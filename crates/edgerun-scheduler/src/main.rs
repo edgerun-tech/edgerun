@@ -782,7 +782,7 @@ async fn job_create(
     );
 
     let bundle_path = bundle_path(&state, &bundle_hash_hex);
-    std::fs::write(&bundle_path, &bundle_payload_bytes).map_err(internal_err)?;
+    write_bundle_cas(&bundle_path, &bundle_hash_hex, &bundle_payload_bytes).map_err(internal_err)?;
 
     prune_expired_workers(&state);
     let committee_workers = if let Some(worker_pubkey) = payload.assignment_worker_pubkey.as_ref() {
@@ -960,6 +960,13 @@ async fn get_bundle(
     let path = bundle_path(&state, &bundle_hash);
     let bytes =
         std::fs::read(path).map_err(|_| (StatusCode::NOT_FOUND, "bundle not found".to_string()))?;
+    let computed = hex::encode(edgerun_crypto::compute_bundle_hash(&bytes));
+    if !computed.eq_ignore_ascii_case(&bundle_hash) {
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "bundle content hash mismatch".to_string(),
+        ));
+    }
     Ok((
         [(axum::http::header::CONTENT_TYPE, "application/cbor")],
         Bytes::from(bytes),
@@ -1274,6 +1281,22 @@ fn bundle_path(state: &AppState, bundle_hash: &str) -> PathBuf {
         .data_dir
         .join("bundles")
         .join(format!("{bundle_hash}.cbor"))
+}
+
+fn write_bundle_cas(path: &PathBuf, expected_bundle_hash_hex: &str, bytes: &[u8]) -> Result<()> {
+    let computed = hex::encode(edgerun_crypto::compute_bundle_hash(bytes));
+    if !computed.eq_ignore_ascii_case(expected_bundle_hash_hex) {
+        anyhow::bail!("bundle bytes do not match expected bundle hash");
+    }
+    if path.exists() {
+        let existing = std::fs::read(path).context("failed to read existing bundle")?;
+        if existing != bytes {
+            anyhow::bail!("bundle path already exists with different bytes");
+        }
+        return Ok(());
+    }
+    std::fs::write(path, bytes).context("failed to write bundle bytes")?;
+    Ok(())
 }
 
 fn load_state(data_dir: &FsPath) -> Result<PersistedState> {
