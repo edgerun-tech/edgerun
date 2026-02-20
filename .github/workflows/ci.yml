@@ -235,6 +235,9 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
+      - name: Validate external review ledger
+        run: python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json
+
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
 

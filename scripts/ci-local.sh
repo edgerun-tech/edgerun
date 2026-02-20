@@ -82,6 +82,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  cargo run -p edgerun-runtime -- calibrate-fuel --profile local --artifact /tmp/fuel-calibration.local.json --runs 3 --max-per-unit-spread 0.4"
     echo "  cargo run -p edgerun-runtime -- slo-smoke --profile local --artifact /tmp/slo-smoke.local.json --runs 50 --max-p95-ms 100 --min-ops-per-sec 30"
     echo "  (optional, with cargo-fuzz+nightly) (cd crates/edgerun-runtime/fuzz && cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=15 && cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15 && cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15)"
+    echo "  python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json"
     echo "  (optional, with cargo-audit) cargo audit"
     echo "  (optional, with cargo-cyclonedx) cargo cyclonedx --manifest-path crates/edgerun-runtime/Cargo.toml --format json --override-filename runtime-sbom && mv crates/edgerun-runtime/runtime-sbom.json /tmp/edgerun-runtime-security/runtime-sbom.json"
     echo "  (optional, with bun+anchor+solana) ./program/scripts/test-bun-local"
@@ -174,6 +175,7 @@ run_runtime_fuzz_sanity() {
 }
 
 run_runtime_security() {
+  python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json
   if ! command -v cargo-audit >/dev/null 2>&1 && ! cargo audit --help >/dev/null 2>&1; then
     echo "cargo-audit not found; skipping runtime-security fallback"
     return 0

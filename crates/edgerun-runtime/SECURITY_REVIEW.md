@@ -58,6 +58,12 @@ Open items:
 
 - [ ] Formal external security review and findings sign-off.
 
+Tracking artifacts:
+
+- Review packet: `EXTERNAL_SECURITY_REVIEW.md`
+- Findings ledger: `SECURITY_FINDINGS.json`
+- CI validator: `scripts/validate_external_security_review.py`
+
 ## Advisory triage exceptions
 
 The CI `cargo audit` gate currently carries temporary ignore entries in `.cargo/audit.toml` for:

@@ -1,0 +1,15 @@
+{
+  "review_cycle_id": "runtime-external-review-2026-q1",
+  "status": "planned",
+  "provider": {
+    "organization": "TBD",
+    "reviewer": "TBD"
+  },
+  "scope_version": "2026-02-20",
+  "sign_off": {
+    "date": "",
+    "approved": false,
+    "notes": ""
+  },
+  "findings": []
+}
