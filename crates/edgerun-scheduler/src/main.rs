@@ -21,6 +21,8 @@ use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcProgramAccountsConfig;
+use solana_client::rpc_filter::{Memcmp, RpcFilterType};
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     hash::hash,
@@ -1678,13 +1680,34 @@ struct OnchainJobView {
     status: u8,
 }
 
+fn posted_job_rpc_filters() -> Vec<RpcFilterType> {
+    vec![
+        RpcFilterType::DataSize(JOB_ACCOUNT_MIN_LEN as u64),
+        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+            0,
+            anchor_account_discriminator("Job").to_vec(),
+        )),
+        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+            ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR,
+            vec![0_u8], // Posted
+        )),
+    ]
+}
+
 fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
     let Some(chain) = state.chain.as_ref() else {
         return Ok(());
     };
+    let filters = posted_job_rpc_filters();
     let accounts = chain
         .rpc
-        .get_program_accounts(&chain.program_id)
+        .get_program_accounts_with_config(
+            &chain.program_id,
+            RpcProgramAccountsConfig {
+                filters: Some(filters),
+                ..RpcProgramAccountsConfig::default()
+            },
+        )
         .context("failed to fetch program accounts for discovery")?;
     if accounts.is_empty() {
         return Ok(());
@@ -2626,6 +2649,23 @@ mod tests {
     fn empty_idempotency_is_not_deduped() {
         assert!(!is_duplicate_idempotency("abc", ""));
         assert!(is_duplicate_idempotency("abc", "abc"));
+    }
+
+    #[test]
+    fn posted_job_rpc_filters_include_discriminator_and_status() {
+        let filters = posted_job_rpc_filters();
+        assert_eq!(filters.len(), 3);
+        match &filters[0] {
+            RpcFilterType::DataSize(v) => assert_eq!(*v, JOB_ACCOUNT_MIN_LEN as u64),
+            _ => panic!("expected data size filter"),
+        }
+        match &filters[2] {
+            RpcFilterType::Memcmp(memcmp) => assert_eq!(
+                memcmp.offset(),
+                ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR
+            ),
+            _ => panic!("expected memcmp status filter"),
+        }
     }
 
     #[test]
