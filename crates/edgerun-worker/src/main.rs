@@ -1094,13 +1094,15 @@ fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
 }
 
 fn result_signing_message(payload: &WorkerResultReport) -> String {
+    let attestation_sig = payload.attestation_sig.clone().unwrap_or_default();
     format!(
-        "result|{}|{}|{}|{}|{}",
+        "result|{}|{}|{}|{}|{}|{}",
         payload.worker_pubkey,
         payload.job_id,
         payload.bundle_hash,
         payload.output_hash,
-        payload.output_len
+        payload.output_len,
+        attestation_sig
     )
 }
 
