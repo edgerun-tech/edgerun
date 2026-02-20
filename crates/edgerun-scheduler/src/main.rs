@@ -101,6 +101,8 @@ struct WorkerResultReport {
     output_hash: String,
     output_len: usize,
     #[serde(default)]
+    attestation_sig: Option<String>,
+    #[serde(default)]
     signature: Option<String>,
 }
 
@@ -1398,6 +1400,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                attestation_sig: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -1407,6 +1410,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 12,
+                attestation_sig: None,
                 signature: None,
             },
         ];
@@ -1426,6 +1430,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                attestation_sig: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -1435,6 +1440,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                attestation_sig: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -1444,6 +1450,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-b".to_string(),
                 output_len: 10,
+                attestation_sig: None,
                 signature: None,
             },
         ];
