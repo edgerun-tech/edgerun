@@ -51,6 +51,7 @@ struct AppState {
     quorum: usize,
     heartbeat_ttl_secs: u64,
     require_worker_signatures: bool,
+    require_result_attestation: bool,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
     chain: Option<Arc<ChainContext>>,
@@ -370,6 +371,10 @@ async fn main() -> Result<()> {
             "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES",
             false,
         ),
+        require_result_attestation: read_env_bool(
+            "EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION",
+            false,
+        ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         chain,
@@ -504,6 +509,12 @@ async fn worker_result(
         return Err((
             StatusCode::FORBIDDEN,
             "worker is not assigned to this job".to_string(),
+        ));
+    }
+    if !verify_result_attestation(&state, &payload)? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid result attestation".to_string(),
         ));
     }
     tracing::info!(
@@ -1694,6 +1705,73 @@ fn verify_worker_message_signature(
     Ok(edgerun_crypto::verify(&worker_vk, &digest, &signature))
 }
 
+fn verify_result_attestation(
+    state: &AppState,
+    payload: &WorkerResultReport,
+) -> Result<bool, (StatusCode, String)> {
+    let Some(attestation_b64) = payload.attestation_sig.as_deref() else {
+        if state.require_result_attestation {
+            return Ok(false);
+        }
+        return Ok(true);
+    };
+    let worker = payload.worker_pubkey.parse::<Pubkey>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "worker_pubkey must be base58 pubkey".to_string(),
+        )
+    })?;
+    let worker_bytes = worker.to_bytes();
+    let worker_vk = VerifyingKey::from_bytes(&worker_bytes).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid worker pubkey bytes".to_string(),
+        )
+    })?;
+    let job_id = parse_hex32(&payload.job_id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "job_id must be 32-byte hex".to_string(),
+        )
+    })?;
+    let output_hash = parse_hex32(&payload.output_hash).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "output_hash must be 32-byte hex".to_string(),
+        )
+    })?;
+    let sig_bytes = base64::engine::general_purpose::STANDARD
+        .decode(attestation_b64.as_bytes())
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "attestation_sig must be base64".to_string(),
+            )
+        })?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "attestation_sig must decode to 64 bytes".to_string(),
+        )
+    })?;
+    let signature = Signature::from_bytes(&sig_arr);
+    let message = build_worker_attestation_message(&job_id, &worker, &output_hash);
+    Ok(edgerun_crypto::verify(&worker_vk, &message, &signature))
+}
+
+fn build_worker_attestation_message(
+    job_id: &[u8; 32],
+    worker: &Pubkey,
+    output_hash: &[u8; 32],
+) -> [u8; 98] {
+    let mut msg = [0_u8; 98];
+    msg[0..2].copy_from_slice(b"ER");
+    msg[2..34].copy_from_slice(job_id);
+    msg[34..66].copy_from_slice(&worker.to_bytes());
+    msg[66..98].copy_from_slice(output_hash);
+    msg
+}
+
 fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
     let runtime_ids = payload.runtime_ids.join(",");
     let (max_concurrent, mem_bytes) = payload
@@ -1899,6 +1977,7 @@ mod tests {
             quorum: 2,
             heartbeat_ttl_secs: 15,
             require_worker_signatures: false,
+            require_result_attestation: false,
             chain_auto_submit: false,
             job_timeout_secs: 60,
             chain: None,
@@ -2143,5 +2222,31 @@ mod tests {
         let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 2;
         assert_eq!(parse_onchain_job_status(&data), Some(2));
+    }
+
+    #[test]
+    fn verifies_result_attestation() {
+        let state = test_state();
+        let signing_key = SigningKey::from_bytes(&[9_u8; 32]);
+        let worker = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
+        let job_id = [1_u8; 32];
+        let output_hash = [2_u8; 32];
+        let message = build_worker_attestation_message(&job_id, &worker, &output_hash);
+        let sig = edgerun_crypto::sign(&signing_key, &message);
+        let attestation_sig = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+
+        let payload = WorkerResultReport {
+            idempotency_key: "ik".to_string(),
+            worker_pubkey: worker.to_string(),
+            job_id: hex::encode(job_id),
+            bundle_hash: "b1".to_string(),
+            output_hash: hex::encode(output_hash),
+            output_len: 7,
+            attestation_sig: Some(attestation_sig),
+            signature: None,
+        };
+
+        let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
+        assert!(ok);
     }
 }
