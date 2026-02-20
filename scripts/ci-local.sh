@@ -20,6 +20,7 @@ Examples:
   scripts/ci-local.sh
   scripts/ci-local.sh --job rust-checks
   scripts/ci-local.sh --job integration
+  scripts/ci-local.sh --job runtime-determinism
   scripts/ci-local.sh --dry-run
 EOF
 }
@@ -70,6 +71,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  ./scripts/integration_scheduler_api.sh"
     echo "  ./scripts/integration_e2e_lifecycle.sh"
     echo "  ./scripts/integration_policy_rotation.sh"
+    echo "  cargo run -p edgerun-runtime -- replay-corpus --profile local --artifact /tmp/replay-corpus.local.json --runs 3"
     echo "  (optional, with bun+anchor+solana) ./program/scripts/test-bun-local"
   fi
   exit 0
@@ -101,6 +103,11 @@ run_integration() {
   ./scripts/integration_policy_rotation.sh
 }
 
+run_runtime_determinism() {
+  local artifact="${TMPDIR:-/tmp}/replay-corpus.local.json"
+  cargo run -p edgerun-runtime -- replay-corpus --profile local --artifact "$artifact" --runs 3
+}
+
 run_program_localnet() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "bun not found; skipping program-localnet fallback"
@@ -121,6 +128,7 @@ case "${JOB:-all}" in
   all)
     run_rust_checks
     run_integration
+    run_runtime_determinism
     run_program_localnet
     ;;
   rust-checks)
@@ -128,6 +136,9 @@ case "${JOB:-all}" in
     ;;
   integration)
     run_integration
+    ;;
+  runtime-determinism)
+    run_runtime_determinism
     ;;
   program-localnet)
     run_program_localnet

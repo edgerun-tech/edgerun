@@ -63,6 +63,39 @@ jobs:
       - name: Policy rotation integration
         run: ./scripts/integration_policy_rotation.sh
 
+  runtime-determinism:
+    name: Runtime Determinism (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Replay corpus determinism gate
+        run: |
+          mkdir -p /tmp/edgerun-runtime-determinism
+          cargo run -p edgerun-runtime -- replay-corpus \
+            --profile "${{ runner.os }}-${{ runner.arch }}" \
+            --artifact /tmp/edgerun-runtime-determinism/replay-corpus.json \
+            --runs 3
+
+      - name: Upload replay artifact
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-corpus-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-runtime-determinism/replay-corpus.json
+
   program-localnet:
     name: Program Localnet
     runs-on: ubuntu-24.04
