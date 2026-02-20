@@ -1718,8 +1718,11 @@ mod tests {
     use super::*;
 
     fn test_state() -> AppState {
+        let data_dir =
+            std::env::temp_dir().join(format!("edgerun-scheduler-tests-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&data_dir);
         AppState {
-            data_dir: PathBuf::from("."),
+            data_dir,
             public_base_url: "http://127.0.0.1:8080".to_string(),
             retention: RetentionConfig {
                 max_reports_per_job: 32,
