@@ -40,6 +40,16 @@ enum Commands {
         #[arg(long, default_value_t = 2)]
         runs: u32,
     },
+    CalibrateFuel {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        artifact: PathBuf,
+        #[arg(long, default_value_t = 3)]
+        runs: u32,
+        #[arg(long, default_value_t = 0.4)]
+        max_per_unit_spread: f64,
+    },
 }
 
 #[tokio::main]
@@ -58,6 +68,12 @@ async fn main() -> Result<()> {
             artifact,
             runs,
         } => replay_corpus(profile, artifact, runs).await?,
+        Commands::CalibrateFuel {
+            profile,
+            artifact,
+            runs,
+            max_per_unit_spread,
+        } => calibrate_fuel(profile, artifact, runs, max_per_unit_spread).await?,
     }
 
     Ok(())
@@ -99,6 +115,38 @@ struct ReplayArtifact {
     trap_code: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct FuelCalibrationArtifact {
+    profile: String,
+    host_os: String,
+    host_arch: String,
+    runs_per_case: u32,
+    max_per_unit_spread: f64,
+    cases: Vec<FuelCalibrationCase>,
+    workloads: Vec<FuelCalibrationWorkloadSummary>,
+}
+
+#[derive(Debug, Serialize)]
+struct FuelCalibrationCase {
+    workload: String,
+    units: u32,
+    max_instructions: u64,
+    fuel_used_samples: Vec<u64>,
+    fuel_used_min: u64,
+    fuel_used_max: u64,
+    fuel_used_mean: f64,
+    stable: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct FuelCalibrationWorkloadSummary {
+    workload: String,
+    monotonic_fuel_used: bool,
+    per_unit_min: f64,
+    per_unit_max: f64,
+    per_unit_spread: f64,
+}
+
 async fn replay(
     bundle_path: PathBuf,
     artifact_path: PathBuf,
@@ -136,6 +184,226 @@ async fn replay(
         println!("expect_output_hash_match=true");
     }
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum CalibrationWorkload {
+    PureLoop,
+    ReadHostcallLoop,
+}
+
+struct CalibrationCaseSpec {
+    workload: CalibrationWorkload,
+    units: u32,
+}
+
+async fn calibrate_fuel(
+    profile: String,
+    artifact_path: PathBuf,
+    runs: u32,
+    max_per_unit_spread: f64,
+) -> Result<()> {
+    if runs == 0 {
+        bail!("runs must be > 0");
+    }
+    if !(0.0..=1.0).contains(&max_per_unit_spread) {
+        bail!("max-per-unit-spread must be between 0.0 and 1.0");
+    }
+
+    let specs = calibration_specs();
+    let mut cases = Vec::with_capacity(specs.len());
+    for spec in specs {
+        let mut samples = Vec::with_capacity(runs as usize);
+        for _ in 0..runs {
+            let bundle = build_calibration_bundle(spec.workload, spec.units)?;
+            let report = edgerun_runtime::execute_bundle_payload_bytes_strict(&bundle)?;
+            samples.push(report.fuel_limit.saturating_sub(report.fuel_remaining));
+        }
+        let fuel_used_min = *samples.iter().min().unwrap_or(&0);
+        let fuel_used_max = *samples.iter().max().unwrap_or(&0);
+        let fuel_used_mean = if samples.is_empty() {
+            0.0
+        } else {
+            samples.iter().map(|v| *v as f64).sum::<f64>() / samples.len() as f64
+        };
+        cases.push(FuelCalibrationCase {
+            workload: workload_name(spec.workload).to_string(),
+            units: spec.units,
+            max_instructions: calibration_max_instructions(spec.units),
+            fuel_used_samples: samples.clone(),
+            fuel_used_min,
+            fuel_used_max,
+            fuel_used_mean,
+            stable: samples.windows(2).all(|w| w[0] == w[1]),
+        });
+    }
+
+    let workloads = summarize_calibration_workloads(&cases)?;
+    let all_stable = cases.iter().all(|c| c.stable);
+    let all_monotonic = workloads.iter().all(|w| w.monotonic_fuel_used);
+    let spread_ok = workloads
+        .iter()
+        .all(|w| w.per_unit_spread <= max_per_unit_spread);
+
+    let artifact = FuelCalibrationArtifact {
+        profile,
+        host_os: std::env::consts::OS.to_string(),
+        host_arch: std::env::consts::ARCH.to_string(),
+        runs_per_case: runs,
+        max_per_unit_spread,
+        cases,
+        workloads,
+    };
+    let body = serde_json::to_vec_pretty(&artifact)?;
+    tokio::fs::write(&artifact_path, body).await?;
+    println!("artifact={}", artifact_path.display());
+    println!("all_stable={all_stable}");
+    println!("all_monotonic={all_monotonic}");
+    println!("spread_ok={spread_ok}");
+
+    if !all_stable {
+        bail!("fuel calibration failed: non-stable case observed");
+    }
+    if !all_monotonic {
+        bail!("fuel calibration failed: non-monotonic fuel usage");
+    }
+    if !spread_ok {
+        bail!("fuel calibration failed: per-unit spread exceeded threshold {max_per_unit_spread}");
+    }
+    Ok(())
+}
+
+fn summarize_calibration_workloads(
+    cases: &[FuelCalibrationCase],
+) -> Result<Vec<FuelCalibrationWorkloadSummary>> {
+    let mut by_workload: std::collections::BTreeMap<&str, Vec<&FuelCalibrationCase>> =
+        std::collections::BTreeMap::new();
+    for case in cases {
+        by_workload
+            .entry(case.workload.as_str())
+            .or_default()
+            .push(case);
+    }
+
+    let mut out = Vec::with_capacity(by_workload.len());
+    for (workload, mut points) in by_workload {
+        points.sort_by_key(|p| p.units);
+        if points.is_empty() {
+            continue;
+        }
+        let monotonic_fuel_used = points
+            .windows(2)
+            .all(|w| w[1].fuel_used_mean >= w[0].fuel_used_mean);
+        let per_unit: Vec<f64> = points
+            .iter()
+            .map(|p| {
+                if p.units == 0 {
+                    0.0
+                } else {
+                    p.fuel_used_mean / p.units as f64
+                }
+            })
+            .collect();
+        let per_unit_min = per_unit
+            .iter()
+            .copied()
+            .reduce(f64::min)
+            .ok_or_else(|| anyhow::anyhow!("empty per-unit set"))?;
+        let per_unit_max = per_unit
+            .iter()
+            .copied()
+            .reduce(f64::max)
+            .ok_or_else(|| anyhow::anyhow!("empty per-unit set"))?;
+        let per_unit_spread = if per_unit_max > 0.0 {
+            (per_unit_max - per_unit_min) / per_unit_max
+        } else {
+            0.0
+        };
+        out.push(FuelCalibrationWorkloadSummary {
+            workload: workload.to_string(),
+            monotonic_fuel_used,
+            per_unit_min,
+            per_unit_max,
+            per_unit_spread,
+        });
+    }
+    Ok(out)
+}
+
+fn calibration_specs() -> Vec<CalibrationCaseSpec> {
+    let units = [100_u32, 500_u32, 1000_u32];
+    let mut out = Vec::with_capacity(units.len() * 2);
+    for u in units {
+        out.push(CalibrationCaseSpec {
+            workload: CalibrationWorkload::PureLoop,
+            units: u,
+        });
+        out.push(CalibrationCaseSpec {
+            workload: CalibrationWorkload::ReadHostcallLoop,
+            units: u,
+        });
+    }
+    out
+}
+
+fn workload_name(workload: CalibrationWorkload) -> &'static str {
+    match workload {
+        CalibrationWorkload::PureLoop => "pure_loop",
+        CalibrationWorkload::ReadHostcallLoop => "read_hostcall_loop",
+    }
+}
+
+fn calibration_max_instructions(units: u32) -> u64 {
+    (units as u64).saturating_mul(20_000).max(100_000)
+}
+
+fn build_calibration_bundle(workload: CalibrationWorkload, units: u32) -> Result<Vec<u8>> {
+    let wasm = match workload {
+        CalibrationWorkload::PureLoop => calibration_pure_loop_wasm(units)?,
+        CalibrationWorkload::ReadHostcallLoop => calibration_read_hostcall_loop_wasm(units)?,
+    };
+    encode_bundle(
+        wasm,
+        b"calibration-input".to_vec(),
+        1024 * 1024,
+        calibration_max_instructions(units),
+    )
+}
+
+fn calibration_pure_loop_wasm(units: u32) -> Result<Vec<u8>> {
+    let wat = format!(
+        r#"(module
+            (memory (export "memory") 1 1)
+            (func (export "_start")
+                (local $i i32)
+                (local.set $i (i32.const {units}))
+                (loop $loop
+                    (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+                    (br_if $loop (i32.gt_s (local.get $i) (i32.const 0)))
+                )
+            )
+        )"#
+    );
+    Ok(wat::parse_str(&wat)?)
+}
+
+fn calibration_read_hostcall_loop_wasm(units: u32) -> Result<Vec<u8>> {
+    let wat = format!(
+        r#"(module
+            (import "edgerun" "read_input" (func $read_input (param i32 i32 i32) (result i32)))
+            (memory (export "memory") 1 1)
+            (func (export "_start")
+                (local $i i32)
+                (local.set $i (i32.const {units}))
+                (loop $loop
+                    (drop (call $read_input (i32.const 0) (i32.const 0) (i32.const 1)))
+                    (local.set $i (i32.sub (local.get $i) (i32.const 1)))
+                    (br_if $loop (i32.gt_s (local.get $i) (i32.const 0)))
+                )
+            )
+        )"#
+    );
+    Ok(wat::parse_str(&wat)?)
 }
 
 fn replay_error_artifact(
