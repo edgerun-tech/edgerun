@@ -17,7 +17,7 @@ use axum::{
     Json, Router,
 };
 use base64::Engine;
-use ed25519_dalek::{Signature, SigningKey};
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -48,6 +48,7 @@ struct AppState {
     committee_size: usize,
     quorum: usize,
     heartbeat_ttl_secs: u64,
+    require_worker_signatures: bool,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -99,6 +100,8 @@ struct WorkerResultReport {
     bundle_hash: String,
     output_hash: String,
     output_len: usize,
+    #[serde(default)]
+    signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +114,8 @@ struct WorkerFailureReport {
     phase: String,
     error_code: String,
     error_message: String,
+    #[serde(default)]
+    signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +143,8 @@ struct WorkerReplayArtifactReport {
     worker_pubkey: String,
     job_id: String,
     artifact: ReplayArtifactPayload,
+    #[serde(default)]
+    signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -145,6 +152,10 @@ struct WorkerRegistryEntry {
     worker_pubkey: String,
     runtime_ids: Vec<String>,
     version: String,
+    #[serde(default)]
+    max_concurrent: Option<u32>,
+    #[serde(default)]
+    mem_bytes: Option<u64>,
     last_heartbeat_unix_s: u64,
 }
 
@@ -200,6 +211,16 @@ struct HeartbeatRequest {
     worker_pubkey: String,
     runtime_ids: Vec<String>,
     version: String,
+    #[serde(default)]
+    capacity: Option<WorkerCapacity>,
+    #[serde(default)]
+    signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerCapacity {
+    max_concurrent: u32,
+    mem_bytes: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -315,6 +336,10 @@ async fn main() -> Result<()> {
         committee_size: read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3),
         quorum: read_env_usize("EDGERUN_SCHEDULER_QUORUM", 2),
         heartbeat_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_HEARTBEAT_TTL_SECS", 15),
+        require_worker_signatures: read_env_bool(
+            "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES",
+            false,
+        ),
         chain,
     };
     enforce_history_retention(&state);
@@ -356,7 +381,18 @@ async fn policy_info(State(state): State<AppState>) -> Json<PolicyInfoResponse> 
 async fn worker_heartbeat(
     State(state): State<AppState>,
     Json(payload): Json<HeartbeatRequest>,
-) -> Json<HeartbeatResponse> {
+) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
+    if !verify_worker_message_signature(
+        &state,
+        &payload.worker_pubkey,
+        payload.signature.as_deref(),
+        &heartbeat_signing_message(&payload),
+    )? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid worker signature".to_string(),
+        ));
+    }
     prune_expired_workers(&state);
     tracing::info!(
         worker = %payload.worker_pubkey,
@@ -365,6 +401,11 @@ async fn worker_heartbeat(
         "received worker heartbeat"
     );
     let now = now_unix_seconds();
+    let (max_concurrent, mem_bytes) = payload
+        .capacity
+        .as_ref()
+        .map(|c| (Some(c.max_concurrent), Some(c.mem_bytes)))
+        .unwrap_or((None, None));
     {
         let mut registry = state.worker_registry.lock().expect("lock poisoned");
         registry.insert(
@@ -373,6 +414,8 @@ async fn worker_heartbeat(
                 worker_pubkey: payload.worker_pubkey,
                 runtime_ids: payload.runtime_ids,
                 version: payload.version,
+                max_concurrent,
+                mem_bytes,
                 last_heartbeat_unix_s: now,
             },
         );
@@ -381,11 +424,11 @@ async fn worker_heartbeat(
         tracing::warn!(error = %err, "failed to persist state after worker heartbeat");
     }
 
-    Json(HeartbeatResponse {
+    Ok(Json(HeartbeatResponse {
         ok: true,
         next_poll_ms: 2000,
         server_time_unix_s: now,
-    })
+    }))
 }
 
 async fn worker_assignments(
@@ -407,6 +450,17 @@ async fn worker_result(
     State(state): State<AppState>,
     Json(payload): Json<WorkerResultReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if !verify_worker_message_signature(
+        &state,
+        &payload.worker_pubkey,
+        payload.signature.as_deref(),
+        &result_signing_message(&payload),
+    )? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid worker signature".to_string(),
+        ));
+    }
     tracing::info!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -448,6 +502,17 @@ async fn worker_failure(
     State(state): State<AppState>,
     Json(payload): Json<WorkerFailureReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if !verify_worker_message_signature(
+        &state,
+        &payload.worker_pubkey,
+        payload.signature.as_deref(),
+        &failure_signing_message(&payload),
+    )? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid worker signature".to_string(),
+        ));
+    }
     tracing::warn!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -479,6 +544,17 @@ async fn worker_replay_artifact(
     State(state): State<AppState>,
     Json(payload): Json<WorkerReplayArtifactReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if !verify_worker_message_signature(
+        &state,
+        &payload.worker_pubkey,
+        payload.signature.as_deref(),
+        &replay_signing_message(&payload),
+    )? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid worker signature".to_string(),
+        ));
+    }
     tracing::info!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -1078,6 +1154,100 @@ fn parse_hex32(value: &str) -> Result<[u8; 32]> {
     Ok(out)
 }
 
+fn verify_worker_message_signature(
+    state: &AppState,
+    worker_pubkey: &str,
+    signature_b64: Option<&str>,
+    message: &str,
+) -> Result<bool, (StatusCode, String)> {
+    let Some(signature_b64) = signature_b64 else {
+        if state.require_worker_signatures {
+            return Ok(false);
+        }
+        return Ok(true);
+    };
+
+    let worker_key = worker_pubkey.parse::<Pubkey>().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "worker_pubkey must be base58 pubkey".to_string(),
+        )
+    })?;
+    let worker_pk_bytes: [u8; 32] = worker_key.to_bytes();
+    let worker_vk = VerifyingKey::from_bytes(&worker_pk_bytes).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid worker pubkey bytes".to_string(),
+        )
+    })?;
+    let sig_bytes = base64::engine::general_purpose::STANDARD
+        .decode(signature_b64.as_bytes())
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "signature must be base64".to_string(),
+            )
+        })?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "signature must decode to 64 bytes".to_string(),
+        )
+    })?;
+    let signature = Signature::from_bytes(&sig_arr);
+    let digest = edgerun_crypto::blake3_256(message.as_bytes());
+    Ok(edgerun_crypto::verify(&worker_vk, &digest, &signature))
+}
+
+fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
+    let runtime_ids = payload.runtime_ids.join(",");
+    let (max_concurrent, mem_bytes) = payload
+        .capacity
+        .as_ref()
+        .map(|c| (c.max_concurrent.to_string(), c.mem_bytes.to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
+    format!(
+        "heartbeat|{}|{}|{}|{}|{}",
+        payload.worker_pubkey, runtime_ids, payload.version, max_concurrent, mem_bytes
+    )
+}
+
+fn result_signing_message(payload: &WorkerResultReport) -> String {
+    format!(
+        "result|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.bundle_hash,
+        payload.output_hash,
+        payload.output_len
+    )
+}
+
+fn failure_signing_message(payload: &WorkerFailureReport) -> String {
+    format!(
+        "failure|{}|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.bundle_hash,
+        payload.phase,
+        payload.error_code,
+        payload.error_message
+    )
+}
+
+fn replay_signing_message(payload: &WorkerReplayArtifactReport) -> String {
+    let ok_flag = if payload.artifact.ok { "1" } else { "0" };
+    let artifact_output_hash = payload.artifact.output_hash.clone().unwrap_or_default();
+    format!(
+        "replay|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.artifact.bundle_hash,
+        ok_flag,
+        artifact_output_hash
+    )
+}
+
 fn load_retention_config() -> RetentionConfig {
     RetentionConfig {
         max_reports_per_job: read_env_usize("EDGERUN_SCHEDULER_MAX_REPORTS_PER_JOB", 32),
@@ -1213,6 +1383,7 @@ mod tests {
             committee_size: 3,
             quorum: 2,
             heartbeat_ttl_secs: 15,
+            require_worker_signatures: false,
             chain: None,
         }
     }
@@ -1227,6 +1398,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                signature: None,
             },
             WorkerResultReport {
                 idempotency_key: "b".to_string(),
@@ -1235,6 +1407,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 12,
+                signature: None,
             },
         ];
 
@@ -1253,6 +1426,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                signature: None,
             },
             WorkerResultReport {
                 idempotency_key: "b".to_string(),
@@ -1261,6 +1435,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-a".to_string(),
                 output_len: 10,
+                signature: None,
             },
             WorkerResultReport {
                 idempotency_key: "c".to_string(),
@@ -1269,6 +1444,7 @@ mod tests {
                 bundle_hash: "b1".to_string(),
                 output_hash: "out-b".to_string(),
                 output_len: 10,
+                signature: None,
             },
         ];
 
@@ -1287,6 +1463,8 @@ mod tests {
                     worker_pubkey: "w1".to_string(),
                     runtime_ids: vec!["r1".to_string()],
                     version: "1".to_string(),
+                    max_concurrent: Some(1),
+                    mem_bytes: Some(1024),
                     last_heartbeat_unix_s: now,
                 },
             );
@@ -1296,6 +1474,8 @@ mod tests {
                     worker_pubkey: "w2".to_string(),
                     runtime_ids: vec!["r1".to_string()],
                     version: "1".to_string(),
+                    max_concurrent: Some(1),
+                    mem_bytes: Some(1024),
                     last_heartbeat_unix_s: now,
                 },
             );
@@ -1305,6 +1485,8 @@ mod tests {
                     worker_pubkey: "stale".to_string(),
                     runtime_ids: vec!["r1".to_string()],
                     version: "1".to_string(),
+                    max_concurrent: Some(1),
+                    mem_bytes: Some(1024),
                     last_heartbeat_unix_s: now.saturating_sub(60),
                 },
             );
@@ -1314,6 +1496,8 @@ mod tests {
                     worker_pubkey: "wrong-runtime".to_string(),
                     runtime_ids: vec!["r2".to_string()],
                     version: "1".to_string(),
+                    max_concurrent: Some(1),
+                    mem_bytes: Some(1024),
                     last_heartbeat_unix_s: now,
                 },
             );
@@ -1323,5 +1507,25 @@ mod tests {
         assert_eq!(selected.len(), 2);
         assert!(selected.contains(&"w1".to_string()));
         assert!(selected.contains(&"w2".to_string()));
+    }
+
+    #[test]
+    fn verifies_worker_signature_when_present() {
+        let state = test_state();
+        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+        let worker_pubkey = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
+        let message = "result|worker|job|bundle|output|10";
+        let digest = edgerun_crypto::blake3_256(message.as_bytes());
+        let sig = edgerun_crypto::sign(&signing_key, &digest);
+        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+
+        let ok = verify_worker_message_signature(
+            &state,
+            &worker_pubkey.to_string(),
+            Some(&sig_b64),
+            message,
+        )
+        .expect("verification should not error");
+        assert!(ok);
     }
 }

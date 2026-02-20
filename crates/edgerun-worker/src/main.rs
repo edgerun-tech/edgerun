@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,8 @@ struct WorkerConfig {
     scheduler_base_url: String,
     runtime_ids: Vec<String>,
     version: String,
+    capacity: WorkerCapacity,
+    worker_signing_key: Option<SigningKey>,
     policy_verifiers: Vec<PolicyVerifier>,
     policy_clock_skew_secs: u64,
     pending_queue_max: usize,
@@ -25,6 +28,12 @@ struct PolicyVerifier {
     key_id: String,
     version: u32,
     verify_pubkey_hex: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct WorkerCapacity {
+    max_concurrent: u32,
+    mem_bytes: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +76,8 @@ struct HeartbeatRequest {
     worker_pubkey: String,
     runtime_ids: Vec<String>,
     version: String,
+    capacity: WorkerCapacity,
+    signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +88,7 @@ struct WorkerResultReport {
     bundle_hash: String,
     output_hash: String,
     output_len: usize,
+    signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,6 +100,7 @@ struct WorkerFailureReport {
     phase: String,
     error_code: String,
     error_message: String,
+    signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -114,6 +127,7 @@ struct WorkerReplayArtifactReport {
     worker_pubkey: String,
     job_id: String,
     artifact: ReplayArtifactPayload,
+    signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -224,6 +238,26 @@ fn load_config() -> WorkerConfig {
             vec!["0000000000000000000000000000000000000000000000000000000000000000".to_string()]
         });
     let version = std::env::var("EDGERUN_WORKER_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
+    let capacity = WorkerCapacity {
+        max_concurrent: std::env::var("EDGERUN_WORKER_MAX_CONCURRENT")
+            .ok()
+            .and_then(|v| v.parse::<u32>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(1),
+        mem_bytes: std::env::var("EDGERUN_WORKER_MEM_BYTES")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(268_435_456),
+    };
+    let worker_signing_key = std::env::var("EDGERUN_WORKER_SIGNING_KEY_HEX")
+        .ok()
+        .map(|hex_key| parse_signing_key_hex(&hex_key))
+        .transpose()
+        .unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "invalid EDGERUN_WORKER_SIGNING_KEY_HEX; disabling worker request signatures");
+            None
+        });
     let policy_verify_pubkey_hex = std::env::var("EDGERUN_WORKER_POLICY_VERIFY_KEY_HEX")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -291,6 +325,8 @@ fn load_config() -> WorkerConfig {
         scheduler_base_url,
         runtime_ids,
         version,
+        capacity,
+        worker_signing_key,
         policy_verifiers,
         policy_clock_skew_secs,
         pending_queue_max,
@@ -302,11 +338,14 @@ fn load_config() -> WorkerConfig {
 
 async fn send_heartbeat(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
     let url = format!("{}/v1/worker/heartbeat", cfg.scheduler_base_url);
-    let payload = HeartbeatRequest {
+    let mut payload = HeartbeatRequest {
         worker_pubkey: cfg.worker_pubkey.clone(),
         runtime_ids: cfg.runtime_ids.clone(),
         version: cfg.version.clone(),
+        capacity: cfg.capacity.clone(),
+        signature: None,
     };
+    payload.signature = sign_worker_payload(cfg, heartbeat_signing_message(&payload));
 
     let resp = client
         .post(url)
@@ -390,6 +429,7 @@ async fn process_assignment(
                 phase: "assignment_policy_verify".to_string(),
                 error_code: "AssignmentPolicyInvalid".to_string(),
                 error_message: msg.clone(),
+                signature: None,
             },
         )
         .await;
@@ -430,6 +470,7 @@ async fn process_assignment(
                     phase: "assignment_validation".to_string(),
                     error_code: "InvalidAssignmentRuntimeId".to_string(),
                     error_message: msg.clone(),
+                    signature: None,
                 },
             )
             .await;
@@ -478,6 +519,7 @@ async fn process_assignment(
                         error_message: Some(err_message.clone()),
                         trap_code: err.trap_code,
                     },
+                    signature: None,
                 },
             )
             .await;
@@ -500,6 +542,7 @@ async fn process_assignment(
                     phase: "runtime_execute".to_string(),
                     error_code: err_code,
                     error_message: err_message.clone(),
+                    signature: None,
                 },
             )
             .await;
@@ -544,6 +587,7 @@ async fn process_assignment(
                     error_message: Some(msg.clone()),
                     trap_code: None,
                 },
+                signature: None,
             },
         )
         .await;
@@ -566,13 +610,14 @@ async fn process_assignment(
                 phase: "post_execution_verify".to_string(),
                 error_code: "BundleHashMismatch".to_string(),
                 error_message: msg.clone(),
+                signature: None,
             },
         )
         .await;
         anyhow::bail!(msg);
     }
 
-    let result = WorkerResultReport {
+    let mut result = WorkerResultReport {
         idempotency_key: idempotency_key(
             "result",
             &cfg.worker_pubkey,
@@ -586,7 +631,9 @@ async fn process_assignment(
         bundle_hash: computed_bundle_hash,
         output_hash: hex::encode(report.output_hash),
         output_len: report.output_len,
+        signature: None,
     };
+    result.signature = sign_worker_payload(cfg, result_signing_message(&result));
 
     if !submit_with_retry(
         client,
@@ -632,6 +679,7 @@ async fn process_assignment(
             error_message: None,
             trap_code: None,
         },
+        signature: None,
     };
 
     submit_replay_artifact(client, cfg, queue, replay_payload).await;
@@ -650,8 +698,9 @@ async fn submit_replay_artifact(
     client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
-    replay_payload: WorkerReplayArtifactReport,
+    mut replay_payload: WorkerReplayArtifactReport,
 ) {
+    replay_payload.signature = sign_worker_payload(cfg, replay_signing_message(&replay_payload));
     if !submit_with_retry(
         client,
         cfg,
@@ -674,8 +723,9 @@ async fn submit_failure_report(
     client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
-    failure_payload: WorkerFailureReport,
+    mut failure_payload: WorkerFailureReport,
 ) {
+    failure_payload.signature = sign_worker_payload(cfg, failure_signing_message(&failure_payload));
     if !submit_with_retry(
         client,
         cfg,
@@ -836,6 +886,70 @@ fn idempotency_key(
     hex::encode(edgerun_crypto::blake3_256(raw.as_bytes()))
 }
 
+fn parse_signing_key_hex(value: &str) -> Result<SigningKey> {
+    let bytes = hex::decode(value.trim()).context("worker signing key must be hex")?;
+    let arr: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("worker signing key must decode to 32 bytes"))?;
+    Ok(SigningKey::from_bytes(&arr))
+}
+
+fn sign_worker_payload(cfg: &WorkerConfig, message: String) -> Option<String> {
+    let signing_key = cfg.worker_signing_key.as_ref()?;
+    let digest = edgerun_crypto::blake3_256(message.as_bytes());
+    let sig = edgerun_crypto::sign(signing_key, &digest);
+    Some(base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()))
+}
+
+fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
+    let runtime_ids = payload.runtime_ids.join(",");
+    format!(
+        "heartbeat|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        runtime_ids,
+        payload.version,
+        payload.capacity.max_concurrent,
+        payload.capacity.mem_bytes
+    )
+}
+
+fn result_signing_message(payload: &WorkerResultReport) -> String {
+    format!(
+        "result|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.bundle_hash,
+        payload.output_hash,
+        payload.output_len
+    )
+}
+
+fn failure_signing_message(payload: &WorkerFailureReport) -> String {
+    format!(
+        "failure|{}|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.bundle_hash,
+        payload.phase,
+        payload.error_code,
+        payload.error_message
+    )
+}
+
+fn replay_signing_message(payload: &WorkerReplayArtifactReport) -> String {
+    let ok_flag = if payload.artifact.ok { "1" } else { "0" };
+    let artifact_output_hash = payload.artifact.output_hash.clone().unwrap_or_default();
+    format!(
+        "replay|{}|{}|{}|{}|{}",
+        payload.worker_pubkey,
+        payload.job_id,
+        payload.artifact.bundle_hash,
+        ok_flag,
+        artifact_output_hash
+    )
+}
+
 fn default_abi_version() -> u8 {
     edgerun_types::BUNDLE_ABI_CURRENT
 }
@@ -986,6 +1100,11 @@ mod tests {
             scheduler_base_url: base_url,
             runtime_ids: vec![],
             version: "test".to_string(),
+            capacity: WorkerCapacity {
+                max_concurrent: 1,
+                mem_bytes: 1024,
+            },
+            worker_signing_key: None,
             policy_verifiers: vec![PolicyVerifier {
                 key_id: default_policy_key_id(),
                 version: default_policy_version(),
@@ -1045,6 +1164,7 @@ mod tests {
             bundle_hash: "bundle-hash".to_string(),
             output_hash: "output-hash".to_string(),
             output_len: 7,
+            signature: None,
         };
 
         let ok = submit_with_retry(
