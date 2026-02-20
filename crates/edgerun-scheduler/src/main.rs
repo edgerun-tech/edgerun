@@ -1807,6 +1807,9 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
 }
 
 fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView) -> Option<String> {
+    if !verify_onchain_job_result_attestation(view) {
+        return None;
+    }
     let job_id_hex = hex::encode(view.job_id);
     let (expected_bundle_hash, is_assigned) = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
@@ -1852,6 +1855,16 @@ fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView)
     drop(results);
     touch_job_last_update(state, &job_id_hex);
     Some(job_id_hex)
+}
+
+fn verify_onchain_job_result_attestation(view: &OnchainJobResultView) -> bool {
+    let worker_bytes = view.worker.to_bytes();
+    let Ok(worker_vk) = VerifyingKey::from_bytes(&worker_bytes) else {
+        return false;
+    };
+    let signature = Signature::from_bytes(&view.attestation_sig);
+    let message = build_worker_attestation_message(&view.job_id, &view.worker, &view.output_hash);
+    edgerun_crypto::verify(&worker_vk, &message, &signature)
 }
 
 fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
@@ -3254,9 +3267,12 @@ mod tests {
         state.quorum_requires_attestation = false;
         let state = state;
 
-        let worker1 = Pubkey::new_unique();
-        let worker2 = Pubkey::new_unique();
-        let worker3 = Pubkey::new_unique();
+        let worker1_sk = SigningKey::from_bytes(&[31_u8; 32]);
+        let worker2_sk = SigningKey::from_bytes(&[32_u8; 32]);
+        let worker3_sk = SigningKey::from_bytes(&[33_u8; 32]);
+        let worker1 = Pubkey::new_from_array(*worker1_sk.verifying_key().as_bytes());
+        let worker2 = Pubkey::new_from_array(*worker2_sk.verifying_key().as_bytes());
+        let worker3 = Pubkey::new_from_array(*worker3_sk.verifying_key().as_bytes());
         let job_id = [0x90_u8; 32];
         let job_id_hex = hex::encode(job_id);
         {
@@ -3300,18 +3316,22 @@ mod tests {
         }
 
         let output_hash = [0xAB_u8; 32];
+        let msg1 = build_worker_attestation_message(&job_id, &worker1, &output_hash);
+        let msg2 = build_worker_attestation_message(&job_id, &worker2, &output_hash);
+        let sig1 = edgerun_crypto::sign(&worker1_sk, &msg1).to_bytes();
+        let sig2 = edgerun_crypto::sign(&worker2_sk, &msg2).to_bytes();
         let r1 = OnchainJobResultView {
             job_id,
             worker: worker1,
             output_hash,
-            attestation_sig: [1_u8; 64],
+            attestation_sig: sig1,
             submitted_slot: 10,
         };
         let r2 = OnchainJobResultView {
             job_id,
             worker: worker2,
             output_hash,
-            attestation_sig: [2_u8; 64],
+            attestation_sig: sig2,
             submitted_slot: 11,
         };
         assert!(ingest_onchain_job_result_view(&state, &r1).is_some());
@@ -3324,6 +3344,58 @@ mod tests {
             .get(&job_id_hex)
             .and_then(|v| v.winning_output_hash.as_ref())
             .is_some());
+    }
+
+    #[test]
+    fn onchain_result_ingest_rejects_invalid_attestation() {
+        let state = test_state();
+        let worker_sk = SigningKey::from_bytes(&[41_u8; 32]);
+        let worker = Pubkey::new_from_array(*worker_sk.verifying_key().as_bytes());
+        let job_id = [0x91_u8; 32];
+        let job_id_hex = hex::encode(job_id);
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                job_id_hex.clone(),
+                JobQuorumState {
+                    expected_bundle_hash:
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
+                    committee_workers: vec![worker.to_string()],
+                    committee_size: 1,
+                    quorum: 1,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+        let bad = OnchainJobResultView {
+            job_id,
+            worker,
+            output_hash: [0xAB_u8; 32],
+            attestation_sig: [0_u8; 64],
+            submitted_slot: 99,
+        };
+        assert!(ingest_onchain_job_result_view(&state, &bad).is_none());
     }
 
     #[test]
