@@ -462,7 +462,7 @@ async fn job_create(
     runtime_id.copy_from_slice(&runtime_id_bytes);
 
     let bundle_payload = edgerun_types::BundlePayload {
-        v: 1,
+        v: edgerun_types::BUNDLE_ABI_CURRENT,
         runtime_id,
         wasm,
         input,
@@ -701,7 +701,7 @@ fn internal_err<E: std::fmt::Display>(err: E) -> (StatusCode, String) {
 }
 
 fn default_abi_version() -> u8 {
-    1
+    edgerun_types::BUNDLE_ABI_CURRENT
 }
 
 fn default_policy_key_id() -> String {

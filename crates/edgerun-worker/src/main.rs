@@ -12,7 +12,6 @@ struct WorkerConfig {
     scheduler_base_url: String,
     runtime_ids: Vec<String>,
     version: String,
-    expected_bundle_abi_version: u8,
     policy_verifiers: Vec<PolicyVerifier>,
     policy_clock_skew_secs: u64,
     pending_queue_max: usize,
@@ -225,10 +224,6 @@ fn load_config() -> WorkerConfig {
             vec!["0000000000000000000000000000000000000000000000000000000000000000".to_string()]
         });
     let version = std::env::var("EDGERUN_WORKER_VERSION").unwrap_or_else(|_| "0.1.0".to_string());
-    let expected_bundle_abi_version = std::env::var("EDGERUN_WORKER_BUNDLE_ABI_VERSION")
-        .ok()
-        .and_then(|v| v.parse::<u8>().ok())
-        .unwrap_or(1);
     let policy_verify_pubkey_hex = std::env::var("EDGERUN_WORKER_POLICY_VERIFY_KEY_HEX")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -296,7 +291,6 @@ fn load_config() -> WorkerConfig {
         scheduler_base_url,
         runtime_ids,
         version,
-        expected_bundle_abi_version,
         policy_verifiers,
         policy_clock_skew_secs,
         pending_queue_max,
@@ -442,36 +436,6 @@ async fn process_assignment(
             return Err(anyhow::anyhow!(msg));
         }
     };
-
-    if assignment.abi_version != cfg.expected_bundle_abi_version {
-        let msg = format!(
-            "assignment abi_version {} does not match worker policy {}",
-            assignment.abi_version, cfg.expected_bundle_abi_version
-        );
-        submit_failure_report(
-            client,
-            cfg,
-            queue,
-            WorkerFailureReport {
-                idempotency_key: idempotency_key(
-                    "failure",
-                    &cfg.worker_pubkey,
-                    &assignment.job_id,
-                    "assignment_policy_verify",
-                    "AbiPolicyMismatch",
-                    &assignment.bundle_hash,
-                ),
-                worker_pubkey: cfg.worker_pubkey.clone(),
-                job_id: assignment.job_id.clone(),
-                bundle_hash: assignment.bundle_hash.clone(),
-                phase: "assignment_policy_verify".to_string(),
-                error_code: "AbiPolicyMismatch".to_string(),
-                error_message: msg.clone(),
-            },
-        )
-        .await;
-        anyhow::bail!(msg);
-    }
 
     let exec = edgerun_runtime::execute_bundle_payload_bytes_for_runtime_and_abi_strict(
         bundle_bytes.as_ref(),
@@ -873,7 +837,7 @@ fn idempotency_key(
 }
 
 fn default_abi_version() -> u8 {
-    1
+    edgerun_types::BUNDLE_ABI_CURRENT
 }
 
 fn default_policy_key_id() -> String {
@@ -1022,7 +986,6 @@ mod tests {
             scheduler_base_url: base_url,
             runtime_ids: vec![],
             version: "test".to_string(),
-            expected_bundle_abi_version: 1,
             policy_verifiers: vec![PolicyVerifier {
                 key_id: default_policy_key_id(),
                 version: default_policy_version(),

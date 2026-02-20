@@ -56,7 +56,6 @@ Closed items:
 Open items:
 
 - [ ] Signed release provenance for runtime artifacts (SLSA/in-toto or equivalent).
-- [ ] Signed scheduler assignment policy distribution (runtime_id/abi policy moved from env/config).
 - [ ] Formal external security review and findings sign-off.
 
 ## Advisory triage exceptions

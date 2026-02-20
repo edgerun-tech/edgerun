@@ -48,7 +48,6 @@ Not yet production-ready:
 - Deep fuzzing/security hardening for hostcall boundary behavior
 - Calibration model for `max_instructions` cost predictability
 - Strong observability/replay tooling for disputes and incident response
-- Runtime ABI/runtime-id compatibility enforcement at execution boundary
 - Streaming output policy (today output is buffered in-memory)
 - Security posture artifacts (threat model, supply-chain pinning/SBOM, signed release provenance)
 
@@ -167,9 +166,8 @@ Acceptance:
    - partial reads near end-of-input
    - maximum legal write at memory boundary
    - overflow/negative pointer handling
-2. Tighten ABI/runtime policy distribution:
-   - move expected ABI/runtime policy from env/config into signed scheduler assignment metadata
-   - add compatibility tests across rolling runtime upgrades
+2. Add compatibility tests across rolling runtime upgrades:
+   - verify worker/scheduler behavior during policy key and ABI window transitions
 3. Add deterministic replay surfaces:
    - CLI/API mode returning stable JSON execution artifact for disputes
    - include error metadata (`code`, `trap_code`, fuel) on failure paths
