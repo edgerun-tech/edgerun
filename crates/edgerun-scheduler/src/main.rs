@@ -55,6 +55,7 @@ struct AppState {
     require_worker_signatures: bool,
     require_result_attestation: bool,
     quorum_requires_attestation: bool,
+    enable_slash_artifacts: bool,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
     chain: Option<Arc<ChainContext>>,
@@ -209,8 +210,18 @@ struct JobQuorumState {
     onchain_last_update_unix_s: Option<u64>,
     #[serde(default)]
     onchain_deadline_slot: Option<u64>,
+    #[serde(default)]
+    slash_artifacts: Vec<SlashWorkerArtifact>,
     created_at_unix_s: u64,
     quorum_reached_at_unix_s: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SlashWorkerArtifact {
+    worker_pubkey: String,
+    tx: String,
+    sig: Option<String>,
+    submitted: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -402,6 +413,7 @@ async fn main() -> Result<()> {
             "EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION",
             true,
         ),
+        enable_slash_artifacts: read_env_bool("EDGERUN_SCHEDULER_ENABLE_SLASH_ARTIFACTS", true),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         chain,
@@ -860,6 +872,7 @@ async fn job_create(
                 onchain_last_observed_slot: None,
                 onchain_last_update_unix_s: None,
                 onchain_deadline_slot: None,
+                slash_artifacts: Vec::new(),
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -1164,6 +1177,49 @@ fn build_cancel_expired_job_tx_base64(
     Ok((tx_b64, signature, false))
 }
 
+fn build_slash_worker_tx_base64(
+    chain: &ChainContext,
+    job_id: [u8; 32],
+    worker: Pubkey,
+    auto_submit: bool,
+) -> Result<(String, Option<String>, bool)> {
+    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
+    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let (worker_stake_pda, _) =
+        Pubkey::find_program_address(&[b"worker_stake", worker.as_ref()], &chain.program_id);
+    let ix = Instruction {
+        program_id: chain.program_id,
+        accounts: vec![
+            AccountMeta::new(chain.payer.pubkey(), true),
+            AccountMeta::new(config_pda, false),
+            AccountMeta::new(job_pda, false),
+            AccountMeta::new(worker_stake_pda, false),
+        ],
+        data: encode_slash_worker_data(),
+    };
+    let blockhash = chain
+        .rpc
+        .get_latest_blockhash()
+        .context("failed to fetch latest blockhash")?;
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&chain.payer.pubkey()),
+        &[&chain.payer],
+        blockhash,
+    );
+    let signature = tx.signatures.first().map(ToString::to_string);
+    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
+    if auto_submit {
+        let sent = chain
+            .rpc
+            .send_and_confirm_transaction(&tx)
+            .context("failed to send slash_worker transaction")?;
+        return Ok((tx_b64, Some(sent.to_string()), true));
+    }
+    Ok((tx_b64, signature, false))
+}
+
 fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     let mut data = Vec::with_capacity(8 + 32 + 32 + 32 + 4 + 8 + 8);
     data.extend_from_slice(&anchor_discriminator("post_job"));
@@ -1196,6 +1252,12 @@ fn encode_finalize_job_data(winning_output_hash: [u8; 32], winner_count: u8) -> 
 fn encode_cancel_expired_job_data() -> Vec<u8> {
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_discriminator("cancel_expired_job"));
+    data
+}
+
+fn encode_slash_worker_data() -> Vec<u8> {
+    let mut data = Vec::with_capacity(8);
+    data.extend_from_slice(&anchor_discriminator("slash_worker"));
     data
 }
 
@@ -1416,6 +1478,7 @@ fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
         !quorum_state.finalize_triggered && (changed_hash || !was_reached);
     let committee_workers = quorum_state.committee_workers.clone();
     let winners = quorum_state.winning_workers.clone();
+    let slash_artifacts_enabled = state.enable_slash_artifacts;
     drop(job_quorum);
 
     if should_trigger_finalize {
@@ -1432,6 +1495,15 @@ fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
             quorum_state.finalize_tx = Some(finalize_tx);
             quorum_state.finalize_sig = finalize_sig;
             quorum_state.finalize_submitted = finalize_submitted;
+            if slash_artifacts_enabled {
+                quorum_state.slash_artifacts = build_slash_worker_artifacts(
+                    state,
+                    job_id,
+                    &winning_hash,
+                    &committee_workers,
+                    &filtered_reports,
+                );
+            }
         }
     }
     Ok(true)
@@ -1468,6 +1540,89 @@ fn find_winning_output_hash(
                 .cmp(&b_workers.len())
                 .then_with(|| b_hash.cmp(a_hash))
         })
+}
+
+fn build_slash_worker_artifacts(
+    state: &AppState,
+    job_id_hex: &str,
+    winning_hash: &str,
+    committee_workers: &[String],
+    reports: &[WorkerResultReport],
+) -> Vec<SlashWorkerArtifact> {
+    let mut candidate_workers: Vec<String> = Vec::new();
+    let committee: HashSet<&str> = committee_workers.iter().map(|w| w.as_str()).collect();
+    let mut seen: HashSet<&str> = HashSet::new();
+    for report in reports {
+        if !seen.insert(report.worker_pubkey.as_str()) {
+            continue;
+        }
+        if !committee.contains(report.worker_pubkey.as_str()) {
+            continue;
+        }
+        if report.output_hash == winning_hash {
+            continue;
+        }
+        if report.attestation_sig.is_none()
+            || !verify_result_attestation(state, report).unwrap_or(false)
+        {
+            continue;
+        }
+        candidate_workers.push(report.worker_pubkey.clone());
+    }
+    if candidate_workers.is_empty() {
+        return Vec::new();
+    }
+
+    let Some(chain) = state.chain.as_ref() else {
+        return candidate_workers
+            .into_iter()
+            .map(|worker_pubkey| SlashWorkerArtifact {
+                worker_pubkey,
+                tx: "UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(),
+                sig: None,
+                submitted: false,
+            })
+            .collect();
+    };
+    let Ok(job_id) = parse_hex32(job_id_hex) else {
+        return candidate_workers
+            .into_iter()
+            .map(|worker_pubkey| SlashWorkerArtifact {
+                worker_pubkey,
+                tx: "UNAVAILABLE_INVALID_JOB_ID".to_string(),
+                sig: None,
+                submitted: false,
+            })
+            .collect();
+    };
+
+    candidate_workers
+        .into_iter()
+        .map(|worker_pubkey| {
+            let Some(worker) = worker_pubkey.parse::<Pubkey>().ok() else {
+                return SlashWorkerArtifact {
+                    worker_pubkey,
+                    tx: "UNAVAILABLE_INVALID_WORKER_PUBKEY".to_string(),
+                    sig: None,
+                    submitted: false,
+                };
+            };
+            match build_slash_worker_tx_base64(chain, job_id, worker, state.chain_auto_submit) {
+                Ok((tx, sig, submitted)) => SlashWorkerArtifact {
+                    worker_pubkey,
+                    tx,
+                    sig,
+                    submitted,
+                },
+                Err(_) => SlashWorkerArtifact {
+                    worker_pubkey,
+                    tx: "UNAVAILABLE_SLASH_BUILD_FAILED".to_string(),
+                    sig: None,
+                    submitted: false,
+                },
+            }
+        })
+        .collect()
 }
 
 fn build_finalize_trigger_payload_inner(
@@ -1975,6 +2130,7 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
                 onchain_last_observed_slot: None,
                 onchain_last_update_unix_s: Some(now),
                 onchain_deadline_slot: Some(view.deadline_slot),
+                slash_artifacts: Vec::new(),
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -2573,6 +2729,7 @@ mod tests {
             require_worker_signatures: false,
             require_result_attestation: false,
             quorum_requires_attestation: true,
+            enable_slash_artifacts: true,
             chain_auto_submit: false,
             job_timeout_secs: 60,
             chain: None,
@@ -2758,6 +2915,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds().saturating_sub(3600),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2806,6 +2964,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -3090,6 +3249,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -3161,6 +3321,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds().saturating_sub(60),
                     quorum_reached_at_unix_s: None,
                 },
@@ -3309,6 +3470,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -3383,6 +3545,7 @@ mod tests {
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
                     onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -3396,6 +3559,79 @@ mod tests {
             submitted_slot: 99,
         };
         assert!(ingest_onchain_job_result_view(&state, &bad).is_none());
+    }
+
+    #[test]
+    fn slash_artifacts_include_losing_workers() {
+        let state = test_state();
+        let worker_win_sk = SigningKey::from_bytes(&[51_u8; 32]);
+        let worker_lose_sk = SigningKey::from_bytes(&[52_u8; 32]);
+        let worker_other_sk = SigningKey::from_bytes(&[53_u8; 32]);
+        let worker_win = Pubkey::new_from_array(*worker_win_sk.verifying_key().as_bytes());
+        let worker_lose = Pubkey::new_from_array(*worker_lose_sk.verifying_key().as_bytes());
+        let worker_other = Pubkey::new_from_array(*worker_other_sk.verifying_key().as_bytes());
+        let job_id = [0xA1_u8; 32];
+        let job_id_hex = hex::encode(job_id);
+
+        let winning_hash =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let losing_hash =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
+
+        let msg_win = build_worker_attestation_message(
+            &job_id,
+            &worker_win,
+            &parse_hex32(&winning_hash).expect("hex"),
+        );
+        let msg_lose = build_worker_attestation_message(
+            &job_id,
+            &worker_lose,
+            &parse_hex32(&losing_hash).expect("hex"),
+        );
+        let sig_win = base64::engine::general_purpose::STANDARD
+            .encode(edgerun_crypto::sign(&worker_win_sk, &msg_win).to_bytes());
+        let sig_lose = base64::engine::general_purpose::STANDARD
+            .encode(edgerun_crypto::sign(&worker_lose_sk, &msg_lose).to_bytes());
+
+        let reports = vec![
+            WorkerResultReport {
+                idempotency_key: "s1".to_string(),
+                worker_pubkey: worker_win.to_string(),
+                job_id: job_id_hex.clone(),
+                bundle_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+                output_hash: winning_hash.clone(),
+                output_len: 1,
+                attestation_sig: Some(sig_win),
+                signature: None,
+            },
+            WorkerResultReport {
+                idempotency_key: "s2".to_string(),
+                worker_pubkey: worker_lose.to_string(),
+                job_id: job_id_hex.clone(),
+                bundle_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                    .to_string(),
+                output_hash: losing_hash,
+                output_len: 1,
+                attestation_sig: Some(sig_lose),
+                signature: None,
+            },
+        ];
+
+        let artifacts = build_slash_worker_artifacts(
+            &state,
+            &job_id_hex,
+            &winning_hash,
+            &[
+                worker_win.to_string(),
+                worker_lose.to_string(),
+                worker_other.to_string(),
+            ],
+            &reports,
+        );
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].worker_pubkey, worker_lose.to_string());
+        assert_eq!(artifacts[0].tx, "UNAVAILABLE_NO_CHAIN_CONTEXT");
     }
 
     #[test]
