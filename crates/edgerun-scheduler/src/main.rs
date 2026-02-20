@@ -1586,123 +1586,126 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
         if view.status != 0 {
             continue;
         }
-        let job_id_hex = hex::encode(view.job_id);
-        let already_tracked = {
-            let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.contains_key(&job_id_hex)
-        };
-        if already_tracked {
-            continue;
+        if seed_discovered_posted_job(state, &view)? {
+            changed = true;
         }
-        let runtime_id_hex = hex::encode(view.runtime_id);
-        let committee_workers = select_committee_workers(
-            state,
-            &runtime_id_hex,
-            &job_id_hex,
-            usize::from(view.committee_size.max(1)),
-        );
-        let quorum_target = usize::from(view.quorum.max(1));
-        if committee_workers.len() < quorum_target {
-            tracing::warn!(
-                job_id = %job_id_hex,
-                runtime_id = %runtime_id_hex,
-                have = committee_workers.len(),
-                need = quorum_target,
-                "skipping discovered posted job due to insufficient eligible workers"
-            );
-            continue;
-        }
-
-        let now = now_unix_seconds();
-        let mut queued: Vec<(String, QueuedAssignment)> =
-            Vec::with_capacity(committee_workers.len());
-        for worker_pubkey in &committee_workers {
-            let mut assignment = QueuedAssignment {
-                job_id: job_id_hex.clone(),
-                bundle_hash: hex::encode(view.bundle_hash),
-                bundle_url: format!(
-                    "{}/bundle/{}",
-                    state.public_base_url,
-                    hex::encode(view.bundle_hash)
-                ),
-                runtime_id: runtime_id_hex.clone(),
-                abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
-                limits: edgerun_types::Limits {
-                    max_memory_bytes: view.max_memory_bytes,
-                    max_instructions: view.max_instructions,
-                },
-                escrow_lamports: view.escrow_lamports,
-                policy_signer_pubkey: hex::encode(
-                    state.policy_signing_key.verifying_key().as_bytes(),
-                ),
-                policy_signature: String::new(),
-                policy_key_id: state.policy_key_id.clone(),
-                policy_version: state.policy_version,
-                policy_valid_after_unix_s: now,
-                policy_valid_until_unix_s: now.saturating_add(state.policy_ttl_secs),
-            };
-            assignment.policy_signature =
-                sign_assignment_policy(&state.policy_signing_key, &assignment);
-            queued.push((worker_pubkey.clone(), assignment));
-        }
-        {
-            let mut assignments = state.assignments.lock().expect("lock poisoned");
-            for (worker_pubkey, assignment) in queued {
-                assignments
-                    .entry(worker_pubkey)
-                    .or_default()
-                    .push(assignment);
-            }
-        }
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                job_id_hex.clone(),
-                JobQuorumState {
-                    committee_workers: committee_workers.clone(),
-                    committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
-                    quorum: quorum_target.min(u8::MAX as usize) as u8,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: Some("posted".to_string()),
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: Some(now),
-                    created_at_unix_s: now,
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-        let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
-            build_assign_workers_artifact(state, &job_id_hex)?;
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            if let Some(quorum_state) = job_quorum.get_mut(&job_id_hex) {
-                quorum_state.assign_tx = assign_workers_tx;
-                quorum_state.assign_sig = assign_workers_sig;
-                quorum_state.assign_submitted = assign_workers_submitted;
-            }
-        }
-        touch_job_last_update(state, &job_id_hex);
-        changed = true;
-        tracing::info!(job_id = %job_id_hex, "discovered posted on-chain job and queued assignments");
     }
 
     if changed {
         write_state_snapshot(state)?;
     }
     Ok(())
+}
+
+fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
+    let job_id_hex = hex::encode(view.job_id);
+    let already_tracked = {
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum.contains_key(&job_id_hex)
+    };
+    if already_tracked {
+        return Ok(false);
+    }
+    let runtime_id_hex = hex::encode(view.runtime_id);
+    let committee_workers = select_committee_workers(
+        state,
+        &runtime_id_hex,
+        &job_id_hex,
+        usize::from(view.committee_size.max(1)),
+    );
+    let quorum_target = usize::from(view.quorum.max(1));
+    if committee_workers.len() < quorum_target {
+        tracing::warn!(
+            job_id = %job_id_hex,
+            runtime_id = %runtime_id_hex,
+            have = committee_workers.len(),
+            need = quorum_target,
+            "skipping discovered posted job due to insufficient eligible workers"
+        );
+        return Ok(false);
+    }
+
+    let now = now_unix_seconds();
+    let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
+    for worker_pubkey in &committee_workers {
+        let mut assignment = QueuedAssignment {
+            job_id: job_id_hex.clone(),
+            bundle_hash: hex::encode(view.bundle_hash),
+            bundle_url: format!(
+                "{}/bundle/{}",
+                state.public_base_url,
+                hex::encode(view.bundle_hash)
+            ),
+            runtime_id: runtime_id_hex.clone(),
+            abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
+            limits: edgerun_types::Limits {
+                max_memory_bytes: view.max_memory_bytes,
+                max_instructions: view.max_instructions,
+            },
+            escrow_lamports: view.escrow_lamports,
+            policy_signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
+            policy_signature: String::new(),
+            policy_key_id: state.policy_key_id.clone(),
+            policy_version: state.policy_version,
+            policy_valid_after_unix_s: now,
+            policy_valid_until_unix_s: now.saturating_add(state.policy_ttl_secs),
+        };
+        assignment.policy_signature =
+            sign_assignment_policy(&state.policy_signing_key, &assignment);
+        queued.push((worker_pubkey.clone(), assignment));
+    }
+    {
+        let mut assignments = state.assignments.lock().expect("lock poisoned");
+        for (worker_pubkey, assignment) in queued {
+            assignments
+                .entry(worker_pubkey)
+                .or_default()
+                .push(assignment);
+        }
+    }
+    {
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum.insert(
+            job_id_hex.clone(),
+            JobQuorumState {
+                committee_workers: committee_workers.clone(),
+                committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
+                quorum: quorum_target.min(u8::MAX as usize) as u8,
+                assign_tx: None,
+                assign_sig: None,
+                assign_submitted: false,
+                quorum_reached: false,
+                winning_output_hash: None,
+                winning_workers: Vec::new(),
+                finalize_triggered: false,
+                finalize_tx: None,
+                finalize_sig: None,
+                finalize_submitted: false,
+                cancel_triggered: false,
+                cancel_tx: None,
+                cancel_sig: None,
+                cancel_submitted: false,
+                onchain_status: Some("posted".to_string()),
+                onchain_last_observed_slot: None,
+                onchain_last_update_unix_s: Some(now),
+                created_at_unix_s: now,
+                quorum_reached_at_unix_s: None,
+            },
+        );
+    }
+    let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
+        build_assign_workers_artifact(state, &job_id_hex)?;
+    {
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        if let Some(quorum_state) = job_quorum.get_mut(&job_id_hex) {
+            quorum_state.assign_tx = assign_workers_tx;
+            quorum_state.assign_sig = assign_workers_sig;
+            quorum_state.assign_submitted = assign_workers_submitted;
+        }
+    }
+    touch_job_last_update(state, &job_id_hex);
+    tracing::info!(job_id = %job_id_hex, "discovered posted on-chain job and queued assignments");
+    Ok(true)
 }
 
 fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
@@ -2534,6 +2537,134 @@ mod tests {
             &Pubkey::new_unique(),
             &job_id
         ));
+    }
+
+    #[test]
+    fn discovered_job_lifecycle_generates_assign_and_finalize_artifacts() {
+        let state = test_state();
+        let now = now_unix_seconds();
+        let runtime_id = [0_u8; 32];
+        let runtime_hex = hex::encode(runtime_id);
+        {
+            let mut registry = state.worker_registry.lock().expect("lock poisoned");
+            for worker in ["w1", "w2", "w3"] {
+                registry.insert(
+                    worker.to_string(),
+                    WorkerRegistryEntry {
+                        worker_pubkey: worker.to_string(),
+                        runtime_ids: vec![runtime_hex.clone()],
+                        version: "1".to_string(),
+                        max_concurrent: Some(1),
+                        mem_bytes: Some(1024),
+                        last_heartbeat_unix_s: now,
+                    },
+                );
+            }
+        }
+
+        let view = OnchainJobView {
+            job_id: [0x44_u8; 32],
+            bundle_hash: [0x55_u8; 32],
+            runtime_id,
+            max_memory_bytes: 64 * 1024 * 1024,
+            max_instructions: 1_000_000,
+            escrow_lamports: 1_000,
+            committee_size: 3,
+            quorum: 2,
+            status: 0,
+        };
+        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
+        assert!(inserted);
+
+        let job_id_hex = hex::encode(view.job_id);
+        let queued_assignments = state.assignments.lock().expect("lock poisoned");
+        let queued_total = queued_assignments.values().map(Vec::len).sum::<usize>();
+        assert_eq!(queued_total, 3);
+        drop(queued_assignments);
+
+        {
+            let mut results = state.results.lock().expect("lock poisoned");
+            let entries = results.entry(job_id_hex.clone()).or_default();
+            entries.push(WorkerResultReport {
+                idempotency_key: "r1".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: job_id_hex.clone(),
+                bundle_hash: hex::encode(view.bundle_hash),
+                output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            });
+            entries.push(WorkerResultReport {
+                idempotency_key: "r2".to_string(),
+                worker_pubkey: "w2".to_string(),
+                job_id: job_id_hex.clone(),
+                bundle_hash: hex::encode(view.bundle_hash),
+                output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    .to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            });
+        }
+
+        let reached = recompute_job_quorum(&state, &job_id_hex).expect("recompute");
+        assert!(reached);
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        let entry = jq.get(&job_id_hex).expect("quorum entry");
+        assert!(entry.finalize_triggered);
+        assert!(entry
+            .finalize_tx
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("UNAVAILABLE_FINALIZE_"));
+    }
+
+    #[test]
+    fn timeout_lifecycle_generates_cancel_artifact_without_chain() {
+        let mut state = test_state();
+        state.job_timeout_secs = 1;
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                JobQuorumState {
+                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    created_at_unix_s: now_unix_seconds().saturating_sub(60),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+        evaluate_expired_jobs(&state).expect("expire");
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        let entry = jq
+            .get("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            .expect("entry");
+        assert!(entry.cancel_triggered);
+        assert_eq!(
+            entry.cancel_tx.as_deref(),
+            Some("UNAVAILABLE_NO_CHAIN_CONTEXT")
+        );
     }
 
     #[test]
