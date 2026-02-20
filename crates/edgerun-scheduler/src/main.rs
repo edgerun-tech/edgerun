@@ -505,10 +505,9 @@ async fn worker_result(
     let job_id = payload.job_id.clone();
     let mut results = state.results.lock().expect("lock poisoned");
     let entries = results.entry(payload.job_id.clone()).or_default();
-    if entries
-        .iter()
-        .any(|existing| existing.idempotency_key == payload.idempotency_key)
-    {
+    if entries.iter().any(|existing| {
+        is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
+    }) {
         drop(results);
         let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
         return Ok(Json(serde_json::json!({
@@ -564,10 +563,9 @@ async fn worker_failure(
     let job_id = payload.job_id.clone();
     let mut failures = state.failures.lock().expect("lock poisoned");
     let entries = failures.entry(payload.job_id.clone()).or_default();
-    if entries
-        .iter()
-        .any(|existing| existing.idempotency_key == payload.idempotency_key)
-    {
+    if entries.iter().any(|existing| {
+        is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
+    }) {
         drop(failures);
         return Ok(Json(serde_json::json!({ "ok": true, "duplicate": true })));
     }
@@ -613,10 +611,9 @@ async fn worker_replay_artifact(
     let job_id = payload.job_id.clone();
     let mut replay_artifacts = state.replay_artifacts.lock().expect("lock poisoned");
     let entries = replay_artifacts.entry(payload.job_id.clone()).or_default();
-    if entries
-        .iter()
-        .any(|existing| existing.idempotency_key == payload.idempotency_key)
-    {
+    if entries.iter().any(|existing| {
+        is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
+    }) {
         drop(replay_artifacts);
         return Ok(Json(serde_json::json!({ "ok": true, "duplicate": true })));
     }
@@ -1691,6 +1688,10 @@ fn touch_job_last_update(state: &AppState, job_id: &str) {
     map.insert(job_id.to_string(), now_unix_seconds());
 }
 
+fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {
+    !incoming.is_empty() && existing == incoming
+}
+
 fn trim_vec<T>(items: &mut Vec<T>, max_len: usize) {
     if items.len() > max_len {
         let excess = items.len() - max_len;
@@ -1999,5 +2000,11 @@ mod tests {
 
         assert!(is_assigned_worker(&state, "job-1", "w2"));
         assert!(!is_assigned_worker(&state, "job-1", "intruder"));
+    }
+
+    #[test]
+    fn empty_idempotency_is_not_deduped() {
+        assert!(!is_duplicate_idempotency("abc", ""));
+        assert!(is_duplicate_idempotency("abc", "abc"));
     }
 }
