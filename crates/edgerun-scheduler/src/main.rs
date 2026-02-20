@@ -50,6 +50,7 @@ struct AppState {
     heartbeat_ttl_secs: u64,
     require_worker_signatures: bool,
     chain_auto_submit: bool,
+    job_timeout_secs: u64,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -182,6 +183,14 @@ struct JobQuorumState {
     finalize_sig: Option<String>,
     #[serde(default)]
     finalize_submitted: bool,
+    #[serde(default)]
+    cancel_triggered: bool,
+    #[serde(default)]
+    cancel_tx: Option<String>,
+    #[serde(default)]
+    cancel_sig: Option<String>,
+    #[serde(default)]
+    cancel_submitted: bool,
     created_at_unix_s: u64,
     quorum_reached_at_unix_s: Option<u64>,
 }
@@ -354,6 +363,7 @@ async fn main() -> Result<()> {
             false,
         ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
+        job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         chain,
     };
     enforce_history_retention(&state);
@@ -437,6 +447,9 @@ async fn worker_heartbeat(
     if let Err(err) = write_state_snapshot(&state) {
         tracing::warn!(error = %err, "failed to persist state after worker heartbeat");
     }
+    if let Err(err) = evaluate_expired_jobs(&state) {
+        tracing::warn!(error = %err, "failed to evaluate expired jobs");
+    }
 
     Ok(Json(HeartbeatResponse {
         ok: true,
@@ -503,6 +516,7 @@ async fn worker_result(
     let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
     touch_job_last_update(&state, &job_id);
     enforce_history_retention(&state);
+    evaluate_expired_jobs(&state).map_err(internal_err)?;
 
     write_state_snapshot(&state).map_err(internal_err)?;
     Ok(Json(serde_json::json!({
@@ -549,6 +563,7 @@ async fn worker_failure(
     drop(failures);
     touch_job_last_update(&state, &job_id);
     enforce_history_retention(&state);
+    evaluate_expired_jobs(&state).map_err(internal_err)?;
 
     write_state_snapshot(&state).map_err(internal_err)?;
     Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
@@ -591,6 +606,7 @@ async fn worker_replay_artifact(
     drop(replay_artifacts);
     touch_job_last_update(&state, &job_id);
     enforce_history_retention(&state);
+    evaluate_expired_jobs(&state).map_err(internal_err)?;
 
     write_state_snapshot(&state).map_err(internal_err)?;
     Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
@@ -743,6 +759,10 @@ async fn job_create(
                 finalize_tx: None,
                 finalize_sig: None,
                 finalize_submitted: false,
+                cancel_triggered: false,
+                cancel_tx: None,
+                cancel_sig: None,
+                cancel_submitted: false,
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -760,6 +780,7 @@ async fn job_create(
         }
     }
     write_state_snapshot(&state).map_err(internal_err)?;
+    evaluate_expired_jobs(&state).map_err(internal_err)?;
 
     let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
         let tx_args = PostJobArgs {
@@ -1007,6 +1028,45 @@ fn build_assign_workers_tx_base64(
     Ok((tx_b64, signature, false))
 }
 
+fn build_cancel_expired_job_tx_base64(
+    chain: &ChainContext,
+    job_id: [u8; 32],
+    client: Pubkey,
+    auto_submit: bool,
+) -> Result<(String, Option<String>, bool)> {
+    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let ix = Instruction {
+        program_id: chain.program_id,
+        accounts: vec![
+            AccountMeta::new(chain.payer.pubkey(), true),
+            AccountMeta::new(job_pda, false),
+            AccountMeta::new(client, false),
+        ],
+        data: encode_cancel_expired_job_data(),
+    };
+    let blockhash = chain
+        .rpc
+        .get_latest_blockhash()
+        .context("failed to fetch latest blockhash")?;
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&chain.payer.pubkey()),
+        &[&chain.payer],
+        blockhash,
+    );
+    let signature = tx.signatures.first().map(ToString::to_string);
+    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
+    if auto_submit {
+        let sent = chain
+            .rpc
+            .send_and_confirm_transaction(&tx)
+            .context("failed to send cancel_expired_job transaction")?;
+        return Ok((tx_b64, Some(sent.to_string()), true));
+    }
+    Ok((tx_b64, signature, false))
+}
+
 fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     let mut data = Vec::with_capacity(8 + 32 + 32 + 32 + 4 + 8 + 8);
     data.extend_from_slice(&anchor_discriminator("post_job"));
@@ -1033,6 +1093,12 @@ fn encode_finalize_job_data(winning_output_hash: [u8; 32], winner_count: u8) -> 
     data.extend_from_slice(&anchor_discriminator("finalize_job"));
     data.extend_from_slice(&winning_output_hash);
     data.push(winner_count);
+    data
+}
+
+fn encode_cancel_expired_job_data() -> Vec<u8> {
+    let mut data = Vec::with_capacity(8);
+    data.extend_from_slice(&anchor_discriminator("cancel_expired_job"));
     data
 }
 
@@ -1365,6 +1431,61 @@ fn build_assign_workers_artifact(
     Ok((Some(tx), sig, submitted))
 }
 
+fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
+    let now = now_unix_seconds();
+    let timeout = state.job_timeout_secs.max(1);
+    let candidates = {
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum
+            .iter()
+            .filter_map(|(job_id, quorum_state)| {
+                let expired = now.saturating_sub(quorum_state.created_at_unix_s) >= timeout;
+                if expired && !quorum_state.quorum_reached && !quorum_state.cancel_triggered {
+                    Some(job_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    for job_id in candidates {
+        let (cancel_tx, cancel_sig, cancel_submitted) =
+            build_cancel_expired_artifact(state, &job_id)?;
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        if let Some(quorum_state) = job_quorum.get_mut(&job_id) {
+            quorum_state.cancel_triggered = true;
+            quorum_state.cancel_tx = Some(cancel_tx);
+            quorum_state.cancel_sig = cancel_sig;
+            quorum_state.cancel_submitted = cancel_submitted;
+        }
+    }
+
+    write_state_snapshot(state)?;
+    Ok(())
+}
+
+fn build_cancel_expired_artifact(
+    state: &AppState,
+    job_id_hex: &str,
+) -> Result<(String, Option<String>, bool)> {
+    let Some(chain) = state.chain.as_ref() else {
+        return Ok(("UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(), None, false));
+    };
+    let job_id = parse_hex32(job_id_hex)?;
+    let (tx, sig, submitted) = build_cancel_expired_job_tx_base64(
+        chain,
+        job_id,
+        chain.payer.pubkey(),
+        state.chain_auto_submit,
+    )?;
+    Ok((tx, sig, submitted))
+}
+
 fn build_finalize_trigger_payload(
     state: &AppState,
     job_id_hex: &str,
@@ -1622,6 +1743,7 @@ mod tests {
             heartbeat_ttl_secs: 15,
             require_worker_signatures: false,
             chain_auto_submit: false,
+            job_timeout_secs: 60,
             chain: None,
         }
     }
@@ -1770,5 +1892,45 @@ mod tests {
         )
         .expect("verification should not error");
         assert!(ok);
+    }
+
+    #[test]
+    fn expired_job_without_quorum_gets_cancel_artifact() {
+        let state = test_state();
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+                JobQuorumState {
+                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    created_at_unix_s: now_unix_seconds().saturating_sub(3600),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+
+        evaluate_expired_jobs(&state).expect("expiry evaluation");
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        let entry = job_quorum
+            .get("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            .expect("entry exists");
+        assert!(entry.cancel_triggered);
+        assert!(entry.cancel_tx.is_some());
     }
 }
