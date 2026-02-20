@@ -49,6 +49,7 @@ struct AppState {
     quorum: usize,
     heartbeat_ttl_secs: u64,
     require_worker_signatures: bool,
+    chain_auto_submit: bool,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -166,6 +167,12 @@ struct JobQuorumState {
     committee_workers: Vec<String>,
     committee_size: u8,
     quorum: u8,
+    #[serde(default)]
+    assign_tx: Option<String>,
+    #[serde(default)]
+    assign_sig: Option<String>,
+    #[serde(default)]
+    assign_submitted: bool,
     quorum_reached: bool,
     winning_output_hash: Option<String>,
     winning_workers: Vec<String>,
@@ -173,6 +180,8 @@ struct JobQuorumState {
     finalize_triggered: bool,
     finalize_tx: Option<String>,
     finalize_sig: Option<String>,
+    #[serde(default)]
+    finalize_submitted: bool,
     created_at_unix_s: u64,
     quorum_reached_at_unix_s: Option<u64>,
 }
@@ -255,6 +264,8 @@ struct JobCreateResponse {
     bundle_url: String,
     post_job_tx: String,
     post_job_sig: Option<String>,
+    assign_workers_tx: Option<String>,
+    assign_workers_sig: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -342,6 +353,7 @@ async fn main() -> Result<()> {
             "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES",
             false,
         ),
+        chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         chain,
     };
     enforce_history_retention(&state);
@@ -721,18 +733,32 @@ async fn job_create(
                 committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
                 quorum: effective_quorum.min(u8::MAX as usize) as u8,
                 committee_workers,
+                assign_tx: None,
+                assign_sig: None,
+                assign_submitted: false,
                 quorum_reached: false,
                 winning_output_hash: None,
                 winning_workers: Vec::new(),
                 finalize_triggered: false,
                 finalize_tx: None,
                 finalize_sig: None,
+                finalize_submitted: false,
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
         );
     }
     touch_job_last_update(&state, &bundle_hash_hex);
+    let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
+        build_assign_workers_artifact(&state, &bundle_hash_hex).map_err(internal_err)?;
+    {
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        if let Some(quorum_state) = job_quorum.get_mut(&bundle_hash_hex) {
+            quorum_state.assign_tx = assign_workers_tx.clone();
+            quorum_state.assign_sig = assign_workers_sig.clone();
+            quorum_state.assign_submitted = assign_workers_submitted;
+        }
+    }
     write_state_snapshot(&state).map_err(internal_err)?;
 
     let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
@@ -763,6 +789,8 @@ async fn job_create(
         bundle_url: format!("{}/bundle/{bundle_hash_hex}", state.public_base_url),
         post_job_tx,
         post_job_sig,
+        assign_workers_tx,
+        assign_workers_sig,
     }))
 }
 
@@ -869,18 +897,38 @@ fn build_post_job_tx_base64(
 fn build_finalize_job_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
-) -> Result<(String, Option<String>)> {
+    committee: [Pubkey; 3],
+    winners: Vec<Pubkey>,
+    winning_output_hash_hex: &str,
+    auto_submit: bool,
+) -> Result<(String, Option<String>, bool)> {
     let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
     let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let (worker_stake_0, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
+    let (worker_stake_1, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
+    let (worker_stake_2, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
+    let winning_output_hash =
+        parse_hex32(winning_output_hash_hex).context("winning output hash must be 32-byte hex")?;
+    let winner_count = winners.len().min(u8::MAX as usize) as u8;
 
+    let mut accounts = vec![
+        AccountMeta::new(chain.payer.pubkey(), true),
+        AccountMeta::new(config_pda, false),
+        AccountMeta::new(job_pda, false),
+        AccountMeta::new(worker_stake_0, false),
+        AccountMeta::new(worker_stake_1, false),
+        AccountMeta::new(worker_stake_2, false),
+    ];
+    for winner in winners {
+        accounts.push(AccountMeta::new(winner, false));
+    }
     let ix = Instruction {
         program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new_readonly(config_pda, false),
-            AccountMeta::new(job_pda, false),
-        ],
-        data: encode_finalize_job_data(job_id),
+        accounts,
+        data: encode_finalize_job_data(winning_output_hash, winner_count),
     };
 
     let blockhash = chain
@@ -898,7 +946,65 @@ fn build_finalize_job_tx_base64(
     let signature = tx.signatures.first().map(ToString::to_string);
     let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    Ok((tx_b64, signature))
+    if auto_submit {
+        let sent = chain
+            .rpc
+            .send_and_confirm_transaction(&tx)
+            .context("failed to send finalize_job transaction")?;
+        return Ok((tx_b64, Some(sent.to_string()), true));
+    }
+    Ok((tx_b64, signature, false))
+}
+
+fn build_assign_workers_tx_base64(
+    chain: &ChainContext,
+    job_id: [u8; 32],
+    workers: [Pubkey; 3],
+    auto_submit: bool,
+) -> Result<(String, Option<String>, bool)> {
+    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
+    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let (worker_stake_0, _) =
+        Pubkey::find_program_address(&[b"worker_stake", workers[0].as_ref()], &chain.program_id);
+    let (worker_stake_1, _) =
+        Pubkey::find_program_address(&[b"worker_stake", workers[1].as_ref()], &chain.program_id);
+    let (worker_stake_2, _) =
+        Pubkey::find_program_address(&[b"worker_stake", workers[2].as_ref()], &chain.program_id);
+
+    let ix = Instruction {
+        program_id: chain.program_id,
+        accounts: vec![
+            AccountMeta::new(chain.payer.pubkey(), true),
+            AccountMeta::new(config_pda, false),
+            AccountMeta::new(job_pda, false),
+            AccountMeta::new(worker_stake_0, false),
+            AccountMeta::new(worker_stake_1, false),
+            AccountMeta::new(worker_stake_2, false),
+        ],
+        data: encode_assign_workers_data(workers),
+    };
+
+    let blockhash = chain
+        .rpc
+        .get_latest_blockhash()
+        .context("failed to fetch latest blockhash")?;
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&chain.payer.pubkey()),
+        &[&chain.payer],
+        blockhash,
+    );
+    let signature = tx.signatures.first().map(ToString::to_string);
+    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
+    if auto_submit {
+        let sent = chain
+            .rpc
+            .send_and_confirm_transaction(&tx)
+            .context("failed to send assign_workers transaction")?;
+        return Ok((tx_b64, Some(sent.to_string()), true));
+    }
+    Ok((tx_b64, signature, false))
 }
 
 fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
@@ -913,10 +1019,20 @@ fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     data
 }
 
-fn encode_finalize_job_data(job_id: [u8; 32]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32);
+fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(8 + 32 * 3);
+    data.extend_from_slice(&anchor_discriminator("assign_workers"));
+    data.extend_from_slice(workers[0].as_ref());
+    data.extend_from_slice(workers[1].as_ref());
+    data.extend_from_slice(workers[2].as_ref());
+    data
+}
+
+fn encode_finalize_job_data(winning_output_hash: [u8; 32], winner_count: u8) -> Vec<u8> {
+    let mut data = Vec::with_capacity(8 + 32 + 1);
     data.extend_from_slice(&anchor_discriminator("finalize_job"));
-    data.extend_from_slice(&job_id);
+    data.extend_from_slice(&winning_output_hash);
+    data.push(winner_count);
     data
 }
 
@@ -1083,14 +1199,29 @@ fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
         quorum_state.quorum_reached_at_unix_s = Some(now_unix_seconds());
     }
 
-    if !quorum_state.finalize_triggered && (changed_hash || !was_reached) {
-        let (finalize_tx, finalize_sig) =
-            build_finalize_trigger_payload(state, job_id, &winning_hash);
-        quorum_state.finalize_triggered = true;
-        quorum_state.finalize_tx = Some(finalize_tx);
-        quorum_state.finalize_sig = finalize_sig;
+    let should_trigger_finalize =
+        !quorum_state.finalize_triggered && (changed_hash || !was_reached);
+    let committee_workers = quorum_state.committee_workers.clone();
+    let winners = quorum_state.winning_workers.clone();
+    drop(job_quorum);
+
+    if should_trigger_finalize {
+        let (finalize_tx, finalize_sig, finalize_submitted) = build_finalize_trigger_payload(
+            state,
+            job_id,
+            &winning_hash,
+            &committee_workers,
+            &winners,
+        );
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        if let Some(quorum_state) = job_quorum.get_mut(job_id) {
+            quorum_state.finalize_triggered = true;
+            quorum_state.finalize_tx = Some(finalize_tx);
+            quorum_state.finalize_sig = finalize_sig;
+            quorum_state.finalize_submitted = finalize_submitted;
+        }
     }
-    Ok(quorum_state.quorum_reached)
+    Ok(true)
 }
 
 fn find_winning_output_hash(
@@ -1126,24 +1257,128 @@ fn find_winning_output_hash(
         })
 }
 
-fn build_finalize_trigger_payload(
+fn build_finalize_trigger_payload_inner(
     state: &AppState,
     job_id_hex: &str,
     winning_output_hash: &str,
-) -> (String, Option<String>) {
+    committee_workers: &[String],
+    winning_workers: &[String],
+) -> (String, Option<String>, bool) {
     if let Some(chain) = state.chain.as_ref() {
         if let Ok(job_id) = parse_hex32(job_id_hex) {
-            match build_finalize_job_tx_base64(chain, job_id) {
-                Ok((tx, sig)) => return (tx, sig),
-                Err(err) => {
-                    tracing::warn!(error = %err, job_id = %job_id_hex, "failed to build finalize tx")
+            if let Some((committee, winners)) =
+                parse_finalize_accounts(committee_workers, winning_workers)
+            {
+                match build_finalize_job_tx_base64(
+                    chain,
+                    job_id,
+                    committee,
+                    winners,
+                    winning_output_hash,
+                    state.chain_auto_submit,
+                ) {
+                    Ok((tx, sig, submitted)) => return (tx, sig, submitted),
+                    Err(err) => {
+                        tracing::warn!(
+                            error = %err,
+                            job_id = %job_id_hex,
+                            "failed to build finalize tx"
+                        )
+                    }
                 }
+            } else {
+                tracing::warn!(
+                    job_id = %job_id_hex,
+                    "unable to derive finalize account metas from committee/winner pubkeys"
+                );
             }
         } else {
             tracing::warn!(job_id = %job_id_hex, "invalid job id hex for finalize tx build");
         }
     }
-    (format!("UNAVAILABLE_FINALIZE_{winning_output_hash}"), None)
+    (
+        format!("UNAVAILABLE_FINALIZE_{winning_output_hash}"),
+        None,
+        false,
+    )
+}
+
+fn parse_finalize_accounts(
+    committee_workers: &[String],
+    winning_workers: &[String],
+) -> Option<([Pubkey; 3], Vec<Pubkey>)> {
+    if committee_workers.len() != 3 {
+        return None;
+    }
+    let committee = [
+        committee_workers.first()?.parse::<Pubkey>().ok()?,
+        committee_workers.get(1)?.parse::<Pubkey>().ok()?,
+        committee_workers.get(2)?.parse::<Pubkey>().ok()?,
+    ];
+    let committee_set: HashSet<Pubkey> = committee.iter().copied().collect();
+    let winners = winning_workers
+        .iter()
+        .filter_map(|worker| worker.parse::<Pubkey>().ok())
+        .filter(|worker| committee_set.contains(worker))
+        .collect::<Vec<_>>();
+    if winners.is_empty() {
+        return None;
+    }
+    Some((committee, winners))
+}
+
+fn build_assign_workers_artifact(
+    state: &AppState,
+    job_id_hex: &str,
+) -> Result<(Option<String>, Option<String>, bool)> {
+    let Some(chain) = state.chain.as_ref() else {
+        return Ok((None, None, false));
+    };
+    let job_id = parse_hex32(job_id_hex)?;
+    let committee_workers = {
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum
+            .get(job_id_hex)
+            .map(|q| q.committee_workers.clone())
+            .unwrap_or_default()
+    };
+    if committee_workers.len() != 3 {
+        return Ok((
+            Some("UNAVAILABLE_ASSIGN_COMMITTEE_NOT_FIXED3".to_string()),
+            None,
+            false,
+        ));
+    }
+    let workers = [
+        committee_workers[0]
+            .parse::<Pubkey>()
+            .context("committee worker pubkey invalid")?,
+        committee_workers[1]
+            .parse::<Pubkey>()
+            .context("committee worker pubkey invalid")?,
+        committee_workers[2]
+            .parse::<Pubkey>()
+            .context("committee worker pubkey invalid")?,
+    ];
+    let (tx, sig, submitted) =
+        build_assign_workers_tx_base64(chain, job_id, workers, state.chain_auto_submit)?;
+    Ok((Some(tx), sig, submitted))
+}
+
+fn build_finalize_trigger_payload(
+    state: &AppState,
+    job_id_hex: &str,
+    winning_output_hash: &str,
+    committee_workers: &[String],
+    winning_workers: &[String],
+) -> (String, Option<String>, bool) {
+    build_finalize_trigger_payload_inner(
+        state,
+        job_id_hex,
+        winning_output_hash,
+        committee_workers,
+        winning_workers,
+    )
 }
 
 fn parse_hex32(value: &str) -> Result<[u8; 32]> {
@@ -1386,6 +1621,7 @@ mod tests {
             quorum: 2,
             heartbeat_ttl_secs: 15,
             require_worker_signatures: false,
+            chain_auto_submit: false,
             chain: None,
         }
     }
