@@ -25,6 +25,7 @@ Examples:
   scripts/ci-local.sh --job runtime-calibration
   scripts/ci-local.sh --job runtime-slo
   scripts/ci-local.sh --job runtime-fuzz-sanity
+  scripts/ci-local.sh --job runtime-ub-safety
   scripts/ci-local.sh --job runtime-security
   scripts/ci-local.sh --dry-run
 EOF
@@ -82,6 +83,9 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  cargo run -p edgerun-runtime -- calibrate-fuel --profile local --artifact /tmp/fuel-calibration.local.json --runs 3 --max-per-unit-spread 0.4"
     echo "  cargo run -p edgerun-runtime -- slo-smoke --profile local --artifact /tmp/slo-smoke.local.json --runs 50 --max-p95-ms 100 --min-ops-per-sec 30"
     echo "  (optional, with cargo-fuzz+nightly) (cd crates/edgerun-runtime/fuzz && cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=15 && cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15 && cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15)"
+    echo "  (optional, with nightly+miri) cargo +nightly miri setup && MIRIFLAGS='-Zmiri-disable-isolation -Zmiri-strict-provenance' cargo +nightly miri test -p edgerun-runtime --lib"
+    echo "  (optional, with nightly sanitizer support) RUSTFLAGS='-Zsanitizer=address' cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1"
+    echo "  (optional, with nightly sanitizer support) RUSTFLAGS='-Zsanitizer=undefined' cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1"
     echo "  python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json"
     echo "  (optional, with cargo-audit) cargo audit"
     echo "  (optional, with cargo-cyclonedx) cargo cyclonedx --manifest-path crates/edgerun-runtime/Cargo.toml --format json --override-filename runtime-sbom && mv crates/edgerun-runtime/runtime-sbom.json /tmp/edgerun-runtime-security/runtime-sbom.json"
@@ -174,6 +178,24 @@ run_runtime_fuzz_sanity() {
   )
 }
 
+run_runtime_ub_safety() {
+  if ! rustup toolchain list | grep -q '^nightly'; then
+    echo "nightly toolchain not found; skipping runtime-ub-safety fallback"
+    return 0
+  fi
+  if ! cargo +nightly miri --help >/dev/null 2>&1; then
+    echo "miri not found on nightly toolchain; skipping runtime-ub-safety fallback"
+    return 0
+  fi
+  cargo +nightly miri setup
+  MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-strict-provenance" \
+    cargo +nightly miri test -p edgerun-runtime --lib
+  RUSTFLAGS="-Zsanitizer=address" \
+    cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1
+  RUSTFLAGS="-Zsanitizer=undefined" \
+    cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1
+}
+
 run_runtime_security() {
   python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json
   if ! command -v cargo-audit >/dev/null 2>&1 && ! cargo audit --help >/dev/null 2>&1; then
@@ -219,6 +241,7 @@ case "${JOB:-all}" in
     run_runtime_calibration
     run_runtime_slo
     run_runtime_fuzz_sanity
+    run_runtime_ub_safety
     run_runtime_security
     run_program_localnet
     ;;
@@ -242,6 +265,9 @@ case "${JOB:-all}" in
     ;;
   runtime-fuzz-sanity)
     run_runtime_fuzz_sanity
+    ;;
+  runtime-ub-safety)
+    run_runtime_ub_safety
     ;;
   runtime-security)
     run_runtime_security

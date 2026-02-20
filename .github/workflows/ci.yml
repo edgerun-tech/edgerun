@@ -221,6 +221,38 @@ jobs:
           cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15
           cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15
 
+  runtime-ub-safety:
+    name: Runtime UB Safety (Miri/ASan/UBSan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (nightly + miri)
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Miri checks (runtime lib tests)
+        run: |
+          cargo +nightly miri setup
+          MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-strict-provenance" \
+            cargo +nightly miri test -p edgerun-runtime --lib
+
+      - name: AddressSanitizer checks
+        run: |
+          RUSTFLAGS="-Zsanitizer=address" \
+          cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1
+
+      - name: UndefinedBehaviorSanitizer checks
+        run: |
+          RUSTFLAGS="-Zsanitizer=undefined" \
+          cargo +nightly test -p edgerun-runtime --lib --target x86_64-unknown-linux-gnu -- --test-threads=1
+
   runtime-security:
     name: Runtime Security Gates
     runs-on: ubuntu-24.04

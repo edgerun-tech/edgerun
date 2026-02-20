@@ -45,6 +45,7 @@ Implemented:
 - Signed runtime release provenance workflow (`.github/workflows/runtime-provenance.yml`)
 - Hash-only runtime execution mode for worker path (no output byte buffering in worker execution loop)
 - External security review packet + findings ledger validation pipeline
+- UB-focused CI checks for runtime crate (`miri`, `asan`, `ubsan`)
 
 Not yet production-ready:
 
