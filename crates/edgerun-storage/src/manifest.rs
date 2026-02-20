@@ -133,7 +133,10 @@ impl Manifest {
     pub fn compute_crc(&self) -> u32 {
         use crc32fast::Hasher;
         let mut hasher = Hasher::new();
-        let json = serde_json::to_string(self).unwrap_or_default();
+        // Exclude CRC field itself so checksum verification is deterministic.
+        let mut canonical = self.clone();
+        canonical.manifest_crc = 0;
+        let json = serde_json::to_string(&canonical).unwrap_or_default();
         hasher.update(json.as_bytes());
         hasher.finalize()
     }
@@ -574,6 +577,22 @@ mod tests {
         let crc = manifest.compute_crc();
 
         assert!(crc != 0);
+    }
+
+    #[test]
+    fn test_manifest_crc_is_stable_after_assignment() {
+        let mut manifest = Manifest::new();
+        manifest.epoch = 42;
+        manifest.manifest_crc = manifest.compute_crc();
+        assert_eq!(manifest.manifest_crc, manifest.compute_crc());
+    }
+
+    #[test]
+    fn test_manifest_manager_validate_fresh_store() -> Result<(), ManifestError> {
+        let temp_dir = TempDir::new().unwrap();
+        let manager = ManifestManager::new(temp_dir.path().to_path_buf())?;
+        manager.validate()?;
+        Ok(())
     }
 
     #[test]
