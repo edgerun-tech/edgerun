@@ -12,9 +12,10 @@ use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::{read_keypair_file, Keypair, Signer},
-    system_program, sysvar,
+    sysvar,
     transaction::Transaction,
 };
+use solana_system_interface::program as system_program;
 
 #[derive(Debug)]
 struct WorkerConfig {

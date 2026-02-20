@@ -17,6 +17,7 @@ base64.workspace = true
 ed25519-dalek.workspace = true
 solana-client.workspace = true
 solana-sdk.workspace = true
+solana-system-interface.workspace = true
 edgerun-runtime = { path = "../../crates/edgerun-runtime" }
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-types = { path = "../../crates/edgerun-types" }

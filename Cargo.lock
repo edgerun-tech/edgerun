@@ -1412,6 +1412,7 @@ dependencies = [
  "serde_json",
  "solana-client",
  "solana-sdk",
+ "solana-system-interface",
  "tokio",
  "tracing",
  "tracing-subscriber",
