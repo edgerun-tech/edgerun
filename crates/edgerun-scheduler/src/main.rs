@@ -488,6 +488,12 @@ async fn worker_result(
             "invalid worker signature".to_string(),
         ));
     }
+    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "worker is not assigned to this job".to_string(),
+        ));
+    }
     tracing::info!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -541,6 +547,12 @@ async fn worker_failure(
             "invalid worker signature".to_string(),
         ));
     }
+    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "worker is not assigned to this job".to_string(),
+        ));
+    }
     tracing::warn!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -582,6 +594,12 @@ async fn worker_replay_artifact(
         return Err((
             StatusCode::UNAUTHORIZED,
             "invalid worker signature".to_string(),
+        ));
+    }
+    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "worker is not assigned to this job".to_string(),
         ));
     }
     tracing::info!(
@@ -1239,6 +1257,17 @@ fn select_committee_workers(
     });
     eligible.truncate(committee_size.max(1));
     eligible
+}
+
+fn is_assigned_worker(state: &AppState, job_id: &str, worker_pubkey: &str) -> bool {
+    let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+    let Some(quorum_state) = job_quorum.get(job_id) else {
+        return false;
+    };
+    quorum_state
+        .committee_workers
+        .iter()
+        .any(|worker| worker == worker_pubkey)
 }
 
 fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
@@ -1935,5 +1964,40 @@ mod tests {
             .expect("entry exists");
         assert!(entry.cancel_triggered);
         assert!(entry.cancel_tx.is_some());
+    }
+
+    #[test]
+    fn worker_must_be_in_committee() {
+        let state = test_state();
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                "job-1".to_string(),
+                JobQuorumState {
+                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+
+        assert!(is_assigned_worker(&state, "job-1", "w2"));
+        assert!(!is_assigned_worker(&state, "job-1", "intruder"));
     }
 }
