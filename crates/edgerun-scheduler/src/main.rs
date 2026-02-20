@@ -52,6 +52,7 @@ struct AppState {
     heartbeat_ttl_secs: u64,
     require_worker_signatures: bool,
     require_result_attestation: bool,
+    quorum_requires_attestation: bool,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
     chain: Option<Arc<ChainContext>>,
@@ -393,6 +394,10 @@ async fn main() -> Result<()> {
             "EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION",
             false,
         ),
+        quorum_requires_attestation: read_env_bool(
+            "EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION",
+            true,
+        ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         chain,
@@ -658,6 +663,14 @@ async fn worker_replay_artifact(
             StatusCode::BAD_REQUEST,
             "artifact.bundle_hash does not match job expectation".to_string(),
         ));
+    }
+    if let Some(runtime_id) = payload.artifact.runtime_id.as_deref() {
+        if !matches_expected_runtime_id(&state, &payload.job_id, runtime_id) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "artifact.runtime_id does not match job expectation".to_string(),
+            ));
+        }
     }
     tracing::info!(
         worker = %payload.worker_pubkey,
@@ -1344,6 +1357,19 @@ fn matches_expected_bundle_hash(state: &AppState, job_id: &str, bundle_hash: &st
         .eq_ignore_ascii_case(bundle_hash)
 }
 
+fn matches_expected_runtime_id(state: &AppState, job_id: &str, runtime_id: &str) -> bool {
+    let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+    let Some(quorum_state) = job_quorum.get(job_id) else {
+        return false;
+    };
+    if quorum_state.expected_runtime_id.is_empty() {
+        return true;
+    }
+    quorum_state
+        .expected_runtime_id
+        .eq_ignore_ascii_case(runtime_id)
+}
+
 fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
     let reports = {
         let results = state.results.lock().expect("lock poisoned");
@@ -1354,7 +1380,20 @@ fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
         return Ok(false);
     };
     let quorum_target = usize::from(quorum_state.quorum.max(1));
-    let Some((winning_hash, winning_workers)) = find_winning_output_hash(&reports, quorum_target)
+    let expected_bundle_hash = quorum_state.expected_bundle_hash.clone();
+    let quorum_requires_attestation = state.quorum_requires_attestation;
+    let filtered_reports = reports
+        .into_iter()
+        .filter(|report| {
+            (expected_bundle_hash.is_empty()
+                || expected_bundle_hash.eq_ignore_ascii_case(&report.bundle_hash))
+                && (!quorum_requires_attestation
+                    || (report.attestation_sig.is_some()
+                        && verify_result_attestation(state, report).unwrap_or(false)))
+        })
+        .collect::<Vec<_>>();
+    let Some((winning_hash, winning_workers)) =
+        find_winning_output_hash(&filtered_reports, quorum_target)
     else {
         return Ok(false);
     };
@@ -2296,6 +2335,7 @@ mod tests {
             heartbeat_ttl_secs: 15,
             require_worker_signatures: false,
             require_result_attestation: false,
+            quorum_requires_attestation: true,
             chain_auto_submit: false,
             job_timeout_secs: 60,
             chain: None,
@@ -2623,7 +2663,9 @@ mod tests {
 
     #[test]
     fn discovered_job_lifecycle_generates_assign_and_finalize_artifacts() {
-        let state = test_state();
+        let mut state = test_state();
+        state.quorum_requires_attestation = false;
+        let state = state;
         let now = now_unix_seconds();
         let runtime_id = [0_u8; 32];
         let runtime_hex = hex::encode(runtime_id);
@@ -2703,6 +2745,76 @@ mod tests {
             .as_deref()
             .unwrap_or_default()
             .starts_with("UNAVAILABLE_FINALIZE_"));
+    }
+
+    #[test]
+    fn quorum_requires_attestation_by_default() {
+        let state = test_state();
+        let job_id = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string();
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                job_id.clone(),
+                JobQuorumState {
+                    expected_bundle_hash:
+                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
+                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+        {
+            let mut results = state.results.lock().expect("lock poisoned");
+            let entries = results.entry(job_id.clone()).or_default();
+            entries.push(WorkerResultReport {
+                idempotency_key: "q1".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: job_id.clone(),
+                bundle_hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+                output_hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .to_string(),
+                output_len: 1,
+                attestation_sig: None,
+                signature: None,
+            });
+            entries.push(WorkerResultReport {
+                idempotency_key: "q2".to_string(),
+                worker_pubkey: "w2".to_string(),
+                job_id: job_id.clone(),
+                bundle_hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
+                output_hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    .to_string(),
+                output_len: 1,
+                attestation_sig: None,
+                signature: None,
+            });
+        }
+        let reached = recompute_job_quorum(&state, &job_id).expect("recompute");
+        assert!(!reached);
     }
 
     #[test]
