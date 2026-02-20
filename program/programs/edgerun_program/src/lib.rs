@@ -6,27 +6,30 @@ use anchor_lang::system_program::{self, Transfer};
 
 declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZK8mJzqzH9uM6YqkB6x6a");
 
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct ConfigParams {
+    pub scheduler_authority: Pubkey,
+    pub min_worker_stake_lamports: u64,
+    pub protocol_fee_bps: u16,
+    pub challenge_window_slots: u64,
+    pub max_memory_bytes: u32,
+    pub max_instructions: u64,
+    pub paused: bool,
+}
+
 #[program]
 pub mod edgerun_program {
     use super::*;
 
-    pub fn initialize_config(
-        ctx: Context<InitializeConfig>,
-        scheduler_authority: Pubkey,
-        min_worker_stake_lamports: u64,
-        protocol_fee_bps: u16,
-        challenge_window_slots: u64,
-        max_memory_bytes: u32,
-        max_instructions: u64,
-    ) -> Result<()> {
+    pub fn initialize_config(ctx: Context<InitializeConfig>, params: ConfigParams) -> Result<()> {
         let config = &mut ctx.accounts.config;
         config.admin = ctx.accounts.admin.key();
-        config.scheduler_authority = scheduler_authority;
-        config.min_worker_stake_lamports = min_worker_stake_lamports;
-        config.protocol_fee_bps = protocol_fee_bps;
-        config.challenge_window_slots = challenge_window_slots;
-        config.max_memory_bytes = max_memory_bytes;
-        config.max_instructions = max_instructions;
+        config.scheduler_authority = params.scheduler_authority;
+        config.min_worker_stake_lamports = params.min_worker_stake_lamports;
+        config.protocol_fee_bps = params.protocol_fee_bps;
+        config.challenge_window_slots = params.challenge_window_slots;
+        config.max_memory_bytes = params.max_memory_bytes;
+        config.max_instructions = params.max_instructions;
         config.committee_size = 3;
         config.quorum = 2;
         config.paused = false;
@@ -34,24 +37,15 @@ pub mod edgerun_program {
         Ok(())
     }
 
-    pub fn update_config(
-        ctx: Context<UpdateConfig>,
-        scheduler_authority: Pubkey,
-        min_worker_stake_lamports: u64,
-        protocol_fee_bps: u16,
-        challenge_window_slots: u64,
-        max_memory_bytes: u32,
-        max_instructions: u64,
-        paused: bool,
-    ) -> Result<()> {
+    pub fn update_config(ctx: Context<UpdateConfig>, params: ConfigParams) -> Result<()> {
         let config = &mut ctx.accounts.config;
-        config.scheduler_authority = scheduler_authority;
-        config.min_worker_stake_lamports = min_worker_stake_lamports;
-        config.protocol_fee_bps = protocol_fee_bps;
-        config.challenge_window_slots = challenge_window_slots;
-        config.max_memory_bytes = max_memory_bytes;
-        config.max_instructions = max_instructions;
-        config.paused = paused;
+        config.scheduler_authority = params.scheduler_authority;
+        config.min_worker_stake_lamports = params.min_worker_stake_lamports;
+        config.protocol_fee_bps = params.protocol_fee_bps;
+        config.challenge_window_slots = params.challenge_window_slots;
+        config.max_memory_bytes = params.max_memory_bytes;
+        config.max_instructions = params.max_instructions;
+        config.paused = params.paused;
         Ok(())
     }
 
@@ -143,7 +137,10 @@ pub mod edgerun_program {
         require!(!config.paused, EdgerunError::Paused);
         require!(escrow_lamports > 0, EdgerunError::InvalidAmount);
         require!(bundle_hash != [0u8; 32], EdgerunError::InvalidBundleHash);
-        require!(max_memory_bytes <= config.max_memory_bytes, EdgerunError::LimitExceeded);
+        require!(
+            max_memory_bytes <= config.max_memory_bytes,
+            EdgerunError::LimitExceeded
+        );
         require!(
             max_instructions <= config.max_instructions,
             EdgerunError::LimitExceeded
@@ -184,7 +181,10 @@ pub mod edgerun_program {
         let config = &ctx.accounts.config;
         let job = &mut ctx.accounts.job;
 
-        require!(job.status == JobStatus::Posted as u8, EdgerunError::InvalidJobState);
+        require!(
+            job.status == JobStatus::Posted as u8,
+            EdgerunError::InvalidJobState
+        );
 
         let required_lock = required_lock_for_job(job.escrow_lamports, config.committee_size)
             .max(config.min_worker_stake_lamports);
@@ -206,7 +206,10 @@ pub mod edgerun_program {
         attestation_sig: [u8; 64],
     ) -> Result<()> {
         let job = &ctx.accounts.job;
-        require!(job.status == JobStatus::Assigned as u8, EdgerunError::InvalidJobState);
+        require!(
+            job.status == JobStatus::Assigned as u8,
+            EdgerunError::InvalidJobState
+        );
         require!(
             job.assigned_workers.contains(&ctx.accounts.worker.key()),
             EdgerunError::WorkerNotAssigned
@@ -230,7 +233,10 @@ pub mod edgerun_program {
     ) -> Result<()> {
         require!(winner_count > 0, EdgerunError::InvalidAmount);
         let job = &ctx.accounts.job;
-        require!(job.status == JobStatus::Assigned as u8, EdgerunError::InvalidJobState);
+        require!(
+            job.status == JobStatus::Assigned as u8,
+            EdgerunError::InvalidJobState
+        );
         require!(winner_count >= job.quorum, EdgerunError::QuorumNotMet);
         require!(
             usize::from(winner_count) == ctx.remaining_accounts.len(),
@@ -278,7 +284,11 @@ pub mod edgerun_program {
         )?;
 
         for winner in ctx.remaining_accounts.iter() {
-            transfer_lamports_from_program_owned(&ctx.accounts.job.to_account_info(), winner, payout_each)?;
+            transfer_lamports_from_program_owned(
+                &ctx.accounts.job.to_account_info(),
+                winner,
+                payout_each,
+            )?;
         }
         if payout_remainder > 0 {
             transfer_lamports_from_program_owned(
@@ -300,8 +310,14 @@ pub mod edgerun_program {
         let job = &ctx.accounts.job;
         let current_slot = Clock::get()?.slot;
 
-        require!(job.status == JobStatus::Assigned as u8, EdgerunError::InvalidJobState);
-        require!(current_slot > job.deadline_slot, EdgerunError::JobNotExpired);
+        require!(
+            job.status == JobStatus::Assigned as u8,
+            EdgerunError::InvalidJobState
+        );
+        require!(
+            current_slot > job.deadline_slot,
+            EdgerunError::JobNotExpired
+        );
 
         let escrow = job.escrow_lamports;
         transfer_lamports_from_program_owned(
@@ -358,7 +374,10 @@ fn lock_worker_for_job(
     required_lock: u64,
 ) -> Result<()> {
     require!(stake.worker == worker_key, EdgerunError::WorkerMismatch);
-    require!(stake.status == WorkerStatus::Active as u8, EdgerunError::WorkerNotActive);
+    require!(
+        stake.status == WorkerStatus::Active as u8,
+        EdgerunError::WorkerNotActive
+    );
 
     let available = stake
         .total_stake_lamports
