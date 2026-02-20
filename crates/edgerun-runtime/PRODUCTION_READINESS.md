@@ -43,6 +43,7 @@ Implemented:
 - Runtime ABI compatibility policy documented in `ABI_COMPATIBILITY_POLICY.md` (`N` + `N-1` window)
 - Scheduler/worker ABI rollover integration test (`scripts/integration_abi_rollover.sh`)
 - Signed runtime release provenance workflow (`.github/workflows/runtime-provenance.yml`)
+- Hash-only runtime execution mode for worker path (no output byte buffering in worker execution loop)
 
 Not yet production-ready:
 
@@ -50,7 +51,7 @@ Not yet production-ready:
 - Deep fuzzing/security hardening for hostcall boundary behavior
 - Calibration model for `max_instructions` cost predictability
 - Strong observability/replay tooling for disputes and incident response
-- Streaming output policy (today output is buffered in-memory)
+- Streaming output policy for all runtime surfaces (`run` CLI still returns buffered output bytes)
 - Security posture artifacts (supply-chain pinning policy)
 
 ## Production gates

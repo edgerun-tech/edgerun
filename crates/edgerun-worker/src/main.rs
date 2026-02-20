@@ -437,7 +437,7 @@ async fn process_assignment(
         }
     };
 
-    let exec = edgerun_runtime::execute_bundle_payload_bytes_for_runtime_and_abi_strict(
+    let exec = edgerun_runtime::execute_bundle_payload_bytes_for_runtime_and_abi_digest_strict(
         bundle_bytes.as_ref(),
         expected_runtime_id,
         assignment.abi_version,
@@ -585,7 +585,7 @@ async fn process_assignment(
         job_id: assignment.job_id,
         bundle_hash: computed_bundle_hash,
         output_hash: hex::encode(report.output_hash),
-        output_len: report.output.len(),
+        output_len: report.output_len,
     };
 
     if !submit_with_retry(

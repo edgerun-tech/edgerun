@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+blake3.workspace = true
 ciborium.workspace = true
 clap.workspace = true
 hex.workspace = true

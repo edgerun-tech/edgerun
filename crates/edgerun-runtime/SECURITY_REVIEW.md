@@ -33,6 +33,7 @@ Trust boundaries:
   - fuel metering (`max_instructions`)
   - memory limiter (`max_memory_bytes`)
   - output size limits + trap mapping
+  - worker execution path uses hash-only output mode (does not retain output bytes in memory)
 - Hostcall boundary hardening tests for zero-length, partial, boundary, negative, and overflow cases.
 - Determinism and replay controls:
   - replay artifact contract

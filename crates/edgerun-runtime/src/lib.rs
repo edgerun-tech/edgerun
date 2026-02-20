@@ -25,9 +25,31 @@ pub struct ExecutionReport {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExecutionDigestReport {
+    pub bundle_hash: [u8; 32],
+    pub abi_version: u8,
+    pub runtime_id: [u8; 32],
+    pub output_hash: [u8; 32],
+    pub output_len: usize,
+    pub input_len: usize,
+    pub max_memory_bytes: u32,
+    pub max_instructions: u64,
+    pub fuel_limit: u64,
+    pub fuel_remaining: u64,
+}
+
+#[derive(Debug, Clone)]
 struct ExecutionOutcome {
-    output: Vec<u8>,
+    output: Option<Vec<u8>>,
+    output_hash: [u8; 32],
+    output_len: usize,
     fuel_remaining: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutputMode {
+    Buffered,
+    HashOnly,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,6 +106,9 @@ impl RuntimeError {
 struct RuntimeHostState {
     input: Vec<u8>,
     output: Vec<u8>,
+    output_len: usize,
+    output_hasher: blake3::Hasher,
+    output_mode: OutputMode,
     max_output_bytes: usize,
     memory: Option<Memory>,
 }
@@ -153,11 +178,86 @@ pub fn execute_bundle_payload_bytes_for_runtime_and_abi_strict(
     )
 }
 
+pub fn execute_bundle_payload_bytes_for_runtime_and_abi_digest_strict(
+    bundle_payload_bytes: &[u8],
+    expected_runtime_id: [u8; 32],
+    expected_abi_version: u8,
+) -> core::result::Result<ExecutionDigestReport, RuntimeError> {
+    execute_bundle_payload_bytes_with_policy_digest_strict(
+        bundle_payload_bytes,
+        Some(expected_runtime_id),
+        Some(expected_abi_version),
+    )
+}
+
 fn execute_bundle_payload_bytes_with_policy_strict(
     bundle_payload_bytes: &[u8],
     expected_runtime_id: Option<[u8; 32]>,
     expected_abi_version: Option<u8>,
 ) -> core::result::Result<ExecutionReport, RuntimeError> {
+    let (bundle_hash, bundle) = decode_validate_with_policy(
+        bundle_payload_bytes,
+        expected_runtime_id,
+        expected_abi_version,
+    )?;
+    let outcome = execute_wasm_with_hostcalls(
+        &bundle.wasm,
+        &bundle.input,
+        &bundle.limits,
+        OutputMode::Buffered,
+    )?;
+    let output = outcome.output.unwrap_or_default();
+
+    Ok(ExecutionReport {
+        bundle_hash,
+        abi_version: bundle.v,
+        runtime_id: bundle.runtime_id,
+        output_hash: outcome.output_hash,
+        output,
+        input_len: bundle.input.len(),
+        max_memory_bytes: bundle.limits.max_memory_bytes,
+        max_instructions: bundle.limits.max_instructions,
+        fuel_limit: bundle.limits.max_instructions,
+        fuel_remaining: outcome.fuel_remaining,
+    })
+}
+
+fn execute_bundle_payload_bytes_with_policy_digest_strict(
+    bundle_payload_bytes: &[u8],
+    expected_runtime_id: Option<[u8; 32]>,
+    expected_abi_version: Option<u8>,
+) -> core::result::Result<ExecutionDigestReport, RuntimeError> {
+    let (bundle_hash, bundle) = decode_validate_with_policy(
+        bundle_payload_bytes,
+        expected_runtime_id,
+        expected_abi_version,
+    )?;
+    let outcome = execute_wasm_with_hostcalls(
+        &bundle.wasm,
+        &bundle.input,
+        &bundle.limits,
+        OutputMode::HashOnly,
+    )?;
+
+    Ok(ExecutionDigestReport {
+        bundle_hash,
+        abi_version: bundle.v,
+        runtime_id: bundle.runtime_id,
+        output_hash: outcome.output_hash,
+        output_len: outcome.output_len,
+        input_len: bundle.input.len(),
+        max_memory_bytes: bundle.limits.max_memory_bytes,
+        max_instructions: bundle.limits.max_instructions,
+        fuel_limit: bundle.limits.max_instructions,
+        fuel_remaining: outcome.fuel_remaining,
+    })
+}
+
+fn decode_validate_with_policy(
+    bundle_payload_bytes: &[u8],
+    expected_runtime_id: Option<[u8; 32]>,
+    expected_abi_version: Option<u8>,
+) -> core::result::Result<([u8; 32], edgerun_types::BundlePayload), RuntimeError> {
     // Invariant: always hash raw canonical bytes before any decode/re-encode.
     let bundle_hash = edgerun_crypto::compute_bundle_hash(bundle_payload_bytes);
     let bundle = decode_bundle_from_canonical_bytes(bundle_payload_bytes)
@@ -198,27 +298,14 @@ fn execute_bundle_payload_bytes_with_policy_strict(
         ));
     }
 
-    let outcome = execute_wasm_with_hostcalls(&bundle.wasm, &bundle.input, &bundle.limits)?;
-    let output_hash = edgerun_crypto::blake3_256(&outcome.output);
-
-    Ok(ExecutionReport {
-        bundle_hash,
-        abi_version: bundle.v,
-        runtime_id: bundle.runtime_id,
-        output_hash,
-        output: outcome.output,
-        input_len: bundle.input.len(),
-        max_memory_bytes: bundle.limits.max_memory_bytes,
-        max_instructions: bundle.limits.max_instructions,
-        fuel_limit: bundle.limits.max_instructions,
-        fuel_remaining: outcome.fuel_remaining,
-    })
+    Ok((bundle_hash, bundle))
 }
 
 fn execute_wasm_with_hostcalls(
     wasm: &[u8],
     input: &[u8],
     limits: &edgerun_types::Limits,
+    output_mode: OutputMode,
 ) -> core::result::Result<ExecutionOutcome, RuntimeError> {
     let mut config = Config::default();
     config.consume_fuel(true);
@@ -239,6 +326,9 @@ fn execute_wasm_with_hostcalls(
         host: RuntimeHostState {
             input: input.to_vec(),
             output: Vec::new(),
+            output_len: 0,
+            output_hasher: blake3::Hasher::new(),
+            output_mode,
             max_output_bytes: limits.max_memory_bytes as usize,
             memory: None,
         },
@@ -302,21 +392,29 @@ fn execute_wasm_with_hostcalls(
         ));
     }
 
-    let output = store.data().host.output.clone();
+    let host = &store.data().host;
+    let output = if host.output_mode == OutputMode::Buffered {
+        Some(host.output.clone())
+    } else {
+        None
+    };
+    let output_len = host.output_len;
+    let output_hash: [u8; 32] = host.output_hasher.clone().finalize().into();
     let fuel_after_exec = store.get_fuel().ok().unwrap_or(0);
-    if output.len() > limits.max_memory_bytes as usize {
+    if output_len > limits.max_memory_bytes as usize {
         return Err(RuntimeError::new(
             RuntimeErrorCode::MemoryLimitExceeded,
             format!(
                 "output size {} exceeds max_memory_bytes {}",
-                output.len(),
-                limits.max_memory_bytes
+                output_len, limits.max_memory_bytes
             ),
         ));
     }
 
     Ok(ExecutionOutcome {
         output,
+        output_hash,
+        output_len,
         fuel_remaining: fuel_after_exec,
     })
 }
@@ -370,11 +468,15 @@ fn host_write_output(mut caller: Caller<'_, RuntimeStoreData>, src_ptr: i32, len
     }
 
     let state = caller.data_mut();
-    let next_len = state.host.output.len().saturating_add(bytes.len());
+    let next_len = state.host.output_len.saturating_add(bytes.len());
     if next_len > state.host.max_output_bytes {
         return -1;
     }
-    state.host.output.extend_from_slice(&bytes);
+    state.host.output_len = next_len;
+    state.host.output_hasher.update(&bytes);
+    if state.host.output_mode == OutputMode::Buffered {
+        state.host.output.extend_from_slice(&bytes);
+    }
     bytes.len() as i32
 }
 
@@ -660,6 +762,40 @@ mod tests {
         let err = execute_bundle_payload_bytes_strict(&bytes_unsupported)
             .expect_err("unsupported ABI version must fail decode");
         assert_eq!(err.code, RuntimeErrorCode::BundleDecode);
+    }
+
+    #[test]
+    fn digest_mode_matches_buffered_output_hash_and_length() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (import "edgerun" "input_len" (func $input_len (result i32)))
+                (import "edgerun" "read_input" (func $read_input (param i32 i32 i32) (result i32)))
+                (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
+                (memory (export "memory") 1 1)
+                (func (export "_start")
+                    (drop (call $read_input (i32.const 0) (i32.const 0) (call $input_len)))
+                    (drop (call $write_output (i32.const 0) (call $input_len)))
+                )
+            )"#,
+        )
+        .expect("wat parse");
+
+        let bytes = sample_payload(wasm, 1024 * 1024, 50_000);
+        let buffered = execute_bundle_payload_bytes_for_runtime_and_abi_strict(
+            &bytes,
+            [9_u8; 32],
+            edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
+        )
+        .expect("buffered exec");
+        let digest = execute_bundle_payload_bytes_for_runtime_and_abi_digest_strict(
+            &bytes,
+            [9_u8; 32],
+            edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
+        )
+        .expect("digest exec");
+
+        assert_eq!(digest.output_hash, buffered.output_hash);
+        assert_eq!(digest.output_len, buffered.output.len());
     }
 
     #[test]
