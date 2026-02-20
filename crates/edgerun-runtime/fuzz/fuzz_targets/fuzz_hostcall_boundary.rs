@@ -59,6 +59,7 @@ fuzz_target!(|case: HostcallCase| {
             max_memory_bytes: max_pages * 65_536,
             max_instructions,
         },
+        meta: None,
     };
 
     let bytes = match edgerun_types::encode_bundle_payload_canonical(&payload) {

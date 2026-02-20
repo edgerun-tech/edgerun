@@ -545,6 +545,7 @@ mod tests {
                 max_memory_bytes,
                 max_instructions,
             },
+            meta: None,
         };
         edgerun_types::encode_bundle_payload_canonical(&payload).expect("canonical encode")
     }

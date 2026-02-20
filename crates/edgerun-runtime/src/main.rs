@@ -738,6 +738,7 @@ fn encode_bundle(
             max_memory_bytes,
             max_instructions,
         },
+        meta: None,
     };
     Ok(edgerun_types::encode_bundle_payload_canonical(&payload)?)
 }

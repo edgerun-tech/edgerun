@@ -32,6 +32,17 @@ pub struct BundlePayload {
     pub wasm: Vec<u8>,
     pub input: Vec<u8>,
     pub limits: Limits,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meta: Option<BundleMeta>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BundleMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Error)]
@@ -86,6 +97,7 @@ mod tests {
                 max_memory_bytes: 1024,
                 max_instructions: 2048,
             },
+            meta: None,
         }
     }
 
@@ -143,6 +155,19 @@ mod tests {
         let encoded = encode_bundle_payload_canonical(&payload).expect("encode");
         let decoded = decode_bundle_payload_canonical(&encoded).expect("decode");
         assert_eq!(decoded.v, BUNDLE_ABI_CURRENT);
+    }
+
+    #[test]
+    fn supports_optional_meta_fields() {
+        let mut payload = sample_payload();
+        payload.meta = Some(BundleMeta {
+            content_type: Some("application/octet-stream".to_string()),
+            note: Some("whitepaper-meta".to_string()),
+        });
+
+        let encoded = encode_bundle_payload_canonical(&payload).expect("encode");
+        let decoded = decode_bundle_payload_canonical(&encoded).expect("decode");
+        assert_eq!(decoded.meta, payload.meta);
     }
 
     #[test]

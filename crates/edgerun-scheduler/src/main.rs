@@ -484,6 +484,7 @@ async fn job_create(
         wasm,
         input,
         limits: payload.limits.clone(),
+        meta: None,
     };
     let bundle_payload_bytes = edgerun_types::encode_bundle_payload_canonical(&bundle_payload)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
