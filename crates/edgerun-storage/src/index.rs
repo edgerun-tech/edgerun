@@ -121,10 +121,7 @@ impl StreamIndex {
 
     pub fn insert(&self, stream_id: StreamId, entry: StreamIndexEntry) {
         let mut entries = self.entries.write().unwrap();
-        entries
-            .entry(stream_id)
-            .or_default()
-            .push(entry);
+        entries.entry(stream_id).or_default().push(entry);
     }
 
     pub fn get(&self, stream_id: &StreamId) -> Vec<StreamIndexEntry> {

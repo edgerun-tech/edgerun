@@ -301,10 +301,11 @@ fn main() {
         if let Some(entry) = event_index.get(&hash) {
             for reader in &readers {
                 if reader.segment_id() == entry.segment_id
-                    && reader.get_event_at(entry.offset).is_ok() {
-                        query_hits += 1;
-                        break;
-                    }
+                    && reader.get_event_at(entry.offset).is_ok()
+                {
+                    query_hits += 1;
+                    break;
+                }
             }
         }
     }
@@ -365,16 +366,8 @@ fn main() {
         indexed_write_throughput,
         format_bytes(indexed_write_bytes_per_sec)
     );
-    println!(
-        "Read (cached)          | {cache_read_throughput:.0} events/s"
-    );
-    println!(
-        "Read (uncached)        | {uncached_read_throughput:.0} events/s"
-    );
-    println!(
-        "Query (existing keys)  | {query_existing_throughput:.0} queries/s"
-    );
-    println!(
-        "Query (random keys)    | {query_random_throughput:.0} queries/s"
-    );
+    println!("Read (cached)          | {cache_read_throughput:.0} events/s");
+    println!("Read (uncached)        | {uncached_read_throughput:.0} events/s");
+    println!("Query (existing keys)  | {query_existing_throughput:.0} queries/s");
+    println!("Query (random keys)    | {query_random_throughput:.0} queries/s");
 }

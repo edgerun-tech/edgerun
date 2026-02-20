@@ -86,10 +86,9 @@ fn test_cache_effectiveness() {
         };
 
         let key = format!("key_{key_idx:04}").into_bytes();
-        if msi.read(&key, stream_id.clone()).is_some()
-            && key_idx < 100 {
-                hot_hits += 1;
-            }
+        if msi.read(&key, stream_id.clone()).is_some() && key_idx < 100 {
+            hot_hits += 1;
+        }
         total += 1;
     }
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /// Durability levels define how data is persisted before acknowledgement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DurabilityLevel {
     /// Appended to memory buffer, not persisted.
     ///
@@ -55,10 +54,8 @@ pub enum DurabilityLevel {
     AckReplicatedN(u8),
 }
 
-
 /// Read consistency levels define visibility guarantees.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ReadConsistency {
     /// Read the absolute latest data.
     ///
@@ -101,7 +98,6 @@ pub enum ReadConsistency {
     /// Use cases: Consensus, critical reads
     Strong,
 }
-
 
 /// Checkpoint epoch identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -197,13 +193,11 @@ impl SyncPolicy {
 }
 
 /// Durability configuration for an append operation.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct DurabilityConfig {
     pub level: DurabilityLevel,
     pub sync_policy: SyncPolicy,
     pub timeout: Option<Duration>,
 }
-
 
 use std::time::Duration;

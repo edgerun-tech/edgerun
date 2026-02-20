@@ -65,11 +65,12 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "act not found; fallback commands:"
     echo "  cargo fmt --all --check"
     echo "  cargo check --workspace"
-    echo "  cargo test -p edgerun-runtime"
-    echo "  cargo test -p edgerun-worker"
+    echo "  cargo clippy --workspace --all-targets -- -D warnings"
+    echo "  cargo test --workspace"
     echo "  ./scripts/integration_scheduler_api.sh"
     echo "  ./scripts/integration_e2e_lifecycle.sh"
     echo "  ./scripts/integration_policy_rotation.sh"
+    echo "  (optional, with bun+anchor+solana) ./program/scripts/test-bun-local"
   fi
   exit 0
 fi
@@ -90,8 +91,8 @@ cd "$ROOT_DIR"
 run_rust_checks() {
   cargo fmt --all --check
   cargo check --workspace
-  cargo test -p edgerun-runtime
-  cargo test -p edgerun-worker
+  cargo clippy --workspace --all-targets -- -D warnings
+  cargo test --workspace
 }
 
 run_integration() {
@@ -100,16 +101,36 @@ run_integration() {
   ./scripts/integration_policy_rotation.sh
 }
 
+run_program_localnet() {
+  if ! command -v bun >/dev/null 2>&1; then
+    echo "bun not found; skipping program-localnet fallback"
+    return 0
+  fi
+  if ! command -v anchor >/dev/null 2>&1; then
+    echo "anchor not found; skipping program-localnet fallback"
+    return 0
+  fi
+  if ! command -v solana-test-validator >/dev/null 2>&1; then
+    echo "solana-test-validator not found; skipping program-localnet fallback"
+    return 0
+  fi
+  (cd "$ROOT_DIR/program" && ./scripts/test-bun-local)
+}
+
 case "${JOB:-all}" in
   all)
     run_rust_checks
     run_integration
+    run_program_localnet
     ;;
   rust-checks)
     run_rust_checks
     ;;
   integration)
     run_integration
+    ;;
+  program-localnet)
+    run_program_localnet
     ;;
   *)
     echo "unsupported job for fallback mode: $JOB" >&2

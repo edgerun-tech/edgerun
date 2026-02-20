@@ -169,10 +169,11 @@ fn run_stress_test() {
                 for path in segments.iter() {
                     if let Ok(reader) = SegmentReader::from_file(path.clone()) {
                         if reader.segment_id() == entry.segment_id
-                            && reader.get_event_at(entry.offset).is_ok() {
-                                hits += 1;
-                                break;
-                            }
+                            && reader.get_event_at(entry.offset).is_ok()
+                        {
+                            hits += 1;
+                            break;
+                        }
                     }
                 }
             }
@@ -478,12 +479,8 @@ fn verify_integrity() {
     }
 
     println!("\n=== VERIFICATION RESULTS ===");
-    println!(
-        "Segments found: {segment_count} (expected: {expected_segments})"
-    );
-    println!(
-        "Total events: {total_events} (expected: {expected_events})"
-    );
+    println!("Segments found: {segment_count} (expected: {expected_segments})");
+    println!("Total events: {total_events} (expected: {expected_events})");
     println!(
         "Total data bytes: {} (expected: {})",
         format_bytes(total_bytes as f64),

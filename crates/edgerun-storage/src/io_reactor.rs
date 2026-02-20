@@ -461,7 +461,7 @@ impl IoReactor {
         })
     }
 
-#[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn checkpoint_write_fsync(
         &self,
         segment_handle: IoFileHandle,
@@ -484,7 +484,7 @@ impl IoReactor {
         })
     }
 
-#[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub fn checkpoint_write_batch_fsync(
         &self,
         segment_handle: IoFileHandle,
@@ -1131,7 +1131,8 @@ fn submit_write(
     };
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle).map(|slot| types::Fixed(*slot));
+        .get(&handle)
+        .map(|slot| types::Fixed(*slot));
 
     if data.len() > u32::MAX as usize {
         let _ = response.send(Err(io::Error::new(
@@ -1544,7 +1545,8 @@ fn submit_linked_write_fsync(
     }
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle).map(|slot| types::Fixed(*slot));
+        .get(&handle)
+        .map(|slot| types::Fixed(*slot));
 
     let chain_id = *next_chain_id;
     *next_chain_id = next_chain_id.saturating_add(1);
@@ -2267,7 +2269,8 @@ fn submit_read(
     }
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle).map(|slot| types::Fixed(*slot));
+        .get(&handle)
+        .map(|slot| types::Fixed(*slot));
     let fixed_candidate = allocate_fixed_buffer(fixed_buffers, len);
     let mut local_chains: HashMap<u64, LinkedChain> = HashMap::new();
     let mut local_batch_chains: HashMap<u64, BatchWriteChain> = HashMap::new();
@@ -2378,7 +2381,8 @@ fn submit_fsync(
     };
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle).map(|slot| types::Fixed(*slot));
+        .get(&handle)
+        .map(|slot| types::Fixed(*slot));
 
     let mut local_chains: HashMap<u64, LinkedChain> = HashMap::new();
     let mut local_batch_chains: HashMap<u64, BatchWriteChain> = HashMap::new();
@@ -2561,7 +2565,8 @@ fn drain_completions(
                 } => {
                     let _ = iovecs.len();
                     let mapped = decode_cqe_usize(result).and_then(|bytes| {
-                        let max_valid = expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
+                        let max_valid =
+                            expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
                         if bytes > max_valid {
                             Err(io::Error::other("kernel reported invalid write size"))
                         } else {
@@ -2654,7 +2659,8 @@ fn drain_completions(
                 } => {
                     let _ = iovecs.len();
                     let mapped = decode_cqe_usize(result).and_then(|bytes| {
-                        let max_valid = expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
+                        let max_valid =
+                            expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
                         if bytes > max_valid {
                             Err(io::Error::other("kernel reported invalid write size"))
                         } else {

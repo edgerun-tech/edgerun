@@ -21,13 +21,13 @@ Reviewer: Codex
   - Gate: determinism CI matrix, replay expectation mode, fuel calibration, security hardening closure, perf/SLO CI gates.
   - Evidence: open items in `crates/edgerun-runtime/PRODUCTION_READINESS.md:150` and `crates/edgerun-runtime/PRODUCTION_READINESS.md:156`.
 
-- [ ] `Scheduler chain dependency policy finalized`
+- [x] `Scheduler chain dependency policy finalized`
   - Gate: no placeholder tx path in production mode, or explicit documented fail-open policy with safeguards.
-  - Evidence: fallback placeholder behavior at `crates/edgerun-scheduler/src/main.rs:242` and `crates/edgerun-scheduler/src/main.rs:524`.
+  - Evidence: `EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT=true` now enforces fail-fast startup when chain context is unavailable.
 
-- [ ] `CI covers all production components`
+- [x] `CI covers all production components`
   - Gate: CI must include storage tests/lints and program test pipeline (or equivalent separate required workflow).
-  - Evidence: current CI scope in `.github/workflows/ci.yml` runs runtime/worker tests + integration only.
+  - Evidence: `.github/workflows/ci.yml` now enforces strict workspace clippy/tests and includes `program-localnet` harness job.
 
 ## Currently Passing (Good Signals)
 

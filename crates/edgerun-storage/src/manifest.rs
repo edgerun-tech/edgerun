@@ -53,15 +53,13 @@ impl SealedSegment {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IndexRoots {
     pub event_hash_index: Option<[u8; 32]>,
     pub stream_index: Option<[u8; 32]>,
     pub time_index: Option<[u8; 32]>,
     pub materialized_state_index: Option<[u8; 32]>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Checkpoint {

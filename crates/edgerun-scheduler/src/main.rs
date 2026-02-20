@@ -229,6 +229,7 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(data_dir.join("bundles"))?;
 
     let persisted = load_state(&data_dir)?;
+    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
 
     let chain = match init_chain_context() {
         Ok(ctx) => {
@@ -241,8 +242,17 @@ async fn main() -> Result<()> {
             Some(Arc::new(ctx))
         }
         Err(err) => {
-            tracing::warn!(error = %err, "chain context unavailable; post_job_tx will be placeholder");
-            None
+            if require_chain {
+                anyhow::bail!(
+                    "chain context required but unavailable (set EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT=false to allow placeholder mode): {err}"
+                );
+            } else {
+                tracing::warn!(
+                    error = %err,
+                    "chain context unavailable; post_job_tx will be placeholder"
+                );
+                None
+            }
         }
     };
 
@@ -581,9 +591,8 @@ fn init_chain_context() -> Result<ChainContext> {
     let program_id = program_id_str
         .parse::<Pubkey>()
         .context("invalid EDGERUN_CHAIN_PROGRAM_ID")?;
-    let payer = read_keypair_file(&wallet_path).map_err(|e| {
-        anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {wallet_path}: {e}")
-    })?;
+    let payer = read_keypair_file(&wallet_path)
+        .map_err(|e| anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {wallet_path}: {e}"))?;
     let rpc = RpcClient::new(rpc_url.clone());
 
     Ok(ChainContext {
@@ -769,6 +778,17 @@ fn read_env_u64(key: &str, default_value: u64) -> u64 {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .filter(|v| *v > 0)
+        .unwrap_or(default_value)
+}
+
+fn read_env_bool(key: &str, default_value: bool) -> bool {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| match v.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => Some(true),
+            "0" | "false" | "no" | "off" => Some(false),
+            _ => None,
+        })
         .unwrap_or(default_value)
 }
 

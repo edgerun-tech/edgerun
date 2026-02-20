@@ -70,20 +70,14 @@ impl OrSet {
 
     pub fn merge(&mut self, other: &OrSet) {
         for (element, actors) in &other.elements {
-            let entry = self
-                .elements
-                .entry(element.clone())
-                .or_default();
+            let entry = self.elements.entry(element.clone()).or_default();
             for actor in actors {
                 entry.insert(actor.clone());
             }
         }
 
         for (element, actors) in &other.tombstones {
-            let entry = self
-                .tombstones
-                .entry(element.clone())
-                .or_default();
+            let entry = self.tombstones.entry(element.clone()).or_default();
             for actor in actors {
                 entry.insert(actor.clone());
             }

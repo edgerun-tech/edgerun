@@ -159,10 +159,11 @@ fn main() {
         if let Some(entry) = event_index.get(&random_hash) {
             for reader in &readers {
                 if reader.segment_id() == entry.segment_id
-                    && reader.get_event_at(entry.offset).is_ok() {
-                        found_count += 1;
-                        break;
-                    }
+                    && reader.get_event_at(entry.offset).is_ok()
+                {
+                    found_count += 1;
+                    break;
+                }
             }
         }
 

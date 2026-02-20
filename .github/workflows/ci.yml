@@ -15,7 +15,7 @@ jobs:
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,11 +34,11 @@ jobs:
       - name: Workspace check
         run: cargo check --workspace
 
-      - name: Runtime tests
-        run: cargo test -p edgerun-runtime
+      - name: Clippy (strict)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Worker tests
-        run: cargo test -p edgerun-worker
+      - name: Workspace tests
+        run: cargo test --workspace
 
   integration:
     name: Integration
@@ -62,3 +62,40 @@ jobs:
 
       - name: Policy rotation integration
         run: ./scripts/integration_policy_rotation.sh
+
+  program-localnet:
+    name: Program Localnet
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install Solana CLI
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Install Anchor CLI
+        run: cargo install --locked anchor-cli --version 0.31.1
+
+      - name: Install cargo-build-sbf (local program toolchain)
+        working-directory: program
+        run: ./scripts/cargo-local install cargo-build-sbf --version 4.0.0
+
+      - name: Install program dependencies
+        working-directory: program
+        run: bun install --frozen-lockfile
+
+      - name: Program localnet tests
+        working-directory: program
+        run: ./scripts/test-bun-local

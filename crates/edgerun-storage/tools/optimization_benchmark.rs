@@ -129,9 +129,7 @@ fn benchmark_sharded_map() {
     let num_threads = NUM_THREADS;
 
     // Test 2a: Standard HashMap (single lock)
-    println!(
-        "Test 2a: Standard HashMap (single lock, {num_threads} threads)..."
-    );
+    println!("Test 2a: Standard HashMap (single lock, {num_threads} threads)...");
     let std_map = Arc::new(std::sync::RwLock::new(
         std::collections::HashMap::<u64, u64>::new(),
     ));
@@ -224,9 +222,7 @@ fn benchmark_per_core_writers() {
     let total_writes = Arc::new(AtomicU64::new(0));
     let duration_secs = 5;
 
-    println!(
-        "Running {duration_secs}s test with {NUM_THREADS} per-core writers..."
-    );
+    println!("Running {duration_secs}s test with {NUM_THREADS} per-core writers...");
 
     let start = Instant::now();
     let mut handles = vec![];
@@ -283,9 +279,7 @@ fn benchmark_combined_optimizations() {
     let stream_id = StreamId::new();
 
     // Combined: Arena + Sharding + Async
-    println!(
-        "Test: Combined (Arena + Sharding + {NUM_THREADS} threads)..."
-    );
+    println!("Test: Combined (Arena + Sharding + {NUM_THREADS} threads)...");
 
     let events_written = Arc::new(AtomicU64::new(0));
     let bytes_written = Arc::new(AtomicU64::new(0));

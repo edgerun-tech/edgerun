@@ -26,9 +26,7 @@ fn main() {
     let stream_id = storage_engine::event::StreamId::new();
     let actor_id = storage_engine::event::ActorId::new();
 
-    println!(
-        "Writing {num_events} events ({payload_size} bytes each)..."
-    );
+    println!("Writing {num_events} events ({payload_size} bytes each)...");
 
     let start = Instant::now();
 

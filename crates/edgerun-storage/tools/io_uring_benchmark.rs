@@ -304,9 +304,7 @@ fn benchmark_mixed_read_write() {
     let total_ops = reads + writes;
     let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
 
-    println!(
-        "Operations: {total_ops} total ({reads} reads, {writes} writes)"
-    );
+    println!("Operations: {total_ops} total ({reads} reads, {writes} writes)");
     println!("Duration: {elapsed:.2?}");
     println!("Throughput: {ops_per_sec:.0} ops/s");
     println!(
