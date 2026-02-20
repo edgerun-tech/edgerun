@@ -75,8 +75,8 @@ fn benchmark_arena_allocation() {
     }
     let std_duration = start.elapsed();
     let std_throughput = iterations as f64 / std_duration.as_secs_f64();
-    println!("  Duration: {:.2?}", std_duration);
-    println!("  Allocations/s: {:.0}", std_throughput);
+    println!("  Duration: {std_duration:.2?}");
+    println!("  Allocations/s: {std_throughput:.0}");
 
     // Test 1b: Arena allocation
     println!("\nTest 1b: Arena allocation (bump pointer)...");
@@ -89,8 +89,8 @@ fn benchmark_arena_allocation() {
     let arena_duration = start.elapsed();
     let arena_throughput = iterations as f64 / arena_duration.as_secs_f64();
 
-    println!("  Duration: {:.2?}", arena_duration);
-    println!("  Allocations/s: {:.0}", arena_throughput);
+    println!("  Duration: {arena_duration:.2?}");
+    println!("  Allocations/s: {arena_throughput:.0}");
     println!("  Speedup: {:.1}x", arena_throughput / std_throughput);
     println!(
         "  Memory reserved: {}",
@@ -109,8 +109,8 @@ fn benchmark_arena_allocation() {
     let pool_duration = start.elapsed();
     let pool_throughput = iterations as f64 / pool_duration.as_secs_f64();
 
-    println!("  Duration: {:.2?}", pool_duration);
-    println!("  Operations/s: {:.0}", pool_throughput);
+    println!("  Duration: {pool_duration:.2?}");
+    println!("  Operations/s: {pool_throughput:.0}");
     println!(
         "  Speedup vs malloc: {:.1}x",
         pool_throughput / std_throughput
@@ -130,8 +130,7 @@ fn benchmark_sharded_map() {
 
     // Test 2a: Standard HashMap (single lock)
     println!(
-        "Test 2a: Standard HashMap (single lock, {} threads)...",
-        num_threads
+        "Test 2a: Standard HashMap (single lock, {num_threads} threads)..."
     );
     let std_map = Arc::new(std::sync::RwLock::new(
         std::collections::HashMap::<u64, u64>::new(),
@@ -166,8 +165,8 @@ fn benchmark_sharded_map() {
     let std_duration = start.elapsed();
     let std_throughput = num_ops as f64 / std_duration.as_secs_f64();
 
-    println!("  Duration: {:.2?}", std_duration);
-    println!("  Writes/s: {:.0}", std_throughput);
+    println!("  Duration: {std_duration:.2?}");
+    println!("  Writes/s: {std_throughput:.0}");
 
     // Test 2b: Sharded HashMap (lock per shard)
     println!(
@@ -207,8 +206,8 @@ fn benchmark_sharded_map() {
     let sharded_duration = start.elapsed();
     let sharded_throughput = num_ops as f64 / sharded_duration.as_secs_f64();
 
-    println!("  Duration: {:.2?}", sharded_duration);
-    println!("  Writes/s: {:.0}", sharded_throughput);
+    println!("  Duration: {sharded_duration:.2?}");
+    println!("  Writes/s: {sharded_throughput:.0}");
     println!("  Speedup: {:.1}x", sharded_throughput / std_throughput);
 
     let stats = sharded_map.stats();
@@ -226,8 +225,7 @@ fn benchmark_per_core_writers() {
     let duration_secs = 5;
 
     println!(
-        "Running {}s test with {} per-core writers...",
-        duration_secs, NUM_THREADS
+        "Running {duration_secs}s test with {NUM_THREADS} per-core writers..."
     );
 
     let start = Instant::now();
@@ -238,7 +236,7 @@ fn benchmark_per_core_writers() {
         let writes = Arc::clone(&total_writes);
 
         let handle = thread::spawn(move || {
-            let data = format!("thread_{:02}_data", t).into_bytes();
+            let data = format!("thread_{t:02}_data").into_bytes();
             let test_start = Instant::now();
 
             while test_start.elapsed().as_secs() < duration_secs {
@@ -259,9 +257,9 @@ fn benchmark_per_core_writers() {
     let total = total_writes.load(Ordering::Relaxed);
     let throughput = total as f64 / elapsed.as_secs_f64();
 
-    println!("  Total writes: {}", total);
-    println!("  Duration: {:.2?}", elapsed);
-    println!("  Writes/s: {:.0}", throughput);
+    println!("  Total writes: {total}");
+    println!("  Duration: {elapsed:.2?}");
+    println!("  Writes/s: {throughput:.0}");
     println!(
         "  Writes/s per core: {:.0}",
         throughput / NUM_THREADS as f64
@@ -286,8 +284,7 @@ fn benchmark_combined_optimizations() {
 
     // Combined: Arena + Sharding + Async
     println!(
-        "Test: Combined (Arena + Sharding + {} threads)...",
-        NUM_THREADS
+        "Test: Combined (Arena + Sharding + {NUM_THREADS} threads)..."
     );
 
     let events_written = Arc::new(AtomicU64::new(0));
@@ -346,11 +343,11 @@ fn benchmark_combined_optimizations() {
     let throughput_mbps = (total_bytes as f64 / elapsed.as_secs_f64()) / 1024.0 / 1024.0;
     let throughput_eps = total_events as f64 / elapsed.as_secs_f64();
 
-    println!("  Events: {}", total_events);
+    println!("  Events: {total_events}");
     println!("  Data: {}", format_bytes(total_bytes as f64));
-    println!("  Duration: {:.2?}", elapsed);
-    println!("  Throughput: {:.1} MB/s", throughput_mbps);
-    println!("  Throughput: {:.0} events/s", throughput_eps);
+    println!("  Duration: {elapsed:.2?}");
+    println!("  Throughput: {throughput_mbps:.1} MB/s");
+    println!("  Throughput: {throughput_eps:.0} events/s");
     println!();
     println!("  Comparison to baseline (124 MB/s):");
     if throughput_mbps > 124.0 {

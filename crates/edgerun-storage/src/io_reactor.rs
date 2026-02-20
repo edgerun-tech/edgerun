@@ -461,6 +461,7 @@ impl IoReactor {
         })
     }
 
+#[allow(clippy::too_many_arguments)]
     pub fn checkpoint_write_fsync(
         &self,
         segment_handle: IoFileHandle,
@@ -483,6 +484,7 @@ impl IoReactor {
         })
     }
 
+#[allow(clippy::too_many_arguments)]
     pub fn checkpoint_write_batch_fsync(
         &self,
         segment_handle: IoFileHandle,
@@ -618,7 +620,7 @@ fn run_reactor(
 
         if pending.is_empty() {
             if !inflight.is_empty() {
-                let wait_for = inflight.len().min(CQ_WAIT_BATCH).max(1);
+                let wait_for = inflight.len().clamp(1, CQ_WAIT_BATCH);
                 let _ = ring.submit_and_wait(wait_for);
                 drain_completions(
                     &mut ring,
@@ -1021,6 +1023,7 @@ fn enqueue_command(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn open_with_flags(
     path: PathBuf,
     create: bool,
@@ -1083,6 +1086,7 @@ fn first_free_file_slot(
         .and_then(|idx| u32::try_from(idx).ok())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wait_for_capacity(
     ring: &mut IoUring,
     inflight: &mut HashMap<u64, InFlightOp>,
@@ -1097,7 +1101,7 @@ fn wait_for_capacity(
         if let Ok(mut s) = stats.lock() {
             s.queue_backpressure_events += 1;
         }
-        let wait_for = inflight.len().min(CQ_WAIT_BATCH).max(1);
+        let wait_for = inflight.len().clamp(1, CQ_WAIT_BATCH);
         let _ = ring.submit_and_wait(wait_for);
         drain_completions(ring, inflight, chains, batch_chains, fixed_buffers, stats);
     }
@@ -1127,8 +1131,7 @@ fn submit_write(
     };
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle)
-        .and_then(|slot| Some(types::Fixed(*slot)));
+        .get(&handle).map(|slot| types::Fixed(*slot));
 
     if data.len() > u32::MAX as usize {
         let _ = response.send(Err(io::Error::new(
@@ -1541,8 +1544,7 @@ fn submit_linked_write_fsync(
     }
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle)
-        .and_then(|slot| Some(types::Fixed(*slot)));
+        .get(&handle).map(|slot| types::Fixed(*slot));
 
     let chain_id = *next_chain_id;
     *next_chain_id = next_chain_id.saturating_add(1);
@@ -2265,8 +2267,7 @@ fn submit_read(
     }
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle)
-        .and_then(|slot| Some(types::Fixed(*slot)));
+        .get(&handle).map(|slot| types::Fixed(*slot));
     let fixed_candidate = allocate_fixed_buffer(fixed_buffers, len);
     let mut local_chains: HashMap<u64, LinkedChain> = HashMap::new();
     let mut local_batch_chains: HashMap<u64, BatchWriteChain> = HashMap::new();
@@ -2377,8 +2378,7 @@ fn submit_fsync(
     };
 
     let fd_use_fixed = file_slots_by_handle
-        .get(&handle)
-        .and_then(|slot| Some(types::Fixed(*slot)));
+        .get(&handle).map(|slot| types::Fixed(*slot));
 
     let mut local_chains: HashMap<u64, LinkedChain> = HashMap::new();
     let mut local_batch_chains: HashMap<u64, BatchWriteChain> = HashMap::new();
@@ -2561,9 +2561,8 @@ fn drain_completions(
                 } => {
                     let _ = iovecs.len();
                     let mapped = decode_cqe_usize(result).and_then(|bytes| {
-                        if bytes > expected_len {
-                            Err(io::Error::other("kernel reported invalid write size"))
-                        } else if bytes > chunks.iter().map(Vec::len).sum::<usize>() {
+                        let max_valid = expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
+                        if bytes > max_valid {
                             Err(io::Error::other("kernel reported invalid write size"))
                         } else {
                             Ok(bytes)
@@ -2655,9 +2654,8 @@ fn drain_completions(
                 } => {
                     let _ = iovecs.len();
                     let mapped = decode_cqe_usize(result).and_then(|bytes| {
-                        if bytes > expected_len {
-                            Err(io::Error::other("kernel reported invalid write size"))
-                        } else if bytes > chunks.iter().map(Vec::len).sum::<usize>() {
+                        let max_valid = expected_len.min(chunks.iter().map(Vec::len).sum::<usize>());
+                        if bytes > max_valid {
                             Err(io::Error::other("kernel reported invalid write size"))
                         } else {
                             Ok(bytes)

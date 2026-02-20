@@ -54,6 +54,7 @@ impl SealedSegment {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct IndexRoots {
     pub event_hash_index: Option<[u8; 32]>,
     pub stream_index: Option<[u8; 32]>,
@@ -61,16 +62,6 @@ pub struct IndexRoots {
     pub materialized_state_index: Option<[u8; 32]>,
 }
 
-impl Default for IndexRoots {
-    fn default() -> Self {
-        Self {
-            event_hash_index: None,
-            stream_index: None,
-            time_index: None,
-            materialized_state_index: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Checkpoint {
@@ -358,8 +349,7 @@ impl ManifestManager {
             let computed_crc_a = manifest_a.compute_crc();
             if stored_crc_a != computed_crc_a {
                 return Err(ManifestError::InvalidData(format!(
-                    "Manifest A CRC mismatch: stored={}, computed={}",
-                    stored_crc_a, computed_crc_a
+                    "Manifest A CRC mismatch: stored={stored_crc_a}, computed={computed_crc_a}"
                 )));
             }
         }
@@ -370,8 +360,7 @@ impl ManifestManager {
             let computed_crc_b = manifest_b.compute_crc();
             if stored_crc_b != computed_crc_b {
                 return Err(ManifestError::InvalidData(format!(
-                    "Manifest B CRC mismatch: stored={}, computed={}",
-                    stored_crc_b, computed_crc_b
+                    "Manifest B CRC mismatch: stored={stored_crc_b}, computed={computed_crc_b}"
                 )));
             }
         }

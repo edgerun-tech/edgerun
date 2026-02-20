@@ -35,7 +35,7 @@ impl OrSet {
     pub fn add(&mut self, element: String, actor: ActorId) {
         self.elements
             .entry(element.clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(actor);
         self.tombstones.remove(&element);
     }
@@ -43,7 +43,7 @@ impl OrSet {
     pub fn remove(&mut self, element: &str, actor: ActorId) {
         self.tombstones
             .entry(element.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(actor);
         self.elements.remove(element);
     }
@@ -63,7 +63,7 @@ impl OrSet {
     pub fn elements(&self) -> Vec<String> {
         self.elements
             .keys()
-            .filter(|e| self.contains(*e))
+            .filter(|e| self.contains(e))
             .cloned()
             .collect()
     }
@@ -73,7 +73,7 @@ impl OrSet {
             let entry = self
                 .elements
                 .entry(element.clone())
-                .or_insert_with(HashSet::new);
+                .or_default();
             for actor in actors {
                 entry.insert(actor.clone());
             }
@@ -83,7 +83,7 @@ impl OrSet {
             let entry = self
                 .tombstones
                 .entry(element.clone())
-                .or_insert_with(HashSet::new);
+                .or_default();
             for actor in actors {
                 entry.insert(actor.clone());
             }

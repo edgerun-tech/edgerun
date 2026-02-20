@@ -14,7 +14,7 @@ const TARGET_SIZE_GB: usize = 10;
 const TEST_MODE_MB: usize = 100; // Set to 0 for full 10GB test
 const SEGMENT_SIZE: u64 = 128 * 1024 * 1024;
 const EVENT_PAYLOAD_SIZE: usize = 1024;
-const FSYNC_INTERVAL_BYTES: u64 = 1 * 1024 * 1024; // fsync every 1MB
+const FSYNC_INTERVAL_BYTES: u64 = 1024 * 1024; // fsync every 1MB
 const SHUTDOWN_FLAG_PATH: &str = "/tmp/storage_stress_shutdown.flag";
 
 fn format_bytes(bytes: f64) -> String {
@@ -27,7 +27,7 @@ fn format_bytes(bytes: f64) -> String {
     } else if bytes > 1024.0 {
         format!("{:.2} KB", bytes / 1024.0)
     } else {
-        format!("{:.0} B", bytes)
+        format!("{bytes:.0} B")
     }
 }
 
@@ -43,7 +43,7 @@ fn main() {
 
 fn run_stress_test() {
     println!("=== 10GB Durability Stress Test ===\n");
-    println!("Target size: {}GB", TARGET_SIZE_GB);
+    println!("Target size: {TARGET_SIZE_GB}GB");
     println!(
         "Fsync interval: {} bytes",
         format_bytes(FSYNC_INTERVAL_BYTES as f64)
@@ -75,8 +75,7 @@ fn run_stress_test() {
     // Use test mode if specified
     let target_bytes: u64 = if TEST_MODE_MB > 0 {
         println!(
-            "*** TEST MODE: Writing only {}MB instead of {}GB ***\n",
-            TEST_MODE_MB, TARGET_SIZE_GB
+            "*** TEST MODE: Writing only {TEST_MODE_MB}MB instead of {TARGET_SIZE_GB}GB ***\n"
         );
         (TEST_MODE_MB * 1024 * 1024) as u64
     } else {
@@ -142,7 +141,7 @@ fn run_stress_test() {
     // Populate segment files list if resuming
     if resuming {
         for i in 1..=current_segment_id {
-            let path = data_dir.join(format!("segment_{:04}.bin", i));
+            let path = data_dir.join(format!("segment_{i:04}.bin"));
             if path.exists() {
                 segment_files.lock().unwrap().push(path);
             }
@@ -169,12 +168,11 @@ fn run_stress_test() {
                 let segments = lookup_segments.lock().unwrap();
                 for path in segments.iter() {
                     if let Ok(reader) = SegmentReader::from_file(path.clone()) {
-                        if reader.segment_id() == entry.segment_id {
-                            if reader.get_event_at(entry.offset).is_ok() {
+                        if reader.segment_id() == entry.segment_id
+                            && reader.get_event_at(entry.offset).is_ok() {
                                 hits += 1;
                                 break;
                             }
-                        }
                     }
                 }
             }
@@ -226,7 +224,7 @@ fn run_stress_test() {
             events_ingested += 1;
 
             if events_ingested % 10000 == 0 {
-                println!("[REPLICATION] {} events ingested", events_ingested);
+                println!("[REPLICATION] {events_ingested} events ingested");
             }
         }
 
@@ -254,10 +252,10 @@ fn run_stress_test() {
 
         if current_segment.is_none() {
             current_segment_id += 1;
-            let segment_path = data_dir.join(format!("segment_{:04}.bin", current_segment_id));
+            let segment_path = data_dir.join(format!("segment_{current_segment_id:04}.bin"));
             current_segment = Some(SegmentWriter::new(segment_path.clone(), SEGMENT_SIZE));
             segment_files.lock().unwrap().push(segment_path);
-            println!("Created segment_{:04}.bin", current_segment_id);
+            println!("Created segment_{current_segment_id:04}.bin");
         }
 
         let writer = current_segment.as_mut().unwrap();
@@ -349,7 +347,7 @@ fn run_stress_test() {
         format_bytes(bytes_written as f64),
         events_written
     );
-    println!("Duration: {:.2?}", write_duration);
+    println!("Duration: {write_duration:.2?}");
     println!(
         "Throughput: {:.0} events/s, {}/s",
         events_written as f64 / write_duration.as_secs_f64(),
@@ -366,7 +364,7 @@ fn verify_integrity() {
     let checkpoint_file = data_dir.join("checkpoint.bin");
 
     if !data_dir.exists() {
-        println!("ERROR: Data directory not found: {:?}", data_dir);
+        println!("ERROR: Data directory not found: {data_dir:?}");
         std::process::exit(1);
     }
 
@@ -481,19 +479,17 @@ fn verify_integrity() {
 
     println!("\n=== VERIFICATION RESULTS ===");
     println!(
-        "Segments found: {} (expected: {})",
-        segment_count, expected_segments
+        "Segments found: {segment_count} (expected: {expected_segments})"
     );
     println!(
-        "Total events: {} (expected: {})",
-        total_events, expected_events
+        "Total events: {total_events} (expected: {expected_events})"
     );
     println!(
         "Total data bytes: {} (expected: {})",
         format_bytes(total_bytes as f64),
         format_bytes(expected_bytes as f64)
     );
-    println!("Corrupted segments: {}", corrupted_segments);
+    println!("Corrupted segments: {corrupted_segments}");
     println!("Index entries: {}", event_index.len());
 
     // Verify Merkle tree consistency
@@ -520,14 +516,14 @@ fn verify_integrity() {
         // Calculate how much data survived
         if expected_events > 0 {
             let survival_rate = (total_events as f64 / expected_events as f64) * 100.0;
-            println!("  Data survival rate: {:.1}%", survival_rate);
+            println!("  Data survival rate: {survival_rate:.1}%");
         }
 
         std::process::exit(0);
     } else {
         println!("✗ INTEGRITY COMPROMISED");
         if corrupted_segments > 0 {
-            println!("  {} segments are corrupted", corrupted_segments);
+            println!("  {corrupted_segments} segments are corrupted");
         }
         if total_events == 0 {
             println!("  No events found in segments");

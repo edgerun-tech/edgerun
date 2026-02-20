@@ -5,7 +5,7 @@
 //! engine maintains integrity under various crash scenarios.
 
 use rand::Rng;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// Types of crash injection points.
@@ -212,7 +212,7 @@ impl CrashTestHarness {
                     iterations.push(result);
                 }
                 Err(e) => {
-                    print!("✗ ERROR: {}", e);
+                    print!("✗ ERROR: {e}");
                     failed += 1;
                     iterations.push(IterationResult {
                         iteration: i,
@@ -257,11 +257,11 @@ impl CrashTestHarness {
     /// Run a single crash iteration.
     fn run_iteration(&self, iteration: usize) -> Result<IterationResult, String> {
         let start = Instant::now();
-        let data_dir = self.config.data_dir.join(format!("iter_{:04}", iteration));
+        let data_dir = self.config.data_dir.join(format!("iter_{iteration:04}"));
 
         // Clean up from previous run
         let _ = std::fs::remove_dir_all(&data_dir);
-        std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+        std::fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create dir: {e}"))?;
 
         // Select kill point
         let kill_point = if self.config.random_kill_points {
@@ -314,7 +314,7 @@ impl CrashTestHarness {
     /// Run workload and inject crash at specified point.
     fn run_workload_with_crash(
         &self,
-        data_dir: &PathBuf,
+        data_dir: &Path,
         kill_point: KillPoint,
     ) -> Result<(u64, u64), String> {
         use crate::event::{ActorId, Event, StreamId};
@@ -398,7 +398,7 @@ impl CrashTestHarness {
                 file.sync_all()
                     .map_err(|e| format!("segment fsync failed: {e}"))?;
 
-                let manager = ManifestManager::new(data_dir.clone())
+                let manager = ManifestManager::new(data_dir.to_path_buf())
                     .map_err(|e| format!("create manifest manager failed: {e}"))?;
                 let checkpoint = Checkpoint {
                     segment_id,
@@ -446,7 +446,7 @@ impl CrashTestHarness {
                 | KillPoint::DuringIndexFlush
                 | KillPoint::DuringCompaction
         ) {
-            let manager = ManifestManager::new(data_dir.clone())
+            let manager = ManifestManager::new(data_dir.to_path_buf())
                 .map_err(|e| format!("create manifest manager failed: {e}"))?;
             let sealed = SealedSegment::new(segment_id, 0, sealed_len);
             let _ = manager.add_sealed_segment(sealed);
@@ -456,7 +456,7 @@ impl CrashTestHarness {
     }
 
     /// Verify integrity of data after crash.
-    fn verify_integrity(&self, data_dir: &PathBuf) -> Result<ValidationResult, String> {
+    fn verify_integrity(&self, data_dir: &Path) -> Result<ValidationResult, String> {
         use crate::manifest::ManifestManager;
         use crate::segment::SegmentReader;
 
@@ -470,19 +470,19 @@ impl CrashTestHarness {
         };
 
         // Check manifest
-        match ManifestManager::new(data_dir.clone()) {
+        match ManifestManager::new(data_dir.to_path_buf()) {
             Ok(manifest) => {
                 if let Err(e) = manifest.validate() {
                     let msg = e.to_string();
                     if !msg.contains("CRC mismatch") {
                         result.valid = false;
-                        result.error = Some(format!("Manifest validation failed: {}", msg));
+                        result.error = Some(format!("Manifest validation failed: {msg}"));
                     }
                 }
             }
             Err(e) => {
                 result.valid = false;
-                result.error = Some(format!("Failed to load manifest: {}", e));
+                result.error = Some(format!("Failed to load manifest: {e}"));
             }
         }
 

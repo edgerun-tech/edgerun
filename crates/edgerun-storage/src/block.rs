@@ -37,6 +37,7 @@ impl FileBlockDevice {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .append(false)
             .open(&path)?;
 
@@ -144,14 +145,14 @@ mod tests {
 
         for i in 0..100 {
             let offset = (i * 40) as u64;
-            let data = format!("test data {} ", i);
+            let data = format!("test data {i} ");
             device.write_at(offset, data.as_bytes())?;
         }
         device.flush()?;
 
         for i in 0..100 {
             let offset = (i * 40) as u64;
-            let expected = format!("test data {} ", i);
+            let expected = format!("test data {i} ");
             let read = device.read_at(offset, expected.len())?;
             assert_eq!(&read, expected.as_bytes());
         }

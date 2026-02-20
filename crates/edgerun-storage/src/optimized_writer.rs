@@ -65,6 +65,7 @@ struct ActiveSegment {
 }
 
 impl OptimizedSegmentWriter {
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(path: PathBuf, config: OptimizedSegmentWriterConfig) -> Self {
         let writer_pool = Arc::new(ShardedWriterPool::new(config.num_cores, config.buffer_size));
 
@@ -276,7 +277,7 @@ mod tests {
 
         for i in 0..100 {
             writer
-                .append(&stream_id, &actor_id, format!("event {}", i).into_bytes())
+                .append(&stream_id, &actor_id, format!("event {i}").into_bytes())
                 .unwrap();
         }
 

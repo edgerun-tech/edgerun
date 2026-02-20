@@ -323,7 +323,7 @@ async fn send_heartbeat(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<
 
     let status = resp.status();
     if !status.is_success() {
-        anyhow::bail!("heartbeat failed with status {}", status);
+        anyhow::bail!("heartbeat failed with status {status}");
     }
 
     let body = resp
@@ -349,7 +349,7 @@ async fn poll_assignments(
 
     let status = resp.status();
     if !status.is_success() {
-        anyhow::bail!("assignments failed with status {}", status);
+        anyhow::bail!("assignments failed with status {status}");
     }
 
     let body = resp
@@ -855,7 +855,7 @@ async fn post_submission(
         .context("submission request failed")?;
     let status = resp.status();
     if !status.is_success() {
-        anyhow::bail!("submission failed with status {}", status);
+        anyhow::bail!("submission failed with status {status}");
     }
     Ok(())
 }
@@ -1063,7 +1063,7 @@ mod tests {
                 let _ = stream.shutdown().await;
             }
         });
-        (format!("http://{}", addr), handle)
+        (format!("http://{addr}"), handle)
     }
 
     #[tokio::test]

@@ -52,16 +52,16 @@ fn test_cache_effectiveness() {
     // Populate with 1000 keys
     println!("\nPopulating 1000 keys...");
     for i in 0..1000 {
-        let key = format!("key_{:04}", i).into_bytes();
-        let value = format!("value_{:04}", i).into_bytes();
+        let key = format!("key_{i:04}").into_bytes();
+        let value = format!("value_{i:04}").into_bytes();
         msi.write(key, value, stream_id.clone(), i as u64);
     }
 
     // Create a snapshot
     let mut state = std::collections::HashMap::new();
     for i in 0..1000 {
-        let key = format!("key_{:04}", i).into_bytes();
-        let value = format!("value_{:04}", i).into_bytes();
+        let key = format!("key_{i:04}").into_bytes();
+        let value = format!("value_{i:04}").into_bytes();
         state.insert(key, value);
     }
     msi.create_snapshot(stream_id.clone(), state, 1000);
@@ -85,17 +85,16 @@ fn test_cache_effectiveness() {
             100 + rand::random::<usize>() % 900 // Cold keys
         };
 
-        let key = format!("key_{:04}", key_idx).into_bytes();
-        if msi.read(&key, stream_id.clone()).is_some() {
-            if key_idx < 100 {
+        let key = format!("key_{key_idx:04}").into_bytes();
+        if msi.read(&key, stream_id.clone()).is_some()
+            && key_idx < 100 {
                 hot_hits += 1;
             }
-        }
         total += 1;
     }
 
     let stats = msi.cache_stats();
-    println!("  Total reads: {}", total);
+    println!("  Total reads: {total}");
     println!("  Cache hit rate: {:.1}%", stats.hit_rate * 100.0);
     println!(
         "  Hot key hit rate: {:.1}%",
@@ -117,8 +116,8 @@ fn test_mixed_workload() {
     println!("\nSetting up initial state (10K keys)...");
     let mut state = std::collections::HashMap::new();
     for i in 0..10_000 {
-        let key = format!("key_{:05}", i).into_bytes();
-        let value = format!("value_{:05}", i).into_bytes();
+        let key = format!("key_{i:05}").into_bytes();
+        let value = format!("value_{i:05}").into_bytes();
         state.insert(key.clone(), value.clone());
         msi.write(key, value, stream_id.clone(), i as u64);
     }
@@ -141,7 +140,7 @@ fn test_mixed_workload() {
         let start = Instant::now();
         while start.elapsed().as_secs() < BENCHMARK_DURATION_SECS {
             let key_idx = rand::random::<usize>() % 10_000;
-            let key = format!("key_{:05}", key_idx).into_bytes();
+            let key = format!("key_{key_idx:05}").into_bytes();
             let _ = msi_read.read(&key, stream_id_read.clone());
             reads_completed_clone.fetch_add(1, Ordering::Relaxed);
         }
@@ -153,8 +152,8 @@ fn test_mixed_workload() {
         let mut counter = 10_000u64;
         while start.elapsed().as_secs() < BENCHMARK_DURATION_SECS {
             let key_idx = rand::random::<usize>() % 10_000;
-            let key = format!("key_{:05}", key_idx).into_bytes();
-            let value = format!("updated_{}", counter).into_bytes();
+            let key = format!("key_{key_idx:05}").into_bytes();
+            let value = format!("updated_{counter}").into_bytes();
             msi_write.write(key, value, stream_id_write.clone(), counter);
             counter += 1;
             writes_completed_clone.fetch_add(1, Ordering::Relaxed);
@@ -171,7 +170,7 @@ fn test_mixed_workload() {
     let writes = writes_completed.load(Ordering::Relaxed);
     let stats = msi.cache_stats();
 
-    println!("\nResults ({}s duration):", BENCHMARK_DURATION_SECS);
+    println!("\nResults ({BENCHMARK_DURATION_SECS}s duration):");
     println!(
         "  Reads: {} ({:.0} reads/s)",
         reads,
@@ -219,7 +218,7 @@ fn test_tail_replay_impact() {
 
         // Add tail events
         for i in 0..tail_len {
-            let value = format!("tail_value_{}", i).into_bytes();
+            let value = format!("tail_value_{i}").into_bytes();
             msi.write(
                 b"test_key".to_vec(),
                 value,
@@ -241,7 +240,7 @@ fn test_tail_replay_impact() {
             println!("{:<15} {:<15.1} {:<15}", tail_len, elapsed, "baseline");
         } else {
             let impact = (elapsed - baseline) / baseline * 100.0;
-            println!("{:<15} {:<15.1} {:<14.1}%", tail_len, elapsed, impact);
+            println!("{tail_len:<15} {elapsed:<15.1} {impact:<14.1}%");
         }
     }
 

@@ -32,7 +32,7 @@ pub struct EventFlags {
 
 impl EventFlags {
     pub fn to_u16(&self) -> u16 {
-        (self.compressed as u16) << 0 | (self.encrypted as u16) << 1 | (self.tombstone as u16) << 2
+        (self.compressed as u16) | (self.encrypted as u16) << 1 | (self.tombstone as u16) << 2
     }
 
     pub fn from_u16(val: u16) -> Self {
@@ -764,9 +764,10 @@ mod tests {
 
     #[test]
     fn test_event_flags_all() {
-        let mut flags = EventFlags::default();
-
-        flags.compressed = true;
+        let mut flags = EventFlags {
+            compressed: true,
+            ..EventFlags::default()
+        };
         assert!(flags.compressed);
 
         flags.encrypted = true;

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -26,6 +26,7 @@ const SST_EXTENDED_HEADER_BYTES: usize = 16;
 const SST_EXTENDED_V2_HEADER_BYTES: usize = 24;
 const SST_ENTRY_BYTES: usize = 80;
 const SST_BLOCK_INDEX_ENTRY_BYTES: usize = 44;
+type SStableEntries = (Arc<SSTable>, Vec<(Vec<u8>, IndexEntry)>);
 
 /// Configuration for the LSM index.
 #[derive(Debug, Clone)]
@@ -295,7 +296,7 @@ impl LsmIndex {
 
             // Flush to L0
             if let Err(e) = self.flush_memtable_to_level(&memtable, 0) {
-                eprintln!("Failed to flush memtable: {}", e);
+                eprintln!("Failed to flush memtable: {e}");
             }
 
             // Check if compaction is needed
@@ -312,7 +313,7 @@ impl LsmIndex {
             id
         };
 
-        let sst_path = self.data_dir.join(format!("{:06}.sst", sst_id));
+        let sst_path = self.data_dir.join(format!("{sst_id:06}.sst"));
 
         // Build SSTable from memtable
         let sstable = SSTable::build_from_memtable(
@@ -425,7 +426,7 @@ impl LsmIndex {
 
     fn compact_level_inner(
         level_num: usize,
-        data_dir: &PathBuf,
+        data_dir: &Path,
         levels_ref: &Arc<RwLock<Vec<Level>>>,
         next_sst_id_ref: &Arc<RwLock<u64>>,
         config: &LsmConfig,
@@ -443,7 +444,7 @@ impl LsmIndex {
         let read_inputs = match Self::read_sstable_entries_pipelined(io_reactor, &to_compact) {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("Compaction read failed at level {}: {}", level_num, e);
+                eprintln!("Compaction read failed at level {level_num}: {e}");
                 return CompactionOutcome::Failed;
             }
         };
@@ -472,7 +473,7 @@ impl LsmIndex {
             id
         };
         let target_level = level_num + 1;
-        let new_path = data_dir.join(format!("{:06}.sst", new_sst_id));
+        let new_path = data_dir.join(format!("{new_sst_id:06}.sst"));
         let new_sst = match SSTable::build_from_entries(
             new_sst_id,
             new_path,
@@ -483,7 +484,7 @@ impl LsmIndex {
         ) {
             Ok(sst) => Arc::new(sst),
             Err(e) => {
-                eprintln!("Compaction write failed at level {}: {}", level_num, e);
+                eprintln!("Compaction write failed at level {level_num}: {e}");
                 return CompactionOutcome::Failed;
             }
         };
@@ -531,7 +532,7 @@ impl LsmIndex {
     fn read_sstable_entries_pipelined(
         io_reactor: Option<&Arc<IoReactor>>,
         sstables: &[Arc<SSTable>],
-    ) -> std::io::Result<Vec<(Arc<SSTable>, Vec<(Vec<u8>, IndexEntry)>)>> {
+    ) -> std::io::Result<Vec<SStableEntries>> {
         if let Some(reactor) = io_reactor {
             let mut out = Vec::with_capacity(sstables.len());
             for sst in sstables {
@@ -710,7 +711,7 @@ impl LsmIndex {
     }
 
     /// Load existing levels from disk.
-    fn load_levels(data_dir: &PathBuf, config: &LsmConfig) -> std::io::Result<Vec<Level>> {
+    fn load_levels(data_dir: &Path, config: &LsmConfig) -> std::io::Result<Vec<Level>> {
         let mut levels = Vec::with_capacity(config.max_levels);
         for i in 0..config.max_levels {
             levels.push(Level::new(i));
@@ -726,7 +727,7 @@ impl LsmIndex {
         if let Ok(entries) = std::fs::read_dir(&sstable_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().map_or(false, |ext| ext == "sst") {
+                if path.extension().is_some_and(|ext| ext == "sst") {
                     // Try to load the SSTable
                     if let Ok(sst) = SSTable::open(path.clone()) {
                         let level = (sst.id as usize) % config.max_levels;
@@ -1343,7 +1344,7 @@ impl SSTable {
 impl BloomFilter {
     fn new(num_items: usize, bits_per_item: usize) -> Self {
         let num_bits = num_items * bits_per_item;
-        let num_words = (num_bits + 63) / 64;
+        let num_words = num_bits.div_ceil(64);
         let num_hashes = Self::optimal_num_hashes(bits_per_item);
 
         Self {
@@ -1477,7 +1478,7 @@ mod tests {
             timestamp: 12345,
         };
 
-        memtable.insert(key.clone(), entry.clone());
+        memtable.insert(key.clone(), entry);
 
         let retrieved = memtable.get(&key).unwrap();
         assert_eq!(retrieved.offset, 100);

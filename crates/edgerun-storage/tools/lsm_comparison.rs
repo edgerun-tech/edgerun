@@ -23,7 +23,7 @@ fn format_bytes(bytes: f64) -> String {
     } else if bytes >= 1024.0 {
         format!("{:.2} KB", bytes / 1024.0)
     } else {
-        format!("{:.0} B", bytes)
+        format!("{bytes:.0} B")
     }
 }
 
@@ -33,7 +33,7 @@ fn main() {
 
     for &size in &TEST_SIZES {
         println!("\n{}\n", "=".repeat(80));
-        println!("Dataset size: {} entries\n", size);
+        println!("Dataset size: {size} entries\n");
 
         // Test Hash Index
         let hash_result = benchmark_hash_index(size);
@@ -128,7 +128,7 @@ fn benchmark_hash_index(num_entries: usize) -> BenchmarkResult {
 }
 
 fn benchmark_lsm_index(num_entries: usize) -> BenchmarkResult {
-    let data_dir = PathBuf::from(format!("/tmp/lsm_bench_{}", num_entries));
+    let data_dir = PathBuf::from(format!("/tmp/lsm_bench_{num_entries}"));
     let _ = std::fs::remove_dir_all(&data_dir);
 
     let config = LsmConfig {
@@ -285,7 +285,7 @@ fn print_comparison(hash: &BenchmarkResult, lsm: &BenchmarkResult) {
         println!("  ✓ Persistent (survives restart)");
     }
     if hash.memory_bytes > 100 * 1024 * 1024 {
-        println!("  ✓ Hash uses {:.1}x more memory", memory_ratio);
+        println!("  ✓ Hash uses {memory_ratio:.1}x more memory");
     }
 }
 

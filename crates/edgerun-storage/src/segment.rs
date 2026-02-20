@@ -686,7 +686,7 @@ mod tests {
             let event = Event::new(
                 stream_id.clone(),
                 actor_id.clone(),
-                format!("payload {}", i).into_bytes(),
+                format!("payload {i}").into_bytes(),
             );
             segment.append_event(&event)?;
         }
@@ -733,7 +733,7 @@ mod tests {
             let event = Event::new(
                 stream_id.clone(),
                 actor_id.clone(),
-                format!("payload {}", i).into_bytes(),
+                format!("payload {i}").into_bytes(),
             );
             segment.append_event(&event)?;
         }
@@ -802,7 +802,7 @@ mod tests {
             let event = Event::new(
                 stream_id.clone(),
                 actor_id.clone(),
-                format!("event {}", i).into_bytes(),
+                format!("event {i}").into_bytes(),
             );
             writer.append(&event)?;
         }

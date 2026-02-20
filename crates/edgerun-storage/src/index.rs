@@ -29,6 +29,12 @@ pub struct EventHashIndex {
     entries: RwLock<HashMap<[u8; 32], EventHashIndexEntry>>,
 }
 
+impl Default for EventHashIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventHashIndex {
     pub fn new() -> Self {
         Self {
@@ -95,14 +101,6 @@ impl EventHashIndex {
     }
 }
 
-#[cfg(test)]
-
-impl Default for EventHashIndex {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct StreamIndexEntry {
     pub hlc: HlcTimestamp,
@@ -125,7 +123,7 @@ impl StreamIndex {
         let mut entries = self.entries.write().unwrap();
         entries
             .entry(stream_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry);
     }
 
@@ -196,7 +194,7 @@ impl TimeIndex {
         let entries = self.entries.read().unwrap();
 
         entries
-            .range(min_hlc.clone()..=max_hlc.clone())
+            .range(*min_hlc..=*max_hlc)
             .map(|(_, entry)| entry.clone())
             .collect()
     }

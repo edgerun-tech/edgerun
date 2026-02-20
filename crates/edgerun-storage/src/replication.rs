@@ -101,7 +101,7 @@ impl MerkleTree {
             return Self { root: None };
         }
 
-        let leaves: Vec<[u8; 32]> = segments.iter().map(|s| *s).collect();
+        let leaves: Vec<[u8; 32]> = segments.to_vec();
         let root = Self::build_tree(&leaves);
 
         Self { root: Some(root) }
@@ -115,7 +115,7 @@ impl MerkleTree {
             };
         }
 
-        let mid = (leaves.len() + 1) / 2;
+        let mid = leaves.len().div_ceil(2);
         let left = Self::build_tree(&leaves[..mid]);
         let right = Self::build_tree(&leaves[mid..]);
 
@@ -602,10 +602,10 @@ fn configure_stream_timeouts(
 ) -> Result<(), ReplicationError> {
     stream
         .set_read_timeout(Some(timeout))
-        .map_err(|e| ReplicationError::Network(format!("set read timeout: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("set read timeout: {e}")))?;
     stream
         .set_write_timeout(Some(timeout))
-        .map_err(|e| ReplicationError::Network(format!("set write timeout: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("set write timeout: {e}")))?;
     Ok(())
 }
 
@@ -618,11 +618,11 @@ fn request_single_ack_over_stream(
         let request = build_authenticated_ack_request(node.store_uuid, op_id, auth_key);
         stream
             .write_all(&request)
-            .map_err(|e| ReplicationError::Network(format!("write request: {}", e)))?;
+            .map_err(|e| ReplicationError::Network(format!("write request: {e}")))?;
         let mut response = [0u8; ACKV2_FRAME_LEN];
         stream
             .read_exact(&mut response)
-            .map_err(|e| ReplicationError::Network(format!("read response: {}", e)))?;
+            .map_err(|e| ReplicationError::Network(format!("read response: {e}")))?;
         verify_authenticated_ack_response(&response, node.store_uuid, op_id, auth_key)?;
         return Ok(());
     }
@@ -632,12 +632,12 @@ fn request_single_ack_over_stream(
     request[4..36].copy_from_slice(&op_id);
     stream
         .write_all(&request)
-        .map_err(|e| ReplicationError::Network(format!("write request: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("write request: {e}")))?;
 
     let mut response = [0u8; 4];
     stream
         .read_exact(&mut response)
-        .map_err(|e| ReplicationError::Network(format!("read response: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("read response: {e}")))?;
     if response != *ACK_RESPONSE_OK {
         return Err(ReplicationError::Network(format!(
             "invalid ACK response from {}",
@@ -869,12 +869,12 @@ fn request_batch_ack_over_stream(
         let request = build_authenticated_ack_batch_request(node.store_uuid, op_ids, auth_key)?;
         stream
             .write_all(&request)
-            .map_err(|e| ReplicationError::Network(format!("write batch request: {}", e)))?;
+            .map_err(|e| ReplicationError::Network(format!("write batch request: {e}")))?;
 
         let mut header = [0u8; ACKV2_BATCH_HEADER_LEN];
         stream
             .read_exact(&mut header)
-            .map_err(|e| ReplicationError::Network(format!("read batch response header: {}", e)))?;
+            .map_err(|e| ReplicationError::Network(format!("read batch response header: {e}")))?;
         if &header[0..4] != ACKV2_BATCH_RESPONSE_MAGIC {
             return Err(ReplicationError::AuthenticationFailed(
                 "invalid batch response magic".to_string(),
@@ -887,7 +887,7 @@ fn request_batch_ack_over_stream(
         let mut body = vec![0u8; body_len];
         stream
             .read_exact(&mut body)
-            .map_err(|e| ReplicationError::Network(format!("read batch response body: {}", e)))?;
+            .map_err(|e| ReplicationError::Network(format!("read batch response body: {e}")))?;
         let mut frame = Vec::with_capacity(ACKV2_BATCH_HEADER_LEN + body_len);
         frame.extend_from_slice(&header);
         frame.extend_from_slice(&body);
@@ -897,12 +897,12 @@ fn request_batch_ack_over_stream(
     let request = build_ack_batch_request(op_ids)?;
     stream
         .write_all(&request)
-        .map_err(|e| ReplicationError::Network(format!("write batch request: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("write batch request: {e}")))?;
 
     let mut header = [0u8; ACK_BATCH_HEADER_LEN];
     stream
         .read_exact(&mut header)
-        .map_err(|e| ReplicationError::Network(format!("read batch response header: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("read batch response header: {e}")))?;
     if &header[0..4] != ACK_BATCH_RESPONSE_MAGIC {
         return Err(ReplicationError::Network(
             "invalid batch response magic".to_string(),
@@ -915,7 +915,7 @@ fn request_batch_ack_over_stream(
     let mut body = vec![0u8; body_len];
     stream
         .read_exact(&mut body)
-        .map_err(|e| ReplicationError::Network(format!("read batch response body: {}", e)))?;
+        .map_err(|e| ReplicationError::Network(format!("read batch response body: {e}")))?;
 
     let mut frame = Vec::with_capacity(ACK_BATCH_HEADER_LEN + body_len);
     frame.extend_from_slice(&header);

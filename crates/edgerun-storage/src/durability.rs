@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /// Durability levels define how data is persisted before acknowledgement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum DurabilityLevel {
     /// Appended to memory buffer, not persisted.
     ///
@@ -30,6 +31,7 @@ pub enum DurabilityLevel {
     /// - May lose last fsync_interval on crash
     ///
     /// Use cases: Standard durability (default)
+    #[default]
     AckDurable,
 
     /// Fsync'd and manifest epoch flipped.
@@ -53,14 +55,10 @@ pub enum DurabilityLevel {
     AckReplicatedN(u8),
 }
 
-impl Default for DurabilityLevel {
-    fn default() -> Self {
-        DurabilityLevel::AckDurable
-    }
-}
 
 /// Read consistency levels define visibility guarantees.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ReadConsistency {
     /// Read the absolute latest data.
     ///
@@ -70,6 +68,7 @@ pub enum ReadConsistency {
     /// - Best read performance
     ///
     /// Use cases: Monitoring, best-effort queries
+    #[default]
     Latest,
 
     /// Read from a specific checkpoint epoch.
@@ -103,11 +102,6 @@ pub enum ReadConsistency {
     Strong,
 }
 
-impl Default for ReadConsistency {
-    fn default() -> Self {
-        ReadConsistency::Latest
-    }
-}
 
 /// Checkpoint epoch identifier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -204,20 +198,12 @@ impl SyncPolicy {
 
 /// Durability configuration for an append operation.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct DurabilityConfig {
     pub level: DurabilityLevel,
     pub sync_policy: SyncPolicy,
     pub timeout: Option<Duration>,
 }
 
-impl Default for DurabilityConfig {
-    fn default() -> Self {
-        Self {
-            level: DurabilityLevel::default(),
-            sync_policy: SyncPolicy::default(),
-            timeout: None,
-        }
-    }
-}
 
 use std::time::Duration;

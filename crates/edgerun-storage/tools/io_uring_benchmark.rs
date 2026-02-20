@@ -88,6 +88,7 @@ fn benchmark_sync_write() {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&path)
             .unwrap();
 
@@ -104,8 +105,8 @@ fn benchmark_sync_write() {
 
     println!("File size: {}", format_bytes(FILE_SIZE as f64));
     println!("Block size: {} KB", BLOCK_SIZE / 1024);
-    println!("Duration: {:.2?}", elapsed);
-    println!("Throughput: {:.1} MB/s", throughput);
+    println!("Duration: {elapsed:.2?}");
+    println!("Throughput: {throughput:.1} MB/s");
     println!("IOPS: {:.0}", num_blocks as f64 / elapsed.as_secs_f64());
 
     let _ = std::fs::remove_file(&path);
@@ -131,6 +132,7 @@ fn benchmark_sync_write_with_fsync() {
         let file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&path)
             .unwrap();
 
@@ -152,9 +154,9 @@ fn benchmark_sync_write_with_fsync() {
     let throughput = FILE_SIZE as f64 / elapsed.as_secs_f64() / 1024.0 / 1024.0;
 
     println!("File size: {}", format_bytes(FILE_SIZE as f64));
-    println!("Fsync count: {}", fsync_count);
-    println!("Duration: {:.2?}", elapsed);
-    println!("Throughput: {:.1} MB/s", throughput);
+    println!("Fsync count: {fsync_count}");
+    println!("Duration: {elapsed:.2?}");
+    println!("Throughput: {throughput:.1} MB/s");
     println!(
         "Average fsync interval: {:.1} ms",
         last_fsync.elapsed().as_millis() as f64 / fsync_count as f64
@@ -192,6 +194,7 @@ fn benchmark_async_write_simulation() {
             let file = OpenOptions::new()
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(&path)
                 .unwrap();
 
@@ -216,9 +219,9 @@ fn benchmark_async_write_simulation() {
     let throughput = FILE_SIZE as f64 / elapsed.as_secs_f64() / 1024.0 / 1024.0;
 
     println!("File size: {}", format_bytes(FILE_SIZE as f64));
-    println!("Threads: {}", NUM_THREADS);
-    println!("Duration: {:.2?}", elapsed);
-    println!("Throughput: {:.1} MB/s", throughput);
+    println!("Threads: {NUM_THREADS}");
+    println!("Duration: {elapsed:.2?}");
+    println!("Throughput: {throughput:.1} MB/s");
     println!("Parallelism improvement: {:.1}x", throughput / 120.0); // Compare to baseline
 
     let _ = std::fs::remove_file(&path);
@@ -241,6 +244,7 @@ fn benchmark_mixed_read_write() {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&path)
             .unwrap();
 
@@ -301,16 +305,15 @@ fn benchmark_mixed_read_write() {
     let ops_per_sec = total_ops as f64 / elapsed.as_secs_f64();
 
     println!(
-        "Operations: {} total ({} reads, {} writes)",
-        total_ops, reads, writes
+        "Operations: {total_ops} total ({reads} reads, {writes} writes)"
     );
-    println!("Duration: {:.2?}", elapsed);
-    println!("Throughput: {:.0} ops/s", ops_per_sec);
+    println!("Duration: {elapsed:.2?}");
+    println!("Throughput: {ops_per_sec:.0} ops/s");
     println!(
         "Read ratio: {:.1}%",
         (reads as f64 / total_ops as f64) * 100.0
     );
-    println!("Threads: {}", NUM_THREADS);
+    println!("Threads: {NUM_THREADS}");
 
     let _ = std::fs::remove_file(&path);
 }

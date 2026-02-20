@@ -206,7 +206,7 @@ async fn replay_corpus(profile: String, artifact_path: PathBuf, runs: u32) -> Re
     let body = serde_json::to_vec_pretty(&artifact)?;
     tokio::fs::write(&artifact_path, body).await?;
     println!("artifact={}", artifact_path.display());
-    println!("all_passed={}", all_passed);
+    println!("all_passed={all_passed}");
     if !all_passed {
         bail!("replay corpus failed");
     }

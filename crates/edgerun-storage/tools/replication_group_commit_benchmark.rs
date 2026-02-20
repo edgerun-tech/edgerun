@@ -200,7 +200,7 @@ fn main() {
     println!("events: {}", cfg.events);
     println!("batch_size: {}", cfg.batch_size);
     println!("payload_size: {}", cfg.payload_size);
-    println!("duration_s: {:.3}", elapsed);
+    println!("duration_s: {elapsed:.3}");
     println!("events_per_sec: {:.0}", cfg.events as f64 / elapsed);
     println!(
         "throughput_mb_s: {:.1}",

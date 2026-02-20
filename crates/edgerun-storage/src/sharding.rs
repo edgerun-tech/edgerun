@@ -317,7 +317,7 @@ fn thread_id_hash(id: std::thread::ThreadId) -> usize {
 
     let mut hasher = DefaultHasher::new();
     // ThreadId doesn't implement Hash directly, so we use its Debug representation
-    format!("{:?}", id).hash(&mut hasher);
+    format!("{id:?}").hash(&mut hasher);
     hasher.finish() as usize
 }
 

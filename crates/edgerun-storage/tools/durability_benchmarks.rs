@@ -175,7 +175,7 @@ pub fn run_durability_benchmark(name: &str, sync_policy: SyncPolicy) -> Durabili
     while total_bytes < target_bytes {
         if current_segment.is_none() {
             segment_counter += 1;
-            let segment_path = data_dir.join(format!("segment_{:04}.bin", segment_counter));
+            let segment_path = data_dir.join(format!("segment_{segment_counter:04}.bin"));
             current_segment = Some(SegmentWriter::new(segment_path, 128 * 1024 * 1024));
         }
 
@@ -302,8 +302,8 @@ pub fn detect_storage_type() -> String {
 
 fn main() {
     println!("=== Real Durability Benchmarks ===\n");
-    println!("Target: {}MB per configuration", TARGET_SIZE_MB);
-    println!("Event size: {} bytes", EVENT_PAYLOAD_SIZE);
+    println!("Target: {TARGET_SIZE_MB}MB per configuration");
+    println!("Event size: {EVENT_PAYLOAD_SIZE} bytes");
     println!("Storage type: {}\n", detect_storage_type());
 
     let mut results: Vec<DurabilityBenchmarkResult> = Vec::new();

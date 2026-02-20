@@ -2,6 +2,10 @@
 #![allow(deprecated)]
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::ed25519_program;
+use anchor_lang::solana_program::sysvar::instructions::{
+    load_current_index_checked, load_instruction_at_checked,
+};
 use anchor_lang::system_program::{self, Transfer};
 
 declare_id!("AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T");
@@ -214,6 +218,13 @@ pub mod edgerun_program {
             job.assigned_workers.contains(&ctx.accounts.worker.key()),
             EdgerunError::WorkerNotAssigned
         );
+        verify_worker_attestation(
+            &ctx.accounts.instructions_sysvar,
+            &ctx.accounts.worker.key(),
+            &job.job_id,
+            &output_hash,
+            &attestation_sig,
+        )?;
 
         let result = &mut ctx.accounts.job_result;
         result.job_id = job.job_id;
@@ -221,8 +232,6 @@ pub mod edgerun_program {
         result.output_hash = output_hash;
         result.attestation_sig = attestation_sig;
         result.submitted_slot = Clock::get()?.slot;
-
-        // TODO: require ed25519 verification instruction in tx for result digest.
         Ok(())
     }
 
@@ -479,6 +488,7 @@ pub struct RegisterWorkerStake<'info> {
 
 #[derive(Accounts)]
 pub struct DepositStake<'info> {
+    #[account(mut)]
     pub worker: Signer<'info>,
     #[account(mut, seeds = [b"worker_stake", worker.key().as_ref()], bump)]
     pub worker_stake: Account<'info, WorkerStake>,
@@ -487,6 +497,7 @@ pub struct DepositStake<'info> {
 
 #[derive(Accounts)]
 pub struct WithdrawStake<'info> {
+    #[account(mut)]
     pub worker: Signer<'info>,
     #[account(mut, seeds = [b"worker_stake", worker.key().as_ref()], bump)]
     pub worker_stake: Account<'info, WorkerStake>,
@@ -542,6 +553,9 @@ pub struct SubmitResult<'info> {
         bump
     )]
     pub job_result: Account<'info, JobResult>,
+    /// CHECK: verified by address constraint; parsed by sysvar instruction helpers.
+    #[account(address = anchor_lang::solana_program::sysvar::instructions::id())]
+    pub instructions_sysvar: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -549,6 +563,7 @@ pub struct SubmitResult<'info> {
 pub struct FinalizeJob<'info> {
     pub scheduler_authority: Signer<'info>,
     #[account(
+        mut,
         seeds = [b"config"],
         bump,
         has_one = scheduler_authority
@@ -577,6 +592,7 @@ pub struct CancelExpiredJob<'info> {
 pub struct SlashWorker<'info> {
     pub scheduler_authority: Signer<'info>,
     #[account(
+        mut,
         seeds = [b"config"],
         bump,
         has_one = scheduler_authority
@@ -692,4 +708,110 @@ pub enum EdgerunError {
     WinnerNotAssigned,
     #[msg("invalid bundle hash")]
     InvalidBundleHash,
+    #[msg("missing ed25519 attestation pre-instruction")]
+    MissingEd25519Instruction,
+    #[msg("invalid ed25519 attestation instruction")]
+    InvalidEd25519Instruction,
+    #[msg("attestation message mismatch")]
+    AttestationMessageMismatch,
+    #[msg("attestation signature mismatch")]
+    AttestationSignatureMismatch,
+    #[msg("attestation signer mismatch")]
+    AttestationSignerMismatch,
+}
+
+fn verify_worker_attestation(
+    instructions_sysvar: &UncheckedAccount,
+    worker: &Pubkey,
+    job_id: &[u8; 32],
+    output_hash: &[u8; 32],
+    attestation_sig: &[u8; 64],
+) -> Result<()> {
+    let current_index = load_current_index_checked(&instructions_sysvar.to_account_info())
+        .map_err(|_| error!(EdgerunError::InvalidEd25519Instruction))?;
+    require!(current_index > 0, EdgerunError::MissingEd25519Instruction);
+
+    let verify_ix = load_instruction_at_checked(
+        usize::from(current_index - 1),
+        &instructions_sysvar.to_account_info(),
+    )
+    .map_err(|_| error!(EdgerunError::MissingEd25519Instruction))?;
+
+    require!(
+        verify_ix.program_id == ed25519_program::id(),
+        EdgerunError::MissingEd25519Instruction
+    );
+    require!(
+        verify_ix.accounts.is_empty(),
+        EdgerunError::InvalidEd25519Instruction
+    );
+
+    let data = verify_ix.data;
+    require!(data.len() >= 16, EdgerunError::InvalidEd25519Instruction);
+    require!(data[0] == 1, EdgerunError::InvalidEd25519Instruction);
+
+    let signature_offset = read_u16_le(&data, 2)?;
+    let signature_instruction_index = read_u16_le(&data, 4)?;
+    let public_key_offset = read_u16_le(&data, 6)?;
+    let public_key_instruction_index = read_u16_le(&data, 8)?;
+    let message_data_offset = read_u16_le(&data, 10)?;
+    let message_data_size = read_u16_le(&data, 12)?;
+    let message_instruction_index = read_u16_le(&data, 14)?;
+
+    require!(
+        signature_instruction_index == u16::MAX
+            && public_key_instruction_index == u16::MAX
+            && message_instruction_index == u16::MAX,
+        EdgerunError::InvalidEd25519Instruction
+    );
+
+    let signature_range = range_checked(signature_offset, 64, data.len())?;
+    let pubkey_range = range_checked(public_key_offset, 32, data.len())?;
+    let message_range = range_checked(message_data_offset, message_data_size, data.len())?;
+
+    require!(
+        data[signature_range] == *attestation_sig,
+        EdgerunError::AttestationSignatureMismatch
+    );
+    require!(
+        data[pubkey_range] == worker.to_bytes(),
+        EdgerunError::AttestationSignerMismatch
+    );
+
+    let expected_message = build_attestation_message(job_id, worker, output_hash);
+    require!(
+        data[message_range] == expected_message,
+        EdgerunError::AttestationMessageMismatch
+    );
+
+    Ok(())
+}
+
+fn build_attestation_message(
+    job_id: &[u8; 32],
+    worker: &Pubkey,
+    output_hash: &[u8; 32],
+) -> [u8; 98] {
+    let mut msg = [0_u8; 98];
+    msg[0..2].copy_from_slice(b"ER");
+    msg[2..34].copy_from_slice(job_id);
+    msg[34..66].copy_from_slice(&worker.to_bytes());
+    msg[66..98].copy_from_slice(output_hash);
+    msg
+}
+
+fn read_u16_le(data: &[u8], offset: usize) -> Result<u16> {
+    let bytes = data
+        .get(offset..offset + 2)
+        .ok_or(error!(EdgerunError::InvalidEd25519Instruction))?;
+    Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
+}
+
+fn range_checked(offset: u16, len: u16, total_len: usize) -> Result<std::ops::Range<usize>> {
+    let start = usize::from(offset);
+    let end = start
+        .checked_add(usize::from(len))
+        .ok_or(error!(EdgerunError::InvalidEd25519Instruction))?;
+    require!(end <= total_len, EdgerunError::InvalidEd25519Instruction);
+    Ok(start..end)
 }

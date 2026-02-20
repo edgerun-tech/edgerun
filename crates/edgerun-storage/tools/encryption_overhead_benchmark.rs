@@ -105,7 +105,7 @@ fn main() {
     println!("encrypted_bytes={}", enc_bytes.len());
     println!("plain_serialize_s={:.6}", plain_elapsed.as_secs_f64());
     println!("encrypted_serialize_s={:.6}", enc_elapsed.as_secs_f64());
-    println!("plain_mib_s={:.2}", plain_mib_s);
-    println!("encrypted_mib_s={:.2}", enc_mib_s);
-    println!("encryption_overhead_percent={:.2}", overhead_pct);
+    println!("plain_mib_s={plain_mib_s:.2}");
+    println!("encrypted_mib_s={enc_mib_s:.2}");
+    println!("encryption_overhead_percent={overhead_pct:.2}");
 }

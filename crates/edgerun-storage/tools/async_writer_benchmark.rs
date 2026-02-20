@@ -233,8 +233,7 @@ fn run_mode(
                     Mode::Checkpoint => {
                         let epoch = events_written / cfg.flush_interval;
                         let manifest = format!(
-                            r#"{{"epoch":{},"events":{},"mode":"checkpoint"}}"#,
-                            epoch, events_written
+                            r#"{{"epoch":{epoch},"events":{events_written},"mode":"checkpoint"}}"#
                         )
                         .into_bytes();
                         writer
@@ -301,8 +300,7 @@ fn run_mode(
                     Mode::Checkpoint => {
                         let epoch = events_written / cfg.flush_interval;
                         let manifest = format!(
-                            r#"{{"epoch":{},"events":{},"mode":"checkpoint"}}"#,
-                            epoch, events_written
+                            r#"{{"epoch":{epoch},"events":{events_written},"mode":"checkpoint"}}"#
                         )
                         .into_bytes();
                         writer
@@ -343,8 +341,8 @@ fn run_mode(
     let throughput_mb = mb_written / elapsed.as_secs_f64();
 
     println!("Duration: {:.2}s", elapsed.as_secs_f64());
-    println!("Throughput: {:.0} events/s", throughput_eps);
-    println!("Throughput: {:.2} MB/s", throughput_mb);
+    println!("Throughput: {throughput_eps:.0} events/s");
+    println!("Throughput: {throughput_mb:.2} MB/s");
     println!(
         "Ops submitted/completed: {}/{}",
         stats.ops_submitted, stats.ops_completed

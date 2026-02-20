@@ -1,6 +1,8 @@
+#![allow(deprecated)]
+
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -580,7 +582,7 @@ fn init_chain_context() -> Result<ChainContext> {
         .parse::<Pubkey>()
         .context("invalid EDGERUN_CHAIN_PROGRAM_ID")?;
     let payer = read_keypair_file(&wallet_path).map_err(|e| {
-        anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {}: {}", wallet_path, e)
+        anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {wallet_path}: {e}")
     })?;
     let rpc = RpcClient::new(rpc_url.clone());
 
@@ -655,7 +657,7 @@ fn bundle_path(state: &AppState, bundle_hash: &str) -> PathBuf {
         .join(format!("{bundle_hash}.cbor"))
 }
 
-fn load_state(data_dir: &PathBuf) -> Result<PersistedState> {
+fn load_state(data_dir: &FsPath) -> Result<PersistedState> {
     let path = data_dir.join("state.json");
     if !path.exists() {
         return Ok(PersistedState::default());

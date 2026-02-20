@@ -222,10 +222,10 @@ fn parse_hex_key(v: &str) -> KeyResult<[u8; 32]> {
         ));
     }
     let mut out = [0u8; 32];
-    for i in 0..32 {
+    for (i, b) in out.iter_mut().enumerate() {
         let hi = hex_to_nibble(hex.as_bytes()[2 * i])?;
         let lo = hex_to_nibble(hex.as_bytes()[2 * i + 1])?;
-        out[i] = (hi << 4) | lo;
+        *b = (hi << 4) | lo;
     }
     Ok(out)
 }

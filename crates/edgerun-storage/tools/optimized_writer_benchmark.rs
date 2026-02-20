@@ -27,8 +27,7 @@ fn main() {
     let actor_id = storage_engine::event::ActorId::new();
 
     println!(
-        "Writing {} events ({} bytes each)...",
-        num_events, payload_size
+        "Writing {num_events} events ({payload_size} bytes each)..."
     );
 
     let start = Instant::now();
@@ -45,30 +44,30 @@ fn main() {
     let mb_per_sec = mb_written / write_duration.as_secs_f64();
 
     println!("Write phase:");
-    println!("  Duration: {:.2?}", write_duration);
-    println!("  Events/s: {:.0}", write_throughput);
-    println!("  Throughput: {:.1} MB/s", mb_per_sec);
+    println!("  Duration: {write_duration:.2?}");
+    println!("  Events/s: {write_throughput:.0}");
+    println!("  Throughput: {mb_per_sec:.1} MB/s");
 
     let seal_start = Instant::now();
     writer.seal().unwrap();
     let seal_duration = seal_start.elapsed();
 
     println!("\nSeal phase:");
-    println!("  Duration: {:.2?}", seal_duration);
+    println!("  Duration: {seal_duration:.2?}");
 
     let flush_start = Instant::now();
     writer.flush().unwrap();
     let flush_duration = flush_start.elapsed();
 
     println!("\nFlush phase:");
-    println!("  Duration: {:.2?}", flush_duration);
+    println!("  Duration: {flush_duration:.2?}");
 
     let total_duration = write_duration + seal_duration + flush_duration;
     let total_mb_per_sec = mb_written / total_duration.as_secs_f64();
 
     println!("\n=== Total ===");
-    println!("  Total duration: {:.2?}", total_duration);
-    println!("  Total throughput: {:.1} MB/s", total_mb_per_sec);
+    println!("  Total duration: {total_duration:.2?}");
+    println!("  Total throughput: {total_mb_per_sec:.1} MB/s");
     println!("  Events written: {}", writer.events_written());
     println!("  Segments sealed: {}", writer.sealed_count());
 }

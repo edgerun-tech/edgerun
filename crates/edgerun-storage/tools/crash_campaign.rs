@@ -80,7 +80,7 @@ fn main() {
 
     let report_path = cfg.data_dir.join("campaign_report.json");
     if let Err(e) = std::fs::create_dir_all(&cfg.data_dir) {
-        eprintln!("WARN: could not create report dir: {}", e);
+        eprintln!("WARN: could not create report dir: {e}");
     } else {
         let summary = format!(
             "{{\"iterations\":{},\"passed\":{},\"failed\":{},\"avg_survival\":{},\"min_survival\":{},\"max_survival\":{},\"total_duration_ms\":{}}}",

@@ -387,7 +387,7 @@ fn map_execution_error(
         return match code {
             TrapCode::OutOfFuel => RuntimeError::new(
                 RuntimeErrorCode::InstructionLimitExceeded,
-                format!("execution exceeded max_instructions {}", max_instructions),
+                format!("execution exceeded max_instructions {max_instructions}"),
             )
             .with_trap_code("OutOfFuel")
             .with_fuel(max_instructions, fuel_remaining),

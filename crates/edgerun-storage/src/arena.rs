@@ -235,6 +235,12 @@ pub struct EventArena {
     event_arena: Arena,
 }
 
+impl Default for EventArena {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventArena {
     /// Create a new event arena.
     pub fn new() -> Self {

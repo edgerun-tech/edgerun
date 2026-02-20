@@ -21,7 +21,7 @@ fn format_bytes(bytes: f64) -> String {
     } else if bytes > 1024.0 {
         format!("{:.2} KB", bytes / 1024.0)
     } else {
-        format!("{:.0} B", bytes)
+        format!("{bytes:.0} B")
     }
 }
 
@@ -43,9 +43,9 @@ fn main() {
     let event_index = EventHashIndex::new();
 
     println!("\n=== WRITE BENCHMARK ===");
-    println!("Target size: {}GB", TARGET_SIZE_GB);
+    println!("Target size: {TARGET_SIZE_GB}GB");
     println!("Segment size: {}", format_bytes(SEGMENT_SIZE as f64));
-    println!("Event payload: {} bytes\n", EVENT_PAYLOAD_SIZE);
+    println!("Event payload: {EVENT_PAYLOAD_SIZE} bytes\n");
 
     let mut total_events: u64 = 0;
     let mut total_bytes: u64 = 0;
@@ -63,7 +63,7 @@ fn main() {
     while total_bytes < target_bytes as u64 {
         if current_segment.is_none() {
             segment_counter += 1;
-            let segment_path = data_dir.join(format!("segment_{:04}.bin", segment_counter));
+            let segment_path = data_dir.join(format!("segment_{segment_counter:04}.bin"));
             current_segment = Some(SegmentWriter::new(segment_path.clone(), SEGMENT_SIZE));
             segment_files.push(segment_path);
         }
@@ -126,17 +126,17 @@ fn main() {
     let write_throughput_bytes = total_bytes as f64 / write_duration.as_secs_f64();
 
     println!("\n--- WRITE RESULTS ---");
-    println!("Total events: {}", total_events);
+    println!("Total events: {total_events}");
     println!("Total bytes: {}", format_bytes(total_bytes as f64));
     println!("Segments created: {}", segment_files.len());
-    println!("Duration: {:.2?}", write_duration);
-    println!("Throughput: {:.0} events/s", write_throughput_events);
+    println!("Duration: {write_duration:.2?}");
+    println!("Throughput: {write_throughput_events:.0} events/s");
     println!("Throughput: {}/s", format_bytes(write_throughput_bytes));
 
     println!("\n=== QUERY BENCHMARK (Random Lookup) ===\n");
 
     let index_size = event_index.len();
-    println!("Index size: {} entries\n", index_size);
+    println!("Index size: {index_size} entries\n");
 
     println!("Warming up: reading segment metadata...");
     let mut readers: Vec<SegmentReader> = Vec::new();
@@ -148,7 +148,7 @@ fn main() {
     println!("Loaded {} segments into memory\n", readers.len());
 
     let query_count = 100_000;
-    println!("Running {} random queries...", query_count);
+    println!("Running {query_count} random queries...");
 
     let query_start = Instant::now();
     let mut found_count = 0;
@@ -158,12 +158,11 @@ fn main() {
 
         if let Some(entry) = event_index.get(&random_hash) {
             for reader in &readers {
-                if reader.segment_id() == entry.segment_id {
-                    if reader.get_event_at(entry.offset as u64).is_ok() {
+                if reader.segment_id() == entry.segment_id
+                    && reader.get_event_at(entry.offset).is_ok() {
                         found_count += 1;
                         break;
                     }
-                }
             }
         }
 
@@ -176,10 +175,10 @@ fn main() {
     let queries_per_sec = query_count as f64 / query_duration.as_secs_f64();
 
     println!("\n--- QUERY RESULTS ---");
-    println!("Total queries: {}", query_count);
-    println!("Found (cache hits): {}", found_count);
-    println!("Duration: {:.2?}", query_duration);
-    println!("Throughput: {:.0} queries/s", queries_per_sec);
+    println!("Total queries: {query_count}");
+    println!("Found (cache hits): {found_count}");
+    println!("Duration: {query_duration:.2?}");
+    println!("Throughput: {queries_per_sec:.0} queries/s");
 
     println!("\n=== SEQUENTIAL READ BENCHMARK ===\n");
 
@@ -199,9 +198,9 @@ fn main() {
     let seq_read_throughput = seq_events_read as f64 / seq_read_duration.as_secs_f64();
 
     println!("--- SEQUENTIAL READ RESULTS ---");
-    println!("Events read: {}", seq_events_read);
-    println!("Duration: {:.2?}", seq_read_duration);
-    println!("Throughput: {:.0} events/s", seq_read_throughput);
+    println!("Events read: {seq_events_read}");
+    println!("Duration: {seq_read_duration:.2?}");
+    println!("Throughput: {seq_read_throughput:.0} events/s");
 
     println!("\n=== CLEANUP ===");
     println!("Removing test data...");
@@ -217,6 +216,6 @@ fn main() {
         write_throughput_events,
         format_bytes(write_throughput_bytes)
     );
-    println!("  Random Query: {:.0} queries/s", queries_per_sec);
-    println!("  Sequential Read: {:.0} events/s", seq_read_throughput);
+    println!("  Random Query: {queries_per_sec:.0} queries/s");
+    println!("  Sequential Read: {seq_read_throughput:.0} events/s");
 }

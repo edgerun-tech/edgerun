@@ -22,7 +22,7 @@ fn format_bytes(bytes: f64) -> String {
     } else if bytes > 1024.0 {
         format!("{:.2} KB", bytes / 1024.0)
     } else {
-        format!("{:.0} B", bytes)
+        format!("{bytes:.0} B")
     }
 }
 
@@ -31,15 +31,15 @@ fn format_duration(duration: std::time::Duration) -> String {
     if secs > 60.0 {
         format!("{:.2}m {:.2}s", secs / 60.0, secs % 60.0)
     } else {
-        format!("{:.2}s", secs)
+        format!("{secs:.2}s")
     }
 }
 
 fn main() {
     println!("=== Storage Engine Comprehensive Benchmarks ===\n");
-    println!("Target size: {}GB", TARGET_SIZE_GB);
+    println!("Target size: {TARGET_SIZE_GB}GB");
     println!("Segment size: {}", format_bytes(SEGMENT_SIZE as f64));
-    println!("Event payload: {} bytes", EVENT_PAYLOAD_SIZE);
+    println!("Event payload: {EVENT_PAYLOAD_SIZE} bytes");
     println!();
 
     let data_dir = PathBuf::from("/tmp/storage_bench_1gb");
@@ -70,7 +70,7 @@ fn main() {
     while pure_write_bytes < target_bytes {
         if current_segment.is_none() {
             segment_counter += 1;
-            let segment_path = data_dir.join(format!("pure_seg_{:04}.bin", segment_counter));
+            let segment_path = data_dir.join(format!("pure_seg_{segment_counter:04}.bin"));
             current_segment = Some(SegmentWriter::new(segment_path, SEGMENT_SIZE));
         }
 
@@ -101,16 +101,16 @@ fn main() {
     let pure_write_bytes_per_sec = pure_write_bytes as f64 / pure_write_duration.as_secs_f64();
 
     println!("--- PURE WRITE RESULTS ---");
-    println!("Events written: {}", pure_write_events);
+    println!("Events written: {pure_write_events}");
     println!("Total bytes: {}", format_bytes(pure_write_bytes as f64));
     println!("Duration: {}", format_duration(pure_write_duration));
-    println!("Throughput: {:.0} events/s", pure_write_throughput);
+    println!("Throughput: {pure_write_throughput:.0} events/s");
     println!("Throughput: {}/s\n", format_bytes(pure_write_bytes_per_sec));
 
     // Clean up pure write segments
     drop(current_segment);
     for i in 1..=segment_counter {
-        let _ = std::fs::remove_file(data_dir.join(format!("pure_seg_{:04}.bin", i)));
+        let _ = std::fs::remove_file(data_dir.join(format!("pure_seg_{i:04}.bin")));
     }
 
     // ============================================================
@@ -132,7 +132,7 @@ fn main() {
     while indexed_write_bytes < target_bytes {
         if current_segment.is_none() {
             segment_counter += 1;
-            let segment_path = data_dir.join(format!("indexed_seg_{:04}.bin", segment_counter));
+            let segment_path = data_dir.join(format!("indexed_seg_{segment_counter:04}.bin"));
             current_segment = Some(SegmentWriter::new(segment_path.clone(), SEGMENT_SIZE));
             segment_files.push(segment_path);
         }
@@ -177,11 +177,11 @@ fn main() {
         indexed_write_bytes as f64 / indexed_write_duration.as_secs_f64();
 
     println!("--- WRITE WITH INDEX RESULTS ---");
-    println!("Events written: {}", indexed_write_events);
+    println!("Events written: {indexed_write_events}");
     println!("Index entries: {}", event_index.len());
     println!("Total bytes: {}", format_bytes(indexed_write_bytes as f64));
     println!("Duration: {}", format_duration(indexed_write_duration));
-    println!("Throughput: {:.0} events/s", indexed_write_throughput);
+    println!("Throughput: {indexed_write_throughput:.0} events/s");
     println!(
         "Throughput: {}/s\n",
         format_bytes(indexed_write_bytes_per_sec)
@@ -226,9 +226,9 @@ fn main() {
     let cache_read_throughput = cache_events_read as f64 / cache_read_duration.as_secs_f64();
 
     println!("--- CACHED READ RESULTS ---");
-    println!("Events read: {}", cache_events_read);
+    println!("Events read: {cache_events_read}");
     println!("Duration: {}", format_duration(cache_read_duration));
-    println!("Throughput: {:.0} events/s\n", cache_read_throughput);
+    println!("Throughput: {cache_read_throughput:.0} events/s\n");
 
     // ============================================================
     // BENCHMARK 4: READ WITHOUT CACHE (cold disk reads)
@@ -255,9 +255,9 @@ fn main() {
         uncached_events_read as f64 / uncached_read_duration.as_secs_f64();
 
     println!("--- UNCACHED READ RESULTS ---");
-    println!("Events read: {}", uncached_events_read);
+    println!("Events read: {uncached_events_read}");
     println!("Duration: {}", format_duration(uncached_read_duration));
-    println!("Throughput: {:.0} events/s\n", uncached_read_throughput);
+    println!("Throughput: {uncached_read_throughput:.0} events/s\n");
 
     // ============================================================
     // BENCHMARK 5: QUERY BY HASH (with index)
@@ -290,7 +290,7 @@ fn main() {
     }
 
     let index_size = event_index.len();
-    println!("Index size: {} entries\n", index_size);
+    println!("Index size: {index_size} entries\n");
 
     // Query for existing keys (100% hits)
     let query_existing_start = Instant::now();
@@ -300,12 +300,11 @@ fn main() {
         let hash = actual_hashes[i % actual_hashes.len()];
         if let Some(entry) = event_index.get(&hash) {
             for reader in &readers {
-                if reader.segment_id() == entry.segment_id {
-                    if reader.get_event_at(entry.offset).is_ok() {
+                if reader.segment_id() == entry.segment_id
+                    && reader.get_event_at(entry.offset).is_ok() {
                         query_hits += 1;
                         break;
                     }
-                }
             }
         }
     }
@@ -314,10 +313,10 @@ fn main() {
     let query_existing_throughput = QUERY_COUNT as f64 / query_existing_duration.as_secs_f64();
 
     println!("--- QUERY EXISTING KEYS (100% hit rate) ---");
-    println!("Queries: {}", QUERY_COUNT);
-    println!("Found: {}", query_hits);
+    println!("Queries: {QUERY_COUNT}");
+    println!("Found: {query_hits}");
     println!("Duration: {}", format_duration(query_existing_duration));
-    println!("Throughput: {:.0} queries/s\n", query_existing_throughput);
+    println!("Throughput: {query_existing_throughput:.0} queries/s\n");
 
     // Query for random keys (0% hits - testing index lookup speed)
     let query_random_start = Instant::now();
@@ -334,10 +333,10 @@ fn main() {
     let query_random_throughput = QUERY_COUNT as f64 / query_random_duration.as_secs_f64();
 
     println!("--- QUERY RANDOM KEYS (0% hit rate) ---");
-    println!("Queries: {}", QUERY_COUNT);
-    println!("Not found: {}", query_misses);
+    println!("Queries: {QUERY_COUNT}");
+    println!("Not found: {query_misses}");
     println!("Duration: {}", format_duration(query_random_duration));
-    println!("Throughput: {:.0} queries/s\n", query_random_throughput);
+    println!("Throughput: {query_random_throughput:.0} queries/s\n");
 
     // ============================================================
     // CLEANUP
@@ -367,19 +366,15 @@ fn main() {
         format_bytes(indexed_write_bytes_per_sec)
     );
     println!(
-        "Read (cached)          | {:.0} events/s",
-        cache_read_throughput
+        "Read (cached)          | {cache_read_throughput:.0} events/s"
     );
     println!(
-        "Read (uncached)        | {:.0} events/s",
-        uncached_read_throughput
+        "Read (uncached)        | {uncached_read_throughput:.0} events/s"
     );
     println!(
-        "Query (existing keys)  | {:.0} queries/s",
-        query_existing_throughput
+        "Query (existing keys)  | {query_existing_throughput:.0} queries/s"
     );
     println!(
-        "Query (random keys)    | {:.0} queries/s",
-        query_random_throughput
+        "Query (random keys)    | {query_random_throughput:.0} queries/s"
     );
 }

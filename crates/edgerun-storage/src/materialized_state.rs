@@ -288,7 +288,7 @@ impl MaterializedStateIndex {
     }
 
     /// Replay tail events on a value.
-    fn replay_tail(&self, _value: &mut Vec<u8>, _stream_id: StreamId, _start: u64, _end: u64) {
+    fn replay_tail(&self, _value: &mut [u8], _stream_id: StreamId, _start: u64, _end: u64) {
         // This would read events from the log and apply them
         // For now, it's a placeholder
         // In production, this would:

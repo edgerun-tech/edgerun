@@ -265,14 +265,9 @@ fn main() {
         total_reads as f64 / elapsed,
         hit_rate * 100.0
     );
-    println!("hits={}, misses={}", hits, misses);
+    println!("hits={hits}, misses={misses}");
     println!(
-        "compaction: scheduled={}, completed={}, failed={}, skipped={}, total_ms={}",
-        compaction_scheduled,
-        compaction_completed,
-        compaction_failed,
-        compaction_skipped,
-        compaction_ms
+        "compaction: scheduled={compaction_scheduled}, completed={compaction_completed}, failed={compaction_failed}, skipped={compaction_skipped}, total_ms={compaction_ms}"
     );
     println!(
         "memory_bytes={} (memtable={}, imm={})",
