@@ -7,10 +7,10 @@
 use rand::Rng;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use storage_engine::durability::SyncPolicy;
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::segment::SegmentWriter;
-use storage_engine::StorageEngine;
+use edgerun_storage::durability::SyncPolicy;
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::segment::SegmentWriter;
+use edgerun_storage::StorageEngine;
 
 const TARGET_SIZE_MB: usize = 10; // Write 10MB for quick demo (use 500+ for real benchmarks)
 const EVENT_PAYLOAD_SIZE: usize = 1024;

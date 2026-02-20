@@ -4,9 +4,9 @@ use std::net::TcpListener;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::replication::{close_pooled_ack_connections, NodeInfo};
-use storage_engine::StorageEngine;
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::replication::{close_pooled_ack_connections, NodeInfo};
+use edgerun_storage::StorageEngine;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {

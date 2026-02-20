@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use storage_engine::async_segment_writer::AsyncSegmentWriterFactory;
-use storage_engine::event::{ActorId, Event, HlcTimestamp, StreamId};
-use storage_engine::io_reactor::IoReactorStats;
+use edgerun_storage::async_segment_writer::AsyncSegmentWriterFactory;
+use edgerun_storage::event::{ActorId, Event, HlcTimestamp, StreamId};
+use edgerun_storage::io_reactor::IoReactorStats;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Mode {

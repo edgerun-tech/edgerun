@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 use std::time::Instant;
-use storage_engine::optimized_writer::{OptimizedSegmentWriter, OptimizedSegmentWriterConfig};
+use edgerun_storage::optimized_writer::{OptimizedSegmentWriter, OptimizedSegmentWriterConfig};
 
 fn main() {
     println!("=== Optimized Segment Writer Benchmark ===\n");
@@ -23,8 +23,8 @@ fn main() {
     let payload_size = 256;
 
     let mut writer = OptimizedSegmentWriter::new(path.clone(), config);
-    let stream_id = storage_engine::event::StreamId::new();
-    let actor_id = storage_engine::event::ActorId::new();
+    let stream_id = edgerun_storage::event::StreamId::new();
+    let actor_id = edgerun_storage::event::ActorId::new();
 
     println!("Writing {num_events} events ({payload_size} bytes each)...");
 

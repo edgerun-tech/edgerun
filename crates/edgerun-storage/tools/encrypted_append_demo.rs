@@ -3,16 +3,16 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use rand::RngCore;
-use storage_engine::durability::DurabilityLevel;
-use storage_engine::encryption::{verify_encrypted_segment_bytes, EncryptionMode};
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::key_management::{
+use edgerun_storage::durability::DurabilityLevel;
+use edgerun_storage::encryption::{verify_encrypted_segment_bytes, EncryptionMode};
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::key_management::{
     derive_wrapping_key_from_material, EnvKeyProvider, KeyProvider, PassphraseKeyProvider,
     WrappedFileKeyProvider,
 };
-use storage_engine::manifest::ManifestManager;
-use storage_engine::segment::SegmentReader;
-use storage_engine::StorageEngine;
+use edgerun_storage::manifest::ManifestManager;
+use edgerun_storage::segment::SegmentReader;
+use edgerun_storage::StorageEngine;
 
 #[derive(Debug, Clone)]
 enum Provider {

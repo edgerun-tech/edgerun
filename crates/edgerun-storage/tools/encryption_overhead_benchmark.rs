@@ -2,9 +2,9 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use storage_engine::encryption::{EncryptionMode, SegmentEncryptionConfig};
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::segment::Segment;
+use edgerun_storage::encryption::{EncryptionMode, SegmentEncryptionConfig};
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::segment::Segment;
 
 #[derive(Debug, Clone)]
 struct Config {

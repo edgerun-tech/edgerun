@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use storage_engine::event::StreamId;
-use storage_engine::materialized_state::{MaterializedStateIndex, MsiConfig};
+use edgerun_storage::event::StreamId;
+use edgerun_storage::materialized_state::{MaterializedStateIndex, MsiConfig};
 
 const WARMUP_ITERATIONS: usize = 1000;
 const BENCHMARK_DURATION_SECS: u64 = 10;

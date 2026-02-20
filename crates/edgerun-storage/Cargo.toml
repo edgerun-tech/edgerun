@@ -1,5 +1,5 @@
 [package]
-name = "storage-engine"
+name = "edgerun-storage"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -44,7 +44,7 @@ default = []
 encryption = []
 
 [lib]
-name = "storage_engine"
+name = "edgerun_storage"
 path = "src/lib.rs"
 
 [[bench]]

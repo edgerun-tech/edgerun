@@ -8,8 +8,8 @@ use rand::Rng;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
-use storage_engine::index::EventHashIndex;
-use storage_engine::lsm_index::{LsmConfig, LsmIndex};
+use edgerun_storage::index::EventHashIndex;
+use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 
 const TEST_SIZES: [usize; 3] = [10_000, 100_000, 1_000_000];
 

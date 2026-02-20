@@ -2,10 +2,10 @@
 use rand::Rng;
 use std::path::PathBuf;
 use std::time::Instant;
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::index::EventHashIndex;
-use storage_engine::segment::{SegmentReader, SegmentWriter};
-use storage_engine::StorageEngine;
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::index::EventHashIndex;
+use edgerun_storage::segment::{SegmentReader, SegmentWriter};
+use edgerun_storage::StorageEngine;
 
 const TARGET_SIZE_GB: usize = 10;
 const SEGMENT_SIZE: u64 = 256 * 1024 * 1024;

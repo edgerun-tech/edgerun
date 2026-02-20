@@ -5,13 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use storage_engine::durability::DurabilityLevel;
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::replication::{
+use edgerun_storage::durability::DurabilityLevel;
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::replication::{
     build_authenticated_ack_response, close_pooled_ack_connections, derive_auth_key,
     verify_authenticated_ack_request, NodeInfo,
 };
-use storage_engine::{StorageEngine, StorageError};
+use edgerun_storage::{StorageEngine, StorageError};
 use tempfile::TempDir;
 
 const ACK_RESPONSE_OK: &[u8; 4] = b"ACK\n";
@@ -172,7 +172,7 @@ fn test_replicated_quorum_times_out_under_partition() -> Result<(), StorageError
     assert!(matches!(
         err,
         StorageError::Replication(
-            storage_engine::replication::ReplicationError::QuorumTimeout { .. }
+            edgerun_storage::replication::ReplicationError::QuorumTimeout { .. }
         )
     ));
     close_pooled_ack_connections();

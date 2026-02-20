@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use storage_engine::event::{ActorId, Event, StreamId};
+use edgerun_storage::event::{ActorId, Event, StreamId};
 
 fn bench_event_serialize(c: &mut Criterion) {
     let stream = StreamId::new();

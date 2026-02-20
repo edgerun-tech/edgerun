@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use storage_engine::io_reactor::IoReactorConfig;
+use edgerun_storage::io_reactor::IoReactorConfig;
 
 const FILE_SIZE: usize = 100 * 1024 * 1024; // 100MB test file
 const BLOCK_SIZE: usize = 4 * 1024; // 4KB blocks

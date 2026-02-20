@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use storage_engine::lsm_index::{LsmConfig, LsmIndex};
+use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 
 #[derive(Debug, Clone)]
 struct Config {

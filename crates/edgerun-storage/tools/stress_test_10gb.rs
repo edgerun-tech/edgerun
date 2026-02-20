@@ -4,11 +4,11 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use storage_engine::event::{ActorId, Event, StreamId};
-use storage_engine::index::EventHashIndex;
-use storage_engine::replication::Replicator;
-use storage_engine::segment::{SegmentReader, SegmentWriter};
-use storage_engine::StorageEngine;
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::index::EventHashIndex;
+use edgerun_storage::replication::Replicator;
+use edgerun_storage::segment::{SegmentReader, SegmentWriter};
+use edgerun_storage::StorageEngine;
 
 const TARGET_SIZE_GB: usize = 10;
 const TEST_MODE_MB: usize = 100; // Set to 0 for full 10GB test
