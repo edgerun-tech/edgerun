@@ -42,6 +42,7 @@ Implemented:
 - Runtime security review and hardening backlog tracked in `SECURITY_REVIEW.md`
 - Runtime ABI compatibility policy documented in `ABI_COMPATIBILITY_POLICY.md` (`N` + `N-1` window)
 - Scheduler/worker ABI rollover integration test (`scripts/integration_abi_rollover.sh`)
+- Signed runtime release provenance workflow (`.github/workflows/runtime-provenance.yml`)
 
 Not yet production-ready:
 
@@ -50,7 +51,7 @@ Not yet production-ready:
 - Calibration model for `max_instructions` cost predictability
 - Strong observability/replay tooling for disputes and incident response
 - Streaming output policy (today output is buffered in-memory)
-- Security posture artifacts (threat model, supply-chain pinning/SBOM, signed release provenance)
+- Security posture artifacts (supply-chain pinning policy)
 
 ## Production gates
 

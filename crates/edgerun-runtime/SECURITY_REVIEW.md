@@ -55,7 +55,6 @@ Closed items:
 
 Open items:
 
-- [ ] Signed release provenance for runtime artifacts (SLSA/in-toto or equivalent).
 - [ ] Formal external security review and findings sign-off.
 
 ## Advisory triage exceptions

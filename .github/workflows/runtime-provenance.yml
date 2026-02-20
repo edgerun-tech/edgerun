@@ -1,0 +1,45 @@
+name: Runtime Provenance
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  runtime-provenance:
+    name: Runtime Release Provenance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build runtime release artifact
+        run: |
+          mkdir -p /tmp/edgerun-runtime-release
+          cargo build --locked --release -p edgerun-runtime
+          cp target/release/edgerun-runtime /tmp/edgerun-runtime-release/edgerun-runtime
+          sha256sum /tmp/edgerun-runtime-release/edgerun-runtime > /tmp/edgerun-runtime-release/SHA256SUMS
+
+      - name: Upload runtime release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: edgerun-runtime-release-${{ github.sha }}
+          path: /tmp/edgerun-runtime-release
+
+      - name: Attest runtime release artifact provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: /tmp/edgerun-runtime-release/edgerun-runtime
