@@ -29,6 +29,8 @@ enum Commands {
         bundle: PathBuf,
         #[arg(long)]
         artifact: PathBuf,
+        #[arg(long)]
+        expect_output_hash: Option<String>,
     },
     ReplayCorpus {
         #[arg(long)]
@@ -46,7 +48,11 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Run { bundle, output } => run(bundle, output).await?,
-        Commands::Replay { bundle, artifact } => replay(bundle, artifact).await?,
+        Commands::Replay {
+            bundle,
+            artifact,
+            expect_output_hash,
+        } => replay(bundle, artifact, expect_output_hash).await?,
         Commands::ReplayCorpus {
             profile,
             artifact,
@@ -93,7 +99,11 @@ struct ReplayArtifact {
     trap_code: Option<String>,
 }
 
-async fn replay(bundle_path: PathBuf, artifact_path: PathBuf) -> Result<()> {
+async fn replay(
+    bundle_path: PathBuf,
+    artifact_path: PathBuf,
+    expect_output_hash: Option<String>,
+) -> Result<()> {
     let bundle_bytes = tokio::fs::read(&bundle_path).await?;
     let bundle_hash = hex::encode(edgerun_crypto::compute_bundle_hash(&bundle_bytes));
     let decoded = decode_bundle_from_canonical_bytes(&bundle_bytes).ok();
@@ -121,6 +131,10 @@ async fn replay(bundle_path: PathBuf, artifact_path: PathBuf) -> Result<()> {
     tokio::fs::write(&artifact_path, body).await?;
     println!("artifact={}", artifact_path.display());
     println!("ok={}", artifact.ok);
+    if let Some(expected) = expect_output_hash {
+        verify_expected_output_hash(&artifact, &expected)?;
+        println!("expect_output_hash_match=true");
+    }
     Ok(())
 }
 
@@ -145,6 +159,24 @@ fn replay_error_artifact(
         error_message: Some(err.message),
         trap_code: err.trap_code,
     }
+}
+
+fn verify_expected_output_hash(artifact: &ReplayArtifact, expected_hex: &str) -> Result<()> {
+    let expected = expected_hex.trim().to_ascii_lowercase();
+    if expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
+        bail!("invalid --expect-output-hash: expected 64 hex chars");
+    }
+    let Some(actual) = artifact.output_hash.as_ref() else {
+        bail!(
+            "expected output hash {} but replay did not produce output (ok={})",
+            expected,
+            artifact.ok
+        );
+    };
+    if *actual != expected {
+        bail!("output hash mismatch: expected={expected} actual={actual}");
+    }
+    Ok(())
 }
 
 struct CorpusCase {

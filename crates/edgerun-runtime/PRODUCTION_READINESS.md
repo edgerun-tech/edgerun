@@ -148,7 +148,7 @@ Acceptance:
 ### Phase C
 
 - [ ] Cross-machine determinism CI matrix
-- [ ] Replay tool (`edgerun-runtime replay --bundle ... --expect-output-hash ...`)
+- [x] Replay tool (`edgerun-runtime replay --bundle ... --expect-output-hash ...`)
 - [ ] Instruction/fuel calibration framework
 
 ### Phase D
