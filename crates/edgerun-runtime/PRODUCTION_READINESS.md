@@ -154,7 +154,7 @@ Acceptance:
 ### Phase D
 
 - [ ] Security review + hardening backlog closure
-- [ ] SLO and performance regression gates in CI
+- [x] SLO and performance regression gates in CI
 
 ## Immediate next implementation tasks
 

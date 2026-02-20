@@ -22,6 +22,7 @@ Examples:
   scripts/ci-local.sh --job integration
   scripts/ci-local.sh --job runtime-determinism
   scripts/ci-local.sh --job runtime-calibration
+  scripts/ci-local.sh --job runtime-slo
   scripts/ci-local.sh --dry-run
 EOF
 }
@@ -74,6 +75,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  ./scripts/integration_policy_rotation.sh"
     echo "  cargo run -p edgerun-runtime -- replay-corpus --profile local --artifact /tmp/replay-corpus.local.json --runs 3"
     echo "  cargo run -p edgerun-runtime -- calibrate-fuel --profile local --artifact /tmp/fuel-calibration.local.json --runs 3 --max-per-unit-spread 0.4"
+    echo "  cargo run -p edgerun-runtime -- slo-smoke --profile local --artifact /tmp/slo-smoke.local.json --runs 50 --max-p95-ms 100 --min-ops-per-sec 30"
     echo "  (optional, with bun+anchor+solana) ./program/scripts/test-bun-local"
   fi
   exit 0
@@ -119,6 +121,16 @@ run_runtime_calibration() {
     --max-per-unit-spread 0.4
 }
 
+run_runtime_slo() {
+  local artifact="${TMPDIR:-/tmp}/slo-smoke.local.json"
+  cargo run -p edgerun-runtime -- slo-smoke \
+    --profile local \
+    --artifact "$artifact" \
+    --runs 50 \
+    --max-p95-ms 100 \
+    --min-ops-per-sec 30
+}
+
 run_program_localnet() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "bun not found; skipping program-localnet fallback"
@@ -141,6 +153,7 @@ case "${JOB:-all}" in
     run_integration
     run_runtime_determinism
     run_runtime_calibration
+    run_runtime_slo
     run_program_localnet
     ;;
   rust-checks)
@@ -154,6 +167,9 @@ case "${JOB:-all}" in
     ;;
   runtime-calibration)
     run_runtime_calibration
+    ;;
+  runtime-slo)
+    run_runtime_slo
     ;;
   program-localnet)
     run_program_localnet

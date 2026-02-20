@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
@@ -50,6 +51,18 @@ enum Commands {
         #[arg(long, default_value_t = 0.4)]
         max_per_unit_spread: f64,
     },
+    SloSmoke {
+        #[arg(long)]
+        profile: String,
+        #[arg(long)]
+        artifact: PathBuf,
+        #[arg(long, default_value_t = 50)]
+        runs: u32,
+        #[arg(long, default_value_t = 100.0)]
+        max_p95_ms: f64,
+        #[arg(long, default_value_t = 30.0)]
+        min_ops_per_sec: f64,
+    },
 }
 
 #[tokio::main]
@@ -74,6 +87,13 @@ async fn main() -> Result<()> {
             runs,
             max_per_unit_spread,
         } => calibrate_fuel(profile, artifact, runs, max_per_unit_spread).await?,
+        Commands::SloSmoke {
+            profile,
+            artifact,
+            runs,
+            max_p95_ms,
+            min_ops_per_sec,
+        } => slo_smoke(profile, artifact, runs, max_p95_ms, min_ops_per_sec).await?,
     }
 
     Ok(())
@@ -147,6 +167,31 @@ struct FuelCalibrationWorkloadSummary {
     per_unit_spread: f64,
 }
 
+#[derive(Debug, Serialize)]
+struct SloSmokeArtifact {
+    profile: String,
+    host_os: String,
+    host_arch: String,
+    runs_per_case: u32,
+    max_p95_ms: f64,
+    min_ops_per_sec: f64,
+    overall_ops_per_sec: f64,
+    all_passed: bool,
+    cases: Vec<SloSmokeCaseResult>,
+}
+
+#[derive(Debug, Serialize)]
+struct SloSmokeCaseResult {
+    case: String,
+    expected: String,
+    actual: String,
+    stable: bool,
+    passed: bool,
+    p50_ms: f64,
+    p95_ms: f64,
+    max_ms: f64,
+}
+
 async fn replay(
     bundle_path: PathBuf,
     artifact_path: PathBuf,
@@ -182,6 +227,105 @@ async fn replay(
     if let Some(expected) = expect_output_hash {
         verify_expected_output_hash(&artifact, &expected)?;
         println!("expect_output_hash_match=true");
+    }
+    Ok(())
+}
+
+async fn slo_smoke(
+    profile: String,
+    artifact_path: PathBuf,
+    runs: u32,
+    max_p95_ms: f64,
+    min_ops_per_sec: f64,
+) -> Result<()> {
+    if runs == 0 {
+        bail!("runs must be > 0");
+    }
+    if max_p95_ms <= 0.0 {
+        bail!("max-p95-ms must be > 0");
+    }
+    if min_ops_per_sec <= 0.0 {
+        bail!("min-ops-per-sec must be > 0");
+    }
+
+    let cases = replay_corpus_cases()?;
+    let suite_start = Instant::now();
+    let mut results = Vec::with_capacity(cases.len());
+    let mut total_ops: u64 = 0;
+    for case in cases {
+        let mut observed = Vec::with_capacity(runs as usize);
+        let mut latencies_ms = Vec::with_capacity(runs as usize);
+        for _ in 0..runs {
+            let started = Instant::now();
+            let value = match edgerun_runtime::execute_bundle_payload_bytes_strict(&case.bundle) {
+                Ok(report) => format!("OK:{}", hex::encode(report.output_hash)),
+                Err(err) => format!("ERR:{:?}", err.code),
+            };
+            observed.push(value);
+            latencies_ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            total_ops = total_ops.saturating_add(1);
+        }
+
+        let stable = observed.windows(2).all(|w| w[0] == w[1]);
+        let actual = observed
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "ERR:NoObservation".to_string());
+        let expected = match case.expected {
+            ExpectedOutcome::OutputHash(hash) => format!("OK:{hash}"),
+            ExpectedOutcome::ErrorCode(code) => format!("ERR:{code:?}"),
+        };
+        let p50_ms = percentile(&latencies_ms, 0.50)?;
+        let p95_ms = percentile(&latencies_ms, 0.95)?;
+        let max_ms = latencies_ms.iter().copied().reduce(f64::max).unwrap_or(0.0);
+        let passed = stable && expected == actual && p95_ms <= max_p95_ms;
+        results.push(SloSmokeCaseResult {
+            case: case.name.to_string(),
+            expected,
+            actual,
+            stable,
+            passed,
+            p50_ms,
+            p95_ms,
+            max_ms,
+        });
+    }
+
+    let elapsed_secs = suite_start.elapsed().as_secs_f64();
+    let overall_ops_per_sec = if elapsed_secs > 0.0 {
+        total_ops as f64 / elapsed_secs
+    } else {
+        0.0
+    };
+    let all_cases_passed = results.iter().all(|r| r.passed);
+    let throughput_ok = overall_ops_per_sec >= min_ops_per_sec;
+    let all_passed = all_cases_passed && throughput_ok;
+
+    let artifact = SloSmokeArtifact {
+        profile,
+        host_os: std::env::consts::OS.to_string(),
+        host_arch: std::env::consts::ARCH.to_string(),
+        runs_per_case: runs,
+        max_p95_ms,
+        min_ops_per_sec,
+        overall_ops_per_sec,
+        all_passed,
+        cases: results,
+    };
+    let body = serde_json::to_vec_pretty(&artifact)?;
+    tokio::fs::write(&artifact_path, body).await?;
+    println!("artifact={}", artifact_path.display());
+    println!("overall_ops_per_sec={overall_ops_per_sec:.2}");
+    println!("all_passed={all_passed}");
+    if !all_cases_passed {
+        bail!("slo smoke failed: case correctness or latency threshold not met");
+    }
+    if !throughput_ok {
+        bail!(
+            "slo smoke failed: overall_ops_per_sec {} < min_ops_per_sec {}",
+            overall_ops_per_sec,
+            min_ops_per_sec
+        );
     }
     Ok(())
 }
@@ -592,6 +736,19 @@ fn encode_bundle(
         },
     };
     Ok(edgerun_types::encode_bundle_payload_canonical(&payload)?)
+}
+
+fn percentile(values: &[f64], q: f64) -> Result<f64> {
+    if values.is_empty() {
+        bail!("percentile on empty set");
+    }
+    if !(0.0..=1.0).contains(&q) {
+        bail!("percentile q must be in [0, 1]");
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let idx = ((sorted.len() - 1) as f64 * q).ceil() as usize;
+    Ok(sorted[idx])
 }
 
 async fn run(bundle_path: PathBuf, output_path: PathBuf) -> Result<()> {

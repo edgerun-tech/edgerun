@@ -126,6 +126,37 @@ jobs:
           name: fuel-calibration-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-calibration/fuel-calibration.json
 
+  runtime-slo:
+    name: Runtime SLO Smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Runtime SLO smoke gate
+        run: |
+          mkdir -p /tmp/edgerun-runtime-slo
+          cargo run -p edgerun-runtime -- slo-smoke \
+            --profile "${{ runner.os }}-${{ runner.arch }}" \
+            --artifact /tmp/edgerun-runtime-slo/slo-smoke.json \
+            --runs 50 \
+            --max-p95-ms 100 \
+            --min-ops-per-sec 30
+
+      - name: Upload SLO artifact
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: slo-smoke-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-runtime-slo/slo-smoke.json
+
   program-localnet:
     name: Program Localnet
     runs-on: ubuntu-24.04
