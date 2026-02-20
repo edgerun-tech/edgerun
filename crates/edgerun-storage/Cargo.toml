@@ -1,0 +1,127 @@
+[package]
+name = "storage-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "High-performance storage engine with io_uring I/O, durability tiers, and replication primitives"
+readme = "README.md"
+keywords = ["storage", "io-uring", "durability", "lsm", "replication"]
+categories = ["database-implementations", "filesystem", "asynchronous"]
+exclude = ["/target", "/.github", "/tmp", "*.log"]
+
+[dependencies]
+blake3.workspace = true
+edgerun-crypto = { path = "../edgerun-crypto" }
+zstd = "0.13"
+serde.workspace = true
+serde_json.workspace = true
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror.workspace = true
+rand = "0.8"
+bytes = "1.5"
+crc32fast = "1.4"
+tokio = { workspace = true, features = ["full"] }
+parking_lot = "0.12"
+once_cell = "1.19"
+num_cpus = "1.16"
+io-uring = "0.7"
+libc = "0.2"
+crossbeam-channel = "0.5"
+rustc-hash = "1.1"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+argon2 = "0.5"
+
+[dev-dependencies]
+tempfile = "3.10"
+proptest = "1.5"
+criterion = "0.5"
+
+[features]
+default = []
+encryption = []
+
+[lib]
+name = "storage_engine"
+path = "src/lib.rs"
+
+[[bench]]
+name = "event_serialize"
+harness = false
+
+[[bin]]
+name = "benchmark_10gb"
+path = "tools/benchmark_10gb.rs"
+bench = false
+
+[[bin]]
+name = "benchmark_1gb_comprehensive"
+path = "tools/benchmark_1gb_comprehensive.rs"
+bench = false
+
+[[bin]]
+name = "stress_test_10gb"
+path = "tools/stress_test_10gb.rs"
+bench = false
+
+[[bin]]
+name = "durability_benchmarks"
+path = "tools/durability_benchmarks.rs"
+bench = false
+
+[[bin]]
+name = "lsm_comparison"
+path = "tools/lsm_comparison.rs"
+bench = false
+
+[[bin]]
+name = "msi_benchmark"
+path = "tools/msi_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "io_uring_benchmark"
+path = "tools/io_uring_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "optimization_benchmark"
+path = "tools/optimization_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "optimized_writer_benchmark"
+path = "tools/optimized_writer_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "async_writer_benchmark"
+path = "tools/async_writer_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "mixed_rw_compaction_benchmark"
+path = "tools/mixed_rw_compaction_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "crash_campaign"
+path = "tools/crash_campaign.rs"
+bench = false
+
+[[bin]]
+name = "replication_group_commit_benchmark"
+path = "tools/replication_group_commit_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "encrypted_append_demo"
+path = "tools/encrypted_append_demo.rs"
+bench = false
+
+[[bin]]
+name = "encryption_overhead_benchmark"
+path = "tools/encryption_overhead_benchmark.rs"
+bench = false

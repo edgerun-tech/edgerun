@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: Nightly Gates
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  deeper-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Full Build + Tests
+        run: |
+          RUSTFLAGS='-D warnings' cargo check --all-targets
+          cargo test -q
+
+      - name: Perf Gate (Extended)
+        run: |
+          MIXED_RW_SWEEP_DURATION=8 \
+          MIXED_RW_SWEEP_MAX_CASES=8 \
+          tools/perf_gate.sh
+
+      - name: Crash Campaign (2k)
+        run: |
+          cargo run -q --bin crash_campaign -- \
+            --iterations 2000 \
+            --data-dir /tmp/crash_campaign_nightly \
+            --target-mb 2 \
+            --random true \
+            --keep-failed true

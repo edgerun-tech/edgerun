@@ -1,0 +1,9 @@
+/target
+**/target
+.DS_Store
+.env
+*.log
+node_modules
+program/.anchor
+program/test-ledger
+program/.solana

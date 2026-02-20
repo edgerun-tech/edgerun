@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  rust-check-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format Check
+        run: cargo fmt --check
+
+      - name: Warnings Clean
+        run: RUSTFLAGS='-D warnings' cargo check --all-targets
+
+      - name: Test
+        run: cargo test -q
+
+      - name: Perf Gate (Smoke)
+        run: |
+          MIXED_RW_SWEEP_DURATION=1 \
+          MIXED_RW_SWEEP_MAX_CASES=1 \
+          MIN_TOP_SCORE=1 \
+          MIN_TOP_WRITES_OPS=1 \
+          MIN_TOP_READS_OPS=1 \
+          MAX_TOP_COMP_FAILED=999 \
+          tools/perf_gate.sh
