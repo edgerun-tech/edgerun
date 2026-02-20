@@ -157,6 +157,30 @@ jobs:
           name: slo-smoke-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-slo/slo-smoke.json
 
+  runtime-fuzz-sanity:
+    name: Runtime Fuzz Sanity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Fuzz sanity runs
+        working-directory: crates/edgerun-runtime/fuzz
+        run: |
+          cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=15
+          cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15
+          cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15
+
   program-localnet:
     name: Program Localnet
     runs-on: ubuntu-24.04

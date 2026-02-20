@@ -36,6 +36,7 @@ Implemented:
   - `fuel_limit`
   - `fuel_remaining`
 - Replay artifact contract documented: `REPLAY_ARTIFACT_CONTRACT.md`
+- CI fuzz sanity job for decoder/validator/hostcall targets (bounded-time regression runs)
 
 Not yet production-ready:
 
