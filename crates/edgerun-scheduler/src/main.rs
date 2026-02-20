@@ -350,6 +350,20 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
         .parse()
         .context("invalid EDGERUN_SCHEDULER_ADDR")?;
+    let configured_committee_size = read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3);
+    if configured_committee_size != 3 {
+        tracing::warn!(
+            configured = configured_committee_size,
+            "MVP scheduler enforces committee_size=3; ignoring configured value"
+        );
+    }
+    let configured_quorum = read_env_usize("EDGERUN_SCHEDULER_QUORUM", 2);
+    if configured_quorum != 2 {
+        tracing::warn!(
+            configured = configured_quorum,
+            "MVP scheduler enforces quorum=2; ignoring configured value"
+        );
+    }
 
     let state = AppState {
         data_dir,
@@ -368,8 +382,8 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| default_policy_key_id()),
         policy_version: read_env_u32("EDGERUN_SCHEDULER_POLICY_VERSION", default_policy_version()),
         policy_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_POLICY_TTL_SECS", 300),
-        committee_size: read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3),
-        quorum: read_env_usize("EDGERUN_SCHEDULER_QUORUM", 2),
+        committee_size: 3,
+        quorum: 2,
         heartbeat_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_HEARTBEAT_TTL_SECS", 15),
         require_worker_signatures: read_env_bool(
             "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES",
@@ -1636,6 +1650,15 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
 
 fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
     let job_id_hex = hex::encode(view.job_id);
+    if view.committee_size != 3 || view.quorum != 2 {
+        tracing::warn!(
+            job_id = %job_id_hex,
+            committee_size = view.committee_size,
+            quorum = view.quorum,
+            "skipping discovered posted job: unsupported committee/quorum for MVP policy"
+        );
+        return Ok(false);
+    }
     let bundle_hash_hex = hex::encode(view.bundle_hash);
     if !bundle_path(state, &bundle_hash_hex).exists() {
         tracing::warn!(
@@ -2770,6 +2793,45 @@ mod tests {
         let job_id_hex = hex::encode(view.job_id);
         let jq = state.job_quorum.lock().expect("lock poisoned");
         assert!(!jq.contains_key(&job_id_hex));
+    }
+
+    #[test]
+    fn discovered_job_with_non_mvp_committee_policy_is_skipped() {
+        let state = test_state();
+        let now = now_unix_seconds();
+        let runtime_id = [0_u8; 32];
+        let runtime_hex = hex::encode(runtime_id);
+        {
+            let mut registry = state.worker_registry.lock().expect("lock poisoned");
+            for worker in ["w1", "w2", "w3"] {
+                registry.insert(
+                    worker.to_string(),
+                    WorkerRegistryEntry {
+                        worker_pubkey: worker.to_string(),
+                        runtime_ids: vec![runtime_hex.clone()],
+                        version: "1".to_string(),
+                        max_concurrent: Some(1),
+                        mem_bytes: Some(1024),
+                        last_heartbeat_unix_s: now,
+                    },
+                );
+            }
+        }
+        let view = OnchainJobView {
+            job_id: [0x68_u8; 32],
+            bundle_hash: [0x69_u8; 32],
+            runtime_id,
+            max_memory_bytes: 1,
+            max_instructions: 1,
+            escrow_lamports: 1,
+            committee_size: 5,
+            quorum: 3,
+            status: 0,
+        };
+        let bundle_hash_hex = hex::encode(view.bundle_hash);
+        std::fs::write(bundle_path(&state, &bundle_hash_hex), b"bundle").expect("write bundle");
+        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
+        assert!(!inserted);
     }
 
     #[test]
