@@ -205,6 +205,8 @@ struct JobQuorumState {
     onchain_last_observed_slot: Option<u64>,
     #[serde(default)]
     onchain_last_update_unix_s: Option<u64>,
+    #[serde(default)]
+    onchain_deadline_slot: Option<u64>,
     created_at_unix_s: u64,
     quorum_reached_at_unix_s: Option<u64>,
 }
@@ -855,6 +857,7 @@ async fn job_create(
                 onchain_status: None,
                 onchain_last_observed_slot: None,
                 onchain_last_update_unix_s: None,
+                onchain_deadline_slot: None,
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -1576,12 +1579,30 @@ fn build_assign_workers_artifact(
 fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
     let now = now_unix_seconds();
     let timeout = state.job_timeout_secs.max(1);
+    let chain_slot = state
+        .chain
+        .as_ref()
+        .and_then(|chain| match chain.rpc.get_slot() {
+            Ok(slot) => Some(slot),
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to read current chain slot for expiry evaluation");
+                None
+            }
+        });
     let candidates = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
         job_quorum
             .iter()
             .filter_map(|(job_id, quorum_state)| {
-                let expired = now.saturating_sub(quorum_state.created_at_unix_s) >= timeout;
+                let expired = if let Some(deadline_slot) = quorum_state.onchain_deadline_slot {
+                    chain_slot
+                        .map(|slot| slot >= deadline_slot)
+                        .unwrap_or_else(|| {
+                            now.saturating_sub(quorum_state.created_at_unix_s) >= timeout
+                        })
+                } else {
+                    now.saturating_sub(quorum_state.created_at_unix_s) >= timeout
+                };
                 if expired && !quorum_state.quorum_reached && !quorum_state.cancel_triggered {
                     Some(job_id.clone())
                 } else {
@@ -1638,6 +1659,8 @@ const JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR: usize = 136;
 const JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR: usize = 140;
 const JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR: usize = 148;
 const JOB_QUORUM_OFFSET_FROM_ANCHOR: usize = 149;
+const JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR: usize = 150;
+const JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR: usize = 158;
 const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
 
 #[derive(Debug, Clone)]
@@ -1650,6 +1673,8 @@ struct OnchainJobView {
     escrow_lamports: u64,
     committee_size: u8,
     quorum: u8,
+    created_slot: u64,
+    deadline_slot: u64,
     status: u8,
 }
 
@@ -1794,6 +1819,7 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
                 onchain_status: Some("posted".to_string()),
                 onchain_last_observed_slot: None,
                 onchain_last_update_unix_s: Some(now),
+                onchain_deadline_slot: Some(view.deadline_slot),
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -1810,7 +1836,12 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
         }
     }
     touch_job_last_update(state, &job_id_hex);
-    tracing::info!(job_id = %job_id_hex, "discovered posted on-chain job and queued assignments");
+    tracing::info!(
+        job_id = %job_id_hex,
+        created_slot = view.created_slot,
+        deadline_slot = view.deadline_slot,
+        "discovered posted on-chain job and queued assignments"
+    );
     Ok(true)
 }
 
@@ -1911,6 +1942,8 @@ fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
     let max_instructions = read_u64_from_anchor(data, JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR)?;
     let committee_size = read_u8_from_anchor(data, JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR)?;
     let quorum = read_u8_from_anchor(data, JOB_QUORUM_OFFSET_FROM_ANCHOR)?;
+    let created_slot = read_u64_from_anchor(data, JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR)?;
+    let deadline_slot = read_u64_from_anchor(data, JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR)?;
     let status = read_u8_from_anchor(data, JOB_STATUS_OFFSET_FROM_ANCHOR)?;
     if status > 4 || committee_size == 0 || quorum == 0 {
         return None;
@@ -1924,6 +1957,8 @@ fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
         escrow_lamports,
         committee_size,
         quorum,
+        created_slot,
+        deadline_slot,
         status,
     })
 }
@@ -2520,6 +2555,7 @@ mod tests {
                     onchain_status: None,
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
                     created_at_unix_s: now_unix_seconds().saturating_sub(3600),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2567,6 +2603,7 @@ mod tests {
                     onchain_status: None,
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2623,6 +2660,12 @@ mod tests {
             .copy_from_slice(&789_u64.to_le_bytes());
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR] = 3;
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_QUORUM_OFFSET_FROM_ANCHOR] = 2;
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR + 8]
+            .copy_from_slice(&900_u64.to_le_bytes());
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR + 8]
+            .copy_from_slice(&901_u64.to_le_bytes());
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 0;
 
         let parsed = parse_onchain_job_view(&data).expect("parse");
@@ -2634,6 +2677,8 @@ mod tests {
         assert_eq!(parsed.max_instructions, 789);
         assert_eq!(parsed.committee_size, 3);
         assert_eq!(parsed.quorum, 2);
+        assert_eq!(parsed.created_slot, 900);
+        assert_eq!(parsed.deadline_slot, 901);
         assert_eq!(parsed.status, 0);
     }
 
@@ -2695,6 +2740,8 @@ mod tests {
             escrow_lamports: 1_000,
             committee_size: 3,
             quorum: 2,
+            created_slot: 10,
+            deadline_slot: 20,
             status: 0,
         };
         let bundle_hash_hex = hex::encode(view.bundle_hash);
@@ -2780,6 +2827,7 @@ mod tests {
                     onchain_status: None,
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2850,6 +2898,7 @@ mod tests {
                     onchain_status: None,
                     onchain_last_observed_slot: None,
                     onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
                     created_at_unix_s: now_unix_seconds().saturating_sub(60),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2898,6 +2947,8 @@ mod tests {
             escrow_lamports: 1,
             committee_size: 3,
             quorum: 2,
+            created_slot: 10,
+            deadline_slot: 20,
             status: 0,
         };
         let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
@@ -2938,6 +2989,8 @@ mod tests {
             escrow_lamports: 1,
             committee_size: 5,
             quorum: 3,
+            created_slot: 10,
+            deadline_slot: 20,
             status: 0,
         };
         let bundle_hash_hex = hex::encode(view.bundle_hash);
