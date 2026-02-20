@@ -1539,7 +1539,167 @@ fn build_cancel_expired_artifact(
 }
 
 const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
+const JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
+const JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR: usize = 64;
+const JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR: usize = 72;
+const JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR: usize = 104;
+const JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR: usize = 136;
+const JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR: usize = 140;
+const JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR: usize = 148;
+const JOB_QUORUM_OFFSET_FROM_ANCHOR: usize = 149;
 const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
+
+#[derive(Debug, Clone)]
+struct OnchainJobView {
+    job_id: [u8; 32],
+    bundle_hash: [u8; 32],
+    runtime_id: [u8; 32],
+    max_memory_bytes: u32,
+    max_instructions: u64,
+    escrow_lamports: u64,
+    committee_size: u8,
+    quorum: u8,
+    status: u8,
+}
+
+fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
+    let Some(chain) = state.chain.as_ref() else {
+        return Ok(());
+    };
+    let accounts = chain
+        .rpc
+        .get_program_accounts(&chain.program_id)
+        .context("failed to fetch program accounts for discovery")?;
+    if accounts.is_empty() {
+        return Ok(());
+    }
+
+    let mut changed = false;
+    for (_addr, account) in accounts {
+        let Some(view) = parse_onchain_job_view(&account.data) else {
+            continue;
+        };
+        if view.status != 0 {
+            continue;
+        }
+        let job_id_hex = hex::encode(view.job_id);
+        let already_tracked = {
+            let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.contains_key(&job_id_hex)
+        };
+        if already_tracked {
+            continue;
+        }
+        let runtime_id_hex = hex::encode(view.runtime_id);
+        let committee_workers = select_committee_workers(
+            state,
+            &runtime_id_hex,
+            &job_id_hex,
+            usize::from(view.committee_size.max(1)),
+        );
+        let quorum_target = usize::from(view.quorum.max(1));
+        if committee_workers.len() < quorum_target {
+            tracing::warn!(
+                job_id = %job_id_hex,
+                runtime_id = %runtime_id_hex,
+                have = committee_workers.len(),
+                need = quorum_target,
+                "skipping discovered posted job due to insufficient eligible workers"
+            );
+            continue;
+        }
+
+        let now = now_unix_seconds();
+        let mut queued: Vec<(String, QueuedAssignment)> =
+            Vec::with_capacity(committee_workers.len());
+        for worker_pubkey in &committee_workers {
+            let mut assignment = QueuedAssignment {
+                job_id: job_id_hex.clone(),
+                bundle_hash: hex::encode(view.bundle_hash),
+                bundle_url: format!(
+                    "{}/bundle/{}",
+                    state.public_base_url,
+                    hex::encode(view.bundle_hash)
+                ),
+                runtime_id: runtime_id_hex.clone(),
+                abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
+                limits: edgerun_types::Limits {
+                    max_memory_bytes: view.max_memory_bytes,
+                    max_instructions: view.max_instructions,
+                },
+                escrow_lamports: view.escrow_lamports,
+                policy_signer_pubkey: hex::encode(
+                    state.policy_signing_key.verifying_key().as_bytes(),
+                ),
+                policy_signature: String::new(),
+                policy_key_id: state.policy_key_id.clone(),
+                policy_version: state.policy_version,
+                policy_valid_after_unix_s: now,
+                policy_valid_until_unix_s: now.saturating_add(state.policy_ttl_secs),
+            };
+            assignment.policy_signature =
+                sign_assignment_policy(&state.policy_signing_key, &assignment);
+            queued.push((worker_pubkey.clone(), assignment));
+        }
+        {
+            let mut assignments = state.assignments.lock().expect("lock poisoned");
+            for (worker_pubkey, assignment) in queued {
+                assignments
+                    .entry(worker_pubkey)
+                    .or_default()
+                    .push(assignment);
+            }
+        }
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                job_id_hex.clone(),
+                JobQuorumState {
+                    committee_workers: committee_workers.clone(),
+                    committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
+                    quorum: quorum_target.min(u8::MAX as usize) as u8,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: Some("posted".to_string()),
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: Some(now),
+                    created_at_unix_s: now,
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+        let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
+            build_assign_workers_artifact(state, &job_id_hex)?;
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            if let Some(quorum_state) = job_quorum.get_mut(&job_id_hex) {
+                quorum_state.assign_tx = assign_workers_tx;
+                quorum_state.assign_sig = assign_workers_sig;
+                quorum_state.assign_submitted = assign_workers_submitted;
+            }
+        }
+        touch_job_last_update(state, &job_id_hex);
+        changed = true;
+        tracing::info!(job_id = %job_id_hex, "discovered posted on-chain job and queued assignments");
+    }
+
+    if changed {
+        write_state_snapshot(state)?;
+    }
+    Ok(())
+}
 
 fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
     let Some(chain) = state.chain.as_ref() else {
@@ -1621,6 +1781,59 @@ fn fetch_onchain_job_status(chain: &ChainContext, job_id: [u8; 32]) -> Result<Op
 fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
     let status_offset = ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR;
     data.get(status_offset).copied()
+}
+
+fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
+    let job_id = read_fixed_32(data, JOB_ID_OFFSET_FROM_ANCHOR)?;
+    let bundle_hash = read_fixed_32(data, JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR)?;
+    let runtime_id = read_fixed_32(data, JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR)?;
+    let escrow_lamports = read_u64_from_anchor(data, JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR)?;
+    let max_memory_bytes = read_u32_from_anchor(data, JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR)?;
+    let max_instructions = read_u64_from_anchor(data, JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR)?;
+    let committee_size = read_u8_from_anchor(data, JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR)?;
+    let quorum = read_u8_from_anchor(data, JOB_QUORUM_OFFSET_FROM_ANCHOR)?;
+    let status = read_u8_from_anchor(data, JOB_STATUS_OFFSET_FROM_ANCHOR)?;
+    if status > 4 || committee_size == 0 || quorum == 0 {
+        return None;
+    }
+    Some(OnchainJobView {
+        job_id,
+        bundle_hash,
+        runtime_id,
+        max_memory_bytes,
+        max_instructions,
+        escrow_lamports,
+        committee_size,
+        quorum,
+        status,
+    })
+}
+
+fn read_u8_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u8> {
+    data.get(ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor)
+        .copied()
+}
+
+fn read_u32_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u32> {
+    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
+    let bytes = data.get(start..start + 4)?;
+    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+}
+
+fn read_u64_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u64> {
+    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
+    let bytes = data.get(start..start + 8)?;
+    Some(u64::from_le_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ]))
+}
+
+fn read_fixed_32(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 32]> {
+    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
+    let slice = data.get(start..start + 32)?;
+    let mut out = [0_u8; 32];
+    out.copy_from_slice(slice);
+    Some(out)
 }
 
 fn onchain_status_label(status: u8) -> &'static str {
@@ -1868,6 +2081,9 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
 async fn housekeeping_loop(state: AppState) {
     let interval_secs = read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5).max(1);
     loop {
+        if let Err(err) = discover_posted_jobs_from_chain(&state) {
+            tracing::warn!(error = %err, "housekeeping posted-job discovery failed");
+        }
         if let Err(err) = evaluate_expired_jobs(&state) {
             tracing::warn!(error = %err, "housekeeping evaluate_expired_jobs failed");
         }
@@ -2222,6 +2438,46 @@ mod tests {
         let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 2;
         assert_eq!(parse_onchain_job_status(&data), Some(2));
+    }
+
+    #[test]
+    fn parses_onchain_job_view_fields() {
+        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
+        let job_id = [0x11_u8; 32];
+        let bundle_hash = [0x22_u8; 32];
+        let runtime_id = [0x33_u8; 32];
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_ID_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_ID_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(&job_id);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(&bundle_hash);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(&runtime_id);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR + 8]
+            .copy_from_slice(&123_u64.to_le_bytes());
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR + 4]
+            .copy_from_slice(&456_u32.to_le_bytes());
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR + 8]
+            .copy_from_slice(&789_u64.to_le_bytes());
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR] = 3;
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_QUORUM_OFFSET_FROM_ANCHOR] = 2;
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 0;
+
+        let parsed = parse_onchain_job_view(&data).expect("parse");
+        assert_eq!(parsed.job_id, job_id);
+        assert_eq!(parsed.bundle_hash, bundle_hash);
+        assert_eq!(parsed.runtime_id, runtime_id);
+        assert_eq!(parsed.escrow_lamports, 123);
+        assert_eq!(parsed.max_memory_bytes, 456);
+        assert_eq!(parsed.max_instructions, 789);
+        assert_eq!(parsed.committee_size, 3);
+        assert_eq!(parsed.quorum, 2);
+        assert_eq!(parsed.status, 0);
     }
 
     #[test]
