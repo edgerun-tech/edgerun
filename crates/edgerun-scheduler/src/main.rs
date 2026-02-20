@@ -168,6 +168,10 @@ struct WorkerRegistryEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JobQuorumState {
+    #[serde(default)]
+    expected_bundle_hash: String,
+    #[serde(default)]
+    expected_runtime_id: String,
     committee_workers: Vec<String>,
     committee_size: u8,
     quorum: u8,
@@ -511,6 +515,12 @@ async fn worker_result(
             "worker is not assigned to this job".to_string(),
         ));
     }
+    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.bundle_hash) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "bundle_hash does not match job expectation".to_string(),
+        ));
+    }
     if !verify_result_attestation(&state, &payload)? {
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -575,6 +585,12 @@ async fn worker_failure(
             "worker is not assigned to this job".to_string(),
         ));
     }
+    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.bundle_hash) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "bundle_hash does not match job expectation".to_string(),
+        ));
+    }
     tracing::warn!(
         worker = %payload.worker_pubkey,
         job_id = %payload.job_id,
@@ -621,6 +637,12 @@ async fn worker_replay_artifact(
         return Err((
             StatusCode::FORBIDDEN,
             "worker is not assigned to this job".to_string(),
+        ));
+    }
+    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.artifact.bundle_hash) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "artifact.bundle_hash does not match job expectation".to_string(),
         ));
     }
     tracing::info!(
@@ -784,6 +806,8 @@ async fn job_create(
         job_quorum.insert(
             bundle_hash_hex.clone(),
             JobQuorumState {
+                expected_bundle_hash: bundle_hash_hex.clone(),
+                expected_runtime_id: payload.runtime_id.clone(),
                 committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
                 quorum: effective_quorum.min(u8::MAX as usize) as u8,
                 committee_workers,
@@ -1293,6 +1317,19 @@ fn is_assigned_worker(state: &AppState, job_id: &str, worker_pubkey: &str) -> bo
         .any(|worker| worker == worker_pubkey)
 }
 
+fn matches_expected_bundle_hash(state: &AppState, job_id: &str, bundle_hash: &str) -> bool {
+    let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+    let Some(quorum_state) = job_quorum.get(job_id) else {
+        return false;
+    };
+    if quorum_state.expected_bundle_hash.is_empty() {
+        return true;
+    }
+    quorum_state
+        .expected_bundle_hash
+        .eq_ignore_ascii_case(bundle_hash)
+}
+
 fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
     let reports = {
         let results = state.results.lock().expect("lock poisoned");
@@ -1668,6 +1705,8 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
         job_quorum.insert(
             job_id_hex.clone(),
             JobQuorumState {
+                expected_bundle_hash: hex::encode(view.bundle_hash),
+                expected_runtime_id: runtime_id_hex.clone(),
                 committee_workers: committee_workers.clone(),
                 committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
                 quorum: quorum_target.min(u8::MAX as usize) as u8,
@@ -2388,6 +2427,10 @@ mod tests {
             job_quorum.insert(
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
                 JobQuorumState {
+                    expected_bundle_hash:
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -2431,6 +2474,10 @@ mod tests {
             job_quorum.insert(
                 "job-1".to_string(),
                 JobQuorumState {
+                    expected_bundle_hash:
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -2459,6 +2506,12 @@ mod tests {
 
         assert!(is_assigned_worker(&state, "job-1", "w2"));
         assert!(!is_assigned_worker(&state, "job-1", "intruder"));
+        assert!(matches_expected_bundle_hash(
+            &state,
+            "job-1",
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ));
+        assert!(!matches_expected_bundle_hash(&state, "job-1", "deadbeef"));
     }
 
     #[test]
@@ -2630,6 +2683,10 @@ mod tests {
             job_quorum.insert(
                 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
                 JobQuorumState {
+                    expected_bundle_hash:
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
