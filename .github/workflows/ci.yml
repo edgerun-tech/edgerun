@@ -100,6 +100,9 @@ jobs:
       - name: Policy rotation integration
         run: ./scripts/integration_policy_rotation.sh
 
+      - name: ABI rollover integration
+        run: ./scripts/integration_abi_rollover.sh
+
   runtime-determinism:
     name: Runtime Determinism (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

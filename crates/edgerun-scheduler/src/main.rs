@@ -187,6 +187,7 @@ struct JobCreateRequest {
     runtime_id: String,
     wasm_base64: String,
     input_base64: String,
+    abi_version: Option<u8>,
     limits: edgerun_types::Limits,
     escrow_lamports: u64,
     assignment_worker_pubkey: Option<String>,
@@ -458,11 +459,27 @@ async fn job_create(
             "runtime_id must be 32 bytes".to_string(),
         ));
     }
+    let abi_version = payload
+        .abi_version
+        .unwrap_or(edgerun_types::BUNDLE_ABI_CURRENT);
+    if !(edgerun_types::BUNDLE_ABI_MIN_SUPPORTED..=edgerun_types::BUNDLE_ABI_CURRENT)
+        .contains(&abi_version)
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "abi_version must be in [{}..={}], got {}",
+                edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
+                edgerun_types::BUNDLE_ABI_CURRENT,
+                abi_version
+            ),
+        ));
+    }
     let mut runtime_id = [0_u8; 32];
     runtime_id.copy_from_slice(&runtime_id_bytes);
 
     let bundle_payload = edgerun_types::BundlePayload {
-        v: edgerun_types::BUNDLE_ABI_CURRENT,
+        v: abi_version,
         runtime_id,
         wasm,
         input,
@@ -478,6 +495,7 @@ async fn job_create(
         wasm_b64_len = payload.wasm_base64.len(),
         input_b64_len = payload.input_base64.len(),
         bundle_payload_len = bundle_payload_bytes.len(),
+        abi_version = bundle_payload.v,
         max_memory = payload.limits.max_memory_bytes,
         max_instructions = payload.limits.max_instructions,
         escrow = payload.escrow_lamports,

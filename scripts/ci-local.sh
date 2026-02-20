@@ -77,6 +77,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  ./scripts/integration_scheduler_api.sh"
     echo "  ./scripts/integration_e2e_lifecycle.sh"
     echo "  ./scripts/integration_policy_rotation.sh"
+    echo "  ./scripts/integration_abi_rollover.sh"
     echo "  cargo run -p edgerun-runtime -- replay-corpus --profile local --artifact /tmp/replay-corpus.local.json --runs 3"
     echo "  cargo run -p edgerun-runtime -- calibrate-fuel --profile local --artifact /tmp/fuel-calibration.local.json --runs 3 --max-per-unit-spread 0.4"
     echo "  cargo run -p edgerun-runtime -- slo-smoke --profile local --artifact /tmp/slo-smoke.local.json --runs 50 --max-p95-ms 100 --min-ops-per-sec 30"
@@ -128,6 +129,7 @@ run_integration() {
   ./scripts/integration_scheduler_api.sh
   ./scripts/integration_e2e_lifecycle.sh
   ./scripts/integration_policy_rotation.sh
+  ./scripts/integration_abi_rollover.sh
 }
 
 run_runtime_determinism() {
