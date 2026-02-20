@@ -181,6 +181,45 @@ jobs:
           cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15
           cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15
 
+  runtime-security:
+    name: Runtime Security Gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Dependency vulnerability audit
+        run: cargo audit
+
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --locked
+
+      - name: Generate runtime SBOM
+        run: |
+          mkdir -p /tmp/edgerun-runtime-security
+          cargo cyclonedx \
+            --manifest-path crates/edgerun-runtime/Cargo.toml \
+            --format json \
+            --override-filename runtime-sbom
+          mv crates/edgerun-runtime/runtime-sbom.json /tmp/edgerun-runtime-security/runtime-sbom.json
+
+      - name: Upload runtime SBOM artifact
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-sbom-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-runtime-security
+
   program-localnet:
     name: Program Localnet
     runs-on: ubuntu-24.04

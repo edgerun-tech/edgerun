@@ -37,6 +37,9 @@ Implemented:
   - `fuel_remaining`
 - Replay artifact contract documented: `REPLAY_ARTIFACT_CONTRACT.md`
 - CI fuzz sanity job for decoder/validator/hostcall targets (bounded-time regression runs)
+- CI dependency vulnerability audit (`cargo audit`)
+- CI runtime SBOM artifact generation (`cargo cyclonedx`)
+- Runtime security review and hardening backlog tracked in `SECURITY_REVIEW.md`
 
 Not yet production-ready:
 
@@ -150,11 +153,11 @@ Acceptance:
 
 - [x] Cross-machine determinism CI matrix
 - [x] Replay tool (`edgerun-runtime replay --bundle ... --expect-output-hash ...`)
-- [ ] Instruction/fuel calibration framework
+- [x] Instruction/fuel calibration framework
 
 ### Phase D
 
-- [ ] Security review + hardening backlog closure
+- [x] Security review + hardening backlog closure
 - [x] SLO and performance regression gates in CI
 
 ## Immediate next implementation tasks

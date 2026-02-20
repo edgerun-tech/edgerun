@@ -1,0 +1,9 @@
+[advisories]
+# Temporary triage for vulnerabilities in scheduler/Solana transitive dependencies
+# that are not linked into edgerun-runtime binary paths.
+# Remove these ignores once upstream dependency upgrades land.
+ignore = [
+  "RUSTSEC-2022-0093", # ed25519-dalek 1.x signing oracle issue via solana dependency graph
+  "RUSTSEC-2024-0344", # curve25519-dalek 3.x timing variability via solana/ed25519-dalek 1.x
+  "RUSTSEC-2021-0145", # atty potential unaligned read in legacy dependency chains
+]

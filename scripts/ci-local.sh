@@ -24,6 +24,7 @@ Examples:
   scripts/ci-local.sh --job runtime-calibration
   scripts/ci-local.sh --job runtime-slo
   scripts/ci-local.sh --job runtime-fuzz-sanity
+  scripts/ci-local.sh --job runtime-security
   scripts/ci-local.sh --dry-run
 EOF
 }
@@ -77,7 +78,9 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  cargo run -p edgerun-runtime -- replay-corpus --profile local --artifact /tmp/replay-corpus.local.json --runs 3"
     echo "  cargo run -p edgerun-runtime -- calibrate-fuel --profile local --artifact /tmp/fuel-calibration.local.json --runs 3 --max-per-unit-spread 0.4"
     echo "  cargo run -p edgerun-runtime -- slo-smoke --profile local --artifact /tmp/slo-smoke.local.json --runs 50 --max-p95-ms 100 --min-ops-per-sec 30"
-    echo "  (optional, with cargo-fuzz) (cd crates/edgerun-runtime/fuzz && cargo fuzz run fuzz_bundle_decode -- -max_total_time=15 && cargo fuzz run fuzz_validate_wasm -- -max_total_time=15 && cargo fuzz run fuzz_hostcall_boundary -- -max_total_time=15)"
+    echo "  (optional, with cargo-fuzz+nightly) (cd crates/edgerun-runtime/fuzz && cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=15 && cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=15 && cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=15)"
+    echo "  (optional, with cargo-audit) cargo audit"
+    echo "  (optional, with cargo-cyclonedx) cargo cyclonedx --manifest-path crates/edgerun-runtime/Cargo.toml --format json --override-filename runtime-sbom && mv crates/edgerun-runtime/runtime-sbom.json /tmp/edgerun-runtime-security/runtime-sbom.json"
     echo "  (optional, with bun+anchor+solana) ./program/scripts/test-bun-local"
   fi
   exit 0
@@ -150,6 +153,25 @@ run_runtime_fuzz_sanity() {
   )
 }
 
+run_runtime_security() {
+  if ! command -v cargo-audit >/dev/null 2>&1 && ! cargo audit --help >/dev/null 2>&1; then
+    echo "cargo-audit not found; skipping runtime-security fallback"
+    return 0
+  fi
+  cargo audit
+  if ! command -v cargo-cyclonedx >/dev/null 2>&1; then
+    echo "cargo-cyclonedx not found; skipping SBOM generation in fallback"
+    return 0
+  fi
+  local out_dir="${TMPDIR:-/tmp}/edgerun-runtime-security"
+  mkdir -p "$out_dir"
+  cargo cyclonedx \
+    --manifest-path crates/edgerun-runtime/Cargo.toml \
+    --format json \
+    --override-filename runtime-sbom
+  mv crates/edgerun-runtime/runtime-sbom.json "$out_dir/runtime-sbom.json"
+}
+
 run_program_localnet() {
   if ! command -v bun >/dev/null 2>&1; then
     echo "bun not found; skipping program-localnet fallback"
@@ -174,6 +196,7 @@ case "${JOB:-all}" in
     run_runtime_calibration
     run_runtime_slo
     run_runtime_fuzz_sanity
+    run_runtime_security
     run_program_localnet
     ;;
   rust-checks)
@@ -193,6 +216,9 @@ case "${JOB:-all}" in
     ;;
   runtime-fuzz-sanity)
     run_runtime_fuzz_sanity
+    ;;
+  runtime-security)
+    run_runtime_security
     ;;
   program-localnet)
     run_program_localnet
