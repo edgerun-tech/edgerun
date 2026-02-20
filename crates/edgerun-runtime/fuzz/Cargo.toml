@@ -1,0 +1,39 @@
+[package]
+name = "edgerun-runtime-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { version = "1", features = ["derive"] }
+edgerun-runtime = { path = ".." }
+edgerun-types = { path = "../../edgerun-types" }
+libfuzzer-sys = "0.4"
+wat = "1"
+
+[workspace]
+members = []
+
+[[bin]]
+name = "fuzz_bundle_decode"
+path = "fuzz_targets/fuzz_bundle_decode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_wasm"
+path = "fuzz_targets/fuzz_validate_wasm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_hostcall_boundary"
+path = "fuzz_targets/fuzz_hostcall_boundary.rs"
+test = false
+doc = false
+bench = false

@@ -44,9 +44,12 @@ pub enum BundleCodecError {
     NonCanonicalEncoding,
 }
 
-pub fn encode_bundle_payload_canonical(payload: &BundlePayload) -> Result<Vec<u8>, BundleCodecError> {
+pub fn encode_bundle_payload_canonical(
+    payload: &BundlePayload,
+) -> Result<Vec<u8>, BundleCodecError> {
     let mut bytes = Vec::new();
-    ciborium::ser::into_writer(payload, &mut bytes).map_err(|e| BundleCodecError::Encode(e.to_string()))?;
+    ciborium::ser::into_writer(payload, &mut bytes)
+        .map_err(|e| BundleCodecError::Encode(e.to_string()))?;
     Ok(bytes)
 }
 
@@ -108,10 +111,19 @@ mod tests {
         ]);
 
         let non_canonical = Value::Map(vec![
-            (Value::Text("wasm".to_string()), Value::Bytes(vec![0x00, 0x61, 0x73, 0x6d])),
+            (
+                Value::Text("wasm".to_string()),
+                Value::Bytes(vec![0x00, 0x61, 0x73, 0x6d]),
+            ),
             (Value::Text("v".to_string()), Value::Integer(1_u64.into())),
-            (Value::Text("runtime_id".to_string()), Value::Bytes(vec![7_u8; 32])),
-            (Value::Text("input".to_string()), Value::Bytes(vec![1, 2, 3])),
+            (
+                Value::Text("runtime_id".to_string()),
+                Value::Bytes(vec![7_u8; 32]),
+            ),
+            (
+                Value::Text("input".to_string()),
+                Value::Bytes(vec![1, 2, 3]),
+            ),
             (Value::Text("limits".to_string()), limits),
         ]);
 

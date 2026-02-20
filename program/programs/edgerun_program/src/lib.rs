@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{self, Transfer};
 
-declare_id!("Fg6PaFpoGXkYsidMpWxTWqkZK8mJzqzH9uM6YqkB6x6a");
+declare_id!("AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T");
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ConfigParams {

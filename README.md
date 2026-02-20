@@ -16,7 +16,16 @@ Scaffold for the Phase 1 EdgeRun system described in `Whitepaper.md`.
 ## Quick Start
 
 ```bash
-make check
+./scripts/edgerun doctor
+./scripts/edgerun setup
+./scripts/edgerun build workspace
+./scripts/edgerun test runtime
+```
+
+One-command baseline check:
+
+```bash
+./scripts/edgerun all
 ```
 
 Run service scaffolds:
@@ -31,6 +40,50 @@ Run runtime scaffold:
 ```bash
 cargo run -p edgerun-runtime -- run --bundle ./bundle.cbor --output ./out.bin
 ```
+
+## Project CLI
+
+`./scripts/edgerun` is the orchestrator for setup/build/test workflows.
+
+Examples:
+
+```bash
+./scripts/edgerun doctor
+./scripts/edgerun setup --install-missing
+./scripts/edgerun build all
+./scripts/edgerun test integration
+./scripts/edgerun test e2e
+./scripts/edgerun run replay-corpus
+./scripts/edgerun run fuzz-weekly
+```
+
+Optional shortcut install:
+
+```bash
+./scripts/install.sh
+./edgerun all
+```
+
+Policy rotation runbook:
+
+- `docs/policy-rotation.md`
+
+## CI
+
+GitHub Actions workflow:
+
+- `.github/workflows/ci.yml`
+
+Run the same workflow locally (without pushing):
+
+```bash
+./scripts/ci-local.sh --dry-run
+./scripts/ci-local.sh --job rust-checks
+./scripts/ci-local.sh --job integration
+```
+
+If `act` is installed, `ci-local.sh` executes the workflow via `act`.
+If `act` is missing, it falls back to equivalent local commands.
 
 ## Notes
 
