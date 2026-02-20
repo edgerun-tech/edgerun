@@ -65,6 +65,7 @@ pub enum RuntimeErrorCode {
     FuelConfiguration,
     InstructionLimitExceeded,
     MemoryLimitExceeded,
+    OutputContractViolation,
     HostcallFailed,
     Trap,
 }
@@ -109,6 +110,7 @@ struct RuntimeHostState {
     output_len: usize,
     output_hasher: blake3::Hasher,
     output_mode: OutputMode,
+    output_write_calls: u32,
     max_output_bytes: usize,
     memory: Option<Memory>,
 }
@@ -329,6 +331,7 @@ fn execute_wasm_with_hostcalls(
             output_len: 0,
             output_hasher: blake3::Hasher::new(),
             output_mode,
+            output_write_calls: 0,
             max_output_bytes: limits.max_memory_bytes as usize,
             memory: None,
         },
@@ -410,6 +413,15 @@ fn execute_wasm_with_hostcalls(
             ),
         ));
     }
+    if host.output_write_calls != 1 {
+        return Err(RuntimeError::new(
+            RuntimeErrorCode::OutputContractViolation,
+            format!(
+                "module must call write_output exactly once, observed {} calls",
+                host.output_write_calls
+            ),
+        ));
+    }
 
     Ok(ExecutionOutcome {
         output,
@@ -468,6 +480,7 @@ fn host_write_output(mut caller: Caller<'_, RuntimeStoreData>, src_ptr: i32, len
     }
 
     let state = caller.data_mut();
+    state.host.output_write_calls = state.host.output_write_calls.saturating_add(1);
     let next_len = state.host.output_len.saturating_add(bytes.len());
     if next_len > state.host.max_output_bytes {
         return -1;
@@ -697,8 +710,11 @@ mod tests {
     fn strict_api_accepts_current_and_n_minus_one_abi_versions() {
         let wasm = wat::parse_str(
             r#"(module
+                (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
                 (memory (export "memory") 1 1)
-                (func (export "_start"))
+                (func (export "_start")
+                    (drop (call $write_output (i32.const 0) (i32.const 0)))
+                )
             )"#,
         )
         .expect("wat parse");
@@ -744,8 +760,11 @@ mod tests {
     fn strict_api_rejects_unsupported_abi_versions() {
         let wasm = wat::parse_str(
             r#"(module
+                (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
                 (memory (export "memory") 1 1)
-                (func (export "_start"))
+                (func (export "_start")
+                    (drop (call $write_output (i32.const 0) (i32.const 0)))
+                )
             )"#,
         )
         .expect("wat parse");
@@ -796,6 +815,38 @@ mod tests {
 
         assert_eq!(digest.output_hash, buffered.output_hash);
         assert_eq!(digest.output_len, buffered.output.len());
+    }
+
+    #[test]
+    fn enforces_single_write_output_contract() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
+                (memory (export "memory") 1 1)
+                (func (export "_start")
+                    (drop (call $write_output (i32.const 0) (i32.const 0)))
+                    (drop (call $write_output (i32.const 0) (i32.const 0)))
+                )
+            )"#,
+        )
+        .expect("wat parse");
+        let bytes = sample_payload(wasm, 1024 * 1024, 50_000);
+        let err = execute_bundle_payload_bytes_strict(&bytes).expect_err("must fail");
+        assert_eq!(err.code, RuntimeErrorCode::OutputContractViolation);
+    }
+
+    #[test]
+    fn rejects_missing_write_output_contract() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "_start"))
+            )"#,
+        )
+        .expect("wat parse");
+        let bytes = sample_payload(wasm, 1024 * 1024, 50_000);
+        let err = execute_bundle_payload_bytes_strict(&bytes).expect_err("must fail");
+        assert_eq!(err.code, RuntimeErrorCode::OutputContractViolation);
     }
 
     #[test]

@@ -517,6 +517,7 @@ fn build_calibration_bundle(workload: CalibrationWorkload, units: u32) -> Result
 fn calibration_pure_loop_wasm(units: u32) -> Result<Vec<u8>> {
     let wat = format!(
         r#"(module
+            (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
             (memory (export "memory") 1 1)
             (func (export "_start")
                 (local $i i32)
@@ -525,6 +526,7 @@ fn calibration_pure_loop_wasm(units: u32) -> Result<Vec<u8>> {
                     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
                     (br_if $loop (i32.gt_s (local.get $i) (i32.const 0)))
                 )
+                (drop (call $write_output (i32.const 0) (i32.const 0)))
             )
         )"#
     );
@@ -535,6 +537,7 @@ fn calibration_read_hostcall_loop_wasm(units: u32) -> Result<Vec<u8>> {
     let wat = format!(
         r#"(module
             (import "edgerun" "read_input" (func $read_input (param i32 i32 i32) (result i32)))
+            (import "edgerun" "write_output" (func $write_output (param i32 i32) (result i32)))
             (memory (export "memory") 1 1)
             (func (export "_start")
                 (local $i i32)
@@ -544,6 +547,7 @@ fn calibration_read_hostcall_loop_wasm(units: u32) -> Result<Vec<u8>> {
                     (local.set $i (i32.sub (local.get $i) (i32.const 1)))
                     (br_if $loop (i32.gt_s (local.get $i) (i32.const 0)))
                 )
+                (drop (call $write_output (i32.const 0) (i32.const 0)))
             )
         )"#
     );
