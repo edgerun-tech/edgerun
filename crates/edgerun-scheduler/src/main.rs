@@ -39,10 +39,15 @@ struct AppState {
     failures: Arc<Mutex<HashMap<String, Vec<WorkerFailureReport>>>>,
     replay_artifacts: Arc<Mutex<HashMap<String, Vec<WorkerReplayArtifactReport>>>>,
     job_last_update: Arc<Mutex<HashMap<String, u64>>>,
+    worker_registry: Arc<Mutex<HashMap<String, WorkerRegistryEntry>>>,
+    job_quorum: Arc<Mutex<HashMap<String, JobQuorumState>>>,
     policy_signing_key: SigningKey,
     policy_key_id: String,
     policy_version: u32,
     policy_ttl_secs: u64,
+    committee_size: usize,
+    quorum: usize,
+    heartbeat_ttl_secs: u64,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -135,6 +140,30 @@ struct WorkerReplayArtifactReport {
     artifact: ReplayArtifactPayload,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerRegistryEntry {
+    worker_pubkey: String,
+    runtime_ids: Vec<String>,
+    version: String,
+    last_heartbeat_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct JobQuorumState {
+    committee_workers: Vec<String>,
+    committee_size: u8,
+    quorum: u8,
+    quorum_reached: bool,
+    winning_output_hash: Option<String>,
+    winning_workers: Vec<String>,
+    #[serde(default)]
+    finalize_triggered: bool,
+    finalize_tx: Option<String>,
+    finalize_sig: Option<String>,
+    created_at_unix_s: u64,
+    quorum_reached_at_unix_s: Option<u64>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 struct PersistedState {
@@ -143,6 +172,8 @@ struct PersistedState {
     failures: HashMap<String, Vec<WorkerFailureReport>>,
     replay_artifacts: HashMap<String, Vec<WorkerReplayArtifactReport>>,
     job_last_update: HashMap<String, u64>,
+    worker_registry: HashMap<String, WorkerRegistryEntry>,
+    job_quorum: HashMap<String, JobQuorumState>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,6 +206,7 @@ struct HeartbeatRequest {
 struct HeartbeatResponse {
     ok: bool,
     next_poll_ms: u64,
+    server_time_unix_s: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -208,6 +240,7 @@ struct JobStatusResponse {
     reports: Vec<WorkerResultReport>,
     failures: Vec<WorkerFailureReport>,
     replay_artifacts: Vec<WorkerReplayArtifactReport>,
+    quorum: Option<JobQuorumState>,
 }
 
 struct PostJobArgs {
@@ -272,11 +305,16 @@ async fn main() -> Result<()> {
         failures: Arc::new(Mutex::new(persisted.failures)),
         replay_artifacts: Arc::new(Mutex::new(persisted.replay_artifacts)),
         job_last_update: Arc::new(Mutex::new(persisted.job_last_update)),
+        worker_registry: Arc::new(Mutex::new(persisted.worker_registry)),
+        job_quorum: Arc::new(Mutex::new(persisted.job_quorum)),
         policy_signing_key: load_policy_signing_key()?,
         policy_key_id: std::env::var("EDGERUN_SCHEDULER_POLICY_KEY_ID")
             .unwrap_or_else(|_| default_policy_key_id()),
         policy_version: read_env_u32("EDGERUN_SCHEDULER_POLICY_VERSION", default_policy_version()),
         policy_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_POLICY_TTL_SECS", 300),
+        committee_size: read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3),
+        quorum: read_env_usize("EDGERUN_SCHEDULER_QUORUM", 2),
+        heartbeat_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_HEARTBEAT_TTL_SECS", 15),
         chain,
     };
     enforce_history_retention(&state);
@@ -315,17 +353,38 @@ async fn policy_info(State(state): State<AppState>) -> Json<PolicyInfoResponse> 
     })
 }
 
-async fn worker_heartbeat(Json(payload): Json<HeartbeatRequest>) -> Json<HeartbeatResponse> {
+async fn worker_heartbeat(
+    State(state): State<AppState>,
+    Json(payload): Json<HeartbeatRequest>,
+) -> Json<HeartbeatResponse> {
+    prune_expired_workers(&state);
     tracing::info!(
         worker = %payload.worker_pubkey,
         runtime_count = payload.runtime_ids.len(),
         version = %payload.version,
         "received worker heartbeat"
     );
+    let now = now_unix_seconds();
+    {
+        let mut registry = state.worker_registry.lock().expect("lock poisoned");
+        registry.insert(
+            payload.worker_pubkey.clone(),
+            WorkerRegistryEntry {
+                worker_pubkey: payload.worker_pubkey,
+                runtime_ids: payload.runtime_ids,
+                version: payload.version,
+                last_heartbeat_unix_s: now,
+            },
+        );
+    }
+    if let Err(err) = write_state_snapshot(&state) {
+        tracing::warn!(error = %err, "failed to persist state after worker heartbeat");
+    }
 
     Json(HeartbeatResponse {
         ok: true,
         next_poll_ms: 2000,
+        server_time_unix_s: now,
     })
 }
 
@@ -364,15 +423,25 @@ async fn worker_result(
         .any(|existing| existing.idempotency_key == payload.idempotency_key)
     {
         drop(results);
-        return Ok(Json(serde_json::json!({ "ok": true, "duplicate": true })));
+        let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
+        return Ok(Json(serde_json::json!({
+            "ok": true,
+            "duplicate": true,
+            "quorum_reached": quorum_reached
+        })));
     }
     entries.push(payload);
     drop(results);
+    let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
     touch_job_last_update(&state, &job_id);
     enforce_history_retention(&state);
 
     write_state_snapshot(&state).map_err(internal_err)?;
-    Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "duplicate": false,
+        "quorum_reached": quorum_reached
+    })))
 }
 
 async fn worker_failure(
@@ -506,8 +575,37 @@ async fn job_create(
     let bundle_path = bundle_path(&state, &bundle_hash_hex);
     std::fs::write(&bundle_path, &bundle_payload_bytes).map_err(internal_err)?;
 
-    if let Some(worker_pubkey) = payload.assignment_worker_pubkey.as_ref() {
-        let now = now_unix_seconds();
+    prune_expired_workers(&state);
+    let committee_workers = if let Some(worker_pubkey) = payload.assignment_worker_pubkey.as_ref() {
+        vec![worker_pubkey.clone()]
+    } else {
+        let selected = select_committee_workers(
+            &state,
+            &payload.runtime_id,
+            &bundle_hash_hex,
+            state.committee_size,
+        );
+        if selected.len() < state.quorum.max(1) {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!(
+                    "insufficient eligible workers for quorum: have {}, need {}",
+                    selected.len(),
+                    state.quorum.max(1)
+                ),
+            ));
+        }
+        selected
+    };
+
+    let effective_quorum = if payload.assignment_worker_pubkey.is_some() {
+        1
+    } else {
+        state.quorum.max(1).min(committee_workers.len())
+    };
+    let now = now_unix_seconds();
+    let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
+    for worker_pubkey in &committee_workers {
         let mut assignment = QueuedAssignment {
             job_id: bundle_hash_hex.clone(),
             bundle_hash: bundle_hash_hex.clone(),
@@ -525,14 +623,39 @@ async fn job_create(
         };
         assignment.policy_signature =
             sign_assignment_policy(&state.policy_signing_key, &assignment);
-        let mut assignments = state.assignments.lock().expect("lock poisoned");
-        assignments
-            .entry(worker_pubkey.clone())
-            .or_default()
-            .push(assignment);
-        drop(assignments);
-        write_state_snapshot(&state).map_err(internal_err)?;
+        queued.push((worker_pubkey.clone(), assignment));
     }
+
+    {
+        let mut assignments = state.assignments.lock().expect("lock poisoned");
+        for (worker_pubkey, assignment) in queued {
+            assignments
+                .entry(worker_pubkey)
+                .or_default()
+                .push(assignment);
+        }
+    }
+    {
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum.insert(
+            bundle_hash_hex.clone(),
+            JobQuorumState {
+                committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
+                quorum: effective_quorum.min(u8::MAX as usize) as u8,
+                committee_workers,
+                quorum_reached: false,
+                winning_output_hash: None,
+                winning_workers: Vec::new(),
+                finalize_triggered: false,
+                finalize_tx: None,
+                finalize_sig: None,
+                created_at_unix_s: now,
+                quorum_reached_at_unix_s: None,
+            },
+        );
+    }
+    touch_job_last_update(&state, &bundle_hash_hex);
+    write_state_snapshot(&state).map_err(internal_err)?;
 
     let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
         let tx_args = PostJobArgs {
@@ -578,11 +701,18 @@ async fn get_job_status(
 
     let replay_artifacts = state.replay_artifacts.lock().expect("lock poisoned");
     let replay_artifacts = replay_artifacts.get(&job_id).cloned().unwrap_or_default();
+    let quorum = state
+        .job_quorum
+        .lock()
+        .expect("lock poisoned")
+        .get(&job_id)
+        .cloned();
     Json(JobStatusResponse {
         job_id,
         reports,
         failures,
         replay_artifacts,
+        quorum,
     })
 }
 
@@ -658,6 +788,41 @@ fn build_post_job_tx_base64(
     Ok((tx_b64, signature))
 }
 
+fn build_finalize_job_tx_base64(
+    chain: &ChainContext,
+    job_id: [u8; 32],
+) -> Result<(String, Option<String>)> {
+    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
+    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+
+    let ix = Instruction {
+        program_id: chain.program_id,
+        accounts: vec![
+            AccountMeta::new(chain.payer.pubkey(), true),
+            AccountMeta::new_readonly(config_pda, false),
+            AccountMeta::new(job_pda, false),
+        ],
+        data: encode_finalize_job_data(job_id),
+    };
+
+    let blockhash = chain
+        .rpc
+        .get_latest_blockhash()
+        .context("failed to fetch latest blockhash")?;
+
+    let tx = Transaction::new_signed_with_payer(
+        &[ix],
+        Some(&chain.payer.pubkey()),
+        &[&chain.payer],
+        blockhash,
+    );
+
+    let signature = tx.signatures.first().map(ToString::to_string);
+    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
+    Ok((tx_b64, signature))
+}
+
 fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     let mut data = Vec::with_capacity(8 + 32 + 32 + 32 + 4 + 8 + 8);
     data.extend_from_slice(&anchor_discriminator("post_job"));
@@ -667,6 +832,13 @@ fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     data.extend_from_slice(&args.max_memory_bytes.to_le_bytes());
     data.extend_from_slice(&args.max_instructions.to_le_bytes());
     data.extend_from_slice(&args.escrow_lamports.to_le_bytes());
+    data
+}
+
+fn encode_finalize_job_data(job_id: [u8; 32]) -> Vec<u8> {
+    let mut data = Vec::with_capacity(8 + 32);
+    data.extend_from_slice(&anchor_discriminator("finalize_job"));
+    data.extend_from_slice(&job_id);
     data
 }
 
@@ -709,6 +881,8 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
             .expect("lock poisoned")
             .clone(),
         job_last_update: state.job_last_update.lock().expect("lock poisoned").clone(),
+        worker_registry: state.worker_registry.lock().expect("lock poisoned").clone(),
+        job_quorum: state.job_quorum.lock().expect("lock poisoned").clone(),
     };
     let bytes = serde_json::to_vec_pretty(&snapshot)?;
     std::fs::write(state.data_dir.join("state.json"), bytes)?;
@@ -765,6 +939,143 @@ fn sign_assignment_policy(signing_key: &SigningKey, assignment: &QueuedAssignmen
     let message = assignment_policy_message(assignment);
     let sig: Signature = edgerun_crypto::sign(signing_key, message.as_bytes());
     hex::encode(sig.to_bytes())
+}
+
+fn prune_expired_workers(state: &AppState) {
+    let cutoff = now_unix_seconds().saturating_sub(state.heartbeat_ttl_secs);
+    let mut registry = state.worker_registry.lock().expect("lock poisoned");
+    registry.retain(|_, entry| entry.last_heartbeat_unix_s >= cutoff);
+}
+
+fn select_committee_workers(
+    state: &AppState,
+    runtime_id: &str,
+    seed: &str,
+    committee_size: usize,
+) -> Vec<String> {
+    let now = now_unix_seconds();
+    let cutoff = now.saturating_sub(state.heartbeat_ttl_secs);
+    let registry = state.worker_registry.lock().expect("lock poisoned");
+    let mut eligible = registry
+        .values()
+        .filter(|entry| {
+            entry.last_heartbeat_unix_s >= cutoff
+                && entry
+                    .runtime_ids
+                    .iter()
+                    .any(|candidate| candidate.eq_ignore_ascii_case(runtime_id))
+        })
+        .map(|entry| entry.worker_pubkey.clone())
+        .collect::<Vec<_>>();
+    drop(registry);
+
+    eligible.sort_by(|a, b| {
+        let a_score = hash(format!("{seed}|{runtime_id}|{a}").as_bytes());
+        let b_score = hash(format!("{seed}|{runtime_id}|{b}").as_bytes());
+        a_score
+            .to_bytes()
+            .cmp(&b_score.to_bytes())
+            .then_with(|| a.cmp(b))
+    });
+    eligible.truncate(committee_size.max(1));
+    eligible
+}
+
+fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
+    let reports = {
+        let results = state.results.lock().expect("lock poisoned");
+        results.get(job_id).cloned().unwrap_or_default()
+    };
+    let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+    let Some(quorum_state) = job_quorum.get_mut(job_id) else {
+        return Ok(false);
+    };
+    let quorum_target = usize::from(quorum_state.quorum.max(1));
+    let Some((winning_hash, winning_workers)) = find_winning_output_hash(&reports, quorum_target)
+    else {
+        return Ok(false);
+    };
+
+    let was_reached = quorum_state.quorum_reached;
+    let changed_hash = quorum_state.winning_output_hash.as_deref() != Some(winning_hash.as_str());
+    quorum_state.quorum_reached = true;
+    quorum_state.winning_output_hash = Some(winning_hash.clone());
+    quorum_state.winning_workers = winning_workers;
+    if quorum_state.quorum_reached_at_unix_s.is_none() {
+        quorum_state.quorum_reached_at_unix_s = Some(now_unix_seconds());
+    }
+
+    if !quorum_state.finalize_triggered && (changed_hash || !was_reached) {
+        let (finalize_tx, finalize_sig) =
+            build_finalize_trigger_payload(state, job_id, &winning_hash);
+        quorum_state.finalize_triggered = true;
+        quorum_state.finalize_tx = Some(finalize_tx);
+        quorum_state.finalize_sig = finalize_sig;
+    }
+    Ok(quorum_state.quorum_reached)
+}
+
+fn find_winning_output_hash(
+    reports: &[WorkerResultReport],
+    quorum_target: usize,
+) -> Option<(String, Vec<String>)> {
+    let mut seen_workers: HashSet<&str> = HashSet::new();
+    let mut counts: HashMap<&str, Vec<String>> = HashMap::new();
+    for report in reports {
+        if !seen_workers.insert(report.worker_pubkey.as_str()) {
+            continue;
+        }
+        counts
+            .entry(report.output_hash.as_str())
+            .or_default()
+            .push(report.worker_pubkey.clone());
+    }
+
+    counts
+        .into_iter()
+        .filter_map(|(output_hash, workers)| {
+            if workers.len() >= quorum_target {
+                Some((output_hash.to_string(), workers))
+            } else {
+                None
+            }
+        })
+        .max_by(|(a_hash, a_workers), (b_hash, b_workers)| {
+            a_workers
+                .len()
+                .cmp(&b_workers.len())
+                .then_with(|| b_hash.cmp(a_hash))
+        })
+}
+
+fn build_finalize_trigger_payload(
+    state: &AppState,
+    job_id_hex: &str,
+    winning_output_hash: &str,
+) -> (String, Option<String>) {
+    if let Some(chain) = state.chain.as_ref() {
+        if let Ok(job_id) = parse_hex32(job_id_hex) {
+            match build_finalize_job_tx_base64(chain, job_id) {
+                Ok((tx, sig)) => return (tx, sig),
+                Err(err) => {
+                    tracing::warn!(error = %err, job_id = %job_id_hex, "failed to build finalize tx")
+                }
+            }
+        } else {
+            tracing::warn!(job_id = %job_id_hex, "invalid job id hex for finalize tx build");
+        }
+    }
+    (format!("UNAVAILABLE_FINALIZE_{winning_output_hash}"), None)
+}
+
+fn parse_hex32(value: &str) -> Result<[u8; 32]> {
+    let bytes = hex::decode(value).context("value must be 32-byte hex")?;
+    if bytes.len() != 32 {
+        anyhow::bail!("value must be 32-byte hex");
+    }
+    let mut out = [0_u8; 32];
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
 
 fn load_retention_config() -> RetentionConfig {
@@ -836,6 +1147,7 @@ fn enforce_history_retention(state: &AppState) {
     let mut failures = state.failures.lock().expect("lock poisoned");
     let mut replay_artifacts = state.replay_artifacts.lock().expect("lock poisoned");
     let mut job_last_update = state.job_last_update.lock().expect("lock poisoned");
+    let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
 
     for entries in results.values_mut() {
         trim_vec(entries, limits.max_reports_per_job);
@@ -868,6 +1180,148 @@ fn enforce_history_retention(state: &AppState) {
         results.remove(job_id);
         failures.remove(job_id);
         replay_artifacts.remove(job_id);
+        job_quorum.remove(job_id);
         job_last_update.remove(job_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_state() -> AppState {
+        AppState {
+            data_dir: PathBuf::from("."),
+            public_base_url: "http://127.0.0.1:8080".to_string(),
+            retention: RetentionConfig {
+                max_reports_per_job: 32,
+                max_failures_per_job: 32,
+                max_replays_per_job: 32,
+                max_jobs_tracked: 100,
+            },
+            assignments: Arc::new(Mutex::new(HashMap::new())),
+            results: Arc::new(Mutex::new(HashMap::new())),
+            failures: Arc::new(Mutex::new(HashMap::new())),
+            replay_artifacts: Arc::new(Mutex::new(HashMap::new())),
+            job_last_update: Arc::new(Mutex::new(HashMap::new())),
+            worker_registry: Arc::new(Mutex::new(HashMap::new())),
+            job_quorum: Arc::new(Mutex::new(HashMap::new())),
+            policy_signing_key: SigningKey::from_bytes(&[1_u8; 32]),
+            policy_key_id: "dev-key-1".to_string(),
+            policy_version: 1,
+            policy_ttl_secs: 300,
+            committee_size: 3,
+            quorum: 2,
+            heartbeat_ttl_secs: 15,
+            chain: None,
+        }
+    }
+
+    #[test]
+    fn winning_output_reaches_quorum() {
+        let reports = vec![
+            WorkerResultReport {
+                idempotency_key: "a".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 10,
+            },
+            WorkerResultReport {
+                idempotency_key: "b".to_string(),
+                worker_pubkey: "w2".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 12,
+            },
+        ];
+
+        let winning = find_winning_output_hash(&reports, 2).expect("quorum expected");
+        assert_eq!(winning.0, "out-a");
+        assert_eq!(winning.1.len(), 2);
+    }
+
+    #[test]
+    fn duplicate_worker_reports_do_not_count_twice() {
+        let reports = vec![
+            WorkerResultReport {
+                idempotency_key: "a".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 10,
+            },
+            WorkerResultReport {
+                idempotency_key: "b".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 10,
+            },
+            WorkerResultReport {
+                idempotency_key: "c".to_string(),
+                worker_pubkey: "w2".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-b".to_string(),
+                output_len: 10,
+            },
+        ];
+
+        assert!(find_winning_output_hash(&reports, 2).is_none());
+    }
+
+    #[test]
+    fn committee_selection_uses_runtime_and_live_heartbeats() {
+        let state = test_state();
+        let now = now_unix_seconds();
+        {
+            let mut registry = state.worker_registry.lock().expect("lock poisoned");
+            registry.insert(
+                "w1".to_string(),
+                WorkerRegistryEntry {
+                    worker_pubkey: "w1".to_string(),
+                    runtime_ids: vec!["r1".to_string()],
+                    version: "1".to_string(),
+                    last_heartbeat_unix_s: now,
+                },
+            );
+            registry.insert(
+                "w2".to_string(),
+                WorkerRegistryEntry {
+                    worker_pubkey: "w2".to_string(),
+                    runtime_ids: vec!["r1".to_string()],
+                    version: "1".to_string(),
+                    last_heartbeat_unix_s: now,
+                },
+            );
+            registry.insert(
+                "stale".to_string(),
+                WorkerRegistryEntry {
+                    worker_pubkey: "stale".to_string(),
+                    runtime_ids: vec!["r1".to_string()],
+                    version: "1".to_string(),
+                    last_heartbeat_unix_s: now.saturating_sub(60),
+                },
+            );
+            registry.insert(
+                "wrong-runtime".to_string(),
+                WorkerRegistryEntry {
+                    worker_pubkey: "wrong-runtime".to_string(),
+                    runtime_ids: vec!["r2".to_string()],
+                    version: "1".to_string(),
+                    last_heartbeat_unix_s: now,
+                },
+            );
+        }
+
+        let selected = select_committee_workers(&state, "r1", "seed-1", 3);
+        assert_eq!(selected.len(), 2);
+        assert!(selected.contains(&"w1".to_string()));
+        assert!(selected.contains(&"w2".to_string()));
     }
 }
