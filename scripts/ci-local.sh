@@ -19,6 +19,7 @@ Usage:
 Examples:
   scripts/ci-local.sh
   scripts/ci-local.sh --job rust-checks
+  scripts/ci-local.sh --job coverage
   scripts/ci-local.sh --job integration
   scripts/ci-local.sh --job runtime-determinism
   scripts/ci-local.sh --job runtime-calibration
@@ -72,6 +73,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
     echo "  cargo check --workspace"
     echo "  cargo clippy --workspace --all-targets -- -D warnings"
     echo "  cargo test --workspace"
+    echo "  (optional, with cargo-llvm-cov + llvm-tools-preview) cargo llvm-cov clean --workspace && cargo llvm-cov --workspace --all-targets --summary-only --lcov --output-path /tmp/edgerun-coverage/lcov.info"
     echo "  ./scripts/integration_scheduler_api.sh"
     echo "  ./scripts/integration_e2e_lifecycle.sh"
     echo "  ./scripts/integration_policy_rotation.sh"
@@ -104,6 +106,22 @@ run_rust_checks() {
   cargo check --workspace
   cargo clippy --workspace --all-targets -- -D warnings
   cargo test --workspace
+}
+
+run_coverage() {
+  if ! command -v cargo-llvm-cov >/dev/null 2>&1 && ! cargo llvm-cov --help >/dev/null 2>&1; then
+    echo "cargo-llvm-cov not found; skipping coverage fallback"
+    return 0
+  fi
+  local out_dir="${TMPDIR:-/tmp}/edgerun-coverage"
+  mkdir -p "$out_dir"
+  cargo llvm-cov clean --workspace
+  cargo llvm-cov \
+    --workspace \
+    --all-targets \
+    --summary-only \
+    --lcov \
+    --output-path "$out_dir/lcov.info"
 }
 
 run_integration() {
@@ -191,6 +209,7 @@ run_program_localnet() {
 case "${JOB:-all}" in
   all)
     run_rust_checks
+    run_coverage
     run_integration
     run_runtime_determinism
     run_runtime_calibration
@@ -201,6 +220,9 @@ case "${JOB:-all}" in
     ;;
   rust-checks)
     run_rust_checks
+    ;;
+  coverage)
+    run_coverage
     ;;
   integration)
     run_integration

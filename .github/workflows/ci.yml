@@ -40,6 +40,43 @@ jobs:
       - name: Workspace tests
         run: cargo test --workspace
 
+  coverage:
+    name: Coverage (llvm-cov)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      - name: Generate workspace coverage report
+        run: |
+          mkdir -p /tmp/edgerun-coverage
+          cargo llvm-cov clean --workspace
+          cargo llvm-cov \
+            --workspace \
+            --all-targets \
+            --summary-only \
+            --lcov \
+            --output-path /tmp/edgerun-coverage/lcov.info
+
+      - name: Upload coverage artifact
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-coverage-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-coverage/lcov.info
+
   integration:
     name: Integration
     runs-on: ubuntu-24.04
