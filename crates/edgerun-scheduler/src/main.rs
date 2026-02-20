@@ -1783,59 +1783,15 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
         let Some(view) = parse_onchain_job_result_view(&account.data) else {
             continue;
         };
-        let job_id_hex = hex::encode(view.job_id);
-        let (expected_bundle_hash, is_assigned) = {
-            let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            let Some(entry) = job_quorum.get(&job_id_hex) else {
-                continue;
-            };
-            let worker = view.worker.to_string();
-            let assigned = entry.committee_workers.iter().any(|w| w == &worker);
-            (entry.expected_bundle_hash.clone(), assigned)
-        };
-        if !is_assigned {
-            continue;
+        if let Some(job_id_hex) = ingest_onchain_job_result_view(state, &view) {
+            tracing::info!(
+                job_id = %job_id_hex,
+                worker = %view.worker,
+                submitted_slot = view.submitted_slot,
+                "synced on-chain JobResult into scheduler report state"
+            );
+            changed_jobs.insert(job_id_hex);
         }
-
-        let worker_pubkey = view.worker.to_string();
-        let output_hash_hex = hex::encode(view.output_hash);
-        let idem = scheduler_idempotency_key(
-            "onchain_result",
-            &worker_pubkey,
-            &job_id_hex,
-            "job_result_sync",
-            &output_hash_hex,
-            &expected_bundle_hash,
-        );
-        let mut results = state.results.lock().expect("lock poisoned");
-        let entries = results.entry(job_id_hex.clone()).or_default();
-        if entries.iter().any(|e| {
-            (e.idempotency_key == idem)
-                || (e.worker_pubkey == worker_pubkey && e.output_hash == output_hash_hex)
-        }) {
-            continue;
-        }
-        entries.push(WorkerResultReport {
-            idempotency_key: idem,
-            worker_pubkey,
-            job_id: job_id_hex.clone(),
-            bundle_hash: expected_bundle_hash.clone(),
-            output_hash: output_hash_hex,
-            output_len: 0,
-            attestation_sig: Some(
-                base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
-            ),
-            signature: None,
-        });
-        drop(results);
-        tracing::info!(
-            job_id = %job_id_hex,
-            worker = %view.worker,
-            submitted_slot = view.submitted_slot,
-            "synced on-chain JobResult into scheduler report state"
-        );
-        touch_job_last_update(state, &job_id_hex);
-        changed_jobs.insert(job_id_hex);
     }
 
     if changed_jobs.is_empty() {
@@ -1848,6 +1804,54 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
     enforce_history_retention(state);
     write_state_snapshot(state)?;
     Ok(())
+}
+
+fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView) -> Option<String> {
+    let job_id_hex = hex::encode(view.job_id);
+    let (expected_bundle_hash, is_assigned) = {
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        let entry = job_quorum.get(&job_id_hex)?;
+        let worker = view.worker.to_string();
+        let assigned = entry.committee_workers.iter().any(|w| w == &worker);
+        (entry.expected_bundle_hash.clone(), assigned)
+    };
+    if !is_assigned {
+        return None;
+    }
+
+    let worker_pubkey = view.worker.to_string();
+    let output_hash_hex = hex::encode(view.output_hash);
+    let idem = scheduler_idempotency_key(
+        "onchain_result",
+        &worker_pubkey,
+        &job_id_hex,
+        "job_result_sync",
+        &output_hash_hex,
+        &expected_bundle_hash,
+    );
+    let mut results = state.results.lock().expect("lock poisoned");
+    let entries = results.entry(job_id_hex.clone()).or_default();
+    if entries.iter().any(|e| {
+        (e.idempotency_key == idem)
+            || (e.worker_pubkey == worker_pubkey && e.output_hash == output_hash_hex)
+    }) {
+        return None;
+    }
+    entries.push(WorkerResultReport {
+        idempotency_key: idem,
+        worker_pubkey,
+        job_id: job_id_hex.clone(),
+        bundle_hash: expected_bundle_hash,
+        output_hash: output_hash_hex,
+        output_len: 0,
+        attestation_sig: Some(
+            base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
+        ),
+        signature: None,
+    });
+    drop(results);
+    touch_job_last_update(state, &job_id_hex);
+    Some(job_id_hex)
 }
 
 fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
@@ -3242,6 +3246,84 @@ mod tests {
         std::fs::write(bundle_path(&state, &bundle_hash_hex), b"bundle").expect("write bundle");
         let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
         assert!(!inserted);
+    }
+
+    #[test]
+    fn onchain_result_ingest_can_drive_quorum() {
+        let mut state = test_state();
+        state.quorum_requires_attestation = false;
+        let state = state;
+
+        let worker1 = Pubkey::new_unique();
+        let worker2 = Pubkey::new_unique();
+        let worker3 = Pubkey::new_unique();
+        let job_id = [0x90_u8; 32];
+        let job_id_hex = hex::encode(job_id);
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                job_id_hex.clone(),
+                JobQuorumState {
+                    expected_bundle_hash:
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                            .to_string(),
+                    expected_runtime_id: "r1".to_string(),
+                    committee_workers: vec![
+                        worker1.to_string(),
+                        worker2.to_string(),
+                        worker3.to_string(),
+                    ],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+
+        let output_hash = [0xAB_u8; 32];
+        let r1 = OnchainJobResultView {
+            job_id,
+            worker: worker1,
+            output_hash,
+            attestation_sig: [1_u8; 64],
+            submitted_slot: 10,
+        };
+        let r2 = OnchainJobResultView {
+            job_id,
+            worker: worker2,
+            output_hash,
+            attestation_sig: [2_u8; 64],
+            submitted_slot: 11,
+        };
+        assert!(ingest_onchain_job_result_view(&state, &r1).is_some());
+        assert!(ingest_onchain_job_result_view(&state, &r2).is_some());
+
+        let reached = recompute_job_quorum(&state, &job_id_hex).expect("recompute");
+        assert!(reached);
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        assert!(jq
+            .get(&job_id_hex)
+            .and_then(|v| v.winning_output_hash.as_ref())
+            .is_some());
     }
 
     #[test]
