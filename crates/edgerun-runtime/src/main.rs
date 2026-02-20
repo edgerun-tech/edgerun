@@ -726,7 +726,7 @@ fn encode_bundle(
     max_instructions: u64,
 ) -> Result<Vec<u8>> {
     let payload = edgerun_types::BundlePayload {
-        v: 1,
+        v: edgerun_types::BUNDLE_ABI_CURRENT,
         runtime_id: [9_u8; 32],
         wasm,
         input,

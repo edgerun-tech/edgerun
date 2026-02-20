@@ -40,10 +40,10 @@ Implemented:
 - CI dependency vulnerability audit (`cargo audit`)
 - CI runtime SBOM artifact generation (`cargo cyclonedx`)
 - Runtime security review and hardening backlog tracked in `SECURITY_REVIEW.md`
+- Runtime ABI compatibility policy documented in `ABI_COMPATIBILITY_POLICY.md` (`N` + `N-1` window)
 
 Not yet production-ready:
 
-- Runtime spec versioning and compatibility policy
 - Comprehensive deterministic conformance suite across platforms
 - Deep fuzzing/security hardening for hostcall boundary behavior
 - Calibration model for `max_instructions` cost predictability

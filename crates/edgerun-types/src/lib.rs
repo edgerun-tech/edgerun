@@ -4,6 +4,8 @@ use thiserror::Error;
 pub const BUNDLE_HASH_LEN: usize = 32;
 pub const OUTPUT_HASH_LEN: usize = 32;
 pub const RUNTIME_ID_LEN: usize = 32;
+pub const BUNDLE_ABI_MIN_SUPPORTED: u8 = 1;
+pub const BUNDLE_ABI_CURRENT: u8 = 2;
 pub const COMMITTEE_SIZE_MVP: u8 = 3;
 pub const QUORUM_MVP: u8 = 2;
 
@@ -34,7 +36,7 @@ pub struct BundlePayload {
 
 #[derive(Debug, Error)]
 pub enum BundleCodecError {
-    #[error("bundle version must be 1, got {0}")]
+    #[error("unsupported bundle version {0}")]
     UnsupportedVersion(u8),
     #[error("bundle decode failed: {0}")]
     Decode(String),
@@ -57,7 +59,7 @@ pub fn decode_bundle_payload_canonical(bytes: &[u8]) -> Result<BundlePayload, Bu
     let payload: BundlePayload =
         ciborium::de::from_reader(bytes).map_err(|e| BundleCodecError::Decode(e.to_string()))?;
 
-    if payload.v != 1 {
+    if !(BUNDLE_ABI_MIN_SUPPORTED..=BUNDLE_ABI_CURRENT).contains(&payload.v) {
         return Err(BundleCodecError::UnsupportedVersion(payload.v));
     }
 
@@ -76,7 +78,7 @@ mod tests {
 
     fn sample_payload() -> BundlePayload {
         BundlePayload {
-            v: 1,
+            v: BUNDLE_ABI_MIN_SUPPORTED,
             runtime_id: [7_u8; 32],
             wasm: vec![0x00, 0x61, 0x73, 0x6d],
             input: vec![1, 2, 3],
@@ -132,5 +134,30 @@ mod tests {
 
         let err = decode_bundle_payload_canonical(&bytes).expect_err("must reject non-canonical");
         assert!(matches!(err, BundleCodecError::NonCanonicalEncoding));
+    }
+
+    #[test]
+    fn accepts_supported_abi_range() {
+        let mut payload = sample_payload();
+        payload.v = BUNDLE_ABI_CURRENT;
+        let encoded = encode_bundle_payload_canonical(&payload).expect("encode");
+        let decoded = decode_bundle_payload_canonical(&encoded).expect("decode");
+        assert_eq!(decoded.v, BUNDLE_ABI_CURRENT);
+    }
+
+    #[test]
+    fn rejects_unsupported_abi_versions() {
+        let mut payload = sample_payload();
+        payload.v = BUNDLE_ABI_MIN_SUPPORTED.saturating_sub(1);
+        let encoded = encode_bundle_payload_canonical(&payload).expect("encode");
+        let err = decode_bundle_payload_canonical(&encoded).expect_err("must reject");
+        assert!(matches!(err, BundleCodecError::UnsupportedVersion(0)));
+
+        payload.v = BUNDLE_ABI_CURRENT.saturating_add(1);
+        let encoded = encode_bundle_payload_canonical(&payload).expect("encode");
+        let err = decode_bundle_payload_canonical(&encoded).expect_err("must reject");
+        assert!(
+            matches!(err, BundleCodecError::UnsupportedVersion(v) if v == BUNDLE_ABI_CURRENT + 1)
+        );
     }
 }

@@ -415,13 +415,14 @@ mod tests {
 
     fn sample_payload_with_runtime_and_input(
         wasm: Vec<u8>,
+        abi_version: u8,
         runtime_id: [u8; 32],
         input: Vec<u8>,
         max_memory_bytes: u32,
         max_instructions: u64,
     ) -> Vec<u8> {
         let payload = edgerun_types::BundlePayload {
-            v: 1,
+            v: abi_version,
             runtime_id,
             wasm,
             input,
@@ -436,6 +437,7 @@ mod tests {
     fn sample_payload(wasm: Vec<u8>, max_memory_bytes: u32, max_instructions: u64) -> Vec<u8> {
         sample_payload_with_runtime_and_input(
             wasm,
+            edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
             [9_u8; 32],
             b"hello-edgerun".to_vec(),
             max_memory_bytes,
@@ -555,6 +557,7 @@ mod tests {
 
         let bytes = sample_payload_with_runtime_and_input(
             wasm,
+            edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
             [9_u8; 32],
             b"hello-edgerun".to_vec(),
             1024 * 1024,
@@ -577,6 +580,7 @@ mod tests {
 
         let bytes = sample_payload_with_runtime_and_input(
             wasm,
+            edgerun_types::BUNDLE_ABI_MIN_SUPPORTED,
             [9_u8; 32],
             b"hello-edgerun".to_vec(),
             1024 * 1024,
@@ -585,6 +589,77 @@ mod tests {
         let err = execute_bundle_payload_bytes_for_runtime_and_abi_strict(&bytes, [9_u8; 32], 2)
             .expect_err("must fail ABI version mismatch");
         assert_eq!(err.code, RuntimeErrorCode::AbiVersionMismatch);
+    }
+
+    #[test]
+    fn strict_api_accepts_current_and_n_minus_one_abi_versions() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "_start"))
+            )"#,
+        )
+        .expect("wat parse");
+
+        let n_minus_one = edgerun_types::BUNDLE_ABI_MIN_SUPPORTED;
+        let current = edgerun_types::BUNDLE_ABI_CURRENT;
+        let runtime_id = [9_u8; 32];
+
+        let bytes_n_minus_one = sample_payload_with_runtime_and_input(
+            wasm.clone(),
+            n_minus_one,
+            runtime_id,
+            b"hello-edgerun".to_vec(),
+            1024 * 1024,
+            50_000,
+        );
+        let report_n_minus_one = execute_bundle_payload_bytes_for_runtime_and_abi_strict(
+            &bytes_n_minus_one,
+            runtime_id,
+            n_minus_one,
+        )
+        .expect("n-1 ABI should be accepted");
+        assert_eq!(report_n_minus_one.abi_version, n_minus_one);
+
+        let bytes_current = sample_payload_with_runtime_and_input(
+            wasm,
+            current,
+            runtime_id,
+            b"hello-edgerun".to_vec(),
+            1024 * 1024,
+            50_000,
+        );
+        let report_current = execute_bundle_payload_bytes_for_runtime_and_abi_strict(
+            &bytes_current,
+            runtime_id,
+            current,
+        )
+        .expect("current ABI should be accepted");
+        assert_eq!(report_current.abi_version, current);
+    }
+
+    #[test]
+    fn strict_api_rejects_unsupported_abi_versions() {
+        let wasm = wat::parse_str(
+            r#"(module
+                (memory (export "memory") 1 1)
+                (func (export "_start"))
+            )"#,
+        )
+        .expect("wat parse");
+
+        let bytes_unsupported = sample_payload_with_runtime_and_input(
+            wasm,
+            edgerun_types::BUNDLE_ABI_CURRENT.saturating_add(1),
+            [9_u8; 32],
+            b"hello-edgerun".to_vec(),
+            1024 * 1024,
+            50_000,
+        );
+
+        let err = execute_bundle_payload_bytes_strict(&bytes_unsupported)
+            .expect_err("unsupported ABI version must fail decode");
+        assert_eq!(err.code, RuntimeErrorCode::BundleDecode);
     }
 
     #[test]
