@@ -1539,6 +1539,7 @@ fn build_cancel_expired_artifact(
 }
 
 const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
+const JOB_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 303;
 const JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
 const JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR: usize = 64;
 const JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR: usize = 72;
@@ -1575,10 +1576,13 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
     }
 
     let mut changed = false;
-    for (_addr, account) in accounts {
+    for (addr, account) in accounts {
         let Some(view) = parse_onchain_job_view(&account.data) else {
             continue;
         };
+        if !is_valid_job_account_address(&chain.program_id, &addr, &view.job_id) {
+            continue;
+        }
         if view.status != 0 {
             continue;
         }
@@ -1784,6 +1788,12 @@ fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
 }
 
 fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
+    if data.len() < JOB_ACCOUNT_MIN_LEN {
+        return None;
+    }
+    if !has_anchor_account_discriminator(data, "Job") {
+        return None;
+    }
     let job_id = read_fixed_32(data, JOB_ID_OFFSET_FROM_ANCHOR)?;
     let bundle_hash = read_fixed_32(data, JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR)?;
     let runtime_id = read_fixed_32(data, JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR)?;
@@ -1807,6 +1817,27 @@ fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
         quorum,
         status,
     })
+}
+
+fn has_anchor_account_discriminator(data: &[u8], account_name: &str) -> bool {
+    if data.len() < ANCHOR_DISCRIMINATOR_LEN {
+        return false;
+    }
+    let expected = anchor_account_discriminator(account_name);
+    data[..ANCHOR_DISCRIMINATOR_LEN] == expected
+}
+
+fn anchor_account_discriminator(account_name: &str) -> [u8; 8] {
+    let preimage = format!("account:{account_name}");
+    let h = hash(preimage.as_bytes());
+    let mut out = [0_u8; 8];
+    out.copy_from_slice(&h.to_bytes()[..8]);
+    out
+}
+
+fn is_valid_job_account_address(program_id: &Pubkey, addr: &Pubkey, job_id: &[u8; 32]) -> bool {
+    let (expected, _) = Pubkey::find_program_address(&[b"job", job_id], program_id);
+    expected == *addr
 }
 
 fn read_u8_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u8> {
@@ -2443,6 +2474,7 @@ mod tests {
     #[test]
     fn parses_onchain_job_view_fields() {
         let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
+        data[..ANCHOR_DISCRIMINATOR_LEN].copy_from_slice(&anchor_account_discriminator("Job"));
         let job_id = [0x11_u8; 32];
         let bundle_hash = [0x22_u8; 32];
         let runtime_id = [0x33_u8; 32];
@@ -2478,6 +2510,30 @@ mod tests {
         assert_eq!(parsed.committee_size, 3);
         assert_eq!(parsed.quorum, 2);
         assert_eq!(parsed.status, 0);
+    }
+
+    #[test]
+    fn rejects_non_job_discriminator_in_job_parser() {
+        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
+        data[..ANCHOR_DISCRIMINATOR_LEN]
+            .copy_from_slice(&anchor_account_discriminator("WorkerStake"));
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR] = 3;
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_QUORUM_OFFSET_FROM_ANCHOR] = 2;
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 0;
+        assert!(parse_onchain_job_view(&data).is_none());
+    }
+
+    #[test]
+    fn validates_job_pda_against_job_id() {
+        let program_id = Pubkey::new_unique();
+        let job_id = [0x55_u8; 32];
+        let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &program_id);
+        assert!(is_valid_job_account_address(&program_id, &job_pda, &job_id));
+        assert!(!is_valid_job_account_address(
+            &program_id,
+            &Pubkey::new_unique(),
+            &job_id
+        ));
     }
 
     #[test]
