@@ -3011,6 +3011,42 @@ mod tests {
     }
 
     #[test]
+    fn bundle_cas_rejects_overwrite_with_different_bytes() {
+        let state = test_state();
+        let path = state.data_dir.join("bundles").join("cas-overwrite-test.cbor");
+
+        let first = b"bundle-v1";
+        let first_hash = hex::encode(edgerun_crypto::compute_bundle_hash(first));
+        write_bundle_cas(&path, &first_hash, first).expect("initial write");
+
+        let second = b"bundle-v2";
+        let second_hash = hex::encode(edgerun_crypto::compute_bundle_hash(second));
+        let err = write_bundle_cas(&path, &second_hash, second).expect_err("must reject drift");
+        assert!(err
+            .to_string()
+            .contains("bundle path already exists with different bytes"));
+    }
+
+    #[tokio::test]
+    async fn get_bundle_rejects_hash_mismatch_for_tampered_bytes() {
+        let state = test_state();
+        let canonical = b"bundle-canonical";
+        let bundle_hash = hex::encode(edgerun_crypto::compute_bundle_hash(canonical));
+        let path = bundle_path(&state, &bundle_hash);
+
+        // Simulate local-disk tamper/drift at the expected bundle path.
+        std::fs::write(path, b"bundle-tampered").expect("write tampered bundle");
+
+        match get_bundle(State(state), Path(bundle_hash)).await {
+            Ok(_) => panic!("tampered bytes should be rejected"),
+            Err(err) => {
+                assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
+                assert_eq!(err.1, "bundle content hash mismatch");
+            }
+        }
+    }
+
+    #[test]
     fn posted_job_rpc_filters_include_discriminator_and_status() {
         let filters = posted_job_rpc_filters();
         assert_eq!(filters.len(), 3);
