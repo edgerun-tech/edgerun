@@ -1664,6 +1664,12 @@ const JOB_QUORUM_OFFSET_FROM_ANCHOR: usize = 149;
 const JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR: usize = 150;
 const JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR: usize = 158;
 const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
+const JOB_RESULT_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 168;
+const JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
+const JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR: usize = 32;
+const JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR: usize = 64;
+const JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR: usize = 96;
+const JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR: usize = 160;
 
 #[derive(Debug, Clone)]
 struct OnchainJobView {
@@ -1680,6 +1686,15 @@ struct OnchainJobView {
     status: u8,
 }
 
+#[derive(Debug, Clone)]
+struct OnchainJobResultView {
+    job_id: [u8; 32],
+    worker: Pubkey,
+    output_hash: [u8; 32],
+    attestation_sig: [u8; 64],
+    submitted_slot: u64,
+}
+
 fn posted_job_rpc_filters() -> Vec<RpcFilterType> {
     vec![
         RpcFilterType::DataSize(JOB_ACCOUNT_MIN_LEN as u64),
@@ -1690,6 +1705,16 @@ fn posted_job_rpc_filters() -> Vec<RpcFilterType> {
         RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
             ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR,
             vec![0_u8], // Posted
+        )),
+    ]
+}
+
+fn job_result_rpc_filters() -> Vec<RpcFilterType> {
+    vec![
+        RpcFilterType::DataSize(JOB_RESULT_ACCOUNT_MIN_LEN as u64),
+        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
+            0,
+            anchor_account_discriminator("JobResult").to_vec(),
         )),
     ]
 }
@@ -1732,6 +1757,96 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
     if changed {
         write_state_snapshot(state)?;
     }
+    Ok(())
+}
+
+fn sync_onchain_job_results(state: &AppState) -> Result<()> {
+    let Some(chain) = state.chain.as_ref() else {
+        return Ok(());
+    };
+    let accounts = chain
+        .rpc
+        .get_program_accounts_with_config(
+            &chain.program_id,
+            RpcProgramAccountsConfig {
+                filters: Some(job_result_rpc_filters()),
+                ..RpcProgramAccountsConfig::default()
+            },
+        )
+        .context("failed to fetch program accounts for job-result sync")?;
+    if accounts.is_empty() {
+        return Ok(());
+    }
+
+    let mut changed_jobs: HashSet<String> = HashSet::new();
+    for (_addr, account) in accounts {
+        let Some(view) = parse_onchain_job_result_view(&account.data) else {
+            continue;
+        };
+        let job_id_hex = hex::encode(view.job_id);
+        let (expected_bundle_hash, is_assigned) = {
+            let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            let Some(entry) = job_quorum.get(&job_id_hex) else {
+                continue;
+            };
+            let worker = view.worker.to_string();
+            let assigned = entry.committee_workers.iter().any(|w| w == &worker);
+            (entry.expected_bundle_hash.clone(), assigned)
+        };
+        if !is_assigned {
+            continue;
+        }
+
+        let worker_pubkey = view.worker.to_string();
+        let output_hash_hex = hex::encode(view.output_hash);
+        let idem = scheduler_idempotency_key(
+            "onchain_result",
+            &worker_pubkey,
+            &job_id_hex,
+            "job_result_sync",
+            &output_hash_hex,
+            &expected_bundle_hash,
+        );
+        let mut results = state.results.lock().expect("lock poisoned");
+        let entries = results.entry(job_id_hex.clone()).or_default();
+        if entries.iter().any(|e| {
+            (e.idempotency_key == idem)
+                || (e.worker_pubkey == worker_pubkey && e.output_hash == output_hash_hex)
+        }) {
+            continue;
+        }
+        entries.push(WorkerResultReport {
+            idempotency_key: idem,
+            worker_pubkey,
+            job_id: job_id_hex.clone(),
+            bundle_hash: expected_bundle_hash.clone(),
+            output_hash: output_hash_hex,
+            output_len: 0,
+            attestation_sig: Some(
+                base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
+            ),
+            signature: None,
+        });
+        drop(results);
+        tracing::info!(
+            job_id = %job_id_hex,
+            worker = %view.worker,
+            submitted_slot = view.submitted_slot,
+            "synced on-chain JobResult into scheduler report state"
+        );
+        touch_job_last_update(state, &job_id_hex);
+        changed_jobs.insert(job_id_hex);
+    }
+
+    if changed_jobs.is_empty() {
+        return Ok(());
+    }
+
+    for job_id in changed_jobs {
+        let _ = recompute_job_quorum(state, &job_id)?;
+    }
+    enforce_history_retention(state);
+    write_state_snapshot(state)?;
     Ok(())
 }
 
@@ -1986,6 +2101,28 @@ fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
     })
 }
 
+fn parse_onchain_job_result_view(data: &[u8]) -> Option<OnchainJobResultView> {
+    if data.len() < JOB_RESULT_ACCOUNT_MIN_LEN {
+        return None;
+    }
+    if !has_anchor_account_discriminator(data, "JobResult") {
+        return None;
+    }
+    let job_id = read_fixed_32(data, JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR)?;
+    let worker_bytes = read_fixed_32(data, JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR)?;
+    let worker = Pubkey::new_from_array(worker_bytes);
+    let output_hash = read_fixed_32(data, JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR)?;
+    let attestation_sig = read_fixed_64(data, JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR)?;
+    let submitted_slot = read_u64_from_anchor(data, JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR)?;
+    Some(OnchainJobResultView {
+        job_id,
+        worker,
+        output_hash,
+        attestation_sig,
+        submitted_slot,
+    })
+}
+
 fn has_anchor_account_discriminator(data: &[u8], account_name: &str) -> bool {
     if data.len() < ANCHOR_DISCRIMINATOR_LEN {
         return false;
@@ -2030,6 +2167,14 @@ fn read_fixed_32(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 32]> {
     let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
     let slice = data.get(start..start + 32)?;
     let mut out = [0_u8; 32];
+    out.copy_from_slice(slice);
+    Some(out)
+}
+
+fn read_fixed_64(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 64]> {
+    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
+    let slice = data.get(start..start + 64)?;
+    let mut out = [0_u8; 64];
     out.copy_from_slice(slice);
     Some(out)
 }
@@ -2284,6 +2429,9 @@ async fn housekeeping_loop(state: AppState) {
         if let Err(err) = discover_posted_jobs_from_chain(&state) {
             tracing::warn!(error = %err, "housekeeping posted-job discovery failed");
         }
+        if let Err(err) = sync_onchain_job_results(&state) {
+            tracing::warn!(error = %err, "housekeeping on-chain result sync failed");
+        }
         if let Err(err) = evaluate_expired_jobs(&state) {
             tracing::warn!(error = %err, "housekeeping evaluate_expired_jobs failed");
         }
@@ -2308,6 +2456,18 @@ fn touch_job_last_update(state: &AppState, job_id: &str) {
 
 fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {
     !incoming.is_empty() && existing == incoming
+}
+
+fn scheduler_idempotency_key(
+    kind: &str,
+    worker_pubkey: &str,
+    job_id: &str,
+    phase: &str,
+    discriminator: &str,
+    bundle_hash: &str,
+) -> String {
+    let raw = format!("{kind}|{worker_pubkey}|{job_id}|{phase}|{discriminator}|{bundle_hash}");
+    hex::encode(edgerun_crypto::blake3_256(raw.as_bytes()))
 }
 
 fn trim_vec<T>(items: &mut Vec<T>, max_len: usize) {
@@ -2669,6 +2829,16 @@ mod tests {
     }
 
     #[test]
+    fn job_result_rpc_filters_include_discriminator() {
+        let filters = job_result_rpc_filters();
+        assert_eq!(filters.len(), 2);
+        match &filters[0] {
+            RpcFilterType::DataSize(v) => assert_eq!(*v, JOB_RESULT_ACCOUNT_MIN_LEN as u64),
+            _ => panic!("expected data size filter"),
+        }
+    }
+
+    #[test]
     fn parses_onchain_job_status_byte() {
         let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
         data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 2;
@@ -2722,6 +2892,39 @@ mod tests {
         assert_eq!(parsed.created_slot, 900);
         assert_eq!(parsed.deadline_slot, 901);
         assert_eq!(parsed.status, 0);
+    }
+
+    #[test]
+    fn parses_onchain_job_result_view_fields() {
+        let mut data = vec![0_u8; JOB_RESULT_ACCOUNT_MIN_LEN];
+        data[..ANCHOR_DISCRIMINATOR_LEN]
+            .copy_from_slice(&anchor_account_discriminator("JobResult"));
+        let job_id = [0x11_u8; 32];
+        let worker = Pubkey::new_unique();
+        let output_hash = [0x22_u8; 32];
+        let sig = [0x33_u8; 64];
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(&job_id);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(worker.as_ref());
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR + 32]
+            .copy_from_slice(&output_hash);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR + 64]
+            .copy_from_slice(&sig);
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR
+            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR + 8]
+            .copy_from_slice(&77_u64.to_le_bytes());
+
+        let parsed = parse_onchain_job_result_view(&data).expect("parse");
+        assert_eq!(parsed.job_id, job_id);
+        assert_eq!(parsed.worker, worker);
+        assert_eq!(parsed.output_hash, output_hash);
+        assert_eq!(parsed.attestation_sig, sig);
+        assert_eq!(parsed.submitted_slot, 77);
     }
 
     #[test]
