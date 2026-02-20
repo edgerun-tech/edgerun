@@ -239,7 +239,7 @@ async fn main() -> Result<()> {
 }
 
 fn load_config() -> WorkerConfig {
-    let worker_pubkey =
+    let mut worker_pubkey =
         std::env::var("EDGERUN_WORKER_PUBKEY").unwrap_or_else(|_| "worker-demo-1".to_string());
     let scheduler_base_url = std::env::var("EDGERUN_SCHEDULER_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
@@ -278,6 +278,17 @@ fn load_config() -> WorkerConfig {
             None
         });
     let chain_submit = load_chain_submit_config();
+    if let Some(chain_cfg) = chain_submit.as_ref() {
+        let chain_worker = chain_cfg.wallet.pubkey().to_string();
+        if worker_pubkey != chain_worker {
+            tracing::warn!(
+                configured_worker_pubkey = %worker_pubkey,
+                chain_wallet_pubkey = %chain_worker,
+                "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED requires worker_pubkey to match chain wallet; overriding"
+            );
+            worker_pubkey = chain_worker;
+        }
+    }
     let policy_verify_pubkey_hex = std::env::var("EDGERUN_WORKER_POLICY_VERIFY_KEY_HEX")
         .ok()
         .filter(|v| !v.trim().is_empty())
