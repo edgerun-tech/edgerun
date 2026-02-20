@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -21,6 +22,7 @@ use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
+    commitment_config::CommitmentConfig,
     hash::hash,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -191,6 +193,12 @@ struct JobQuorumState {
     cancel_sig: Option<String>,
     #[serde(default)]
     cancel_submitted: bool,
+    #[serde(default)]
+    onchain_status: Option<String>,
+    #[serde(default)]
+    onchain_last_observed_slot: Option<u64>,
+    #[serde(default)]
+    onchain_last_update_unix_s: Option<u64>,
     created_at_unix_s: u64,
     quorum_reached_at_unix_s: Option<u64>,
 }
@@ -368,6 +376,7 @@ async fn main() -> Result<()> {
     };
     enforce_history_retention(&state);
 
+    let housekeeping_state = state.clone();
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/policy/info", get(policy_info))
@@ -380,6 +389,9 @@ async fn main() -> Result<()> {
         .route("/v1/job/{job_id}", get(get_job_status))
         .route("/bundle/{bundle_hash}", get(get_bundle))
         .with_state(state);
+    tokio::spawn(async move {
+        housekeeping_loop(housekeeping_state).await;
+    });
     tracing::info!(%addr, "scheduler listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -778,6 +790,9 @@ async fn job_create(
                 cancel_tx: None,
                 cancel_sig: None,
                 cancel_submitted: false,
+                onchain_status: None,
+                onchain_last_observed_slot: None,
+                onchain_last_update_unix_s: None,
                 created_at_unix_s: now,
                 quorum_reached_at_unix_s: None,
             },
@@ -1512,6 +1527,102 @@ fn build_cancel_expired_artifact(
     Ok((tx, sig, submitted))
 }
 
+const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
+const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
+
+fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
+    let Some(chain) = state.chain.as_ref() else {
+        return Ok(());
+    };
+    let job_ids = {
+        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        job_quorum.keys().cloned().collect::<Vec<_>>()
+    };
+    if job_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut changed = false;
+    for job_id_hex in job_ids {
+        let Ok(job_id) = parse_hex32(&job_id_hex) else {
+            continue;
+        };
+        let (status, observed_slot) = match fetch_onchain_job_status(chain, job_id) {
+            Ok(Some(v)) => v,
+            Ok(None) => continue,
+            Err(err) => {
+                tracing::warn!(error = %err, job_id = %job_id_hex, "failed to fetch on-chain job account");
+                continue;
+            }
+        };
+
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        let Some(entry) = job_quorum.get_mut(&job_id_hex) else {
+            continue;
+        };
+        let status_label = onchain_status_label(status).to_string();
+        if entry.onchain_status.as_deref() != Some(status_label.as_str()) {
+            entry.onchain_status = Some(status_label);
+            changed = true;
+        }
+        if entry.onchain_last_observed_slot != Some(observed_slot) {
+            entry.onchain_last_observed_slot = Some(observed_slot);
+            changed = true;
+        }
+        entry.onchain_last_update_unix_s = Some(now_unix_seconds());
+
+        if status >= 1 && !entry.assign_submitted {
+            entry.assign_submitted = true;
+            changed = true;
+        }
+        if status == 2 && !entry.finalize_submitted {
+            entry.finalize_submitted = true;
+            entry.finalize_triggered = true;
+            changed = true;
+        }
+        if status == 3 && !entry.cancel_submitted {
+            entry.cancel_submitted = true;
+            entry.cancel_triggered = true;
+            changed = true;
+        }
+    }
+    if changed {
+        write_state_snapshot(state)?;
+    }
+    Ok(())
+}
+
+fn fetch_onchain_job_status(chain: &ChainContext, job_id: [u8; 32]) -> Result<Option<(u8, u64)>> {
+    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let resp = chain
+        .rpc
+        .get_account_with_commitment(&job_pda, CommitmentConfig::processed())
+        .context("rpc get_account_with_commitment failed")?;
+    let Some(account) = resp.value else {
+        return Ok(None);
+    };
+    let Some(status) = parse_onchain_job_status(&account.data) else {
+        return Ok(None);
+    };
+    Ok(Some((status, resp.context.slot)))
+}
+
+fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
+    let status_offset = ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR;
+    data.get(status_offset).copied()
+}
+
+fn onchain_status_label(status: u8) -> &'static str {
+    match status {
+        0 => "posted",
+        1 => "assigned",
+        2 => "finalized",
+        3 => "cancelled",
+        4 => "slashed",
+        _ => "unknown",
+    }
+}
+
 fn build_finalize_trigger_payload(
     state: &AppState,
     job_id_hex: &str,
@@ -1674,6 +1785,19 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
             _ => None,
         })
         .unwrap_or(default_value)
+}
+
+async fn housekeeping_loop(state: AppState) {
+    let interval_secs = read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5).max(1);
+    loop {
+        if let Err(err) = evaluate_expired_jobs(&state) {
+            tracing::warn!(error = %err, "housekeeping evaluate_expired_jobs failed");
+        }
+        if let Err(err) = reconcile_onchain_job_statuses(&state) {
+            tracing::warn!(error = %err, "housekeeping on-chain reconciliation failed");
+        }
+        tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+    }
 }
 
 fn now_unix_seconds() -> u64 {
@@ -1952,6 +2076,9 @@ mod tests {
                     cancel_tx: None,
                     cancel_sig: None,
                     cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
                     created_at_unix_s: now_unix_seconds().saturating_sub(3600),
                     quorum_reached_at_unix_s: None,
                 },
@@ -1992,6 +2119,9 @@ mod tests {
                     cancel_tx: None,
                     cancel_sig: None,
                     cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
                     created_at_unix_s: now_unix_seconds(),
                     quorum_reached_at_unix_s: None,
                 },
@@ -2006,5 +2136,12 @@ mod tests {
     fn empty_idempotency_is_not_deduped() {
         assert!(!is_duplicate_idempotency("abc", ""));
         assert!(is_duplicate_idempotency("abc", "abc"));
+    }
+
+    #[test]
+    fn parses_onchain_job_status_byte() {
+        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
+        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 2;
+        assert_eq!(parse_onchain_job_status(&data), Some(2));
     }
 }
