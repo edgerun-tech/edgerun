@@ -1636,6 +1636,15 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
 
 fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
     let job_id_hex = hex::encode(view.job_id);
+    let bundle_hash_hex = hex::encode(view.bundle_hash);
+    if !bundle_path(state, &bundle_hash_hex).exists() {
+        tracing::warn!(
+            job_id = %job_id_hex,
+            bundle_hash = %bundle_hash_hex,
+            "skipping discovered posted job because bundle is unavailable in local store"
+        );
+        return Ok(false);
+    }
     let already_tracked = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
         job_quorum.contains_key(&job_id_hex)
@@ -1667,12 +1676,8 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
     for worker_pubkey in &committee_workers {
         let mut assignment = QueuedAssignment {
             job_id: job_id_hex.clone(),
-            bundle_hash: hex::encode(view.bundle_hash),
-            bundle_url: format!(
-                "{}/bundle/{}",
-                state.public_base_url,
-                hex::encode(view.bundle_hash)
-            ),
+            bundle_hash: bundle_hash_hex.clone(),
+            bundle_url: format!("{}/bundle/{}", state.public_base_url, bundle_hash_hex),
             runtime_id: runtime_id_hex.clone(),
             abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
             limits: edgerun_types::Limits {
@@ -2242,6 +2247,7 @@ mod tests {
         let data_dir =
             std::env::temp_dir().join(format!("edgerun-scheduler-tests-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&data_dir);
+        let _ = std::fs::create_dir_all(data_dir.join("bundles"));
         AppState {
             data_dir,
             public_base_url: "http://127.0.0.1:8080".to_string(),
@@ -2626,6 +2632,8 @@ mod tests {
             quorum: 2,
             status: 0,
         };
+        let bundle_hash_hex = hex::encode(view.bundle_hash);
+        std::fs::write(bundle_path(&state, &bundle_hash_hex), b"bundle").expect("write bundle");
         let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
         assert!(inserted);
 
@@ -2642,7 +2650,7 @@ mod tests {
                 idempotency_key: "r1".to_string(),
                 worker_pubkey: "w1".to_string(),
                 job_id: job_id_hex.clone(),
-                bundle_hash: hex::encode(view.bundle_hash),
+                bundle_hash: bundle_hash_hex.clone(),
                 output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     .to_string(),
                 output_len: 10,
@@ -2653,7 +2661,7 @@ mod tests {
                 idempotency_key: "r2".to_string(),
                 worker_pubkey: "w2".to_string(),
                 job_id: job_id_hex.clone(),
-                bundle_hash: hex::encode(view.bundle_hash),
+                bundle_hash: bundle_hash_hex,
                 output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     .to_string(),
                 output_len: 10,
@@ -2722,6 +2730,46 @@ mod tests {
             entry.cancel_tx.as_deref(),
             Some("UNAVAILABLE_NO_CHAIN_CONTEXT")
         );
+    }
+
+    #[test]
+    fn discovered_job_without_local_bundle_is_skipped() {
+        let state = test_state();
+        let now = now_unix_seconds();
+        let runtime_id = [0_u8; 32];
+        let runtime_hex = hex::encode(runtime_id);
+        {
+            let mut registry = state.worker_registry.lock().expect("lock poisoned");
+            for worker in ["w1", "w2", "w3"] {
+                registry.insert(
+                    worker.to_string(),
+                    WorkerRegistryEntry {
+                        worker_pubkey: worker.to_string(),
+                        runtime_ids: vec![runtime_hex.clone()],
+                        version: "1".to_string(),
+                        max_concurrent: Some(1),
+                        mem_bytes: Some(1024),
+                        last_heartbeat_unix_s: now,
+                    },
+                );
+            }
+        }
+        let view = OnchainJobView {
+            job_id: [0x66_u8; 32],
+            bundle_hash: [0x77_u8; 32],
+            runtime_id,
+            max_memory_bytes: 1,
+            max_instructions: 1,
+            escrow_lamports: 1,
+            committee_size: 3,
+            quorum: 2,
+            status: 0,
+        };
+        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
+        assert!(!inserted);
+        let job_id_hex = hex::encode(view.job_id);
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        assert!(!jq.contains_key(&job_id_hex));
     }
 
     #[test]
