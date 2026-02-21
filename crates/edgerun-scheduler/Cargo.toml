@@ -2,7 +2,7 @@
 name = "edgerun-scheduler"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "LicenseRef-Edgerun-Proprietary"
 
 [dependencies]
 anyhow.workspace = true
