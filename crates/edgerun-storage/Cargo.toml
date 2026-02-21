@@ -3,7 +3,7 @@
 name = "edgerun-storage"
 version.workspace = true
 edition.workspace = true
-license.workspace = true
+license = "GPL-2.0-only"
 description = "High-performance storage engine with io_uring I/O, durability tiers, and replication primitives"
 readme = "README.mdx"
 keywords = ["storage", "io-uring", "durability", "lsm", "replication"]
@@ -13,23 +13,17 @@ exclude = ["/target", "/.github", "/tmp", "*.log"]
 [dependencies]
 blake3.workspace = true
 edgerun-crypto = { path = "../edgerun-crypto" }
-zstd = "0.13"
 serde.workspace = true
 serde_json.workspace = true
 uuid = { version = "1.8", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror.workspace = true
 rand = "0.8"
-bytes = "1.5"
 crc32fast = "1.4"
-tokio = { workspace = true, features = ["full"] }
-parking_lot = "0.12"
-once_cell = "1.19"
 num_cpus = "1.16"
 io-uring = "0.7"
 libc = "0.2"
 crossbeam-channel = "0.5"
-rustc-hash = "1.1"
 chacha20poly1305 = "0.10"
 hkdf = "0.12"
 sha2 = "0.10"
@@ -37,7 +31,6 @@ argon2 = "0.5"
 
 [dev-dependencies]
 tempfile = "3.10"
-proptest = "1.5"
 criterion = "0.5"
 
 [features]
