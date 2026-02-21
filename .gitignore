@@ -12,3 +12,5 @@ program/.anchor
 program/test-ledger
 program/.solana
 test-ledger/
+site/dist/
+site/wiki/

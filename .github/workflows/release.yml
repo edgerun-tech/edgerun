@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-site-and-wiki:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      build_number: ${{ steps.meta.outputs.build_number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Metadata
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAGS="$(git tag --sort=-version:refname | sed 's/^v//' | head -n 10 | paste -sd, -)"
+          BUILD_NUMBER="${VERSION}-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::8}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "versions=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Install site deps
+        working-directory: site
+        run: bun install --frozen-lockfile
+
+      - name: Build site
+        working-directory: site
+        env:
+          EDGERUN_VERSION: ${{ steps.meta.outputs.version }}
+          EDGERUN_VERSIONS: ${{ steps.meta.outputs.versions }}
+          EDGERUN_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          EDGERUN_SITE_URL: https://www.edgerun.tech
+        run: bun run build
+
+      - name: Archive site docs
+        run: |
+          mkdir -p release-artifacts
+          tar -czf "release-artifacts/edgerun-docs-${{ steps.meta.outputs.version }}.tar.gz" -C site dist
+          tar -czf "release-artifacts/edgerun-wiki-${{ steps.meta.outputs.version }}.tar.gz" -C site wiki
+
+      - name: Upload site artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-release-artifacts
+          path: release-artifacts/*
+
+  build-cli:
+    runs-on: ubuntu-24.04
+    needs: build-site-and-wiki
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI
+        env:
+          EDGERUN_BUILD_NUMBER: ${{ needs.build-site-and-wiki.outputs.build_number }}
+        run: |
+          cargo build --release -p edgerun-cli --target "${{ matrix.target }}"
+
+      - name: Pack binary
+        run: |
+          mkdir -p release-artifacts
+          BIN="target/${{ matrix.target }}/release/edgerun"
+          OUT="release-artifacts/edgerun-${{ needs.build-site-and-wiki.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}"
+          tar -czf "$OUT" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+
+      - name: Upload binary artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: release-artifacts/*
+
+  publish-release:
+    runs-on: ubuntu-24.04
+    needs: [build-site-and-wiki, build-cli]
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-downloads
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-assets
+          find release-downloads -type f -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+
