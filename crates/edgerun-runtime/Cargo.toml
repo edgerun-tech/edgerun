@@ -5,18 +5,30 @@ version.workspace = true
 edition.workspace = true
 license = "Apache-2.0"
 
+[features]
+default = []
+cli = ["dep:clap", "dep:tokio", "dep:serde_json", "dep:wat"]
+
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
 ciborium.workspace = true
-clap.workspace = true
+clap = { workspace = true, optional = true }
 hex.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, optional = true }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, optional = true }
 wasmparser.workspace = true
 wasmi.workspace = true
 thiserror.workspace = true
-wat.workspace = true
+wat = { workspace = true, optional = true }
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-types = { path = "../../crates/edgerun-types" }
+
+[dev-dependencies]
+wat.workspace = true
+
+[[bin]]
+name = "edgerun-runtime"
+path = "src/main.rs"
+required-features = ["cli"]

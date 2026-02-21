@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "edgerun-runtime-web"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+hex.workspace = true
+serde.workspace = true
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+edgerun-runtime = { path = "../../crates/edgerun-runtime" }

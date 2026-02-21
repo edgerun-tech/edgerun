@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use hmac::{Hmac, Mac};
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     hash::hash,
@@ -27,8 +31,10 @@ struct WorkerConfig {
     capacity: WorkerCapacity,
     worker_signing_key: Option<SigningKey>,
     chain_submit: Option<ChainSubmitConfig>,
-    policy_verifiers: Vec<PolicyVerifier>,
+    policy_verifiers: Arc<RwLock<Vec<PolicyVerifier>>>,
+    policy_session: Arc<Mutex<PolicySessionState>>,
     policy_clock_skew_secs: u64,
+    policy_refresh_interval: Duration,
     pending_queue_max: usize,
     retry_base_ms: u64,
     retry_max_ms: u64,
@@ -47,6 +53,45 @@ struct PolicyVerifier {
     key_id: String,
     version: u32,
     verify_pubkey_hex: String,
+}
+
+#[derive(Debug)]
+struct PolicySessionState {
+    token: Option<String>,
+    session_key: Option<String>,
+    expires_at_unix_s: u64,
+    bound_origin: Option<String>,
+    bootstrap_token: Option<String>,
+    nonce_counter: u64,
+}
+
+impl PolicySessionState {
+    fn has_live_session(&self, now: u64) -> bool {
+        self.token.is_some()
+            && self.session_key.is_some()
+            && self.expires_at_unix_s > now.saturating_add(5)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct PolicyInfoResponse {
+    key_id: String,
+    version: u32,
+    signer_pubkey: String,
+    ttl_secs: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionCreateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bound_origin: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionCreateResponse {
+    token: String,
+    session_key: String,
+    ttl_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,6 +153,7 @@ struct WorkerResultReport {
     output_hash: String,
     output_len: usize,
     attestation_sig: Option<String>,
+    attestation_claim: Option<edgerun_types::AttestationClaim>,
     signature: Option<String>,
 }
 
@@ -203,6 +249,9 @@ async fn main() -> Result<()> {
         max_backoff: Duration::from_millis(cfg.retry_max_ms.max(cfg.retry_base_ms.max(1))),
         flush_batch: cfg.retry_flush_batch.max(1),
     };
+    let mut last_policy_refresh = Instant::now()
+        .checked_sub(cfg.policy_refresh_interval)
+        .unwrap_or_else(Instant::now);
 
     tracing::info!(
         worker = %cfg.worker_pubkey,
@@ -212,6 +261,13 @@ async fn main() -> Result<()> {
 
     let mut next_poll_ms = 2000;
     loop {
+        if last_policy_refresh.elapsed() >= cfg.policy_refresh_interval {
+            if let Err(err) = refresh_policy_verifiers(&client, &cfg).await {
+                tracing::warn!(error = %err, "policy verifier refresh failed");
+            }
+            last_policy_refresh = Instant::now();
+        }
+
         flush_submission_queue(&client, &cfg, &mut submission_queue).await;
 
         if let Ok(resp) = send_heartbeat(&client, &cfg).await {
@@ -331,6 +387,20 @@ fn load_config() -> WorkerConfig {
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(30);
+    let policy_session_origin = std::env::var("EDGERUN_WORKER_POLICY_SESSION_ORIGIN")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty());
+    let policy_session_bootstrap_token =
+        std::env::var("EDGERUN_WORKER_POLICY_SESSION_BOOTSTRAP_TOKEN")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty());
+    let policy_refresh_secs = std::env::var("EDGERUN_WORKER_POLICY_REFRESH_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(30);
     let pending_queue_max = std::env::var("EDGERUN_WORKER_PENDING_QUEUE_MAX")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -360,8 +430,17 @@ fn load_config() -> WorkerConfig {
         capacity,
         worker_signing_key,
         chain_submit,
-        policy_verifiers,
+        policy_verifiers: Arc::new(RwLock::new(policy_verifiers)),
+        policy_session: Arc::new(Mutex::new(PolicySessionState {
+            token: None,
+            session_key: None,
+            expires_at_unix_s: 0,
+            bound_origin: policy_session_origin,
+            bootstrap_token: policy_session_bootstrap_token,
+            nonce_counter: 0,
+        })),
         policy_clock_skew_secs,
+        policy_refresh_interval: Duration::from_secs(policy_refresh_secs),
         pending_queue_max,
         retry_base_ms,
         retry_max_ms,
@@ -460,6 +539,166 @@ async fn poll_assignments(
         .await
         .context("invalid assignments response")?;
     Ok(body)
+}
+
+async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<()> {
+    let info = fetch_policy_info(client, cfg).await?;
+
+    let verifier = PolicyVerifier {
+        key_id: info.key_id.clone(),
+        version: info.version,
+        verify_pubkey_hex: info.signer_pubkey.clone(),
+    };
+    let mut verifiers = cfg.policy_verifiers.write().expect("lock poisoned");
+    if let Some(existing) = verifiers
+        .iter_mut()
+        .find(|v| v.key_id == verifier.key_id && v.version == verifier.version)
+    {
+        if existing.verify_pubkey_hex != verifier.verify_pubkey_hex {
+            tracing::warn!(
+                key_id = %verifier.key_id,
+                version = verifier.version,
+                "policy verifier key changed for existing tuple; updating"
+            );
+            existing.verify_pubkey_hex = verifier.verify_pubkey_hex;
+        }
+    } else {
+        verifiers.push(verifier);
+        tracing::info!(
+            key_id = %info.key_id,
+            version = info.version,
+            ttl_secs = info.ttl_secs,
+            "added policy verifier from scheduler policy info"
+        );
+    }
+    Ok(())
+}
+
+async fn fetch_policy_info(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<PolicyInfoResponse> {
+    let path = "/v1/policy/info";
+    let url = Url::parse(&format!("{}{}", cfg.scheduler_base_url, path))?;
+    let mut attempted_session_create = false;
+    loop {
+        let mut req = client.get(url.clone());
+        if let Some(headers) = build_policy_session_headers(cfg, "GET", path, b"")? {
+            req = req
+                .header("authorization", headers.authorization)
+                .header("x-hwv-ts", headers.ts)
+                .header("x-hwv-nonce", headers.nonce)
+                .header("x-hwv-sig", headers.sig);
+            if let Some(origin) = headers.origin {
+                req = req.header("origin", origin);
+            }
+        }
+        let resp = req.send().await.context("policy info request failed")?;
+        let status = resp.status();
+        if status.is_success() {
+            return resp
+                .json::<PolicyInfoResponse>()
+                .await
+                .context("invalid policy info response");
+        }
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
+        {
+            if attempted_session_create {
+                tracing::debug!(
+                    status = %status,
+                    "policy info endpoint denied access; keeping configured policy verifiers"
+                );
+                anyhow::bail!("policy info failed with status {status}");
+            }
+            attempted_session_create = true;
+            establish_policy_session(client, cfg)
+                .await
+                .context("failed to establish policy session")?;
+            continue;
+        }
+        anyhow::bail!("policy info failed with status {status}");
+    }
+}
+
+#[derive(Debug)]
+struct PolicySessionHeaders {
+    authorization: String,
+    origin: Option<String>,
+    ts: String,
+    nonce: String,
+    sig: String,
+}
+
+type HmacSha256 = Hmac<Sha256>;
+
+fn build_policy_session_headers(
+    cfg: &WorkerConfig,
+    method: &str,
+    path: &str,
+    body: &[u8],
+) -> Result<Option<PolicySessionHeaders>> {
+    let now = now_unix_seconds();
+    let mut session = cfg.policy_session.lock().expect("lock poisoned");
+    if !session.has_live_session(now) {
+        return Ok(None);
+    }
+    let token = session.token.clone().unwrap_or_default();
+    let key = session.session_key.clone().unwrap_or_default();
+    let origin = session.bound_origin.clone();
+    session.nonce_counter = session.nonce_counter.saturating_add(1);
+    let nonce = format!("worker-{}-{}", now, session.nonce_counter);
+    drop(session);
+
+    let ts = now.to_string();
+    let mut hasher = Sha256::new();
+    hasher.update(body);
+    let body_hash = URL_SAFE_NO_PAD.encode(hasher.finalize());
+    let canonical = format!("{method}|{path}|{ts}|{nonce}|{body_hash}");
+    let mut mac = HmacSha256::new_from_slice(key.as_bytes()).context("hmac key")?;
+    mac.update(canonical.as_bytes());
+    let sig = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+
+    Ok(Some(PolicySessionHeaders {
+        authorization: format!("Bearer {token}"),
+        origin,
+        ts,
+        nonce,
+        sig,
+    }))
+}
+
+async fn establish_policy_session(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<()> {
+    let (bootstrap_token, bound_origin) = {
+        let mut session = cfg.policy_session.lock().expect("lock poisoned");
+        session.token = None;
+        session.session_key = None;
+        session.expires_at_unix_s = 0;
+        session.nonce_counter = 0;
+        (session.bootstrap_token.clone(), session.bound_origin.clone())
+    };
+    let path = "/v1/session/create";
+    let url = Url::parse(&format!("{}{}", cfg.scheduler_base_url, path))?;
+    let payload = SessionCreateRequest {
+        bound_origin: bound_origin.clone(),
+    };
+    let mut req = client.post(url).json(&payload);
+    if let Some(token) = bootstrap_token {
+        req = req.header("x-edgerun-bootstrap-token", token);
+    }
+
+    let resp = req.send().await.context("session create request failed")?;
+    let status = resp.status();
+    if !status.is_success() {
+        anyhow::bail!("session create failed with status {status}");
+    }
+    let issued = resp
+        .json::<SessionCreateResponse>()
+        .await
+        .context("invalid session create response")?;
+    let now = now_unix_seconds();
+    let mut session = cfg.policy_session.lock().expect("lock poisoned");
+    session.token = Some(issued.token);
+    session.session_key = Some(issued.session_key);
+    session.expires_at_unix_s = now.saturating_add(issued.ttl_secs.max(1));
+    session.nonce_counter = 0;
+    Ok(())
 }
 
 async fn process_assignment(
@@ -702,6 +941,7 @@ async fn process_assignment(
         output_hash: hex::encode(report.output_hash),
         output_len: report.output_len,
         attestation_sig: None,
+        attestation_claim: None,
         signature: None,
     };
     if let Some(chain_cfg) = cfg.chain_submit.as_ref() {
@@ -1105,14 +1345,20 @@ fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
 
 fn result_signing_message(payload: &WorkerResultReport) -> String {
     let attestation_sig = payload.attestation_sig.clone().unwrap_or_default();
+    let attestation_claim = payload
+        .attestation_claim
+        .as_ref()
+        .and_then(|c| serde_json::to_string(c).ok())
+        .unwrap_or_default();
     format!(
-        "result|{}|{}|{}|{}|{}|{}",
+        "result|{}|{}|{}|{}|{}|{}|{}",
         payload.worker_pubkey,
         payload.job_id,
         payload.bundle_hash,
         payload.output_hash,
         payload.output_len,
-        attestation_sig
+        attestation_sig,
+        attestation_claim
     )
 }
 
@@ -1183,8 +1429,8 @@ fn assignment_policy_message(assignment: &QueuedAssignment) -> String {
 }
 
 fn verify_assignment_policy(cfg: &WorkerConfig, assignment: &QueuedAssignment) -> Result<()> {
-    let matched_verifier = cfg
-        .policy_verifiers
+    let verifiers = cfg.policy_verifiers.read().expect("lock poisoned");
+    let matched_verifier = verifiers
         .iter()
         .find(|v| v.key_id == assignment.policy_key_id && v.version == assignment.policy_version)
         .ok_or_else(|| {
@@ -1308,12 +1554,21 @@ mod tests {
             },
             worker_signing_key: None,
             chain_submit: None,
-            policy_verifiers: vec![PolicyVerifier {
+            policy_verifiers: Arc::new(RwLock::new(vec![PolicyVerifier {
                 key_id: default_policy_key_id(),
                 version: default_policy_version(),
                 verify_pubkey_hex: default_policy_verify_pubkey_hex(),
-            }],
+            }])),
+            policy_session: Arc::new(Mutex::new(PolicySessionState {
+                token: None,
+                session_key: None,
+                expires_at_unix_s: 0,
+                bound_origin: None,
+                bootstrap_token: None,
+                nonce_counter: 0,
+            })),
             policy_clock_skew_secs: 30,
+            policy_refresh_interval: Duration::from_millis(50),
             pending_queue_max: 16,
             retry_base_ms: 5,
             retry_max_ms: 20,
@@ -1351,6 +1606,25 @@ mod tests {
         (format!("http://{addr}"), handle)
     }
 
+    async fn spawn_policy_info_server(body: String) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local_addr");
+        let handle = tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = [0_u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            }
+        });
+        (format!("http://{addr}"), handle)
+    }
+
     #[tokio::test]
     async fn retries_result_submission_and_drains_after_recovery() {
         let client = reqwest::Client::builder()
@@ -1368,6 +1642,7 @@ mod tests {
             output_hash: "output-hash".to_string(),
             output_len: 7,
             attestation_sig: None,
+            attestation_claim: None,
             signature: None,
         };
 
@@ -1422,5 +1697,85 @@ mod tests {
             2,
             "same key on different endpoints should be distinct"
         );
+    }
+
+    #[tokio::test]
+    async fn refresh_policy_verifiers_adds_scheduler_tuple() {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(200))
+            .build()
+            .expect("client");
+        let key_hex = default_policy_verify_pubkey_hex();
+        let body = format!(
+            "{{\"key_id\":\"rotated-key\",\"version\":2,\"signer_pubkey\":\"{}\",\"ttl_secs\":300}}",
+            key_hex
+        );
+        let (base_url, server) = spawn_policy_info_server(body).await;
+        let cfg = test_cfg(base_url);
+
+        refresh_policy_verifiers(&client, &cfg)
+            .await
+            .expect("refresh should succeed");
+        let verifiers = cfg.policy_verifiers.read().expect("lock poisoned");
+        assert!(verifiers
+            .iter()
+            .any(|v| v.key_id == "rotated-key" && v.version == 2));
+
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn refresh_policy_verifiers_creates_session_after_unauthorized() {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(200))
+            .build()
+            .expect("client");
+        let key_hex = default_policy_verify_pubkey_hex();
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("local_addr");
+        let handle = tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let mut buf = [0_u8; 4096];
+                let n = stream.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_ascii_lowercase();
+                let (status, body) = if req.contains("post /v1/session/create ") {
+                    (
+                        "200 OK",
+                        "{\"token\":\"tok-1\",\"session_key\":\"session-key-1\",\"ttl_secs\":300}"
+                            .to_string(),
+                    )
+                } else if req.contains("get /v1/policy/info ")
+                    && req.contains("authorization: bearer tok-1")
+                {
+                    (
+                        "200 OK",
+                        format!(
+                            "{{\"key_id\":\"rotated-key\",\"version\":2,\"signer_pubkey\":\"{}\",\"ttl_secs\":300}}",
+                            key_hex
+                        ),
+                    )
+                } else {
+                    ("401 Unauthorized", "{\"error\":\"unauthorized\"}".to_string())
+                };
+                let resp = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = stream.write_all(resp.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            }
+        });
+        let cfg = test_cfg(format!("http://{addr}"));
+
+        refresh_policy_verifiers(&client, &cfg)
+            .await
+            .expect("refresh should create session and succeed");
+        let verifiers = cfg.policy_verifiers.read().expect("lock poisoned");
+        assert!(verifiers
+            .iter()
+            .any(|v| v.key_id == "rotated-key" && v.version == 2));
+
+        handle.abort();
     }
 }
