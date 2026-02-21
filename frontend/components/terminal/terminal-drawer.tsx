@@ -35,6 +35,7 @@ export function TerminalDrawer() {
   const [qrImageDataUrl, setQrImageDataUrl] = createSignal('')
   const [tailscaleImporting, setTailscaleImporting] = createSignal(false)
   const [tailscaleImportNote, setTailscaleImportNote] = createSignal('')
+  let lastAutoImportAt = 0
 
   const walletConnected = createMemo(() => wallet().connected)
 
@@ -69,10 +70,11 @@ export function TerminalDrawer() {
     }))
   }
 
-  const importTailscaleDevices = async () => {
+  const importTailscaleDevices = async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent)
     if (tailscaleImporting()) return
     setTailscaleImporting(true)
-    setTailscaleImportNote('')
+    if (!silent) setTailscaleImportNote('')
     const endpoints = [
       'http://127.0.0.1:49201/v1/tailscale/devices',
       'http://localhost:49201/v1/tailscale/devices'
@@ -91,7 +93,7 @@ export function TerminalDrawer() {
     }
 
     if (!payload?.ok || !Array.isArray(payload.devices)) {
-      setTailscaleImportNote('Tailscale bridge unavailable. Start: edgerun tailscale bridge')
+      if (!silent) setTailscaleImportNote('Tailscale bridge unavailable. Start: edgerun tailscale bridge')
       setTailscaleImporting(false)
       return
     }
@@ -107,8 +109,18 @@ export function TerminalDrawer() {
       imported += 1
     }
     await refreshDeviceStatus()
-    setTailscaleImportNote(imported > 0 ? `Imported ${imported} device${imported === 1 ? '' : 's'} from Tailscale.` : 'No new Tailscale devices to import.')
+    if (!silent) {
+      setTailscaleImportNote(imported > 0 ? `Imported ${imported} device${imported === 1 ? '' : 's'} from Tailscale.` : 'No new Tailscale devices to import.')
+    }
     setTailscaleImporting(false)
+  }
+
+  const autoImportTailscaleDevices = () => {
+    if (!untrack(() => state().autoImportTailscale)) return
+    const now = Date.now()
+    if (now - lastAutoImportAt < 15000) return
+    lastAutoImportAt = now
+    void importTailscaleDevices({ silent: true })
   }
 
   const restoreLastDevice = () => {
@@ -146,6 +158,7 @@ export function TerminalDrawer() {
     setWallet(initialWallet)
     if (initialWallet.connected) {
       restoreLastDevice()
+      autoImportTailscaleDevices()
     }
 
     const unsubscribe = subscribeTerminalDrawer((next) => setState(next))
@@ -155,6 +168,7 @@ export function TerminalDrawer() {
       const nextWallet = custom.detail || readWalletSession()
       setWallet(nextWallet)
       if (nextWallet.connected) {
+        autoImportTailscaleDevices()
         restoreLastDevice()
         void refreshDeviceStatus()
       }
@@ -267,12 +281,20 @@ export function TerminalDrawer() {
                     type="button"
                     class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-60"
                     disabled={tailscaleImporting()}
-                    onClick={() => void importTailscaleDevices()}
+                    onClick={() => void importTailscaleDevices({ silent: false })}
                   >
                     {tailscaleImporting() ? 'Importing...' : 'Import TS'}
                   </button>
                 </div>
               </div>
+              <label class="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={state().autoImportTailscale}
+                  onChange={(event) => terminalDrawerActions.setAutoImportTailscale((event.currentTarget as HTMLInputElement).checked)}
+                />
+                Auto import Tailscale on wallet connect
+              </label>
               <Show when={tailscaleImportNote().length > 0}>
                 <p class="mb-2 text-[11px] text-muted-foreground">{tailscaleImportNote()}</p>
               </Show>

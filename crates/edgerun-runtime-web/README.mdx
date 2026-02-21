@@ -7,7 +7,7 @@ Browser wrapper for `edgerun-runtime` using `wasm-bindgen`.
 From repo root:
 
 ```bash
-bash scripts/build-runtime-web.sh
+cargo run -p edgerun-cli -- --root . ci --job build-runtime-web
 ```
 
 Or from frontend:
@@ -19,7 +19,7 @@ bun run runtime:web:build
 Skip frontend mirroring:
 
 ```bash
-bash scripts/build-runtime-web.sh --no-sync
+wasm-pack build --target web --release --out-dir crates/edgerun-runtime-web/pkg-web
 ```
 
 This writes the generated package to:
