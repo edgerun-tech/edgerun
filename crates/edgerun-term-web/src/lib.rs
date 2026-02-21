@@ -24,6 +24,8 @@ mod wasm {
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen::{JsCast, Clamped};
+    #[cfg(feature = "webgpu")]
+    use wasm_bindgen_futures::spawn_local;
     use web_sys::{
         CanvasRenderingContext2d, ClipboardEvent, CompositionEvent, Document, Element,
         HtmlCanvasElement, HtmlTextAreaElement, ImageData, InputEvent, KeyboardEvent, MessageEvent, WebSocket,
@@ -38,12 +40,14 @@ mod wasm {
     #[cfg(feature = "webgpu")]
     #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
     #[repr(C)]
+    #[allow(dead_code)]
     struct Vertex {
         pos: [f32; 2],
         uv: [f32; 2],
     }
 
     #[cfg(feature = "webgpu")]
+    #[allow(dead_code)]
     impl Vertex {
         fn desc() -> wgpu::VertexBufferLayout<'static> {
             wgpu::VertexBufferLayout {
@@ -66,10 +70,32 @@ mod wasm {
     }
 
     #[derive(Clone)]
+    #[allow(dead_code)]
     enum RenderBackend {
         #[cfg(feature = "webgpu")]
         WebGpu(Rc<RefCell<GpuState>>),
         Canvas2d(CanvasRenderingContext2d),
+    }
+
+    type SharedRenderBackend = Rc<RefCell<RenderBackend>>;
+
+    #[cfg(feature = "webgpu")]
+    const WEBGPU_STATE_KEY: &str = "edgerun.term.webgpu.state.v1";
+    #[cfg(feature = "webgpu")]
+    const WEBGPU_CRASH_KEY: &str = "edgerun.term.webgpu.inflight";
+    #[cfg(feature = "webgpu")]
+    const WEBGPU_BASE_COOLDOWN_MS: f64 = 30_000.0;
+    #[cfg(feature = "webgpu")]
+    const WEBGPU_MAX_COOLDOWN_MS: f64 = 900_000.0;
+
+    #[cfg(feature = "webgpu")]
+    #[derive(Clone, Debug, Default)]
+    struct WebGpuRuntimeState {
+        consecutive_failures: u32,
+        total_failures: u32,
+        total_successes: u32,
+        disabled_until_ms: f64,
+        last_failure_ms: f64,
     }
 
     #[cfg(feature = "webgpu")]
@@ -141,6 +167,145 @@ mod wasm {
         }
     }
 
+    #[cfg(feature = "webgpu")]
+    fn now_ms() -> f64 {
+        js_sys::Date::now()
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn local_storage(window: &web_sys::Window) -> Option<web_sys::Storage> {
+        window.local_storage().ok().flatten()
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn parse_webgpu_state(raw: &str) -> Option<WebGpuRuntimeState> {
+        let mut parts = raw.split(',');
+        let version = parts.next()?;
+        if version != "v1" {
+            return None;
+        }
+        Some(WebGpuRuntimeState {
+            consecutive_failures: parts.next()?.parse().ok()?,
+            total_failures: parts.next()?.parse().ok()?,
+            total_successes: parts.next()?.parse().ok()?,
+            disabled_until_ms: parts.next()?.parse().ok()?,
+            last_failure_ms: parts.next()?.parse().ok()?,
+        })
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn format_webgpu_state(state: &WebGpuRuntimeState) -> String {
+        format!(
+            "v1,{},{},{},{},{}",
+            state.consecutive_failures,
+            state.total_failures,
+            state.total_successes,
+            state.disabled_until_ms,
+            state.last_failure_ms
+        )
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn load_webgpu_state(window: &web_sys::Window) -> WebGpuRuntimeState {
+        let Some(storage) = local_storage(window) else {
+            return WebGpuRuntimeState::default();
+        };
+        let Ok(Some(raw)) = storage.get_item(WEBGPU_STATE_KEY) else {
+            return WebGpuRuntimeState::default();
+        };
+        parse_webgpu_state(&raw).unwrap_or_default()
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn save_webgpu_state(window: &web_sys::Window, state: &WebGpuRuntimeState) {
+        if let Some(storage) = local_storage(window) {
+            let _ = storage.set_item(WEBGPU_STATE_KEY, &format_webgpu_state(state));
+        }
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn set_webgpu_inflight(window: &web_sys::Window, inflight: bool) {
+        if let Some(storage) = local_storage(window) {
+            if inflight {
+                let _ = storage.set_item(WEBGPU_CRASH_KEY, "1");
+            } else {
+                let _ = storage.remove_item(WEBGPU_CRASH_KEY);
+            }
+        }
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn consume_previous_crash_flag(window: &web_sys::Window) -> bool {
+        let Some(storage) = local_storage(window) else {
+            return false;
+        };
+        let crashed = matches!(storage.get_item(WEBGPU_CRASH_KEY), Ok(Some(flag)) if flag == "1");
+        if crashed {
+            let _ = storage.remove_item(WEBGPU_CRASH_KEY);
+        }
+        crashed
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn webgpu_cooldown_ms(consecutive_failures: u32) -> f64 {
+        if consecutive_failures == 0 {
+            return 0.0;
+        }
+        let exp = consecutive_failures.saturating_sub(1).min(8);
+        (WEBGPU_BASE_COOLDOWN_MS * (1u64 << exp) as f64).min(WEBGPU_MAX_COOLDOWN_MS)
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn record_webgpu_failure(window: &web_sys::Window, state: &mut WebGpuRuntimeState) -> f64 {
+        state.total_failures = state.total_failures.saturating_add(1);
+        state.consecutive_failures = state.consecutive_failures.saturating_add(1);
+        state.last_failure_ms = now_ms();
+        let cooldown = webgpu_cooldown_ms(state.consecutive_failures);
+        state.disabled_until_ms = state.last_failure_ms + cooldown;
+        save_webgpu_state(window, state);
+        cooldown
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn record_webgpu_success(window: &web_sys::Window, state: &mut WebGpuRuntimeState) {
+        state.total_successes = state.total_successes.saturating_add(1);
+        state.consecutive_failures = 0;
+        state.disabled_until_ms = 0.0;
+        save_webgpu_state(window, state);
+    }
+
+    #[cfg(feature = "webgpu")]
+    fn should_attempt_webgpu(window: &web_sys::Window) -> (bool, String, WebGpuRuntimeState) {
+        let navigator = window.navigator();
+        let has_gpu = js_sys::Reflect::has(&navigator, &JsValue::from_str("gpu")).unwrap_or(false);
+        if !has_gpu {
+            return (false, "WebGPU unavailable in this browser; using 2D canvas".to_string(), WebGpuRuntimeState::default());
+        }
+
+        let mut state = load_webgpu_state(window);
+        if consume_previous_crash_flag(window) {
+            let cooldown = record_webgpu_failure(window, &mut state);
+            let seconds = (cooldown / 1000.0).round() as u64;
+            return (
+                false,
+                format!("WebGPU crashed last run; using 2D canvas for {seconds}s cooldown"),
+                state,
+            );
+        }
+
+        let now = now_ms();
+        if state.disabled_until_ms > now {
+            let remaining = ((state.disabled_until_ms - now) / 1000.0).ceil().max(1.0) as u64;
+            return (
+                false,
+                format!("WebGPU cooldown active ({remaining}s); using 2D canvas"),
+                state,
+            );
+        }
+
+        (true, "Attempting WebGPU backend…".to_string(), state)
+    }
+
     fn init_canvas_2d(canvas: &HtmlCanvasElement) -> Result<CanvasRenderingContext2d, JsValue> {
         let context = canvas
             .get_context("2d")?
@@ -198,18 +363,52 @@ mod wasm {
         canvas.set_height(height);
 
         #[cfg(feature = "webgpu")]
-        let render_backend = {
-            set_status(
-                &status_el,
-                Some("WebGPU backend temporarily disabled, using 2D canvas"),
-            );
-            RenderBackend::Canvas2d(init_canvas_2d(&canvas)?)
-        };
+        let render_backend: SharedRenderBackend =
+            Rc::new(RefCell::new(RenderBackend::Canvas2d(init_canvas_2d(&canvas)?)));
         #[cfg(not(feature = "webgpu"))]
-        let render_backend = {
+        let render_backend: SharedRenderBackend = Rc::new(RefCell::new({
             set_status(&status_el, Some("WebGPU feature disabled, using 2D canvas"));
             RenderBackend::Canvas2d(init_canvas_2d(&canvas)?)
-        };
+        }));
+
+        #[cfg(feature = "webgpu")]
+        {
+            let (should_try, reason, mut runtime_state) = should_attempt_webgpu(&window);
+            set_status(&status_el, Some(&reason));
+            if should_try {
+                let canvas_for_gpu = canvas.clone();
+                let status_for_gpu = status_el.clone();
+                let backend_for_gpu = render_backend.clone();
+                let window_for_gpu = window.clone();
+                set_webgpu_inflight(&window, true);
+                spawn_local(async move {
+                    match init_gpu(&canvas_for_gpu, width, height).await {
+                        Ok((gpu, _format)) => {
+                            set_webgpu_inflight(&window_for_gpu, false);
+                            record_webgpu_success(&window_for_gpu, &mut runtime_state);
+                            *backend_for_gpu.borrow_mut() =
+                                RenderBackend::WebGpu(Rc::new(RefCell::new(gpu)));
+                            set_status(&status_for_gpu, Some("WebGPU active"));
+                        }
+                        Err(err) => {
+                            set_webgpu_inflight(&window_for_gpu, false);
+                            let cooldown_ms =
+                                record_webgpu_failure(&window_for_gpu, &mut runtime_state);
+                            let cooldown_s = (cooldown_ms / 1000.0).round() as u64;
+                            web_sys::console::warn_1(&JsValue::from_str(&format!(
+                                "WebGPU init failed: {err:?}"
+                            )));
+                            set_status(
+                                &status_for_gpu,
+                                Some(&format!(
+                                    "WebGPU init failed; using 2D canvas ({cooldown_s}s cooldown)"
+                                )),
+                            );
+                        }
+                    }
+                });
+            }
+        }
 
         let primary = std::sync::Arc::new(FONT_DATA.to_vec());
         let glyphs = GlyphCache::new(primary, FONT_SIZE);
@@ -436,7 +635,7 @@ mod wasm {
         window: &web_sys::Window,
         canvas: &HtmlCanvasElement,
         state: &Rc<RefCell<AppState>>,
-        backend: &RenderBackend,
+        backend: &SharedRenderBackend,
     ) {
         let (width, height) = canvas_size(canvas, window);
         if {
@@ -462,7 +661,7 @@ mod wasm {
         state.frame.resize((width * height * 4) as usize, 0);
         state.image_data = None;
 
-        match backend {
+        match backend.borrow().clone() {
             #[cfg(feature = "webgpu")]
             RenderBackend::WebGpu(gpu) => {
                 let mut gpu = gpu.borrow_mut();
@@ -485,7 +684,7 @@ mod wasm {
         window: &web_sys::Window,
         canvas: HtmlCanvasElement,
         state: Rc<RefCell<AppState>>,
-        backend: RenderBackend,
+        backend: SharedRenderBackend,
     ) -> Result<(), JsValue> {
         let window_for_size = window.clone();
         let canvas_for_size = canvas.clone();
@@ -511,7 +710,7 @@ mod wasm {
         Ok(())
     }
 
-    fn start_render_loop(window: web_sys::Window, state: Rc<RefCell<AppState>>, backend: RenderBackend) {
+    fn start_render_loop(window: web_sys::Window, state: Rc<RefCell<AppState>>, backend: SharedRenderBackend) {
         let f: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
         let g = f.clone();
 
@@ -570,10 +769,10 @@ mod wasm {
                 drain_outbox(&state.ws, &state.outbox);
             }
 
-            let render_result = match &backend {
+            let render_result = match backend.borrow().clone() {
                 #[cfg(feature = "webgpu")]
-                RenderBackend::WebGpu(gpu) => render_gpu(&state, gpu),
-                RenderBackend::Canvas2d(ctx) => render_canvas_2d(&state, ctx),
+                RenderBackend::WebGpu(gpu) => render_gpu(&state, &gpu),
+                RenderBackend::Canvas2d(ctx) => render_canvas_2d(&state, &ctx),
             };
 
             if let Err(err) = render_result {
@@ -627,6 +826,7 @@ mod wasm {
             Err(SurfaceError::OutOfMemory) => {
                 return Err(JsValue::from_str("surface out of memory"))
             }
+            Err(SurfaceError::Other) => return Ok(()),
         };
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -638,6 +838,7 @@ mod wasm {
                 label: Some("term-web-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
+                    depth_slice: None,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
@@ -713,12 +914,13 @@ mod wasm {
     }
 
     #[cfg(feature = "webgpu")]
+    #[allow(dead_code)]
     async fn init_gpu(
         canvas: &HtmlCanvasElement,
         width: u32,
         height: u32,
     ) -> Result<(GpuState, wgpu::TextureFormat), JsValue> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::BROWSER_WEBGPU,
             ..Default::default()
         });
@@ -734,7 +936,7 @@ mod wasm {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or("No WebGPU adapter")?;
+            .map_err(|err| JsValue::from_str(&format!("adapter error: {err:?}")))?;
 
         let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
         let (device, queue) = adapter
@@ -743,8 +945,10 @@ mod wasm {
                     label: Some("term-web-device"),
                     required_features: wgpu::Features::empty(),
                     required_limits: limits,
+                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                    memory_hints: wgpu::MemoryHints::default(),
+                    trace: wgpu::Trace::Off,
                 },
-                None,
             )
             .await
             .map_err(|err| JsValue::from_str(&format!("device error: {err:?}")))?;
@@ -818,13 +1022,13 @@ mod wasm {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[Vertex::desc()],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -842,6 +1046,7 @@ mod wasm {
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
+            cache: None,
         });
 
         let vertices = [
@@ -905,14 +1110,14 @@ mod wasm {
 
         if padded_bytes_per_row == unpadded_bytes_per_row {
             queue.write_texture(
-                wgpu::ImageCopyTexture {
+                wgpu::TexelCopyTextureInfo {
                     texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
                 frame,
-                wgpu::ImageDataLayout {
+                wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(unpadded_bytes_per_row as u32),
                     rows_per_image: Some(height),
@@ -937,14 +1142,14 @@ mod wasm {
         }
 
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
             padded,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(padded_bytes_per_row as u32),
                 rows_per_image: Some(height),

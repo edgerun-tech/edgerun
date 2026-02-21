@@ -7,10 +7,10 @@ license.workspace = true
 [dependencies]
 dirs = "5.0"
 log = "0.4"
-pixels = "0.13"
+pixels = "0.15"
 term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
-winit = { version = "0.29", default-features = false, features = [
-    "rwh_05",
+winit = { version = "0.30", default-features = false, features = [
+    "rwh_06",
     "x11",
     "wayland",
     "wayland-dlopen",

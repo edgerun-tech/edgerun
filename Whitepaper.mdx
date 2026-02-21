@@ -1,0 +1,425 @@
+# Edgerun Whitepaper (Phase 1)
+
+Document version: `edgerun-phase1-spec v1.1`  
+Scope: Bonded redundant execution (no fraud-proof VM, no rollup).  
+Chain: Solana L1 program for escrow, stake, payout, and slashing.  
+Execution: Deterministic WASM runtime with restricted hostcalls.  
+Verification: N-of-M redundant outputs with cryptographic attestations.
+
+## 1. Executive Summary
+
+Edgerun is a deterministic compute protocol that settles on Solana.
+
+In Phase 1, correctness is enforced by economic guarantees and redundancy:
+- A job is executed by a committee of workers.
+- Workers attest to their output hash with Ed25519 signatures.
+- The protocol finalizes when quorum agrees on the same output hash.
+- Contradictory workers are slashable once a winning output is finalized.
+
+Phase 1 is intentionally practical:
+- On-chain logic handles stake, escrow, and settlement.
+- Off-chain scheduler handles assignment and operations.
+- Deterministic runtime minimizes disagreement from execution drift.
+
+## 2. Core Concepts
+
+## 2.1 Definitions
+
+- Job: Request to execute WASM with input bytes under a specific runtime version.
+- Bundle: Immutable payload containing WASM, input, limits, and metadata.
+- BundleHash: `blake3(bundle_bytes)` (32 bytes).
+- OutputHash: `blake3(output_bytes)` (32 bytes).
+- ResultDigest: `blake3(job_id || bundle_hash || output_hash || runtime_id)` (32 bytes).
+- Attestation: Ed25519 signature by worker over `ResultDigest`.
+- Committee: Set of workers assigned to a job.
+- Quorum: Minimum number of matching attestations required to finalize.
+
+## 2.2 Cryptographic Primitives (Frozen)
+
+- Hash: BLAKE3-256 everywhere.
+- Signature: Ed25519.
+
+## 3. Protocol Lifecycle
+
+## 3.1 High-Level Flow
+
+1. Client creates bundle and posts job escrow on-chain.
+2. Scheduler assigns worker committee and locks required stake.
+3. Workers fetch bundle, verify hash, run deterministic runtime, submit attested result hashes.
+4. Scheduler (or future permissionless caller) finalizes once quorum is reached.
+5. Winners are paid from escrow minus protocol fee.
+6. Contradictory workers can be slashed.
+7. If quorum is not reached by deadline, job is canceled and escrow is refunded.
+
+## 3.2 Finality Behavior
+
+A job finalizes only if at least `quorum` workers submit the same `output_hash`.
+
+- Match case: finalize with winning hash.
+- Mismatch case: no finalize until quorum exists or deadline expires.
+- Timeout case: cancel after deadline, refund client, unlock stake.
+
+## 4. Deterministic Runtime Specification
+
+## 4.1 Determinism Requirements (MUST)
+
+- WASM target: `wasm32`.
+- No floating point opcodes; reject module at load time if present.
+- No nondeterministic hostcalls (time, rng, filesystem, networking, threads).
+- Single-threaded deterministic memory model.
+- Enforce job-level memory and instruction limits (capped by global limits).
+
+## 4.2 Allowed Imports (ONLY)
+
+Module import namespace must be exactly `edgerun` and only:
+
+- `edgerun.input_len() -> i32`
+- `edgerun.read_input(ptr: i32, len: i32) -> i32`
+- `edgerun.write_output(ptr: i32, len: i32) -> i32`
+
+Any other import causes bundle rejection.
+
+## 4.3 Entrypoint and Output Contract
+
+- Module MUST export `_start() -> ()`.
+- Runtime invokes `_start` exactly once.
+- Module MUST call `write_output` exactly once.
+- Multiple writes or no write is treated as job failure.
+
+## 4.4 Runtime Identity
+
+- `runtime_id` is a 32-byte identifier (BLAKE3 of canonical runtime artifact/identity).
+- Workers MUST reject jobs with unknown `runtime_id`.
+- Scheduler MUST assign workers that advertise support for that `runtime_id`.
+
+## 5. Bundle Format (Canonical)
+
+Bundle bytes are canonical CBOR (RFC 8949 canonical encoding):
+
+```cbor
+{
+  "v": 1,
+  "runtime_id": bytes32,
+  "wasm": bytes,
+  "input": bytes,
+  "limits": {
+    "max_memory_bytes": u32,
+    "max_instructions": u64
+  },
+  "meta": {
+    "content_type": tstr?,
+    "note": tstr?
+  }
+}
+```
+
+Bundle validation rules:
+- Canonical CBOR must decode.
+- `v == 1`.
+- `runtime_id` matches job/runtime assignment.
+- WASM passes import and floating-point checks.
+- Limits are within global caps.
+- Computed `bundle_hash` must equal on-chain `job.bundle_hash`.
+
+Storage service MUST serve exact bytes that hash to `bundle_hash`.
+
+## 6. System Architecture
+
+## 6.1 Components
+
+- Solana program: escrow, staking, finalization, slashing.
+- Scheduler service (centralized in MVP): assignment/orchestration.
+- Worker daemon: execution + result submission.
+- Bundle storage: immutable content-addressed retrieval.
+
+## 6.2 Responsibility Split
+
+| Component | Responsibility |
+|---|---|
+| Solana program | Source of truth for funds, stake locks, settlement state |
+| Scheduler | Committee assignment, timeout handling, operational finalization |
+| Worker daemon | Execute deterministically, sign attestations, submit on-chain |
+| Storage | Return exact bundle bytes by hash |
+
+## 7. Solana Program Specification (Phase 1)
+
+## 7.1 PDAs
+
+- `GlobalConfig`: seeds `['config']`
+- `Treasury` (optional): seeds `['treasury']`
+- `WorkerStake`: seeds `['worker_stake', worker_pubkey]`
+- `Job`: seeds `['job', job_id_bytes]`
+- `JobResult` (recommended): seeds `['job_result', job_id, worker_pubkey]`
+
+`JobResult` PDAs are recommended to keep the `Job` account fixed-size.
+
+## 7.2 Token Model
+
+- Settlement and staking currency: native SOL.
+
+## 7.3 Core Accounts
+
+### `GlobalConfig`
+
+- `admin: Pubkey`
+- `scheduler_authority: Pubkey`
+- `min_worker_stake_lamports: u64`
+- `min_challenger_stake_lamports: u64`
+- `protocol_fee_bps: u16`
+- `committee_size: u8` (default 3)
+- `quorum: u8` (default 2)
+- `challenge_window_slots: u64`
+- `max_memory_bytes: u32`
+- `max_instructions: u64`
+- `allowed_runtime_root: [u8;32]` (optional gating)
+- `paused: bool`
+
+### `WorkerStake`
+
+- `worker: Pubkey`
+- `total_stake_lamports: u64`
+- `locked_stake_lamports: u64`
+- `reputation: i32` (optional)
+- `status: u8` (`0 active`, `1 jailed`)
+
+### `Job`
+
+- `job_id: [u8;32]`
+- `client: Pubkey`
+- `escrow_lamports: u64`
+- `bundle_hash: [u8;32]`
+- `runtime_id: [u8;32]`
+- `max_memory_bytes: u32`
+- `max_instructions: u64`
+- `committee_size: u8`
+- `quorum: u8`
+- `created_slot: u64`
+- `deadline_slot: u64`
+- `assigned_workers: [Pubkey; 3]` (Phase 1 fixed committee size)
+- `status: u8` (`Posted`, `Assigned`, `Finalized`, `Cancelled`, `Slashed`)
+
+### `JobResult`
+
+- `job_id: [u8;32]`
+- `worker: Pubkey`
+- `output_hash: [u8;32]`
+- `attestation_sig: [u8;64]`
+- `submitted_slot: u64`
+
+## 7.4 Stake Lock Formula (Frozen)
+
+For each assigned worker:
+
+```text
+required_lock = max(min_worker_stake, escrow_lamports * 3 / 2 / committee_size)
+```
+
+This deterministic formula is fixed for Phase 1.
+
+## 7.5 Instruction Set
+
+1. `initialize_config(...)`
+- Create `GlobalConfig`.
+- Callable once.
+
+2. `update_config(...)`
+- Admin-only config updates.
+
+3. `register_worker_stake()`
+- Create worker stake account.
+
+4. `deposit_stake(amount_lamports)`
+- Transfer SOL to stake vault/account and increase total stake.
+
+5. `withdraw_stake(amount_lamports)`
+- Allowed only when post-withdraw stake remains >= locked stake.
+
+6. `post_job(job_id, bundle_hash, runtime_id, limits, ...)`
+- Validate limits against global caps.
+- Transfer escrow from client.
+- Create `Job`, set deadline.
+
+7. `assign_workers(job_id, workers[3])`
+- Scheduler-authority only.
+- Validate worker eligibility and lock required stake.
+- Move job to `Assigned`.
+
+8. `submit_result(job_id, output_hash, attestation_sig)`
+- Assigned worker only.
+- Verify Ed25519 signature over `ResultDigest`.
+- Record result in `JobResult` PDA.
+
+9. `finalize_job(job_id)`
+- Scheduler-authority for MVP (permissionless later).
+- Identify winning `output_hash` at quorum.
+- Payout winners and protocol fee.
+- Unlock winner stake.
+
+10. `slash_worker(job_id, worker)`
+- Slash worker that submitted contradictory output hash.
+- MVP distribution: `100%` slash to treasury.
+
+11. `cancel_expired_job(job_id)`
+- After deadline if no quorum.
+- Full escrow refund to client.
+- Unlock stake and mark canceled.
+
+## 7.6 Payout and Slashing Policy (Frozen)
+
+- Protocol fee: `protocol_fee_bps` from escrow.
+- Remaining escrow is split equally among winning workers.
+- Only workers matching winning hash are winners.
+- Contradictory submitted result is slashable.
+- Missing submission is not slashable in Phase 1 (reputation/off-chain handling).
+
+## 8. Off-Chain API (Scheduler MVP)
+
+Transport: HTTPS + JSON.
+
+## 8.1 Worker Heartbeat
+
+`POST /v1/worker/heartbeat`
+
+Key payload fields:
+- `worker_pubkey`
+- `runtime_ids`
+- `version`
+- `capacity`
+- request `signature`
+
+## 8.2 Assignment Polling
+
+`GET /v1/worker/assignments?worker_pubkey=...`
+
+Returns pending jobs with:
+- `job_id`, `bundle_hash`, `bundle_url`, `runtime_id`, limits, deadline, chain metadata.
+
+## 8.3 Optional Observability Result
+
+`POST /v1/worker/result`
+
+For telemetry only; canonical settlement remains on-chain.
+
+## 8.4 Client Job Creation
+
+`POST /v1/job/create`
+
+Returns:
+- `job_id`
+- `bundle_hash`
+- `bundle_url`
+- posting transaction material/instructions
+
+## 9. Worker Execution Algorithm
+
+For each assignment:
+
+1. Download `bundle_bytes`.
+2. Verify `blake3(bundle_bytes) == bundle_hash`.
+3. Decode canonical CBOR and validate runtime/import/limits.
+4. Execute deterministic runtime with enforced limits.
+5. Capture output bytes from exactly one `write_output`.
+6. Compute `output_hash`.
+7. Compute `result_digest`.
+8. Sign with worker Ed25519 key.
+9. Submit on-chain with Ed25519 verification instruction.
+
+Timeout behavior (Phase 1):
+- Worker may abort local execution on local safety timeout.
+- Non-submission is not slashable in Phase 1.
+
+## 10. Security Model
+
+## 10.1 Enforced by Cryptography and Chain State
+
+- Workers cannot repudiate signed attestations.
+- Contradictions are objective and slashable after finalization.
+- Quorum logic is deterministic and on-chain-verifiable.
+
+## 10.2 Not Yet Trustless in Phase 1
+
+- If committee colludes on the same wrong output hash, Phase 1 cannot detect truth.
+- Mitigations in Phase 1: stake requirements, committee diversity, operations/reputation controls.
+- Future phases can add challenge/dispute mechanisms and stronger verifier roles.
+
+## 10.3 Anti-Griefing
+
+- Only assigned workers may submit results.
+- Finalization is scheduler-gated in MVP to reduce spam.
+- Permissionless finalization can be enabled after hardening.
+
+## 11. Economics (Phase 1, Frozen)
+
+- Payment currency: SOL.
+- `committee_size = 3`.
+- `quorum = 2`.
+- `protocol_fee_bps = 300` (default 3%).
+- Stake lock uses frozen formula in section 7.4.
+- Slashing applies to contradictory submissions only.
+
+## 12. Testing Requirements
+
+## 12.1 Determinism Tests
+
+- Run identical bundle across 10 heterogeneous machines; require identical output hash.
+- Fuzz randomized inputs across at least 1,000 runs.
+
+## 12.2 On-Chain Tests
+
+Required coverage:
+- escrow transfer correctness on `post_job`
+- stake lock/unlock correctness
+- signature verification failures
+- non-assigned submit rejection
+- quorum success and mismatch behavior
+- timeout cancellation/refund path
+- slashing balance effects
+
+## 12.3 End-to-End Tests
+
+- Full flow: client -> scheduler -> workers -> chain -> finalization.
+- Fault injection: one worker returns contradictory output; verify slash path.
+
+## 13. Production Deployment Checklist
+
+- Deploy program to devnet, then mainnet.
+- Run scheduler with:
+  - chain watcher
+  - job state database
+  - worker heartbeat tracking
+- Run immutable content-addressed storage by bundle hash.
+- Ship worker daemon as reproducible pinned binary.
+- Monitor:
+  - p50/p95 job latency
+  - worker failure rate
+  - mismatch rate
+  - treasury fee inflow
+
+## 14. Build Order (Implementation Sequence)
+
+1. Solana program: config, stake, jobs, assignment, result submission, finalization, cancel, slash.
+2. Runtime: canonical bundle parsing, WASM validation, deterministic execution, CLI surface.
+3. Worker daemon: heartbeat, assignment polling, runtime invocation, on-chain submission.
+4. Scheduler: worker registry, job creation, assignment, chain watch, finalize/cancel orchestration.
+5. Storage: immutable content-addressed bundle serving.
+6. Launch: devnet soak, load testing, mainnet rollout.
+
+## 15. Explicit Non-Goals in Phase 1
+
+- No fraud-proof VM.
+- No rollup proving layer.
+- No full permissionless scheduler.
+- No slash for non-submission.
+
+## 16. Frozen Decisions (Single Source of Truth)
+
+- Hash: BLAKE3-256.
+- Signature: Ed25519.
+- Execution: deterministic `wasm32`, no FP, restricted hostcalls.
+- Committee: 3.
+- Quorum: 2.
+- Currency: SOL.
+- On-chain result payload: output hash only.
+- MVP scheduler authority: centralized for assignment and finalization.
+
+These decisions are locked for Phase 1 to avoid protocol drift during implementation.
