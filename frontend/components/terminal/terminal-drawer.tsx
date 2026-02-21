@@ -1,14 +1,17 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js'
+import QRCode from 'qrcode'
 import {
   ensureTerminalDrawerStore,
   getTerminalDrawerState,
   getTerminalPaneSrc,
   subscribeTerminalDrawer,
   terminalDrawerActions,
+  type DeviceStatus,
   type TerminalDrawerState,
   type TerminalSplitMode,
   type TerminalTab
 } from '../../lib/terminal-drawer-store'
+import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 
 function splitClassName(tab: TerminalTab): string {
   if (tab.split === 'split-cols') return 'terminal-grid-split-cols'
@@ -16,9 +19,24 @@ function splitClassName(tab: TerminalTab): string {
   return 'terminal-grid-split-none'
 }
 
+function statusBadge(status: DeviceStatus): string {
+  if (status === 'online') return 'text-emerald-400'
+  if (status === 'offline') return 'text-rose-400'
+  return 'text-muted-foreground'
+}
+
 export function TerminalDrawer() {
   const [state, setState] = createSignal<TerminalDrawerState>(getTerminalDrawerState())
   const [dragging, setDragging] = createSignal(false)
+  const [wallet, setWallet] = createSignal<WalletSessionState>(readWalletSession())
+  const [deviceNameInput, setDeviceNameInput] = createSignal('')
+  const [deviceUrlInput, setDeviceUrlInput] = createSignal('')
+  const [qrDeviceUrl, setQrDeviceUrl] = createSignal('')
+  const [qrImageDataUrl, setQrImageDataUrl] = createSignal('')
+  const [tailscaleImporting, setTailscaleImporting] = createSignal(false)
+  const [tailscaleImportNote, setTailscaleImportNote] = createSignal('')
+
+  const walletConnected = createMemo(() => wallet().connected)
 
   const activeTab = createMemo(() => {
     const current = state()
@@ -26,6 +44,7 @@ export function TerminalDrawer() {
   })
 
   const drawerHeight = createMemo(() => {
+    if (!walletConnected()) return 0
     const current = state()
     if (!current.open) return 48
     return Math.round(window.innerHeight * current.heightRatio)
@@ -35,19 +54,117 @@ export function TerminalDrawer() {
     terminalDrawerActions.setSplit(mode)
   }
 
+  const refreshDeviceStatus = async () => {
+    const connected = untrack(() => walletConnected())
+    if (!connected) return
+    const devices = untrack(() => state().devices)
+    await Promise.all(devices.map(async (device) => {
+      try {
+        const url = new URL('/v1/device/identity', device.baseUrl)
+        const response = await fetch(url.toString(), { method: 'GET' })
+        terminalDrawerActions.markDeviceStatus(device.id, response.ok ? 'online' : 'offline')
+      } catch {
+        terminalDrawerActions.markDeviceStatus(device.id, 'offline')
+      }
+    }))
+  }
+
+  const importTailscaleDevices = async () => {
+    if (tailscaleImporting()) return
+    setTailscaleImporting(true)
+    setTailscaleImportNote('')
+    const endpoints = [
+      'http://127.0.0.1:49201/v1/tailscale/devices',
+      'http://localhost:49201/v1/tailscale/devices'
+    ]
+
+    let payload: { ok?: boolean; devices?: Array<{ name?: string; base_url?: string; baseUrl?: string }>; error?: string } | null = null
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, { method: 'GET' })
+        if (!response.ok) continue
+        payload = await response.json() as { ok?: boolean; devices?: Array<{ name?: string; base_url?: string; baseUrl?: string }>; error?: string }
+        if (payload?.ok) break
+      } catch {
+        // try next localhost variant
+      }
+    }
+
+    if (!payload?.ok || !Array.isArray(payload.devices)) {
+      setTailscaleImportNote('Tailscale bridge unavailable. Start: edgerun tailscale bridge')
+      setTailscaleImporting(false)
+      return
+    }
+
+    const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
+    let imported = 0
+    for (const item of payload.devices) {
+      const baseUrl = (item.base_url || item.baseUrl || '').trim()
+      if (!baseUrl || existing.has(baseUrl)) continue
+      const name = (item.name || 'Tailscale Device').trim()
+      terminalDrawerActions.addDevice(name, baseUrl)
+      existing.add(baseUrl)
+      imported += 1
+    }
+    await refreshDeviceStatus()
+    setTailscaleImportNote(imported > 0 ? `Imported ${imported} device${imported === 1 ? '' : 's'} from Tailscale.` : 'No new Tailscale devices to import.')
+    setTailscaleImporting(false)
+  }
+
+  const restoreLastDevice = () => {
+    terminalDrawerActions.restoreLastDeviceOnActiveTab()
+  }
+
+  createEffect(() => {
+    const target = qrDeviceUrl().trim()
+    if (!target) {
+      setQrImageDataUrl('')
+      return
+    }
+    void QRCode.toDataURL(target, {
+      width: 220,
+      margin: 1,
+      errorCorrectionLevel: 'M'
+    })
+      .then((dataUrl: string) => setQrImageDataUrl(dataUrl))
+      .catch(() => setQrImageDataUrl(''))
+  })
+
   createEffect(() => {
     if (typeof document === 'undefined') return
+    if (!walletConnected()) {
+      document.documentElement.style.removeProperty('--terminal-drawer-height')
+      return
+    }
     document.documentElement.style.setProperty('--terminal-drawer-height', `${drawerHeight()}px`)
   })
 
   onMount(() => {
     ensureTerminalDrawerStore()
     setState(getTerminalDrawerState())
+    const initialWallet = readWalletSession()
+    setWallet(initialWallet)
+    if (initialWallet.connected) {
+      restoreLastDevice()
+    }
 
     const unsubscribe = subscribeTerminalDrawer((next) => setState(next))
 
+    const onWalletSession = (event: Event) => {
+      const custom = event as CustomEvent<WalletSessionState>
+      const nextWallet = custom.detail || readWalletSession()
+      setWallet(nextWallet)
+      if (nextWallet.connected) {
+        restoreLastDevice()
+        void refreshDeviceStatus()
+      }
+      if (!nextWallet.connected) {
+        terminalDrawerActions.setOpen(false)
+      }
+    }
+
     const onPointerMove = (ev: PointerEvent) => {
-      if (!dragging()) return
+      if (!dragging() || !walletConnected()) return
       const minPx = Math.round(window.innerHeight * 0.2)
       const maxPx = Math.round(window.innerHeight * 0.85)
       const nextHeight = window.innerHeight - ev.clientY
@@ -55,18 +172,19 @@ export function TerminalDrawer() {
       terminalDrawerActions.setHeightRatio(clamped / window.innerHeight)
     }
 
-    const onPointerUp = () => {
-      setDragging(false)
-    }
-
-    const onResize = () => {
-      setState(getTerminalDrawerState())
-    }
+    const onPointerUp = () => setDragging(false)
+    const onResize = () => setState(getTerminalDrawerState())
 
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointercancel', onPointerUp)
     window.addEventListener('resize', onResize)
+    window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
+
+    void refreshDeviceStatus()
+    const timer = window.setInterval(() => {
+      void refreshDeviceStatus()
+    }, 12000)
 
     onCleanup(() => {
       unsubscribe()
@@ -75,17 +193,20 @@ export function TerminalDrawer() {
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
+      window.clearInterval(timer)
     })
   })
 
   return (
-    <section
-      id="edgerun-terminal-drawer"
-      aria-label="Terminal Drawer"
-      aria-hidden={!state().open}
-      data-open={state().open ? 'true' : 'false'}
-      class="terminal-drawer fixed inset-x-0 bottom-0 z-[70] border-t border-border/80 bg-black/90 backdrop-blur"
-    >
+    <Show when={walletConnected()}>
+      <section
+        id="edgerun-terminal-drawer"
+        aria-label="Terminal Drawer"
+        aria-hidden={!state().open}
+        data-open={state().open ? 'true' : 'false'}
+        class="terminal-drawer fixed inset-x-0 bottom-0 z-[70] border-t border-border/80 bg-black/90 backdrop-blur"
+      >
       <Show when={state().open}>
         <button
           type="button"
@@ -99,7 +220,7 @@ export function TerminalDrawer() {
         />
       </Show>
 
-      <div class="flex h-full flex-col">
+      <div class="flex h-full min-h-0 flex-col">
         <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2">
           <div class="flex flex-1 items-center gap-1 overflow-x-auto">
             <For each={state().tabs}>{(tab) => (
@@ -121,76 +242,171 @@ export function TerminalDrawer() {
           </div>
 
           <div class="flex items-center gap-1">
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => splitChange('split-cols')}
-            >
-              Split V
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => splitChange('split-rows')}
-            >
-              Split H
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => splitChange('none')}
-            >
-              Single
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => terminalDrawerActions.closeActiveTab()}
-            >
-              Close Tab
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-              aria-label="Close terminal drawer"
-              onClick={() => terminalDrawerActions.toggle()}
-            >
-              Hide
-            </button>
+            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('split-cols')}>Split V</button>
+            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('split-rows')}>Split H</button>
+            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('none')}>Single</button>
+            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => terminalDrawerActions.closeActiveTab()}>Close Tab</button>
+            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" aria-label="Close terminal drawer" onClick={() => terminalDrawerActions.toggle()}>Hide</button>
           </div>
         </div>
 
         <Show when={state().open} fallback={<div class="flex h-full items-center px-3 text-xs text-muted-foreground">Terminal hidden. Use the navbar toggle to open.</div>}>
-          <div class="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-            <span class="text-[11px] uppercase tracking-wide text-muted-foreground">Base URL</span>
-            <input
-              id="global-terminal-base-url"
-              type="text"
-              value={state().baseUrl}
-              class="h-8 w-full max-w-xl rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
-              onChange={(ev) => terminalDrawerActions.setBaseUrl(ev.currentTarget.value)}
-            />
-          </div>
-
-          <div class="min-h-0 flex-1 p-2">
-            <Show when={activeTab()}>
-              {(tab) => (
-                <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
-                  <For each={tab().panes}>{(pane) => (
-                    <iframe
-                      title={`Terminal ${pane.id}`}
-                      class="h-full min-h-0 w-full rounded-md border border-border/70 bg-black"
-                      src={getTerminalPaneSrc(pane.baseUrl || state().baseUrl, pane.id)}
-                      loading="eager"
-                      allow="clipboard-read; clipboard-write"
-                    />
-                  )}</For>
+          <div class="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] gap-0">
+            <aside class="border-r border-border/70 bg-card/30 p-3">
+              <div class="mb-2 flex items-center justify-between">
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Connected Devices</p>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                    onClick={() => void refreshDeviceStatus()}
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+                    disabled={tailscaleImporting()}
+                    onClick={() => void importTailscaleDevices()}
+                  >
+                    {tailscaleImporting() ? 'Importing...' : 'Import TS'}
+                  </button>
                 </div>
-              )}
-            </Show>
+              </div>
+              <Show when={tailscaleImportNote().length > 0}>
+                <p class="mb-2 text-[11px] text-muted-foreground">{tailscaleImportNote()}</p>
+              </Show>
+
+              <div class="mb-3 space-y-2">
+                <input
+                  type="text"
+                  value={deviceNameInput()}
+                  placeholder="Device name"
+                  class="h-8 w-full rounded-md border border-border bg-background/80 px-2 text-xs text-foreground"
+                  onInput={(ev) => setDeviceNameInput(ev.currentTarget.value)}
+                />
+                <input
+                  type="text"
+                  value={deviceUrlInput()}
+                  placeholder="https://device.edgerun.tech"
+                  class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
+                  onInput={(ev) => setDeviceUrlInput(ev.currentTarget.value)}
+                />
+                <button
+                  type="button"
+                  class="h-8 w-full rounded-md border border-border/70 bg-card/70 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => {
+                    terminalDrawerActions.addDevice(deviceNameInput(), deviceUrlInput())
+                    setDeviceNameInput('')
+                    setDeviceUrlInput('')
+                    void refreshDeviceStatus()
+                  }}
+                >
+                  Add Device
+                </button>
+              </div>
+
+              <div class="space-y-2 overflow-y-auto pr-1">
+                <Show when={state().devices.length > 0} fallback={<p class="text-xs text-muted-foreground">No devices yet. Add a relay URL, then connect a tab.</p>}>
+                  <For each={state().devices}>{(device) => (
+                    <div class="rounded-md border border-border/70 bg-background/40 p-2">
+                      <div class="flex items-center justify-between gap-2">
+                        <p class="truncate text-xs font-medium text-foreground">{device.name}</p>
+                        <span class={`text-[10px] uppercase ${statusBadge(device.status)}`}>{device.status}</span>
+                      </div>
+                      <p class="mt-1 truncate font-mono text-[10px] text-muted-foreground">{device.baseUrl}</p>
+                      <div class="mt-2 flex gap-1">
+                        <button
+                          type="button"
+                          class="flex-1 rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => terminalDrawerActions.connectActiveTabToDevice(device.id)}
+                        >
+                          Connect
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => setQrDeviceUrl(device.baseUrl)}
+                        >
+                          QR
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() => terminalDrawerActions.removeDevice(device.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}</For>
+                </Show>
+              </div>
+
+              <Show when={qrImageDataUrl().length > 0}>
+                <div class="mt-3 rounded-md border border-border/70 bg-background/40 p-2">
+                  <p class="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">Device QR</p>
+                  <img src={qrImageDataUrl()} alt="Device URL QR code" class="mx-auto h-40 w-40 rounded border border-border/70 bg-white p-1" />
+                  <p class="mt-2 truncate font-mono text-[10px] text-muted-foreground">{qrDeviceUrl()}</p>
+                  <div class="mt-2 flex gap-1">
+                    <button
+                      type="button"
+                      class="flex-1 rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(qrDeviceUrl())
+                        } catch {
+                          // ignore copy failures
+                        }
+                      }}
+                    >
+                      Copy URL
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+                      onClick={() => setQrDeviceUrl('')}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </aside>
+
+            <div class="min-h-0 p-2">
+              <Show when={activeTab()}>
+                {(tab) => (
+                  <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
+                    <For each={tab().panes}>{(pane) => {
+                      const src = createMemo(() => getTerminalPaneSrc(pane.baseUrl, pane.id))
+                      return (
+                        <Show
+                          when={src().length > 0}
+                          fallback={
+                            <div class="flex h-full min-h-0 items-center justify-center rounded-md border border-dashed border-border/70 bg-background/40 p-4 text-center text-xs text-muted-foreground">
+                              Select a connected device to open this pane.
+                            </div>
+                          }
+                        >
+                          <iframe
+                            title={`Terminal ${pane.id}`}
+                            class="h-full min-h-0 w-full rounded-md border border-border/70 bg-black"
+                            src={src()}
+                            loading="eager"
+                            allow="clipboard-read; clipboard-write"
+                          />
+                        </Show>
+                      )
+                    }}</For>
+                  </div>
+                )}
+              </Show>
+            </div>
           </div>
         </Show>
       </div>
-    </section>
+      </section>
+    </Show>
   )
 }

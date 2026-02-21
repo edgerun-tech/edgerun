@@ -4,8 +4,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -111,7 +111,9 @@ pub enum HardwareError {
     InvalidIdentity,
 }
 
-pub fn load_or_create_device_signer(mode: HardwareSecurityMode) -> Result<DeviceSigner, HardwareError> {
+pub fn load_or_create_device_signer(
+    mode: HardwareSecurityMode,
+) -> Result<DeviceSigner, HardwareError> {
     let record_path = default_record_path()?;
     if let Some(existing) = read_record(&record_path)? {
         if let Ok(signer) = signer_from_record(&existing, mode) {
@@ -253,8 +255,8 @@ fn write_record(path: &Path, record: &DeviceIdentityRecord) -> Result<(), Hardwa
         fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
             .map_err(|e| HardwareError::Io(e.to_string()))?;
     }
-    let payload = serde_json::to_string_pretty(record)
-        .map_err(|e| HardwareError::Parse(e.to_string()))?;
+    let payload =
+        serde_json::to_string_pretty(record).map_err(|e| HardwareError::Parse(e.to_string()))?;
     fs::write(path, payload).map_err(|e| HardwareError::Io(e.to_string()))
 }
 
@@ -303,7 +305,15 @@ fn tpm_seal_seed(nv_index: u32, seed: &[u8; 32]) -> Result<(), HardwareError> {
 
     if !exists.status.success() {
         let define = Command::new("tpm2_nvdefine")
-            .args([&index_arg, "-C", "o", "-s", "32", "-a", "ownerread|ownerwrite"])
+            .args([
+                &index_arg,
+                "-C",
+                "o",
+                "-s",
+                "32",
+                "-a",
+                "ownerread|ownerwrite",
+            ])
             .output()
             .map_err(|e| HardwareError::TpmCommand(format!("nvdefine spawn failed: {e}")))?;
         if !define.status.success() {

@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::fs;
 use std::io::{self, Write};
-use std::net::TcpListener;
+use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
+use axum::http::{HeaderValue, Method};
+use axum::{Json, Router, extract::State, response::IntoResponse, routing::get};
 use clap::{Parser, Subcommand, ValueEnum};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::process::Command;
 use tokio::time::{sleep, timeout};
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun", about = "EdgeRun project orchestration CLI")]
@@ -68,6 +72,10 @@ enum Commands {
     Storage {
         #[command(subcommand)]
         command: StorageCommand,
+    },
+    Tailscale {
+        #[command(subcommand)]
+        command: TailscaleCommand,
     },
 }
 
@@ -129,6 +137,18 @@ enum StorageCommand {
     CiSmoke,
 }
 
+#[derive(Subcommand, Debug, Clone)]
+enum TailscaleCommand {
+    Bridge {
+        #[arg(long, default_value = "127.0.0.1:49201")]
+        listen: SocketAddr,
+        #[arg(long, default_value_t = 8080)]
+        term_port: u16,
+        #[arg(long, default_value_t = false)]
+        include_offline: bool,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, Default)]
 struct AppConfig {
     #[serde(default)]
@@ -150,6 +170,20 @@ struct IntegrationConfig {
     require_worker_signatures: Option<bool>,
     require_result_attestation: Option<bool>,
     quorum_requires_attestation: Option<bool>,
+}
+
+#[derive(Clone, Debug)]
+struct TailscaleBridgeState {
+    term_port: u16,
+    include_offline: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct TailscaleBridgeDevice {
+    name: String,
+    base_url: String,
+    online: bool,
+    source: &'static str,
 }
 
 const CLI_BUILD_NUMBER: &str = match option_env!("EDGERUN_BUILD_NUMBER") {
@@ -222,6 +256,7 @@ async fn main() -> Result<()> {
             validate_external_security_review(&p)?
         }
         Commands::Storage { command } => run_storage_command(&root, command)?,
+        Commands::Tailscale { command } => run_tailscale_command(command).await?,
     }
 
     Ok(())
@@ -275,7 +310,22 @@ async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bool) 
         return Ok(());
     }
 
-    if command_exists("act") {
+    let act_supported_job = matches!(
+        job_name.as_str(),
+        "all"
+            | "build-timing-main"
+            | "rust-checks"
+            | "coverage"
+            | "integration"
+            | "runtime-determinism"
+            | "runtime-calibration"
+            | "runtime-slo"
+            | "runtime-fuzz-sanity"
+            | "runtime-ub-safety"
+            | "runtime-security"
+            | "program-localnet"
+    );
+    if command_exists("act") && act_supported_job {
         let mut args = vec![
             event,
             "-W".to_string(),
@@ -292,7 +342,9 @@ async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bool) 
 
     match job_name.as_str() {
         "all" => {
+            run_spdx_check_sync(root)?;
             run_rust_checks_sync(root)?;
+            run_matrix_validation_check_sync(root)?;
             run_future_with_timeout(
                 "integration scheduler api",
                 run_integration_scheduler_api(root),
@@ -323,6 +375,12 @@ async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bool) 
             )?;
             Ok(())
         }
+        "spdx-check" => run_spdx_check_sync(root),
+        "matrix-check" => run_matrix_validation_check_sync(root),
+        "clean-artifacts" => run_clean_artifacts_sync(root),
+        "build-runtime-web" => run_build_runtime_web_sync(root, true),
+        "verify" => run_verify_sync(root),
+        "build-timing-main" => run_build_timing_sync(root),
         "rust-checks" => run_rust_checks_sync(root),
         "integration" => {
             run_future_with_timeout(
@@ -485,6 +543,26 @@ async fn run_named_task_sync_blocking(root: PathBuf, task: String) -> Result<()>
 
 fn run_native_task_sync(root: &Path, task: &str) -> Result<bool> {
     match task {
+        "spdx-check" => {
+            run_spdx_check_sync(root)?;
+            Ok(true)
+        }
+        "matrix-check" => {
+            run_matrix_validation_check_sync(root)?;
+            Ok(true)
+        }
+        "clean-artifacts" => {
+            run_clean_artifacts_sync(root)?;
+            Ok(true)
+        }
+        "build-runtime-web" => {
+            run_build_runtime_web_sync(root, true)?;
+            Ok(true)
+        }
+        "verify" => {
+            run_verify_sync(root)?;
+            Ok(true)
+        }
         "doctor" => {
             run_doctor_sync(root)?;
             Ok(true)
@@ -670,6 +748,408 @@ fn run_rust_checks_sync(root: &Path) -> Result<()> {
         root,
         false,
     )
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<()> {
+    if path.is_dir() {
+        fs::remove_dir_all(path)
+            .with_context(|| format!("failed to remove directory: {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    if path.is_file() {
+        fs::remove_file(path)
+            .with_context(|| format!("failed to remove file: {}", path.display()))?;
+    }
+    Ok(())
+}
+
+fn run_clean_artifacts_sync(root: &Path) -> Result<()> {
+    remove_dir_if_exists(&root.join("out"))?;
+    remove_dir_if_exists(&root.join("target"))?;
+    remove_dir_if_exists(&root.join("test-ledger"))?;
+    remove_dir_if_exists(&root.join("frontend/test-results"))?;
+    remove_dir_if_exists(&root.join("frontend/playwright-report"))?;
+    remove_file_if_exists(&root.join("solana-validator.log"))?;
+    println!("cleaned artifacts");
+    Ok(())
+}
+
+fn run_build_runtime_web_sync(root: &Path, sync_frontend: bool) -> Result<()> {
+    let crate_dir = root.join("crates/edgerun-runtime-web");
+    let pkg_dir = crate_dir.join("pkg-web");
+    let frontend_out = root.join("frontend/public/wasm/edgerun-runtime-web");
+
+    ensure(
+        command_exists("wasm-pack"),
+        "wasm-pack is required (cargo install wasm-pack)",
+    )?;
+    fs::create_dir_all(&pkg_dir)?;
+    run_program_sync(
+        "Build runtime web wasm package",
+        "wasm-pack",
+        &[
+            "build",
+            "--target",
+            "web",
+            "--release",
+            "--out-dir",
+            "pkg-web",
+        ],
+        &crate_dir,
+        false,
+    )?;
+
+    if sync_frontend && root.join("frontend").is_dir() {
+        fs::create_dir_all(&frontend_out)?;
+        copy_dir_contents(&pkg_dir, &frontend_out)?;
+        println!("synced wasm package to: {}", frontend_out.display());
+    }
+
+    Ok(())
+}
+
+fn copy_dir_contents(src: &Path, dst: &Path) -> Result<()> {
+    for entry in fs::read_dir(src).with_context(|| format!("failed to read {}", src.display()))? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            fs::create_dir_all(&dst_path)?;
+            copy_dir_contents(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path).with_context(|| {
+                format!(
+                    "failed to copy {} -> {}",
+                    src_path.display(),
+                    dst_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn run_verify_sync(root: &Path) -> Result<()> {
+    run_program_sync(
+        "Run worker/scheduler Rust tests",
+        "cargo",
+        &[
+            "test",
+            "-p",
+            "edgerun-worker",
+            "-p",
+            "edgerun-scheduler",
+            "--quiet",
+        ],
+        root,
+        false,
+    )?;
+    run_program_anchor_verify_sync(root)
+}
+
+fn run_program_anchor_verify_sync(root: &Path) -> Result<()> {
+    let program_root = root.join("program");
+    let env = program_tool_env(&program_root);
+
+    ensure(
+        command_exists("cargo-build-sbf"),
+        "cargo-build-sbf not found on PATH",
+    )?;
+
+    let so_path = program_root.join("target/deploy/edgerun.so");
+    let manifest = program_root.join("programs/edgerun_program/Cargo.toml");
+    let source_dir = program_root.join("programs/edgerun_program/src");
+
+    let needs_sbf = !so_path.is_file()
+        || file_is_newer(&manifest, &so_path)?
+        || any_file_newer(&source_dir, &so_path)?;
+    if needs_sbf {
+        run_program_sync_with_env(
+            "Build SBF artifact",
+            "cargo",
+            &[
+                "build-sbf",
+                "--manifest-path",
+                "programs/edgerun_program/Cargo.toml",
+                "--sbf-out-dir",
+                "target/deploy",
+            ],
+            &program_root,
+            false,
+            &env,
+        )?;
+    }
+
+    let idl_path = program_root.join("target/idl/edgerun_program.json");
+    let needs_idl = !idl_path.is_file()
+        || file_is_newer(&manifest, &idl_path)?
+        || any_file_newer(&source_dir, &idl_path)?;
+    if needs_idl {
+        fs::create_dir_all(idl_path.parent().unwrap_or(&program_root))?;
+        run_program_sync_with_env(
+            "Build Program IDL",
+            "anchor",
+            &[
+                "idl",
+                "build",
+                "-p",
+                "edgerun_program",
+                "-o",
+                "target/idl/edgerun_program.json",
+            ],
+            &program_root,
+            false,
+            &env,
+        )?;
+    }
+
+    let idl_alias = program_root.join("target/idl/edgerun.json");
+    if idl_path.is_file() && !idl_alias.exists() {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("edgerun_program.json", &idl_alias)
+            .with_context(|| format!("failed to symlink {}", idl_alias.display()))?;
+    }
+
+    run_program_sync_with_env(
+        "Anchor test --skip-build",
+        "anchor",
+        &["test", "--skip-build"],
+        &program_root,
+        false,
+        &env,
+    )
+}
+
+fn file_is_newer(candidate: &Path, base: &Path) -> Result<bool> {
+    if !candidate.is_file() || !base.is_file() {
+        return Ok(false);
+    }
+    let c = fs::metadata(candidate)?.modified()?;
+    let b = fs::metadata(base)?.modified()?;
+    Ok(c > b)
+}
+
+fn any_file_newer(dir: &Path, base: &Path) -> Result<bool> {
+    if !dir.is_dir() || !base.is_file() {
+        return Ok(false);
+    }
+    let base_ts = fs::metadata(base)?.modified()?;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in fs::read_dir(&current)? {
+            let entry = entry?;
+            let path = entry.path();
+            if entry.file_type()?.is_dir() {
+                stack.push(path);
+            } else if entry.file_type()?.is_file() {
+                let modified = fs::metadata(&path)?.modified()?;
+                if modified > base_ts {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn run_matrix_validation_check_sync(root: &Path) -> Result<()> {
+    let matrix_file = root.join("docs/WHITEPAPER_IMPLEMENTATION_MATRIX.mdx");
+    let content = fs::read_to_string(&matrix_file)
+        .with_context(|| format!("missing {}", matrix_file.display()))?;
+
+    let mut in_section = false;
+    let mut bad = Vec::new();
+    for line in content.lines() {
+        if line.starts_with("## ") {
+            in_section = line == "## Test Coverage (Implemented)";
+            continue;
+        }
+        if !in_section || !line.starts_with('|') {
+            continue;
+        }
+        if line.starts_with("| Scenario |")
+            || line
+                .chars()
+                .all(|c| c == '|' || c == '-' || c == ' ' || c == '\t')
+        {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').map(str::trim).collect();
+        if parts.len() < 5 {
+            bad.push(format!("malformed row: {line}"));
+            continue;
+        }
+        let status = parts[2];
+        let validation = parts[3];
+        if status == "Implemented" && validation.is_empty() {
+            bad.push(format!("missing Validation for Implemented row: {line}"));
+        }
+    }
+
+    if bad.is_empty() {
+        println!("matrix validation OK: all Implemented test-coverage rows include Validation references");
+        Ok(())
+    } else {
+        for issue in bad {
+            eprintln!("error: {issue}");
+        }
+        Err(anyhow!("matrix validation failed"))
+    }
+}
+
+fn expected_spdx_for_path(path: &str) -> Option<&'static str> {
+    match path {
+        p if p.starts_with("crates/edgerun-scheduler/") => Some("LicenseRef-Edgerun-Proprietary"),
+        p if p.starts_with("crates/edgerun-storage/") => Some("GPL-2.0-only"),
+        p if p.starts_with("crates/edgerun-cli/")
+            || p.starts_with("crates/edgerun-runtime/")
+            || p.starts_with("crates/edgerun-worker/")
+            || p.starts_with("program/")
+            || p.starts_with("docs/")
+            || p.starts_with("scripts/") =>
+        {
+            Some("Apache-2.0")
+        }
+        _ => None,
+    }
+}
+
+fn is_supported_spdx_source(path: &str) -> bool {
+    [
+        ".rs", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sh", ".bash", ".zsh", ".py", ".yml",
+        ".yaml", ".toml",
+    ]
+    .iter()
+    .any(|ext| path.ends_with(ext))
+}
+
+fn run_spdx_check_sync(root: &Path) -> Result<()> {
+    let output = std::process::Command::new("git")
+        .arg("ls-files")
+        .current_dir(root)
+        .output()
+        .context("failed to run git ls-files")?;
+    ensure(output.status.success(), "git ls-files failed")?;
+
+    let files = String::from_utf8(output.stdout).context("git ls-files output was not utf8")?;
+    let mut errors = 0usize;
+
+    for path in files.lines() {
+        if path.is_empty() || path.ends_with("/LICENSE") || path == "LICENSE" {
+            continue;
+        }
+        if !is_supported_spdx_source(path) {
+            continue;
+        }
+        let Some(expected) = expected_spdx_for_path(path) else {
+            continue;
+        };
+
+        let full = root.join(path);
+        let content = fs::read_to_string(&full).unwrap_or_default();
+        let actual = content
+            .lines()
+            .take(5)
+            .find(|line| line.contains("SPDX-License-Identifier:"));
+        match actual {
+            None => {
+                eprintln!("missing SPDX header: {path} (expected {expected})");
+                errors += 1;
+            }
+            Some(line) if !line.contains(&format!("SPDX-License-Identifier: {expected}")) => {
+                eprintln!("wrong SPDX header: {path}");
+                eprintln!("  expected: SPDX-License-Identifier: {expected}");
+                eprintln!("  actual:   {line}");
+                errors += 1;
+            }
+            _ => {}
+        }
+    }
+
+    if errors > 0 {
+        Err(anyhow!("SPDX check failed with {errors} issue(s)"))
+    } else {
+        println!("SPDX check passed.");
+        Ok(())
+    }
+}
+
+fn run_build_timing_sync(root: &Path) -> Result<()> {
+    let start_all = std::time::Instant::now();
+
+    let step = std::time::Instant::now();
+    run_program_sync(
+        "cargo install edgerun-cli",
+        "cargo",
+        &[
+            "install",
+            "--path",
+            "crates/edgerun-cli",
+            "--locked",
+            "--force",
+        ],
+        root,
+        false,
+    )?;
+    let install_secs = step.elapsed().as_secs();
+
+    let step = std::time::Instant::now();
+    run_program_sync(
+        "cargo check --workspace",
+        "cargo",
+        &["check", "--workspace"],
+        root,
+        false,
+    )?;
+    let check_secs = step.elapsed().as_secs();
+
+    let step = std::time::Instant::now();
+    run_program_sync(
+        "cargo build --release --workspace",
+        "cargo",
+        &["build", "--release", "--workspace"],
+        root,
+        false,
+    )?;
+    let release_secs = step.elapsed().as_secs();
+    let total_secs = start_all.elapsed().as_secs();
+
+    let out_dir = root.join("out/ci");
+    fs::create_dir_all(&out_dir)?;
+    let payload = json!({
+        "run_id": std::env::var("GITHUB_RUN_ID").unwrap_or_else(|_| "local".to_string()),
+        "sha": std::env::var("GITHUB_SHA").unwrap_or_else(|_| "local".to_string()),
+        "install_seconds": install_secs,
+        "check_seconds": check_secs,
+        "release_build_seconds": release_secs,
+        "total_seconds": total_secs
+    });
+    fs::write(
+        out_dir.join("build-timings.json"),
+        serde_json::to_vec_pretty(&payload)?,
+    )?;
+
+    println!("build timings:");
+    println!("  install_seconds={install_secs}");
+    println!("  check_seconds={check_secs}");
+    println!("  release_build_seconds={release_secs}");
+    println!("  total_seconds={total_secs}");
+
+    if let Ok(summary_path) = std::env::var("GITHUB_STEP_SUMMARY") {
+        let summary = format!(
+            "## Build Timings\n\n| Step | Seconds |\n| --- | ---: |\n| cargo install --path crates/edgerun-cli --locked --force | {install_secs} |\n| cargo check --workspace | {check_secs} |\n| cargo build --release --workspace | {release_secs} |\n| Total | {total_secs} |\n"
+        );
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(summary_path)
+            .and_then(|mut f| std::io::Write::write_all(&mut f, summary.as_bytes()));
+    }
+
+    Ok(())
 }
 
 fn run_program_anchor_build_sync(root: &Path) -> Result<()> {
@@ -948,6 +1428,182 @@ fn run_program_capture_sync_owned(
             output.status.code()
         ))
     }
+}
+
+async fn run_tailscale_command(command: TailscaleCommand) -> Result<()> {
+    match command {
+        TailscaleCommand::Bridge {
+            listen,
+            term_port,
+            include_offline,
+        } => run_tailscale_bridge(listen, term_port, include_offline).await,
+    }
+}
+
+async fn run_tailscale_bridge(listen: SocketAddr, term_port: u16, include_offline: bool) -> Result<()> {
+    if !command_exists("tailscale") {
+        return Err(anyhow!(
+            "tailscale CLI not found in PATH; install Tailscale first"
+        ));
+    }
+
+    let state = TailscaleBridgeState {
+        term_port,
+        include_offline,
+    };
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::OPTIONS])
+        .allow_headers(Any)
+        .max_age(Duration::from_secs(600));
+
+    let app = Router::new()
+        .route("/v1/tailscale/devices", get(tailscale_devices_handler))
+        .with_state(state)
+        .layer(cors);
+
+    println!(
+        "tailscale bridge listening on http://{listen} (term_port={term_port}, include_offline={include_offline})"
+    );
+    println!("endpoint: GET /v1/tailscale/devices");
+
+    let listener = tokio::net::TcpListener::bind(listen)
+        .await
+        .with_context(|| format!("failed to bind tailscale bridge on {listen}"))?;
+    axum::serve(listener, app)
+        .await
+        .context("tailscale bridge server failed")?;
+    Ok(())
+}
+
+async fn tailscale_devices_handler(
+    State(state): State<TailscaleBridgeState>,
+) -> impl IntoResponse {
+    match discover_tailscale_devices(state.term_port, state.include_offline).await {
+        Ok(devices) => (
+            [(axum::http::header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+            Json(json!({
+                "ok": true,
+                "count": devices.len(),
+                "devices": devices
+            })),
+        )
+            .into_response(),
+        Err(err) => (
+            axum::http::StatusCode::BAD_GATEWAY,
+            Json(json!({
+                "ok": false,
+                "error": err.to_string()
+            })),
+        )
+            .into_response(),
+    }
+}
+
+async fn discover_tailscale_devices(
+    term_port: u16,
+    include_offline: bool,
+) -> Result<Vec<TailscaleBridgeDevice>> {
+    let output = Command::new("tailscale")
+        .arg("status")
+        .arg("--json")
+        .stdin(Stdio::null())
+        .output()
+        .await
+        .context("failed to execute 'tailscale status --json'")?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let msg = stderr.trim();
+        if msg.is_empty() {
+            return Err(anyhow!("tailscale status returned non-zero exit code"));
+        }
+        return Err(anyhow!(msg.to_string()));
+    }
+
+    let doc: Value = serde_json::from_slice(&output.stdout)
+        .context("failed to parse tailscale status JSON")?;
+    let mut devices = Vec::new();
+    append_tailscale_entry(
+        &mut devices,
+        doc.get("Self"),
+        true,
+        term_port,
+        include_offline,
+    );
+    if let Some(peers) = doc.get("Peer").and_then(|v| v.as_object()) {
+        for peer in peers.values() {
+            append_tailscale_entry(
+                &mut devices,
+                Some(peer),
+                false,
+                term_port,
+                include_offline,
+            );
+        }
+    }
+    devices.sort_by(|a, b| a.name.cmp(&b.name));
+    devices.dedup_by(|a, b| a.base_url == b.base_url);
+    Ok(devices)
+}
+
+fn append_tailscale_entry(
+    out: &mut Vec<TailscaleBridgeDevice>,
+    entry: Option<&Value>,
+    is_self: bool,
+    term_port: u16,
+    include_offline: bool,
+) {
+    let Some(entry) = entry else {
+        return;
+    };
+    let online = entry
+        .get("Online")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(is_self);
+    if !include_offline && !online {
+        return;
+    }
+
+    let dns_name = entry
+        .get("DNSName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim_end_matches('.')
+        .to_string();
+    let host_name = entry
+        .get("HostName")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let tailnet_name = if !host_name.is_empty() {
+        host_name
+    } else if !dns_name.is_empty() {
+        dns_name.clone()
+    } else {
+        "Tailscale Device".to_string()
+    };
+    let base_host = if !dns_name.is_empty() {
+        dns_name
+    } else {
+        let maybe_ip = entry
+            .get("TailscaleIPs")
+            .and_then(|v| v.as_array())
+            .and_then(|ips| ips.first())
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if maybe_ip.is_empty() {
+            return;
+        }
+        maybe_ip.to_string()
+    };
+    let source = if is_self { "tailscale-self" } else { "tailscale-peer" };
+    out.push(TailscaleBridgeDevice {
+        name: tailnet_name,
+        base_url: format!("http://{base_host}:{term_port}"),
+        online,
+        source,
+    });
 }
 
 #[derive(Clone, Copy)]

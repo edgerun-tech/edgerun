@@ -1,5 +1,5 @@
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use std::thread;
@@ -7,8 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
 use axum::{
-    Router,
-    Json,
+    Json, Router,
     extract::State,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     response::IntoResponse,

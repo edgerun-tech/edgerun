@@ -4,7 +4,7 @@ CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
 
 clean:
-	./scripts/clean-artifacts.sh
+	cargo run -p edgerun-cli -- --root . ci --job clean-artifacts
 
 check:
 	cargo check --workspace
@@ -19,10 +19,10 @@ test:
 	cargo test --workspace
 
 verify:
-	./scripts/verify.sh
+	cargo run -p edgerun-cli -- --root . ci --job verify
 
 matrix-check:
-	./scripts/check-matrix-validation.sh
+	cargo run -p edgerun-cli -- --root . ci --job matrix-check
 
 tree:
 	@find . -maxdepth 3 -type d | sort
