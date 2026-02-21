@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js'
-import { hydrate, render } from 'solid-js/web'
+import { render } from 'solid-js/web'
 
 import HomePage from '../app/page'
 import DocsPage from '../app/docs/page'
@@ -18,6 +18,8 @@ import StyleGuidePage from '../app/style-guide/page'
 import { blogPosts, jobs } from '../lib/content'
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../lib/solana-deployments'
+import { TerminalDrawer } from '../components/terminal/terminal-drawer'
+import { ensureTerminalDrawerStore } from '../lib/terminal-drawer-store'
 
 function normalizePath(pathname: string): string {
   const cleaned = pathname.replace(/index\.html$/, '')
@@ -44,6 +46,57 @@ for (const job of jobs) routeComponents[`/job/${job.id}/`] = () => <JobDetailsPa
 
 let disposePage: null | (() => void) = null
 let bootstrapped = false
+let terminalDrawerMounted = false
+let transitionInFlight = false
+
+function mountGlobalTerminalDrawer(): void {
+  if (terminalDrawerMounted) return
+  if (typeof document === 'undefined') return
+
+  ensureTerminalDrawerStore()
+  const host = document.createElement('div')
+  host.id = 'edgerun-terminal-drawer-root'
+  document.body.appendChild(host)
+  render(() => <TerminalDrawer />, host)
+  terminalDrawerMounted = true
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+async function runRouteTransition(update: () => void): Promise<void> {
+  const withTransition = document as Document & {
+    startViewTransition?: (callback: () => void) => { finished: Promise<void> }
+  }
+
+  if (typeof withTransition.startViewTransition === 'function') {
+    const transition = withTransition.startViewTransition(() => {
+      update()
+    })
+    try {
+      await transition.finished
+    } catch {
+      // ignore cancelled transitions
+    }
+    return
+  }
+
+  const root = document.getElementById('edgerun-root')
+  if (!root) {
+    update()
+    return
+  }
+
+  root.classList.add('route-fade-out')
+  await sleep(80)
+  update()
+  root.classList.remove('route-fade-out')
+  root.classList.add('route-fade-in')
+  window.requestAnimationFrame(() => {
+    root.classList.remove('route-fade-in')
+  })
+}
 
 function applyPageEnhancements(): void {
   const yearEl = document.querySelector<HTMLElement>('[data-current-year]')
@@ -65,41 +118,25 @@ function applyPageEnhancements(): void {
   initDocsCodeCopyButtons()
 }
 
-function mountCurrentRoute(preferHydrate: boolean): boolean {
+function mountCurrentRoute(): boolean {
   const root = document.getElementById('edgerun-root')
   if (!root) return false
   const route = normalizePath(window.location.pathname)
   const Page = routeComponents[route]
   if (!Page) return false
 
-  if (!preferHydrate && disposePage) {
+  if (disposePage) {
     disposePage()
     disposePage = null
   }
 
-  const hasHydrationMarkers = root.querySelector('[data-hk]') !== null
-  try {
-    if (preferHydrate && hasHydrationMarkers) {
-      disposePage = hydrate(() => <Page />, root)
-    } else {
-      root.innerHTML = ''
-      disposePage = render(() => <Page />, root)
-    }
-    bootstrapped = true
-    applyPageEnhancements()
-    void loadChainData()
-    void loadDeploymentStatus()
-    return true
-  } catch (error) {
-    console.warn('Hydration failed; falling back to client render.', error)
-    root.innerHTML = ''
-    disposePage = render(() => <Page />, root)
-    bootstrapped = true
-    applyPageEnhancements()
-    void loadChainData()
-    void loadDeploymentStatus()
-    return true
-  }
+  root.innerHTML = ''
+  disposePage = render(() => <Page />, root)
+  bootstrapped = true
+  applyPageEnhancements()
+  void loadChainData()
+  void loadDeploymentStatus()
+  return true
 }
 
 function shouldClientRoute(anchor: HTMLAnchorElement): boolean {
@@ -122,10 +159,11 @@ document.addEventListener('change', (event) => {
   window.location.href = `/docs/${v}/`
 })
 
-document.addEventListener('click', (event) => {
+document.addEventListener('click', async (event) => {
   if (event.defaultPrevented) return
   if (event.button !== 0) return
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+  if (transitionInFlight) return
 
   const node = event.target as HTMLElement | null
   const anchor = node?.closest('a') as HTMLAnchorElement | null
@@ -137,22 +175,33 @@ document.addEventListener('click', (event) => {
   if (nextPath === currentPath) return
 
   event.preventDefault()
-  window.history.pushState({}, '', nextPath)
-  const mounted = mountCurrentRoute(false)
-  if (!mounted) window.location.assign(nextPath)
+  transitionInFlight = true
+  await runRouteTransition(() => {
+    window.history.pushState({}, '', nextPath)
+    const mounted = mountCurrentRoute()
+    if (!mounted) window.location.assign(nextPath)
+  })
+  transitionInFlight = false
 })
 
-window.addEventListener('popstate', () => {
+window.addEventListener('popstate', async () => {
   if (!bootstrapped) return
-  const mounted = mountCurrentRoute(false)
-  if (!mounted) window.location.assign(window.location.pathname)
+  if (transitionInFlight) return
+  transitionInFlight = true
+  await runRouteTransition(() => {
+    const mounted = mountCurrentRoute()
+    if (!mounted) window.location.assign(window.location.pathname)
+  })
+  transitionInFlight = false
 })
 
-if (!mountCurrentRoute(true)) {
+if (!mountCurrentRoute()) {
   applyPageEnhancements()
   void loadChainData()
   void loadDeploymentStatus()
 }
+
+mountGlobalTerminalDrawer()
 
 type RpcEnvelope<T> = {
   jsonrpc: string

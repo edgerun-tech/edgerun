@@ -17,12 +17,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-frontend-${{ runner.os }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-frontend-${{ runner.os }}-
 
       - name: Build wiki docs
         env:
@@ -34,6 +44,7 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run build
+        working-directory: frontend
 
       - name: Push wiki
         if: ${{ secrets.WIKI_PUSH_TOKEN != '' }}
@@ -41,10 +52,10 @@ jobs:
           WIKI_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
         run: |
           set -euo pipefail
-          rm -rf /tmp/edgerun-frontend-wiki
-          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/edgerun-frontend-wiki
-          rsync -a --delete wiki/main/ /tmp/edgerun-frontend-wiki/
-          cd /tmp/edgerun-frontend-wiki
+          rm -rf /tmp/edgerun-wiki
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/edgerun-wiki
+          rsync -a --delete out/frontend/wiki/main/ /tmp/edgerun-wiki/
+          cd /tmp/edgerun-wiki
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [[ -n "$(git status --porcelain)" ]]; then
