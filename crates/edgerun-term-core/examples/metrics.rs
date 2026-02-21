@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use edgerun_term_core::render::FONT_DATA;
 use edgerun_term_core::text::GlyphCache;
+use std::sync::Arc;
 fn main() {
     let mut cache = GlyphCache::new(Arc::new(FONT_DATA.to_vec()), 16.0);
     let (m, _, _) = cache.rasterize('M');

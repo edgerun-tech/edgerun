@@ -136,8 +136,15 @@ export function createTerminalDrawer() {
     const toggleBtn = document.getElementById('toggleTerminalBtn');
     const paneHost = document.getElementById('termPaneHost');
 
-    paneHost.innerHTML = '';
     tabsEl.innerHTML = '';
+
+    const liveTabIds = new Set(state.tabs.map((t) => t.id));
+    for (const [tabId, tabRuntime] of runtime.entries()) {
+      if (!liveTabIds.has(tabId)) {
+        tabRuntime.root.remove();
+        runtime.delete(tabId);
+      }
+    }
 
     for (const tab of state.tabs) ensureRuntime(tab, state);
 

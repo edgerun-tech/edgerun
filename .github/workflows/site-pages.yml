@@ -24,12 +24,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+          fetch-tags: true
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.10
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-frontend-${{ runner.os }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-frontend-${{ runner.os }}-
 
       - name: Metadata
         id: meta
@@ -50,6 +61,7 @@ jobs:
 
       - name: Install
         run: bun install --frozen-lockfile
+        working-directory: frontend
 
       - name: Build static site
         env:
@@ -59,17 +71,18 @@ jobs:
           EDGERUN_SITE_URL: https://www.edgerun.tech
           EDGERUN_SITE_DOMAIN: www.edgerun.tech
         run: bun run build
+        working-directory: frontend
 
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: out/frontend/site
 
       - name: Upload wiki artifact
         uses: actions/upload-artifact@v4
         with:
           name: wiki-docs-${{ steps.meta.outputs.version }}
-          path: wiki
+          path: out/frontend/wiki
 
   deploy:
     runs-on: ubuntu-24.04

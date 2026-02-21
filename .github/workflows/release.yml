@@ -45,7 +45,7 @@ jobs:
       - name: Pack binary
         run: |
           mkdir -p release-artifacts
-          BIN="target/${{ matrix.target }}/release/edgerun"
+          BIN="out/target/${{ matrix.target }}/release/edgerun"
           OUT="release-artifacts/edgerun-${{ steps.meta.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}"
           tar -czf "$OUT" -C "$(dirname "$BIN")" "$(basename "$BIN")"
 

@@ -171,6 +171,49 @@ summary,
   }
 }
 
+@keyframes edgerun-route-fade-in {
+  from {
+    opacity: 0.975;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes edgerun-route-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.975;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 140ms;
+    animation-timing-function: ease;
+  }
+
+  ::view-transition-old(root) {
+    animation-name: edgerun-route-fade-out;
+  }
+
+  ::view-transition-new(root) {
+    animation-name: edgerun-route-fade-in;
+  }
+
+  #edgerun-root.route-fade-out {
+    opacity: 0.975;
+    transition: opacity 80ms ease;
+  }
+
+  #edgerun-root.route-fade-in {
+    animation: edgerun-route-fade-in 140ms ease;
+  }
+}
+
 .docs-content {
   line-height: 1.65;
   color: color-mix(in oklab, var(--foreground) 82%, var(--muted-foreground-token));
@@ -318,6 +361,29 @@ summary,
   border: 0;
   border-top: 1px solid var(--border);
   margin: 1.2rem 0;
+}
+
+.terminal-grid-split-none {
+  grid-template-columns: 1fr;
+}
+
+.terminal-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--terminal-drawer-height, 48px);
+  max-height: 100dvh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.terminal-grid-split-cols {
+  grid-template-columns: 1fr 1fr;
+}
+
+.terminal-grid-split-rows {
+  grid-template-rows: 1fr 1fr;
 }
 
 blockquote {

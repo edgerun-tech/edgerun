@@ -2488,13 +2488,17 @@ impl Perform for GridPerformer<'_> {
                     self.grid.set_window_title(title);
                 }
             } else if tag == b"52" {
+                // OSC 52 ; clipboard ; data ST
                 if let Some(encoded) = merged.get(2).or_else(|| merged.get(1)).copied() {
-                    if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
-                        if let Ok(text) = String::from_utf8(decoded) {
-                            if let Err(e) = write_clipboard_text(&text) {
-                                log::error!("Failed to write clipboard text: {e}");
-                            }
+                    if encoded.is_empty() {
+                        if let Err(e) = write_clipboard_text("") {
+                            log::error!("Failed to write clipboard text: {e}");
                         }
+                    } else if let Ok(decoded) = general_purpose::STANDARD.decode(encoded)
+                        && let Ok(text) = String::from_utf8(decoded)
+                        && let Err(e) = write_clipboard_text(&text)
+                    {
+                        log::error!("Failed to write clipboard text: {e}");
                     }
                 }
             } else if tag == b"7" {
@@ -2651,22 +2655,6 @@ impl Perform for GridPerformer<'_> {
                         }
                     }
                     self.grid.reset_palette_indices(Some(indices));
-                }
-            } else if tag == b"52" {
-                // OSC 52 ; clipboard ; data ST
-                let encoded = merged.get(2).copied().or_else(|| merged.get(1).copied());
-                if let Some(encoded) = encoded {
-                    if encoded.is_empty() {
-                        if let Err(e) = write_clipboard_text("") {
-                            log::error!("Failed to write clipboard text: {e}");
-                        }
-                    } else if let Ok(decoded) = general_purpose::STANDARD.decode(encoded) {
-                        if let Ok(text) = String::from_utf8(decoded) {
-                            if let Err(e) = write_clipboard_text(&text) {
-                                log::error!("Failed to write clipboard text: {e}");
-                            }
-                        }
-                    }
                 }
             }
         }
@@ -3436,6 +3424,43 @@ mod tests {
             parser.advance(&mut performer, *b);
         }
 
+        assert_eq!(captured.lock().unwrap().as_str(), "");
+    }
+
+    #[test]
+    fn osc52_empty_payload_clears_clipboard() {
+        let _guard = CLIPBOARD_TEST_LOCK.lock().unwrap();
+        let captured = Arc::new(Mutex::new(String::new()));
+        set_clipboard_hook({
+            let captured = captured.clone();
+            move |text| {
+                *captured.lock().unwrap() = text.to_string();
+            }
+        });
+
+        let mut term = Terminal::new(4, 1);
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let mut app_cursor_keys = false;
+        let mut performer = GridPerformer {
+            grid: &mut term,
+            writer,
+            app_cursor_keys: &mut app_cursor_keys,
+            dcs_state: None,
+        };
+        let mut parser = vte::Parser::new();
+
+        let payload = general_purpose::STANDARD.encode("hello");
+        let set_seq = format!("\x1b]52;c;{}\x07", payload);
+        for b in set_seq.as_bytes() {
+            parser.advance(&mut performer, *b);
+        }
+        assert_eq!(captured.lock().unwrap().as_str(), "hello");
+
+        let clear_seq = "\x1b]52;c;\x07";
+        for b in clear_seq.as_bytes() {
+            parser.advance(&mut performer, *b);
+        }
         assert_eq!(captured.lock().unwrap().as_str(), "");
     }
 
