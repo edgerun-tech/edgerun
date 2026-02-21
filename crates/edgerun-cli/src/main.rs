@@ -19,8 +19,9 @@ use axum::{
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tokio::time::sleep;
 
 #[derive(Parser, Debug)]
@@ -146,6 +147,7 @@ struct WebState {
     config: AppConfig,
     tasks: Arc<Mutex<HashMap<String, TaskStatus>>>,
     queue: Arc<Mutex<VecDeque<String>>>,
+    running_cancel: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
     state_file: PathBuf,
     runs_dir: PathBuf,
 }
@@ -463,6 +465,7 @@ async fn run_server(root: PathBuf, addr: String, config: AppConfig) -> Result<()
         config: config.clone(),
         tasks: Arc::new(Mutex::new(tasks)),
         queue: Arc::new(Mutex::new(VecDeque::new())),
+        running_cancel: Arc::new(Mutex::new(HashMap::new())),
         state_file,
         runs_dir,
     };
@@ -787,9 +790,16 @@ async fn api_run_task(
     let state_clone = state.clone();
     let history_limit = web_history_limit(&state.config);
     let task_for_spawn = task.clone();
+    let cancel_notify = Arc::new(Notify::new());
+    {
+        let mut running_cancel = state.running_cancel.lock().await;
+        running_cancel.insert(task.clone(), cancel_notify.clone());
+    }
     tokio::spawn(async move {
         let (task_state, last_exit, summary) =
-            match run_task_subprocess_capture(&state_clone.root, &task_for_spawn).await {
+            match run_task_subprocess_capture(&state_clone.root, &task_for_spawn, cancel_notify)
+                .await
+            {
                 Ok((0, output)) => ("success".to_string(), Some(0), output),
                 Ok((exit, output)) => ("failed".to_string(), Some(exit), output),
                 Err(err) => ("failed".to_string(), Some(1), format!("ERROR: {err:#}")),
@@ -830,6 +840,8 @@ async fn api_run_task(
         if let Err(err) = persist_task_statuses(&state_clone.state_file, &tasks) {
             eprintln!("failed to persist task state: {err:#}");
         }
+        let mut running_cancel = state_clone.running_cancel.lock().await;
+        running_cancel.remove(&task_for_spawn);
     });
 
     (
@@ -886,11 +898,35 @@ async fn api_cancel_task(
             }),
         );
     }
+    drop(queue);
+
+    let cancel_notify = {
+        let running_cancel = state.running_cancel.lock().await;
+        running_cancel.get(&task).cloned()
+    };
+    if let Some(cancel_notify) = cancel_notify {
+        cancel_notify.notify_waiters();
+        let mut tasks = state.tasks.lock().await;
+        if let Some(entry) = tasks.get_mut(&task) {
+            entry.state = "canceling".to_string();
+            entry.last_output = "cancel requested".to_string();
+        }
+        if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
+            eprintln!("failed to persist task state: {err:#}");
+        }
+        return (
+            axum::http::StatusCode::ACCEPTED,
+            Json(ApiMessage {
+                ok: true,
+                message: format!("task cancel requested: {task}"),
+            }),
+        );
+    }
     (
         axum::http::StatusCode::NOT_FOUND,
         Json(ApiMessage {
             ok: false,
-            message: format!("task not queued: {task}"),
+            message: format!("task not active: {task}"),
         }),
     )
 }
@@ -967,7 +1003,11 @@ fn task_to_cli_args(task: &str) -> Option<Vec<&'static str>> {
     }
 }
 
-async fn run_task_subprocess_capture(root: &Path, task: &str) -> Result<(i32, String)> {
+async fn run_task_subprocess_capture(
+    root: &Path,
+    task: &str,
+    cancel_notify: Arc<Notify>,
+) -> Result<(i32, String)> {
     let args = task_to_cli_args(task).ok_or_else(|| anyhow!("unknown task: {task}"))?;
     let exe = std::env::current_exe().context("failed to resolve current executable")?;
     let mut cmd = Command::new(exe);
@@ -976,18 +1016,61 @@ async fn run_task_subprocess_capture(root: &Path, task: &str) -> Result<(i32, St
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let output = cmd
-        .output()
-        .await
-        .context("failed to run task subprocess")?;
+    let mut child = cmd.spawn().context("failed to run task subprocess")?;
+
+    let stdout_task = child.stdout.take().map(|mut stdout| {
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let _ = stdout.read_to_end(&mut buf).await;
+            buf
+        })
+    });
+    let stderr_task = child.stderr.take().map(|mut stderr| {
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let _ = stderr.read_to_end(&mut buf).await;
+            buf
+        })
+    });
+
+    let (status, canceled) = tokio::select! {
+        waited = child.wait() => (
+            waited.context("failed while waiting for task subprocess")?,
+            false,
+        ),
+        _ = cancel_notify.notified() => {
+            let _ = child.start_kill();
+            (
+                child
+                    .wait()
+                    .await
+                    .context("failed while canceling task subprocess")?,
+                true,
+            )
+        }
+    };
+
+    let stdout = match stdout_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let stderr = match stderr_task {
+        Some(task) => task.await.unwrap_or_default(),
+        None => Vec::new(),
+    };
 
     let mut text = String::new();
-    text.push_str(&String::from_utf8_lossy(&output.stdout));
-    if !output.stdout.is_empty() && !output.stderr.is_empty() {
+    text.push_str(&String::from_utf8_lossy(&stdout));
+    if !stdout.is_empty() && !stderr.is_empty() {
         text.push('\n');
     }
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
-    Ok((output.status.code().unwrap_or(1), text))
+    text.push_str(&String::from_utf8_lossy(&stderr));
+    let exit = if canceled {
+        130
+    } else {
+        status.code().unwrap_or(1)
+    };
+    Ok((exit, text))
 }
 
 fn load_task_statuses(path: &Path) -> Result<HashMap<String, TaskStatus>> {
@@ -3220,6 +3303,7 @@ mod tests {
             config,
             tasks: Arc::new(Mutex::new(tasks)),
             queue: Arc::new(Mutex::new(VecDeque::new())),
+            running_cancel: Arc::new(Mutex::new(HashMap::new())),
             state_file,
             runs_dir,
         }
@@ -3445,6 +3529,49 @@ require_worker_signatures = true
         let tasks = state.tasks.lock().await;
         let doctor = tasks.get("doctor").expect("doctor state");
         assert_eq!(doctor.state, "canceled");
+    }
+
+    #[tokio::test]
+    async fn cancel_running_task_requests_cancellation() {
+        let root = temp_dir("edgerun-web-cancel-running-test");
+        let state = make_state(root, AppConfig::default(), HashMap::new());
+        let notify = Arc::new(Notify::new());
+        {
+            let mut tasks = state.tasks.lock().await;
+            tasks.insert(
+                "doctor".to_string(),
+                TaskStatus {
+                    task: "doctor".to_string(),
+                    state: "running".to_string(),
+                    started_at_unix_s: Some(now_unix_s()),
+                    finished_at_unix_s: None,
+                    runs: 1,
+                    last_exit: None,
+                    last_output: String::new(),
+                    history: Vec::new(),
+                    last_log_path: None,
+                },
+            );
+        }
+        {
+            let mut running_cancel = state.running_cancel.lock().await;
+            running_cancel.insert("doctor".to_string(), notify);
+        }
+        let app = build_router(state.clone());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/cancel/doctor")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("cancel response");
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        let tasks = state.tasks.lock().await;
+        let doctor = tasks.get("doctor").expect("doctor state");
+        assert_eq!(doctor.state, "canceling");
     }
 
     #[test]
