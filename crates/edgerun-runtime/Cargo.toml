@@ -12,7 +12,6 @@ cli = ["dep:clap", "dep:tokio", "dep:serde_json", "dep:wat"]
 [dependencies]
 anyhow.workspace = true
 blake3.workspace = true
-ciborium.workspace = true
 clap = { workspace = true, optional = true }
 hex.workspace = true
 tokio = { workspace = true, optional = true }
