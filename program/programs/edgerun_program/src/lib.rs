@@ -15,9 +15,14 @@ declare_id!("AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T");
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ConfigParams {
     pub scheduler_authority: Pubkey,
+    pub randomness_authority: Pubkey,
     pub min_worker_stake_lamports: u64,
     pub protocol_fee_bps: u16,
     pub challenge_window_slots: u64,
+    pub da_window_slots: u64,
+    pub non_response_slash_lamports: u64,
+    pub committee_tiering_enabled: bool,
+    pub max_committee_size: u8,
     pub max_memory_bytes: u32,
     pub max_instructions: u64,
     pub allowed_runtime_root: [u8; 32],
@@ -32,9 +37,14 @@ pub mod edgerun_program {
         let config = &mut ctx.accounts.config;
         config.admin = ctx.accounts.admin.key();
         config.scheduler_authority = params.scheduler_authority;
+        config.randomness_authority = params.randomness_authority;
         config.min_worker_stake_lamports = params.min_worker_stake_lamports;
         config.protocol_fee_bps = params.protocol_fee_bps;
         config.challenge_window_slots = params.challenge_window_slots;
+        config.da_window_slots = params.da_window_slots;
+        config.non_response_slash_lamports = params.non_response_slash_lamports;
+        config.committee_tiering_enabled = params.committee_tiering_enabled;
+        config.max_committee_size = params.max_committee_size.max(3);
         config.max_memory_bytes = params.max_memory_bytes;
         config.max_instructions = params.max_instructions;
         config.allowed_runtime_root = params.allowed_runtime_root;
@@ -48,9 +58,14 @@ pub mod edgerun_program {
     pub fn update_config(ctx: Context<UpdateConfig>, params: ConfigParams) -> Result<()> {
         let config = &mut ctx.accounts.config;
         config.scheduler_authority = params.scheduler_authority;
+        config.randomness_authority = params.randomness_authority;
         config.min_worker_stake_lamports = params.min_worker_stake_lamports;
         config.protocol_fee_bps = params.protocol_fee_bps;
         config.challenge_window_slots = params.challenge_window_slots;
+        config.da_window_slots = params.da_window_slots;
+        config.non_response_slash_lamports = params.non_response_slash_lamports;
+        config.committee_tiering_enabled = params.committee_tiering_enabled;
+        config.max_committee_size = params.max_committee_size.max(3);
         config.max_memory_bytes = params.max_memory_bytes;
         config.max_instructions = params.max_instructions;
         config.allowed_runtime_root = params.allowed_runtime_root;
@@ -178,6 +193,7 @@ pub mod edgerun_program {
         system_program::transfer(transfer_ctx, escrow_lamports)?;
 
         let job = &mut ctx.accounts.job;
+        let (committee_size, quorum) = committee_tier_for_escrow(escrow_lamports);
         job.job_id = job_id;
         job.client = ctx.accounts.client.key();
         job.escrow_lamports = escrow_lamports;
@@ -186,13 +202,26 @@ pub mod edgerun_program {
         job.runtime_id = runtime_id;
         job.max_memory_bytes = max_memory_bytes;
         job.max_instructions = max_instructions;
-        job.committee_size = config.committee_size;
-        job.quorum = config.quorum;
+        job.committee_size = if config.committee_tiering_enabled {
+            committee_size.min(config.max_committee_size)
+        } else {
+            config.committee_size
+        };
+        job.quorum = if config.committee_tiering_enabled {
+            quorum.min(job.committee_size)
+        } else {
+            config.quorum
+        };
         job.created_slot = Clock::get()?.slot;
         job.deadline_slot = job.created_slot + config.challenge_window_slots;
-        job.assigned_workers = [Pubkey::default(); 3];
+        job.assigned_workers = [Pubkey::default(); 9];
+        job.assigned_count = 0;
         job.required_lock_lamports = 0;
         job.winning_output_hash = [0_u8; 32];
+        job.seed = [0_u8; 32];
+        job.seed_set = false;
+        job.quorum_reached_slot = 0;
+        job.da_deadline_slot = 0;
         job.status = JobStatus::Posted as u8;
 
         Ok(())
@@ -203,9 +232,12 @@ pub mod edgerun_program {
         let job = &mut ctx.accounts.job;
 
         require!(
-            job.status == JobStatus::Posted as u8,
+            job.status == JobStatus::Posted as u8 || job.status == JobStatus::Seeded as u8,
             EdgerunError::InvalidJobState
         );
+        if config.committee_tiering_enabled {
+            require!(job.seed_set, EdgerunError::SeedNotSet);
+        }
         require!(
             workers[0] != workers[1] && workers[0] != workers[2] && workers[1] != workers[2],
             EdgerunError::DuplicateAssignedWorker
@@ -218,10 +250,28 @@ pub mod edgerun_program {
         lock_worker_for_job(&mut ctx.accounts.worker_stake_1, workers[1], required_lock)?;
         lock_worker_for_job(&mut ctx.accounts.worker_stake_2, workers[2], required_lock)?;
 
-        job.assigned_workers = workers;
+        job.assigned_workers = [Pubkey::default(); 9];
+        job.assigned_workers[0] = workers[0];
+        job.assigned_workers[1] = workers[1];
+        job.assigned_workers[2] = workers[2];
+        job.assigned_count = 3;
         job.required_lock_lamports = required_lock;
         job.status = JobStatus::Assigned as u8;
 
+        Ok(())
+    }
+
+    pub fn set_job_seed(ctx: Context<SetJobSeed>, seed: [u8; 32]) -> Result<()> {
+        let job = &mut ctx.accounts.job;
+        require!(
+            job.status == JobStatus::Posted as u8,
+            EdgerunError::InvalidJobState
+        );
+        require!(!job.seed_set, EdgerunError::SeedAlreadySet);
+        require!(seed != [0_u8; 32], EdgerunError::InvalidSeed);
+        job.seed = seed;
+        job.seed_set = true;
+        job.status = JobStatus::Seeded as u8;
         Ok(())
     }
 
@@ -417,6 +467,116 @@ pub mod edgerun_program {
 
         Ok(())
     }
+
+    pub fn reach_quorum(ctx: Context<ReachQuorum>) -> Result<()> {
+        let job = &mut ctx.accounts.job;
+        require!(
+            job.status == JobStatus::Assigned as u8,
+            EdgerunError::InvalidJobState
+        );
+        require!(
+            Clock::get()?.slot <= job.deadline_slot,
+            EdgerunError::JobResultSubmissionExpired
+        );
+
+        let winning_output_hash = parse_quorum_winning_hash(job, &ctx.remaining_accounts)?
+            .ok_or(error!(EdgerunError::QuorumNotMet))?;
+        let now_slot = Clock::get()?.slot;
+        job.winning_output_hash = winning_output_hash;
+        job.quorum_reached_slot = now_slot;
+        job.da_deadline_slot = now_slot
+            .checked_add(ctx.accounts.config.da_window_slots)
+            .ok_or(EdgerunError::MathOverflow)?;
+        job.status = JobStatus::AwaitingDa as u8;
+        Ok(())
+    }
+
+    pub fn declare_output(
+        ctx: Context<DeclareOutput>,
+        output_hash: [u8; 32],
+        pointer: Vec<u8>,
+    ) -> Result<()> {
+        let job = &ctx.accounts.job;
+        require!(
+            job.status == JobStatus::AwaitingDa as u8,
+            EdgerunError::InvalidJobState
+        );
+        require!(
+            ctx.accounts.job_result.job_id == job.job_id,
+            EdgerunError::InvalidJobResult
+        );
+        require!(
+            ctx.accounts.job_result.worker == ctx.accounts.publisher.key(),
+            EdgerunError::WorkerMismatch
+        );
+        require!(
+            ctx.accounts.job_result.output_hash == job.winning_output_hash,
+            EdgerunError::WorkerNotSlashable
+        );
+        require!(
+            output_hash == job.winning_output_hash,
+            EdgerunError::OutputHashMismatch
+        );
+        require!(pointer.len() <= 128, EdgerunError::PointerTooLarge);
+
+        let mut pointer_fixed = [0_u8; 128];
+        pointer_fixed[..pointer.len()].copy_from_slice(&pointer);
+        let da = &mut ctx.accounts.output_availability;
+        da.job_id = job.job_id;
+        da.output_hash = output_hash;
+        da.publisher = ctx.accounts.publisher.key();
+        da.pointer = pointer_fixed;
+        da.published_slot = Clock::get()?.slot;
+        Ok(())
+    }
+
+    pub fn penalize_non_submitters(ctx: Context<PenalizeNonSubmitters>) -> Result<()> {
+        let job = &ctx.accounts.job;
+        let now_slot = Clock::get()?.slot;
+        require!(
+            job.status == JobStatus::Finalized as u8 || now_slot > job.deadline_slot,
+            EdgerunError::InvalidJobState
+        );
+
+        let submitted_workers = collect_submitted_workers(job, &ctx.remaining_accounts)?;
+        apply_non_response_slash(
+            &mut ctx.accounts.worker_stake_0,
+            &ctx.accounts.config,
+            &ctx.accounts.job,
+            &submitted_workers,
+        )?;
+        apply_non_response_slash(
+            &mut ctx.accounts.worker_stake_1,
+            &ctx.accounts.config,
+            &ctx.accounts.job,
+            &submitted_workers,
+        )?;
+        apply_non_response_slash(
+            &mut ctx.accounts.worker_stake_2,
+            &ctx.accounts.config,
+            &ctx.accounts.job,
+            &submitted_workers,
+        )?;
+        Ok(())
+    }
+
+    pub fn cancel_no_da(ctx: Context<CancelNoDa>) -> Result<()> {
+        let now_slot = Clock::get()?.slot;
+        let job = &mut ctx.accounts.job;
+        require!(
+            job.status == JobStatus::AwaitingDa as u8,
+            EdgerunError::InvalidJobState
+        );
+        require!(now_slot > job.da_deadline_slot, EdgerunError::DaWindowActive);
+        job.winning_output_hash = [0_u8; 32];
+        job.quorum_reached_slot = 0;
+        job.da_deadline_slot = 0;
+        job.deadline_slot = now_slot
+            .checked_add(ctx.accounts.config.challenge_window_slots)
+            .ok_or(EdgerunError::MathOverflow)?;
+        job.status = JobStatus::Assigned as u8;
+        Ok(())
+    }
 }
 
 struct ParsedFinalizeInputs {
@@ -524,6 +684,21 @@ fn required_lock_for_job(escrow_lamports: u64, committee_size: u8) -> u64 {
         .saturating_div(u64::from(committee_size))
 }
 
+fn committee_tier_for_escrow(escrow_lamports: u64) -> (u8, u8) {
+    const TIER0: u64 = 100_000_000;
+    const TIER1: u64 = 1_000_000_000;
+    const TIER2: u64 = 10_000_000_000;
+    if escrow_lamports < TIER0 {
+        (3, 2)
+    } else if escrow_lamports < TIER1 {
+        (5, 3)
+    } else if escrow_lamports < TIER2 {
+        (7, 5)
+    } else {
+        (9, 6)
+    }
+}
+
 fn lock_worker_for_job(
     stake: &mut Account<WorkerStake>,
     worker_key: Pubkey,
@@ -572,7 +747,7 @@ fn unlock_winner_stakes(
 
 fn unlock_all_assigned_stakes(
     required_lock_lamports: u64,
-    assigned_workers: &[Pubkey; 3],
+    assigned_workers: &[Pubkey; 9],
     worker_stakes: [&mut Account<WorkerStake>; 3],
 ) -> Result<()> {
     if required_lock_lamports == 0 {
@@ -588,6 +763,94 @@ fn unlock_all_assigned_stakes(
         }
     }
 
+    Ok(())
+}
+
+fn parse_quorum_winning_hash(
+    job: &Account<Job>,
+    remaining_accounts: &[AccountInfo],
+) -> Result<Option<[u8; 32]>> {
+    let mut seen_workers = HashSet::new();
+    let mut by_output_hash: HashMap<[u8; 32], usize> = HashMap::new();
+    for account in remaining_accounts {
+        if let Some(result) = parse_job_result_account(account)? {
+            require!(result.job_id == job.job_id, EdgerunError::InvalidJobResult);
+            require!(
+                job.assigned_workers.contains(&result.worker),
+                EdgerunError::WorkerNotAssigned
+            );
+            require!(
+                seen_workers.insert(result.worker),
+                EdgerunError::DuplicateJobResult
+            );
+            *by_output_hash.entry(result.output_hash).or_insert(0) += 1;
+        }
+    }
+
+    let quorum_target = usize::from(job.quorum.max(1));
+    let mut best: Option<([u8; 32], usize)> = None;
+    let mut saw_tie = false;
+    for (hash, count) in by_output_hash {
+        if count < quorum_target {
+            continue;
+        }
+        match best {
+            None => best = Some((hash, count)),
+            Some((_, best_count)) if count > best_count => {
+                best = Some((hash, count));
+                saw_tie = false;
+            }
+            Some((_, best_count)) if count == best_count => {
+                saw_tie = true;
+            }
+            _ => {}
+        }
+    }
+
+    if saw_tie {
+        return Ok(None);
+    }
+    Ok(best.map(|v| v.0))
+}
+
+fn collect_submitted_workers(job: &Account<Job>, remaining_accounts: &[AccountInfo]) -> Result<HashSet<Pubkey>> {
+    let mut out = HashSet::new();
+    for account in remaining_accounts {
+        if let Some(result) = parse_job_result_account(account)? {
+            if result.job_id == job.job_id && job.assigned_workers.contains(&result.worker) {
+                out.insert(result.worker);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn apply_non_response_slash(
+    stake: &mut Account<WorkerStake>,
+    config: &Account<GlobalConfig>,
+    job: &Account<Job>,
+    submitted_workers: &HashSet<Pubkey>,
+) -> Result<()> {
+    if !job.assigned_workers.contains(&stake.worker) || submitted_workers.contains(&stake.worker) {
+        return Ok(());
+    }
+    let available = stake
+        .total_stake_lamports
+        .checked_sub(stake.locked_stake_lamports)
+        .ok_or(EdgerunError::MathOverflow)?;
+    let slash_amount = available.min(config.non_response_slash_lamports);
+    if slash_amount == 0 {
+        return Ok(());
+    }
+    stake.total_stake_lamports = stake
+        .total_stake_lamports
+        .checked_sub(slash_amount)
+        .ok_or(EdgerunError::InsufficientStake)?;
+    transfer_lamports_from_program_owned(
+        &stake.to_account_info(),
+        &config.to_account_info(),
+        slash_amount,
+    )?;
     Ok(())
 }
 
@@ -709,6 +972,19 @@ pub struct AssignWorkers<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SetJobSeed<'info> {
+    pub randomness_authority: Signer<'info>,
+    #[account(
+        seeds = [b"config"],
+        bump,
+        has_one = randomness_authority
+    )]
+    pub config: Account<'info, GlobalConfig>,
+    #[account(mut)]
+    pub job: Account<'info, Job>,
+}
+
+#[derive(Accounts)]
 pub struct SubmitResult<'info> {
     #[account(mut)]
     pub worker: Signer<'info>,
@@ -770,16 +1046,74 @@ pub struct SlashWorker<'info> {
     pub job_result: Account<'info, JobResult>,
 }
 
+#[derive(Accounts)]
+pub struct ReachQuorum<'info> {
+    pub caller: Signer<'info>,
+    #[account(seeds = [b"config"], bump)]
+    pub config: Account<'info, GlobalConfig>,
+    #[account(mut)]
+    pub job: Account<'info, Job>,
+}
+
+#[derive(Accounts)]
+pub struct DeclareOutput<'info> {
+    #[account(mut)]
+    pub publisher: Signer<'info>,
+    pub job: Account<'info, Job>,
+    #[account(
+        seeds = [b"job_result", job.job_id.as_ref(), publisher.key().as_ref()],
+        bump
+    )]
+    pub job_result: Account<'info, JobResult>,
+    #[account(
+        init,
+        payer = publisher,
+        space = 8 + OutputAvailability::INIT_SPACE,
+        seeds = [b"output", job.job_id.as_ref()],
+        bump
+    )]
+    pub output_availability: Account<'info, OutputAvailability>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct PenalizeNonSubmitters<'info> {
+    pub caller: Signer<'info>,
+    #[account(mut, seeds = [b"config"], bump)]
+    pub config: Account<'info, GlobalConfig>,
+    pub job: Account<'info, Job>,
+    #[account(mut)]
+    pub worker_stake_0: Account<'info, WorkerStake>,
+    #[account(mut)]
+    pub worker_stake_1: Account<'info, WorkerStake>,
+    #[account(mut)]
+    pub worker_stake_2: Account<'info, WorkerStake>,
+}
+
+#[derive(Accounts)]
+pub struct CancelNoDa<'info> {
+    pub caller: Signer<'info>,
+    #[account(seeds = [b"config"], bump)]
+    pub config: Account<'info, GlobalConfig>,
+    #[account(mut)]
+    pub job: Account<'info, Job>,
+}
+
 #[account]
 #[derive(InitSpace)]
 pub struct GlobalConfig {
     pub admin: Pubkey,
     pub scheduler_authority: Pubkey,
+    pub randomness_authority: Pubkey,
     pub min_worker_stake_lamports: u64,
     pub protocol_fee_bps: u16,
     pub committee_size: u8,
     pub quorum: u8,
     pub challenge_window_slots: u64,
+    pub da_window_slots: u64,
+    pub non_response_slash_lamports: u64,
+    pub committee_tiering_enabled: bool,
+    pub max_committee_size: u8,
     pub max_memory_bytes: u32,
     pub max_instructions: u64,
     pub allowed_runtime_root: [u8; 32],
@@ -809,9 +1143,14 @@ pub struct Job {
     pub quorum: u8,
     pub created_slot: u64,
     pub deadline_slot: u64,
-    pub assigned_workers: [Pubkey; 3],
+    pub assigned_workers: [Pubkey; 9],
+    pub assigned_count: u8,
     pub required_lock_lamports: u64,
+    pub seed: [u8; 32],
+    pub seed_set: bool,
     pub winning_output_hash: [u8; 32],
+    pub quorum_reached_slot: u64,
+    pub da_deadline_slot: u64,
     pub status: u8,
 }
 
@@ -823,6 +1162,16 @@ pub struct JobResult {
     pub output_hash: [u8; 32],
     pub attestation_sig: [u8; 64],
     pub submitted_slot: u64,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct OutputAvailability {
+    pub job_id: [u8; 32],
+    pub output_hash: [u8; 32],
+    pub publisher: Pubkey,
+    pub pointer: [u8; 128],
+    pub published_slot: u64,
 }
 
 #[repr(u8)]
@@ -838,6 +1187,9 @@ pub enum JobStatus {
     Finalized = 2,
     Cancelled = 3,
     Slashed = 4,
+    Seeded = 5,
+    QuorumReached = 6,
+    AwaitingDa = 7,
 }
 
 #[error_code]
@@ -906,6 +1258,18 @@ pub enum EdgerunError {
     JobResultSubmissionExpired,
     #[msg("caller is not authorized to cancel this job")]
     UnauthorizedCancelCaller,
+    #[msg("job seed has not been set")]
+    SeedNotSet,
+    #[msg("job seed already set")]
+    SeedAlreadySet,
+    #[msg("invalid seed")]
+    InvalidSeed,
+    #[msg("output hash mismatch")]
+    OutputHashMismatch,
+    #[msg("output pointer too large")]
+    PointerTooLarge,
+    #[msg("DA window still active")]
+    DaWindowActive,
 }
 
 fn verify_worker_attestation(
