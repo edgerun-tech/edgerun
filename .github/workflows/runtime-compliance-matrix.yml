@@ -1,0 +1,102 @@
+name: Runtime Compliance Matrix
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: runtime-compliance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  determinism-matrix:
+    name: Determinism Matrix (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run replay corpus gate (extended)
+        run: |
+          mkdir -p /tmp/edgerun-runtime-compliance
+          cargo run -p edgerun-runtime -- replay-corpus \
+            --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
+            --artifact /tmp/edgerun-runtime-compliance/replay-corpus.json \
+            --runs 10
+
+      - name: Run fuel calibration gate (extended)
+        run: |
+          cargo run -p edgerun-runtime -- calibrate-fuel \
+            --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
+            --artifact /tmp/edgerun-runtime-compliance/fuel-calibration.json \
+            --runs 10 \
+            --max-per-unit-spread 0.25
+
+      - name: Run SLO smoke gate (extended)
+        run: |
+          cargo run -p edgerun-runtime -- slo-smoke \
+            --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
+            --artifact /tmp/edgerun-runtime-compliance/slo-smoke.json \
+            --runs 200 \
+            --max-p95-ms 100 \
+            --min-ops-per-sec 30
+
+      - name: Upload compliance artifacts
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-compliance-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-runtime-compliance
+
+  extended-fuzz-campaign:
+    name: Extended Fuzz Campaign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run extended fuzz matrix
+        working-directory: crates/edgerun-runtime/fuzz
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/edgerun-runtime-fuzz
+
+          cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=180 -seed=1337
+          cargo +nightly fuzz run fuzz_bundle_decode -- -max_total_time=180 -seed=7331
+
+          cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=180 -seed=2001
+          cargo +nightly fuzz run fuzz_validate_wasm -- -max_total_time=180 -seed=1002
+
+          cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=180 -seed=4242
+          cargo +nightly fuzz run fuzz_hostcall_boundary -- -max_total_time=180 -seed=2424
+
+      - name: Upload fuzz corpus artifacts
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-fuzz-corpus-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            crates/edgerun-runtime/fuzz/corpus
+            crates/edgerun-runtime/fuzz/artifacts

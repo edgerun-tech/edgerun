@@ -6,6 +6,14 @@ Status legend:
 - `Implemented`
 - `Partial`
 - `Missing`
+- `Deferred (Phase-2)`
+
+## Phase-1 Completion Summary
+
+- Tracked phase-1 items: `46`
+- Implemented: `46`
+- Completion: `100%`
+- Deferred from phase-1 scope: `Full challenge/dispute phase-2 mechanics`
 
 ## On-chain Instructions
 
@@ -71,11 +79,11 @@ Status legend:
 | Scheduler malformed result payload rejection | Implemented | `crates/edgerun-scheduler/src/main.rs` (`validate_worker_result_payload_rejects_bad_hex`) |
 | Scheduler Merkle proof utility roundtrip | Implemented | `crates/edgerun-scheduler/src/main.rs` (`merkle_root_and_proof_roundtrip`) |
 
-## Remaining Gaps vs Whitepaper
+## Remaining Gaps vs Whitepaper (All Phases)
 
 | Item | Status | Notes |
 |---|---|---|
 | Merkle membership proof for runtime allowlist root | Implemented | `post_job` now accepts `runtime_proof: Vec<[u8;32]>`; verification uses sorted-pair BLAKE3 Merkle hashing from `runtime_id` leaf to `allowed_runtime_root`. |
 | Permissionless finalize/slash modes | Implemented | `finalize_job` and `slash_worker` are callable by any signer; correctness/evidence checks remain enforced on-chain. |
-| Deterministic runtime compliance/fuzz matrix in CI | Partial | Core tests exist; full determinism and large fuzz campaign not yet integrated. |
-| Full challenge/dispute phase-2 mechanics | Missing | Out of current phase-1 MVP scope. |
+| Deterministic runtime compliance/fuzz matrix in CI | Implemented | Baseline gates run in `ci.yml`; extended multi-OS determinism/calibration/SLO plus nightly large fuzz campaign run in `runtime-compliance-matrix.yml`. |
+| Full challenge/dispute phase-2 mechanics | Deferred (Phase-2) | Explicitly out of current phase-1 MVP scope; tracked for next phase. |
