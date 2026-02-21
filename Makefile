@@ -1,4 +1,4 @@
-.PHONY: check fmt clippy test verify matrix-check tree site-build site-install
+.PHONY: check fmt clippy test verify matrix-check tree
 
 check:
 	cargo check --workspace
@@ -20,9 +20,3 @@ matrix-check:
 
 tree:
 	@find . -maxdepth 3 -type d | sort
-
-site-install:
-	@cd site && bun install
-
-site-build:
-	@cd site && bun run build
