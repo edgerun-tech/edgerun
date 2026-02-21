@@ -1,5 +1,8 @@
 .PHONY: check fmt clippy test verify matrix-check tree
 
+CARGO_TARGET_DIR ?= $(CURDIR)/out/target
+export CARGO_TARGET_DIR
+
 check:
 	cargo check --workspace
 
