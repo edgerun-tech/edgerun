@@ -841,6 +841,7 @@ async fn api_cancel_task(
         if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
             eprintln!("failed to persist task state: {err:#}");
         }
+        drop(tasks);
         try_start_next_queued_task(state.clone()).await;
         return (
             axum::http::StatusCode::ACCEPTED,
@@ -851,6 +852,37 @@ async fn api_cancel_task(
         );
     }
     drop(queue);
+
+    {
+        let mut tasks = state.tasks.lock().await;
+        if let Some(entry) = tasks.get_mut(&task) {
+            if entry.state == "queued" {
+                entry.state = "canceled".to_string();
+                entry.last_exit = Some(130);
+                entry.finished_at_unix_s = Some(now_unix_s());
+                entry.last_output = "canceled before dispatch".to_string();
+                entry.history.push(TaskRunRecord {
+                    started_at_unix_s: entry.started_at_unix_s,
+                    finished_at_unix_s: entry.finished_at_unix_s,
+                    state: entry.state.clone(),
+                    exit: entry.last_exit,
+                    output: entry.last_output.clone(),
+                    log_path: entry.last_log_path.clone(),
+                });
+                trim_history(&mut entry.history, web_history_limit(&state.config));
+                if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
+                    eprintln!("failed to persist task state: {err:#}");
+                }
+                return (
+                    axum::http::StatusCode::ACCEPTED,
+                    Json(ApiMessage {
+                        ok: true,
+                        message: format!("task canceled before dispatch: {task}"),
+                    }),
+                );
+            }
+        }
+    }
 
     let cancel_notify = {
         let running_cancel = state.running_cancel.lock().await;
@@ -964,6 +996,9 @@ async fn spawn_task_execution(state: WebState, task: String) -> Result<()> {
         let Some(entry) = tasks.get_mut(&task) else {
             return Ok(());
         };
+        if entry.state != "queued" {
+            return Ok(());
+        }
         entry.state = "running".to_string();
         entry.started_at_unix_s = Some(now_unix_s());
         entry.finished_at_unix_s = None;
@@ -1666,8 +1701,7 @@ struct SimpleOkResponse {
 #[derive(Debug, Deserialize)]
 struct JobCreateResponse {
     job_id: String,
-    #[serde(rename = "bundle_hash")]
-    _bundle_hash: String,
+    bundle_hash: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2391,8 +2425,32 @@ async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     let client = reqwest::Client::new();
     wait_for_health(&client, &sched_url, &mut scheduler).await?;
 
+    let runtime_id = "1111111111111111111111111111111111111111111111111111111111111111";
+    let create_body = json!({
+        "runtime_id": runtime_id,
+        "wasm_base64":"AA==",
+        "input_base64":"",
+        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
+        "escrow_lamports":1,
+        "assignment_worker_pubkey":"worker-a"
+    });
+    let create: JobCreateResponse = client
+        .post(format!("{sched_url}/v1/job/create"))
+        .json(&create_body)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let job_id = create.job_id;
+    let bundle_hash = create.bundle_hash;
+
+    let output_hash_1 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let output_hash_2 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let output_hash_3 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
     let r1 = json!({
-        "idempotency_key":"k-result-1","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","output_hash":"o1","output_len":10
+        "idempotency_key":"k-result-1","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_1,"output_len":10
     });
     let resp = post_json_ok(&client, &sched_url, "/v1/worker/result", &r1).await?;
     ensure(
@@ -2406,7 +2464,7 @@ async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     )?;
 
     let f1 = json!({
-        "idempotency_key":"k-failure-1","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","phase":"runtime_execute","error_code":"InstructionLimitExceeded","error_message":"out of fuel"
+        "idempotency_key":"k-failure-1","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"runtime_execute","error_code":"InstructionLimitExceeded","error_message":"out of fuel"
     });
     let resp = post_json_ok(&client, &sched_url, "/v1/worker/failure", &f1).await?;
     ensure(
@@ -2420,7 +2478,7 @@ async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     )?;
 
     let p1 = json!({
-        "idempotency_key":"k-replay-1","worker_pubkey":"worker-a","job_id":"job-a","artifact":{"bundle_hash":"b1","ok":false,"abi_version":1,"runtime_id":"r1","output_hash":null,"output_len":null,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":0,"error_code":"InstructionLimitExceeded","error_message":"out of fuel","trap_code":"OutOfFuel"}
+        "idempotency_key":"k-replay-1","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":false,"abi_version":1,"runtime_id":runtime_id,"output_hash":null,"output_len":null,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":0,"error_code":"InstructionLimitExceeded","error_message":"out of fuel","trap_code":"OutOfFuel"}
     });
     let resp = post_json_ok(&client, &sched_url, "/v1/worker/replay", &p1).await?;
     ensure(
@@ -2433,15 +2491,15 @@ async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
         "replay second submit should duplicate",
     )?;
 
-    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-2","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","output_hash":"o2","output_len":20})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-3","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","output_hash":"o3","output_len":30})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-2","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","phase":"post_execution_verify","error_code":"BundleHashMismatch","error_message":"mismatch"})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-3","worker_pubkey":"worker-a","job_id":"job-a","bundle_hash":"b1","phase":"runtime_execute","error_code":"Trap","error_message":"trap"})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-2","worker_pubkey":"worker-a","job_id":"job-a","artifact":{"bundle_hash":"b1","ok":true,"abi_version":1,"runtime_id":"r1","output_hash":"o2","output_len":20,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":900,"error_code":null,"error_message":null,"trap_code":null}})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-3","worker_pubkey":"worker-a","job_id":"job-a","artifact":{"bundle_hash":"b1","ok":true,"abi_version":1,"runtime_id":"r1","output_hash":"o3","output_len":30,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":800,"error_code":null,"error_message":null,"trap_code":null}})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-2","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_2,"output_len":20})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-3","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_3,"output_len":30})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-2","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"post_execution_verify","error_code":"BundleHashMismatch","error_message":"mismatch"})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-3","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"runtime_execute","error_code":"Trap","error_message":"trap"})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-2","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_2,"output_len":20,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":900,"error_code":null,"error_message":null,"trap_code":null}})).await?;
+    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-3","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_3,"output_len":30,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":800,"error_code":null,"error_message":null,"trap_code":null}})).await?;
 
     let status: Value = client
-        .get(format!("{sched_url}/v1/job/job-a"))
+        .get(format!("{sched_url}/v1/job/{job_id}"))
         .send()
         .await?
         .error_for_status()?
@@ -2462,7 +2520,7 @@ async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
             .last()
             .and_then(|x| x["output_hash"].as_str())
             .unwrap_or_default()
-            == "o3",
+            == output_hash_3,
         "expected newest result output_hash=o3",
     )?;
     ensure(
