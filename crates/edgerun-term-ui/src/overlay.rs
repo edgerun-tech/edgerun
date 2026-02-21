@@ -3,11 +3,11 @@ use std::time::Instant;
 use crate::debug::{DebugOverlay, DebugRendererUsed};
 use crate::widgets::center_panel_rect;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
+use term_core::render::primitives::{OverlayRect, push_overlay_rect};
 use term_core::render::{
     OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT, OVERLAY_TEXT_MUTED, fill_rect,
     rgba_bytes,
 };
-use term_core::render::primitives::{OverlayRect, push_overlay_rect};
 use term_core::terminal::{Rgba, ansi_color};
 use term_core::text::GlyphCache;
 
@@ -45,7 +45,10 @@ pub fn debug_overlay_lines(
             ansi_color(6, false),
         )
     } else {
-        ("Benchmark: idle (B to start)".to_string(), OVERLAY_TEXT_MUTED)
+        (
+            "Benchmark: idle (B to start)".to_string(),
+            OVERLAY_TEXT_MUTED,
+        )
     };
     vec![
         ("Debug overlay (F3 to close)".to_string(), OVERLAY_TEXT),
@@ -169,11 +172,19 @@ pub fn draw_debug_panel(
     let max_y = height.saturating_sub(10) as i32;
     let palette_h = (cell_h as i32).max(line_h);
     let panel_h = (line_h * lines.len() as i32 + palette_h + padding as i32 * 2 + 6).min(max_y);
-    let (x0, y0, x1, y1) =
-        center_panel_rect(width, height, panel_w, panel_h, padding);
+    let (x0, y0, x1, y1) = center_panel_rect(width, height, panel_w, panel_h, padding);
 
     // Opaque background so preview glyphs are not ghosted beneath the panel.
-    fill_rect(frame, width, height, x0, y0, x1, y1, rgba_bytes(OVERLAY_PANEL));
+    fill_rect(
+        frame,
+        width,
+        height,
+        x0,
+        y0,
+        x1,
+        y1,
+        rgba_bytes(OVERLAY_PANEL),
+    );
     fill_rect(
         frame,
         width,
@@ -230,14 +241,7 @@ pub fn draw_debug_overlay_cpu(
         rgba_bytes(OVERLAY_DIM),
     );
     draw_debug_panel(
-        glyphs,
-        frame,
-        width,
-        height,
-        overlay,
-        last_used,
-        cell_w,
-        cell_h,
+        glyphs, frame, width, height, overlay, last_used, cell_w, cell_h,
     );
 }
 
@@ -278,8 +282,13 @@ pub fn build_debug_overlay_gpu(
     let line_h = glyphs.cell_height() as f32 + 4.0;
     let palette_h = (cell_h as f32).max(line_h);
     let panel_h = (line_h * lines.len() as f32 + palette_h + padding * 2.0 + 6.0).min(max_h);
-    let (x0_i, y0_i, x1_i, y1_i) =
-        center_panel_rect(width, height, panel_w as i32, panel_h as i32, padding as i32);
+    let (x0_i, y0_i, x1_i, y1_i) = center_panel_rect(
+        width,
+        height,
+        panel_w as i32,
+        panel_h as i32,
+        padding as i32,
+    );
     let x0 = x0_i as f32;
     let y0 = y0_i as f32;
     let x1 = x1_i as f32;
@@ -367,5 +376,5 @@ pub fn draw_debug_scene(
     // Border drawing stays in the caller for now.
     let _ = (frame_width, frame_height, start_time, focused);
 }
-use term_core::render::{draw_background, draw_text_line_clipped};
 use pixels::wgpu;
+use term_core::render::{draw_background, draw_text_line_clipped};

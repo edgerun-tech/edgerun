@@ -574,7 +574,10 @@ async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) 
     Ok(())
 }
 
-async fn fetch_policy_info(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<PolicyInfoResponse> {
+async fn fetch_policy_info(
+    client: &reqwest::Client,
+    cfg: &WorkerConfig,
+) -> Result<PolicyInfoResponse> {
     let path = "/v1/policy/info";
     let url = Url::parse(&format!("{}{}", cfg.scheduler_base_url, path))?;
     let mut attempted_session_create = false;
@@ -598,8 +601,7 @@ async fn fetch_policy_info(client: &reqwest::Client, cfg: &WorkerConfig) -> Resu
                 .await
                 .context("invalid policy info response");
         }
-        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN
-        {
+        if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             if attempted_session_create {
                 tracing::debug!(
                     status = %status,
@@ -671,7 +673,10 @@ async fn establish_policy_session(client: &reqwest::Client, cfg: &WorkerConfig) 
         session.session_key = None;
         session.expires_at_unix_s = 0;
         session.nonce_counter = 0;
-        (session.bootstrap_token.clone(), session.bound_origin.clone())
+        (
+            session.bootstrap_token.clone(),
+            session.bound_origin.clone(),
+        )
     };
     let path = "/v1/session/create";
     let url = Url::parse(&format!("{}{}", cfg.scheduler_base_url, path))?;
@@ -1755,7 +1760,10 @@ mod tests {
                         ),
                     )
                 } else {
-                    ("401 Unauthorized", "{\"error\":\"unauthorized\"}".to_string())
+                    (
+                        "401 Unauthorized",
+                        "{\"error\":\"unauthorized\"}".to_string(),
+                    )
                 };
                 let resp = format!(
                     "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

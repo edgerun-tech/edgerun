@@ -47,9 +47,11 @@ pub fn validate_wasm_module(wasm: &[u8]) -> Result<(), JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn execute_bundle_payload_bytes_strict(bundle_payload_bytes: &[u8]) -> Result<JsValue, JsValue> {
-    let report =
-        edgerun_runtime::execute_bundle_payload_bytes_strict(bundle_payload_bytes).map_err(runtime_error_to_js)?;
+pub fn execute_bundle_payload_bytes_strict(
+    bundle_payload_bytes: &[u8],
+) -> Result<JsValue, JsValue> {
+    let report = edgerun_runtime::execute_bundle_payload_bytes_strict(bundle_payload_bytes)
+        .map_err(runtime_error_to_js)?;
     to_js_value(ExecutionReportJs {
         bundle_hash: hex::encode(report.bundle_hash),
         abi_version: report.abi_version,
@@ -98,11 +100,14 @@ fn parse_hex_32(input: &str) -> Result<[u8; 32], JsValue> {
         .strip_prefix("0x")
         .or_else(|| trimmed.strip_prefix("0X"))
         .unwrap_or(trimmed);
-    let bytes = hex::decode(hex_str).map_err(|e| js_error(format!("runtime_id must be hex: {e}")))?;
-    let arr: [u8; 32] = bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| js_error(format!("runtime_id must decode to 32 bytes, got {}", bytes.len())))?;
+    let bytes =
+        hex::decode(hex_str).map_err(|e| js_error(format!("runtime_id must be hex: {e}")))?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+        js_error(format!(
+            "runtime_id must decode to 32 bytes, got {}",
+            bytes.len()
+        ))
+    })?;
     Ok(arr)
 }
 

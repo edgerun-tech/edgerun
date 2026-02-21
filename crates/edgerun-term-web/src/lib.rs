@@ -11,29 +11,25 @@ mod wasm {
 
     use js_sys::Uint8Array;
     use term_core::render::{
-        draw_background,
-        draw_cursor_overlay,
-        draw_grid,
+        FONT_DATA, FONT_SIZE, GlyphCache, draw_background, draw_cursor_overlay, draw_grid,
         layout::compute_layout,
-        GlyphCache,
-        FONT_DATA,
-        FONT_SIZE,
     };
     use term_core::terminal::{GridPerformer, Terminal};
     use vte::Parser as VteParser;
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::prelude::*;
-    use wasm_bindgen::{JsCast, Clamped};
+    use wasm_bindgen::{Clamped, JsCast};
     #[cfg(feature = "webgpu")]
     use wasm_bindgen_futures::spawn_local;
     use web_sys::{
         CanvasRenderingContext2d, ClipboardEvent, CompositionEvent, Document, Element,
-        HtmlCanvasElement, HtmlTextAreaElement, ImageData, InputEvent, KeyboardEvent, MessageEvent, WebSocket,
+        HtmlCanvasElement, HtmlTextAreaElement, ImageData, InputEvent, KeyboardEvent, MessageEvent,
+        WebSocket,
     };
     #[cfg(feature = "webgpu")]
-    use wgpu::util::DeviceExt;
-    #[cfg(feature = "webgpu")]
     use wgpu::SurfaceError;
+    #[cfg(feature = "webgpu")]
+    use wgpu::util::DeviceExt;
 
     const BLINK_INTERVAL: Duration = Duration::from_millis(700);
 
@@ -279,7 +275,11 @@ mod wasm {
         let navigator = window.navigator();
         let has_gpu = js_sys::Reflect::has(&navigator, &JsValue::from_str("gpu")).unwrap_or(false);
         if !has_gpu {
-            return (false, "WebGPU unavailable in this browser; using 2D canvas".to_string(), WebGpuRuntimeState::default());
+            return (
+                false,
+                "WebGPU unavailable in this browser; using 2D canvas".to_string(),
+                WebGpuRuntimeState::default(),
+            );
         }
 
         let mut state = load_webgpu_state(window);
@@ -363,8 +363,9 @@ mod wasm {
         canvas.set_height(height);
 
         #[cfg(feature = "webgpu")]
-        let render_backend: SharedRenderBackend =
-            Rc::new(RefCell::new(RenderBackend::Canvas2d(init_canvas_2d(&canvas)?)));
+        let render_backend: SharedRenderBackend = Rc::new(RefCell::new(RenderBackend::Canvas2d(
+            init_canvas_2d(&canvas)?,
+        )));
         #[cfg(not(feature = "webgpu"))]
         let render_backend: SharedRenderBackend = Rc::new(RefCell::new({
             set_status(&status_el, Some("WebGPU feature disabled, using 2D canvas"));
@@ -418,9 +419,10 @@ mod wasm {
         let terminal = Terminal::new(layout.cols, layout.rows);
 
         let outbox = Arc::new(Mutex::new(Vec::new()));
-        let writer: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(Box::new(OutboxWriter {
-            queue: outbox.clone(),
-        })));
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(OutboxWriter {
+                queue: outbox.clone(),
+            })));
 
         let app_state = Rc::new(RefCell::new(AppState {
             terminal,
@@ -447,7 +449,12 @@ mod wasm {
         setup_keyboard(&window, app_state.clone())?;
         setup_paste(&window, app_state.clone())?;
         setup_text_input(&window, &document, app_state.clone())?;
-        setup_resize(&window, canvas.clone(), app_state.clone(), render_backend.clone())?;
+        setup_resize(
+            &window,
+            canvas.clone(),
+            app_state.clone(),
+            render_backend.clone(),
+        )?;
 
         start_render_loop(window, app_state, render_backend);
 
@@ -463,7 +470,10 @@ mod wasm {
         (width, height)
     }
 
-    fn setup_keyboard(window: &web_sys::Window, state: Rc<RefCell<AppState>>) -> Result<(), JsValue> {
+    fn setup_keyboard(
+        window: &web_sys::Window,
+        state: Rc<RefCell<AppState>>,
+    ) -> Result<(), JsValue> {
         let handler = Closure::<dyn FnMut(KeyboardEvent)>::new(move |event: KeyboardEvent| {
             if let Some(bytes) = map_key(&event) {
                 event.prevent_default();
@@ -515,15 +525,19 @@ mod wasm {
 
         let input_for_comp = input.clone();
         let state_for_comp = state.clone();
-        let on_comp_end = Closure::<dyn FnMut(CompositionEvent)>::new(move |event: CompositionEvent| {
-            if let Some(text) = event.data() {
-                if !text.is_empty() {
-                    queue_or_send(&state_for_comp, text.as_bytes());
+        let on_comp_end =
+            Closure::<dyn FnMut(CompositionEvent)>::new(move |event: CompositionEvent| {
+                if let Some(text) = event.data() {
+                    if !text.is_empty() {
+                        queue_or_send(&state_for_comp, text.as_bytes());
+                    }
                 }
-            }
-            input_for_comp.set_value("");
-        });
-        input.add_event_listener_with_callback("compositionend", on_comp_end.as_ref().unchecked_ref())?;
+                input_for_comp.set_value("");
+            });
+        input.add_event_listener_with_callback(
+            "compositionend",
+            on_comp_end.as_ref().unchecked_ref(),
+        )?;
         on_comp_end.forget();
 
         let focus_input = input.clone();
@@ -539,7 +553,8 @@ mod wasm {
             let focus_canvas = Closure::<dyn FnMut()>::new(move || {
                 let _ = canvas_focus.focus();
             });
-            canvas.add_event_listener_with_callback("click", focus_canvas.as_ref().unchecked_ref())?;
+            canvas
+                .add_event_listener_with_callback("click", focus_canvas.as_ref().unchecked_ref())?;
             focus_canvas.forget();
         }
 
@@ -571,7 +586,11 @@ mod wasm {
                 let mut state = onmessage_state.borrow_mut();
                 let (terminal, parser, app_cursor_keys) = {
                     let state = &mut *state;
-                    (&mut state.terminal, &mut state.parser, &mut state.app_cursor_keys)
+                    (
+                        &mut state.terminal,
+                        &mut state.parser,
+                        &mut state.app_cursor_keys,
+                    )
                 };
                 let mut performer = GridPerformer {
                     grid: terminal,
@@ -591,7 +610,11 @@ mod wasm {
         let onopen_state = state.clone();
         let onopen = Closure::<dyn FnMut()>::new(move || {
             if let Some(ws) = onopen_state.borrow().ws.as_ref() {
-                send_resize(ws, onopen_state.borrow().layout.cols, onopen_state.borrow().layout.rows);
+                send_resize(
+                    ws,
+                    onopen_state.borrow().layout.cols,
+                    onopen_state.borrow().layout.rows,
+                );
                 let mut state = onopen_state.borrow_mut();
                 let pending = std::mem::take(&mut state.pending_input);
                 for chunk in pending {
@@ -621,7 +644,12 @@ mod wasm {
                 state.reconnect_attempts = state.reconnect_attempts.saturating_add(1);
                 backoff
             };
-            schedule_reconnect(&onclose_window, onclose_state.clone(), onclose_writer.clone(), delay);
+            schedule_reconnect(
+                &onclose_window,
+                onclose_state.clone(),
+                onclose_writer.clone(),
+                delay,
+            );
         });
         if let Some(ws) = state.borrow().ws.as_ref() {
             ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
@@ -671,8 +699,12 @@ mod wasm {
                 let (texture, view) = create_frame_texture(&gpu.device, width, height);
                 gpu.texture = texture;
                 gpu.texture_view = view;
-                gpu.bind_group =
-                    create_bind_group_with_layout(&gpu.device, &gpu.bind_group_layout, &gpu.texture_view, &gpu.sampler);
+                gpu.bind_group = create_bind_group_with_layout(
+                    &gpu.device,
+                    &gpu.bind_group_layout,
+                    &gpu.texture_view,
+                    &gpu.sampler,
+                );
             }
             RenderBackend::Canvas2d(ctx) => {
                 ctx.clear_rect(0.0, 0.0, width as f64, height as f64);
@@ -691,7 +723,12 @@ mod wasm {
         let state_for_size = state.clone();
         let backend_for_size = backend.clone();
         let handler = Closure::<dyn FnMut()>::new(move || {
-            apply_resize(&window_for_size, &canvas_for_size, &state_for_size, &backend_for_size);
+            apply_resize(
+                &window_for_size,
+                &canvas_for_size,
+                &state_for_size,
+                &backend_for_size,
+            );
         });
         window.add_event_listener_with_callback("resize", handler.as_ref().unchecked_ref())?;
         handler.forget();
@@ -700,9 +737,16 @@ mod wasm {
         let canvas_for_observer = canvas.clone();
         let state_for_observer = state.clone();
         let backend_for_observer = backend.clone();
-        let observer_cb = Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(move |_entries, _observer| {
-            apply_resize(&window_for_observer, &canvas_for_observer, &state_for_observer, &backend_for_observer);
-        });
+        let observer_cb = Closure::<dyn FnMut(js_sys::Array, web_sys::ResizeObserver)>::new(
+            move |_entries, _observer| {
+                apply_resize(
+                    &window_for_observer,
+                    &canvas_for_observer,
+                    &state_for_observer,
+                    &backend_for_observer,
+                );
+            },
+        );
         let observer = web_sys::ResizeObserver::new(observer_cb.as_ref().unchecked_ref())?;
         observer.observe(&canvas);
         observer_cb.forget();
@@ -710,11 +754,15 @@ mod wasm {
         Ok(())
     }
 
-    fn start_render_loop(window: web_sys::Window, state: Rc<RefCell<AppState>>, backend: SharedRenderBackend) {
+    fn start_render_loop(
+        window: web_sys::Window,
+        state: Rc<RefCell<AppState>>,
+        backend: SharedRenderBackend,
+    ) {
         let f: Rc<RefCell<Option<Closure<dyn FnMut()>>>> = Rc::new(RefCell::new(None));
         let g = f.clone();
 
-            let window_for_frame = window.clone();
+        let window_for_frame = window.clone();
         *g.borrow_mut() = Some(Closure::wrap(Box::new(move || {
             {
                 let mut state = state.borrow_mut();
@@ -783,7 +831,8 @@ mod wasm {
                 .request_animation_frame(f.borrow().as_ref().unwrap().as_ref().unchecked_ref());
         }) as Box<dyn FnMut()>));
 
-        let _ = window.request_animation_frame(g.borrow().as_ref().unwrap().as_ref().unchecked_ref());
+        let _ =
+            window.request_animation_frame(g.borrow().as_ref().unwrap().as_ref().unchecked_ref());
     }
 
     fn send_resize(ws: &WebSocket, cols: usize, rows: usize) {
@@ -801,7 +850,10 @@ mod wasm {
     }
 
     #[cfg(feature = "webgpu")]
-    fn render_gpu(state: &Rc<RefCell<AppState>>, gpu: &Rc<RefCell<GpuState>>) -> Result<(), JsValue> {
+    fn render_gpu(
+        state: &Rc<RefCell<AppState>>,
+        gpu: &Rc<RefCell<GpuState>>,
+    ) -> Result<(), JsValue> {
         let mut gpu = gpu.borrow_mut();
         let frame = state.borrow();
 
@@ -824,14 +876,18 @@ mod wasm {
             }
             Err(SurfaceError::Timeout) => return Ok(()),
             Err(SurfaceError::OutOfMemory) => {
-                return Err(JsValue::from_str("surface out of memory"))
+                return Err(JsValue::from_str("surface out of memory"));
             }
             Err(SurfaceError::Other) => return Ok(()),
         };
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("term-web-encoder"),
-        });
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("term-web-encoder"),
+            });
 
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -861,7 +917,10 @@ mod wasm {
         Ok(())
     }
 
-    fn render_canvas_2d(state: &Rc<RefCell<AppState>>, ctx: &CanvasRenderingContext2d) -> Result<(), JsValue> {
+    fn render_canvas_2d(
+        state: &Rc<RefCell<AppState>>,
+        ctx: &CanvasRenderingContext2d,
+    ) -> Result<(), JsValue> {
         let mut frame = state.borrow_mut();
         let width = frame.width;
         let height = frame.height;
@@ -940,16 +999,14 @@ mod wasm {
 
         let limits = wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("term-web-device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: limits,
-                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::Off,
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("term-web-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: limits,
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await
             .map_err(|err| JsValue::from_str(&format!("device error: {err:?}")))?;
 
@@ -1004,7 +1061,8 @@ mod wasm {
             ],
         });
 
-        let bind_group = create_bind_group_with_layout(&device, &bind_group_layout, &texture_view, &sampler);
+        let bind_group =
+            create_bind_group_with_layout(&device, &bind_group_layout, &texture_view, &sampler);
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("term-web-shader"),
@@ -1093,7 +1151,6 @@ mod wasm {
             format,
         ))
     }
-
 
     #[cfg(feature = "webgpu")]
     fn upload_frame(
@@ -1207,7 +1264,6 @@ mod wasm {
             ],
         })
     }
-
 }
 
 #[cfg(target_arch = "wasm32")]

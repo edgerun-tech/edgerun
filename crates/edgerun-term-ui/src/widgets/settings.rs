@@ -1,14 +1,14 @@
+use crate::debug::DebugRenderMode;
+use crate::widgets::{
+    MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
+};
+use pixels::wgpu;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
+use term_core::render::primitives::fill_rect;
 use term_core::render::{
     GlyphCache, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT, OVERLAY_TEXT_MUTED,
     draw_text_line_clipped, rgba_bytes,
 };
-use term_core::render::primitives::fill_rect;
-use crate::widgets::{
-    MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
-};
-use crate::debug::DebugRenderMode;
-use pixels::wgpu;
 
 pub struct SettingsPanel {
     pub open: bool,
@@ -177,7 +177,16 @@ pub fn draw_settings_panel_cpu(
         height as i32,
         rgba_bytes(OVERLAY_DIM),
     );
-    fill_rect(frame, width, height, x0, y0, x1, y1, rgba_bytes(OVERLAY_PANEL));
+    fill_rect(
+        frame,
+        width,
+        height,
+        x0,
+        y0,
+        x1,
+        y1,
+        rgba_bytes(OVERLAY_PANEL),
+    );
     fill_rect(
         frame,
         width,
@@ -204,34 +213,38 @@ pub fn draw_settings_panel_cpu(
 
     let line_h = glyphs.cell_height() as i32 + 6;
     let mut y = y0 + 12 + line_h;
-        let lines = vec![
-            "F4/Esc closes the panel".to_string(),
-            " ".to_string(),
-            "Performance".to_string(),
-            format!(
-                "  Scrollback: {} (S to toggle)",
-                if settings.scrollback_enabled {
-                    "Enabled"
-                } else {
-                    "Disabled"
-                }
-            ),
-            format!(
-                "  FPS overlay: {} (P to toggle)",
-                if settings.show_fps { "On" } else { "Off" }
-            ),
-            format!(
-                "  Copy notice: {} (C to toggle)",
-                if settings.show_copy_notice { "On" } else { "Off" }
-            ),
-            format!("  Rendering: {} (G to cycle)", settings.render_mode),
-            format!(
-                "  Log level: {} (L to cycle)",
-                settings.log_level.to_ascii_uppercase()
-            ),
-            " ".to_string(),
-            "Fonts".to_string(),
-            settings.current_font_label(),
+    let lines = vec![
+        "F4/Esc closes the panel".to_string(),
+        " ".to_string(),
+        "Performance".to_string(),
+        format!(
+            "  Scrollback: {} (S to toggle)",
+            if settings.scrollback_enabled {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
+        ),
+        format!(
+            "  FPS overlay: {} (P to toggle)",
+            if settings.show_fps { "On" } else { "Off" }
+        ),
+        format!(
+            "  Copy notice: {} (C to toggle)",
+            if settings.show_copy_notice {
+                "On"
+            } else {
+                "Off"
+            }
+        ),
+        format!("  Rendering: {} (G to cycle)", settings.render_mode),
+        format!(
+            "  Log level: {} (L to cycle)",
+            settings.log_level.to_ascii_uppercase()
+        ),
+        " ".to_string(),
+        "Fonts".to_string(),
+        settings.current_font_label(),
         "  F = next font, R = refresh system list, 0 = reset embedded".to_string(),
         " ".to_string(),
         "Downloads".to_string(),
@@ -345,7 +358,11 @@ pub fn build_settings_panel_gpu(
         ),
         format!(
             "  Copy notice: {} (C to toggle)",
-            if settings.show_copy_notice { "On" } else { "Off" }
+            if settings.show_copy_notice {
+                "On"
+            } else {
+                "Off"
+            }
         ),
         format!("  Rendering: {} (G to cycle)", settings.render_mode),
         format!(

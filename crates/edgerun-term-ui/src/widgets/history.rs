@@ -1,12 +1,12 @@
+use crate::widgets::{
+    MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
+};
+use pixels::wgpu;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
 use term_core::render::{
     GlyphCache, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT_MUTED, rgba_bytes,
 };
 use term_core::terminal::Rgba;
-use crate::widgets::{
-    MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
-};
-use pixels::wgpu;
 
 #[derive(Clone)]
 pub struct MenuEntry {
@@ -485,14 +485,7 @@ impl HistoryMenu {
         };
 
         let (x0, y0, x1, y1) = layout.rect;
-        GpuRenderer::push_rect(
-            rects,
-            0.0,
-            0.0,
-            width as f32,
-            height as f32,
-            OVERLAY_DIM,
-        );
+        GpuRenderer::push_rect(rects, 0.0, 0.0, width as f32, height as f32, OVERLAY_DIM);
         GpuRenderer::push_rect(
             rects,
             x0 as f32,

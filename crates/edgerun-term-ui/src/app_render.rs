@@ -2,26 +2,21 @@ use std::borrow::Cow;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
 
+use crate::overlay;
 use log::{error, info, warn};
 use pixels::{Error as PixelsError, Pixels, wgpu};
+use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
 use term_core::render::layout::LayoutMetrics;
+use term_core::render::primitives::fill_rect;
 use term_core::render::{
-    GlyphCache, TabVisual, OVERLAY_BADGE, OVERLAY_TEXT, build_border_gpu, draw_background,
+    GlyphCache, OVERLAY_BADGE, OVERLAY_TEXT, TabVisual, build_border_gpu, draw_background,
     draw_text_line_clipped, rgba_bytes,
 };
 use term_core::render::{
-    build_help_bar_gpu,
-    build_tab_bar_gpu,
-    draw_border_cpu,
-    draw_cursor_overlay,
-    draw_grid,
-    draw_help_bar_cpu,
-    draw_tab_bar_cpu,
+    build_help_bar_gpu, build_tab_bar_gpu, draw_border_cpu, draw_cursor_overlay, draw_grid,
+    draw_help_bar_cpu, draw_tab_bar_cpu,
 };
-use term_core::render::primitives::fill_rect;
-use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
 use term_core::terminal::Rgba;
-use crate::overlay;
 
 use crate::debug::{DebugOverlay, DebugRenderMode, DebugRendererUsed};
 use crate::widgets::cheatsheet::{Cheatsheet, build_cheatsheet_gpu, draw_cheatsheet_cpu};
@@ -322,10 +317,7 @@ fn render_gpu_frame(
                     hover: tab.link_hover,
                     hover_link_range: tab.hover_link_range,
                 };
-                let ui_dirty = match LAST_UI_DAMAGE
-                    .get_or_init(|| Mutex::new(ui_state))
-                    .lock()
-                {
+                let ui_dirty = match LAST_UI_DAMAGE.get_or_init(|| Mutex::new(ui_state)).lock() {
                     Ok(mut last_ui) => {
                         let changed = *last_ui != ui_state;
                         *last_ui = ui_state;
@@ -347,29 +339,29 @@ fn render_gpu_frame(
                         }
                     }
                 }
-            if !dirty_rows.is_empty() {
-                let mut band_start = dirty_rows[0];
-                let mut band_end = dirty_rows[0];
-                for &row in dirty_rows.iter().skip(1) {
-                    if row == band_end + 1 {
-                        band_end = row;
-                    } else {
-                        let x = layout.content_x;
-                        let y = layout.content_y + (band_start as u32).saturating_mul(cell_h);
-                        let w = frame_width.saturating_sub(layout.content_x);
-                        let hh = ((band_end - band_start + 1) as u32).saturating_mul(cell_h);
-                        damage_rects.push((x, y, w, hh));
-                        band_start = row;
-                        band_end = row;
+                if !dirty_rows.is_empty() {
+                    let mut band_start = dirty_rows[0];
+                    let mut band_end = dirty_rows[0];
+                    for &row in dirty_rows.iter().skip(1) {
+                        if row == band_end + 1 {
+                            band_end = row;
+                        } else {
+                            let x = layout.content_x;
+                            let y = layout.content_y + (band_start as u32).saturating_mul(cell_h);
+                            let w = frame_width.saturating_sub(layout.content_x);
+                            let hh = ((band_end - band_start + 1) as u32).saturating_mul(cell_h);
+                            damage_rects.push((x, y, w, hh));
+                            band_start = row;
+                            band_end = row;
+                        }
                     }
+                    let x = layout.content_x;
+                    let y = layout.content_y + (band_start as u32).saturating_mul(cell_h);
+                    let w = frame_width.saturating_sub(layout.content_x);
+                    let hh = ((band_end - band_start + 1) as u32).saturating_mul(cell_h);
+                    damage_rects.push((x, y, w, hh));
                 }
-                let x = layout.content_x;
-                let y = layout.content_y + (band_start as u32).saturating_mul(cell_h);
-                let w = frame_width.saturating_sub(layout.content_x);
-                let hh = ((band_end - band_start + 1) as u32).saturating_mul(cell_h);
-                damage_rects.push((x, y, w, hh));
             }
-        }
             let blink_changed = match LAST_BLINK_STATE.get_or_init(|| Mutex::new(None)).lock() {
                 Ok(mut last) => {
                     let changed = last.map_or(true, |prev| prev != cell_blink_on);
@@ -489,11 +481,9 @@ pub(crate) enum UiMode {
 }
 
 #[cfg(target_os = "macos")]
-const HELP_NORMAL: &str =
-    "Alt+T new tab • Alt+Q close tab • Alt+1-9 switch • Ctrl+Tab / Ctrl+Shift+Tab cycle • F5 logs • ˇ autocomplete • Cmd+C/V copy/paste";
+const HELP_NORMAL: &str = "Alt+T new tab • Alt+Q close tab • Alt+1-9 switch • Ctrl+Tab / Ctrl+Shift+Tab cycle • F5 logs • ˇ autocomplete • Cmd+C/V copy/paste";
 #[cfg(not(target_os = "macos"))]
-const HELP_NORMAL: &str =
-    "Alt+T new tab • Alt+Q close tab • Alt+1-9 switch • Ctrl+Tab / Ctrl+Shift+Tab cycle • F5 logs • ˇ autocomplete • Ctrl+Shift+C/V copy/paste";
+const HELP_NORMAL: &str = "Alt+T new tab • Alt+Q close tab • Alt+1-9 switch • Ctrl+Tab / Ctrl+Shift+Tab cycle • F5 logs • ˇ autocomplete • Ctrl+Shift+C/V copy/paste";
 
 #[cfg(target_os = "macos")]
 const HELP_SELECTING: &str =
@@ -704,7 +694,12 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
     if gpu_allowed && !settings.open {
         let allow_cursor_only = false;
         if let Some(renderer) = gpu_renderer.as_mut() {
-            if allow_cursor_only && cursor_only && !overlay_active && !overlays_open && renderer.base_valid() {
+            if allow_cursor_only
+                && cursor_only
+                && !overlay_active
+                && !overlays_open
+                && renderer.base_valid()
+            {
                 let render_result = render_gpu_frame(
                     renderer,
                     pixels,
@@ -739,13 +734,8 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
 
                 if let Err(err) = render_result {
                     renderer.invalidate_base();
-                    if !handle_render_error(
-                        err,
-                        frame_width,
-                        frame_height,
-                        pixels,
-                        Some(renderer),
-                    ) {
+                    if !handle_render_error(err, frame_width, frame_height, pixels, Some(renderer))
+                    {
                         return RenderOutcome {
                             keep_running: false,
                             needs_redraw,
@@ -761,47 +751,41 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
                 }
             }
 
-                let render_result = render_gpu_frame(
-                    renderer,
-                    pixels,
-                    tabs,
-                    active_tab,
-                    glyphs,
-                    layout,
-                    frame_width,
-                    frame_height,
-                    cell_w,
-                    cell_h,
-                    tab_bar_height,
-                    border_thickness,
-                    border_radius,
-                    border_inset,
-                    start_time,
-                    focused,
-                    help_visible,
-                    history_menu,
-                    context_menu,
-                    cheatsheet,
-                    settings,
-                    log_viewer,
-                    debug_overlay,
-                    fps,
-                    notice_text,
-                    overlay_active,
-                    render_cursor,
-                    cell_blink_on,
+            let render_result = render_gpu_frame(
+                renderer,
+                pixels,
+                tabs,
+                active_tab,
+                glyphs,
+                layout,
+                frame_width,
+                frame_height,
+                cell_w,
+                cell_h,
+                tab_bar_height,
+                border_thickness,
+                border_radius,
+                border_inset,
+                start_time,
+                focused,
+                help_visible,
+                history_menu,
+                context_menu,
+                cheatsheet,
+                settings,
+                log_viewer,
+                debug_overlay,
+                fps,
+                notice_text,
+                overlay_active,
+                render_cursor,
+                cell_blink_on,
                 cursor_blink_on,
             );
 
             if let Err(err) = render_result {
                 renderer.invalidate_base();
-                if !handle_render_error(
-                    err,
-                    frame_width,
-                    frame_height,
-                    pixels,
-                    Some(renderer),
-                ) {
+                if !handle_render_error(err, frame_width, frame_height, pixels, Some(renderer)) {
                     return RenderOutcome {
                         keep_running: false,
                         needs_redraw,
@@ -821,13 +805,13 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
         && renderer_used.is_none()
         && !overlay_active
         && !overlays_open
-        && matches!(debug_overlay.render_mode(), DebugRenderMode::Auto | DebugRenderMode::CpuOnly);
+        && matches!(
+            debug_overlay.render_mode(),
+            DebugRenderMode::Auto | DebugRenderMode::CpuOnly
+        );
     if can_cursor_only {
         if let Some(tab) = tabs.get(active_tab) {
-            if let Ok(cached) = LAST_CPU_FRAME
-                .get_or_init(|| Mutex::new(None))
-                .lock()
-            {
+            if let Ok(cached) = LAST_CPU_FRAME.get_or_init(|| Mutex::new(None)).lock() {
                 let valid = cached
                     .as_ref()
                     .map(|frame| frame.width == frame_width && frame.height == frame_height)
@@ -904,10 +888,7 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
             draw_cursor_in_scene,
         );
         if !draw_cursor_in_scene {
-            if let Ok(mut cached) = LAST_CPU_FRAME
-                .get_or_init(|| Mutex::new(None))
-                .lock()
-            {
+            if let Ok(mut cached) = LAST_CPU_FRAME.get_or_init(|| Mutex::new(None)).lock() {
                 *cached = Some(CachedFrame {
                     width: frame_width,
                     height: frame_height,
@@ -1230,9 +1211,9 @@ fn draw_fps_in_tab_bar_cpu(
         icon_color,
     );
 
-    let text_y =
-        bar_top + ((tab_bar_height as i32 - glyphs.cell_height() as i32) / 2).max(0)
-            + (glyphs.cell_height() as i32 - glyphs.baseline());
+    let text_y = bar_top
+        + ((tab_bar_height as i32 - glyphs.cell_height() as i32) / 2).max(0)
+        + (glyphs.cell_height() as i32 - glyphs.baseline());
     draw_text_line_clipped(
         glyphs,
         frame,
@@ -1436,7 +1417,14 @@ mod tests {
         let log_viewer = LogViewer::new();
 
         assert_eq!(
-            current_ui_mode(selection, &history, &context, &cheatsheet, &settings, &log_viewer),
+            current_ui_mode(
+                selection,
+                &history,
+                &context,
+                &cheatsheet,
+                &settings,
+                &log_viewer
+            ),
             UiMode::Selecting
         );
     }
@@ -1452,7 +1440,14 @@ mod tests {
         let log_viewer = LogViewer::new();
 
         assert_eq!(
-            current_ui_mode(selection, &history, &context, &cheatsheet, &settings, &log_viewer),
+            current_ui_mode(
+                selection,
+                &history,
+                &context,
+                &cheatsheet,
+                &settings,
+                &log_viewer
+            ),
             UiMode::Settings
         );
     }
