@@ -13,7 +13,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio::process::Command;
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun", about = "EdgeRun project orchestration CLI")]
@@ -157,6 +157,24 @@ const CLI_BUILD_NUMBER: &str = match option_env!("EDGERUN_BUILD_NUMBER") {
     None => "dev",
 };
 
+fn ci_timeout_duration() -> Duration {
+    let secs = std::env::var("EDGERUN_CI_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(30 * 60);
+    Duration::from_secs(secs)
+}
+
+async fn run_future_with_timeout<T>(
+    label: &str,
+    fut: impl std::future::Future<Output = Result<T>>,
+) -> Result<T> {
+    timeout(ci_timeout_duration(), fut)
+        .await
+        .with_context(|| format!("{label} timed out"))?
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -275,11 +293,31 @@ async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bool) 
     match job_name.as_str() {
         "all" => {
             run_rust_checks_sync(root)?;
-            run_integration_scheduler_api(root).await?;
-            run_integration_e2e_lifecycle(root).await?;
-            run_integration_policy_rotation(root).await?;
-            run_integration_abi_rollover(root).await?;
-            run_replay_corpus(root, &load_app_config(root)?).await?;
+            run_future_with_timeout(
+                "integration scheduler api",
+                run_integration_scheduler_api(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration e2e lifecycle",
+                run_integration_e2e_lifecycle(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration policy rotation",
+                run_integration_policy_rotation(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration abi rollover",
+                run_integration_abi_rollover(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "runtime replay corpus",
+                run_replay_corpus(root, &load_app_config(root)?),
+            )
+            .await?;
             validate_external_security_review(
                 &root.join("crates/edgerun-runtime/SECURITY_FINDINGS.json"),
             )?;
@@ -287,12 +325,34 @@ async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bool) 
         }
         "rust-checks" => run_rust_checks_sync(root),
         "integration" => {
-            run_integration_scheduler_api(root).await?;
-            run_integration_e2e_lifecycle(root).await?;
-            run_integration_policy_rotation(root).await?;
-            run_integration_abi_rollover(root).await
+            run_future_with_timeout(
+                "integration scheduler api",
+                run_integration_scheduler_api(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration e2e lifecycle",
+                run_integration_e2e_lifecycle(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration policy rotation",
+                run_integration_policy_rotation(root),
+            )
+            .await?;
+            run_future_with_timeout(
+                "integration abi rollover",
+                run_integration_abi_rollover(root),
+            )
+            .await
         }
-        "runtime-determinism" => run_replay_corpus(root, &load_app_config(root)?).await,
+        "runtime-determinism" => {
+            run_future_with_timeout(
+                "runtime replay corpus",
+                run_replay_corpus(root, &load_app_config(root)?),
+            )
+            .await
+        }
         "runtime-security" => validate_external_security_review(
             &root.join("crates/edgerun-runtime/SECURITY_FINDINGS.json"),
         ),
@@ -614,7 +674,7 @@ fn run_rust_checks_sync(root: &Path) -> Result<()> {
 
 fn run_program_anchor_build_sync(root: &Path) -> Result<()> {
     let program_root = root.join("program");
-    let env = program_tool_env(&program_root)?;
+    let env = program_tool_env(&program_root);
     run_program_sync_with_env(
         "Build Program",
         "anchor",
@@ -627,7 +687,7 @@ fn run_program_anchor_build_sync(root: &Path) -> Result<()> {
 
 fn run_program_local_tests_sync(root: &Path) -> Result<()> {
     let program_root = root.join("program");
-    let env = program_tool_env(&program_root)?;
+    let env = program_tool_env(&program_root);
     let program_id = "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T";
     let ledger_dir = program_root.join(".anchor/manual-test-ledger");
     let validator_log = ledger_dir.join("validator.log");
@@ -648,7 +708,7 @@ fn run_program_local_tests_sync(root: &Path) -> Result<()> {
         .arg("9900")
         .arg("--bpf-program")
         .arg(program_id)
-        .arg(program_root.join("target/deploy/edgerun.so"))
+        .arg(program_target_dir(&program_root).join("deploy/edgerun.so"))
         .current_dir(&program_root)
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err))
@@ -706,19 +766,25 @@ fn run_program_local_tests_sync(root: &Path) -> Result<()> {
     test_result
 }
 
-fn program_tool_env(program_root: &Path) -> Result<Vec<(OsString, OsString)>> {
+fn program_target_dir(program_root: &Path) -> PathBuf {
+    std::env::var_os("EDGERUN_PROGRAM_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| program_root.join("target"))
+}
+
+fn program_tool_env(program_root: &Path) -> Vec<(OsString, OsString)> {
     let cargo_home = program_root.join(".cargo-home");
     let cargo_install_root = program_root.join(".cargo");
-    let cargo_target_dir = program_root.join("target");
+    let cargo_target_dir = program_target_dir(program_root);
     let cargo_bin_dir = cargo_install_root.join("bin");
 
     let mut paths = vec![cargo_bin_dir];
     if let Some(existing) = std::env::var_os("PATH") {
         paths.extend(std::env::split_paths(&existing));
     }
-    let joined_path = std::env::join_paths(paths).context("failed to join PATH")?;
+    let joined_path = std::env::join_paths(paths).unwrap_or_else(|_| OsString::from(""));
 
-    Ok(vec![
+    vec![
         (OsString::from("CARGO_HOME"), cargo_home.into_os_string()),
         (
             OsString::from("CARGO_INSTALL_ROOT"),
@@ -729,7 +795,7 @@ fn program_tool_env(program_root: &Path) -> Result<Vec<(OsString, OsString)>> {
             cargo_target_dir.into_os_string(),
         ),
         (OsString::from("PATH"), joined_path),
-    ])
+    ]
 }
 
 fn run_program_sync(
@@ -2021,7 +2087,7 @@ async fn run_weekly_fuzz(root: &Path, config: &AppConfig) -> Result<()> {
 
     let artifact_dir = std::env::var("FUZZ_ARTIFACT_DIR")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| root.join(".edgerun-fuzz-weekly"));
+        .unwrap_or_else(|_| root.join("out/fuzz-weekly"));
     std::fs::create_dir_all(&artifact_dir)?;
     let secs = std::env::var("FUZZ_SECONDS_PER_TARGET")
         .ok()
@@ -2033,6 +2099,12 @@ async fn run_weekly_fuzz(root: &Path, config: &AppConfig) -> Result<()> {
         })
         .unwrap_or_else(|| "300".to_string());
     let fuzz_dir = root.join("crates/edgerun-runtime/fuzz");
+    let fuzz_crash_dir = fuzz_dir.join("artifacts");
+    if fuzz_crash_dir.exists() {
+        std::fs::remove_dir_all(&fuzz_crash_dir)
+            .with_context(|| format!("failed to clear {}", fuzz_crash_dir.display()))?;
+    }
+    std::fs::create_dir_all(&fuzz_crash_dir)?;
 
     for target in [
         "fuzz_bundle_decode",
@@ -2054,8 +2126,19 @@ async fn run_weekly_fuzz(root: &Path, config: &AppConfig) -> Result<()> {
         )?;
     }
 
-    let crash_count = count_files_recursive(&fuzz_dir.join("artifacts"))?;
-    ensure(crash_count == 0, "fuzz crashes detected in artifacts/")?;
+    let crash_count = count_files_recursive(&fuzz_crash_dir)?;
+    if crash_count > 0 {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let out_dir = artifact_dir.join(format!("run-{stamp}"));
+        copy_dir_recursive(&fuzz_crash_dir, &out_dir)?;
+        return Err(anyhow!(
+            "fuzz crashes detected: {crash_count} files (copied to {})",
+            out_dir.display()
+        ));
+    }
     Ok(())
 }
 
@@ -2232,12 +2315,28 @@ async fn spawn_cargo_bin(
     let log_file = std::fs::File::create(log_path)
         .with_context(|| format!("failed to create {}", log_path.display()))?;
     let log_file_err = log_file.try_clone()?;
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run")
-        .arg("-p")
-        .arg(package)
-        .current_dir(root)
-        .stdout(Stdio::from(log_file))
+    let override_var = match package {
+        "edgerun-scheduler" => Some("EDGERUN_SCHEDULER_BIN"),
+        "edgerun-worker" => Some("EDGERUN_WORKER_BIN"),
+        _ => None,
+    };
+
+    let mut cmd = if let Some(var) = override_var {
+        if let Ok(bin_path) = std::env::var(var) {
+            let mut c = Command::new(bin_path);
+            c.current_dir(root);
+            c
+        } else {
+            let mut c = Command::new("cargo");
+            c.arg("run").arg("-p").arg(package).current_dir(root);
+            c
+        }
+    } else {
+        let mut c = Command::new("cargo");
+        c.arg("run").arg("-p").arg(package).current_dir(root);
+        c
+    };
+    cmd.stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err));
     for (k, v) in envs {
         cmd.env(k, v);
@@ -2387,6 +2486,30 @@ fn count_files_recursive(path: &Path) -> Result<usize> {
         }
     }
     Ok(count)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    if !src.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).with_context(|| {
+                format!(
+                    "failed copying {} to {}",
+                    src_path.display(),
+                    dst_path.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
 }
 
 fn load_app_config(root: &Path) -> Result<AppConfig> {
