@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Edgerun-Proprietary
 [package]
 name = "edgerun-scheduler"
 version.workspace = true

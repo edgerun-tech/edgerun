@@ -28,6 +28,9 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
+      - name: SPDX header check
+        run: scripts/spdx-check.sh
+
       - name: Format check
         run: cargo fmt --all --check
 
