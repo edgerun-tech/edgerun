@@ -1,0 +1,53 @@
+[package]
+name = "edgerun-term-web"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+
+[features]
+default = []
+webgpu = ["dep:wgpu"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bytemuck = { version = "1.14", features = ["derive"] }
+console_error_panic_hook = "0.1"
+js-sys = "0.3"
+term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
+vte = "0.13"
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = [
+    "BinaryType",
+    "CanvasRenderingContext2d",
+    "ClipboardEvent",
+    "CompositionEvent",
+    "console",
+    "DataTransfer",
+    "Document",
+    "Element",
+    "EventTarget",
+    "FocusEvent",
+    "HtmlCanvasElement",
+    "HtmlTextAreaElement",
+    "ImageData",
+    "InputEvent",
+    "KeyboardEvent",
+    "Location",
+    "MessageEvent",
+    "Navigator",
+    "ResizeObserver",
+    "Gpu",
+    "GpuAdapter",
+    "GpuCanvasContext",
+    "GpuCanvasConfiguration",
+    "GpuDevice",
+    "GpuQueue",
+    "GpuTexture",
+    "GpuTextureFormat",
+    "Node",
+    "Window",
+    "WebSocket"
+] }
+wgpu = { version = "0.20", features = ["webgpu"], optional = true }
