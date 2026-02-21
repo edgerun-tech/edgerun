@@ -1,7 +1,8 @@
-# Edgerun Onboarding (Optional Security Layers)
+# Get Started
 
-This guide gives you a fast path to first success, then optional hardening.
-You do not need every workflow to get started.
+This guide starts with a Solana vanity-address workflow, then walks through
+local and distributed modes, and finally the limitations/gotchas so you can
+map required primitives to expected security outcomes.
 
 Prerequisites for examples:
 
@@ -10,7 +11,7 @@ Prerequisites for examples:
 - `jq` (for JSON extraction in shell snippets)
 - `openssl` (for HMAC signature examples)
 
-## 1) Minimal Start (Recommended First)
+## 1) First Workflow: Generate a Solana Vanity Address
 
 This runs vanity search fully local on the client. Seed material never leaves
 the client process.
@@ -25,7 +26,21 @@ cargo run -p edgerun-vanity-client -- \
   --chunk-attempts 50000
 ```
 
-## 2) Distributed Demo (Optional, Insecure by Design)
+## 2) Local vs Distributed Modes
+
+### Local (`secure-local`)
+
+- Seed stays on client.
+- No scheduler/worker required.
+- Best default for secrecy.
+
+### Distributed (`distributed-insecure`)
+
+- Uses scheduler + worker execution.
+- Seed/derivation material is exposed to worker-side execution.
+- Demo/testing only unless you add trusted execution + attestation validation.
+
+## 3) Distributed Demo (Optional, Insecure by Design)
 
 Use this only when seed disclosure to workers is acceptable for demo/testing.
 
@@ -67,7 +82,7 @@ cargo run -p edgerun-vanity-client -- \
   --max-escrow-lamports 20000000
 ```
 
-## 3) Policy and Session Hardening (Optional)
+## 4) Policy and Session Hardening (Optional)
 
 These endpoints are for control-plane security and auditability. Job creation
 does not require these calls.
@@ -183,7 +198,23 @@ curl -sS -X POST "$BASE/v1/session/invalidate" \
   -d '{}' | jq .
 ```
 
-## 4) Optional Environment Toggles
+## 5) Limitations and Gotchas
+
+Distributed vanity search without TEEs is not secret. Splitting generation and
+evaluation across workers does not fix this if any worker can reconstruct the
+search seed/counter path.
+
+Use the table below to decide what primitives you need for each result.
+
+| Desired Result | Required Primitives |
+| --- | --- |
+| Basic vanity demo only | `edgerun-vanity-payload` + `edgerun-vanity-client` in `secure-local` mode |
+| Distributed orchestration demo | Scheduler + worker + vanity payload (accept seed exposure risk) |
+| Controlled policy changes | Policy sessions (HMAC headers), nonce replay protection, audit log |
+| Strong secrecy in distributed search | TEE execution + remote attestation verification + measurement allowlist policy |
+| Strong integrity of worker claims | Attestation claim verification bound to worker identity and challenge nonce |
+
+## 6) Optional Environment Toggles
 
 Scheduler toggles you can enable as needed:
 
