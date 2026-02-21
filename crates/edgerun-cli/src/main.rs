@@ -38,6 +38,7 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    Version,
     Doctor,
     Setup {
         #[arg(long)]
@@ -233,6 +234,10 @@ struct StatusResponse {
 }
 
 const DEFAULT_HISTORY_LIMIT: usize = 30;
+const CLI_BUILD_NUMBER: &str = match option_env!("EDGERUN_BUILD_NUMBER") {
+    Some(v) => v,
+    None => "dev",
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -242,6 +247,13 @@ async fn main() -> Result<()> {
     let config = load_app_config(&root)?;
 
     match cli.command.unwrap_or(Commands::Interactive) {
+        Commands::Version => {
+            println!(
+                "edgerun {} (build {})",
+                env!("CARGO_PKG_VERSION"),
+                CLI_BUILD_NUMBER
+            );
+        }
         Commands::Doctor => run_named_task_sync(&root, "doctor")?,
         Commands::Setup { install_missing } => {
             let name = if install_missing {
