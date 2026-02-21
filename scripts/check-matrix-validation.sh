@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 MATRIX_FILE="docs/WHITEPAPER_IMPLEMENTATION_MATRIX.md"

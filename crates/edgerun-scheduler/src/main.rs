@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Edgerun-Proprietary
 #![allow(deprecated)]
 
 use std::collections::{HashMap, HashSet};

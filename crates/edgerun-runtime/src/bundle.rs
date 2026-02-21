@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use anyhow::{Context, Result};
 
 pub type Bundle = edgerun_types::BundlePayload;

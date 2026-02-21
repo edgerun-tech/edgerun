@@ -23,4 +23,5 @@ This repository uses a mixed licensing model.
   `license = "LicenseRef-Edgerun-Proprietary"`.
 - Apache-licensed components remain usable for community adoption and ecosystem growth.
 - Proprietary scheduler code preserves commercialization and fundraising flexibility.
-
+- SPDX headers are enforced in CI via `scripts/spdx-check.sh`.
+- You can normalize/update headers locally with `scripts/spdx-normalize.sh`.
