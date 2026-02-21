@@ -157,8 +157,9 @@ function activeTab(current: TerminalDrawerState): TerminalTab {
 }
 
 function lastUsedDevice(current: TerminalDrawerState): TerminalDevice | null {
-  if (current.devices.length === 0) return null
-  const sorted = [...current.devices].sort((left, right) => {
+  const used = current.devices.filter((device) => typeof device.lastConnectedAt === 'number' && device.lastConnectedAt > 0)
+  if (used.length === 0) return null
+  const sorted = [...used].sort((left, right) => {
     const l = left.lastConnectedAt ?? 0
     const r = right.lastConnectedAt ?? 0
     if (l !== r) return r - l
@@ -373,8 +374,6 @@ function seedKnownDevices(): void {
     const name = typeof entry?.name === 'string' && entry.name.trim() ? entry.name.trim() : 'Device'
     candidates.set(baseUrl, name)
   }
-
-  candidates.set(window.location.origin, 'Current Origin')
 
   if (state.devices.length > 0) return
   let added = false

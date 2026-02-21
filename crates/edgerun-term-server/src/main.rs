@@ -74,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/device/challenge", post(device_challenge))
         .route("/v1/device/handshake", post(device_handshake))
         .with_state(state)
-        .nest_service("/", ServeDir::new("term-web"));
+        .fallback_service(ServeDir::new("term-web"));
 
     let addr: SocketAddr = match "0.0.0.0:8080".parse() {
         Ok(addr) => addr,
