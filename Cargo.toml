@@ -7,6 +7,9 @@ members = [
   "crates/edgerun-worker",
   "crates/edgerun-scheduler",
   "crates/edgerun-storage",
+  "crates/edgerun-vanity-payload",
+  "crates/edgerun-vanity-client",
+  "crates/edgerun-hwvault-primitives",
 ]
 exclude = ["program/programs/edgerun_program"]
 resolver = "2"
