@@ -45,6 +45,104 @@ pub struct BundleMeta {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncTrustProfile {
+    Strict,
+    Balanced,
+    Monitor,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SyncTrustPolicy {
+    pub profile: SyncTrustProfile,
+    pub warn_risk: u32,
+    pub max_risk: u32,
+    pub block_revoked: bool,
+    pub configured: bool,
+}
+
+impl SyncTrustPolicy {
+    pub fn strict(configured: bool) -> Self {
+        Self {
+            profile: SyncTrustProfile::Strict,
+            warn_risk: 40,
+            max_risk: 60,
+            block_revoked: true,
+            configured,
+        }
+    }
+
+    pub fn balanced(configured: bool) -> Self {
+        Self {
+            profile: SyncTrustProfile::Balanced,
+            warn_risk: 70,
+            max_risk: 90,
+            block_revoked: true,
+            configured,
+        }
+    }
+
+    pub fn monitor(configured: bool) -> Self {
+        Self {
+            profile: SyncTrustProfile::Monitor,
+            warn_risk: 70,
+            max_risk: 100,
+            block_revoked: false,
+            configured,
+        }
+    }
+
+    pub fn from_profile_name(profile: &str, configured: bool) -> Option<Self> {
+        match profile.trim().to_ascii_lowercase().as_str() {
+            "strict" => Some(Self::strict(configured)),
+            "balanced" => Some(Self::balanced(configured)),
+            "monitor" => Some(Self::monitor(configured)),
+            _ => None,
+        }
+    }
+}
+
+impl Default for SyncTrustPolicy {
+    fn default() -> Self {
+        Self::balanced(false)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttestationClaim {
+    pub measurement: String,
+    pub issued_at_unix_s: u64,
+    pub expires_at_unix_s: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub format: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttestationPolicy {
+    pub required: bool,
+    pub max_age_secs: u64,
+    #[serde(default)]
+    pub allowed_measurements: Vec<String>,
+}
+
+impl Default for AttestationPolicy {
+    fn default() -> Self {
+        Self {
+            required: false,
+            max_age_secs: 300,
+            allowed_measurements: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum BundleCodecError {
     #[error("unsupported bundle version {0}")]
@@ -184,5 +282,54 @@ mod tests {
         assert!(
             matches!(err, BundleCodecError::UnsupportedVersion(v) if v == BUNDLE_ABI_CURRENT + 1)
         );
+    }
+
+    #[test]
+    fn sync_trust_policy_profile_defaults_match_expected() {
+        let strict = SyncTrustPolicy::strict(true);
+        assert_eq!(strict.profile, SyncTrustProfile::Strict);
+        assert_eq!(strict.warn_risk, 40);
+        assert_eq!(strict.max_risk, 60);
+        assert!(strict.block_revoked);
+        assert!(strict.configured);
+
+        let balanced = SyncTrustPolicy::balanced(true);
+        assert_eq!(balanced.profile, SyncTrustProfile::Balanced);
+        assert_eq!(balanced.warn_risk, 70);
+        assert_eq!(balanced.max_risk, 90);
+        assert!(balanced.block_revoked);
+        assert!(balanced.configured);
+
+        let monitor = SyncTrustPolicy::monitor(true);
+        assert_eq!(monitor.profile, SyncTrustProfile::Monitor);
+        assert_eq!(monitor.warn_risk, 70);
+        assert_eq!(monitor.max_risk, 100);
+        assert!(!monitor.block_revoked);
+        assert!(monitor.configured);
+    }
+
+    #[test]
+    fn sync_trust_policy_from_profile_name() {
+        assert!(matches!(
+            SyncTrustPolicy::from_profile_name("strict", true).map(|p| p.profile),
+            Some(SyncTrustProfile::Strict)
+        ));
+        assert!(matches!(
+            SyncTrustPolicy::from_profile_name("BALANCED", true).map(|p| p.profile),
+            Some(SyncTrustProfile::Balanced)
+        ));
+        assert!(matches!(
+            SyncTrustPolicy::from_profile_name("monitor", true).map(|p| p.profile),
+            Some(SyncTrustProfile::Monitor)
+        ));
+        assert!(SyncTrustPolicy::from_profile_name("unknown", true).is_none());
+    }
+
+    #[test]
+    fn attestation_policy_default_is_non_blocking() {
+        let p = AttestationPolicy::default();
+        assert!(!p.required);
+        assert_eq!(p.max_age_secs, 300);
+        assert!(p.allowed_measurements.is_empty());
     }
 }

@@ -22,3 +22,9 @@ solana-sdk.workspace = true
 ed25519-dalek.workspace = true
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-types = { path = "../../crates/edgerun-types" }
+edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
+fs2 = "0.4"
+
+[dev-dependencies]
+hmac = "0.12"
+sha2 = "0.10"

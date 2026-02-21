@@ -2,6 +2,7 @@
 #![allow(deprecated)]
 
 use std::collections::{HashMap, HashSet};
+use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -13,13 +14,14 @@ use axum::{
     body::Bytes,
     extract::Query,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcProgramAccountsConfig;
@@ -61,6 +63,19 @@ struct AppState {
     client_signature_max_age_secs: u64,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
+    session_ttl_secs: u64,
+    require_policy_session: bool,
+    policy_session_bootstrap_token: Option<String>,
+    policy_session_shared: bool,
+    policy_session_lock_path: PathBuf,
+    sessions: Arc<Mutex<HashMap<String, edgerun_hwvault_primitives::session::SessionState>>>,
+    policy_nonces: Arc<Mutex<HashMap<String, u64>>>,
+    policy_session_state_path: PathBuf,
+    policy_audit_path: PathBuf,
+    trust_policy: Arc<Mutex<edgerun_types::SyncTrustPolicy>>,
+    trust_policy_path: PathBuf,
+    attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
+    attestation_policy_path: PathBuf,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -114,6 +129,8 @@ struct WorkerResultReport {
     output_len: usize,
     #[serde(default)]
     attestation_sig: Option<String>,
+    #[serde(default)]
+    attestation_claim: Option<edgerun_types::AttestationClaim>,
     #[serde(default)]
     signature: Option<String>,
 }
@@ -256,6 +273,86 @@ struct PolicyInfoResponse {
     version: u32,
     signer_pubkey: String,
     ttl_secs: u64,
+    trust_policy: edgerun_types::SyncTrustPolicy,
+    attestation_policy: edgerun_types::AttestationPolicy,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionCreateRequest {
+    #[serde(default)]
+    bound_origin: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionCreateResponse {
+    token: String,
+    session_key: String,
+    ttl_secs: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionRotateRequest {
+    #[serde(default)]
+    bound_origin: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionRotateResponse {
+    token: String,
+    session_key: String,
+    ttl_secs: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct SessionInvalidateRequest {
+    #[serde(default)]
+    token: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SessionInvalidateResponse {
+    ok: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct PolicyAuditQuery {
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct PolicyAuditListResponse {
+    events: Vec<edgerun_hwvault_primitives::audit::PolicyAuditEvent>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct TrustPolicySetRequest {
+    profile: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TrustPolicyResponse {
+    policy: edgerun_types::SyncTrustPolicy,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AttestationPolicySetRequest {
+    required: bool,
+    max_age_secs: u64,
+    #[serde(default)]
+    allowed_measurements: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct AttestationPolicyResponse {
+    policy: edgerun_types::AttestationPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct PersistedPolicySessionState {
+    #[serde(default)]
+    sessions: HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
+    #[serde(default)]
+    nonces: HashMap<String, u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -387,9 +484,16 @@ async fn main() -> Result<()> {
             "MVP scheduler enforces quorum=2; ignoring configured value"
         );
     }
+    let trust_policy_path = data_dir.join("trust-policy.json");
+    let trust_policy = load_trust_policy(&trust_policy_path).unwrap_or_default();
+    let attestation_policy_path = data_dir.join("attestation-policy.json");
+    let attestation_policy = load_attestation_policy(&attestation_policy_path).unwrap_or_default();
+    let policy_session_state_path = data_dir.join("policy-session-state.json");
+    let loaded_policy_session_state =
+        load_policy_session_state(&policy_session_state_path).unwrap_or_default();
 
     let state = AppState {
-        data_dir,
+        data_dir: data_dir.clone(),
         public_base_url: std::env::var("EDGERUN_SCHEDULER_BASE_URL")
             .unwrap_or_else(|_| format!("http://{addr}")),
         retention: load_retention_config(),
@@ -421,13 +525,33 @@ async fn main() -> Result<()> {
             true,
         ),
         enable_slash_artifacts: read_env_bool("EDGERUN_SCHEDULER_ENABLE_SLASH_ARTIFACTS", true),
-        require_client_signatures: read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CLIENT_SIGNATURES", false),
+        require_client_signatures: read_env_bool(
+            "EDGERUN_SCHEDULER_REQUIRE_CLIENT_SIGNATURES",
+            false,
+        ),
         client_signature_max_age_secs: read_env_u64(
             "EDGERUN_SCHEDULER_CLIENT_SIGNATURE_MAX_AGE_SECS",
             300,
         ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
+        session_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_SESSION_TTL_SECS", 15 * 60),
+        require_policy_session: read_env_bool("EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION", true),
+        policy_session_bootstrap_token: std::env::var(
+            "EDGERUN_SCHEDULER_POLICY_SESSION_BOOTSTRAP_TOKEN",
+        )
+        .ok()
+        .filter(|v| !v.trim().is_empty()),
+        policy_session_shared: read_env_bool("EDGERUN_SCHEDULER_POLICY_SESSION_SHARED", false),
+        policy_session_lock_path: data_dir.join("policy-session.lock"),
+        sessions: Arc::new(Mutex::new(loaded_policy_session_state.sessions)),
+        policy_nonces: Arc::new(Mutex::new(loaded_policy_session_state.nonces)),
+        policy_session_state_path,
+        policy_audit_path: data_dir.join("policy-audit.jsonl"),
+        trust_policy: Arc::new(Mutex::new(trust_policy)),
+        trust_policy_path,
+        attestation_policy: Arc::new(Mutex::new(attestation_policy)),
+        attestation_policy_path,
         chain,
     };
     enforce_history_retention(&state);
@@ -435,7 +559,15 @@ async fn main() -> Result<()> {
     let housekeeping_state = state.clone();
     let app = Router::new()
         .route("/health", get(health))
+        .route("/v1/session/create", post(session_create))
+        .route("/v1/session/rotate", post(session_rotate))
+        .route("/v1/session/invalidate", post(session_invalidate))
         .route("/v1/policy/info", get(policy_info))
+        .route("/v1/policy/audit", get(policy_audit_list))
+        .route("/v1/trust/policy/get", get(trust_policy_get))
+        .route("/v1/trust/policy/set", post(trust_policy_set))
+        .route("/v1/attestation/policy/get", get(attestation_policy_get))
+        .route("/v1/attestation/policy/set", post(attestation_policy_set))
         .route("/v1/worker/heartbeat", post(worker_heartbeat))
         .route("/v1/worker/assignments", get(worker_assignments))
         .route("/v1/worker/result", post(worker_result))
@@ -461,13 +593,296 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
-async fn policy_info(State(state): State<AppState>) -> Json<PolicyInfoResponse> {
-    Json(PolicyInfoResponse {
+async fn session_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<SessionCreateRequest>,
+) -> Result<Json<SessionCreateResponse>, (StatusCode, String)> {
+    if let Some(expected) = state.policy_session_bootstrap_token.as_deref() {
+        let provided = header_value(&headers, "x-edgerun-bootstrap-token").unwrap_or_default();
+        if provided != expected {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "invalid bootstrap token".to_string(),
+            ));
+        }
+    }
+
+    let now = now_unix_seconds();
+    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
+        ttl_secs: state.session_ttl_secs.max(1),
+        ..edgerun_hwvault_primitives::session::SessionConfig::default()
+    };
+    let issue = with_policy_session_store_mut(&state, |sessions, _nonces| {
+        Ok(edgerun_hwvault_primitives::session::create_session(
+            sessions,
+            now,
+            &cfg,
+            payload.bound_origin,
+        ))
+    })?;
+    Ok(Json(SessionCreateResponse {
+        token: issue.token,
+        session_key: issue.signing_key,
+        ttl_secs: issue.ttl_secs,
+    }))
+}
+
+async fn session_rotate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<SessionRotateRequest>,
+) -> Result<Json<SessionRotateResponse>, (StatusCode, String)> {
+    let now = now_unix_seconds();
+    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
+        ttl_secs: state.session_ttl_secs.max(1),
+        ..edgerun_hwvault_primitives::session::SessionConfig::default()
+    };
+    let auth_header = header_value(&headers, "authorization");
+    let origin_header = header_value(&headers, "origin");
+    let ts_header = header_value(&headers, "x-hwv-ts");
+    let nonce_header = header_value(&headers, "x-hwv-nonce");
+    let sig_header = header_value(&headers, "x-hwv-sig");
+    let issue = with_policy_session_store_mut(&state, |sessions, nonces| {
+        let token = edgerun_hwvault_primitives::session::verify_session_request(
+            sessions,
+            nonces,
+            edgerun_hwvault_primitives::session::SessionAuthInput {
+                auth_header,
+                origin_header,
+                ts_header,
+                nonce_header,
+                sig_header,
+                method: "POST",
+                path: "/v1/session/rotate",
+                body: b"",
+            },
+            now,
+            &cfg,
+        )
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
+        invalidate_session_token(sessions, nonces, &token);
+        Ok(edgerun_hwvault_primitives::session::create_session(
+            sessions,
+            now,
+            &cfg,
+            payload.bound_origin,
+        ))
+    })?;
+    Ok(Json(SessionRotateResponse {
+        token: issue.token,
+        session_key: issue.signing_key,
+        ttl_secs: issue.ttl_secs,
+    }))
+}
+
+async fn session_invalidate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<SessionInvalidateRequest>,
+) -> Result<Json<SessionInvalidateResponse>, (StatusCode, String)> {
+    let now = now_unix_seconds();
+    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
+        ttl_secs: state.session_ttl_secs.max(1),
+        ..edgerun_hwvault_primitives::session::SessionConfig::default()
+    };
+    let auth_header = header_value(&headers, "authorization");
+    let origin_header = header_value(&headers, "origin");
+    let ts_header = header_value(&headers, "x-hwv-ts");
+    let nonce_header = header_value(&headers, "x-hwv-nonce");
+    let sig_header = header_value(&headers, "x-hwv-sig");
+    with_policy_session_store_mut(&state, |sessions, nonces| {
+        let caller = edgerun_hwvault_primitives::session::verify_session_request(
+            sessions,
+            nonces,
+            edgerun_hwvault_primitives::session::SessionAuthInput {
+                auth_header,
+                origin_header,
+                ts_header,
+                nonce_header,
+                sig_header,
+                method: "POST",
+                path: "/v1/session/invalidate",
+                body: b"",
+            },
+            now,
+            &cfg,
+        )
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
+
+        if let Some(target) = payload.token.as_deref() {
+            if target != caller {
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    "cross-session invalidation is not allowed".to_string(),
+                ));
+            }
+        }
+        invalidate_session_token(sessions, nonces, &caller);
+        Ok(())
+    })?;
+    Ok(Json(SessionInvalidateResponse { ok: true }))
+}
+
+async fn policy_info(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PolicyInfoResponse>, (StatusCode, String)> {
+    require_policy_session_headers(&state, &headers, "GET", "/v1/policy/info", &[])?;
+    Ok(Json(PolicyInfoResponse {
         key_id: state.policy_key_id.clone(),
         version: state.policy_version,
         signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
         ttl_secs: state.policy_ttl_secs,
-    })
+        trust_policy: state.trust_policy.lock().expect("lock poisoned").clone(),
+        attestation_policy: state
+            .attestation_policy
+            .lock()
+            .expect("lock poisoned")
+            .clone(),
+    }))
+}
+
+async fn policy_audit_list(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<PolicyAuditQuery>,
+) -> Result<Json<PolicyAuditListResponse>, (StatusCode, String)> {
+    require_policy_session_headers(&state, &headers, "GET", "/v1/policy/audit", &[])?;
+    let limit = query.limit.unwrap_or(100).clamp(1, 10_000);
+    let events = edgerun_hwvault_primitives::audit::list_recent_events_jsonl(
+        &state.policy_audit_path,
+        limit,
+    )
+    .map_err(internal_err)?;
+    Ok(Json(PolicyAuditListResponse { events }))
+}
+
+async fn trust_policy_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<TrustPolicyResponse>, (StatusCode, String)> {
+    require_policy_session_headers(&state, &headers, "GET", "/v1/trust/policy/get", &[])?;
+    let policy = state.trust_policy.lock().expect("lock poisoned").clone();
+    Ok(Json(TrustPolicyResponse { policy }))
+}
+
+async fn trust_policy_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<TrustPolicyResponse>, (StatusCode, String)> {
+    require_policy_session_headers(&state, &headers, "POST", "/v1/trust/policy/set", &body)?;
+    let payload: TrustPolicySetRequest = serde_json::from_slice(&body).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid trust policy payload".to_string(),
+        )
+    })?;
+    let Some(policy) = edgerun_types::SyncTrustPolicy::from_profile_name(&payload.profile, true)
+    else {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "profile must be one of: strict, balanced, monitor".to_string(),
+        ));
+    };
+
+    {
+        let mut current = state.trust_policy.lock().expect("lock poisoned");
+        *current = policy.clone();
+    }
+    save_trust_policy(&state.trust_policy_path, &policy).map_err(internal_err)?;
+
+    let evt = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
+        ts: now_unix_seconds(),
+        action: "trust_policy_set".to_string(),
+        target: "scheduler".to_string(),
+        details: format!(
+            "profile={:?} warn_risk={} max_risk={} block_revoked={}",
+            policy.profile, policy.warn_risk, policy.max_risk, policy.block_revoked
+        ),
+    };
+    if let Err(err) =
+        edgerun_hwvault_primitives::audit::append_event_jsonl(&state.policy_audit_path, &evt)
+    {
+        tracing::warn!(error = %err, "failed to append trust policy audit event");
+    }
+
+    Ok(Json(TrustPolicyResponse { policy }))
+}
+
+async fn attestation_policy_get(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AttestationPolicyResponse>, (StatusCode, String)> {
+    require_policy_session_headers(&state, &headers, "GET", "/v1/attestation/policy/get", &[])?;
+    let policy = state
+        .attestation_policy
+        .lock()
+        .expect("lock poisoned")
+        .clone();
+    Ok(Json(AttestationPolicyResponse { policy }))
+}
+
+async fn attestation_policy_set(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Json<AttestationPolicyResponse>, (StatusCode, String)> {
+    require_policy_session_headers(
+        &state,
+        &headers,
+        "POST",
+        "/v1/attestation/policy/set",
+        &body,
+    )?;
+    let payload: AttestationPolicySetRequest = serde_json::from_slice(&body).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid attestation policy payload".to_string(),
+        )
+    })?;
+    if payload.max_age_secs == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "max_age_secs must be > 0".to_string(),
+        ));
+    }
+    let mut allowed = payload
+        .allowed_measurements
+        .into_iter()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>();
+    allowed.sort();
+    allowed.dedup();
+    let policy = edgerun_types::AttestationPolicy {
+        required: payload.required,
+        max_age_secs: payload.max_age_secs,
+        allowed_measurements: allowed,
+    };
+    {
+        let mut current = state.attestation_policy.lock().expect("lock poisoned");
+        *current = policy.clone();
+    }
+    save_attestation_policy(&state.attestation_policy_path, &policy).map_err(internal_err)?;
+    let evt = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
+        ts: now_unix_seconds(),
+        action: "attestation_policy_set".to_string(),
+        target: "scheduler".to_string(),
+        details: format!(
+            "required={} max_age_secs={} allowed_measurements={}",
+            policy.required,
+            policy.max_age_secs,
+            policy.allowed_measurements.join(",")
+        ),
+    };
+    if let Err(err) =
+        edgerun_hwvault_primitives::audit::append_event_jsonl(&state.policy_audit_path, &evt)
+    {
+        tracing::warn!(error = %err, "failed to append attestation policy audit event");
+    }
+    Ok(Json(AttestationPolicyResponse { policy }))
 }
 
 async fn worker_heartbeat(
@@ -769,7 +1184,10 @@ async fn job_create(
                 client_signed_at_unix_s,
             );
             if !verify_client_message_signature(client, client_signature, &message)? {
-                return Err((StatusCode::UNAUTHORIZED, "invalid client signature".to_string()));
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "invalid client signature".to_string(),
+                ));
             }
             Some(client)
         }
@@ -780,6 +1198,17 @@ async fn job_create(
             ));
         }
     };
+    {
+        let policy = state.trust_policy.lock().expect("lock poisoned").clone();
+        if matches!(policy.profile, edgerun_types::SyncTrustProfile::Strict)
+            && parsed_client.is_none()
+        {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "strict trust policy requires authenticated client signatures".to_string(),
+            ));
+        }
+    }
     if state.require_client_signatures && parsed_client.is_none() {
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -952,6 +1381,25 @@ async fn job_create(
     }
     write_state_snapshot(&state).map_err(internal_err)?;
     evaluate_expired_jobs(&state).map_err(internal_err)?;
+    let audit_event = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
+        ts: now,
+        action: "job_create".to_string(),
+        target: bundle_hash_hex.clone(),
+        details: format!(
+            "policy_key_id={} policy_version={} quorum={} committee={} escrow_lamports={}",
+            state.policy_key_id,
+            state.policy_version,
+            effective_quorum,
+            state.committee_size,
+            payload.escrow_lamports
+        ),
+    };
+    if let Err(err) = edgerun_hwvault_primitives::audit::append_event_jsonl(
+        &state.policy_audit_path,
+        &audit_event,
+    ) {
+        tracing::warn!(error = %err, "failed to append policy audit event");
+    }
 
     let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
         let runtime_proof = match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
@@ -2287,6 +2735,7 @@ fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView)
         attestation_sig: Some(
             base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
         ),
+        attestation_claim: None,
         signature: None,
     });
     drop(results);
@@ -2741,7 +3190,11 @@ fn verify_client_message_signature(
         )
     })?;
     let signature = Signature::from_bytes(&sig_arr);
-    Ok(edgerun_crypto::verify(&client_vk, message.as_bytes(), &signature))
+    Ok(edgerun_crypto::verify(
+        &client_vk,
+        message.as_bytes(),
+        &signature,
+    ))
 }
 
 fn verify_worker_message_signature(
@@ -2793,6 +3246,10 @@ fn verify_result_attestation(
     state: &AppState,
     payload: &WorkerResultReport,
 ) -> Result<bool, (StatusCode, String)> {
+    if !verify_attestation_claim_stub(state, payload.attestation_claim.as_ref()) {
+        return Ok(false);
+    }
+
     let Some(attestation_b64) = payload.attestation_sig.as_deref() else {
         if state.require_result_attestation {
             return Ok(false);
@@ -2901,14 +3358,20 @@ fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
 
 fn result_signing_message(payload: &WorkerResultReport) -> String {
     let attestation_sig = payload.attestation_sig.clone().unwrap_or_default();
+    let attestation_claim = payload
+        .attestation_claim
+        .as_ref()
+        .and_then(|c| serde_json::to_string(c).ok())
+        .unwrap_or_default();
     format!(
-        "result|{}|{}|{}|{}|{}|{}",
+        "result|{}|{}|{}|{}|{}|{}|{}",
         payload.worker_pubkey,
         payload.job_id,
         payload.bundle_hash,
         payload.output_hash,
         payload.output_len,
-        attestation_sig
+        attestation_sig,
+        attestation_claim
     )
 }
 
@@ -2981,6 +3444,116 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
         .unwrap_or(default_value)
 }
 
+fn load_trust_policy(path: &std::path::Path) -> Result<edgerun_types::SyncTrustPolicy> {
+    if !path.exists() {
+        return Ok(edgerun_types::SyncTrustPolicy::default());
+    }
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read trust policy file {}", path.display()))?;
+    let parsed: edgerun_types::SyncTrustPolicy =
+        serde_json::from_str(&raw).context("invalid trust policy json")?;
+    Ok(parsed)
+}
+
+fn load_attestation_policy(path: &std::path::Path) -> Result<edgerun_types::AttestationPolicy> {
+    if !path.exists() {
+        return Ok(edgerun_types::AttestationPolicy::default());
+    }
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read attestation policy file {}", path.display()))?;
+    let parsed: edgerun_types::AttestationPolicy =
+        serde_json::from_str(&raw).context("invalid attestation policy json")?;
+    Ok(parsed)
+}
+
+fn save_trust_policy(
+    path: &std::path::Path,
+    policy: &edgerun_types::SyncTrustPolicy,
+) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create trust policy parent directory {}",
+                parent.display()
+            )
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(policy).context("serialize trust policy")?;
+    std::fs::write(path, bytes)
+        .with_context(|| format!("failed to write trust policy file {}", path.display()))?;
+    Ok(())
+}
+
+fn save_attestation_policy(
+    path: &std::path::Path,
+    policy: &edgerun_types::AttestationPolicy,
+) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create attestation policy parent directory {}",
+                parent.display()
+            )
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(policy).context("serialize attestation policy")?;
+    std::fs::write(path, bytes)
+        .with_context(|| format!("failed to write attestation policy file {}", path.display()))?;
+    Ok(())
+}
+
+fn load_policy_session_state(path: &std::path::Path) -> Result<PersistedPolicySessionState> {
+    if !path.exists() {
+        return Ok(PersistedPolicySessionState::default());
+    }
+    let raw = std::fs::read_to_string(path).with_context(|| {
+        format!(
+            "failed to read policy session state file {}",
+            path.display()
+        )
+    })?;
+    let parsed: PersistedPolicySessionState =
+        serde_json::from_str(&raw).context("invalid policy session state json")?;
+    Ok(parsed)
+}
+
+fn save_policy_session_state(
+    path: &std::path::Path,
+    state: &PersistedPolicySessionState,
+) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create policy session state parent directory {}",
+                parent.display()
+            )
+        })?;
+    }
+    let bytes = serde_json::to_vec_pretty(state).context("serialize policy session state")?;
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes).with_context(|| {
+        format!(
+            "failed to write temp policy session state file {}",
+            tmp.display()
+        )
+    })?;
+    std::fs::rename(&tmp, path).with_context(|| {
+        format!(
+            "failed to rename policy session state temp file {} to {}",
+            tmp.display(),
+            path.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn persist_policy_session_state(state: &AppState) -> Result<()> {
+    let sessions = state.sessions.lock().expect("lock poisoned").clone();
+    let nonces = state.policy_nonces.lock().expect("lock poisoned").clone();
+    let snapshot = PersistedPolicySessionState { sessions, nonces };
+    save_policy_session_state(&state.policy_session_state_path, &snapshot)
+}
+
 async fn housekeeping_loop(state: AppState) {
     let interval_secs = read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5).max(1);
     loop {
@@ -2996,6 +3569,13 @@ async fn housekeeping_loop(state: AppState) {
         if let Err(err) = reconcile_onchain_job_statuses(&state) {
             tracing::warn!(error = %err, "housekeeping on-chain reconciliation failed");
         }
+        let now = now_unix_seconds();
+        if let Err((_, err)) = with_policy_session_store_mut(&state, |sessions, nonces| {
+            edgerun_hwvault_primitives::session::cleanup_expired(sessions, nonces, now);
+            Ok(())
+        }) {
+            tracing::warn!(error = %err, "failed to cleanup policy session state");
+        }
         tokio::time::sleep(Duration::from_secs(interval_secs)).await;
     }
 }
@@ -3005,6 +3585,153 @@ fn now_unix_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+fn require_policy_session_headers(
+    state: &AppState,
+    headers: &HeaderMap,
+    method: &str,
+    path: &str,
+    body: &[u8],
+) -> Result<(), (StatusCode, String)> {
+    if !state.require_policy_session {
+        return Ok(());
+    }
+    let now = now_unix_seconds();
+    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
+        ttl_secs: state.session_ttl_secs.max(1),
+        ..edgerun_hwvault_primitives::session::SessionConfig::default()
+    };
+
+    let auth_header = header_value(headers, "authorization");
+    let origin_header = header_value(headers, "origin");
+    let ts_header = header_value(headers, "x-hwv-ts");
+    let nonce_header = header_value(headers, "x-hwv-nonce");
+    let sig_header = header_value(headers, "x-hwv-sig");
+
+    with_policy_session_store_mut(state, |sessions, nonces| {
+        edgerun_hwvault_primitives::session::verify_session_request(
+            sessions,
+            nonces,
+            edgerun_hwvault_primitives::session::SessionAuthInput {
+                auth_header,
+                origin_header,
+                ts_header,
+                nonce_header,
+                sig_header,
+                method,
+                path,
+                body,
+            },
+            now,
+            &cfg,
+        )
+        .map(|_| ())
+        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))
+    })?;
+    Ok(())
+}
+
+fn with_policy_session_store_mut<T>(
+    state: &AppState,
+    mutator: impl FnOnce(
+        &mut HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
+        &mut HashMap<String, u64>,
+    ) -> Result<T, (StatusCode, String)>,
+) -> Result<T, (StatusCode, String)> {
+    if state.policy_session_shared {
+        if let Some(parent) = state.policy_session_lock_path.parent() {
+            std::fs::create_dir_all(parent).map_err(internal_err)?;
+        }
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&state.policy_session_lock_path)
+            .map_err(internal_err)?;
+        lock_file.lock_exclusive().map_err(internal_err)?;
+
+        let loaded = load_policy_session_state(&state.policy_session_state_path)
+            .unwrap_or_else(|_| PersistedPolicySessionState::default());
+        let op_result = {
+            let mut sessions = state.sessions.lock().expect("lock poisoned");
+            let mut nonces = state.policy_nonces.lock().expect("lock poisoned");
+            *sessions = loaded.sessions;
+            *nonces = loaded.nonces;
+            let result = mutator(&mut sessions, &mut nonces);
+            let snapshot = PersistedPolicySessionState {
+                sessions: sessions.clone(),
+                nonces: nonces.clone(),
+            };
+            if let Err(err) = save_policy_session_state(&state.policy_session_state_path, &snapshot)
+            {
+                tracing::warn!(error = %err, "failed to persist shared policy session state");
+            }
+            result
+        };
+        drop(lock_file);
+        return op_result;
+    }
+
+    let op_result = {
+        let mut sessions = state.sessions.lock().expect("lock poisoned");
+        let mut nonces = state.policy_nonces.lock().expect("lock poisoned");
+        mutator(&mut sessions, &mut nonces)
+    };
+    if let Err(err) = persist_policy_session_state(state) {
+        tracing::warn!(error = %err, "failed to persist policy session state");
+    }
+    op_result
+}
+
+fn invalidate_session_token(
+    sessions: &mut HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
+    nonces: &mut HashMap<String, u64>,
+    token: &str,
+) {
+    sessions.remove(token);
+    let prefix = format!("{token}:");
+    nonces.retain(|k, _| !k.starts_with(&prefix));
+}
+
+fn verify_attestation_claim_stub(
+    state: &AppState,
+    claim: Option<&edgerun_types::AttestationClaim>,
+) -> bool {
+    let now = now_unix_seconds();
+    let policy = state
+        .attestation_policy
+        .lock()
+        .expect("lock poisoned")
+        .clone();
+    let Some(claim) = claim else {
+        return !policy.required;
+    };
+
+    if claim.issued_at_unix_s > now {
+        return false;
+    }
+    if claim.expires_at_unix_s <= now {
+        return false;
+    }
+    if now.saturating_sub(claim.issued_at_unix_s) > policy.max_age_secs {
+        return false;
+    }
+    if !policy.allowed_measurements.is_empty() {
+        let measurement = claim.measurement.trim().to_ascii_lowercase();
+        if !policy
+            .allowed_measurements
+            .iter()
+            .any(|m| m == &measurement)
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn header_value<'a>(headers: &'a HeaderMap, key: &str) -> Option<&'a str> {
+    headers.get(key).and_then(|v| v.to_str().ok())
 }
 
 fn touch_job_last_update(state: &AppState, job_id: &str) {
@@ -3082,6 +3809,10 @@ fn enforce_history_retention(state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use hmac::{Hmac, Mac};
+    use sha2::{Digest, Sha256};
 
     fn test_state() -> AppState {
         let data_dir =
@@ -3089,7 +3820,7 @@ mod tests {
         let _ = std::fs::create_dir_all(&data_dir);
         let _ = std::fs::create_dir_all(data_dir.join("bundles"));
         AppState {
-            data_dir,
+            data_dir: data_dir.clone(),
             public_base_url: "http://127.0.0.1:8080".to_string(),
             retention: RetentionConfig {
                 max_reports_per_job: 32,
@@ -3119,6 +3850,19 @@ mod tests {
             client_signature_max_age_secs: 300,
             chain_auto_submit: false,
             job_timeout_secs: 60,
+            session_ttl_secs: 900,
+            require_policy_session: false,
+            policy_session_bootstrap_token: None,
+            policy_session_shared: false,
+            policy_session_lock_path: data_dir.join("policy-session.lock"),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            policy_nonces: Arc::new(Mutex::new(HashMap::new())),
+            policy_session_state_path: data_dir.join("policy-session-state.json"),
+            policy_audit_path: data_dir.join("policy-audit.jsonl"),
+            trust_policy: Arc::new(Mutex::new(edgerun_types::SyncTrustPolicy::default())),
+            trust_policy_path: data_dir.join("trust-policy.json"),
+            attestation_policy: Arc::new(Mutex::new(edgerun_types::AttestationPolicy::default())),
+            attestation_policy_path: data_dir.join("attestation-policy.json"),
             chain: None,
         }
     }
@@ -3134,6 +3878,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3144,6 +3889,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 12,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
         ];
@@ -3164,6 +3910,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3174,6 +3921,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3184,6 +3932,7 @@ mod tests {
                 output_hash: "out-b".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
         ];
@@ -3202,6 +3951,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3212,6 +3962,7 @@ mod tests {
                 output_hash: "out-a".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3222,6 +3973,7 @@ mod tests {
                 output_hash: "out-b".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -3232,6 +3984,7 @@ mod tests {
                 output_hash: "out-b".to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             },
         ];
@@ -3253,6 +4006,7 @@ mod tests {
                     output_hash: "out-a".to_string(),
                     output_len: 10,
                     attestation_sig: None,
+                    attestation_claim: None,
                     signature: None,
                 });
                 reports.push(WorkerResultReport {
@@ -3263,6 +4017,7 @@ mod tests {
                     output_hash: "out-b".to_string(),
                     output_len: 10,
                     attestation_sig: None,
+                    attestation_claim: None,
                     signature: None,
                 });
             }
@@ -3286,6 +4041,7 @@ mod tests {
                     output_hash: "out-a".to_string(),
                     output_len: 10,
                     attestation_sig: None,
+                    attestation_claim: None,
                     signature: None,
                 });
             }
@@ -3298,6 +4054,7 @@ mod tests {
                     output_hash: "out-b".to_string(),
                     output_len: 10,
                     attestation_sig: None,
+                    attestation_claim: None,
                     signature: None,
                 });
             }
@@ -3325,6 +4082,7 @@ mod tests {
                     },
                     output_len: 10,
                     attestation_sig: None,
+                    attestation_claim: None,
                     signature: None,
                 });
             }
@@ -3352,6 +4110,7 @@ mod tests {
                 .to_string(),
             output_len: 1,
             attestation_sig: None,
+            attestation_claim: None,
             signature: None,
         };
         let err = validate_worker_result_payload(&payload).expect_err("must reject");
@@ -3805,6 +4564,7 @@ mod tests {
                     .to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             });
             entries.push(WorkerResultReport {
@@ -3816,6 +4576,7 @@ mod tests {
                     .to_string(),
                 output_len: 10,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             });
         }
@@ -3887,6 +4648,7 @@ mod tests {
                     .to_string(),
                 output_len: 1,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             });
             entries.push(WorkerResultReport {
@@ -3899,6 +4661,7 @@ mod tests {
                     .to_string(),
                 output_len: 1,
                 attestation_sig: None,
+                attestation_claim: None,
                 signature: None,
             });
         }
@@ -4284,6 +5047,7 @@ mod tests {
                 output_hash: winning_hash.clone(),
                 output_len: 1,
                 attestation_sig: Some(sig_win),
+                attestation_claim: None,
                 signature: None,
             },
             WorkerResultReport {
@@ -4295,6 +5059,7 @@ mod tests {
                 output_hash: losing_hash,
                 output_len: 1,
                 attestation_sig: Some(sig_lose),
+                attestation_claim: None,
                 signature: None,
             },
         ];
@@ -4341,6 +5106,7 @@ mod tests {
             output_hash: hex::encode(output_hash),
             output_len: 7,
             attestation_sig: Some(attestation_sig),
+            attestation_claim: None,
             signature: None,
         };
         {
@@ -4415,6 +5181,7 @@ mod tests {
             output_hash: hex::encode(output_hash),
             output_len: 7,
             attestation_sig: Some(attestation_sig),
+            attestation_claim: None,
             signature: None,
         };
         {
@@ -4456,5 +5223,539 @@ mod tests {
 
         let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
         assert!(!ok);
+    }
+
+    #[test]
+    fn trust_policy_file_roundtrip() {
+        let state = test_state();
+        let path = state.data_dir.join("trust-policy-roundtrip.json");
+        let expected = edgerun_types::SyncTrustPolicy::strict(true);
+        save_trust_policy(&path, &expected).expect("save");
+        let loaded = load_trust_policy(&path).expect("load");
+        assert_eq!(loaded, expected);
+    }
+
+    #[test]
+    fn policy_session_state_file_roundtrip() {
+        let state = test_state();
+        let path = state.data_dir.join("policy-session-roundtrip.json");
+
+        let mut sessions = HashMap::new();
+        sessions.insert(
+            "tok-1".to_string(),
+            edgerun_hwvault_primitives::session::SessionState {
+                expires_at: 123,
+                signing_key: "sk-1".to_string(),
+                bound_origin: Some("https://app.example".to_string()),
+            },
+        );
+        let mut nonces = HashMap::new();
+        nonces.insert("tok-1:n-1".to_string(), 999);
+        let snapshot = PersistedPolicySessionState { sessions, nonces };
+
+        save_policy_session_state(&path, &snapshot).expect("save");
+        let loaded = load_policy_session_state(&path).expect("load");
+        assert_eq!(loaded.sessions.len(), 1);
+        assert_eq!(loaded.nonces.len(), 1);
+        assert_eq!(
+            loaded.sessions.get("tok-1").expect("session").signing_key,
+            "sk-1"
+        );
+    }
+
+    #[tokio::test]
+    async fn strict_trust_policy_requires_client_signature() {
+        let state = test_state();
+        {
+            let mut policy = state.trust_policy.lock().expect("lock poisoned");
+            *policy = edgerun_types::SyncTrustPolicy::strict(true);
+        }
+
+        let payload = JobCreateRequest {
+            runtime_id: "00".repeat(32),
+            wasm_base64: base64::engine::general_purpose::STANDARD.encode([0x00_u8]),
+            input_base64: base64::engine::general_purpose::STANDARD.encode([0x01_u8]),
+            abi_version: Some(edgerun_types::BUNDLE_ABI_CURRENT),
+            limits: edgerun_types::Limits {
+                max_memory_bytes: 1024,
+                max_instructions: 10_000,
+            },
+            escrow_lamports: 1,
+            assignment_worker_pubkey: None,
+            client_pubkey: None,
+            client_signed_at_unix_s: None,
+            client_signature: None,
+        };
+
+        let err = job_create(State(state), Json(payload))
+            .await
+            .expect_err("strict policy must require auth");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert!(err.1.contains("strict trust policy"));
+    }
+
+    #[tokio::test]
+    async fn trust_policy_endpoints_require_valid_session() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let err = trust_policy_get(State(state.clone()), HeaderMap::new())
+            .await
+            .expect_err("missing session must fail");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn trust_policy_set_and_get_with_signed_session_headers() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let set_body = serde_json::to_vec(&TrustPolicySetRequest {
+            profile: "strict".to_string(),
+        })
+        .expect("serialize trust policy payload");
+        let headers_set = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "POST",
+            "/v1/trust/policy/set",
+            "nonce-set-1",
+            &set_body,
+        );
+        let set_resp = trust_policy_set(State(state.clone()), headers_set, Bytes::from(set_body))
+            .await
+            .expect("set must succeed")
+            .0;
+        assert!(matches!(
+            set_resp.policy.profile,
+            edgerun_types::SyncTrustProfile::Strict
+        ));
+
+        let headers_get = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/trust/policy/get",
+            "nonce-get-1",
+            &[],
+        );
+        let get_resp = trust_policy_get(State(state.clone()), headers_get)
+            .await
+            .expect("get must succeed")
+            .0;
+        assert!(matches!(
+            get_resp.policy.profile,
+            edgerun_types::SyncTrustProfile::Strict
+        ));
+
+        let persisted = load_trust_policy(&state.trust_policy_path).expect("load trust policy");
+        assert!(matches!(
+            persisted.profile,
+            edgerun_types::SyncTrustProfile::Strict
+        ));
+        assert!(persisted.configured);
+    }
+
+    #[tokio::test]
+    async fn trust_policy_endpoints_reject_replayed_nonce() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let headers = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/trust/policy/get",
+            "nonce-replay-1",
+            &[],
+        );
+
+        let first = trust_policy_get(State(state.clone()), headers.clone())
+            .await
+            .expect("first request should pass")
+            .0;
+        assert!(matches!(
+            first.policy.profile,
+            edgerun_types::SyncTrustProfile::Balanced
+        ));
+
+        let second = trust_policy_get(State(state.clone()), headers)
+            .await
+            .expect_err("replayed nonce should fail");
+        assert_eq!(second.0, StatusCode::UNAUTHORIZED);
+        assert!(second.1.contains("replay"));
+    }
+
+    #[tokio::test]
+    async fn trust_policy_set_rejects_tampered_body_with_same_signature() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let signed_body = serde_json::to_vec(&TrustPolicySetRequest {
+            profile: "strict".to_string(),
+        })
+        .expect("serialize signed payload");
+        let tampered_body = serde_json::to_vec(&TrustPolicySetRequest {
+            profile: "monitor".to_string(),
+        })
+        .expect("serialize tampered payload");
+        let headers = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "POST",
+            "/v1/trust/policy/set",
+            "nonce-tamper-1",
+            &signed_body,
+        );
+
+        let err = trust_policy_set(State(state.clone()), headers, Bytes::from(tampered_body))
+            .await
+            .expect_err("tampered body should be rejected");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert!(err.1.contains("invalid signature"));
+    }
+
+    #[tokio::test]
+    async fn session_create_requires_bootstrap_token_when_configured() {
+        let mut state = test_state();
+        state.policy_session_bootstrap_token = Some("bootstrap-secret".to_string());
+
+        let err = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect_err("missing bootstrap token must fail");
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-edgerun-bootstrap-token",
+            HeaderValue::from_static("bootstrap-secret"),
+        );
+        let issued = session_create(
+            State(state.clone()),
+            headers,
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("bootstrap token should allow session")
+        .0;
+        assert!(!issued.token.is_empty());
+        assert!(!issued.session_key.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_rotate_replaces_and_revokes_old_token() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let headers_rotate = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "POST",
+            "/v1/session/rotate",
+            "nonce-rotate-1",
+            &[],
+        );
+        let rotated = session_rotate(
+            State(state.clone()),
+            headers_rotate,
+            Json(SessionRotateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("rotate must succeed")
+        .0;
+        assert_ne!(issued.token, rotated.token);
+        assert_ne!(issued.session_key, rotated.session_key);
+
+        let old_headers = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/trust/policy/get",
+            "nonce-old-1",
+            &[],
+        );
+        let old_err = trust_policy_get(State(state.clone()), old_headers)
+            .await
+            .expect_err("old session must be revoked");
+        assert_eq!(old_err.0, StatusCode::UNAUTHORIZED);
+
+        let new_headers = signed_policy_headers(
+            &rotated.token,
+            &rotated.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/trust/policy/get",
+            "nonce-new-1",
+            &[],
+        );
+        let _ = trust_policy_get(State(state.clone()), new_headers)
+            .await
+            .expect("new session must work");
+    }
+
+    #[tokio::test]
+    async fn session_invalidate_revokes_token() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let headers_invalidate = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "POST",
+            "/v1/session/invalidate",
+            "nonce-invalidate-1",
+            &[],
+        );
+        let resp = session_invalidate(
+            State(state.clone()),
+            headers_invalidate,
+            Json(SessionInvalidateRequest { token: None }),
+        )
+        .await
+        .expect("invalidate must succeed")
+        .0;
+        assert!(resp.ok);
+
+        let old_headers = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/trust/policy/get",
+            "nonce-after-invalidate",
+            &[],
+        );
+        let old_err = trust_policy_get(State(state.clone()), old_headers)
+            .await
+            .expect_err("invalidated session must fail");
+        assert_eq!(old_err.0, StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn attestation_policy_set_and_get_with_signed_session_headers() {
+        let mut state = test_state();
+        state.require_policy_session = true;
+
+        let issued = session_create(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(SessionCreateRequest {
+                bound_origin: Some("https://app.example".to_string()),
+            }),
+        )
+        .await
+        .expect("session create must succeed")
+        .0;
+
+        let set_body = serde_json::to_vec(&AttestationPolicySetRequest {
+            required: true,
+            max_age_secs: 120,
+            allowed_measurements: vec!["M1".to_string(), "m1".to_string()],
+        })
+        .expect("serialize attestation policy payload");
+        let headers_set = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "POST",
+            "/v1/attestation/policy/set",
+            "nonce-att-set-1",
+            &set_body,
+        );
+        let set_resp =
+            attestation_policy_set(State(state.clone()), headers_set, Bytes::from(set_body))
+                .await
+                .expect("set must succeed")
+                .0;
+        assert!(set_resp.policy.required);
+        assert_eq!(set_resp.policy.max_age_secs, 120);
+        assert_eq!(set_resp.policy.allowed_measurements, vec!["m1".to_string()]);
+
+        let headers_get = signed_policy_headers(
+            &issued.token,
+            &issued.session_key,
+            "https://app.example",
+            "GET",
+            "/v1/attestation/policy/get",
+            "nonce-att-get-1",
+            &[],
+        );
+        let get_resp = attestation_policy_get(State(state.clone()), headers_get)
+            .await
+            .expect("get must succeed")
+            .0;
+        assert!(get_resp.policy.required);
+        assert_eq!(get_resp.policy.max_age_secs, 120);
+        assert_eq!(get_resp.policy.allowed_measurements, vec!["m1".to_string()]);
+    }
+
+    #[test]
+    fn result_attestation_claim_policy_is_enforced() {
+        let state = test_state();
+        let now = now_unix_seconds();
+
+        let payload = WorkerResultReport {
+            idempotency_key: "claim-1".to_string(),
+            worker_pubkey: "11111111111111111111111111111111".to_string(),
+            job_id: "00".repeat(32),
+            bundle_hash: "11".repeat(32),
+            output_hash: "22".repeat(32),
+            output_len: 1,
+            attestation_sig: None,
+            attestation_claim: None,
+            signature: None,
+        };
+
+        {
+            let mut p = state.attestation_policy.lock().expect("lock poisoned");
+            *p = edgerun_types::AttestationPolicy {
+                required: true,
+                max_age_secs: 300,
+                allowed_measurements: vec!["tee-good".to_string()],
+            };
+        }
+        let missing_claim = verify_result_attestation(&state, &payload).expect("verify");
+        assert!(!missing_claim);
+
+        let mut bad_measurement = payload.clone();
+        bad_measurement.attestation_claim = Some(edgerun_types::AttestationClaim {
+            measurement: "tee-bad".to_string(),
+            issued_at_unix_s: now.saturating_sub(5),
+            expires_at_unix_s: now.saturating_add(30),
+            nonce: None,
+            format: Some("stub".to_string()),
+            evidence: None,
+        });
+        let bad = verify_result_attestation(&state, &bad_measurement).expect("verify");
+        assert!(!bad);
+
+        let mut good = payload.clone();
+        good.attestation_claim = Some(edgerun_types::AttestationClaim {
+            measurement: "tee-good".to_string(),
+            issued_at_unix_s: now.saturating_sub(5),
+            expires_at_unix_s: now.saturating_add(30),
+            nonce: None,
+            format: Some("stub".to_string()),
+            evidence: None,
+        });
+        let ok = verify_result_attestation(&state, &good).expect("verify");
+        assert!(ok);
+    }
+
+    fn signed_policy_headers(
+        token: &str,
+        session_key: &str,
+        origin: &str,
+        method: &str,
+        path: &str,
+        nonce: &str,
+        body: &[u8],
+    ) -> HeaderMap {
+        type HmacSha256 = Hmac<Sha256>;
+
+        let ts = now_unix_seconds().to_string();
+        let body_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(body);
+            URL_SAFE_NO_PAD.encode(hasher.finalize())
+        };
+        let canonical = format!("{method}|{path}|{ts}|{nonce}|{body_hash}");
+        let sig = {
+            let mut mac = HmacSha256::new_from_slice(session_key.as_bytes()).expect("hmac key");
+            mac.update(canonical.as_bytes());
+            URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_str(&format!("Bearer {token}")).expect("auth header"),
+        );
+        headers.insert(
+            "origin",
+            HeaderValue::from_str(origin).expect("origin header"),
+        );
+        headers.insert("x-hwv-ts", HeaderValue::from_str(&ts).expect("ts header"));
+        headers.insert(
+            "x-hwv-nonce",
+            HeaderValue::from_str(nonce).expect("nonce header"),
+        );
+        headers.insert(
+            "x-hwv-sig",
+            HeaderValue::from_str(&sig).expect("sig header"),
+        );
+        headers
     }
 }
