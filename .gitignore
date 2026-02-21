@@ -1,16 +1,24 @@
+# Canonical build output
 /out/
+
+# Rust build artifacts (fallback if not using out/target)
 /target/
 **/target/
+
+# Local validator / chain state
 /test-ledger/
 /program/test-ledger/
 /program/.anchor/
 /program/.solana/
+
+# Local environment / tooling
+node_modules/
+.venv-gfr/
 .DS_Store
 .env
 *.log
-node_modules/
-.venv-gfr/
+
+# Local service state
 .edgerun-cli/
 .edgerun-replay-corpus/
 .edgerun-scheduler-data/
-frontend/

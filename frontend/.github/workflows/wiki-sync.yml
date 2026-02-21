@@ -1,0 +1,54 @@
+name: Wiki Sync
+
+on:
+  workflow_run:
+    workflows: ["Site Pages"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Build wiki docs
+        env:
+          EDGERUN_VERSION: main
+          EDGERUN_VERSIONS: main
+          EDGERUN_BUILD_NUMBER: wiki-${{ github.run_number }}-${{ github.sha }}
+          EDGERUN_SITE_URL: https://www.edgerun.tech
+          EDGERUN_SITE_DOMAIN: www.edgerun.tech
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Push wiki
+        if: ${{ secrets.WIKI_PUSH_TOKEN != '' }}
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/edgerun-frontend-wiki
+          git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/edgerun-frontend-wiki
+          rsync -a --delete wiki/main/ /tmp/edgerun-frontend-wiki/
+          cd /tmp/edgerun-frontend-wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add .
+            git commit -m "Update wiki docs from build ${GITHUB_RUN_NUMBER}"
+            git push
+          fi

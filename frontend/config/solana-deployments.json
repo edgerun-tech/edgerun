@@ -1,0 +1,13 @@
+{
+  "programs": {
+    "edgerunProgram": {
+      "label": "Edgerun Program",
+      "programIdByCluster": {
+        "localnet": "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T",
+        "devnet": "",
+        "testnet": "",
+        "mainnet-beta": ""
+      }
+    }
+  }
+}

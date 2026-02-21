@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Metadata
+        id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAGS="$(git tag --sort=-version:refname | sed 's/^v//' | head -n 10 | paste -sd, -)"
+          BUILD_NUMBER="${VERSION}-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::8}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "versions=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        env:
+          EDGERUN_VERSION: ${{ steps.meta.outputs.version }}
+          EDGERUN_VERSIONS: ${{ steps.meta.outputs.versions }}
+          EDGERUN_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          EDGERUN_SITE_URL: https://www.edgerun.tech
+          EDGERUN_SITE_DOMAIN: www.edgerun.tech
+        run: bun run build
+
+      - name: Archive artifacts
+        run: |
+          mkdir -p release-assets
+          tar -czf "release-assets/edgerun-site-${{ steps.meta.outputs.version }}.tar.gz" -C dist .
+          tar -czf "release-assets/edgerun-wiki-${{ steps.meta.outputs.version }}.tar.gz" -C wiki .
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true

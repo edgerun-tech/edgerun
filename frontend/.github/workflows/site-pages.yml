@@ -1,0 +1,83 @@
+name: Site Pages
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.10
+
+      - name: Metadata
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="main"
+          fi
+          TAGS="$(git tag --sort=-version:refname | sed 's/^v//' | head -n 10 | paste -sd, -)"
+          if [[ -z "$TAGS" ]]; then
+            TAGS="$VERSION"
+          fi
+          BUILD_NUMBER="${VERSION}-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::8}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "versions=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build static site
+        env:
+          EDGERUN_VERSION: ${{ steps.meta.outputs.version }}
+          EDGERUN_VERSIONS: ${{ steps.meta.outputs.versions }}
+          EDGERUN_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
+          EDGERUN_SITE_URL: https://www.edgerun.tech
+          EDGERUN_SITE_DOMAIN: www.edgerun.tech
+        run: bun run build
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Upload wiki artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wiki-docs-${{ steps.meta.outputs.version }}
+          path: wiki
+
+  deploy:
+    runs-on: ubuntu-24.04
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
