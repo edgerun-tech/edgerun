@@ -1889,12 +1889,14 @@ name = "edgerun-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "clap",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
  "toml 0.8.23",
+ "tower-http",
 ]
 
 [[package]]

@@ -8,6 +8,7 @@ import {
   subscribeTerminalDrawer,
   terminalDrawerActions
 } from '../lib/terminal-drawer-store'
+import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -21,12 +22,21 @@ const navLinks = [
 export function Nav() {
   const [mobileOpen, setMobileOpen] = createSignal(false)
   const [terminalOpen, setTerminalOpen] = createSignal(getTerminalDrawerState().open)
+  const [walletConnected, setWalletConnected] = createSignal(readWalletSession().connected)
   ensureTerminalDrawerStore()
 
   onMount(() => {
     setTerminalOpen(getTerminalDrawerState().open)
     const unsubscribe = subscribeTerminalDrawer((next) => setTerminalOpen(next.open))
-    onCleanup(() => unsubscribe())
+    const onWalletSession = (event: Event) => {
+      const custom = event as CustomEvent<WalletSessionState>
+      setWalletConnected(Boolean(custom.detail?.connected))
+    }
+    window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
+    onCleanup(() => {
+      unsubscribe()
+      window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
+    })
   })
 
   return (
@@ -58,15 +68,19 @@ export function Nav() {
               {mobileOpen() ? 'Close' : 'Menu'}
             </Button>
             <Button
-              variant={terminalOpen() ? 'default' : 'outline'}
+              variant={terminalOpen() && walletConnected() ? 'default' : 'outline'}
               size="sm"
               class="h-9 w-9 p-0"
-              aria-label={terminalOpen() ? 'Close terminal drawer' : 'Open terminal drawer'}
+              aria-label={walletConnected() ? (terminalOpen() ? 'Close terminal drawer' : 'Open terminal drawer') : 'Connect wallet to use terminal drawer'}
               aria-controls="edgerun-terminal-drawer"
-              aria-expanded={terminalOpen()}
-              aria-pressed={terminalOpen()}
-              title={terminalOpen() ? 'Close terminal' : 'Open terminal'}
-              onClick={() => terminalDrawerActions.toggle()}
+              aria-expanded={walletConnected() ? terminalOpen() : false}
+              aria-pressed={walletConnected() ? terminalOpen() : false}
+              title={walletConnected() ? (terminalOpen() ? 'Close terminal' : 'Open terminal') : 'Connect wallet first'}
+              disabled={!walletConnected()}
+              onClick={() => {
+                if (!walletConnected()) return
+                terminalDrawerActions.toggle()
+              }}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true" class={`h-4 w-4 ${terminalOpen() ? 'text-primary-foreground' : 'text-foreground'}`}>
                 <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v9h16V6H4Zm1 14h14v2H5v-2Zm2-10 3 2-3 2v-4Zm5 3h5v1h-5v-1Z" />

@@ -5,6 +5,7 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Select } from '../ui/select'
 import { RPC_CONFIG_EVENT, RPC_DEFAULT_BY_CLUSTER, readRuntimeRpcConfig, writeRuntimeRpcConfig } from '../../lib/solana-config'
+import { clearWalletSession, readWalletSession, writeWalletSession } from '../../lib/wallet-session'
 
 type WalletProvider = {
   isConnected?: boolean
@@ -73,10 +74,15 @@ export function WalletButton() {
   const [customRpcUrl, setCustomRpcUrl] = createSignal(initialCluster === 'custom' ? currentRpc.rpcUrl : '')
   const [activeRpcUrl, setActiveRpcUrl] = createSignal(currentRpc.rpcUrl)
   let activeProvider: WalletProvider | null = null
+  let unbindProvider: null | (() => void) = null
 
   const available = createMemo(() => getCandidates())
   const installed = createMemo(() => available().find((item) => item.provider) || null)
   const connected = createMemo(() => Boolean(address()))
+
+  function getInstalledCandidate(): ProviderCandidate | null {
+    return getCandidates().find((item) => item.provider) || null
+  }
 
   async function refreshBalance(pubkey: string): Promise<void> {
     const rpcUrl = readRuntimeRpcConfig().rpcUrl || 'https://api.devnet.solana.com'
@@ -96,11 +102,28 @@ export function WalletButton() {
     }
   }
 
-  function bindProvider(provider: WalletProvider): void {
+  function bindProvider(provider: WalletProvider, providerLabel: string): void {
+    if (unbindProvider) {
+      unbindProvider()
+      unbindProvider = null
+    }
+
     const onDisconnect = () => {
       setAddress('')
       setBalance('')
       setError('')
+      clearWalletSession()
+    }
+    const onConnect = (next?: { publicKey?: { toString(): string } }) => {
+      const value = next?.publicKey?.toString() || provider.publicKey?.toString() || ''
+      if (!value) return
+      setAddress(value)
+      void refreshBalance(value)
+      writeWalletSession({
+        connected: true,
+        address: value,
+        provider: providerLabel || 'wallet'
+      })
     }
     const onAccount = (next?: { toString(): string }) => {
       if (!next) {
@@ -110,13 +133,63 @@ export function WalletButton() {
       const value = next.toString()
       setAddress(value)
       void refreshBalance(value)
+      writeWalletSession({
+        connected: true,
+        address: value,
+        provider: providerLabel || 'wallet'
+      })
     }
+    provider.on?.('connect', onConnect)
     provider.on?.('disconnect', onDisconnect)
     provider.on?.('accountChanged', onAccount)
-    onCleanup(() => {
+    unbindProvider = () => {
+      provider.removeListener?.('connect', onConnect)
       provider.removeListener?.('disconnect', onDisconnect)
       provider.removeListener?.('accountChanged', onAccount)
-    })
+    }
+    onCleanup(() => unbindProvider?.())
+  }
+
+  async function syncFromCandidate(target: ProviderCandidate | null): Promise<void> {
+    if (!target?.provider) {
+      setProviderName('')
+      setAddress('')
+      setBalance('')
+      clearWalletSession()
+      return
+    }
+
+    activeProvider = target.provider
+    setProviderName(target.name)
+    bindProvider(target.provider, target.name)
+
+    let pubkey = target.provider.publicKey?.toString() || ''
+    if (!target.provider.isConnected || !pubkey) {
+      try {
+        const trusted = await target.provider.connect({ onlyIfTrusted: true })
+        pubkey = trusted?.publicKey?.toString() || target.provider.publicKey?.toString() || ''
+      } catch {
+        // not trusted yet; keep disconnected
+      }
+    }
+
+    if (pubkey) {
+      setAddress(pubkey)
+      writeWalletSession({
+        connected: true,
+        address: pubkey,
+        provider: target.name
+      })
+      void refreshBalance(pubkey)
+    } else {
+      setAddress('')
+      setBalance('')
+      clearWalletSession()
+    }
+  }
+
+  async function syncFromDetectedProvider(): Promise<void> {
+    await syncFromCandidate(getInstalledCandidate())
   }
 
   async function connect(): Promise<void> {
@@ -135,8 +208,13 @@ export function WalletButton() {
       const pubkey = result?.publicKey?.toString() || target.provider.publicKey?.toString() || ''
       if (!pubkey) throw new Error('wallet_public_key_missing')
       setAddress(pubkey)
+      writeWalletSession({
+        connected: true,
+        address: pubkey,
+        provider: target.name
+      })
       void refreshBalance(pubkey)
-      bindProvider(target.provider)
+      bindProvider(target.provider, target.name)
       setDialogOpen(true)
     } catch {
       setError('Connection failed')
@@ -154,6 +232,7 @@ export function WalletButton() {
     }
     setAddress('')
     setBalance('')
+    clearWalletSession()
   }
 
   function applyRpcSelection(): void {
@@ -170,22 +249,23 @@ export function WalletButton() {
 
   onMount(() => {
     setMounted(true)
-    const target = installed()
+    const restored = readWalletSession()
+    if (restored.connected && restored.address) {
+      setAddress(restored.address)
+      setProviderName(restored.provider || '')
+    }
     const cfg = readRuntimeRpcConfig()
     setActiveRpcUrl(cfg.rpcUrl)
     const inferred = inferClusterFromRpcUrl(cfg.rpcUrl)
     setCluster(inferred)
     setCustomRpcUrl(inferred === 'custom' ? cfg.rpcUrl : '')
-
-    if (!target?.provider) return
-    activeProvider = target.provider
-    setProviderName(target.name)
-    const pubkey = target.provider.publicKey?.toString() || ''
-    if (target.provider.isConnected && pubkey) {
-      setAddress(pubkey)
-      void refreshBalance(pubkey)
-    }
-    bindProvider(target.provider)
+    void syncFromDetectedProvider()
+    const providerSyncTimer = window.setInterval(() => {
+      const maybePubkey = activeProvider?.publicKey?.toString() || ''
+      if (!activeProvider?.isConnected || !maybePubkey) {
+        void syncFromDetectedProvider()
+      }
+    }, 3000)
 
     const onRpcChanged = () => {
       const next = readRuntimeRpcConfig()
@@ -195,8 +275,16 @@ export function WalletButton() {
       setCustomRpcUrl(nextCluster === 'custom' ? next.rpcUrl : '')
       if (address()) void refreshBalance(address())
     }
+    const onFocus = () => {
+      void syncFromDetectedProvider()
+    }
     window.addEventListener(RPC_CONFIG_EVENT, onRpcChanged)
-    onCleanup(() => window.removeEventListener(RPC_CONFIG_EVENT, onRpcChanged))
+    window.addEventListener('focus', onFocus)
+    onCleanup(() => {
+      window.removeEventListener(RPC_CONFIG_EVENT, onRpcChanged)
+      window.removeEventListener('focus', onFocus)
+      window.clearInterval(providerSyncTimer)
+    })
   })
 
   const buttonLabel = createMemo(() => {

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # Normalizes SPDX headers across tracked source files in this repository.
@@ -105,4 +106,3 @@ while IFS= read -r path; do
 done < <(git ls-files)
 
 echo "SPDX normalization complete."
-

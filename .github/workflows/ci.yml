@@ -12,6 +12,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-timing-main:
+    name: Build Timing (Main)
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run timed build pipeline
+        run: cargo run -p edgerun-cli -- --root . ci --job build-timing-main
+
+      - name: Upload timing artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-timings-main-${{ github.run_id }}
+          path: out/ci/build-timings.json
+
   rust-checks:
     name: Rust Checks
     runs-on: ubuntu-24.04
@@ -29,7 +50,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: SPDX header check
-        run: scripts/spdx-check.sh
+        run: cargo run -p edgerun-cli -- --root . ci --job spdx-check
 
       - name: Format check
         run: cargo fmt --all --check
@@ -44,7 +65,7 @@ jobs:
         run: cargo test --workspace
 
       - name: Matrix validation references check
-        run: make matrix-check
+        run: cargo run -p edgerun-cli -- --root . ci --job matrix-check
 
   coverage:
     name: Coverage (llvm-cov)
@@ -334,7 +355,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Verify Gate (Rust + Anchor)
-        run: make verify
+        run: cargo run -p edgerun-cli -- --root . ci --job verify
 
       - name: Program localnet tests
         run: cargo run -p edgerun-cli -- test program

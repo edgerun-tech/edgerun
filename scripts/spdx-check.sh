@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
 # Checks SPDX headers across tracked source files in this repository.
@@ -66,4 +67,3 @@ if [[ "$errors" -gt 0 ]]; then
 fi
 
 echo "SPDX check passed."
-
