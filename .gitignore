@@ -4,6 +4,10 @@
 .env
 *.log
 node_modules
+.venv-gfr/
+.edgerun-cli/
+.edgerun-replay-corpus/
+.edgerun-scheduler-data/
 program/.anchor
 program/test-ledger
 program/.solana
