@@ -4,6 +4,7 @@ use std::io::{self, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -148,6 +149,7 @@ struct WebState {
     tasks: Arc<Mutex<HashMap<String, TaskStatus>>>,
     queue: Arc<Mutex<VecDeque<String>>>,
     running_cancel: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
+    dispatcher_running: Arc<AtomicBool>,
     state_file: PathBuf,
     runs_dir: PathBuf,
 }
@@ -466,6 +468,7 @@ async fn run_server(root: PathBuf, addr: String, config: AppConfig) -> Result<()
         tasks: Arc::new(Mutex::new(tasks)),
         queue: Arc::new(Mutex::new(VecDeque::new())),
         running_cancel: Arc::new(Mutex::new(HashMap::new())),
+        dispatcher_running: Arc::new(AtomicBool::new(false)),
         state_file,
         runs_dir,
     };
@@ -769,86 +772,34 @@ async fn api_run_task(
             history: Vec::new(),
             last_log_path: None,
         });
-        if entry.state == "running" {
+        if matches!(entry.state.as_str(), "running" | "queued" | "canceling") {
             return (
                 axum::http::StatusCode::CONFLICT,
                 Json(ApiMessage {
                     ok: false,
-                    message: format!("task already running: {task}"),
+                    message: format!("task already active: {task}"),
                 }),
             );
         }
-        entry.state = "running".to_string();
-        entry.started_at_unix_s = Some(now_unix_s());
+        entry.state = "queued".to_string();
+        entry.started_at_unix_s = None;
         entry.finished_at_unix_s = None;
-        entry.runs += 1;
+        entry.last_output = "queued".to_string();
         if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
             eprintln!("failed to persist task state: {err:#}");
         }
     }
-
-    let state_clone = state.clone();
-    let history_limit = web_history_limit(&state.config);
-    let task_for_spawn = task.clone();
-    let cancel_notify = Arc::new(Notify::new());
     {
-        let mut running_cancel = state.running_cancel.lock().await;
-        running_cancel.insert(task.clone(), cancel_notify.clone());
+        let mut queue = state.queue.lock().await;
+        queue.push_back(task.clone());
     }
-    tokio::spawn(async move {
-        let (task_state, last_exit, summary) =
-            match run_task_subprocess_capture(&state_clone.root, &task_for_spawn, cancel_notify)
-                .await
-            {
-                Ok((0, output)) => ("success".to_string(), Some(0), output),
-                Ok((exit, output)) => ("failed".to_string(), Some(exit), output),
-                Err(err) => ("failed".to_string(), Some(1), format!("ERROR: {err:#}")),
-            };
-
-        let mut tasks = state_clone.tasks.lock().await;
-        if let Some(entry) = tasks.get_mut(&task_for_spawn) {
-            entry.state = task_state;
-            entry.last_exit = last_exit;
-            entry.finished_at_unix_s = Some(now_unix_s());
-            let full_output = summary;
-            entry.last_output = truncate_output(full_output.clone(), 12_000);
-            let log_path = match persist_run_log(
-                &state_clone.runs_dir,
-                &entry.task,
-                entry.started_at_unix_s,
-                entry.finished_at_unix_s,
-                &entry.state,
-                &full_output,
-            ) {
-                Ok(path) => Some(path),
-                Err(err) => {
-                    eprintln!("failed to persist run log: {err:#}");
-                    None
-                }
-            };
-            entry.history.push(TaskRunRecord {
-                started_at_unix_s: entry.started_at_unix_s,
-                finished_at_unix_s: entry.finished_at_unix_s,
-                state: entry.state.clone(),
-                exit: entry.last_exit,
-                output: truncate_output(entry.last_output.clone(), 4_000),
-                log_path: log_path.clone(),
-            });
-            entry.last_log_path = log_path;
-            trim_history(&mut entry.history, history_limit);
-        }
-        if let Err(err) = persist_task_statuses(&state_clone.state_file, &tasks) {
-            eprintln!("failed to persist task state: {err:#}");
-        }
-        let mut running_cancel = state_clone.running_cancel.lock().await;
-        running_cancel.remove(&task_for_spawn);
-    });
+    try_start_next_queued_task(state.clone()).await;
 
     (
         axum::http::StatusCode::ACCEPTED,
         Json(ApiMessage {
             ok: true,
-            message: format!("task started: {task}"),
+            message: format!("task queued: {task}"),
         }),
     )
 }
@@ -890,6 +841,7 @@ async fn api_cancel_task(
         if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
             eprintln!("failed to persist task state: {err:#}");
         }
+        try_start_next_queued_task(state.clone()).await;
         return (
             axum::http::StatusCode::ACCEPTED,
             Json(ApiMessage {
@@ -965,6 +917,119 @@ fn is_supported_task(task: &str) -> bool {
             | "install"
             | "all"
     )
+}
+
+fn has_active_task(tasks: &HashMap<String, TaskStatus>) -> bool {
+    tasks
+        .values()
+        .any(|t| matches!(t.state.as_str(), "running" | "canceling"))
+}
+
+async fn try_start_next_queued_task(state: WebState) {
+    if state.dispatcher_running.swap(true, Ordering::AcqRel) {
+        return;
+    }
+
+    let has_active = {
+        let tasks = state.tasks.lock().await;
+        has_active_task(&tasks)
+    };
+    if has_active {
+        state.dispatcher_running.store(false, Ordering::Release);
+        return;
+    }
+
+    let next_task = {
+        let mut queue = state.queue.lock().await;
+        queue.pop_front()
+    };
+    if let Some(task) = next_task {
+        if let Err(err) = spawn_task_execution(state.clone(), task).await {
+            eprintln!("failed to spawn queued task: {err:#}");
+        }
+    }
+    state.dispatcher_running.store(false, Ordering::Release);
+}
+
+fn schedule_dispatch(state: WebState) {
+    tokio::spawn(async move {
+        try_start_next_queued_task(state).await;
+    });
+}
+
+async fn spawn_task_execution(state: WebState, task: String) -> Result<()> {
+    let cancel_notify = Arc::new(Notify::new());
+    {
+        let mut tasks = state.tasks.lock().await;
+        let Some(entry) = tasks.get_mut(&task) else {
+            return Ok(());
+        };
+        entry.state = "running".to_string();
+        entry.started_at_unix_s = Some(now_unix_s());
+        entry.finished_at_unix_s = None;
+        entry.runs += 1;
+        if let Err(err) = persist_task_statuses(&state.state_file, &tasks) {
+            eprintln!("failed to persist task state: {err:#}");
+        }
+    }
+    {
+        let mut running_cancel = state.running_cancel.lock().await;
+        running_cancel.insert(task.clone(), cancel_notify.clone());
+    }
+
+    let state_clone = state.clone();
+    let history_limit = web_history_limit(&state.config);
+    tokio::spawn(async move {
+        let (task_state, last_exit, summary) =
+            match run_task_subprocess_capture(&state_clone.root, &task, cancel_notify).await {
+                Ok((0, output)) => ("success".to_string(), Some(0), output),
+                Ok((130, output)) => ("canceled".to_string(), Some(130), output),
+                Ok((exit, output)) => ("failed".to_string(), Some(exit), output),
+                Err(err) => ("failed".to_string(), Some(1), format!("ERROR: {err:#}")),
+            };
+
+        let mut tasks = state_clone.tasks.lock().await;
+        if let Some(entry) = tasks.get_mut(&task) {
+            entry.state = task_state;
+            entry.last_exit = last_exit;
+            entry.finished_at_unix_s = Some(now_unix_s());
+            let full_output = summary;
+            entry.last_output = truncate_output(full_output.clone(), 12_000);
+            let log_path = match persist_run_log(
+                &state_clone.runs_dir,
+                &entry.task,
+                entry.started_at_unix_s,
+                entry.finished_at_unix_s,
+                &entry.state,
+                &full_output,
+            ) {
+                Ok(path) => Some(path),
+                Err(err) => {
+                    eprintln!("failed to persist run log: {err:#}");
+                    None
+                }
+            };
+            entry.history.push(TaskRunRecord {
+                started_at_unix_s: entry.started_at_unix_s,
+                finished_at_unix_s: entry.finished_at_unix_s,
+                state: entry.state.clone(),
+                exit: entry.last_exit,
+                output: truncate_output(entry.last_output.clone(), 4_000),
+                log_path: log_path.clone(),
+            });
+            entry.last_log_path = log_path;
+            trim_history(&mut entry.history, history_limit);
+        }
+        if let Err(err) = persist_task_statuses(&state_clone.state_file, &tasks) {
+            eprintln!("failed to persist task state: {err:#}");
+        }
+        drop(tasks);
+        let mut running_cancel = state_clone.running_cancel.lock().await;
+        running_cancel.remove(&task);
+        drop(running_cancel);
+        schedule_dispatch(state_clone);
+    });
+    Ok(())
 }
 
 fn task_to_cli_args(task: &str) -> Option<Vec<&'static str>> {
@@ -3304,6 +3369,7 @@ mod tests {
             tasks: Arc::new(Mutex::new(tasks)),
             queue: Arc::new(Mutex::new(VecDeque::new())),
             running_cancel: Arc::new(Mutex::new(HashMap::new())),
+            dispatcher_running: Arc::new(AtomicBool::new(false)),
             state_file,
             runs_dir,
         }
@@ -3572,6 +3638,46 @@ require_worker_signatures = true
         let tasks = state.tasks.lock().await;
         let doctor = tasks.get("doctor").expect("doctor state");
         assert_eq!(doctor.state, "canceling");
+    }
+
+    #[tokio::test]
+    async fn run_task_is_queued_when_another_task_is_running() {
+        let root = temp_dir("edgerun-web-queue-while-running-test");
+        let mut tasks = HashMap::new();
+        tasks.insert(
+            "doctor".to_string(),
+            TaskStatus {
+                task: "doctor".to_string(),
+                state: "running".to_string(),
+                started_at_unix_s: Some(now_unix_s()),
+                finished_at_unix_s: None,
+                runs: 1,
+                last_exit: None,
+                last_output: String::new(),
+                history: Vec::new(),
+                last_log_path: None,
+            },
+        );
+        let state = make_state(root, AppConfig::default(), tasks);
+        let app = build_router(state.clone());
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/run/setup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("run response");
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        {
+            let tasks = state.tasks.lock().await;
+            let setup = tasks.get("setup").expect("setup state");
+            assert_eq!(setup.state, "queued");
+        }
+        let queue = state.queue.lock().await;
+        assert_eq!(queue.front().map(String::as_str), Some("setup"));
     }
 
     #[test]
