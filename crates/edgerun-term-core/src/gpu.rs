@@ -911,10 +911,12 @@ impl GpuRenderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
         });
         pass.set_pipeline(&self.blit_pipeline);
         pass.set_bind_group(0, &self.base_bind_group, &[]);
@@ -970,10 +972,12 @@ impl GpuRenderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
         });
 
         if !rects.is_empty() {
@@ -1418,7 +1422,7 @@ impl GpuRenderer {
                         Some(cell.bg)
                     };
                     match (bg_start, bg) {
-                        (Some(start), Some(color)) if color == bg_color => {}
+                        (Some(_start), Some(color)) if color == bg_color => {}
                         (Some(start), Some(color)) => {
                             let x0 = origin_x as f32 + start as f32 * cell_w as f32;
                             let x1 = origin_x as f32 + col as f32 * cell_w as f32;
@@ -1530,7 +1534,7 @@ impl GpuRenderer {
                         && (cell.hyperlink.is_some() || hovered_link.is_some() || in_link_range);
 
                     match (ul_start, underline) {
-                        (Some(start), true) if fg == ul_color => {}
+                        (Some(_start), true) if fg == ul_color => {}
                         (Some(start), true) => {
                             let x0 = origin_x as f32 + start as f32 * cell_w as f32;
                             let x1 = origin_x as f32 + col as f32 * cell_w as f32;
@@ -1554,7 +1558,7 @@ impl GpuRenderer {
                     }
 
                     match (ol_start, overline) {
-                        (Some(start), true) if fg == ol_color => {}
+                        (Some(_start), true) if fg == ol_color => {}
                         (Some(start), true) => {
                             let x0 = origin_x as f32 + start as f32 * cell_w as f32;
                             let x1 = origin_x as f32 + col as f32 * cell_w as f32;
@@ -1576,7 +1580,7 @@ impl GpuRenderer {
                     }
 
                     match (st_start, strike) {
-                        (Some(start), true) if fg == st_color => {}
+                        (Some(_start), true) if fg == st_color => {}
                         (Some(start), true) => {
                             let x0 = origin_x as f32 + start as f32 * cell_w as f32;
                             let x1 = origin_x as f32 + col as f32 * cell_w as f32;
@@ -1957,11 +1961,13 @@ impl GpuRenderer {
                         resolve_target: None,
                         ops: wgpu::Operations {
                             load: wgpu::LoadOp::Load,
-                            store: true,
+                            store: wgpu::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: None,
-                });
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
 
                 if bg_len > 0 {
                     pass.set_pipeline(&self.rect_pipeline);
@@ -2022,11 +2028,13 @@ impl GpuRenderer {
                                 b: clear_bg.b as f64 / 255.0,
                                 a: clear_bg.a as f64 / 255.0,
                             }),
-                            store: true,
+                            store: wgpu::StoreOp::Store,
                         },
                     })],
                     depth_stencil_attachment: None,
-                });
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
 
                 if bg_len > 0 {
                     pass.set_pipeline(&self.rect_pipeline);
@@ -2088,11 +2096,13 @@ impl GpuRenderer {
                             b: clear_bg.b as f64 / 255.0,
                             a: clear_bg.a as f64 / 255.0,
                         }),
-                        store: true,
+                        store: wgpu::StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
-            });
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
 
             if bg_len > 0 {
                 pass.set_pipeline(&self.rect_pipeline);
@@ -2352,10 +2362,12 @@ impl GpuRenderer {
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
-                    store: true,
+                    store: wgpu::StoreOp::Store,
                 },
             })],
             depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
         });
 
         if rects_len > 0 {

@@ -229,6 +229,7 @@ fn tab_text_y(bar_top: i32, tab_bar_height: u32, glyphs: &GlyphCache) -> i32 {
     top + (cell_h - baseline)
 }
 
+#[allow(dead_code)]
 fn tab_text_y_f32(bar_top: f32, tab_bar_height: u32, glyphs: &GlyphCache) -> f32 {
     let cell_h = glyphs.cell_height() as f32;
     let baseline = glyphs.baseline() as f32;

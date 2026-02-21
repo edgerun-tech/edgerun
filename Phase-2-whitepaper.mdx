@@ -33,7 +33,7 @@ All hashes use BLAKE3-256. All signatures use Ed25519.
 * output_bytes by output_hash (new)
 
 Outputs are content-addressed:
-output_url = [https://storage/.../output/{output_hash}](https://storage/.../output/{output_hash})
+`output_url = https://storage/.../output/{output_hash}`
 Pointer stored on-chain is advisory; output_hash is authoritative.
 
 4. SOLANA PROGRAM SPEC (PHASE 2 PRACTICAL)
@@ -99,7 +99,7 @@ Committee is derived from escrow_lamports at post_job time:
 
 Tier table (fixed):
 
-* Tier0: escrow < 0.1 SOL (100_000_000 lamports): committee_size=3, quorum=2
+* Tier0: escrow `< 0.1 SOL` (100_000_000 lamports): committee_size=3, quorum=2
 * Tier1: 0.1–1 SOL: committee_size=5, quorum=3
 * Tier2: 1–10 SOL: committee_size=7, quorum=5
 * Tier3: >=10 SOL: committee_size=9, quorum=6
@@ -169,7 +169,7 @@ Permissionless.
   * status AwaitingDA
   * emits JobQuorumReached(job_id, winning_output_hash)
 
-(6) declare_output(job_id, output_hash, pointer_bytes<=128)
+(6) declare_output(job_id, output_hash, `pointer_bytes<=128`)
 Callable only by a “winner” (a worker whose JobResult.output_hash == job.winning_output_hash).
 
 * Job must be AwaitingDA
@@ -182,7 +182,7 @@ Callable only by a “winner” (a worker whose JobResult.output_hash == job.win
 Permissionless.
 
 * Job must be AwaitingDA
-* Requires current_slot <= da_deadline_slot OR allow finalize anytime after declare_output; freeze:
+* Requires `current_slot <= da_deadline_slot` OR allow finalize anytime after declare_output; freeze:
 
   * Allow finalize anytime after declare_output, but if da_deadline_slot passes without OutputAvailability, job can be re-assigned (see next).
 * Requires OutputAvailability exists and matches winning_output_hash.

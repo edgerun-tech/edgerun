@@ -564,8 +564,8 @@ fn status_label_for_terminal(term: &term_core::terminal::Terminal) -> Option<Str
     }
 }
 
-pub struct RenderInputs<'a> {
-    pub pixels: &'a mut Pixels,
+pub struct RenderInputs<'a, 'win> {
+    pub pixels: &'a mut Pixels<'win>,
     pub gpu_renderer: Option<&'a mut GpuRenderer>,
     pub tabs: &'a [TabRender<'a>],
     pub active_tab: usize,
@@ -601,7 +601,7 @@ pub struct RenderOutcome {
 }
 
 /// Centralized render entrypoint that decides GPU vs CPU and also draws the debug overlay.
-pub fn render_frame(inputs: RenderInputs) -> RenderOutcome {
+pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
     let RenderInputs {
         pixels,
         mut gpu_renderer,

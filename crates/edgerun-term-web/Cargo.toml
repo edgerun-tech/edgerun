@@ -6,7 +6,7 @@ license.workspace = true
 
 [features]
 default = []
-webgpu = ["dep:wgpu"]
+webgpu = ["dep:wgpu", "dep:wasm-bindgen-futures"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -14,11 +14,12 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 bytemuck = { version = "1.14", features = ["derive"] }
 console_error_panic_hook = "0.1"
-js-sys = "0.3"
+js-sys = "=0.3.77"
 term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
 vte = "0.13"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = [
+wasm-bindgen-futures = { version = "0.4.50", optional = true }
+web-sys = { version = "=0.3.77", features = [
     "BinaryType",
     "CanvasRenderingContext2d",
     "ClipboardEvent",
@@ -38,6 +39,7 @@ web-sys = { version = "0.3", features = [
     "MessageEvent",
     "Navigator",
     "ResizeObserver",
+    "Storage",
     "Gpu",
     "GpuAdapter",
     "GpuCanvasContext",
@@ -50,4 +52,4 @@ web-sys = { version = "0.3", features = [
     "Window",
     "WebSocket"
 ] }
-wgpu = { version = "0.20", features = ["webgpu"], optional = true }
+wgpu = { version = "27.0.1", features = ["webgpu"], optional = true }

@@ -39,12 +39,12 @@ use term_ui::widgets::{
 };
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::{ElementState, Event, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
+use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::platform::startup_notify::{
-    EventLoopExtStartupNotify, WindowBuilderExtStartupNotify, reset_activation_token_env,
+    WindowAttributesExtStartupNotify, reset_activation_token_env,
 };
-use winit::window::WindowBuilder;
+use winit::window::Window;
 
 mod logging;
 mod suggest;
@@ -583,8 +583,10 @@ fn main() {
 
 use anyhow::Result;
 
+#[allow(deprecated)]
 fn run() -> Result<()> {
-    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build()?;
+    let mut event_loop_builder = EventLoop::<AppEvent>::with_user_event();
+    let event_loop = event_loop_builder.build()?;
     let proxy = event_loop.create_proxy();
     let hypr_ipc = hyprland_ipc_info();
     let mut hypr_poll = hypr_ipc.as_ref().map(|info| HyprPollState {
@@ -599,15 +601,15 @@ fn run() -> Result<()> {
     // Respect compositor-provided activation token (e.g. Hyprland binds) so the new
     // window grabs focus on the originating workspace instead of bouncing to
     // whichever workspace already has focus.
-    let activation_token = event_loop.read_token_from_env();
+    let activation_token = None;
     let base_title = format!("{} {}", APP_NAME, app_version());
-    let mut window_builder = WindowBuilder::new()
+    let mut window_attributes = Window::default_attributes()
         .with_inner_size(LogicalSize::new(900.0, 600.0))
         .with_title(&base_title);
     if let Some(token) = activation_token {
-        window_builder = window_builder.with_activation_token(token);
+        window_attributes = window_attributes.with_activation_token(token);
     }
-    let window = window_builder.build(&event_loop)?;
+    let window = Arc::new(event_loop.create_window(window_attributes)?);
     reset_activation_token_env();
 
     let mut scale_factor = window.scale_factor();
@@ -639,7 +641,7 @@ fn run() -> Result<()> {
     let mut copy_notice: Option<CopyNotice> = None;
 
     let size = window.inner_size();
-    let surface_texture = SurfaceTexture::new(size.width, size.height, &window);
+    let surface_texture = SurfaceTexture::new(size.width, size.height, window.clone());
     let mut pixels = Pixels::new(size.width, size.height, surface_texture)?;
     let gpu_enabled = env::var("TERM_GPU")
         .map(|v| {

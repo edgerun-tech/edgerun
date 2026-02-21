@@ -2087,7 +2087,7 @@ fn run_storage_mixed_rw_tuning_sweep(
     std::fs::create_dir_all(&logs_dir)
         .with_context(|| format!("failed to create {}", logs_dir.display()))?;
     let csv = opts.out_dir.join("results.csv");
-    let summary = opts.out_dir.join("summary.md");
+    let summary = opts.out_dir.join("summary.mdx");
     std::fs::write(
         &csv,
         "case_id,writers,readers,write_batch,read_batch,key_space,hot_key_space,writes_ops,reads_ops,hit_rate_pct,comp_sched,comp_done,comp_failed,comp_skipped,comp_total_ms,score,log\n",

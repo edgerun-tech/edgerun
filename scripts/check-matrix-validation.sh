@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-MATRIX_FILE="docs/WHITEPAPER_IMPLEMENTATION_MATRIX.md"
+MATRIX_FILE="docs/WHITEPAPER_IMPLEMENTATION_MATRIX.mdx"
 
 if [ ! -f "$MATRIX_FILE" ]; then
   echo "error: missing $MATRIX_FILE" >&2

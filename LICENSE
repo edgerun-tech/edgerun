@@ -5,6 +5,6 @@ This repository uses a mixed licensing model.
 - Core protocol components are licensed under Apache-2.0.
 - Scheduler and selected infrastructure components are proprietary.
 
-See `LICENSING.md` for the authoritative per-directory license matrix.
-See `TRADEMARK_NOTICE.md` for trademark restrictions on the Edgerun name and logo.
+See `LICENSING.mdx` for the authoritative per-directory license matrix.
+See `TRADEMARK_NOTICE.mdx` for trademark restrictions on the Edgerun name and logo.
 
