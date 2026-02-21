@@ -1015,11 +1015,7 @@ async fn worker_result(
     entries.push(payload);
     drop(results);
     let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
-    touch_job_last_update(&state, &job_id);
-    enforce_history_retention(&state);
-    evaluate_expired_jobs(&state).map_err(internal_err)?;
-
-    write_state_snapshot(&state).map_err(internal_err)?;
+    persist_job_activity(&state, &job_id).map_err(internal_err)?;
     Ok(Json(serde_json::json!({
         "ok": true,
         "duplicate": false,
@@ -1073,11 +1069,7 @@ async fn worker_failure(
     }
     entries.push(payload);
     drop(failures);
-    touch_job_last_update(&state, &job_id);
-    enforce_history_retention(&state);
-    evaluate_expired_jobs(&state).map_err(internal_err)?;
-
-    write_state_snapshot(&state).map_err(internal_err)?;
+    persist_job_activity(&state, &job_id).map_err(internal_err)?;
     Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
 }
 
@@ -1135,11 +1127,7 @@ async fn worker_replay_artifact(
     }
     entries.push(payload);
     drop(replay_artifacts);
-    touch_job_last_update(&state, &job_id);
-    enforce_history_retention(&state);
-    evaluate_expired_jobs(&state).map_err(internal_err)?;
-
-    write_state_snapshot(&state).map_err(internal_err)?;
+    persist_job_activity(&state, &job_id).map_err(internal_err)?;
     Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
 }
 
@@ -1983,7 +1971,15 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
         job_quorum: state.job_quorum.lock().expect("lock poisoned").clone(),
     };
     let bytes = serde_json::to_vec_pretty(&snapshot)?;
-    std::fs::write(state.data_dir.join("state.json"), bytes)?;
+    let final_path = state.data_dir.join("state.json");
+    let tmp_path = state
+        .data_dir
+        .join(format!("state.json.tmp-{}", std::process::id()));
+    std::fs::write(&tmp_path, &bytes)?;
+    if let Err(err) = std::fs::rename(&tmp_path, &final_path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(err.into());
+    }
     Ok(())
 }
 
@@ -3737,6 +3733,13 @@ fn header_value<'a>(headers: &'a HeaderMap, key: &str) -> Option<&'a str> {
 fn touch_job_last_update(state: &AppState, job_id: &str) {
     let mut map = state.job_last_update.lock().expect("lock poisoned");
     map.insert(job_id.to_string(), now_unix_seconds());
+}
+
+fn persist_job_activity(state: &AppState, job_id: &str) -> Result<()> {
+    touch_job_last_update(state, job_id);
+    enforce_history_retention(state);
+    evaluate_expired_jobs(state)?;
+    write_state_snapshot(state)
 }
 
 fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {

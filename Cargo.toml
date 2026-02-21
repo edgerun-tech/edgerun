@@ -4,6 +4,7 @@ members = [
   "crates/edgerun-types",
   "crates/edgerun-crypto",
   "crates/edgerun-runtime",
+  "crates/edgerun-runtime-web",
   "crates/edgerun-worker",
   "crates/edgerun-scheduler",
   "crates/edgerun-storage",
