@@ -57,6 +57,8 @@ struct AppState {
     require_result_attestation: bool,
     quorum_requires_attestation: bool,
     enable_slash_artifacts: bool,
+    require_client_signatures: bool,
+    client_signature_max_age_secs: u64,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
     chain: Option<Arc<ChainContext>>,
@@ -294,6 +296,9 @@ struct JobCreateRequest {
     limits: edgerun_types::Limits,
     escrow_lamports: u64,
     assignment_worker_pubkey: Option<String>,
+    client_pubkey: Option<String>,
+    client_signed_at_unix_s: Option<u64>,
+    client_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -416,6 +421,11 @@ async fn main() -> Result<()> {
             true,
         ),
         enable_slash_artifacts: read_env_bool("EDGERUN_SCHEDULER_ENABLE_SLASH_ARTIFACTS", true),
+        require_client_signatures: read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CLIENT_SIGNATURES", false),
+        client_signature_max_age_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_CLIENT_SIGNATURE_MAX_AGE_SECS",
+            300,
+        ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         chain,
@@ -722,12 +732,60 @@ async fn job_create(
     State(state): State<AppState>,
     Json(payload): Json<JobCreateRequest>,
 ) -> Result<Json<JobCreateResponse>, (StatusCode, String)> {
+    let now = now_unix_seconds();
     let wasm = base64::engine::general_purpose::STANDARD
         .decode(payload.wasm_base64.as_bytes())
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid wasm_base64".to_string()))?;
     let input = base64::engine::general_purpose::STANDARD
         .decode(payload.input_base64.as_bytes())
         .map_err(|_| (StatusCode::BAD_REQUEST, "invalid input_base64".to_string()))?;
+    let parsed_client = match (
+        payload.client_pubkey.as_deref(),
+        payload.client_signed_at_unix_s,
+        payload.client_signature.as_deref(),
+    ) {
+        (None, None, None) => None,
+        (Some(client_pubkey), Some(client_signed_at_unix_s), Some(client_signature)) => {
+            let client = client_pubkey.parse::<Pubkey>().map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "client_pubkey must be base58 pubkey".to_string(),
+                )
+            })?;
+            if now.saturating_sub(client_signed_at_unix_s) > state.client_signature_max_age_secs {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    "client signature expired".to_string(),
+                ));
+            }
+            let message = client_job_create_signing_message(
+                client_pubkey,
+                &payload.runtime_id,
+                payload.limits.max_memory_bytes,
+                payload.limits.max_instructions,
+                payload.escrow_lamports,
+                &wasm,
+                &input,
+                client_signed_at_unix_s,
+            );
+            if !verify_client_message_signature(client, client_signature, &message)? {
+                return Err((StatusCode::UNAUTHORIZED, "invalid client signature".to_string()));
+            }
+            Some(client)
+        }
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "client auth fields must all be set together".to_string(),
+            ));
+        }
+    };
+    if state.require_client_signatures && parsed_client.is_none() {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "client signature is required".to_string(),
+        ));
+    }
     let runtime_id_bytes = hex::decode(payload.runtime_id.as_bytes()).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -816,7 +874,6 @@ async fn job_create(
     } else {
         state.quorum.max(1).min(committee_workers.len())
     };
-    let now = now_unix_seconds();
     let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
     for worker_pubkey in &committee_workers {
         let mut assignment = QueuedAssignment {
@@ -913,7 +970,7 @@ async fn job_create(
             }
         };
         let tx_args = PostJobArgs {
-            client: chain.payer.pubkey(),
+            client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
             job_id: bundle_hash,
             bundle_hash,
             runtime_id,
@@ -1039,13 +1096,8 @@ fn build_post_job_tx_base64(
         .get_latest_blockhash()
         .context("failed to fetch latest blockhash")?;
 
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-
+    let mut tx = Transaction::new_with_payer(&[ix], Some(&chain.payer.pubkey()));
+    tx.partial_sign(&[&chain.payer], blockhash);
     let signature = tx.signatures.first().map(ToString::to_string);
     let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
@@ -2637,6 +2689,61 @@ fn parse_hex32(value: &str) -> Result<[u8; 32]> {
     Ok(out)
 }
 
+fn client_job_create_signing_message(
+    client_pubkey: &str,
+    runtime_id: &str,
+    max_memory_bytes: u32,
+    max_instructions: u64,
+    escrow_lamports: u64,
+    wasm: &[u8],
+    input: &[u8],
+    signed_at_unix_s: u64,
+) -> String {
+    let wasm_hash_hex = hex::encode(hash(wasm).to_bytes());
+    let input_hash_hex = hex::encode(hash(input).to_bytes());
+    format!(
+        "edgerun:job_create:v1|{}|{}|{}|{}|{}|{}|{}|{}",
+        client_pubkey,
+        runtime_id,
+        max_memory_bytes,
+        max_instructions,
+        escrow_lamports,
+        wasm_hash_hex,
+        input_hash_hex,
+        signed_at_unix_s
+    )
+}
+
+fn verify_client_message_signature(
+    client_pubkey: Pubkey,
+    signature_b64: &str,
+    message: &str,
+) -> Result<bool, (StatusCode, String)> {
+    let client_pk_bytes: [u8; 32] = client_pubkey.to_bytes();
+    let client_vk = VerifyingKey::from_bytes(&client_pk_bytes).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid client pubkey bytes".to_string(),
+        )
+    })?;
+    let sig_bytes = base64::engine::general_purpose::STANDARD
+        .decode(signature_b64.as_bytes())
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "client_signature must be base64".to_string(),
+            )
+        })?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "client_signature must decode to 64 bytes".to_string(),
+        )
+    })?;
+    let signature = Signature::from_bytes(&sig_arr);
+    Ok(edgerun_crypto::verify(&client_vk, message.as_bytes(), &signature))
+}
+
 fn verify_worker_message_signature(
     state: &AppState,
     worker_pubkey: &str,
@@ -3008,6 +3115,8 @@ mod tests {
             require_result_attestation: false,
             quorum_requires_attestation: true,
             enable_slash_artifacts: true,
+            require_client_signatures: false,
+            client_signature_max_age_secs: 300,
             chain_auto_submit: false,
             job_timeout_secs: 60,
             chain: None,
