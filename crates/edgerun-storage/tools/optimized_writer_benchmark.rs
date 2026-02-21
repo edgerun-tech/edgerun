@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
-use std::time::Instant;
 use edgerun_storage::optimized_writer::{OptimizedSegmentWriter, OptimizedSegmentWriterConfig};
+use std::time::Instant;
 
 fn main() {
     println!("=== Optimized Segment Writer Benchmark ===\n");

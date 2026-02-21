@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
+use edgerun_storage::crash_test::{CrashTestConfig, CrashTestHarness, KillPoint};
 use std::path::PathBuf;
 use std::time::Duration;
-use edgerun_storage::crash_test::{CrashTestConfig, CrashTestHarness, KillPoint};
 
 fn parse_args() -> CrashTestConfig {
     let mut cfg = CrashTestConfig::default();

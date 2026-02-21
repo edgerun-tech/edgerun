@@ -4,12 +4,12 @@
 //! Demonstrates the performance benefits of MSI for hot-key reads
 //! under mixed read/write workloads.
 
+use edgerun_storage::event::StreamId;
+use edgerun_storage::materialized_state::{MaterializedStateIndex, MsiConfig};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use edgerun_storage::event::StreamId;
-use edgerun_storage::materialized_state::{MaterializedStateIndex, MsiConfig};
 
 const WARMUP_ITERATIONS: usize = 1000;
 const BENCHMARK_DURATION_SECS: u64 = 10;

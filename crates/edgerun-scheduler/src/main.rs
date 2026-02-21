@@ -782,7 +782,8 @@ async fn job_create(
     );
 
     let bundle_path = bundle_path(&state, &bundle_hash_hex);
-    write_bundle_cas(&bundle_path, &bundle_hash_hex, &bundle_payload_bytes).map_err(internal_err)?;
+    write_bundle_cas(&bundle_path, &bundle_hash_hex, &bundle_payload_bytes)
+        .map_err(internal_err)?;
 
     prune_expired_workers(&state);
     let committee_workers = if let Some(worker_pubkey) = payload.assignment_worker_pubkey.as_ref() {
@@ -3013,7 +3014,10 @@ mod tests {
     #[test]
     fn bundle_cas_rejects_overwrite_with_different_bytes() {
         let state = test_state();
-        let path = state.data_dir.join("bundles").join("cas-overwrite-test.cbor");
+        let path = state
+            .data_dir
+            .join("bundles")
+            .join("cas-overwrite-test.cbor");
 
         let first = b"bundle-v1";
         let first_hash = hex::encode(edgerun_crypto::compute_bundle_hash(first));

@@ -6,13 +6,13 @@
 //! 2. Per-core sharding (linear scaling)
 //! 3. Async I/O with io_uring
 
+use edgerun_storage::arena::{Arena, EventArena, ObjectPool};
+use edgerun_storage::event::{ActorId, Event, StreamId};
+use edgerun_storage::sharding::{ShardedMap, ShardedWriterPool, ShardingConfig};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Instant;
-use edgerun_storage::arena::{Arena, EventArena, ObjectPool};
-use edgerun_storage::event::{ActorId, Event, StreamId};
-use edgerun_storage::sharding::{ShardedMap, ShardedWriterPool, ShardingConfig};
 
 const NUM_THREADS: usize = 8;
 const EVENTS_PER_THREAD: usize = 100_000;

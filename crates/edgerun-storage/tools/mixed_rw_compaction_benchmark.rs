@@ -4,13 +4,13 @@
 //! Usage:
 //!   cargo run -q --bin mixed_rw_compaction_benchmark -- --duration 20 --writers 2 --readers 4
 
+use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 use rand::Rng;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 
 #[derive(Debug, Clone)]
 struct Config {

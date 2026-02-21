@@ -92,16 +92,16 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Scheduler API integration
-        run: ./scripts/integration_scheduler_api.sh
+        run: cargo run -p edgerun-cli -- --root . test integration
 
       - name: E2E lifecycle integration
-        run: ./scripts/integration_e2e_lifecycle.sh
+        run: cargo run -p edgerun-cli -- --root . test e2e
 
       - name: Policy rotation integration
-        run: ./scripts/integration_policy_rotation.sh
+        run: cargo run -p edgerun-cli -- --root . test rotation
 
       - name: ABI rollover integration
-        run: ./scripts/integration_abi_rollover.sh
+        run: cargo run -p edgerun-cli -- --root . test abi-rollover
 
   runtime-determinism:
     name: Runtime Determinism (${{ matrix.os }})
@@ -268,7 +268,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Validate external review ledger
-        run: python3 scripts/validate_external_security_review.py crates/edgerun-runtime/SECURITY_FINDINGS.json
+        run: cargo run -p edgerun-cli -- --root . validate-security --path crates/edgerun-runtime/SECURITY_FINDINGS.json
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
@@ -321,13 +321,11 @@ jobs:
         run: cargo install --locked anchor-cli --version 0.31.1
 
       - name: Install cargo-build-sbf (local program toolchain)
-        working-directory: program
-        run: ./scripts/cargo-local install cargo-build-sbf --version 4.0.0
+        run: cargo install cargo-build-sbf --version 4.0.0
 
       - name: Install program dependencies
         working-directory: program
         run: bun install --frozen-lockfile
 
       - name: Program localnet tests
-        working-directory: program
-        run: ./scripts/test-bun-local
+        run: cargo run -p edgerun-cli -- test program

@@ -4,12 +4,12 @@
 //! Compares memory usage, insertion throughput, and lookup performance
 //! between the in-memory hash index and the LSM-backed index.
 
+use edgerun_storage::index::EventHashIndex;
+use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 use rand::Rng;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
-use edgerun_storage::index::EventHashIndex;
-use edgerun_storage::lsm_index::{LsmConfig, LsmIndex};
 
 const TEST_SIZES: [usize; 3] = [10_000, 100_000, 1_000_000];
 

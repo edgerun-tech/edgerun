@@ -4,13 +4,13 @@
 //! This benchmark suite measures the actual cost of durability guarantees,
 //! including fsync latency, write amplification, and CPU overhead.
 
-use rand::Rng;
-use std::path::PathBuf;
-use std::time::{Duration, Instant};
 use edgerun_storage::durability::SyncPolicy;
 use edgerun_storage::event::{ActorId, Event, StreamId};
 use edgerun_storage::segment::SegmentWriter;
 use edgerun_storage::StorageEngine;
+use rand::Rng;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 const TARGET_SIZE_MB: usize = 10; // Write 10MB for quick demo (use 500+ for real benchmarks)
 const EVENT_PAYLOAD_SIZE: usize = 1024;

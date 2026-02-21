@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
-use rand::Rng;
-use std::path::PathBuf;
-use std::time::Instant;
 use edgerun_storage::event::{ActorId, Event, StreamId};
 use edgerun_storage::index::EventHashIndex;
 use edgerun_storage::segment::{SegmentReader, SegmentWriter};
 use edgerun_storage::StorageEngine;
+use rand::Rng;
+use std::path::PathBuf;
+use std::time::Instant;
 
 const TARGET_SIZE_GB: usize = 1;
 const SEGMENT_SIZE: u64 = 128 * 1024 * 1024;

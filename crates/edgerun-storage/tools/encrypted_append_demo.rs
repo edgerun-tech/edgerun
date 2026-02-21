@@ -2,7 +2,6 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use rand::RngCore;
 use edgerun_storage::durability::DurabilityLevel;
 use edgerun_storage::encryption::{verify_encrypted_segment_bytes, EncryptionMode};
 use edgerun_storage::event::{ActorId, Event, StreamId};
@@ -13,6 +12,7 @@ use edgerun_storage::key_management::{
 use edgerun_storage::manifest::ManifestManager;
 use edgerun_storage::segment::SegmentReader;
 use edgerun_storage::StorageEngine;
+use rand::RngCore;
 
 #[derive(Debug, Clone)]
 enum Provider {

@@ -1,0 +1,26 @@
+[web]
+# Optional override for `edgerun serve --addr` default.
+default_addr = "127.0.0.1:8787"
+# UI poll interval in milliseconds (minimum effective value is 500).
+refresh_ms = 2000
+# Number of historical runs kept per task in the web status store.
+history_limit = 30
+# Optional API token required by all `/api/*` endpoints.
+# auth_token = "change-me"
+# Allow binding `edgerun serve` to non-loopback addresses.
+allow_remote_bind = false
+
+[runtime]
+# Cargo profiles used by replay corpus checks.
+replay_profile_debug = "dev"
+replay_profile_release = "release"
+# Number of replay runs to execute.
+replay_runs = 5
+# Per-fuzz-target timeout used by weekly fuzz orchestration.
+fuzz_seconds_per_target = 60
+
+[integration]
+# Optional integration safety gates.
+require_worker_signatures = false
+require_result_attestation = false
+quorum_requires_attestation = false
