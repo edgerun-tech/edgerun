@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use term_core::terminal::{GridPerformer, Terminal};
+use edgerun_term_core::terminal::{GridPerformer, Terminal};
 use vte::Parser;
 
 #[derive(Clone, Default)]

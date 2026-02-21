@@ -1,7 +1,10 @@
-.PHONY: check fmt clippy test verify matrix-check tree
+.PHONY: clean check fmt clippy test verify matrix-check tree
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
+
+clean:
+	./scripts/clean-artifacts.sh
 
 check:
 	cargo check --workspace

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 170" fill="none">
+  <rect width="720" height="170" fill="#ffffff"/>
+  <g transform="translate(30 35)">
+    <path d="M50 8 L86 26 L50 44 L14 26 Z
+M14 38 L50 56 L86 38 L86 52 L50 70 L14 52 Z
+M14 64 L50 82 L86 64 L86 78 L50 96 L14 78 Z" fill="#171717"/>
+  </g>
+  <text x="170" y="112"
+    fill="#171717"
+    font-family="Inter, Montserrat, Avenir Next, Segoe UI, Arial, sans-serif"
+    font-size="78"
+    font-weight="700"
+    letter-spacing="0.12em">EDGERUN</text>
+</svg>

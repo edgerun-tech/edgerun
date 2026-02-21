@@ -1,0 +1,329 @@
+@import "tailwindcss";
+
+:root {
+  --background: oklch(0 0 0);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.15 0 0);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.65 0.22 285);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.25 0 0);
+  --secondary-foreground: oklch(0.98 0 0);
+  --muted-token: oklch(0.2 0 0);
+  --muted-foreground-token: oklch(0.6 0 0);
+  --accent: oklch(0.6 0.18 250);
+  --accent-foreground: oklch(0.98 0 0);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(0.22 0 0);
+  --input: oklch(0.22 0 0);
+  --ring: oklch(0.65 0.22 285);
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted-token);
+  --color-muted-foreground: var(--muted-foreground-token);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Geist", "Segoe UI", sans-serif;
+  color: theme(colors.foreground);
+  background: var(--background);
+}
+
+a {
+  color: inherit;
+}
+
+a:hover {
+  color: color-mix(in oklab, var(--foreground) 90%, var(--primary));
+}
+
+a,
+button,
+select,
+summary,
+[role="button"] {
+  cursor: pointer;
+}
+
+.shell {
+  max-width: 74rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+@media (min-width: 768px) {
+  .shell {
+    padding: 1.5rem;
+  }
+}
+
+.panel {
+  background: color-mix(in oklab, var(--card) 88%, black);
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.navlink {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.6rem;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+.navlink:hover,
+.navlink:focus-visible {
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--card) 92%, black);
+  outline: none;
+}
+
+[data-nav-link].is-active {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--card) 92%, black);
+  border: 1px solid var(--border);
+}
+
+.grid-cards {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.status-live {
+  color: #9ef1b6;
+}
+
+.status-generating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  color: #ffd77f;
+}
+
+[data-generating-label] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+[data-generating-label]::before {
+  content: "";
+  width: 0.85em;
+  height: 0.85em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: edgerun-spin 0.8s linear infinite;
+}
+
+@keyframes edgerun-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.docs-content {
+  line-height: 1.65;
+  color: color-mix(in oklab, var(--foreground) 82%, var(--muted-foreground-token));
+}
+
+.docs-content h1 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.9rem;
+  font-size: clamp(1.9rem, 4vw, 2.4rem);
+  line-height: 1.15;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.docs-content h2 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: clamp(1.35rem, 3vw, 1.65rem);
+  line-height: 1.2;
+  font-weight: 650;
+  color: var(--foreground);
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  padding-bottom: 0.35rem;
+}
+
+.docs-content h3 {
+  margin-top: 1.1rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.08rem;
+  font-weight: 620;
+  color: var(--foreground);
+}
+
+.docs-content h2,
+.docs-content p,
+.docs-content ul,
+.docs-content ol,
+.docs-content pre,
+.docs-content blockquote {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.docs-content p {
+  color: color-mix(in oklab, var(--foreground) 80%, var(--muted-foreground-token));
+}
+
+.docs-content a {
+  color: color-mix(in oklab, var(--accent) 75%, white);
+  text-underline-offset: 0.18em;
+}
+
+.docs-content a:hover {
+  color: color-mix(in oklab, var(--accent) 50%, white);
+}
+
+.docs-content ul,
+.docs-content ol {
+  padding-left: 1.2rem;
+}
+
+.docs-content li {
+  margin: 0.25rem 0;
+}
+
+.docs-content pre {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, black 84%, var(--card));
+  padding: 0.8rem;
+}
+
+.code-copy-host {
+  position: relative;
+  padding-top: 2.2rem;
+}
+
+.code-copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  border: 1px solid var(--border);
+  background: color-mix(in oklab, var(--card) 88%, black);
+  color: color-mix(in oklab, var(--foreground) 55%, var(--muted-foreground-token));
+  border-radius: 0.45rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+
+.code-copy-button:hover {
+  background: color-mix(in oklab, var(--card) 72%, black);
+}
+
+.code-copy-button svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: currentColor;
+}
+
+.code-copy-button.is-copied {
+  color: #22c55e;
+  border-color: color-mix(in oklab, #22c55e 50%, var(--border));
+}
+
+.docs-content code {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+.docs-content p code,
+.docs-content li code {
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: color-mix(in oklab, var(--card) 86%, black);
+  padding: 0.08rem 0.35rem;
+  color: color-mix(in oklab, var(--foreground) 88%, var(--accent));
+}
+
+.docs-content blockquote {
+  border-left: 3px solid var(--primary);
+  padding-left: 0.85rem;
+  color: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground-token));
+}
+
+.docs-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.docs-content th,
+.docs-content td {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+}
+
+.docs-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.2rem 0;
+}
+
+blockquote {
+  margin: 0;
+}
+
+.visually-muted {
+  color: var(--muted-foreground-token);
+}
