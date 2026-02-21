@@ -152,7 +152,7 @@ JobResult PDA (optional; recommended for account sizing): seeds ["job_result", j
 To minimize account bloat, prefer JobResult PDAs so the Job account stays fixed-size.
 
 5.2 Token model
-MVP uses native SOL for escrow and stake (simpler). You can switch to SPL EDGE token later; spec allows either with a config flag. Start with SOL.
+MVP uses native SOL for escrow and stake. This specification assumes SOL-denominated staking and settlement.
 
 5.3 Accounts
 
