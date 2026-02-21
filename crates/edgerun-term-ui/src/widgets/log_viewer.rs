@@ -1,14 +1,14 @@
-use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
-use term_core::render::{
-    GlyphCache, OVERLAY_ACCENT, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT,
-    OVERLAY_TEXT_MUTED, draw_text_line_clipped, rgba_bytes,
-};
-use term_core::render::primitives::fill_rect;
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, PanelLayout,
     list_panel_cpu, list_panel_gpu, modal_panel_rect,
 };
 use pixels::wgpu;
+use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
+use term_core::render::primitives::fill_rect;
+use term_core::render::{
+    GlyphCache, OVERLAY_ACCENT, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT,
+    OVERLAY_TEXT_MUTED, draw_text_line_clipped, rgba_bytes,
+};
 
 #[derive(Clone, Debug)]
 pub struct LogSourceEntry {
@@ -110,7 +110,16 @@ pub fn draw_log_viewer_cpu(
         MODAL_PANEL_MIN_W,
         MODAL_PANEL_MIN_H,
     );
-    fill_rect(frame, width, height, x0, y0, x1, y1, rgba_bytes(OVERLAY_PANEL));
+    fill_rect(
+        frame,
+        width,
+        height,
+        x0,
+        y0,
+        x1,
+        y1,
+        rgba_bytes(OVERLAY_PANEL),
+    );
     fill_rect(
         frame,
         width,
@@ -243,10 +252,7 @@ pub fn draw_log_viewer_cpu(
     );
 
     let visible_lines = ((log_y1 - log_y0) / line_h).max(0) as usize;
-    let max_start = viewer
-        .lines
-        .len()
-        .saturating_sub(visible_lines);
+    let max_start = viewer.lines.len().saturating_sub(visible_lines);
     let start = if viewer.follow {
         max_start
     } else {
@@ -310,7 +316,14 @@ pub fn build_log_viewer_gpu(
         MODAL_PANEL_MIN_W,
         MODAL_PANEL_MIN_H,
     );
-    GpuRenderer::push_rect(rects, x0 as f32, y0 as f32, x1 as f32, y1 as f32, OVERLAY_PANEL);
+    GpuRenderer::push_rect(
+        rects,
+        x0 as f32,
+        y0 as f32,
+        x1 as f32,
+        y1 as f32,
+        OVERLAY_PANEL,
+    );
     GpuRenderer::push_rect(
         rects,
         (x0 + 1) as f32,
@@ -434,10 +447,7 @@ pub fn build_log_viewer_gpu(
     );
 
     let visible_lines = ((log_y1 - log_y0) / line_h).max(0) as usize;
-    let max_start = viewer
-        .lines
-        .len()
-        .saturating_sub(visible_lines);
+    let max_start = viewer.lines.len().saturating_sub(visible_lines);
     let start = if viewer.follow {
         max_start
     } else {

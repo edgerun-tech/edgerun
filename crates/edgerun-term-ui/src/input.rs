@@ -164,7 +164,10 @@ mod tests {
         }
     }
 
-    fn capture_writer() -> (Arc<Mutex<Vec<u8>>>, Arc<Mutex<Box<dyn std::io::Write + Send>>>) {
+    fn capture_writer() -> (
+        Arc<Mutex<Vec<u8>>>,
+        Arc<Mutex<Box<dyn std::io::Write + Send>>>,
+    ) {
         let buf = Arc::new(Mutex::new(Vec::new()));
         let writer: Box<dyn std::io::Write + Send> = Box::new(Buf(buf.clone()));
         (buf, Arc::new(Mutex::new(writer)))

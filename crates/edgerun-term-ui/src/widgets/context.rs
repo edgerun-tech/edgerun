@@ -1,8 +1,8 @@
 use crate::widgets::{PanelLayout, clamp_panel_to_view, list_panel_cpu, list_panel_gpu};
-use term_core::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
-use term_core::render::{GlyphCache, OVERLAY_PANEL_INNER, rgba_bytes};
-use term_core::render::cpu::text_width;
 use pixels::wgpu;
+use term_core::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
+use term_core::render::cpu::text_width;
+use term_core::render::{GlyphCache, OVERLAY_PANEL_INNER, rgba_bytes};
 
 pub struct ContextItem {
     pub label: &'static str,

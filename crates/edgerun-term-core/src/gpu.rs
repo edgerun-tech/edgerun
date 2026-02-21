@@ -1705,7 +1705,11 @@ impl GpuRenderer {
                                 row_y,
                                 baseline,
                                 Some(cell_h),
-                                if is_single_glyph { Some(cell_span_w) } else { None },
+                                if is_single_glyph {
+                                    Some(cell_span_w)
+                                } else {
+                                    None
+                                },
                                 cell.italic,
                                 cell.bold,
                                 glyph_fg,
@@ -1833,7 +1837,11 @@ impl GpuRenderer {
                                 base_y,
                                 baseline,
                                 Some(cell_h),
-                                if is_single_glyph { Some(cell_span_w) } else { None },
+                                if is_single_glyph {
+                                    Some(cell_span_w)
+                                } else {
+                                    None
+                                },
                                 cell.italic,
                                 cell.bold,
                                 glyph_fg,
@@ -1965,9 +1973,9 @@ impl GpuRenderer {
                         },
                     })],
                     depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
 
                 if bg_len > 0 {
                     pass.set_pipeline(&self.rect_pipeline);
@@ -2032,9 +2040,9 @@ impl GpuRenderer {
                         },
                     })],
                     depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
 
                 if bg_len > 0 {
                     pass.set_pipeline(&self.rect_pipeline);
@@ -2100,9 +2108,9 @@ impl GpuRenderer {
                     },
                 })],
                 depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
 
             if bg_len > 0 {
                 pass.set_pipeline(&self.rect_pipeline);
@@ -2285,7 +2293,11 @@ impl GpuRenderer {
                             base_y,
                             baseline,
                             Some(cell_h),
-                            if is_single_glyph { Some(cell_span_w) } else { None },
+                            if is_single_glyph {
+                                Some(cell_span_w)
+                            } else {
+                                None
+                            },
                             cell.italic,
                             cell.bold,
                             glyph_fg,

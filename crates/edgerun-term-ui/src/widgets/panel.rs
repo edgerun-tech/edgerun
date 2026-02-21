@@ -1,9 +1,9 @@
+use pixels::wgpu::Queue;
 use term_core::gpu::GpuRenderer;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
 use term_core::render::GlyphCache;
 use term_core::render::primitives::{fill_rect, truncate_label};
 use term_core::terminal::Rgba;
-use pixels::wgpu::Queue;
 
 /// Basic panel layout used by list-style widgets.
 #[derive(Clone, Copy, Debug)]

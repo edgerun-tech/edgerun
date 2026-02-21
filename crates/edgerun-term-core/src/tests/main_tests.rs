@@ -1,28 +1,15 @@
+use crate::render::{
+    FONT_DATA, FONT_SIZE, GlyphCache, draw_background, draw_cursor_overlay, draw_grid,
+    draw_text_line, draw_text_line_clipped,
+};
+use crate::terminal::{
+    DEFAULT_BG, DEFAULT_FG, GridPerformer, Rgba, Terminal, ansi_color, brightened, selection_text,
+    xterm_color,
+};
 use std::io;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use crate::render::{
-    draw_background,
-    draw_cursor_overlay,
-    draw_grid,
-    draw_text_line,
-    draw_text_line_clipped,
-    GlyphCache,
-    FONT_DATA,
-    FONT_SIZE,
-};
-use crate::terminal::{
-    DEFAULT_BG,
-    DEFAULT_FG,
-    GridPerformer,
-    Rgba,
-    Terminal,
-    ansi_color,
-    brightened,
-    selection_text,
-    xterm_color,
-};
 use vte::Parser as VteParser;
 
 #[derive(Clone, Default)]

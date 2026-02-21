@@ -1,13 +1,13 @@
-use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
-use term_core::render::{
-    GlyphCache, OVERLAY_ACCENT, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT,
-    OVERLAY_TEXT_MUTED, draw_text_line_clipped, rgba_bytes,
-};
-use term_core::render::primitives::fill_rect;
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
 };
 use pixels::wgpu;
+use term_core::gpu::{GlyphAtlas, GlyphVertex, GpuRenderer, RectVertex};
+use term_core::render::primitives::fill_rect;
+use term_core::render::{
+    GlyphCache, OVERLAY_ACCENT, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER, OVERLAY_TEXT,
+    OVERLAY_TEXT_MUTED, draw_text_line_clipped, rgba_bytes,
+};
 
 pub struct Cheatsheet {
     open: bool,
@@ -130,7 +130,16 @@ pub fn draw_cheatsheet_cpu(
         MODAL_PANEL_MIN_H,
     );
 
-    fill_rect(frame, width, height, x0, y0, x1, y1, rgba_bytes(OVERLAY_PANEL));
+    fill_rect(
+        frame,
+        width,
+        height,
+        x0,
+        y0,
+        x1,
+        y1,
+        rgba_bytes(OVERLAY_PANEL),
+    );
     fill_rect(
         frame,
         width,
@@ -269,8 +278,7 @@ pub fn build_cheatsheet_gpu(
     let panel_w = (x1 - x0).max(0.0);
     let columns = 2;
     let col_padding = 18.0;
-    let col_width =
-        ((panel_w - col_padding * (columns as f32 + 1.0)) / columns as f32).max(120.0);
+    let col_width = ((panel_w - col_padding * (columns as f32 + 1.0)) / columns as f32).max(120.0);
     let mut col = 0;
     let mut x = x0 + col_padding;
     let mut y = heading_y + line_h + 6.0;

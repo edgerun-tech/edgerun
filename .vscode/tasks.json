@@ -2,148 +2,74 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Web Server",
+      "label": "Rebuild Frontend",
       "type": "shell",
-      "command": "cargo",
-      "args": [
-        "run",
-        "-p",
-        "edgerun-cli",
-        "--",
-        "--root",
-        "${workspaceFolder}",
-        "serve",
-        "--addr",
-        "${input:webAddr}"
-      ],
+      "command": "bun",
+      "args": ["run", "build"],
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
       },
       "presentation": {
         "reveal": "always",
-        "panel": "dedicated",
-        "clear": false
-      }
-    },
-    {
-      "label": "Open Web UI",
-      "type": "shell",
-      "command": "python3",
-      "args": [
-        "-m",
-        "webbrowser",
-        "http://${input:webAddr}"
-      ],
-      "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "presentation": {
-        "reveal": "never",
         "panel": "shared"
       }
     },
     {
-      "label": "Web Server + Open UI",
-      "dependsOrder": "sequence",
-      "dependsOn": [
-        "Web Server",
-        "Open Web UI"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "Doctor",
+      "label": "Check Frontend",
       "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "doctor"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": "build",
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Setup (Install Missing)",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "setup", "--install-missing"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "presentation": { "reveal": "always", "panel": "shared" }
+      "command": "bun",
+      "args": ["run", "check"],
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
     },
     {
       "label": "Build Workspace",
       "type": "shell",
       "command": "cargo",
       "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "build", "workspace"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": "build",
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Build Program",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "build", "program"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Test Workspace",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "test", "workspace"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": "test",
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Test Program",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "test", "program"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": "test",
-      "presentation": { "reveal": "always", "panel": "shared" }
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
     },
     {
       "label": "Test All",
       "type": "shell",
       "command": "cargo",
       "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "test", "all"],
-      "options": { "cwd": "${workspaceFolder}" },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": "test",
-      "presentation": { "reveal": "always", "panel": "shared" }
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
     },
     {
-      "label": "Dev",
+      "label": "Run Dev",
       "type": "shell",
       "command": "cargo",
       "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "dev"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Storage Check",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "storage", "check"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "presentation": { "reveal": "always", "panel": "shared" }
-    },
-    {
-      "label": "Verify Gate",
-      "type": "shell",
-      "command": "make",
-      "args": ["verify"],
-      "options": { "cwd": "${workspaceFolder}" },
-      "group": "test",
-      "presentation": { "reveal": "always", "panel": "shared" }
-    }
-  ],
-  "inputs": [
-    {
-      "id": "webAddr",
-      "type": "promptString",
-      "description": "EdgeRun web server address",
-      "default": "127.0.0.1:8787"
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
     }
   ]
 }

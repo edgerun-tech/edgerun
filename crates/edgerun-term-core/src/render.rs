@@ -10,9 +10,9 @@ pub mod grid;
 pub use grid::{draw_cursor_overlay, draw_grid};
 pub mod border;
 pub mod ui;
-pub use border::draw_border_cpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub use border::build_border_gpu;
+pub use border::draw_border_cpu;
 #[cfg(not(target_arch = "wasm32"))]
 pub use ui::{
     OVERLAY_ACCENT, OVERLAY_BADGE, OVERLAY_BAR, OVERLAY_DIM, OVERLAY_PANEL, OVERLAY_PANEL_INNER,
