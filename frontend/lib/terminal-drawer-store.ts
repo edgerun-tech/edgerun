@@ -32,6 +32,7 @@ export type TerminalDevice = {
 export type TerminalDrawerState = {
   open: boolean
   heightRatio: number
+  autoImportTailscale: boolean
   tabs: TerminalTab[]
   activeTabId: string
   devices: TerminalDevice[]
@@ -64,6 +65,9 @@ function nowMs(): number {
 }
 
 function cloneState<T>(value: T): T {
+  if (typeof globalThis.structuredClone === 'function') {
+    return globalThis.structuredClone(value)
+  }
   return JSON.parse(JSON.stringify(value)) as T
 }
 
@@ -122,6 +126,7 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
   return {
     open: Boolean(base.open),
     heightRatio,
+    autoImportTailscale: typeof base.autoImportTailscale === 'boolean' ? base.autoImportTailscale : true,
     tabs,
     activeTabId,
     devices
@@ -192,6 +197,10 @@ export const terminalDrawerActions = {
 
   setOpen(open: boolean): void {
     apply((prev) => ({ ...prev, open }))
+  },
+
+  setAutoImportTailscale(enabled: boolean): void {
+    apply((prev) => ({ ...prev, autoImportTailscale: enabled }))
   },
 
   addTab(): void {
@@ -368,6 +377,7 @@ function seedKnownDevices(): void {
   candidates.set(window.location.origin, 'Current Origin')
 
   if (state.devices.length > 0) return
+  let added = false
   for (const [baseUrl, name] of candidates.entries()) {
     if (state.devices.some((item) => item.baseUrl === baseUrl)) continue
     state.devices.push({
@@ -378,8 +388,12 @@ function seedKnownDevices(): void {
       lastSeenAt: null,
       lastConnectedAt: null
     })
+    added = true
   }
-  queuePersist()
+  if (added) {
+    notify()
+    queuePersist()
+  }
 }
 
 export function getTerminalPaneSrc(baseUrl: string, paneId: string): string {

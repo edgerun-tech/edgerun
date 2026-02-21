@@ -248,6 +248,7 @@ async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[] = []
 }
 
 async function loadChainData(): Promise<void> {
+  if (!document.querySelector('[data-chain-field]')) return
   const cfg = readRuntimeRpcConfig()
   if (!cfg?.rpcUrl) return
 
@@ -305,6 +306,7 @@ async function isExecutableProgram(rpcUrl: string, programId: string): Promise<b
 }
 
 async function loadDeploymentStatus(): Promise<void> {
+  if (!document.querySelector('[data-deployment-badge]') && !document.querySelector('[data-deployment-detail]')) return
   const cfg = readRuntimeRpcConfig()
   const cluster = cfg.cluster || 'unknown'
   const rpcUrl = cfg.rpcUrl || ''
@@ -349,6 +351,13 @@ type DocsSearchEntry = {
 let docsSearchBoundPath = ''
 let docsCopyBoundPath = ''
 const docsSearchQueryKeyPrefix = 'edgerun_docs_search_query_'
+const docsSearchIndexCache = new Map<string, DocsSearchEntry[]>()
+let docsSearchCleanup: null | (() => void) = null
+let docsSearchToken = 0
+
+function escapeHtml(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+}
 
 function setCopyIcon(button: HTMLButtonElement, mode: 'copy' | 'copied'): void {
   const ns = 'http://www.w3.org/2000/svg'
@@ -375,8 +384,8 @@ function renderDocsSearchResults(container: HTMLElement, results: DocsSearchEntr
     return
   }
   const listItems = results.slice(0, 8).map((entry) => {
-    const title = entry.title.replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-    const href = entry.href.replaceAll('"', '&quot;')
+    const title = escapeHtml(entry.title)
+    const href = escapeHtml(entry.href)
     return `<li><a class="block rounded border border-border bg-background px-2 py-1 hover:border-primary/50 hover:bg-muted/30" href="${href}">${title}</a></li>`
   }).join('')
   container.innerHTML = `<ul class="space-y-1">${listItems}</ul>`
@@ -385,11 +394,19 @@ function renderDocsSearchResults(container: HTMLElement, results: DocsSearchEntr
 async function initDocsSearch(): Promise<void> {
   const route = normalizePath(window.location.pathname)
   if (docsSearchBoundPath === route) return
+  if (docsSearchCleanup) {
+    docsSearchCleanup()
+    docsSearchCleanup = null
+  }
   const root = document.querySelector<HTMLElement>('[data-docs-search]')
   const input = document.querySelector<HTMLInputElement>('[data-docs-search-input]')
   const results = document.querySelector<HTMLElement>('[data-docs-search-results]')
   const version = root?.getAttribute('data-docs-version')?.trim()
-  if (!root || !input || !results || !version) return
+  if (!root || !input || !results || !version) {
+    docsSearchBoundPath = ''
+    return
+  }
+  const token = ++docsSearchToken
   docsSearchBoundPath = route
 
   root.setAttribute('aria-busy', 'true')
@@ -397,18 +414,23 @@ async function initDocsSearch(): Promise<void> {
   input.placeholder = 'Search by keyword...'
   renderDocsSearchMessage(results, 'Type at least 2 characters.')
 
-  let index: DocsSearchEntry[] = []
-  try {
-    const response = await fetch(`/docs/${encodeURIComponent(version)}/search-index.json`, { headers: { accept: 'application/json' } })
-    if (!response.ok) throw new Error(`search_index_${response.status}`)
-    index = await response.json() as DocsSearchEntry[]
-  } catch {
-    input.disabled = true
-    input.placeholder = 'Search unavailable'
-    root.setAttribute('aria-busy', 'false')
-    renderDocsSearchMessage(results, 'Search index unavailable on this page.')
-    return
+  let index = docsSearchIndexCache.get(version) ?? null
+  if (!index) {
+    try {
+      const response = await fetch(`/docs/${encodeURIComponent(version)}/search-index.json`, { headers: { accept: 'application/json' } })
+      if (!response.ok) throw new Error(`search_index_${response.status}`)
+      index = await response.json() as DocsSearchEntry[]
+      docsSearchIndexCache.set(version, index)
+    } catch {
+      if (token !== docsSearchToken) return
+      input.disabled = true
+      input.placeholder = 'Search unavailable'
+      root.setAttribute('aria-busy', 'false')
+      renderDocsSearchMessage(results, 'Search index unavailable on this page.')
+      return
+    }
   }
+  if (token !== docsSearchToken) return
   input.disabled = false
   input.placeholder = 'Search by keyword...'
   root.setAttribute('aria-busy', 'false')
@@ -418,9 +440,10 @@ async function initDocsSearch(): Promise<void> {
   if (restoreQuery.length >= 2) input.value = restoreQuery
 
   let timer: number | null = null
-  const runSearch = (): void => {
+  const onInput = (): void => {
     if (timer !== null) window.clearTimeout(timer)
     timer = window.setTimeout(() => {
+      if (token !== docsSearchToken) return
       const query = input.value.trim().toLowerCase()
       window.sessionStorage.setItem(queryStorageKey, query)
       if (query.length < 2) {
@@ -436,8 +459,12 @@ async function initDocsSearch(): Promise<void> {
     }, 90)
   }
 
-  input.addEventListener('input', runSearch)
-  runSearch()
+  input.addEventListener('input', onInput)
+  onInput()
+  docsSearchCleanup = () => {
+    input.removeEventListener('input', onInput)
+    if (timer !== null) window.clearTimeout(timer)
+  }
 }
 
 function copyTextToClipboard(text: string): Promise<void> {
