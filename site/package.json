@@ -11,6 +11,8 @@
     "build": "bun run clean && mkdir -p dist/assets && bun run build:css && bun run build:js && bun run build:html"
   },
   "dependencies": {
+    "markdown-it": "^14.1.0",
+    "shiki": "^3.13.0",
     "solid-js": "^1.9.9"
   },
   "devDependencies": {
