@@ -27,6 +27,10 @@ cargo run -p edgerun-vanity-client -- \
 
 ## Run (distributed, insecure)
 
+Security warning: `distributed-insecure` is for demo/testing only. It requires
+`--allow-worker-seed-exposure` because worker-side search leaks derivation
+material.
+
 ```bash
 cargo run -p edgerun-vanity-client -- \
   --mode distributed-insecure \
@@ -42,3 +46,27 @@ cargo run -p edgerun-vanity-client -- \
   --escrow-per-job-lamports 1000000 \
   --max-escrow-lamports 20000000
 ```
+
+## Required flags by mode
+
+- `secure-local`: `--seed-hex`, `--prefix`, `--start-counter`, `--end-counter`
+- `distributed-insecure`: all above, plus:
+  - `--allow-worker-seed-exposure`
+  - `--scheduler-url`
+  - `--runtime-id`
+  - `--wasm-path`
+  - `--escrow-per-job-lamports`
+  - `--max-escrow-lamports`
+
+## Output
+
+The client prints JSON:
+
+- `found`: includes `counter`, `address`, `pubkey_hex`, `keypair_hex`
+- `exhausted_range`: full range scanned without match
+- `exhausted_escrow`: escrow cap reached before range complete
+
+## Onboarding
+
+For end-to-end onboarding (minimal and optional hardened workflow), see
+`docs/ONBOARDING.md`.

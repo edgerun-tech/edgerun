@@ -4,6 +4,10 @@ Deterministic Solana vanity search payload for edgerun workers.
 
 Security warning: this payload requires seed material in job input. Any worker executing the job can derive the same keyspace.
 
+Use this payload for local search or insecure/disclosure-accepted demos. For a
+production secrecy story, keep derivation local or run worker-side search only
+inside trusted execution environments with attestation verification.
+
 ## What it does
 
 - Derives deterministic ed25519 keypairs from `(seed, counter)`.
@@ -39,3 +43,5 @@ Binary payload:
 cargo test -p edgerun-vanity-payload
 cargo build -p edgerun-vanity-payload --target wasm32-unknown-unknown
 ```
+
+For end-to-end usage examples, see `docs/ONBOARDING.md`.
