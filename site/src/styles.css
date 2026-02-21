@@ -29,3 +29,29 @@ body {
   font-weight: 700;
 }
 
+.docs-content {
+  line-height: 1.65;
+  color: #dbe7f5;
+}
+
+.docs-content p,
+.docs-content ul,
+.docs-content ol,
+.docs-content pre,
+.docs-content blockquote,
+.docs-content h1,
+.docs-content h2,
+.docs-content h3 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.docs-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.docs-content pre {
+  overflow-x: auto;
+  border: 1px solid color-mix(in oklab, var(--muted) 25%, transparent);
+  border-radius: 0.75rem;
+}
