@@ -322,9 +322,7 @@ async fn slo_smoke(
     }
     if !throughput_ok {
         bail!(
-            "slo smoke failed: overall_ops_per_sec {} < min_ops_per_sec {}",
-            overall_ops_per_sec,
-            min_ops_per_sec
+            "slo smoke failed: overall_ops_per_sec {overall_ops_per_sec} < min_ops_per_sec {min_ops_per_sec}"
         );
     }
     Ok(())

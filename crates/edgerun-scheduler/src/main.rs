@@ -320,6 +320,7 @@ struct PostJobArgs {
     job_id: [u8; 32],
     bundle_hash: [u8; 32],
     runtime_id: [u8; 32],
+    runtime_proof: Vec<[u8; 32]>,
     max_memory_bytes: u32,
     max_instructions: u64,
     escrow_lamports: u64,
@@ -533,6 +534,7 @@ async fn worker_result(
     State(state): State<AppState>,
     Json(payload): Json<WorkerResultReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    validate_worker_result_payload(&payload)?;
     if !verify_worker_message_signature(
         &state,
         &payload.worker_pubkey,
@@ -894,11 +896,27 @@ async fn job_create(
     evaluate_expired_jobs(&state).map_err(internal_err)?;
 
     let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
+        let runtime_proof = match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
+            Ok(proof) => proof,
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to build runtime allowlist proof");
+                return Ok(Json(JobCreateResponse {
+                    job_id: bundle_hash_hex.clone(),
+                    bundle_hash: bundle_hash_hex.clone(),
+                    bundle_url: format!("{}/bundle/{bundle_hash_hex}", state.public_base_url),
+                    post_job_tx: "UNAVAILABLE_BUILD_FAILED".to_string(),
+                    post_job_sig: None,
+                    assign_workers_tx: assign_workers_tx.clone(),
+                    assign_workers_sig,
+                }));
+            }
+        };
         let tx_args = PostJobArgs {
             client: chain.payer.pubkey(),
             job_id: bundle_hash,
             bundle_hash,
             runtime_id,
+            runtime_proof,
             max_memory_bytes: payload.limits.max_memory_bytes,
             max_instructions: payload.limits.max_instructions,
             escrow_lamports: payload.escrow_lamports,
@@ -1033,12 +1051,116 @@ fn build_post_job_tx_base64(
     Ok((tx_b64, signature))
 }
 
+fn build_runtime_allowlist_proof_for_chain(
+    chain: &ChainContext,
+    runtime_id: [u8; 32],
+) -> Result<Vec<[u8; 32]>> {
+    let allowed_root = fetch_chain_allowed_runtime_root(chain)?;
+    if allowed_root == [0_u8; 32] {
+        return Ok(Vec::new());
+    }
+
+    let leaves = load_allowed_runtime_ids_from_env()?.ok_or_else(|| {
+        anyhow::anyhow!(
+            "config.allowed_runtime_root is non-zero but EDGERUN_ALLOWED_RUNTIME_IDS is unset"
+        )
+    })?;
+    let (derived_root, proof) = build_merkle_root_and_proof(&leaves, &runtime_id)
+        .ok_or_else(|| anyhow::anyhow!("runtime_id is not in EDGERUN_ALLOWED_RUNTIME_IDS"))?;
+    if derived_root != allowed_root {
+        anyhow::bail!(
+            "runtime allowlist root mismatch: env-derived root does not match on-chain config"
+        );
+    }
+    Ok(proof)
+}
+
+fn load_allowed_runtime_ids_from_env() -> Result<Option<Vec<[u8; 32]>>> {
+    let Some(raw) = std::env::var("EDGERUN_ALLOWED_RUNTIME_IDS").ok() else {
+        return Ok(None);
+    };
+    let mut leaves = Vec::new();
+    for entry in raw.split(',').map(|v| v.trim()).filter(|v| !v.is_empty()) {
+        leaves.push(parse_hex32(entry).map_err(|_| {
+            anyhow::anyhow!("EDGERUN_ALLOWED_RUNTIME_IDS entries must be 32-byte hex values")
+        })?);
+    }
+    if leaves.is_empty() {
+        return Ok(None);
+    }
+    leaves.sort();
+    leaves.dedup();
+    Ok(Some(leaves))
+}
+
+fn fetch_chain_allowed_runtime_root(chain: &ChainContext) -> Result<[u8; 32]> {
+    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
+    let account = chain
+        .rpc
+        .get_account(&config_pda)
+        .context("failed to fetch config account")?;
+    parse_config_allowed_runtime_root(&account.data)
+        .ok_or_else(|| anyhow::anyhow!("unable to parse config.allowed_runtime_root"))
+}
+
+fn merkle_parent_sorted(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
+    let mut preimage = [0_u8; 64];
+    if a <= b {
+        preimage[0..32].copy_from_slice(a);
+        preimage[32..64].copy_from_slice(b);
+    } else {
+        preimage[0..32].copy_from_slice(b);
+        preimage[32..64].copy_from_slice(a);
+    }
+    edgerun_crypto::blake3_256(&preimage)
+}
+
+fn build_merkle_root_and_proof(
+    leaves: &[[u8; 32]],
+    target: &[u8; 32],
+) -> Option<([u8; 32], Vec<[u8; 32]>)> {
+    if leaves.is_empty() {
+        return None;
+    }
+    let mut layer = leaves.to_vec();
+    layer.sort();
+    layer.dedup();
+    let mut index = layer.iter().position(|leaf| leaf == target)?;
+    let mut proof = Vec::new();
+
+    while layer.len() > 1 {
+        let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
+        let sibling = if sibling_index < layer.len() {
+            layer[sibling_index]
+        } else {
+            layer[index]
+        };
+        proof.push(sibling);
+
+        let mut next = Vec::with_capacity(layer.len().div_ceil(2));
+        let mut i = 0usize;
+        while i < layer.len() {
+            let left = layer[i];
+            let right = if i + 1 < layer.len() {
+                layer[i + 1]
+            } else {
+                layer[i]
+            };
+            next.push(merkle_parent_sorted(&left, &right));
+            i += 2;
+        }
+        layer = next;
+        index /= 2;
+    }
+
+    Some((layer[0], proof))
+}
+
 fn build_finalize_job_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
     committee: [Pubkey; 3],
     winners: Vec<Pubkey>,
-    winning_output_hash_hex: &str,
     auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
     let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
@@ -1049,9 +1171,18 @@ fn build_finalize_job_tx_base64(
         Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
     let (worker_stake_2, _) =
         Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
-    let winning_output_hash =
-        parse_hex32(winning_output_hash_hex).context("winning output hash must be 32-byte hex")?;
-    let winner_count = winners.len().min(u8::MAX as usize) as u8;
+    let (job_result_0, _) = Pubkey::find_program_address(
+        &[b"job_result", &job_id, committee[0].as_ref()],
+        &chain.program_id,
+    );
+    let (job_result_1, _) = Pubkey::find_program_address(
+        &[b"job_result", &job_id, committee[1].as_ref()],
+        &chain.program_id,
+    );
+    let (job_result_2, _) = Pubkey::find_program_address(
+        &[b"job_result", &job_id, committee[2].as_ref()],
+        &chain.program_id,
+    );
 
     let mut accounts = vec![
         AccountMeta::new(chain.payer.pubkey(), true),
@@ -1060,6 +1191,9 @@ fn build_finalize_job_tx_base64(
         AccountMeta::new(worker_stake_0, false),
         AccountMeta::new(worker_stake_1, false),
         AccountMeta::new(worker_stake_2, false),
+        AccountMeta::new_readonly(job_result_0, false),
+        AccountMeta::new_readonly(job_result_1, false),
+        AccountMeta::new_readonly(job_result_2, false),
     ];
     for winner in winners {
         accounts.push(AccountMeta::new(winner, false));
@@ -1067,7 +1201,7 @@ fn build_finalize_job_tx_base64(
     let ix = Instruction {
         program_id: chain.program_id,
         accounts,
-        data: encode_finalize_job_data(winning_output_hash, winner_count),
+        data: encode_finalize_job_data(),
     };
 
     let blockhash = chain
@@ -1150,15 +1284,27 @@ fn build_cancel_expired_job_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
     client: Pubkey,
+    committee: [Pubkey; 3],
     auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
+    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
     let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let (worker_stake_0, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
+    let (worker_stake_1, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
+    let (worker_stake_2, _) =
+        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
     let ix = Instruction {
         program_id: chain.program_id,
         accounts: vec![
             AccountMeta::new(chain.payer.pubkey(), true),
+            AccountMeta::new_readonly(config_pda, false),
             AccountMeta::new(job_pda, false),
             AccountMeta::new(client, false),
+            AccountMeta::new(worker_stake_0, false),
+            AccountMeta::new(worker_stake_1, false),
+            AccountMeta::new(worker_stake_2, false),
         ],
         data: encode_cancel_expired_job_data(),
     };
@@ -1195,6 +1341,10 @@ fn build_slash_worker_tx_base64(
     let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
     let (worker_stake_pda, _) =
         Pubkey::find_program_address(&[b"worker_stake", worker.as_ref()], &chain.program_id);
+    let (job_result_pda, _) = Pubkey::find_program_address(
+        &[b"job_result", &job_id, worker.as_ref()],
+        &chain.program_id,
+    );
     let ix = Instruction {
         program_id: chain.program_id,
         accounts: vec![
@@ -1202,6 +1352,7 @@ fn build_slash_worker_tx_base64(
             AccountMeta::new(config_pda, false),
             AccountMeta::new(job_pda, false),
             AccountMeta::new(worker_stake_pda, false),
+            AccountMeta::new_readonly(job_result_pda, false),
         ],
         data: encode_slash_worker_data(),
     };
@@ -1229,11 +1380,16 @@ fn build_slash_worker_tx_base64(
 }
 
 fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32 + 32 + 32 + 4 + 8 + 8);
+    let mut data =
+        Vec::with_capacity(8 + 32 + 32 + 32 + 4 + (args.runtime_proof.len() * 32) + 4 + 8 + 8);
     data.extend_from_slice(&anchor_discriminator("post_job"));
     data.extend_from_slice(&args.job_id);
     data.extend_from_slice(&args.bundle_hash);
     data.extend_from_slice(&args.runtime_id);
+    data.extend_from_slice(&(args.runtime_proof.len() as u32).to_le_bytes());
+    for sibling in args.runtime_proof {
+        data.extend_from_slice(&sibling);
+    }
     data.extend_from_slice(&args.max_memory_bytes.to_le_bytes());
     data.extend_from_slice(&args.max_instructions.to_le_bytes());
     data.extend_from_slice(&args.escrow_lamports.to_le_bytes());
@@ -1249,11 +1405,9 @@ fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
     data
 }
 
-fn encode_finalize_job_data(winning_output_hash: [u8; 32], winner_count: u8) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32 + 1);
+fn encode_finalize_job_data() -> Vec<u8> {
+    let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_discriminator("finalize_job"));
-    data.extend_from_slice(&winning_output_hash);
-    data.push(winner_count);
     data
 }
 
@@ -1549,21 +1703,55 @@ fn find_winning_output_hash(
             .push(report.worker_pubkey.clone());
     }
 
-    counts
-        .into_iter()
-        .filter_map(|(output_hash, workers)| {
-            if workers.len() >= quorum_target {
-                Some((output_hash.to_string(), workers))
-            } else {
-                None
+    let mut best: Option<(String, Vec<String>)> = None;
+    let mut saw_tie = false;
+    for (output_hash, workers) in counts.into_iter() {
+        if workers.len() < quorum_target {
+            continue;
+        }
+        match &best {
+            None => {
+                best = Some((output_hash.to_string(), workers));
+                saw_tie = false;
             }
-        })
-        .max_by(|(a_hash, a_workers), (b_hash, b_workers)| {
-            a_workers
-                .len()
-                .cmp(&b_workers.len())
-                .then_with(|| b_hash.cmp(a_hash))
-        })
+            Some((_, best_workers)) if workers.len() > best_workers.len() => {
+                best = Some((output_hash.to_string(), workers));
+                saw_tie = false;
+            }
+            Some((_, best_workers)) if workers.len() == best_workers.len() => {
+                saw_tie = true;
+            }
+            Some(_) => {}
+        }
+    }
+    if saw_tie {
+        return None;
+    }
+    best
+}
+
+fn validate_worker_result_payload(
+    payload: &WorkerResultReport,
+) -> Result<(), (StatusCode, String)> {
+    parse_hex32(&payload.job_id).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "job_id must be 32-byte hex".to_string(),
+        )
+    })?;
+    parse_hex32(&payload.bundle_hash).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "bundle_hash must be 32-byte hex".to_string(),
+        )
+    })?;
+    parse_hex32(&payload.output_hash).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "output_hash must be 32-byte hex".to_string(),
+        )
+    })?;
+    Ok(())
 }
 
 fn build_slash_worker_artifacts(
@@ -1666,7 +1854,6 @@ fn build_finalize_trigger_payload_inner(
                     job_id,
                     committee,
                     winners,
-                    winning_output_hash,
                     state.chain_auto_submit,
                 ) {
                     Ok((tx, sig, submitted)) => return (tx, sig, submitted),
@@ -1699,14 +1886,7 @@ fn parse_finalize_accounts(
     committee_workers: &[String],
     winning_workers: &[String],
 ) -> Option<([Pubkey; 3], Vec<Pubkey>)> {
-    if committee_workers.len() != 3 {
-        return None;
-    }
-    let committee = [
-        committee_workers.first()?.parse::<Pubkey>().ok()?,
-        committee_workers.get(1)?.parse::<Pubkey>().ok()?,
-        committee_workers.get(2)?.parse::<Pubkey>().ok()?,
-    ];
+    let committee = parse_committee_workers(committee_workers)?;
     let committee_set: HashSet<Pubkey> = committee.iter().copied().collect();
     let winners = winning_workers
         .iter()
@@ -1717,6 +1897,17 @@ fn parse_finalize_accounts(
         return None;
     }
     Some((committee, winners))
+}
+
+fn parse_committee_workers(committee_workers: &[String]) -> Option<[Pubkey; 3]> {
+    if committee_workers.len() != 3 {
+        return None;
+    }
+    Some([
+        committee_workers.first()?.parse::<Pubkey>().ok()?,
+        committee_workers.get(1)?.parse::<Pubkey>().ok()?,
+        committee_workers.get(2)?.parse::<Pubkey>().ok()?,
+    ])
 }
 
 fn build_assign_workers_artifact(
@@ -1821,16 +2012,26 @@ fn build_cancel_expired_artifact(
         return Ok(("UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(), None, false));
     };
     let job_id = parse_hex32(job_id_hex)?;
+    let committee_workers = {
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        jq.get(job_id_hex)
+            .map(|entry| entry.committee_workers.clone())
+            .unwrap_or_default()
+    };
+    let committee = parse_committee_workers(&committee_workers)
+        .ok_or_else(|| anyhow::anyhow!("invalid committee workers for cancel_expired_job"))?;
     let (tx, sig, submitted) = build_cancel_expired_job_tx_base64(
         chain,
         job_id,
         chain.payer.pubkey(),
+        committee,
         state.chain_auto_submit,
     )?;
     Ok((tx, sig, submitted))
 }
 
 const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
+const GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR: usize = 96;
 const JOB_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 303;
 const JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
 const JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR: usize = 64;
@@ -1986,18 +2187,22 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
 }
 
 fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView) -> Option<String> {
-    if !verify_onchain_job_result_attestation(view) {
-        return None;
-    }
     let job_id_hex = hex::encode(view.job_id);
-    let (expected_bundle_hash, is_assigned) = {
+    let (expected_bundle_hash, expected_runtime_id, is_assigned) = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
         let entry = job_quorum.get(&job_id_hex)?;
         let worker = view.worker.to_string();
         let assigned = entry.committee_workers.iter().any(|w| w == &worker);
-        (entry.expected_bundle_hash.clone(), assigned)
+        (
+            entry.expected_bundle_hash.clone(),
+            entry.expected_runtime_id.clone(),
+            assigned,
+        )
     };
     if !is_assigned {
+        return None;
+    }
+    if !verify_onchain_job_result_attestation(view, &expected_bundle_hash, &expected_runtime_id) {
         return None;
     }
 
@@ -2036,13 +2241,24 @@ fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView)
     Some(job_id_hex)
 }
 
-fn verify_onchain_job_result_attestation(view: &OnchainJobResultView) -> bool {
+fn verify_onchain_job_result_attestation(
+    view: &OnchainJobResultView,
+    expected_bundle_hash_hex: &str,
+    expected_runtime_id_hex: &str,
+) -> bool {
     let worker_bytes = view.worker.to_bytes();
     let Ok(worker_vk) = VerifyingKey::from_bytes(&worker_bytes) else {
         return false;
     };
     let signature = Signature::from_bytes(&view.attestation_sig);
-    let message = build_worker_attestation_message(&view.job_id, &view.worker, &view.output_hash);
+    let Ok(bundle_hash) = parse_hex32(expected_bundle_hash_hex) else {
+        return false;
+    };
+    let Ok(runtime_id) = parse_hex32(expected_runtime_id_hex) else {
+        return false;
+    };
+    let message =
+        build_worker_result_digest(&view.job_id, &bundle_hash, &view.output_hash, &runtime_id);
     edgerun_crypto::verify(&worker_vk, &message, &signature)
 }
 
@@ -2260,6 +2476,13 @@ fn fetch_onchain_job_status(chain: &ChainContext, job_id: [u8; 32]) -> Result<Op
 fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
     let status_offset = ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR;
     data.get(status_offset).copied()
+}
+
+fn parse_config_allowed_runtime_root(data: &[u8]) -> Option<[u8; 32]> {
+    if !has_anchor_account_discriminator(data, "GlobalConfig") {
+        return None;
+    }
+    read_fixed_32(data, GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR)
 }
 
 fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
@@ -2493,6 +2716,34 @@ fn verify_result_attestation(
             "output_hash must be 32-byte hex".to_string(),
         )
     })?;
+    let bundle_hash = parse_hex32(&payload.bundle_hash).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "bundle_hash must be 32-byte hex".to_string(),
+        )
+    })?;
+    let (expected_bundle_hash, expected_runtime_id) = {
+        let jq = state.job_quorum.lock().expect("lock poisoned");
+        let Some(entry) = jq.get(&payload.job_id) else {
+            return Ok(false);
+        };
+        let expected_bundle_hash = parse_hex32(&entry.expected_bundle_hash).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "expected bundle_hash must be 32-byte hex".to_string(),
+            )
+        })?;
+        let expected_runtime_id = parse_hex32(&entry.expected_runtime_id).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "expected runtime_id must be 32-byte hex".to_string(),
+            )
+        })?;
+        (expected_bundle_hash, expected_runtime_id)
+    };
+    if bundle_hash != expected_bundle_hash {
+        return Ok(false);
+    }
     let sig_bytes = base64::engine::general_purpose::STANDARD
         .decode(attestation_b64.as_bytes())
         .map_err(|_| {
@@ -2508,21 +2759,23 @@ fn verify_result_attestation(
         )
     })?;
     let signature = Signature::from_bytes(&sig_arr);
-    let message = build_worker_attestation_message(&job_id, &worker, &output_hash);
+    let message =
+        build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &expected_runtime_id);
     Ok(edgerun_crypto::verify(&worker_vk, &message, &signature))
 }
 
-fn build_worker_attestation_message(
+fn build_worker_result_digest(
     job_id: &[u8; 32],
-    worker: &Pubkey,
+    bundle_hash: &[u8; 32],
     output_hash: &[u8; 32],
-) -> [u8; 98] {
-    let mut msg = [0_u8; 98];
-    msg[0..2].copy_from_slice(b"ER");
-    msg[2..34].copy_from_slice(job_id);
-    msg[34..66].copy_from_slice(&worker.to_bytes());
-    msg[66..98].copy_from_slice(output_hash);
-    msg
+    runtime_id: &[u8; 32],
+) -> [u8; 32] {
+    let mut preimage = [0_u8; 128];
+    preimage[0..32].copy_from_slice(job_id);
+    preimage[32..64].copy_from_slice(bundle_hash);
+    preimage[64..96].copy_from_slice(output_hash);
+    preimage[96..128].copy_from_slice(runtime_id);
+    edgerun_crypto::blake3_256(&preimage)
 }
 
 fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
@@ -2829,6 +3082,193 @@ mod tests {
     }
 
     #[test]
+    fn tie_at_quorum_returns_no_winner() {
+        let reports = vec![
+            WorkerResultReport {
+                idempotency_key: "a".to_string(),
+                worker_pubkey: "w1".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            },
+            WorkerResultReport {
+                idempotency_key: "b".to_string(),
+                worker_pubkey: "w2".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-a".to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            },
+            WorkerResultReport {
+                idempotency_key: "c".to_string(),
+                worker_pubkey: "w3".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-b".to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            },
+            WorkerResultReport {
+                idempotency_key: "d".to_string(),
+                worker_pubkey: "w4".to_string(),
+                job_id: "j1".to_string(),
+                bundle_hash: "b1".to_string(),
+                output_hash: "out-b".to_string(),
+                output_len: 10,
+                attestation_sig: None,
+                signature: None,
+            },
+        ];
+
+        assert!(find_winning_output_hash(&reports, 2).is_none());
+    }
+
+    #[test]
+    fn randomized_ties_never_select_winner() {
+        for seed in 0..64_u32 {
+            let quorum = 2_usize + (seed as usize % 3);
+            let mut reports = Vec::new();
+            for i in 0..quorum {
+                reports.push(WorkerResultReport {
+                    idempotency_key: format!("a-{seed}-{i}"),
+                    worker_pubkey: format!("wa-{seed}-{i}"),
+                    job_id: "j1".to_string(),
+                    bundle_hash: "b1".to_string(),
+                    output_hash: "out-a".to_string(),
+                    output_len: 10,
+                    attestation_sig: None,
+                    signature: None,
+                });
+                reports.push(WorkerResultReport {
+                    idempotency_key: format!("b-{seed}-{i}"),
+                    worker_pubkey: format!("wb-{seed}-{i}"),
+                    job_id: "j1".to_string(),
+                    bundle_hash: "b1".to_string(),
+                    output_hash: "out-b".to_string(),
+                    output_len: 10,
+                    attestation_sig: None,
+                    signature: None,
+                });
+            }
+            assert!(find_winning_output_hash(&reports, quorum).is_none());
+        }
+    }
+
+    #[test]
+    fn randomized_unique_max_selects_winner() {
+        for seed in 0..64_u32 {
+            let quorum = 2_usize;
+            let a_count = 3_usize + (seed as usize % 3);
+            let b_count = 2_usize;
+            let mut reports = Vec::new();
+            for i in 0..a_count {
+                reports.push(WorkerResultReport {
+                    idempotency_key: format!("a-{seed}-{i}"),
+                    worker_pubkey: format!("wa-{seed}-{i}"),
+                    job_id: "j1".to_string(),
+                    bundle_hash: "b1".to_string(),
+                    output_hash: "out-a".to_string(),
+                    output_len: 10,
+                    attestation_sig: None,
+                    signature: None,
+                });
+            }
+            for i in 0..b_count {
+                reports.push(WorkerResultReport {
+                    idempotency_key: format!("b-{seed}-{i}"),
+                    worker_pubkey: format!("wb-{seed}-{i}"),
+                    job_id: "j1".to_string(),
+                    bundle_hash: "b1".to_string(),
+                    output_hash: "out-b".to_string(),
+                    output_len: 10,
+                    attestation_sig: None,
+                    signature: None,
+                });
+            }
+            let winning = find_winning_output_hash(&reports, quorum).expect("winner expected");
+            assert_eq!(winning.0, "out-a");
+            assert_eq!(winning.1.len(), a_count);
+        }
+    }
+
+    #[test]
+    fn winner_worker_set_is_unique_and_from_reports() {
+        for seed in 0..64_u32 {
+            let quorum = 2_usize;
+            let mut reports = Vec::new();
+            for i in 0..6_usize {
+                reports.push(WorkerResultReport {
+                    idempotency_key: format!("a-{seed}-{i}"),
+                    worker_pubkey: format!("wa-{seed}-{}", i % 3),
+                    job_id: "j1".to_string(),
+                    bundle_hash: "b1".to_string(),
+                    output_hash: if i < 4 {
+                        "out-a".to_string()
+                    } else {
+                        "out-b".to_string()
+                    },
+                    output_len: 10,
+                    attestation_sig: None,
+                    signature: None,
+                });
+            }
+            let winning = find_winning_output_hash(&reports, quorum).expect("winner expected");
+            let winner_set: HashSet<String> = winning.1.iter().cloned().collect();
+            assert_eq!(winner_set.len(), winning.1.len());
+            for worker in &winning.1 {
+                let exists = reports
+                    .iter()
+                    .any(|r| r.worker_pubkey == *worker && r.output_hash == winning.0);
+                assert!(exists);
+            }
+        }
+    }
+
+    #[test]
+    fn validate_worker_result_payload_rejects_bad_hex() {
+        let payload = WorkerResultReport {
+            idempotency_key: "k".to_string(),
+            worker_pubkey: "w".to_string(),
+            job_id: "not-hex".to_string(),
+            bundle_hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                .to_string(),
+            output_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .to_string(),
+            output_len: 1,
+            attestation_sig: None,
+            signature: None,
+        };
+        let err = validate_worker_result_payload(&payload).expect_err("must reject");
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert_eq!(err.1, "job_id must be 32-byte hex");
+    }
+
+    #[test]
+    fn merkle_root_and_proof_roundtrip() {
+        let leaves = vec![[1_u8; 32], [2_u8; 32], [3_u8; 32], [4_u8; 32]];
+        let target = [3_u8; 32];
+        let (root, proof) = build_merkle_root_and_proof(&leaves, &target).expect("proof");
+        let mut acc = target;
+        for sibling in proof {
+            acc = merkle_parent_sorted(&acc, &sibling);
+        }
+        assert_eq!(acc, root);
+    }
+
+    #[test]
+    fn merkle_root_and_proof_missing_leaf_returns_none() {
+        let leaves = vec![[1_u8; 32], [2_u8; 32]];
+        let target = [9_u8; 32];
+        assert!(build_merkle_root_and_proof(&leaves, &target).is_none());
+    }
+
+    #[test]
     fn committee_selection_uses_runtime_and_live_heartbeats() {
         let state = test_state();
         let now = now_unix_seconds();
@@ -2917,7 +3357,9 @@ mod tests {
                     expected_bundle_hash:
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -2966,7 +3408,9 @@ mod tests {
                     expected_bundle_hash:
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -3290,7 +3734,9 @@ mod tests {
                     expected_bundle_hash:
                         "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -3362,7 +3808,9 @@ mod tests {
                     expected_bundle_hash:
                         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
                     committee_size: 3,
                     quorum: 2,
@@ -3507,7 +3955,9 @@ mod tests {
                     expected_bundle_hash:
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec![
                         worker1.to_string(),
                         worker2.to_string(),
@@ -3541,8 +3991,14 @@ mod tests {
         }
 
         let output_hash = [0xAB_u8; 32];
-        let msg1 = build_worker_attestation_message(&job_id, &worker1, &output_hash);
-        let msg2 = build_worker_attestation_message(&job_id, &worker2, &output_hash);
+        let bundle_hash =
+            parse_hex32("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .expect("hex");
+        let runtime_id =
+            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
+                .expect("hex");
+        let msg1 = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
+        let msg2 = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
         let sig1 = edgerun_crypto::sign(&worker1_sk, &msg1).to_bytes();
         let sig2 = edgerun_crypto::sign(&worker2_sk, &msg2).to_bytes();
         let r1 = OnchainJobResultView {
@@ -3586,7 +4042,9 @@ mod tests {
                     expected_bundle_hash:
                         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                             .to_string(),
-                    expected_runtime_id: "r1".to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
                     committee_workers: vec![worker.to_string()],
                     committee_size: 1,
                     quorum: 1,
@@ -3635,21 +4093,71 @@ mod tests {
         let worker_other = Pubkey::new_from_array(*worker_other_sk.verifying_key().as_bytes());
         let job_id = [0xA1_u8; 32];
         let job_id_hex = hex::encode(job_id);
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                job_id_hex.clone(),
+                JobQuorumState {
+                    expected_bundle_hash:
+                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                            .to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    committee_workers: vec![
+                        worker_win.to_string(),
+                        worker_lose.to_string(),
+                        worker_other.to_string(),
+                    ],
+                    committee_size: 3,
+                    quorum: 2,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
 
         let winning_hash =
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
         let losing_hash =
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
 
-        let msg_win = build_worker_attestation_message(
+        let runtime_id =
+            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
+                .expect("hex");
+        let bundle_hash =
+            parse_hex32("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+                .expect("hex");
+        let msg_win = build_worker_result_digest(
             &job_id,
-            &worker_win,
+            &bundle_hash,
             &parse_hex32(&winning_hash).expect("hex"),
+            &runtime_id,
         );
-        let msg_lose = build_worker_attestation_message(
+        let msg_lose = build_worker_result_digest(
             &job_id,
-            &worker_lose,
+            &bundle_hash,
             &parse_hex32(&losing_hash).expect("hex"),
+            &runtime_id,
         );
         let sig_win = base64::engine::general_purpose::STANDARD
             .encode(edgerun_crypto::sign(&worker_win_sk, &msg_win).to_bytes());
@@ -3704,7 +4212,13 @@ mod tests {
         let worker = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
         let job_id = [1_u8; 32];
         let output_hash = [2_u8; 32];
-        let message = build_worker_attestation_message(&job_id, &worker, &output_hash);
+        let bundle_hash =
+            parse_hex32("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                .expect("hex");
+        let runtime_id =
+            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
+                .expect("hex");
+        let message = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
         let sig = edgerun_crypto::sign(&signing_key, &message);
         let attestation_sig = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
 
@@ -3712,14 +4226,125 @@ mod tests {
             idempotency_key: "ik".to_string(),
             worker_pubkey: worker.to_string(),
             job_id: hex::encode(job_id),
-            bundle_hash: "b1".to_string(),
+            bundle_hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                .to_string(),
             output_hash: hex::encode(output_hash),
             output_len: 7,
             attestation_sig: Some(attestation_sig),
             signature: None,
         };
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                payload.job_id.clone(),
+                JobQuorumState {
+                    expected_bundle_hash:
+                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            .to_string(),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    committee_workers: vec![worker.to_string()],
+                    committee_size: 1,
+                    quorum: 1,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
 
         let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
         assert!(ok);
+    }
+
+    #[test]
+    fn rejects_result_attestation_when_bundle_hash_mismatch() {
+        let state = test_state();
+        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
+        let worker = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
+        let job_id = [3_u8; 32];
+        let expected_bundle_hash =
+            parse_hex32("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                .expect("hex");
+        let wrong_bundle_hash =
+            parse_hex32("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+                .expect("hex");
+        let output_hash = [4_u8; 32];
+        let runtime_id =
+            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
+                .expect("hex");
+        let message =
+            build_worker_result_digest(&job_id, &wrong_bundle_hash, &output_hash, &runtime_id);
+        let sig = edgerun_crypto::sign(&signing_key, &message);
+        let attestation_sig = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
+
+        let payload = WorkerResultReport {
+            idempotency_key: "ik-bundle-mismatch".to_string(),
+            worker_pubkey: worker.to_string(),
+            job_id: hex::encode(job_id),
+            bundle_hash: hex::encode(wrong_bundle_hash),
+            output_hash: hex::encode(output_hash),
+            output_len: 7,
+            attestation_sig: Some(attestation_sig),
+            signature: None,
+        };
+        {
+            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+            job_quorum.insert(
+                payload.job_id.clone(),
+                JobQuorumState {
+                    expected_bundle_hash: hex::encode(expected_bundle_hash),
+                    expected_runtime_id:
+                        "1111111111111111111111111111111111111111111111111111111111111111"
+                            .to_string(),
+                    committee_workers: vec![worker.to_string()],
+                    committee_size: 1,
+                    quorum: 1,
+                    assign_tx: None,
+                    assign_sig: None,
+                    assign_submitted: false,
+                    quorum_reached: false,
+                    winning_output_hash: None,
+                    winning_workers: Vec::new(),
+                    finalize_triggered: false,
+                    finalize_tx: None,
+                    finalize_sig: None,
+                    finalize_submitted: false,
+                    cancel_triggered: false,
+                    cancel_tx: None,
+                    cancel_sig: None,
+                    cancel_submitted: false,
+                    onchain_status: None,
+                    onchain_last_observed_slot: None,
+                    onchain_last_update_unix_s: None,
+                    onchain_deadline_slot: None,
+                    slash_artifacts: Vec::new(),
+                    created_at_unix_s: now_unix_seconds(),
+                    quorum_reached_at_unix_s: None,
+                },
+            );
+        }
+
+        let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
+        assert!(!ok);
     }
 }

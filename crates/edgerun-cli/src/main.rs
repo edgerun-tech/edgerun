@@ -4,12 +4,11 @@ use std::io::{self, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use axum::{
     extract::{Path as AxPath, State},
     http::HeaderMap,
@@ -21,7 +20,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::process::Command;
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 #[derive(Parser, Debug)]
@@ -147,8 +146,6 @@ struct WebState {
     config: AppConfig,
     tasks: Arc<Mutex<HashMap<String, TaskStatus>>>,
     queue: Arc<Mutex<VecDeque<String>>>,
-    running_cancel: Arc<Mutex<HashMap<String, Arc<Notify>>>>,
-    dispatcher_running: Arc<AtomicBool>,
     state_file: PathBuf,
     runs_dir: PathBuf,
 }
@@ -441,6 +438,12 @@ async fn run_server(root: PathBuf, addr: String, config: AppConfig) -> Result<()
     } else {
         addr
     };
+    let allow_remote_bind = config.web.allow_remote_bind.unwrap_or(false);
+    if !allow_remote_bind && !is_loopback_bind_addr(&bind_addr) {
+        bail!(
+            "refusing to bind web server to non-loopback address {bind_addr}; set [web].allow_remote_bind = true to override"
+        );
+    }
     let state_dir = root.join(".edgerun-cli");
     std::fs::create_dir_all(&state_dir)
         .with_context(|| format!("failed to create {}", state_dir.display()))?;
@@ -460,8 +463,6 @@ async fn run_server(root: PathBuf, addr: String, config: AppConfig) -> Result<()
         config: config.clone(),
         tasks: Arc::new(Mutex::new(tasks)),
         queue: Arc::new(Mutex::new(VecDeque::new())),
-        running_cancel: Arc::new(Mutex::new(HashMap::new())),
-        dispatcher_running: Arc::new(AtomicBool::new(false)),
         state_file,
         runs_dir,
     };
@@ -789,7 +790,7 @@ async fn api_run_task(
     tokio::spawn(async move {
         let (task_state, last_exit, summary) =
             match run_task_subprocess_capture(&state_clone.root, &task_for_spawn).await {
-                Ok((exit, output)) if exit == 0 => ("success".to_string(), Some(0), output),
+                Ok((0, output)) => ("success".to_string(), Some(0), output),
                 Ok((exit, output)) => ("failed".to_string(), Some(exit), output),
                 Err(err) => ("failed".to_string(), Some(1), format!("ERROR: {err:#}")),
             };
@@ -1517,7 +1518,8 @@ struct SimpleOkResponse {
 #[derive(Debug, Deserialize)]
 struct JobCreateResponse {
     job_id: String,
-    bundle_hash: String,
+    #[serde(rename = "bundle_hash")]
+    _bundle_hash: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3218,8 +3220,6 @@ mod tests {
             config,
             tasks: Arc::new(Mutex::new(tasks)),
             queue: Arc::new(Mutex::new(VecDeque::new())),
-            running_cancel: Arc::new(Mutex::new(HashMap::new())),
-            dispatcher_running: Arc::new(AtomicBool::new(false)),
             state_file,
             runs_dir,
         }

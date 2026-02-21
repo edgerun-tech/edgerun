@@ -7,3 +7,4 @@ node_modules
 program/.anchor
 program/test-ledger
 program/.solana
+test-ledger/

@@ -40,6 +40,9 @@ jobs:
       - name: Workspace tests
         run: cargo test --workspace
 
+      - name: Matrix validation references check
+        run: make matrix-check
+
   coverage:
     name: Coverage (llvm-cov)
     runs-on: ubuntu-24.04
@@ -326,6 +329,9 @@ jobs:
       - name: Install program dependencies
         working-directory: program
         run: bun install --frozen-lockfile
+
+      - name: Verify Gate (Rust + Anchor)
+        run: make verify
 
       - name: Program localnet tests
         run: cargo run -p edgerun-cli -- test program

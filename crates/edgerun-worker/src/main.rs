@@ -704,7 +704,13 @@ async fn process_assignment(
         signature: None,
     };
     if let Some(chain_cfg) = cfg.chain_submit.as_ref() {
-        match build_and_send_submit_result_tx(chain_cfg, &result.job_id, report.output_hash) {
+        match build_and_send_submit_result_tx(
+            chain_cfg,
+            &result.job_id,
+            report.bundle_hash,
+            report.output_hash,
+            report.runtime_id,
+        ) {
             Ok((tx_sig, attestation_sig_b64)) => {
                 result.attestation_sig = Some(attestation_sig_b64);
                 tracing::info!(job_id = %result.job_id, tx_sig = %tx_sig, "submitted on-chain result tx");
@@ -990,11 +996,13 @@ fn sign_worker_payload(cfg: &WorkerConfig, message: String) -> Option<String> {
 fn build_and_send_submit_result_tx(
     cfg: &ChainSubmitConfig,
     job_id_hex: &str,
+    bundle_hash: [u8; 32],
     output_hash: [u8; 32],
+    runtime_id: [u8; 32],
 ) -> Result<(String, String)> {
     let job_id = parse_hex32(job_id_hex).context("job_id must be 32-byte hex")?;
     let worker = cfg.wallet.pubkey();
-    let attestation_message = build_attestation_message(&job_id, &worker, &output_hash);
+    let attestation_message = build_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
     let attestation_signature = {
         let sig = cfg.wallet.sign_message(&attestation_message);
         let mut out = [0_u8; 64];
@@ -1042,17 +1050,18 @@ fn build_and_send_submit_result_tx(
     Ok((signature.to_string(), attestation_sig_b64))
 }
 
-fn build_attestation_message(
+fn build_result_digest(
     job_id: &[u8; 32],
-    worker: &Pubkey,
+    bundle_hash: &[u8; 32],
     output_hash: &[u8; 32],
-) -> [u8; 98] {
-    let mut msg = [0_u8; 98];
-    msg[0..2].copy_from_slice(b"ER");
-    msg[2..34].copy_from_slice(job_id);
-    msg[34..66].copy_from_slice(&worker.to_bytes());
-    msg[66..98].copy_from_slice(output_hash);
-    msg
+    runtime_id: &[u8; 32],
+) -> [u8; 32] {
+    let mut preimage = [0_u8; 128];
+    preimage[0..32].copy_from_slice(job_id);
+    preimage[32..64].copy_from_slice(bundle_hash);
+    preimage[64..96].copy_from_slice(output_hash);
+    preimage[96..128].copy_from_slice(runtime_id);
+    edgerun_crypto::blake3_256(&preimage)
 }
 
 fn encode_submit_result_data(output_hash: [u8; 32], attestation_sig: [u8; 64]) -> Vec<u8> {
