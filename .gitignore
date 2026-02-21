@@ -14,3 +14,4 @@ program/.solana
 test-ledger/
 site/dist/
 site/wiki/
+frontend/
