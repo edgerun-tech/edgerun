@@ -16,9 +16,16 @@ Or from frontend:
 bun run runtime:web:build
 ```
 
+Skip frontend mirroring:
+
+```bash
+bash scripts/build-runtime-web.sh --no-sync
+```
+
 This writes the generated package to:
 
-`frontend/public/wasm/edgerun-runtime-web/`
+- Canonical crate output: `crates/edgerun-runtime-web/pkg-web/`
+- Frontend mirror (if `frontend/` exists): `frontend/public/wasm/edgerun-runtime-web/`
 
 ## JS/TS usage
 

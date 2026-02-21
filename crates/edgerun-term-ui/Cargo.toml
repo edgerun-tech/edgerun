@@ -1,0 +1,24 @@
+[package]
+name = "edgerun-term-ui"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+
+[dependencies]
+dirs = "5.0"
+log = "0.4"
+pixels = "0.13"
+term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
+winit = { version = "0.29", default-features = false, features = [
+    "rwh_05",
+    "x11",
+    "wayland",
+    "wayland-dlopen",
+    "wayland-csd-adwaita",
+] }
+
+thiserror = "1.0"
+tempfile = "3"
+
+[dev-dependencies]
+tempfile = "3"
