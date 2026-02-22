@@ -1299,7 +1299,7 @@ impl SSTable {
         for entries in 0..=max_entries {
             let entries_bytes = entries * SST_ENTRY_BYTES;
             let bloom_bytes = remaining.saturating_sub(entries_bytes);
-            if bloom_bytes % 8 != 0 {
+            if !bloom_bytes.is_multiple_of(8) {
                 continue;
             }
 

@@ -3,12 +3,12 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 use crate::process_helpers::{
     run_program_capture_sync_owned, run_program_sync, run_program_sync_with_env,
 };
-use crate::{program_tool_env, ProgramCommand, SolanaCluster};
+use crate::{ProgramCommand, SolanaCluster, program_tool_env};
 
 const ACCOUNT_DISCRIMINATOR_BYTES: usize = 8;
 const GLOBAL_CONFIG_INIT_SPACE: usize = 179;
@@ -79,8 +79,8 @@ fn run_analyze_accounts(
     println!("cluster: {}", cluster.as_str());
     println!();
     println!(
-        "{:<24} {:>6} {:>7} {:>14}  {}",
-        "Account", "Init", "Total", "Rent-exempt", "Seeds / notes"
+        "{:<24} {:>6} {:>7} {:>14}  Seeds / notes",
+        "Account", "Init", "Total", "Rent-exempt"
     );
     println!("{}", "-".repeat(96));
 
@@ -231,7 +231,7 @@ fn run_deploy(
     Ok(())
 }
 
-fn append_solana_path(env: &mut Vec<(OsString, OsString)>) {
+fn append_solana_path(env: &mut [(OsString, OsString)]) {
     let solana_bin = std::env::var("HOME")
         .map(PathBuf::from)
         .map(|p| p.join(".local/share/solana/install/active_release/bin"))

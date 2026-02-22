@@ -228,7 +228,7 @@ fn run_mode(
             };
 
             events_written += 1;
-            if events_written % cfg.flush_interval == 0 {
+            if events_written.is_multiple_of(cfg.flush_interval) {
                 match mode {
                     Mode::Checkpoint => {
                         let epoch = events_written / cfg.flush_interval;
@@ -295,7 +295,7 @@ fn run_mode(
                 .append_serialized(item.serialized.as_ref(), item.hlc)
                 .expect("append serialized");
             events_written += 1;
-            if events_written % cfg.flush_interval == 0 {
+            if events_written.is_multiple_of(cfg.flush_interval) {
                 match mode {
                     Mode::Checkpoint => {
                         let epoch = events_written / cfg.flush_interval;

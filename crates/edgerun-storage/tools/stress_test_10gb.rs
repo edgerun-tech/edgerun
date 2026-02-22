@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
+use edgerun_storage::StorageEngine;
 use edgerun_storage::event::{ActorId, Event, StreamId};
 use edgerun_storage::index::EventHashIndex;
 use edgerun_storage::replication::Replicator;
 use edgerun_storage::segment::{SegmentReader, SegmentWriter};
-use edgerun_storage::StorageEngine;
 use rand::Rng;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 const TARGET_SIZE_GB: usize = 10;
@@ -162,7 +162,7 @@ fn run_stress_test() {
             // Random lookup every 10ms
             std::thread::sleep(Duration::from_millis(10));
 
-            let hash: [u8; 32] = rng.gen();
+            let hash: [u8; 32] = rng.r#gen();
 
             if let Some(entry) = lookup_index.get(&hash) {
                 let segments = lookup_segments.lock().unwrap();
@@ -179,7 +179,7 @@ fn run_stress_test() {
             }
             lookups += 1;
 
-            if lookups % 1000 == 0 {
+            if lookups.is_multiple_of(1000) {
                 println!(
                     "[LOOKUP] {} lookups, {} hits ({:.1}%)",
                     lookups,
@@ -215,16 +215,16 @@ fn run_stress_test() {
             std::thread::sleep(Duration::from_millis(5));
 
             // Generate fake replicated event
-            let payload: Vec<u8> = (0..EVENT_PAYLOAD_SIZE).map(|_| rng.gen()).collect();
+            let payload: Vec<u8> = (0..EVENT_PAYLOAD_SIZE).map(|_| rng.r#gen()).collect();
             let _event = Event::new(repl_stream.clone(), repl_actor.clone(), payload);
 
             // Track it in replicator
-            let segment_id: [u8; 32] = rng.gen();
+            let segment_id: [u8; 32] = rng.r#gen();
             replicator.add_segment(segment_id);
 
             events_ingested += 1;
 
-            if events_ingested % 10000 == 0 {
+            if events_ingested.is_multiple_of(10000) {
                 println!("[REPLICATION] {events_ingested} events ingested");
             }
         }
@@ -260,7 +260,7 @@ fn run_stress_test() {
         }
 
         let writer = current_segment.as_mut().unwrap();
-        let payload: Vec<u8> = (0..EVENT_PAYLOAD_SIZE).map(|_| rng.gen()).collect();
+        let payload: Vec<u8> = (0..EVENT_PAYLOAD_SIZE).map(|_| rng.r#gen()).collect();
         let event = Event::new(stream_id.clone(), actor_id.clone(), payload);
         let event_hash = event.compute_hash();
 

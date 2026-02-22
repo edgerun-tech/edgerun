@@ -5,9 +5,9 @@
 //! worker threads enqueue requests, and one dedicated reactor thread executes them.
 
 use crossbeam_channel::{
-    bounded, Receiver as CommandReceiver, RecvTimeoutError, Sender as CommandSender,
+    Receiver as CommandReceiver, RecvTimeoutError, Sender as CommandSender, bounded,
 };
-use io_uring::{opcode, squeue, types, IoUring};
+use io_uring::{IoUring, opcode, squeue, types};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -2445,7 +2445,7 @@ fn allocate_fixed_buffer(fixed_buffers: &mut [FixedBufferSlot], needed: usize) -
         return None;
     }
 
-    if needed % DIRECT_ALIGNMENT != 0 {
+    if !needed.is_multiple_of(DIRECT_ALIGNMENT) {
         return None;
     }
 

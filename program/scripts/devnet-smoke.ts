@@ -14,23 +14,33 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const RPC_URL = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
+const RPC_URL =
+  process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 const PROGRAM_ID = new PublicKey(
-  process.env.EDGERUN_PROGRAM_ID || "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG"
+  process.env.EDGERUN_PROGRAM_ID ||
+    "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG"
 );
-const WALLET_PATH = process.env.ANCHOR_WALLET || path.join(homedir(), ".config/solana/id.json");
+const WALLET_PATH =
+  process.env.ANCHOR_WALLET || path.join(homedir(), ".config/solana/id.json");
 
 const walletBytes = JSON.parse(readFileSync(WALLET_PATH, "utf8")) as number[];
 const payer = Keypair.fromSecretKey(Uint8Array.from(walletBytes));
 const connection = new anchor.web3.Connection(RPC_URL, "confirmed");
-const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(payer), {
-  commitment: "confirmed",
-  preflightCommitment: "confirmed",
-});
+const provider = new anchor.AnchorProvider(
+  connection,
+  new anchor.Wallet(payer),
+  {
+    commitment: "confirmed",
+    preflightCommitment: "confirmed",
+  }
+);
 anchor.setProvider(provider);
 
 const idl = JSON.parse(
-  readFileSync(new URL("../target/idl/edgerun_program.json", import.meta.url), "utf8")
+  readFileSync(
+    path.join(process.cwd(), "target/idl/edgerun_program.json"),
+    "utf8"
+  )
 );
 idl.address = PROGRAM_ID.toBase58();
 const program = new anchor.Program(idl, provider);
@@ -103,7 +113,10 @@ async function main() {
   console.log("Program:", PROGRAM_ID.toBase58());
   console.log("Payer:", payer.publicKey.toBase58());
 
-  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID);
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    PROGRAM_ID
+  );
   await ensureConfig(configPda);
 
   const updateSig = await program.methods
@@ -130,8 +143,12 @@ async function main() {
   console.log("update_config:", updateSig);
 
   const workers = [Keypair.generate(), Keypair.generate(), Keypair.generate()];
-  const workerStakePdas = workers.map((w) =>
-    PublicKey.findProgramAddressSync([Buffer.from("worker_stake"), w.publicKey.toBuffer()], PROGRAM_ID)[0]
+  const workerStakePdas = workers.map(
+    (w) =>
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("worker_stake"), w.publicKey.toBuffer()],
+        PROGRAM_ID
+      )[0]
   );
 
   const fundTx = new Transaction();
@@ -180,11 +197,12 @@ async function main() {
     [Buffer.from("job"), Buffer.from(jobId)],
     PROGRAM_ID
   );
-  const jobResultPdas = workers.map((w) =>
-    PublicKey.findProgramAddressSync(
-      [Buffer.from("job_result"), Buffer.from(jobId), w.publicKey.toBuffer()],
-      PROGRAM_ID
-    )[0]
+  const jobResultPdas = workers.map(
+    (w) =>
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("job_result"), Buffer.from(jobId), w.publicKey.toBuffer()],
+        PROGRAM_ID
+      )[0]
   );
   const [outputPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("output"), Buffer.from(jobId)],
@@ -265,7 +283,11 @@ async function main() {
       job: jobPda,
     })
     .remainingAccounts(
-      jobResultPdas.map((pubkey) => ({ pubkey, isWritable: false, isSigner: false }))
+      jobResultPdas.map((pubkey) => ({
+        pubkey,
+        isWritable: false,
+        isSigner: false,
+      }))
     )
     .rpc();
   console.log("reach_quorum:", quorumSig);
@@ -292,7 +314,11 @@ async function main() {
       outputAvailability: outputPda,
     })
     .remainingAccounts([
-      ...jobResultPdas.map((pubkey) => ({ pubkey, isWritable: false, isSigner: false })),
+      ...jobResultPdas.map((pubkey) => ({
+        pubkey,
+        isWritable: false,
+        isSigner: false,
+      })),
       ...writableAccounts(workerStakePdas),
       { pubkey: workers[0].publicKey, isWritable: true, isSigner: false },
       { pubkey: workers[1].publicKey, isWritable: true, isSigner: false },
@@ -300,7 +326,7 @@ async function main() {
     .rpc();
   console.log("finalize_job:", finalizeSig);
 
-  const job = await program.account.job.fetch(jobPda);
+  const job = await (program.account as any).job.fetch(jobPda);
   console.log("job_status:", job.status, "(2 means Finalized)");
   console.log("job_pda:", jobPda.toBase58());
 }

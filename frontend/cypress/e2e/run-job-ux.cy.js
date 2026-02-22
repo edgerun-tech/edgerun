@@ -1,10 +1,15 @@
+function openReviewStep() {
+  cy.get('button[role="tab"]').contains('3. Review + Run').click({ force: true })
+  cy.get('button[role="tab"]').contains('3. Review + Run').should('have.attr', 'aria-selected', 'true')
+  cy.get('[data-testid="run-step-review"]').should('be.visible')
+}
+
 describe('run job orchestration UX', () => {
   it('supports preset and custom module flows with clear I/O contract', () => {
     cy.visit('/run/')
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
 
     cy.get('[data-testid="run-step-choose"]').should('be.visible')
-    cy.contains('button', '1. Choose Module').click({ force: true })
 
     cy.get('[aria-label="Preset App"]').should('be.visible')
     cy.get('[data-testid="preset-mode-panel"]').should('be.visible')
@@ -17,7 +22,7 @@ describe('run job orchestration UX', () => {
     cy.get('[aria-label="Submission Mode"]').select('Preset App')
     cy.get('[data-testid="preset-mode-panel"]').should('be.visible')
 
-    cy.contains('button', '2. Define Inputs').click({ force: true })
+    cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
     cy.get('[data-testid="run-step-inputs"]').should('be.visible')
 
     cy.get('[aria-label="Input Source"]').select('Raw JSON payload')
@@ -36,10 +41,62 @@ describe('run job orchestration UX', () => {
       cy.contains('Expected Behavior:').should('be.visible')
     })
 
-    cy.contains('button', '3. Review + Run').click({ force: true })
-    cy.get('[data-testid="run-step-review"]').should('be.visible')
-    cy.contains('h3', 'Input').should('be.visible')
-    cy.contains('h3', 'Output').should('be.visible')
-    cy.contains('h3', 'What Will Happen').should('be.visible')
+    openReviewStep()
+    cy.get('[data-testid="run-step-review"]').within(() => {
+      cy.contains('h3', 'Input').should('be.visible')
+      cy.contains('h3', 'Output').should('be.visible')
+      cy.contains('h3', 'What Will Happen').should('be.visible')
+    })
+  })
+
+  it('shows validation errors when required safety acknowledgement is missing', () => {
+    cy.visit('/run/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
+    cy.get('[data-testid="run-step-inputs"]').should('be.visible')
+
+    cy.get('[aria-label="Allow worker seed exposure"]').uncheck({ force: true })
+
+    openReviewStep()
+    cy.contains('button', 'Submit Job').click({ force: true })
+
+    cy.get('[data-testid="submit-error"]').should('be.visible')
+    cy.get('[data-testid="validation-errors"]').should('be.visible')
+    cy.get('[data-testid="validation-errors"]').contains('Distributed mode requires explicit worker seed exposure acknowledgement.').should('be.visible')
+  })
+
+  it('shows scheduler submission error for unreachable scheduler URL', () => {
+    cy.visit('/run/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
+    cy.get('[data-testid="run-step-inputs"]').should('be.visible')
+
+    cy.get('[aria-label="Scheduler URL"]').clear().type('http://127.0.0.1:9999')
+    cy.get('[aria-label="Allow worker seed exposure"]').check({ force: true })
+
+    openReviewStep()
+    cy.contains('button', 'Submit Job').click({ force: true })
+
+    cy.get('[data-testid="submit-error"]').should('be.visible')
+    cy.get('[data-testid="submit-error"]').contains('Scheduler unreachable at http://127.0.0.1:9999').should('be.visible')
+  })
+
+  it('shows happy path success receipt when submission contract is valid', () => {
+    cy.visit('/run/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
+    cy.get('[data-testid="run-step-inputs"]').should('be.visible')
+    cy.get('[aria-label="Scheduler URL"]').clear().type('http://127.0.0.1:8090')
+    cy.get('[aria-label="Allow worker seed exposure"]').check({ force: true })
+
+    openReviewStep()
+    cy.contains('button', 'Submit Job').click({ force: true })
+
+    cy.get('[data-testid="submit-success"]').should('be.visible')
+    cy.get('[data-testid="submit-success"]').contains('Submission Accepted').should('be.visible')
+    cy.get('[data-testid="submit-success"]').contains('Receipt:').should('be.visible')
   })
 })

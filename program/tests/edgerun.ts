@@ -1577,6 +1577,307 @@ describe("edgerun", () => {
     );
   });
 
+  it("penalize_non_submitters slashes only assigned workers without results", async () => {
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: false,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(100),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+
+    const penaltyJobId = random32();
+    const { jobPda: penaltyJobPda } = await createAssignedJob(
+      penaltyJobId,
+      600_000_000,
+      [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
+    );
+    const winnerHash = random32();
+    const penaltyResult0Pda = jobResultPda(
+      penaltyJobId,
+      lifecycleWorker0.publicKey
+    );
+    const penaltyResult1Pda = jobResultPda(
+      penaltyJobId,
+      lifecycleWorker1.publicKey
+    );
+    const penaltyOutputPda = outputAvailabilityPda(penaltyJobId);
+
+    await submitResultForJob(
+      penaltyJobId,
+      penaltyJobPda,
+      lifecycleWorker0,
+      penaltyResult0Pda,
+      winnerHash
+    );
+    await submitResultForJob(
+      penaltyJobId,
+      penaltyJobPda,
+      lifecycleWorker1,
+      penaltyResult1Pda,
+      winnerHash
+    );
+
+    await program.methods
+      .reachQuorum()
+      .accountsStrict({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: penaltyJobPda,
+      })
+      .remainingAccounts([
+        { pubkey: penaltyResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: penaltyResult1Pda, isWritable: false, isSigner: false },
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+
+    await program.methods
+      .declareOutput(winnerHash, Buffer.from("ipfs://demo/penalty"))
+      .accountsStrict({
+        publisher: lifecycleWorker0.publicKey,
+        job: penaltyJobPda,
+        jobResult: penaltyResult0Pda,
+        outputAvailability: penaltyOutputPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lifecycleWorker0])
+      .rpc();
+
+    await program.methods
+      .finalizeJob()
+      .accountsStrict({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: penaltyJobPda,
+        outputAvailability: penaltyOutputPda,
+      })
+      .remainingAccounts([
+        { pubkey: penaltyResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: penaltyResult1Pda, isWritable: false, isSigner: false },
+        ...writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ]),
+        {
+          pubkey: lifecycleWorker0.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
+        {
+          pubkey: lifecycleWorker1.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+
+    const stake0Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
+    const configLamportsBefore = await provider.connection.getBalance(
+      configPda
+    );
+
+    await program.methods
+      .penalizeNonSubmitters()
+      .accountsStrict({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: penaltyJobPda,
+      })
+      .remainingAccounts([
+        { pubkey: penaltyResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: penaltyResult1Pda, isWritable: false, isSigner: false },
+        ...writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ]),
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+
+    const stake0After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
+    const configLamportsAfter = await provider.connection.getBalance(configPda);
+
+    expect(stake0After.totalStakeLamports.toNumber()).to.equal(
+      stake0Before.totalStakeLamports.toNumber()
+    );
+    expect(stake1After.totalStakeLamports.toNumber()).to.equal(
+      stake1Before.totalStakeLamports.toNumber()
+    );
+    expect(
+      stake2Before.totalStakeLamports.toNumber() -
+        stake2After.totalStakeLamports.toNumber()
+    ).to.equal(50_000);
+    expect(configLamportsAfter - configLamportsBefore).to.equal(50_000);
+  });
+
+  it("cancel_no_da resets awaiting-da job back to assigned after DA deadline", async () => {
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(0),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: false,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(25),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+
+    const noDaJobId = random32();
+    const { jobPda: noDaJobPda } = await createAssignedJob(
+      noDaJobId,
+      650_000_000,
+      [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
+    );
+    const noDaResult0Pda = jobResultPda(noDaJobId, lifecycleWorker0.publicKey);
+    const noDaResult1Pda = jobResultPda(noDaJobId, lifecycleWorker1.publicKey);
+    const noDaHash = random32();
+
+    await submitResultForJob(
+      noDaJobId,
+      noDaJobPda,
+      lifecycleWorker0,
+      noDaResult0Pda,
+      noDaHash
+    );
+    await submitResultForJob(
+      noDaJobId,
+      noDaJobPda,
+      lifecycleWorker1,
+      noDaResult1Pda,
+      noDaHash
+    );
+    await program.methods
+      .reachQuorum()
+      .accountsStrict({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: noDaJobPda,
+      })
+      .remainingAccounts([
+        { pubkey: noDaResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: noDaResult1Pda, isWritable: false, isSigner: false },
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+
+    const awaitingDa = await program.account.job.fetch(noDaJobPda);
+    expect(awaitingDa.status).to.equal(7); // AwaitingDa
+    await waitForSlotAfter(awaitingDa.daDeadlineSlot.toNumber());
+
+    await program.methods
+      .cancelNoDa()
+      .accountsStrict({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: noDaJobPda,
+      })
+      .signers([permissionlessCaller])
+      .rpc();
+
+    const resetJob = await program.account.job.fetch(noDaJobPda);
+    expect(resetJob.status).to.equal(1); // Assigned
+    expect(
+      bytesEqual(Array.from(resetJob.winningOutputHash), new Array(32).fill(0))
+    ).to.equal(true);
+    expect(resetJob.quorumReachedSlot.toNumber()).to.equal(0);
+    expect(resetJob.daDeadlineSlot.toNumber()).to.equal(0);
+    expect(resetJob.deadlineSlot.toNumber()).to.be.greaterThan(
+      awaitingDa.daDeadlineSlot.toNumber()
+    );
+  });
+
+  it("withdraw_stake enforces locked amount and updates worker balance", async () => {
+    const withdrawWorker = Keypair.generate();
+    await airdrop(withdrawWorker.publicKey, 1_000_000_000);
+    const [withdrawStakePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("worker_stake"), withdrawWorker.publicKey.toBuffer()],
+      PROGRAM_ID
+    );
+    await registerAndFundWorker(withdrawWorker, withdrawStakePda, 120_000_000);
+
+    const workerLamportsBefore = await provider.connection.getBalance(
+      withdrawWorker.publicKey
+    );
+    const stakeBefore = await program.account.workerStake.fetch(
+      withdrawStakePda
+    );
+    await program.methods
+      .withdrawStake(new anchor.BN(20_000_000))
+      .accountsStrict({
+        worker: withdrawWorker.publicKey,
+        workerStake: withdrawStakePda,
+      })
+      .signers([withdrawWorker])
+      .rpc();
+    const stakeAfter = await program.account.workerStake.fetch(
+      withdrawStakePda
+    );
+    const workerLamportsAfter = await provider.connection.getBalance(
+      withdrawWorker.publicKey
+    );
+
+    expect(
+      stakeBefore.totalStakeLamports.toNumber() -
+        stakeAfter.totalStakeLamports.toNumber()
+    ).to.equal(20_000_000);
+    expect(workerLamportsAfter).to.be.greaterThan(workerLamportsBefore);
+  });
+
   async function registerAndFundWorker(
     worker: Keypair,
     workerStakePda: PublicKey,
