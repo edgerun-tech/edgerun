@@ -39,7 +39,8 @@ const solanaDeployments = JSON.parse(readFileSync(path.join(projectRoot, 'config
   programs: Record<string, { label: string; programIdByCluster: Record<string, string> }>
 }
 
-const versions = Array.from(new Set((process.env.EDGERUN_VERSIONS || currentVersion).split(',').map((v) => v.trim()).filter(Boolean)))
+const requestedVersions = Array.from(new Set((process.env.EDGERUN_VERSIONS || currentVersion).split(',').map((v) => v.trim()).filter(Boolean)))
+const versions = requestedVersions.includes('main') ? requestedVersions : ['main', ...requestedVersions]
 const docsSources: DocsSource[] = getDocsSources(repoRoot)
 
 const shiki = await createHighlighter({ themes: ['github-dark'], langs: ['plaintext', 'markdown', 'rust', 'toml', 'json', 'yaml', 'bash', 'typescript', 'javascript'] })

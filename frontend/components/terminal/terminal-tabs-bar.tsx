@@ -8,6 +8,18 @@ type Props = {
 
 export function TerminalTabsBar(props: Props) {
   const tabs = () => props.controller
+  const transportLabel = () => {
+    const mode = tabs().activeTransport()
+    if (mode === 'mux') return 'MUX'
+    if (mode === 'raw') return 'RAW'
+    return '...'
+  }
+  const transportClass = () => {
+    const mode = tabs().activeTransport()
+    if (mode === 'mux') return 'border-emerald-500/40 text-emerald-300'
+    if (mode === 'raw') return 'border-amber-500/40 text-amber-300'
+    return 'border-border/70 text-muted-foreground'
+  }
   return (
     <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2">
       <div class="flex flex-1 items-center gap-1 overflow-x-auto">
@@ -109,6 +121,9 @@ export function TerminalTabsBar(props: Props) {
       </div>
 
       <div class="flex items-center gap-1">
+        <div class={`rounded-md border bg-card/60 px-2 py-1 text-[10px] font-semibold tracking-[0.08em] ${transportClass()}`} aria-label={`Terminal transport ${transportLabel()}`}>
+          {transportLabel()}
+        </div>
         <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('split-cols')}>Split V</button>
         <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('split-rows')}>Split H</button>
         <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('none')}>Single</button>

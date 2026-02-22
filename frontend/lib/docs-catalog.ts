@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { readdirSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 
 export type DocsSource = {
   sourcePath: string
@@ -17,6 +17,16 @@ export type GeneratedApiSpec = {
 }
 
 export function getDocsSources(repoRoot: string): DocsSource[] {
+  const docsDir = path.join(repoRoot, 'docs')
+  const docsEntries = existsSync(docsDir)
+    ? readdirSync(docsDir)
+        .filter((name) => name.endsWith('.mdx'))
+        .map((name) => ({
+          sourcePath: path.join('docs', name),
+          ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {})
+        }))
+    : []
+
   return [
     { sourcePath: 'Whitepaper.mdx' },
     { sourcePath: 'Whitepaper-phase-2.mdx' },
@@ -30,12 +40,7 @@ export function getDocsSources(repoRoot: string): DocsSource[] {
       slug: 'address-generator-payload',
       title: 'Address Generator Payload'
     },
-    ...readdirSync(path.join(repoRoot, 'docs'))
-      .filter((name) => name.endsWith('.mdx'))
-      .map((name) => ({
-        sourcePath: path.join('docs', name),
-        ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {})
-      }))
+    ...docsEntries
   ]
 }
 

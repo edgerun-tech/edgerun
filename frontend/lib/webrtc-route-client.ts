@@ -39,6 +39,56 @@ type SignalOutboundMessage = {
 }
 
 const CONTROL_BASE_STORAGE_KEY = 'edgerun.route.controlBase'
+const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost'])
+
+function normalizeBase(value: string): string {
+  return value.trim().replace(/\/+$/, '')
+}
+
+function localControlBaseCandidates(): string[] {
+  if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
+  const { protocol, hostname, port } = window.location
+  if (!LOCALHOST_NAMES.has(hostname)) return []
+  const scheme = protocol === 'https:' ? 'https:' : 'http:'
+  const out: string[] = []
+  if (port !== '8090') out.push(`${scheme}//${hostname}:8090`)
+  if (port !== '8080') out.push(`${scheme}//${hostname}:8080`)
+  if (port !== '8090') out.push(`${scheme}//127.0.0.1:8090`)
+  return [...new Set(out.map(normalizeBase))]
+}
+
+function getControlBaseCandidates(): string[] {
+  if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
+  const fromStorage = normalizeBase(window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY) || '')
+  const origin = normalizeBase(window.location.origin)
+  const local = localControlBaseCandidates()
+  const candidates = [
+    ...local,
+    fromStorage,
+    origin
+  ].filter((value) => value.length > 0)
+  return [...new Set(candidates)]
+}
+
+async function firstReachableControlBase(candidates: string[]): Promise<string | null> {
+  for (const base of candidates) {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 900)
+    try {
+      const url = new URL('/health', `${base}/`)
+      const response = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
+      if (response.ok) {
+        window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+        return base
+      }
+    } catch {
+      // try next
+    } finally {
+      window.clearTimeout(timeout)
+    }
+  }
+  return null
+}
 
 export function parseRouteDeviceId(target: string): string | null {
   const value = target.trim()
@@ -51,10 +101,9 @@ export function parseRouteDeviceId(target: string): string | null {
 }
 
 export function getRouteControlBase(): string {
-  if (typeof window === 'undefined') return 'http://127.0.0.1:8080'
-  const fromStorage = window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY)?.trim() || ''
-  if (fromStorage.length > 0) return fromStorage.replace(/\/+$/, '')
-  return window.location.origin.replace(/\/+$/, '')
+  if (typeof window === 'undefined') return 'http://127.0.0.1:8090'
+  const candidates = getControlBaseCandidates()
+  return candidates[0] || normalizeBase(window.location.origin)
 }
 
 export async function resolveDeviceRoute(controlBase: string, deviceId: string): Promise<string | null> {
@@ -80,25 +129,43 @@ export async function resolveTerminalBaseUrl(input: string, controlBase?: string
   if (!target) return ''
   const routeDeviceId = parseRouteDeviceId(target)
   if (!routeDeviceId) return target
-  const base = controlBase || getRouteControlBase()
-  const resolved = await resolveDeviceRoute(base, routeDeviceId)
-  return resolved || ''
+  const bases = controlBase ? [normalizeBase(controlBase)] : getControlBaseCandidates()
+  for (const base of bases) {
+    const resolved = await resolveDeviceRoute(base, routeDeviceId)
+    if (resolved) {
+      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+      return resolved
+    }
+  }
+  const discovered = typeof window !== 'undefined'
+    ? await firstReachableControlBase(getControlBaseCandidates())
+    : null
+  if (discovered) {
+    const resolved = await resolveDeviceRoute(discovered, routeDeviceId)
+    if (resolved) return resolved
+  }
+  return ''
 }
 
 export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: string): Promise<RouteEntry[]> {
-  const trimmedBase = controlBase.trim().replace(/\/+$/, '')
+  const trimmedBase = normalizeBase(controlBase)
   const trimmedOwner = ownerPubkey.trim()
-  if (!trimmedBase || !trimmedOwner) return []
-  try {
-    const url = new URL(`/v1/route/owner/${encodeURIComponent(trimmedOwner)}`, `${trimmedBase}/`)
-    const response = await fetch(url.toString(), { method: 'GET' })
-    if (!response.ok) return []
-    const body = await response.json() as OwnerRoutesResponse
-    if (!body.ok) return []
-    return Array.isArray(body.devices) ? body.devices : []
-  } catch {
-    return []
+  if (!trimmedOwner) return []
+  const bases = trimmedBase ? [trimmedBase, ...getControlBaseCandidates()] : getControlBaseCandidates()
+  for (const base of [...new Set(bases)]) {
+    try {
+      const url = new URL(`/v1/route/owner/${encodeURIComponent(trimmedOwner)}`, `${base}/`)
+      const response = await fetch(url.toString(), { method: 'GET' })
+      if (!response.ok) continue
+      const body = await response.json() as OwnerRoutesResponse
+      if (!body.ok) continue
+      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+      return Array.isArray(body.devices) ? body.devices : []
+    } catch {
+      // try next
+    }
   }
+  return []
 }
 
 export class WebRtcSignalClient {
@@ -129,7 +196,12 @@ export class WebRtcSignalClient {
   }
 
   send(message: SignalOutboundMessage): void {
-    this.ws.send(JSON.stringify(message))
+    if (this.ws.readyState !== WebSocket.OPEN) return
+    try {
+      this.ws.send(JSON.stringify(message))
+    } catch {
+      // ignore transient closed-state sends
+    }
   }
 
   close(): void {

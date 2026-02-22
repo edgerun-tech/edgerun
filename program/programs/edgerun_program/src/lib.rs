@@ -315,9 +315,14 @@ pub mod edgerun_program {
     pub fn finalize_job(ctx: Context<FinalizeJob>) -> Result<()> {
         let job = &ctx.accounts.job;
         require!(
-            job.status == JobStatus::Assigned as u8,
+            job.status == JobStatus::AwaitingDa as u8,
             EdgerunError::InvalidJobState
         );
+        validate_output_availability_for_finalize(
+            &job.job_id,
+            &job.winning_output_hash,
+            &ctx.accounts.output_availability,
+        )?;
         let finalize_inputs = parse_finalize_inputs(job, &ctx.remaining_accounts)?;
         let winner_count_u64 = finalize_inputs.winner_keys.len() as u64;
 
@@ -825,6 +830,27 @@ fn collect_submitted_workers(job: &Account<Job>, remaining_accounts: &[AccountIn
     Ok(out)
 }
 
+fn validate_output_availability_for_finalize(
+    job_id: &[u8; 32],
+    winning_output_hash: &[u8; 32],
+    da: &Account<OutputAvailability>,
+) -> Result<()> {
+    require!(
+        output_availability_matches(job_id, winning_output_hash, &da.job_id, &da.output_hash),
+        EdgerunError::OutputHashMismatch
+    );
+    Ok(())
+}
+
+fn output_availability_matches(
+    job_id: &[u8; 32],
+    winning_output_hash: &[u8; 32],
+    da_job_id: &[u8; 32],
+    da_output_hash: &[u8; 32],
+) -> bool {
+    da_job_id == job_id && da_output_hash == winning_output_hash && *da_output_hash != [0_u8; 32]
+}
+
 fn apply_non_response_slash(
     stake: &mut Account<WorkerStake>,
     config: &Account<GlobalConfig>,
@@ -1010,6 +1036,8 @@ pub struct FinalizeJob<'info> {
     pub config: Account<'info, GlobalConfig>,
     #[account(mut)]
     pub job: Account<'info, Job>,
+    #[account(seeds = [b"output", job.job_id.as_ref()], bump)]
+    pub output_availability: Account<'info, OutputAvailability>,
     #[account(mut)]
     pub worker_stake_0: Account<'info, WorkerStake>,
     #[account(mut)]
@@ -1396,4 +1424,43 @@ fn range_checked(offset: u16, len: u16, total_len: usize) -> Result<std::ops::Ra
         .ok_or(error!(EdgerunError::InvalidEd25519Instruction))?;
     require!(end <= total_len, EdgerunError::InvalidEd25519Instruction);
     Ok(start..end)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn committee_tier_boundaries_match_phase2_table() {
+        assert_eq!(committee_tier_for_escrow(99_999_999), (3, 2));
+        assert_eq!(committee_tier_for_escrow(100_000_000), (5, 3));
+        assert_eq!(committee_tier_for_escrow(999_999_999), (5, 3));
+        assert_eq!(committee_tier_for_escrow(1_000_000_000), (7, 5));
+        assert_eq!(committee_tier_for_escrow(9_999_999_999), (7, 5));
+        assert_eq!(committee_tier_for_escrow(10_000_000_000), (9, 6));
+    }
+
+    #[test]
+    fn output_availability_must_match_job_and_winner_hash() {
+        let job_id = [1_u8; 32];
+        let winning = [2_u8; 32];
+        let other_job = [3_u8; 32];
+        let other_hash = [4_u8; 32];
+
+        assert!(output_availability_matches(
+            &job_id, &winning, &job_id, &winning
+        ));
+        assert!(!output_availability_matches(
+            &job_id, &winning, &other_job, &winning
+        ));
+        assert!(!output_availability_matches(
+            &job_id, &winning, &job_id, &other_hash
+        ));
+        assert!(!output_availability_matches(
+            &job_id,
+            &winning,
+            &job_id,
+            &[0_u8; 32]
+        ));
+    }
 }

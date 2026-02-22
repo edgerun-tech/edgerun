@@ -3,18 +3,21 @@ import QRCode from 'qrcode'
 import {
   getTerminalDrawerState,
   terminalDrawerActions,
+  type PaneTransport,
   type TerminalDevice,
   type TerminalDrawerState,
   type TerminalSplitMode,
   type TerminalTab
 } from '../../lib/terminal-drawer-store'
-import { canUseCurrentOriginAsDevice, importTailscaleBridgeDevices, refreshTerminalDevices } from '../../lib/terminal-device-service'
+import { refreshTerminalDevices } from '../../lib/terminal-device-service'
 import { mountTerminalDrawerRuntime } from '../../lib/terminal-drawer-runtime'
-import { resolveTerminalBaseUrl } from '../../lib/webrtc-route-client'
+import { getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
+import { getRouteControlBase, parseRouteDeviceId, resolveOwnerRoutes, resolveTerminalBaseUrl } from '../../lib/webrtc-route-client'
 import { readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 
 export type TerminalTabsController = {
   state: Accessor<TerminalDrawerState>
+  activeTransport: Accessor<PaneTransport>
   tabMenuTabId: Accessor<string | null>
   setTabMenuTabId: Setter<string | null>
   hasTabsLeft: (tabId: string) => boolean
@@ -26,15 +29,17 @@ export type TerminalTabsController = {
 export type TerminalDevicesController = {
   state: Accessor<TerminalDrawerState>
   refreshDeviceStatus: () => Promise<void>
-  importTailscaleDevices: (opts?: { silent?: boolean }) => Promise<void>
-  tailscaleImporting: Accessor<boolean>
-  tailscaleImportNote: Accessor<string>
   deviceNameInput: Accessor<string>
   setDeviceNameInput: Setter<string>
   deviceUrlInput: Accessor<string>
   setDeviceUrlInput: Setter<string>
   addDevice: () => void
   connectDevice: (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => Promise<void>
+  ownerPubkeyInput: Accessor<string>
+  setOwnerPubkeyInput: Setter<string>
+  ownerImporting: Accessor<boolean>
+  ownerImportNote: Accessor<string>
+  importOwnerDevices: () => Promise<void>
   qrDeviceUrl: Accessor<string>
   setQrDeviceUrl: Setter<string>
   qrImageDataUrl: Accessor<string>
@@ -61,15 +66,24 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   const [deviceUrlInput, setDeviceUrlInput] = createSignal('')
   const [qrDeviceUrl, setQrDeviceUrl] = createSignal('')
   const [qrImageDataUrl, setQrImageDataUrl] = createSignal('')
-  const [tailscaleImporting, setTailscaleImporting] = createSignal(false)
-  const [tailscaleImportNote, setTailscaleImportNote] = createSignal('')
+  const [ownerPubkeyInput, setOwnerPubkeyInput] = createSignal('')
+  const [ownerImporting, setOwnerImporting] = createSignal(false)
+  const [ownerImportNote, setOwnerImportNote] = createSignal('')
   const [tabMenuTabId, setTabMenuTabId] = createSignal<string | null>(null)
-  let lastAutoImportAt = 0
 
   const walletConnected = createMemo(() => wallet().connected)
   const activeTab = createMemo(() => {
     const current = state()
     return current.tabs.find((tab) => tab.id === current.activeTabId) ?? current.tabs[0]
+  })
+  const activeTransport = createMemo<PaneTransport>(() => {
+    const tab = activeTab()
+    if (!tab || tab.panes.length === 0) return 'unknown'
+    const map = state().paneTransport
+    const values = tab.panes.map((pane) => map[pane.id] ?? 'unknown')
+    if (values.includes('raw')) return 'raw'
+    if (values.includes('mux')) return 'mux'
+    return 'unknown'
   })
   const drawerHeight = createMemo(() => {
     if (!walletConnected()) return 0
@@ -97,59 +111,6 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     )
   }
 
-  const maybeRegisterCurrentOriginDevice = async () => {
-    if (typeof window === 'undefined') return
-    const origin = window.location.origin
-    const existing = untrack(() => state().devices.some((device) => device.baseUrl === origin))
-    if (existing) return
-
-    try {
-      const available = await canUseCurrentOriginAsDevice(origin)
-      if (!available) return
-      terminalDrawerActions.addDevice('This Laptop', origin)
-      await refreshDeviceStatus()
-    } catch {
-      // ignore: origin is not running term-server
-    }
-  }
-
-  const importTailscaleDevices = async (opts?: { silent?: boolean }) => {
-    const silent = Boolean(opts?.silent)
-    if (tailscaleImporting()) return
-    setTailscaleImporting(true)
-    if (!silent) setTailscaleImportNote('')
-    const endpoints = [
-      'http://127.0.0.1:49201/v1/tailscale/devices',
-      'http://localhost:49201/v1/tailscale/devices'
-    ] as const
-
-    const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
-    const result = await importTailscaleBridgeDevices(endpoints, existing)
-    if (result.error) {
-      if (!silent) setTailscaleImportNote(result.error)
-      setTailscaleImporting(false)
-      return
-    }
-
-    for (const device of result.added) {
-      terminalDrawerActions.addDevice(device.name, device.baseUrl)
-    }
-    await refreshDeviceStatus()
-    const imported = result.added.length
-    if (!silent) {
-      setTailscaleImportNote(imported > 0 ? `Imported ${imported} device${imported === 1 ? '' : 's'} from Tailscale.` : 'No new Tailscale devices to import.')
-    }
-    setTailscaleImporting(false)
-  }
-
-  const autoImportTailscaleDevices = () => {
-    if (!untrack(() => state().autoImportTailscale)) return
-    const now = Date.now()
-    if (now - lastAutoImportAt < 15000) return
-    lastAutoImportAt = now
-    void importTailscaleDevices({ silent: true })
-  }
-
   const restoreLastDevice = () => terminalDrawerActions.restoreLastDeviceOnActiveTab()
 
   const addDevice = () => {
@@ -160,6 +121,10 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   }
 
   const connectDevice = async (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => {
+    const routeDeviceId = parseRouteDeviceId(device.baseUrl)
+    if (routeDeviceId) {
+      void getWebRtcPeerSupervisor().connectToDevice(routeDeviceId)
+    }
     const resolved = await resolveTerminalBaseUrl(device.baseUrl)
     if (resolved) {
       terminalDrawerActions.connectActiveTabToBaseUrl(resolved)
@@ -168,7 +133,42 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       }
       return
     }
+    if (routeDeviceId) {
+      // Route targets must resolve to a concrete HTTP(S) terminal base URL before connect.
+      terminalDrawerActions.markDeviceStatus(device.id, 'offline')
+      return
+    }
     terminalDrawerActions.connectActiveTabToDevice(device.id)
+  }
+
+  const importOwnerDevices = async () => {
+    const owner = ownerPubkeyInput().trim()
+    if (!owner || ownerImporting()) return
+    setOwnerImporting(true)
+    setOwnerImportNote('')
+    try {
+      const controlBase = getRouteControlBase()
+      const routes = await resolveOwnerRoutes(controlBase, owner)
+      const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
+      let imported = 0
+      for (const route of routes) {
+        const deviceId = (route.device_id || '').trim()
+        if (!deviceId) continue
+        const routeUrl = `route://${deviceId}`
+        if (existing.has(routeUrl)) continue
+        const ownerLabel = owner.length > 12 ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : owner
+        const label = `Owner ${ownerLabel} · ${deviceId}`
+        terminalDrawerActions.addDevice(label, routeUrl)
+        existing.add(routeUrl)
+        imported += 1
+      }
+      setOwnerImportNote(imported > 0 ? `Imported ${imported} routed device${imported === 1 ? '' : 's'} for owner.` : 'No new routed devices found for owner.')
+      await refreshDeviceStatus()
+    } catch {
+      setOwnerImportNote('Owner route lookup failed.')
+    } finally {
+      setOwnerImporting(false)
+    }
   }
 
   const startResize = (ev: PointerEvent) => {
@@ -211,8 +211,6 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       tabMenuTabId,
       closeTabMenu: () => setTabMenuTabId(null),
       refreshDeviceStatus,
-      maybeRegisterCurrentOriginDevice,
-      autoImportTailscaleDevices,
       restoreLastDevice
     })
 
@@ -228,6 +226,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     startResize,
     tabs: {
       state,
+      activeTransport,
       tabMenuTabId,
       setTabMenuTabId,
       hasTabsLeft,
@@ -238,15 +237,17 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     devices: {
       state,
       refreshDeviceStatus,
-      importTailscaleDevices,
-      tailscaleImporting,
-      tailscaleImportNote,
       deviceNameInput,
       setDeviceNameInput,
       deviceUrlInput,
       setDeviceUrlInput,
       addDevice,
       connectDevice,
+      ownerPubkeyInput,
+      setOwnerPubkeyInput,
+      ownerImporting,
+      ownerImportNote,
+      importOwnerDevices,
       qrDeviceUrl,
       setQrDeviceUrl,
       qrImageDataUrl

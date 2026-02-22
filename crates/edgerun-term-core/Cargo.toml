@@ -25,7 +25,7 @@ dirs = "6.0.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = "3.3"
-env_logger = "0.11"
+edgerun-observability = { path = "../edgerun-observability" }
 pixels = "0.15"
 
 [dev-dependencies]
