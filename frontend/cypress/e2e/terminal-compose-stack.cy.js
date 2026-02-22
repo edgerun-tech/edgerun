@@ -1,12 +1,14 @@
 describe('terminal docker compose stack', () => {
-  it('resolves term-server route via scheduler and opens terminal iframe', () => {
+  it('resolves term-server route via scheduler and blocks legacy iframe terminal embedding', () => {
+    let deviceId = ''
+
     cy.request('http://127.0.0.1:8090/health')
       .its('status')
       .should('eq', 200)
 
     cy.request('http://127.0.0.1:8080/v1/device/identity').then((identityResp) => {
       expect(identityResp.status).to.eq(200)
-      const deviceId = identityResp.body?.device_pubkey_b64url
+      deviceId = String(identityResp.body?.device_pubkey_b64url || '')
       expect(deviceId).to.be.a('string')
       expect(deviceId.length).to.be.greaterThan(0)
 
@@ -14,8 +16,6 @@ describe('terminal docker compose stack', () => {
         expect(resolveResp.status).to.eq(200)
         expect(resolveResp.body?.ok).to.eq(true)
         expect(resolveResp.body?.found).to.eq(true)
-        const reachable = resolveResp.body?.route?.reachable_urls || []
-        expect(reachable).to.include('http://127.0.0.1:8080')
       })
     })
 
@@ -49,18 +49,18 @@ describe('terminal docker compose stack', () => {
       .click({ force: true })
     cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
-    cy.contains('p', 'Local Daemon')
+    cy.get('input[placeholder="Device name"]').clear().type('Compose Routed Device')
+    cy.get('input[placeholder="route://device-id"]').clear().type(`route://${deviceId}`)
+    cy.contains('button', /^Add Device$/).click({ force: true })
+
+    cy.contains('p', 'Compose Routed Device')
       .parents('.rounded-md.border')
       .first()
       .contains('button', /^Connect$/)
       .click({ force: true })
 
-    cy.get('#edgerun-terminal-drawer iframe', { timeout: 10000 })
-      .first()
-      .should(($iframe) => {
-        const src = $iframe.attr('src') || ''
-        expect(src).to.include('http://127.0.0.1:8080/term/')
-        expect(src).to.include('transport=mux')
-      })
+    cy.get('#edgerun-terminal-drawer iframe').should('not.exist')
+    cy.get('[data-testid="routed-terminal-log"]', { timeout: 10000 }).should('exist')
+    cy.get('#edgerun-terminal-drawer').contains(`route://${deviceId} attached`).should('exist')
   })
 })
