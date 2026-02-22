@@ -525,7 +525,7 @@ fn map_execution_error(
     .with_fuel(max_instructions, fuel_remaining)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(miri)))]
 mod tests {
     use super::*;
 
@@ -950,5 +950,17 @@ mod tests {
         let bytes = sample_payload(wasm, 1024 * 1024, 50_000);
         let report = execute_bundle_payload_bytes(&bytes).expect("exec");
         assert_eq!(report.output, vec![0xff, 0xff]);
+    }
+}
+
+#[cfg(all(test, miri))]
+mod miri_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_non_bundle_bytes_under_miri() {
+        let err = execute_bundle_payload_bytes_strict(b"not-a-canonical-bundle")
+            .expect_err("invalid bundle bytes must fail");
+        assert_eq!(err.code, RuntimeErrorCode::BundleDecode);
     }
 }

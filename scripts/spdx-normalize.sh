@@ -95,6 +95,11 @@ normalize_file() {
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   [[ "$path" == *"/LICENSE" || "$path" == "LICENSE" ]] && continue
+  case "$path" in
+    program/target/*|program/target-local/*|out/*)
+      continue
+      ;;
+  esac
 
   license_id="$(license_for_path "$path")"
   [[ -z "$license_id" ]] && continue

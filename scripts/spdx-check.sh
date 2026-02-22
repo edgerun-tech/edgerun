@@ -41,6 +41,11 @@ errors=0
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   [[ "$path" == *"/LICENSE" || "$path" == "LICENSE" ]] && continue
+  case "$path" in
+    program/target/*|program/target-local/*|out/*)
+      continue
+      ;;
+  esac
   is_supported_source "$path" || continue
 
   expected="$(license_for_path "$path")"
