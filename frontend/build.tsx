@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { execSync } from 'node:child_process'
 import { renderToString } from 'solid-js/web'
@@ -6,22 +6,9 @@ import MarkdownIt from 'markdown-it'
 import { createHighlighter } from 'shiki'
 import { evaluateSync } from '@mdx-js/mdx'
 
-import HomePage from './app/page'
-import DocsPage from './app/docs/page'
-import TokenPage from './app/token/page'
-import RunPage from './app/run/page'
-import WorkersPage from './app/workers/page'
-import DashboardPage from './app/dashboard/page'
-import BlogPage from './app/blog/page'
-import BlogPostPage from './app/blog/[slug]/page'
-import PrivacyPage from './app/legal/privacy/page'
-import TermsPage from './app/legal/terms/page'
-import SlaPage from './app/legal/sla/page'
-import StyleGuidePage from './app/style-guide/page'
-import QuickStartPage from './app/docs/getting-started/quick-start/page'
-import JobDetailsPage from './app/job/[id]/page'
-import { blogPosts, jobs } from './lib/content'
 import { getDocsNav } from './lib/docs-nav'
+import { generatedApiSpecs, getDocsSources, type DocsSource } from './lib/docs-catalog'
+import { getAllSiteRoutes } from './lib/routes'
 import { siteLinks } from './lib/site-links'
 import { DocsSidebar } from './components/docs/docs-sidebar'
 import { Nav } from './components/nav'
@@ -53,36 +40,7 @@ const solanaDeployments = JSON.parse(readFileSync(path.join(projectRoot, 'config
 }
 
 const versions = Array.from(new Set((process.env.EDGERUN_VERSIONS || currentVersion).split(',').map((v) => v.trim()).filter(Boolean)))
-
-type DocsSource = { sourcePath: string; slug?: string; title?: string; sourceLabel?: string }
-
-const docsSources: DocsSource[] = [
-  { sourcePath: 'Whitepaper.mdx' },
-  { sourcePath: 'Phase-2-whitepaper.mdx' },
-  {
-    sourcePath: path.join('crates', 'edgerun-vanity-client', 'README.mdx'),
-    slug: 'address-generator-cli',
-    title: 'Address Generator CLI'
-  },
-  {
-    sourcePath: path.join('crates', 'edgerun-vanity-payload', 'README.mdx'),
-    slug: 'address-generator-payload',
-    title: 'Address Generator Payload'
-  },
-  ...readdirSync(path.join(repoRoot, 'docs'))
-    .filter((name) => name.endsWith('.mdx'))
-    .map((name) => ({
-      sourcePath: path.join('docs', name),
-      ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {})
-    }))
-]
-const generatedApiSpecs = [
-  { slug: 'api-runtime-rust', title: 'Runtime Rust API', description: 'Public API surface for edgerun-runtime.', sourcePath: 'crates/edgerun-runtime/src/lib.rs', mode: 'rust' },
-  { slug: 'api-types-rust', title: 'Types Rust API', description: 'Public API surface for edgerun-types.', sourcePath: 'crates/edgerun-types/src/lib.rs', mode: 'rust' },
-  { slug: 'api-address-generator-payload-rust', title: 'Address Generator Payload Rust API', description: 'Public API surface for address generator payload crate.', sourcePath: 'crates/edgerun-vanity-payload/src/lib.rs', mode: 'rust' },
-  { slug: 'api-address-generator-cli', title: 'Address Generator CLI Reference', description: 'CLI argument surface for address generator client.', sourcePath: 'crates/edgerun-vanity-client/src/main.rs', mode: 'cli' },
-  { slug: 'api-edgerun-cli', title: 'Edgerun CLI Reference', description: 'CLI argument and command surface for edgerun-cli.', sourcePath: 'crates/edgerun-cli/src/main.rs', mode: 'cli' }
-] as const
+const docsSources: DocsSource[] = getDocsSources(repoRoot)
 
 const shiki = await createHighlighter({ themes: ['github-dark'], langs: ['plaintext', 'markdown', 'rust', 'toml', 'json', 'yaml', 'bash', 'typescript', 'javascript'] })
 const markdown = new MarkdownIt({
@@ -1120,44 +1078,16 @@ mkdirSync(path.join(distRoot, 'assets'), { recursive: true })
 if (existsSync(publicRoot)) cpSync(publicRoot, distRoot, { recursive: true })
 
 const docsPaths = versions.flatMap((v) => generateVersionDocs(v))
-
-writeComponentPage('index.html', 'Edgerun', 'Dependable compute, financially enforced.', HomePage)
-writeComponentPage(path.join('run', 'index.html'), 'Execute Job', 'Submit jobs to Edgerun workers.', RunPage)
-writeComponentPage(path.join('workers', 'index.html'), 'Workers', 'Worker operations and status.', WorkersPage)
-writeComponentPage(path.join('token', 'index.html'), 'SOL Economics', 'SOL-based economics and settlement.', TokenPage)
-writeComponentPage(path.join('dashboard', 'index.html'), 'Dashboard', 'Operational views and on-chain truth.', DashboardPage)
-writeComponentPage(path.join('docs', 'index.html'), 'Documentation', 'Browse implementation docs.', DocsPage)
-writeComponentPage(path.join('docs', 'getting-started', 'quick-start', 'index.html'), 'Quick Start', 'Run bulk Solana address generation workflow end-to-end.', QuickStartPage)
-writeComponentPage(path.join('blog', 'index.html'), 'Blog', 'Protocol and release updates.', BlogPage)
-for (const post of blogPosts) {
-  writeComponentPage(path.join('blog', post.slug, 'index.html'), post.title, post.excerpt, () => <BlogPostPage slug={post.slug} />)
+const siteRoutes = getAllSiteRoutes()
+for (const route of siteRoutes) {
+  writeComponentPage(route.outputPath, route.pageTitle, route.description, route.component)
 }
-for (const job of jobs) {
-  writeComponentPage(path.join('job', job.id, 'index.html'), `Job ${job.id}`, 'Job execution details and timeline.', () => <JobDetailsPage id={job.id} />)
-}
-writeComponentPage(path.join('style-guide', 'index.html'), 'Style Guide', 'Design tokens and usage guide.', StyleGuidePage)
-writeComponentPage(path.join('legal', 'privacy', 'index.html'), 'Privacy Policy', 'Privacy terms.', PrivacyPage)
-writeComponentPage(path.join('legal', 'terms', 'index.html'), 'Terms of Service', 'Terms for Edgerun services.', TermsPage)
-writeComponentPage(path.join('legal', 'sla', 'index.html'), 'Service Level Agreement', 'Service-level terms.', SlaPage)
 
 writePage('404.html', 'Page Not Found', 'The requested page is unavailable.', '<div class="min-h-screen bg-background text-foreground"><main class="mx-auto max-w-3xl p-8"><h1 class="text-3xl font-bold">Page Not Found</h1><p class="mt-3 text-muted-foreground">This route is unavailable or still generating.</p><a class="inline-block mt-4 text-primary underline" href="/">Go home</a></main></div>')
 
 const paths = [
-  '/',
-  '/run/',
-  '/workers/',
-  '/token/',
-  '/dashboard/',
-  '/docs/',
-  '/docs/getting-started/quick-start/',
-  ...docsPaths,
-  '/blog/',
-  ...blogPosts.map((post) => `/blog/${post.slug}/`),
-  ...jobs.map((job) => `/job/${job.id}/`),
-  '/style-guide/',
-  '/legal/privacy/',
-  '/legal/terms/',
-  '/legal/sla/'
+  ...siteRoutes.map((route) => route.path),
+  ...docsPaths
 ]
 
 const themeConfig = JSON.parse(readFileSync(path.join(projectRoot, 'config', 'brand-theme.json'), 'utf8')) as {

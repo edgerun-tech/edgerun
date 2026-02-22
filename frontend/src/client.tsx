@@ -1,55 +1,16 @@
 import type { Component } from 'solid-js'
 import { render } from 'solid-js/web'
 
-import HomePage from '../app/page'
-import DocsPage from '../app/docs/page'
-import QuickStartPage from '../app/docs/getting-started/quick-start/page'
-import TokenPage from '../app/token/page'
-import RunPage from '../app/run/page'
-import WorkersPage from '../app/workers/page'
-import DashboardPage from '../app/dashboard/page'
-import BlogPage from '../app/blog/page'
-import BlogPostPage from '../app/blog/[slug]/page'
-import JobDetailsPage from '../app/job/[id]/page'
-import PrivacyPage from '../app/legal/privacy/page'
-import TermsPage from '../app/legal/terms/page'
-import SlaPage from '../app/legal/sla/page'
-import StyleGuidePage from '../app/style-guide/page'
-import { blogPosts, jobs } from '../lib/content'
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../lib/solana-deployments'
 import { applyPersonalizationSettings, readPersonalizationSettings } from '../lib/personalization'
+import { getRouteChromeTitle, getSiteRouteMap, normalizeRoutePath } from '../lib/routes'
 import { TerminalDrawer } from '../components/terminal/terminal-drawer'
 import { ensureTerminalDrawerStore, getTerminalDrawerState, subscribeTerminalDrawer, type TerminalDrawerState } from '../lib/terminal-drawer-store'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
-function normalizePath(pathname: string): string {
-  const cleaned = pathname.replace(/index\.html$/, '')
-  if (!cleaned) return '/'
-  return cleaned.endsWith('/') ? cleaned : `${cleaned}/`
-}
-
 function routeTitle(pathname: string): string {
-  const route = normalizePath(pathname)
-  if (route === '/') return 'Home'
-  if (route === '/docs/') return 'Docs'
-  if (route === '/docs/getting-started/quick-start/') return 'Quick Start'
-  if (route === '/token/') return 'Token'
-  if (route === '/run/') return 'Run Job'
-  if (route === '/workers/') return 'Workers'
-  if (route === '/dashboard/') return 'Dashboard'
-  if (route === '/blog/') return 'Blog'
-  if (route === '/legal/privacy/') return 'Privacy'
-  if (route === '/legal/terms/') return 'Terms'
-  if (route === '/legal/sla/') return 'SLA'
-  if (route === '/style-guide/') return 'Style Guide'
-  for (const post of blogPosts) {
-    if (route === `/blog/${post.slug}/`) return post.title
-  }
-  for (const job of jobs) {
-    if (route === `/job/${job.id}/`) return `Job ${job.id}`
-  }
-  return 'Edgerun'
+  return getRouteChromeTitle(pathname)
 }
 
 type SiteChromeStatus = {
@@ -157,22 +118,7 @@ function initSiteChromeStatus(): void {
   })
 }
 
-const routeComponents: Record<string, Component> = {
-  '/': HomePage,
-  '/docs/': DocsPage,
-  '/docs/getting-started/quick-start/': QuickStartPage,
-  '/token/': TokenPage,
-  '/run/': RunPage,
-  '/workers/': WorkersPage,
-  '/dashboard/': DashboardPage,
-  '/blog/': BlogPage,
-  '/legal/privacy/': PrivacyPage,
-  '/legal/terms/': TermsPage,
-  '/legal/sla/': SlaPage,
-  '/style-guide/': StyleGuidePage
-}
-for (const post of blogPosts) routeComponents[`/blog/${post.slug}/`] = () => <BlogPostPage slug={post.slug} />
-for (const job of jobs) routeComponents[`/job/${job.id}/`] = () => <JobDetailsPage id={job.id} />
+const routeComponents: Record<string, Component> = getSiteRouteMap()
 
 let disposePage: null | (() => void) = null
 let bootstrapped = false
@@ -244,9 +190,9 @@ function applyPageEnhancements(): void {
 
   const navLinks = document.querySelectorAll<HTMLAnchorElement>('[data-nav-link]')
   if (!navLinks.length) return
-  const path = normalizePath(window.location.pathname)
+  const path = normalizeRoutePath(window.location.pathname)
   for (const link of navLinks) {
-    const href = normalizePath(link.getAttribute('href') || '')
+    const href = normalizeRoutePath(link.getAttribute('href') || '')
     if (!href) continue
     const active = href === '/' ? path === '/' : path === href || path.startsWith(href)
     link.classList.toggle('is-active', active)
@@ -261,7 +207,7 @@ function applyPageEnhancements(): void {
 function mountCurrentRoute(): boolean {
   const root = document.getElementById('edgerun-root')
   if (!root) return false
-  const route = normalizePath(window.location.pathname)
+  const route = normalizeRoutePath(window.location.pathname)
   const Page = routeComponents[route]
   if (!Page) return false
 
@@ -289,7 +235,7 @@ function shouldClientRoute(anchor: HTMLAnchorElement): boolean {
 
   const url = new URL(rawHref, window.location.origin)
   if (url.origin !== window.location.origin) return false
-  const route = normalizePath(url.pathname)
+  const route = normalizeRoutePath(url.pathname)
   return Boolean(routeComponents[route])
 }
 
@@ -312,8 +258,8 @@ document.addEventListener('click', async (event) => {
   if (!anchor || !shouldClientRoute(anchor)) return
 
   const nextUrl = new URL(anchor.href, window.location.origin)
-  const nextPath = normalizePath(nextUrl.pathname)
-  const currentPath = normalizePath(window.location.pathname)
+  const nextPath = normalizeRoutePath(nextUrl.pathname)
+  const currentPath = normalizeRoutePath(window.location.pathname)
   if (nextPath === currentPath) return
 
   event.preventDefault()
@@ -537,7 +483,7 @@ function renderDocsSearchResults(container: HTMLElement, results: DocsSearchEntr
 }
 
 async function initDocsSearch(): Promise<void> {
-  const route = normalizePath(window.location.pathname)
+  const route = normalizeRoutePath(window.location.pathname)
   if (docsSearchBoundPath === route) return
   if (docsSearchCleanup) {
     docsSearchCleanup()
@@ -630,7 +576,7 @@ function copyTextToClipboard(text: string): Promise<void> {
 }
 
 function initDocsCodeCopyButtons(): void {
-  const route = normalizePath(window.location.pathname)
+  const route = normalizeRoutePath(window.location.pathname)
   if (!route.startsWith('/docs/')) return
   if (docsCopyBoundPath === route) return
   docsCopyBoundPath = route

@@ -398,6 +398,15 @@ summary,
   max-height: 100dvh;
   overflow: hidden;
   isolation: isolate;
+  transition: transform 180ms ease;
+}
+
+.terminal-drawer[data-open='true'] {
+  transform: translateY(-20px);
+}
+
+.terminal-drawer[data-open='false'] {
+  transform: translateY(20px);
 }
 
 .terminal-grid-split-cols {
