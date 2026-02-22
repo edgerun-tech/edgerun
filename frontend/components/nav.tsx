@@ -2,6 +2,7 @@ import { For, createSignal, onCleanup, onMount } from 'solid-js'
 import { Button } from './ui/button'
 import { WalletButton } from './solana/wallet-button'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet'
+import { PersonalizationMenu } from './personalization-menu'
 import {
   ensureTerminalDrawerStore,
   getTerminalDrawerState,
@@ -86,6 +87,7 @@ export function Nav() {
                 <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v9h16V6H4Zm1 14h14v2H5v-2Zm2-10 3 2-3 2v-4Zm5 3h5v1h-5v-1Z" />
               </svg>
             </Button>
+            <PersonalizationMenu />
             <a href="/dashboard/" class="hidden sm:inline-flex"><Button variant="outline" size="sm">Dashboard</Button></a>
             <div class="hidden sm:block"><WalletButton /></div>
           </div>

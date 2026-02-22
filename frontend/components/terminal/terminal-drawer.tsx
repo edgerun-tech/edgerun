@@ -35,6 +35,7 @@ export function TerminalDrawer() {
   const [qrImageDataUrl, setQrImageDataUrl] = createSignal('')
   const [tailscaleImporting, setTailscaleImporting] = createSignal(false)
   const [tailscaleImportNote, setTailscaleImportNote] = createSignal('')
+  const [tabMenuTabId, setTabMenuTabId] = createSignal<string | null>(null)
   let lastAutoImportAt = 0
 
   const walletConnected = createMemo(() => wallet().connected)
@@ -54,6 +55,14 @@ export function TerminalDrawer() {
   const splitChange = (mode: TerminalSplitMode) => {
     terminalDrawerActions.setSplit(mode)
   }
+
+  const tabIndex = (tabId: string): number => state().tabs.findIndex((entry) => entry.id === tabId)
+  const hasTabsLeft = (tabId: string): boolean => tabIndex(tabId) > 0
+  const hasTabsRight = (tabId: string): boolean => {
+    const idx = tabIndex(tabId)
+    return idx >= 0 && idx < state().tabs.length - 1
+  }
+  const hasOtherTabs = (): boolean => state().tabs.length > 1
 
   const refreshDeviceStatus = async () => {
     const connected = untrack(() => walletConnected())
@@ -172,9 +181,6 @@ export function TerminalDrawer() {
         restoreLastDevice()
         void refreshDeviceStatus()
       }
-      if (!nextWallet.connected) {
-        terminalDrawerActions.setOpen(false)
-      }
     }
 
     const onPointerMove = (ev: PointerEvent) => {
@@ -188,11 +194,20 @@ export function TerminalDrawer() {
 
     const onPointerUp = () => setDragging(false)
     const onResize = () => setState(getTerminalDrawerState())
+    const onPointerDown = (event: PointerEvent) => {
+      const menuTab = tabMenuTabId()
+      if (!menuTab) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('[data-tab-menu]')) return
+      if (target?.closest('[data-tab-menu-trigger]')) return
+      setTabMenuTabId(null)
+    }
 
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
     window.addEventListener('pointercancel', onPointerUp)
     window.addEventListener('resize', onResize)
+    window.addEventListener('pointerdown', onPointerDown)
     window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
 
     void refreshDeviceStatus()
@@ -207,6 +222,7 @@ export function TerminalDrawer() {
       window.removeEventListener('pointerup', onPointerUp)
       window.removeEventListener('pointercancel', onPointerUp)
       window.removeEventListener('resize', onResize)
+      window.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
       window.clearInterval(timer)
     })
@@ -224,27 +240,108 @@ export function TerminalDrawer() {
       <Show when={state().open}>
         <button
           type="button"
-          class="absolute left-0 right-0 top-0 h-2 cursor-row-resize border-0 bg-transparent"
+          class="group absolute inset-x-0 -top-1 z-10 h-5 touch-none cursor-row-resize border-0 bg-transparent"
           aria-label="Resize terminal drawer"
           onPointerDown={(ev) => {
             ev.preventDefault()
             setDragging(true)
             terminalDrawerActions.setOpen(true)
           }}
-        />
+        >
+          <span class="pointer-events-none mx-auto mt-1 block h-1 w-16 rounded-full bg-border/80 transition-colors group-hover:bg-primary/70" />
+        </button>
       </Show>
 
       <div class="flex h-full min-h-0 flex-col">
         <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2">
           <div class="flex flex-1 items-center gap-1 overflow-x-auto">
             <For each={state().tabs}>{(tab) => (
-              <button
-                type="button"
-                class={`rounded-md border px-2 py-1 text-xs ${tab.id === state().activeTabId ? 'border-primary/70 bg-primary/20 text-foreground' : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'}`}
-                onClick={() => terminalDrawerActions.setActiveTab(tab.id)}
-              >
-                {tab.title}
-              </button>
+              <div class={`relative inline-flex items-center rounded-md border ${tab.id === state().activeTabId ? 'border-primary/70 bg-primary/20 text-foreground' : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'}`}>
+                <button
+                  type="button"
+                  class="px-2 py-1 text-xs"
+                  onClick={() => terminalDrawerActions.setActiveTab(tab.id)}
+                >
+                  {tab.title}
+                </button>
+                <button
+                  type="button"
+                  class="px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  aria-label={`Tab options for ${tab.title}`}
+                  data-tab-menu-trigger
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setTabMenuTabId(tabMenuTabId() === tab.id ? null : tab.id)
+                  }}
+                >
+                  ⋮
+                </button>
+                <Show when={state().tabs.length > 1}>
+                  <button
+                    type="button"
+                    class="px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    aria-label={`Close ${tab.title}`}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      terminalDrawerActions.closeTab(tab.id)
+                    }}
+                  >
+                    x
+                  </button>
+                </Show>
+
+                <Show when={tabMenuTabId() === tab.id}>
+                  <div
+                    data-tab-menu
+                    class="absolute left-0 top-full z-[90] mt-1 w-44 rounded-md border border-border/70 bg-card/95 p-1 shadow-xl backdrop-blur"
+                  >
+                    <button
+                      type="button"
+                      class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                      disabled={!hasOtherTabs()}
+                      onClick={() => {
+                        terminalDrawerActions.closeOtherTabs(tab.id)
+                        setTabMenuTabId(null)
+                      }}
+                    >
+                      Close Others
+                    </button>
+                    <button
+                      type="button"
+                      class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                      disabled={!hasTabsLeft(tab.id)}
+                      onClick={() => {
+                        terminalDrawerActions.closeTabsLeft(tab.id)
+                        setTabMenuTabId(null)
+                      }}
+                    >
+                      Close Left
+                    </button>
+                    <button
+                      type="button"
+                      class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                      disabled={!hasTabsRight(tab.id)}
+                      onClick={() => {
+                        terminalDrawerActions.closeTabsRight(tab.id)
+                        setTabMenuTabId(null)
+                      }}
+                    >
+                      Close Right
+                    </button>
+                    <button
+                      type="button"
+                      class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
+                      disabled={!hasOtherTabs()}
+                      onClick={() => {
+                        terminalDrawerActions.closeAllTabs()
+                        setTabMenuTabId(null)
+                      }}
+                    >
+                      Close All
+                    </button>
+                  </div>
+                </Show>
+              </div>
             )}</For>
             <button
               type="button"
@@ -259,7 +356,6 @@ export function TerminalDrawer() {
             <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('split-cols')}>Split V</button>
             <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('split-rows')}>Split H</button>
             <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => splitChange('none')}>Single</button>
-            <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => terminalDrawerActions.closeActiveTab()}>Close Tab</button>
             <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" aria-label="Close terminal drawer" onClick={() => terminalDrawerActions.toggle()}>Hide</button>
           </div>
         </div>

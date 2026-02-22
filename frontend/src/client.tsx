@@ -18,6 +18,7 @@ import StyleGuidePage from '../app/style-guide/page'
 import { blogPosts, jobs } from '../lib/content'
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../lib/solana-deployments'
+import { applyPersonalizationSettings, readPersonalizationSettings } from '../lib/personalization'
 import { TerminalDrawer } from '../components/terminal/terminal-drawer'
 import { ensureTerminalDrawerStore } from '../lib/terminal-drawer-store'
 
@@ -48,6 +49,10 @@ let disposePage: null | (() => void) = null
 let bootstrapped = false
 let terminalDrawerMounted = false
 let transitionInFlight = false
+
+if (typeof window !== 'undefined') {
+  applyPersonalizationSettings(readPersonalizationSettings())
+}
 
 function mountGlobalTerminalDrawer(): void {
   if (terminalDrawerMounted) return
