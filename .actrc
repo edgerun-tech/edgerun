@@ -1,0 +1,5 @@
+# Local GitHub Actions runner defaults (used by nektos/act)
+-P ubuntu-24.04=catthehacker/ubuntu:act-24.04
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-P macos-14=catthehacker/ubuntu:act-24.04
+--container-architecture linux/amd64
