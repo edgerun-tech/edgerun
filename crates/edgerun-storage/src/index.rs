@@ -43,32 +43,32 @@ impl EventHashIndex {
     }
 
     pub fn insert(&self, event_hash: [u8; 32], segment_id: [u8; 32], offset: u64) {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
         entries.insert(event_hash, EventHashIndexEntry { segment_id, offset });
     }
 
     pub fn get(&self, event_hash: &[u8; 32]) -> Option<EventHashIndexEntry> {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         entries.get(event_hash).cloned()
     }
 
     pub fn remove(&self, event_hash: &[u8; 32]) -> Option<EventHashIndexEntry> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
         entries.remove(event_hash)
     }
 
     pub fn len(&self) -> usize {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         entries.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         entries.is_empty()
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, IndexError> {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         let mut data = Vec::new();
 
         for (hash, entry) in entries.iter() {
@@ -81,7 +81,7 @@ impl EventHashIndex {
     }
 
     pub fn deserialize(&self, data: &[u8]) -> Result<(), IndexError> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
         entries.clear();
 
         let entry_size = 32 + 32 + 8;
@@ -90,9 +90,10 @@ impl EventHashIndex {
         }
 
         for chunk in data.chunks(entry_size) {
-            let hash: [u8; 32] = chunk[..32].try_into().unwrap();
-            let segment_id: [u8; 32] = chunk[32..64].try_into().unwrap();
-            let offset = u64::from_le_bytes(chunk[64..72].try_into().unwrap());
+            let hash: [u8; 32] = chunk[..32].try_into().map_err(|_| IndexError::Corrupted)?;
+            let segment_id: [u8; 32] = chunk[32..64].try_into().map_err(|_| IndexError::Corrupted)?;
+            let offset_bytes: [u8; 8] = chunk[64..72].try_into().map_err(|_| IndexError::Corrupted)?;
+            let offset = u64::from_le_bytes(offset_bytes);
 
             entries.insert(hash, EventHashIndexEntry { segment_id, offset });
         }
