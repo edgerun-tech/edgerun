@@ -32,6 +32,16 @@ pub struct FileBlockDevice {
 }
 
 impl FileBlockDevice {
+    fn lock_file(&self) -> std::sync::MutexGuard<'_, std::fs::File> {
+        // If a previous panic poisoned the lock, recover the inner file instead of crashing.
+        match self.file.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        }
+    }
+}
+
+impl FileBlockDevice {
     pub fn new(path: PathBuf, direct: bool) -> Result<Self, BlockError> {
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -52,8 +62,10 @@ impl FileBlockDevice {
     }
 
     pub fn set_size(&mut self, size: u64) -> Result<(), BlockError> {
-        let file = self.file.lock().unwrap();
-        file.set_len(size)?;
+        {
+            let file = self.lock_file();
+            file.set_len(size)?;
+        }
         self.size = size;
         Ok(())
     }
@@ -65,7 +77,7 @@ impl BlockDevice for FileBlockDevice {
             return Err(BlockError::OutOfBounds(offset, self.size));
         }
 
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.lock_file();
         let mut buf = vec![0u8; len];
         file.seek(SeekFrom::Start(offset))?;
         file.read_exact(&mut buf)?;
@@ -77,14 +89,14 @@ impl BlockDevice for FileBlockDevice {
             return Err(BlockError::OutOfBounds(offset, self.size));
         }
 
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.lock_file();
         file.seek(SeekFrom::Start(offset))?;
         file.write_all(data)?;
         Ok(())
     }
 
     fn flush(&self) -> Result<(), BlockError> {
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.lock_file();
         file.flush()?;
         Ok(())
     }
