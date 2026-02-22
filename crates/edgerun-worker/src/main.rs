@@ -138,9 +138,7 @@ async fn main() -> Result<()> {
         max_backoff: Duration::from_millis(cfg.retry_max_ms.max(cfg.retry_base_ms.max(1))),
         flush_batch: cfg.retry_flush_batch.max(1),
     };
-    let mut last_policy_refresh = Instant::now()
-        .checked_sub(cfg.policy_refresh_interval)
-        .unwrap_or_else(Instant::now);
+    let mut last_policy_refresh = Instant::now();
 
     tracing::info!(
         worker = %cfg.worker_pubkey,

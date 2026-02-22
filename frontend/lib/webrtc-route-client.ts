@@ -45,6 +45,14 @@ function normalizeBase(value: string): string {
   return value.trim().replace(/\/+$/, '')
 }
 
+function configuredApiBase(): string {
+  if (typeof window === 'undefined') return ''
+  const explicit = normalizeBase(String((window as any).__EDGERUN_API_BASE || ''))
+  if (explicit) return explicit
+  if (window.location.hostname === 'www.edgerun.tech') return 'https://api.edgerun.tech'
+  return ''
+}
+
 function localControlBaseCandidates(): string[] {
   if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
   const { protocol, hostname, port } = window.location
@@ -60,9 +68,11 @@ function localControlBaseCandidates(): string[] {
 function getControlBaseCandidates(): string[] {
   if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
   const fromStorage = normalizeBase(window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY) || '')
+  const configured = configuredApiBase()
   const origin = normalizeBase(window.location.origin)
   const local = localControlBaseCandidates()
   const candidates = [
+    configured,
     ...local,
     fromStorage,
     origin

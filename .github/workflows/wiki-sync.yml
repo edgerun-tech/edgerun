@@ -41,6 +41,7 @@ jobs:
           EDGERUN_BUILD_NUMBER: wiki-${{ github.run_number }}-${{ github.sha }}
           EDGERUN_SITE_URL: https://www.edgerun.tech
           EDGERUN_SITE_DOMAIN: www.edgerun.tech
+          EDGERUN_API_URL: https://api.edgerun.tech
         run: |
           bun install --frozen-lockfile
           bun run build

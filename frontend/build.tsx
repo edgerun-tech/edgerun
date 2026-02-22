@@ -26,6 +26,7 @@ const currentVersion = process.env.EDGERUN_VERSION || versionFromTag || 'main'
 const buildNumber = process.env.EDGERUN_BUILD_NUMBER || `${currentVersion}-${(process.env.GITHUB_SHA || 'local').slice(0, 8)}-${process.env.GITHUB_RUN_NUMBER || '0'}`
 const siteUrl = process.env.EDGERUN_SITE_URL || 'https://www.edgerun.tech'
 const siteDomain = process.env.EDGERUN_SITE_DOMAIN || 'www.edgerun.tech'
+const apiUrl = process.env.EDGERUN_API_URL || 'https://api.edgerun.tech'
 const solanaCluster = process.env.SOLANA_CLUSTER || 'devnet'
 const rpcDefaultByCluster: Record<string, string> = {
   localnet: 'http://127.0.0.1:8899',
@@ -94,6 +95,7 @@ function pageDocument(title: string, description: string, bodyHtml: string): str
     <div id="edgerun-root">${bodyHtml}</div>
     <script>
       window.__EDGERUN_RPC_CONFIG = ${JSON.stringify({ cluster: solanaCluster, rpcUrl: solanaRpcUrl, treasuryAccount, deployments: solanaDeployments })}
+      window.__EDGERUN_API_BASE = ${JSON.stringify(apiUrl)}
     </script>
     <script type="module" src="/assets/client.js"></script>
     <script>window.__EDGERUN_BUILD = ${JSON.stringify({ version: currentVersion, buildNumber, marker })};</script>
