@@ -17,6 +17,9 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+futures-util = "0.3"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+url = "2.5"
 toml = "0.8"
 tower-http = { workspace = true, features = ["cors"] }
 edgerun-types = { path = "../edgerun-types" }

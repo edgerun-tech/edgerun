@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;
 use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError, TransportKind};
+use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
+use serde_json::json;
+use tokio_tungstenite::tungstenite::Message;
+use url::Url;
+
+static REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Default, Clone)]
 pub struct StaticDiscoveryProvider {
@@ -33,14 +40,12 @@ impl DiscoveryProvider for StaticDiscoveryProvider {
 #[derive(Debug, Clone)]
 pub struct SchedulerRouteDiscovery {
     base_url: String,
-    client: reqwest::Client,
 }
 
 impl SchedulerRouteDiscovery {
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into(),
-            client: reqwest::Client::new(),
         }
     }
 }
@@ -56,27 +61,94 @@ struct RouteResolveEntry {
     reachable_urls: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ControlWsServerMessage {
+    request_id: String,
+    ok: bool,
+    #[serde(default)]
+    data: Option<serde_json::Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    status: Option<u16>,
+}
+
+fn next_request_id() -> String {
+    let seq = REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("discovery-{seq}")
+}
+
+fn control_ws_url(base: &str) -> Result<Url, TransportError> {
+    let mut url = Url::parse(base).map_err(|e| TransportError::Protocol(e.to_string()))?;
+    let scheme = match url.scheme() {
+        "http" => "ws".to_string(),
+        "https" => "wss".to_string(),
+        "ws" | "wss" => url.scheme().to_string(),
+        other => {
+            return Err(TransportError::Protocol(format!(
+                "unsupported scheduler scheme for control ws: {other}"
+            )));
+        }
+    };
+    url.set_scheme(&scheme)
+        .map_err(|_| TransportError::Protocol("failed to set websocket scheme".to_string()))?;
+    url.set_path("/v1/control/ws");
+    url.set_query(None);
+    url.query_pairs_mut()
+        .append_pair("client_id", "discovery-route-resolve");
+    Ok(url)
+}
+
 #[async_trait]
 impl DiscoveryProvider for SchedulerRouteDiscovery {
     async fn discover(&self, peer_id: &str) -> Result<Vec<TransportEndpoint>, TransportError> {
-        let url = format!("{}/v1/route/resolve/{}", self.base_url, peer_id);
-        let response = self
-            .client
-            .get(url)
-            .send()
+        let ws_url = control_ws_url(&self.base_url)?;
+        let (mut socket, _) = tokio_tungstenite::connect_async(ws_url.as_str())
             .await
             .map_err(|e| TransportError::Protocol(e.to_string()))?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(TransportError::Protocol(format!(
-                "scheduler route resolve failed with status {status}"
-            )));
+        let request_id = next_request_id();
+        let request = json!({
+            "request_id": request_id,
+            "op": "route.resolve",
+            "payload": { "device_id": peer_id }
+        });
+        socket
+            .send(Message::Text(request.to_string().into()))
+            .await
+            .map_err(|e| TransportError::Protocol(e.to_string()))?;
+        let mut payload: Option<RouteResolveResponse> = None;
+        while let Some(frame) = socket.next().await {
+            let frame = frame.map_err(|e| TransportError::Protocol(e.to_string()))?;
+            let Message::Text(text) = frame else {
+                continue;
+            };
+            let response = serde_json::from_str::<ControlWsServerMessage>(&text)
+                .map_err(|e| TransportError::Protocol(e.to_string()))?;
+            if response.request_id != request_id {
+                continue;
+            }
+            if !response.ok {
+                let status = response
+                    .status
+                    .map(|v| format!(" ({v})"))
+                    .unwrap_or_default();
+                let err = response
+                    .error
+                    .unwrap_or_else(|| format!("scheduler route resolve failed{status}"));
+                return Err(TransportError::Protocol(err));
+            }
+            let data = response
+                .data
+                .ok_or_else(|| TransportError::Protocol("missing route resolve payload".to_string()))?;
+            payload = Some(
+                serde_json::from_value::<RouteResolveResponse>(data)
+                    .map_err(|e| TransportError::Protocol(e.to_string()))?,
+            );
+            break;
         }
-
-        let payload = response
-            .json::<RouteResolveResponse>()
-            .await
-            .map_err(|e| TransportError::Protocol(e.to_string()))?;
+        let payload = payload.ok_or_else(|| {
+            TransportError::Protocol("scheduler closed control ws before response".to_string())
+        })?;
         if !payload.found {
             return Err(TransportError::NoRoute(format!(
                 "no route found for peer {peer_id}"

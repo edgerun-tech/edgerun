@@ -5,6 +5,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+SCHEDULER_PORT="${EDGERUN_E2E_SCHEDULER_PORT:-8090}"
+TERM_SERVER_PORT="${EDGERUN_E2E_TERM_SERVER_PORT:-8081}"
+FRONTEND_PORT="${EDGERUN_E2E_FRONTEND_PORT:-4173}"
+SCHEDULER_BASE="http://127.0.0.1:${SCHEDULER_PORT}"
+TERM_SERVER_BASE="http://127.0.0.1:${TERM_SERVER_PORT}"
+
 cleanup() {
   for pid in "${PIDS[@]:-}"; do
     if [[ -n "${pid:-}" ]] && kill -0 "$pid" >/dev/null 2>&1; then
@@ -32,15 +38,47 @@ wait_for_url() {
 
 require_free_port() {
   local port="$1"
-  if ss -ltn | grep -q ":${port}[[:space:]]"; then
+  if command -v ss >/dev/null 2>&1; then
+    if ss -ltn | grep -q ":${port}[[:space:]]"; then
+      echo "Port ${port} is already in use; stop conflicting service and retry" >&2
+      exit 1
+    fi
+    return
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    if lsof -iTCP:"${port}" -sTCP:LISTEN -Pn >/dev/null 2>&1; then
+      echo "Port ${port} is already in use; stop conflicting service and retry" >&2
+      exit 1
+    fi
+    return
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    if netstat -an 2>/dev/null | grep -E "[:\\.]${port}[[:space:]].*LISTEN" >/dev/null 2>&1; then
+      echo "Port ${port} is already in use; stop conflicting service and retry" >&2
+      exit 1
+    fi
+    return
+  fi
+  python3 - <<PY
+import socket, sys
+port = int("${port}")
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+try:
+    s.bind(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    s.close()
+PY
+  if [[ "$?" -ne 0 ]]; then
     echo "Port ${port} is already in use; stop conflicting service and retry" >&2
     exit 1
   fi
 }
 
-require_free_port 8090
-require_free_port 8080
-require_free_port 4173
+require_free_port "${SCHEDULER_PORT}"
+require_free_port "${TERM_SERVER_PORT}"
+require_free_port "${FRONTEND_PORT}"
 
 if [[ ! -f out/frontend/site/index.html ]]; then
   echo "Missing build output: out/frontend/site/index.html" >&2
@@ -52,9 +90,9 @@ PIDS=()
 LOG_DIR="${TMPDIR:-/tmp}/edgerun-e2e"
 mkdir -p "$LOG_DIR"
 
-echo "[e2e-local] starting scheduler on :8090"
-EDGERUN_SCHEDULER_ADDR=127.0.0.1:8090 \
-EDGERUN_SCHEDULER_BASE_URL=http://127.0.0.1:8090 \
+echo "[e2e-local] starting scheduler on :${SCHEDULER_PORT}"
+EDGERUN_SCHEDULER_ADDR=127.0.0.1:${SCHEDULER_PORT} \
+EDGERUN_SCHEDULER_BASE_URL=${SCHEDULER_BASE} \
 EDGERUN_SCHEDULER_DATA_DIR=.edgerun-scheduler-data/e2e-local \
 EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT=false \
 EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION=false \
@@ -64,24 +102,24 @@ EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION=false \
 cargo run -p edgerun-scheduler >"${LOG_DIR}/scheduler.log" 2>&1 &
 PIDS+=("$!")
 
-echo "[e2e-local] starting term-server on :8080"
+echo "[e2e-local] starting term-server on :${TERM_SERVER_PORT}"
 EDGERUN_HARDWARE_MODE=allow-software \
-EDGERUN_TERM_SERVER_ADDR=127.0.0.1:8080 \
-EDGERUN_ROUTE_CONTROL_BASE=http://127.0.0.1:8090 \
-EDGERUN_TERM_PUBLIC_BASE_URL=http://127.0.0.1:8080 \
+EDGERUN_TERM_SERVER_ADDR=127.0.0.1:${TERM_SERVER_PORT} \
+EDGERUN_ROUTE_CONTROL_BASE=${SCHEDULER_BASE} \
+EDGERUN_TERM_PUBLIC_BASE_URL=${TERM_SERVER_BASE} \
 cargo run -p edgerun-term-server >"${LOG_DIR}/term-server.log" 2>&1 &
 PIDS+=("$!")
 
-echo "[e2e-local] starting static frontend on :4173"
-bunx --bun serve out/frontend/site -p 4173 --no-port-switching >"${LOG_DIR}/frontend-serve.log" 2>&1 &
+echo "[e2e-local] starting static frontend on :${FRONTEND_PORT}"
+bunx --bun serve out/frontend/site -p "${FRONTEND_PORT}" --no-port-switching >"${LOG_DIR}/frontend-serve.log" 2>&1 &
 PIDS+=("$!")
 
 echo "[e2e-local] waiting for services"
-wait_for_url "http://127.0.0.1:8090/health" "scheduler health"
-wait_for_url "http://127.0.0.1:8080/v1/device/identity" "term-server identity"
-wait_for_url "http://127.0.0.1:4173/" "frontend"
+wait_for_url "${SCHEDULER_BASE}/health" "scheduler health"
+wait_for_url "${TERM_SERVER_BASE}/v1/device/identity" "term-server identity"
+wait_for_url "http://127.0.0.1:${FRONTEND_PORT}/" "frontend"
 
-device_id="$(curl -fsS http://127.0.0.1:8080/v1/device/identity | jq -r '.device_pubkey_b64url')"
+device_id="$(curl -fsS "${TERM_SERVER_BASE}/v1/device/identity" | jq -r '.device_pubkey_b64url')"
 if [[ -z "$device_id" || "$device_id" == "null" ]]; then
   echo "Failed to get device_id from term-server identity endpoint" >&2
   exit 1
@@ -89,12 +127,12 @@ fi
 
 echo "[e2e-local] waiting for scheduler route resolve for device ${device_id}"
 for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:8090/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null 2>&1; then
+  if curl -fsS "${SCHEDULER_BASE}/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
-curl -fsS "http://127.0.0.1:8090/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null
+curl -fsS "${SCHEDULER_BASE}/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null
 
 echo "[e2e-local] running cypress terminal compose spec"
 cd frontend

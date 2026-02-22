@@ -3,7 +3,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
-use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -64,6 +63,7 @@ struct AppState {
     failures: Arc<Mutex<HashMap<String, Vec<WorkerFailureReport>>>>,
     replay_artifacts: Arc<Mutex<HashMap<String, Vec<WorkerReplayArtifactReport>>>>,
     job_last_update: Arc<Mutex<HashMap<String, u64>>>,
+    snapshot_flush_state: Arc<Mutex<SnapshotFlushState>>,
     worker_registry: Arc<Mutex<HashMap<String, WorkerRegistryEntry>>>,
     job_quorum: Arc<Mutex<HashMap<String, JobQuorumState>>>,
     policy_signing_key: SigningKey,
@@ -88,6 +88,7 @@ struct AppState {
     policy_session_bootstrap_token: Option<String>,
     policy_session_shared: bool,
     policy_session_lock_path: PathBuf,
+    policy_session_flush_state: Arc<Mutex<SnapshotFlushState>>,
     sessions: Arc<Mutex<HashMap<String, edgerun_hwvault_primitives::session::SessionState>>>,
     policy_nonces: Arc<Mutex<HashMap<String, u64>>>,
     policy_session_state_path: PathBuf,
@@ -97,6 +98,7 @@ struct AppState {
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
     attestation_policy_path: PathBuf,
     route_shared_state_path: Option<PathBuf>,
+    route_flush_state: Arc<Mutex<SnapshotFlushState>>,
     device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
     route_challenges: Arc<Mutex<HashMap<String, u64>>>,
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
@@ -117,6 +119,12 @@ struct ChainContext {
     rpc: RpcClient,
     program_id: Pubkey,
     payer: Keypair,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SnapshotFlushState {
+    dirty: bool,
+    last_write_unix_s: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -551,6 +559,10 @@ async fn main() -> Result<()> {
     let policy_session_state_path = data_dir.join("policy-session-state.json");
     let loaded_policy_session_state =
         load_policy_session_state(&policy_session_state_path).unwrap_or_default();
+    let loaded_route_state = route_shared_state_path
+        .as_ref()
+        .and_then(|path| load_route_state(path).ok())
+        .unwrap_or_default();
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -562,6 +574,7 @@ async fn main() -> Result<()> {
         failures: Arc::new(Mutex::new(persisted.failures)),
         replay_artifacts: Arc::new(Mutex::new(persisted.replay_artifacts)),
         job_last_update: Arc::new(Mutex::new(persisted.job_last_update)),
+        snapshot_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
         worker_registry: Arc::new(Mutex::new(persisted.worker_registry)),
         job_quorum: Arc::new(Mutex::new(persisted.job_quorum)),
         policy_signing_key: load_policy_signing_key()?,
@@ -609,6 +622,7 @@ async fn main() -> Result<()> {
         .filter(|v| !v.trim().is_empty()),
         policy_session_shared: read_env_bool("EDGERUN_SCHEDULER_POLICY_SESSION_SHARED", false),
         policy_session_lock_path: data_dir.join("policy-session.lock"),
+        policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
         sessions: Arc::new(Mutex::new(loaded_policy_session_state.sessions)),
         policy_nonces: Arc::new(Mutex::new(loaded_policy_session_state.nonces)),
         policy_session_state_path,
@@ -618,9 +632,10 @@ async fn main() -> Result<()> {
         attestation_policy: Arc::new(Mutex::new(attestation_policy)),
         attestation_policy_path,
         route_shared_state_path,
-        device_routes: Arc::new(Mutex::new(HashMap::new())),
-        route_challenges: Arc::new(Mutex::new(HashMap::new())),
-        route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
+        route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+        device_routes: Arc::new(Mutex::new(loaded_route_state.device_routes)),
+        route_challenges: Arc::new(Mutex::new(loaded_route_state.route_challenges)),
+        route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
         signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         chain,
     };
@@ -687,41 +702,16 @@ fn with_route_maps_mut<R>(
         &mut HashMap<String, RouteHeartbeatToken>,
     ) -> Result<R, (StatusCode, String)>,
 ) -> Result<R, (StatusCode, String)> {
-    if let Some(path) = state.route_shared_state_path.as_ref() {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path)
-            .map_err(internal_err)?;
-        file.lock_exclusive().map_err(internal_err)?;
-        let mut raw = String::new();
-        file.seek(SeekFrom::Start(0)).map_err(internal_err)?;
-        file.read_to_string(&mut raw).map_err(internal_err)?;
-        let mut persisted = if raw.trim().is_empty() {
-            PersistedRouteState::default()
-        } else {
-            serde_json::from_str::<PersistedRouteState>(&raw).unwrap_or_default()
-        };
-        let out = f(
-            &mut persisted.device_routes,
-            &mut persisted.route_challenges,
-            &mut persisted.route_heartbeat_tokens,
-        )?;
-        let encoded = serde_json::to_vec_pretty(&persisted).map_err(internal_err)?;
-        file.set_len(0).map_err(internal_err)?;
-        file.seek(SeekFrom::Start(0)).map_err(internal_err)?;
-        file.write_all(&encoded).map_err(internal_err)?;
-        file.flush().map_err(internal_err)?;
-        file.unlock().map_err(internal_err)?;
-        return Ok(out);
+    let out = {
+        let mut routes = state.device_routes.lock().expect("lock poisoned");
+        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+        f(&mut routes, &mut challenges, &mut tokens)?
+    };
+    if state.route_shared_state_path.is_some() {
+        schedule_route_state_flush(state).map_err(internal_err)?;
     }
-
-    let mut routes = state.device_routes.lock().expect("lock poisoned");
-    let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-    let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-    f(&mut routes, &mut challenges, &mut tokens)
+    Ok(out)
 }
 
 async fn route_challenge(
@@ -1045,6 +1035,45 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
     let request_id = msg.request_id.trim().to_string();
     let op = msg.op.trim();
     let reply = match op {
+        "job.create" => {
+            let payload = serde_json::from_value::<JobCreateRequest>(msg.payload);
+            match payload {
+                Ok(payload) => match job_create_inner(state, payload) {
+                    Ok(ok) => control_ok_response(
+                        request_id,
+                        serde_json::to_value(ok).unwrap_or_default(),
+                    ),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                },
+                Err(_) => control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "invalid job create payload".to_string(),
+                ),
+            }
+        }
+        "job.status" => {
+            let job_id = msg
+                .payload
+                .get("job_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if job_id.is_empty() {
+                control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "job_id is required".to_string(),
+                )
+            } else {
+                let status = get_job_status_inner(state, job_id);
+                control_ok_response(
+                    request_id,
+                    serde_json::to_value(status).unwrap_or_default(),
+                )
+            }
+        }
         "route.resolve" => {
             let device_id = msg
                 .payload
@@ -1772,7 +1801,7 @@ fn worker_heartbeat_inner(
             },
         );
     }
-    if let Err(err) = write_state_snapshot(state) {
+    if let Err(err) = schedule_state_snapshot(state) {
         tracing::warn!(error = %err, "failed to persist state after worker heartbeat");
     }
     if let Err(err) = evaluate_expired_jobs(state) {
@@ -1803,7 +1832,7 @@ fn worker_assignments_inner(
     let jobs = assignments.remove(worker_pubkey).unwrap_or_else(Vec::new);
     drop(assignments);
 
-    write_state_snapshot(state).map_err(internal_err)?;
+    schedule_state_snapshot(state).map_err(internal_err)?;
     Ok(AssignmentsResponse { jobs })
 }
 
@@ -2018,6 +2047,14 @@ async fn job_create(
     State(state): State<AppState>,
     Json(payload): Json<JobCreateRequest>,
 ) -> Result<Json<JobCreateResponse>, (StatusCode, String)> {
+    let out = job_create_inner(&state, payload)?;
+    Ok(Json(out))
+}
+
+fn job_create_inner(
+    state: &AppState,
+    payload: JobCreateRequest,
+) -> Result<JobCreateResponse, (StatusCode, String)> {
     let now = now_unix_seconds();
     let wasm = base64::engine::general_purpose::STANDARD
         .decode(payload.wasm_base64.as_bytes())
@@ -2267,7 +2304,7 @@ async fn job_create(
             quorum_state.assign_submitted = assign_workers_submitted;
         }
     }
-    write_state_snapshot(&state).map_err(internal_err)?;
+    schedule_state_snapshot(&state).map_err(internal_err)?;
     evaluate_expired_jobs(&state).map_err(internal_err)?;
     let audit_event = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
         ts: now,
@@ -2295,7 +2332,7 @@ async fn job_create(
             Ok(proof) => proof,
             Err(err) => {
                 tracing::warn!(error = %err, "failed to build runtime allowlist proof");
-                return Ok(Json(JobCreateResponse {
+                return Ok(JobCreateResponse {
                     job_id: bundle_hash_hex.clone(),
                     bundle_hash: bundle_hash_hex.clone(),
                     bundle_url: format!("{}/bundle/{bundle_hash_hex}", state.public_base_url),
@@ -2303,7 +2340,7 @@ async fn job_create(
                     post_job_sig: None,
                     assign_workers_tx: assign_workers_tx.clone(),
                     assign_workers_sig,
-                }));
+                });
             }
         };
         let tx_args = PostJobArgs {
@@ -2327,7 +2364,7 @@ async fn job_create(
         ("UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(), None)
     };
 
-    Ok(Json(JobCreateResponse {
+    Ok(JobCreateResponse {
         // Job identity is bundle-hash keyed at MVP scaffold level.
         job_id: bundle_hash_hex.clone(),
         bundle_hash: bundle_hash_hex.clone(),
@@ -2336,13 +2373,17 @@ async fn job_create(
         post_job_sig,
         assign_workers_tx,
         assign_workers_sig,
-    }))
+    })
 }
 
 async fn get_job_status(
     State(state): State<AppState>,
     Path(job_id): Path<String>,
 ) -> Json<JobStatusResponse> {
+    Json(get_job_status_inner(&state, job_id))
+}
+
+fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
     let results = state.results.lock().expect("lock poisoned");
     let reports = results.get(&job_id).cloned().unwrap_or_default();
     drop(results);
@@ -2358,13 +2399,13 @@ async fn get_job_status(
         .expect("lock poisoned")
         .get(&job_id)
         .cloned();
-    Json(JobStatusResponse {
+    JobStatusResponse {
         job_id,
         reports,
         failures,
         replay_artifacts,
         quorum,
-    })
+    }
 }
 
 async fn get_bundle(
@@ -2887,6 +2928,60 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
     Ok(())
 }
 
+fn state_snapshot_min_interval_secs() -> u64 {
+    read_env_u64("EDGERUN_SCHEDULER_STATE_SNAPSHOT_MIN_INTERVAL_SECS", 2).max(1)
+}
+
+fn schedule_state_snapshot(state: &AppState) -> Result<()> {
+    let now = now_unix_seconds();
+    let min_interval = state_snapshot_min_interval_secs();
+    let should_write = {
+        let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+        gate.dirty = true;
+        gate.last_write_unix_s == 0 || now.saturating_sub(gate.last_write_unix_s) >= min_interval
+    };
+    if !should_write {
+        return Ok(());
+    }
+    match write_state_snapshot(state) {
+        Ok(()) => {
+            let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+            gate.dirty = false;
+            gate.last_write_unix_s = now;
+            Ok(())
+        }
+        Err(err) => {
+            let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+            gate.dirty = true;
+            Err(err)
+        }
+    }
+}
+
+fn flush_state_snapshot_if_dirty(state: &AppState) -> Result<()> {
+    let should_write = {
+        let gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+        gate.dirty
+    };
+    if !should_write {
+        return Ok(());
+    }
+    let now = now_unix_seconds();
+    match write_state_snapshot(state) {
+        Ok(()) => {
+            let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+            gate.dirty = false;
+            gate.last_write_unix_s = now;
+            Ok(())
+        }
+        Err(err) => {
+            let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
+            gate.dirty = true;
+            Err(err)
+        }
+    }
+}
+
 fn internal_err<E: std::fmt::Display>(err: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
@@ -3371,7 +3466,7 @@ fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
         }
     }
 
-    write_state_snapshot(state)?;
+    schedule_state_snapshot(state)?;
     Ok(())
 }
 
@@ -3506,7 +3601,7 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
     }
 
     if changed {
-        write_state_snapshot(state)?;
+        schedule_state_snapshot(state)?;
     }
     Ok(())
 }
@@ -3553,7 +3648,7 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
         let _ = recompute_job_quorum(state, &job_id)?;
     }
     enforce_history_retention(state);
-    write_state_snapshot(state)?;
+    schedule_state_snapshot(state)?;
     Ok(())
 }
 
@@ -3825,7 +3920,7 @@ fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
         }
     }
     if changed {
-        write_state_snapshot(state)?;
+        schedule_state_snapshot(state)?;
     }
     Ok(())
 }
@@ -4431,9 +4526,191 @@ fn persist_policy_session_state(state: &AppState) -> Result<()> {
     save_policy_session_state(&state.policy_session_state_path, &snapshot)
 }
 
+fn load_route_state(path: &std::path::Path) -> Result<PersistedRouteState> {
+    if !path.exists() {
+        return Ok(PersistedRouteState::default());
+    }
+    let raw = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read route shared state file {}", path.display()))?;
+    if raw.trim().is_empty() {
+        return Ok(PersistedRouteState::default());
+    }
+    let parsed: PersistedRouteState =
+        serde_json::from_str(&raw).context("invalid route shared state json")?;
+    Ok(parsed)
+}
+
+fn save_route_state(path: &std::path::Path, state: &PersistedRouteState) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create route shared state parent directory {}",
+                parent.display()
+            )
+        })?;
+    }
+    let bytes = serde_json::to_vec(state).context("serialize route shared state")?;
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, bytes).with_context(|| {
+        format!(
+            "failed to write temp route shared state file {}",
+            tmp.display()
+        )
+    })?;
+    std::fs::rename(&tmp, path).with_context(|| {
+        format!(
+            "failed to rename route shared state temp file {} to {}",
+            tmp.display(),
+            path.display()
+        )
+    })?;
+    Ok(())
+}
+
+fn route_sync_min_interval_secs() -> u64 {
+    read_env_u64("EDGERUN_SCHEDULER_ROUTE_SYNC_MIN_INTERVAL_SECS", 2).max(1)
+}
+
+fn policy_session_sync_min_interval_secs() -> u64 {
+    read_env_u64("EDGERUN_SCHEDULER_POLICY_SESSION_SYNC_MIN_INTERVAL_SECS", 2).max(1)
+}
+
+fn schedule_route_state_flush(state: &AppState) -> Result<()> {
+    let Some(_path) = state.route_shared_state_path.as_ref() else {
+        return Ok(());
+    };
+    let now = now_unix_seconds();
+    let min_interval = route_sync_min_interval_secs();
+    let should_write = {
+        let mut gate = state.route_flush_state.lock().expect("lock poisoned");
+        gate.dirty = true;
+        gate.last_write_unix_s == 0 || now.saturating_sub(gate.last_write_unix_s) >= min_interval
+    };
+    if !should_write {
+        return Ok(());
+    }
+    flush_route_state_if_dirty(state)
+}
+
+fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
+    let Some(path) = state.route_shared_state_path.as_ref() else {
+        return Ok(());
+    };
+    let should_write = {
+        let gate = state.route_flush_state.lock().expect("lock poisoned");
+        gate.dirty
+    };
+    if !should_write {
+        return Ok(());
+    }
+    let snapshot = PersistedRouteState {
+        device_routes: state.device_routes.lock().expect("lock poisoned").clone(),
+        route_challenges: state.route_challenges.lock().expect("lock poisoned").clone(),
+        route_heartbeat_tokens: state.route_heartbeat_tokens.lock().expect("lock poisoned").clone(),
+    };
+    let lock_file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+        .with_context(|| format!("failed to open route shared lock file {}", path.display()))?;
+    lock_file.lock_exclusive()?;
+    let save_result = save_route_state(path, &snapshot);
+    let _ = lock_file.unlock();
+    save_result?;
+    let now = now_unix_seconds();
+    let mut gate = state.route_flush_state.lock().expect("lock poisoned");
+    gate.dirty = false;
+    gate.last_write_unix_s = now;
+    Ok(())
+}
+
+fn sync_route_state_from_shared_file(state: &AppState) -> Result<()> {
+    let Some(path) = state.route_shared_state_path.as_ref() else {
+        return Ok(());
+    };
+    {
+        let gate = state.route_flush_state.lock().expect("lock poisoned");
+        if gate.dirty {
+            return Ok(());
+        }
+    }
+    let loaded = load_route_state(path)?;
+    {
+        let mut routes = state.device_routes.lock().expect("lock poisoned");
+        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+        *routes = loaded.device_routes;
+        *challenges = loaded.route_challenges;
+        *tokens = loaded.route_heartbeat_tokens;
+    }
+    let mut gate = state.route_flush_state.lock().expect("lock poisoned");
+    gate.last_write_unix_s = now_unix_seconds();
+    Ok(())
+}
+
+fn schedule_policy_session_state_flush(state: &AppState) -> Result<()> {
+    let now = now_unix_seconds();
+    let min_interval = policy_session_sync_min_interval_secs();
+    let should_write = {
+        let mut gate = state
+            .policy_session_flush_state
+            .lock()
+            .expect("lock poisoned");
+        gate.dirty = true;
+        gate.last_write_unix_s == 0 || now.saturating_sub(gate.last_write_unix_s) >= min_interval
+    };
+    if !should_write {
+        return Ok(());
+    }
+    flush_policy_session_state_if_dirty(state)
+}
+
+fn flush_policy_session_state_if_dirty(state: &AppState) -> Result<()> {
+    let should_write = {
+        let gate = state
+            .policy_session_flush_state
+            .lock()
+            .expect("lock poisoned");
+        gate.dirty
+    };
+    if !should_write {
+        return Ok(());
+    }
+    if state.policy_session_shared {
+        if let Some(parent) = state.policy_session_lock_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&state.policy_session_lock_path)?;
+        lock_file.lock_exclusive()?;
+        let persist_result = persist_policy_session_state(state);
+        let _ = lock_file.unlock();
+        persist_result?;
+    } else {
+        persist_policy_session_state(state)?;
+    }
+    let now = now_unix_seconds();
+    let mut gate = state
+        .policy_session_flush_state
+        .lock()
+        .expect("lock poisoned");
+    gate.dirty = false;
+    gate.last_write_unix_s = now;
+    Ok(())
+}
+
 async fn housekeeping_loop(state: AppState) {
     let interval_secs = read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5).max(1);
     loop {
+        if let Err(err) = sync_route_state_from_shared_file(&state) {
+            tracing::warn!(error = %err, "housekeeping route-state sync failed");
+        }
         if let Err(err) = discover_posted_jobs_from_chain(&state) {
             tracing::warn!(error = %err, "housekeeping posted-job discovery failed");
         }
@@ -4452,6 +4729,15 @@ async fn housekeeping_loop(state: AppState) {
             Ok(())
         }) {
             tracing::warn!(error = %err, "failed to cleanup policy session state");
+        }
+        if let Err(err) = flush_state_snapshot_if_dirty(&state) {
+            tracing::warn!(error = %err, "housekeeping state snapshot flush failed");
+        }
+        if let Err(err) = flush_policy_session_state_if_dirty(&state) {
+            tracing::warn!(error = %err, "housekeeping policy session flush failed");
+        }
+        if let Err(err) = flush_route_state_if_dirty(&state) {
+            tracing::warn!(error = %err, "housekeeping route-state flush failed");
         }
         tokio::time::sleep(Duration::from_secs(interval_secs)).await;
     }
@@ -4516,48 +4802,13 @@ fn with_policy_session_store_mut<T>(
         &mut HashMap<String, u64>,
     ) -> Result<T, (StatusCode, String)>,
 ) -> Result<T, (StatusCode, String)> {
-    if state.policy_session_shared {
-        if let Some(parent) = state.policy_session_lock_path.parent() {
-            std::fs::create_dir_all(parent).map_err(internal_err)?;
-        }
-        let lock_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&state.policy_session_lock_path)
-            .map_err(internal_err)?;
-        lock_file.lock_exclusive().map_err(internal_err)?;
-
-        let loaded = load_policy_session_state(&state.policy_session_state_path)
-            .unwrap_or_else(|_| PersistedPolicySessionState::default());
-        let op_result = {
-            let mut sessions = state.sessions.lock().expect("lock poisoned");
-            let mut nonces = state.policy_nonces.lock().expect("lock poisoned");
-            *sessions = loaded.sessions;
-            *nonces = loaded.nonces;
-            let result = mutator(&mut sessions, &mut nonces);
-            let snapshot = PersistedPolicySessionState {
-                sessions: sessions.clone(),
-                nonces: nonces.clone(),
-            };
-            if let Err(err) = save_policy_session_state(&state.policy_session_state_path, &snapshot)
-            {
-                tracing::warn!(error = %err, "failed to persist shared policy session state");
-            }
-            result
-        };
-        drop(lock_file);
-        return op_result;
-    }
-
     let op_result = {
         let mut sessions = state.sessions.lock().expect("lock poisoned");
         let mut nonces = state.policy_nonces.lock().expect("lock poisoned");
         mutator(&mut sessions, &mut nonces)
     };
-    if let Err(err) = persist_policy_session_state(state) {
-        tracing::warn!(error = %err, "failed to persist policy session state");
+    if let Err(err) = schedule_policy_session_state_flush(state) {
+        tracing::warn!(error = %err, "failed to schedule policy session state flush");
     }
     op_result
 }
@@ -4621,7 +4872,7 @@ fn persist_job_activity(state: &AppState, job_id: &str) -> Result<()> {
     touch_job_last_update(state, job_id);
     enforce_history_retention(state);
     evaluate_expired_jobs(state)?;
-    write_state_snapshot(state)
+    schedule_state_snapshot(state)
 }
 
 fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {
@@ -4722,6 +4973,7 @@ mod tests {
             failures: Arc::new(Mutex::new(HashMap::new())),
             replay_artifacts: Arc::new(Mutex::new(HashMap::new())),
             job_last_update: Arc::new(Mutex::new(HashMap::new())),
+            snapshot_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
             worker_registry: Arc::new(Mutex::new(HashMap::new())),
             job_quorum: Arc::new(Mutex::new(HashMap::new())),
             policy_signing_key: SigningKey::from_bytes(&[1_u8; 32]),
@@ -4746,6 +4998,7 @@ mod tests {
             policy_session_bootstrap_token: None,
             policy_session_shared: false,
             policy_session_lock_path: data_dir.join("policy-session.lock"),
+            policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             policy_nonces: Arc::new(Mutex::new(HashMap::new())),
             policy_session_state_path: data_dir.join("policy-session-state.json"),
@@ -4755,6 +5008,7 @@ mod tests {
             attestation_policy: Arc::new(Mutex::new(edgerun_types::AttestationPolicy::default())),
             attestation_policy_path: data_dir.join("attestation-policy.json"),
             route_shared_state_path: None,
+            route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
             device_routes: Arc::new(Mutex::new(HashMap::new())),
             route_challenges: Arc::new(Mutex::new(HashMap::new())),
             route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
@@ -6829,6 +7083,8 @@ mod tests {
         else {
             panic!("route challenge should succeed");
         };
+        flush_route_state_if_dirty(&state_a).expect("flush route state A after challenge");
+        sync_route_state_from_shared_file(&state_b).expect("sync route state into B after challenge");
 
         // Register on B using challenge from A
         let reachable_urls = vec!["http://127.0.0.1:9001".to_string()];
@@ -6859,6 +7115,8 @@ mod tests {
         else {
             panic!("route register should succeed");
         };
+        flush_route_state_if_dirty(&state_b).expect("flush route state B after register");
+        sync_route_state_from_shared_file(&state_a).expect("sync route state into A after register");
 
         // Resolve on A should see route created on B.
         let resolved_resp = route_resolve(
@@ -6898,6 +7156,8 @@ mod tests {
             panic!("cross-instance heartbeat should succeed");
         };
         assert!(hb.ok);
+        flush_route_state_if_dirty(&state_a).expect("flush route state A after heartbeat");
+        sync_route_state_from_shared_file(&state_b).expect("sync route state into B after heartbeat");
 
         // Owner lookup on B should include route.
         let owner_resp =

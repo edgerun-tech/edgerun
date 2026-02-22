@@ -25,16 +25,30 @@ FAILED=0
 LOG_DIR="${ACT_LOG_DIR:-out/actions-local}"
 mkdir -p "${LOG_DIR}"
 
+run_with_timeout() {
+  local timeout_s="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${timeout_s}" "$@"
+    return $?
+  fi
+  "$@"
+}
+
 for entry in "${WORKFLOWS[@]}"; do
   IFS=':' read -r workflow event <<<"$entry"
   wf_path=".github/workflows/${workflow}"
+  if [[ ! -f "${wf_path}" ]]; then
+    echo "SKIP ${workflow} (missing ${wf_path})"
+    continue
+  fi
 
   echo
   echo "=== ${workflow} (${event}) ==="
 
   log_file="${LOG_DIR}/${workflow%.yml}.log"
 
-  if timeout "${ACT_TIMEOUT_SECONDS}" act -W "${wf_path}" "${event}" -n >"${log_file}" 2>&1; then
+  if run_with_timeout "${ACT_TIMEOUT_SECONDS}" act -W "${wf_path}" "${event}" -n >"${log_file}" 2>&1; then
     echo "PASS ${workflow}"
   else
     rc=$?
