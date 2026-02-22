@@ -3,9 +3,9 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use anyhow::{Result, anyhow, ensure};
+use anyhow::{anyhow, ensure, Result};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::process::Child;
 use tokio::time::sleep;
 
@@ -68,7 +68,9 @@ pub(crate) async fn wait_for_failure_phase(
             .and_then(|arr| arr.last())
             .and_then(|x| x["phase"].as_str())
             .unwrap_or("");
-        if (!invert && phase == expected_phase) || (invert && !phase.is_empty() && phase != expected_phase) {
+        if (!invert && phase == expected_phase)
+            || (invert && !phase.is_empty() && phase != expected_phase)
+        {
             return Ok(());
         }
         sleep(Duration::from_millis(500)).await;
@@ -126,8 +128,13 @@ pub(crate) fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let path = std::env::temp_dir().join(format!("{}-{}-{}", prefix, now_unix_s, std::process::id()));
+    let path =
+        std::env::temp_dir().join(format!("{}-{}-{}", prefix, now_unix_s, std::process::id()));
     std::fs::create_dir_all(&path)?;
-    ensure!(path.is_dir(), "failed to create temp dir at {}", path.display());
+    ensure!(
+        path.is_dir(),
+        "failed to create temp dir at {}",
+        path.display()
+    );
     Ok(path)
 }

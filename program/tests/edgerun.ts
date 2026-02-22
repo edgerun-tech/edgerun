@@ -503,6 +503,7 @@ describe("edgerun", () => {
     const finalizeResult0Pda = jobResultPda(finalizeJobId, lifecycleWorker0.publicKey);
     const finalizeResult1Pda = jobResultPda(finalizeJobId, lifecycleWorker1.publicKey);
     const finalizeResult2Pda = jobResultPda(finalizeJobId, lifecycleWorker2.publicKey);
+    const finalizeOutputPda = outputAvailabilityPda(finalizeJobId);
     await submitResultForJob(
       finalizeJobId,
       finalizeJobPda,
@@ -524,6 +525,31 @@ describe("edgerun", () => {
       finalizeResult2Pda,
       outputHash
     );
+    await program.methods
+      .reachQuorum()
+      .accounts({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: finalizeJobPda,
+      })
+      .remainingAccounts([
+        { pubkey: finalizeResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: finalizeResult1Pda, isWritable: false, isSigner: false },
+        { pubkey: finalizeResult2Pda, isWritable: false, isSigner: false },
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+    await program.methods
+      .declareOutput(outputHash, Buffer.from("ipfs://demo/output"))
+      .accounts({
+        publisher: lifecycleWorker0.publicKey,
+        job: finalizeJobPda,
+        jobResult: finalizeResult0Pda,
+        outputAvailability: finalizeOutputPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lifecycleWorker0])
+      .rpc();
 
     const stake0Before = await program.account.workerStake.fetch(lifecycleWorkerStake0Pda);
     const stake1Before = await program.account.workerStake.fetch(lifecycleWorkerStake1Pda);
@@ -551,6 +577,7 @@ describe("edgerun", () => {
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: finalizeJobPda,
+        outputAvailability: finalizeOutputPda,
         workerStake0: lifecycleWorkerStake0Pda,
         workerStake1: lifecycleWorkerStake1Pda,
         workerStake2: lifecycleWorkerStake2Pda,
@@ -604,6 +631,7 @@ describe("edgerun", () => {
           caller: permissionlessCaller.publicKey,
           config: configPda,
           job: finalizeJobPda,
+          outputAvailability: finalizeOutputPda,
           workerStake0: lifecycleWorkerStake0Pda,
           workerStake1: lifecycleWorkerStake1Pda,
           workerStake2: lifecycleWorkerStake2Pda,
@@ -725,6 +753,7 @@ describe("edgerun", () => {
     const slashResult0Pda = jobResultPda(slashJobId, lifecycleWorker0.publicKey);
     const slashResult1Pda = jobResultPda(slashJobId, lifecycleWorker1.publicKey);
     const slashResult2Pda = jobResultPda(slashJobId, lifecycleWorker2.publicKey);
+    const slashOutputPda = outputAvailabilityPda(slashJobId);
 
     await submitResultForJob(
       slashJobId,
@@ -747,6 +776,31 @@ describe("edgerun", () => {
       slashResult2Pda,
       loserHash
     );
+    await program.methods
+      .reachQuorum()
+      .accounts({
+        caller: permissionlessCaller.publicKey,
+        config: configPda,
+        job: slashJobPda,
+      })
+      .remainingAccounts([
+        { pubkey: slashResult0Pda, isWritable: false, isSigner: false },
+        { pubkey: slashResult1Pda, isWritable: false, isSigner: false },
+        { pubkey: slashResult2Pda, isWritable: false, isSigner: false },
+      ])
+      .signers([permissionlessCaller])
+      .rpc();
+    await program.methods
+      .declareOutput(winnerHash, Buffer.from("ipfs://demo/slash"))
+      .accounts({
+        publisher: lifecycleWorker0.publicKey,
+        job: slashJobPda,
+        jobResult: slashResult0Pda,
+        outputAvailability: slashOutputPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([lifecycleWorker0])
+      .rpc();
 
     await program.methods
       .finalizeJob()
@@ -754,6 +808,7 @@ describe("edgerun", () => {
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: slashJobPda,
+        outputAvailability: slashOutputPda,
         workerStake0: lifecycleWorkerStake0Pda,
         workerStake1: lifecycleWorkerStake1Pda,
         workerStake2: lifecycleWorkerStake2Pda,
@@ -917,6 +972,14 @@ describe("edgerun", () => {
 function jobResultPda(jobIdBytes: number[], worker: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from("job_result"), Buffer.from(jobIdBytes), worker.toBuffer()],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
+function outputAvailabilityPda(jobIdBytes: number[]): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("output"), Buffer.from(jobIdBytes)],
     PROGRAM_ID
   );
   return pda;

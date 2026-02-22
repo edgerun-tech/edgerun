@@ -1922,6 +1922,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-observability"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "tracing",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "edgerun-runtime"
 version = "0.1.0"
 dependencies = [
@@ -1962,10 +1972,12 @@ dependencies = [
  "ed25519-dalek 2.2.0",
  "edgerun-crypto",
  "edgerun-hwvault-primitives",
+ "edgerun-observability",
  "edgerun-types",
  "fs2",
  "hex",
  "hmac 0.12.1",
+ "reqwest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1973,7 +1985,6 @@ dependencies = [
  "solana-sdk",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2009,7 +2020,7 @@ dependencies = [
  "base64 0.21.7",
  "bytemuck",
  "dirs 6.0.0",
- "env_logger 0.11.9",
+ "edgerun-observability",
  "fdsm",
  "fdsm-ttf-parser",
  "icy_sixel",
@@ -2034,9 +2045,9 @@ dependencies = [
  "arboard",
  "criterion",
  "dirs 5.0.1",
+ "edgerun-observability",
  "edgerun-term-core",
  "edgerun-term-ui",
- "env_logger 0.11.9",
  "libc",
  "log",
  "once_cell",
@@ -2055,13 +2066,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "criterion",
  "edgerun-hwvault-primitives",
+ "edgerun-observability",
  "portable-pty",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
  "tower-http",
+ "tracing",
 ]
 
 [[package]]
@@ -2085,6 +2099,7 @@ dependencies = [
  "console_error_panic_hook",
  "edgerun-term-core",
  "js-sys",
+ "serde_json",
  "vte",
  "wasm-bindgen",
  "wasm-bindgen-futures",
@@ -2135,6 +2150,7 @@ dependencies = [
  "base64 0.22.1",
  "ed25519-dalek 2.2.0",
  "edgerun-crypto",
+ "edgerun-observability",
  "edgerun-runtime",
  "edgerun-types",
  "hex",
@@ -2148,7 +2164,6 @@ dependencies = [
  "solana-system-interface",
  "tokio",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2164,16 +2179,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
-name = "env_filter"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a1c3cc8e57274ec99de65301228b537f1e4eedc1b8e0f9411c6caac8ae7308f"
-dependencies = [
- "log",
- "regex",
-]
-
-[[package]]
 name = "env_logger"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2184,19 +2189,6 @@ dependencies = [
  "log",
  "regex",
  "termcolor",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.11.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2daee4ea451f429a58296525ddf28b45a3b64f1acf6587e2067437bb11e218d"
-dependencies = [
- "anstream",
- "anstyle",
- "env_filter",
- "jiff",
- "log",
 ]
 
 [[package]]
@@ -3553,30 +3545,6 @@ name = "itoa"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
-
-[[package]]
-name = "jiff"
-version = "0.2.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c867c356cc096b33f4981825ab281ecba3db0acefe60329f044c1789d94c6543"
-dependencies = [
- "jiff-static",
- "log",
- "portable-atomic",
- "portable-atomic-util",
- "serde_core",
-]
-
-[[package]]
-name = "jiff-static"
-version = "0.2.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7946b4325269738f270bb55b3c19ab5c5040525f83fd625259422a9d25d9be5"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
 
 [[package]]
 name = "jni"
@@ -7042,7 +7010,7 @@ version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db8e777ec1afd733939b532a42492d888ec7c88d8b4127a5d867eb45c6eb5cd5"
 dependencies = [
- "env_logger 0.9.3",
+ "env_logger",
  "lazy_static",
  "libc",
  "log",
@@ -8963,6 +8931,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8972,12 +8950,15 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]

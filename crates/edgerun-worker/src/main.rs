@@ -236,7 +236,7 @@ const DEFAULT_POLICY_SIGNING_KEY_HEX: &str =
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    edgerun_observability::init_service("edgerun-worker")?;
 
     let cfg = load_config();
     let client = reqwest::Client::builder()

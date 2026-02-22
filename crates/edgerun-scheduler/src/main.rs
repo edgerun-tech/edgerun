@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -12,16 +13,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 use axum::{
     body::Bytes,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::Query,
     extract::{Path, State},
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,7 @@ struct AppState {
     trust_policy_path: PathBuf,
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
     attestation_policy_path: PathBuf,
+    route_shared_state_path: Option<PathBuf>,
     device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
     route_challenges: Arc<Mutex<HashMap<String, u64>>>,
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
@@ -505,9 +507,20 @@ struct OwnerRoutesResponse {
 }
 
 #[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize)]
 struct RouteHeartbeatToken {
     device_id: String,
     expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct PersistedRouteState {
+    #[serde(default)]
+    device_routes: HashMap<String, DeviceRouteEntry>,
+    #[serde(default)]
+    route_challenges: HashMap<String, u64>,
+    #[serde(default)]
+    route_heartbeat_tokens: HashMap<String, RouteHeartbeatToken>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -563,12 +576,20 @@ struct PostJobArgs {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    edgerun_observability::init_service("edgerun-scheduler")?;
 
     let data_dir = std::env::var("EDGERUN_SCHEDULER_DATA_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(".edgerun-scheduler-data"));
     std::fs::create_dir_all(data_dir.join("bundles"))?;
+    let route_shared_state_path = std::env::var("EDGERUN_SCHEDULER_ROUTE_STATE_PATH")
+        .ok()
+        .map(PathBuf::from);
+    if let Some(path) = route_shared_state_path.as_ref() {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
 
     let persisted = load_state(&data_dir)?;
     let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
@@ -684,6 +705,7 @@ async fn main() -> Result<()> {
         trust_policy_path,
         attestation_policy: Arc::new(Mutex::new(attestation_policy)),
         attestation_policy_path,
+        route_shared_state_path,
         device_routes: Arc::new(Mutex::new(HashMap::new())),
         route_challenges: Arc::new(Mutex::new(HashMap::new())),
         route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
@@ -735,6 +757,51 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
+fn with_route_maps_mut<R>(
+    state: &AppState,
+    f: impl FnOnce(
+        &mut HashMap<String, DeviceRouteEntry>,
+        &mut HashMap<String, u64>,
+        &mut HashMap<String, RouteHeartbeatToken>,
+    ) -> Result<R, (StatusCode, String)>,
+) -> Result<R, (StatusCode, String)> {
+    if let Some(path) = state.route_shared_state_path.as_ref() {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)
+            .map_err(internal_err)?;
+        file.lock_exclusive().map_err(internal_err)?;
+        let mut raw = String::new();
+        file.seek(SeekFrom::Start(0)).map_err(internal_err)?;
+        file.read_to_string(&mut raw).map_err(internal_err)?;
+        let mut persisted = if raw.trim().is_empty() {
+            PersistedRouteState::default()
+        } else {
+            serde_json::from_str::<PersistedRouteState>(&raw).unwrap_or_default()
+        };
+        let out = f(
+            &mut persisted.device_routes,
+            &mut persisted.route_challenges,
+            &mut persisted.route_heartbeat_tokens,
+        )?;
+        let encoded = serde_json::to_vec_pretty(&persisted).map_err(internal_err)?;
+        file.set_len(0).map_err(internal_err)?;
+        file.seek(SeekFrom::Start(0)).map_err(internal_err)?;
+        file.write_all(&encoded).map_err(internal_err)?;
+        file.flush().map_err(internal_err)?;
+        file.unlock().map_err(internal_err)?;
+        return Ok(out);
+    }
+
+    let mut routes = state.device_routes.lock().expect("lock poisoned");
+    let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+    let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+    f(&mut routes, &mut challenges, &mut tokens)
+}
+
 async fn route_challenge(
     State(state): State<AppState>,
     Json(payload): Json<RouteChallengeRequest>,
@@ -746,10 +813,11 @@ async fn route_challenge(
     let now = now_unix_seconds();
     let nonce = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
     let expires_at = now.saturating_add(120);
-
-    let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-    prune_expired_route_challenges(&mut challenges, now);
-    challenges.insert(nonce.clone(), expires_at);
+    with_route_maps_mut(&state, |_, challenges, _| {
+        prune_expired_route_challenges(challenges, now);
+        challenges.insert(nonce.clone(), expires_at);
+        Ok(())
+    })?;
 
     Ok(Json(RouteChallengeResponse {
         nonce,
@@ -796,19 +864,6 @@ async fn route_register(
             "route register signature expired".to_string(),
         ));
     }
-    {
-        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-        prune_expired_route_challenges(&mut challenges, now);
-        let Some(exp) = challenges.remove(payload.challenge_nonce.trim()) else {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "unknown or expired route challenge".to_string(),
-            ));
-        };
-        if exp <= now {
-            return Err((StatusCode::UNAUTHORIZED, "route challenge expired".to_string()));
-        }
-    }
 
     let msg = route_register_signing_message(
         owner_pubkey,
@@ -818,41 +873,57 @@ async fn route_register(
         payload.signed_at_unix_s,
     );
     if !verify_any_ed25519_signature(owner_pubkey, &payload.signature, msg.as_bytes())? {
-        return Err((StatusCode::UNAUTHORIZED, "invalid route signature".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid route signature".to_string(),
+        ));
     }
 
     let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
     let expires_at = now.saturating_add(ttl);
     let heartbeat_token = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
     let heartbeat_exp = now.saturating_add(24 * 60 * 60);
+    with_route_maps_mut(&state, |routes, challenges, heartbeat_tokens| {
+        prune_expired_route_challenges(challenges, now);
+        let Some(exp) = challenges.remove(payload.challenge_nonce.trim()) else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "unknown or expired route challenge".to_string(),
+            ));
+        };
+        if exp <= now {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "route challenge expired".to_string(),
+            ));
+        }
 
-    let mut routes = state.device_routes.lock().expect("lock poisoned");
-    prune_expired_routes(&mut routes, now);
-    routes.insert(
-        device_id.to_string(),
-        DeviceRouteEntry {
-            device_id: device_id.to_string(),
-            owner_pubkey: owner_pubkey.to_string(),
-            reachable_urls: sanitized_urls,
-            capabilities: payload.capabilities,
-            relay_session_id: payload.relay_session_id,
-            online: true,
-            last_seen_unix_s: now,
-            expires_at_unix_s: expires_at,
-            updated_at_unix_s: now,
-        },
-    );
-    drop(routes);
+        prune_expired_routes(routes, now);
+        routes.insert(
+            device_id.to_string(),
+            DeviceRouteEntry {
+                device_id: device_id.to_string(),
+                owner_pubkey: owner_pubkey.to_string(),
+                reachable_urls: sanitized_urls,
+                capabilities: payload.capabilities,
+                relay_session_id: payload.relay_session_id,
+                online: true,
+                last_seen_unix_s: now,
+                expires_at_unix_s: expires_at,
+                updated_at_unix_s: now,
+            },
+        );
 
-    let mut heartbeat_tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-    prune_expired_route_tokens(&mut heartbeat_tokens, now);
-    heartbeat_tokens.insert(
-        heartbeat_token.clone(),
-        RouteHeartbeatToken {
-            device_id: device_id.to_string(),
-            expires_at_unix_s: heartbeat_exp,
-        },
-    );
+        prune_expired_route_tokens(heartbeat_tokens, now);
+        heartbeat_tokens.insert(
+            heartbeat_token.clone(),
+            RouteHeartbeatToken {
+                device_id: device_id.to_string(),
+                expires_at_unix_s: heartbeat_exp,
+            },
+        );
+        Ok(())
+    })?;
 
     Ok(Json(RouteRegisterResponse {
         ok: true,
@@ -876,26 +947,27 @@ async fn route_heartbeat(
     let now = now_unix_seconds();
     let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
     let expires_at = now.saturating_add(ttl);
-    {
-        let mut heartbeat_tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-        prune_expired_route_tokens(&mut heartbeat_tokens, now);
+    with_route_maps_mut(&state, |routes, _, heartbeat_tokens| {
+        prune_expired_route_tokens(heartbeat_tokens, now);
         let Some(token) = heartbeat_tokens.get(payload.token.trim()) else {
             return Err((StatusCode::UNAUTHORIZED, "invalid route token".to_string()));
         };
         if token.device_id != device_id {
-            return Err((StatusCode::FORBIDDEN, "route token/device mismatch".to_string()));
+            return Err((
+                StatusCode::FORBIDDEN,
+                "route token/device mismatch".to_string(),
+            ));
         }
-    }
-
-    let mut routes = state.device_routes.lock().expect("lock poisoned");
-    prune_expired_routes(&mut routes, now);
-    let Some(entry) = routes.get_mut(device_id) else {
-        return Err((StatusCode::NOT_FOUND, "route not found".to_string()));
-    };
-    entry.online = true;
-    entry.last_seen_unix_s = now;
-    entry.expires_at_unix_s = expires_at;
-    entry.updated_at_unix_s = now;
+        prune_expired_routes(routes, now);
+        let Some(entry) = routes.get_mut(device_id) else {
+            return Err((StatusCode::NOT_FOUND, "route not found".to_string()));
+        };
+        entry.online = true;
+        entry.last_seen_unix_s = now;
+        entry.expires_at_unix_s = expires_at;
+        entry.updated_at_unix_s = now;
+        Ok(())
+    })?;
 
     Ok(Json(RouteHeartbeatResponse {
         ok: true,
@@ -909,9 +981,12 @@ async fn route_resolve(
     Path(device_id): Path<String>,
 ) -> Json<RouteResolveResponse> {
     let now = now_unix_seconds();
-    let mut routes = state.device_routes.lock().expect("lock poisoned");
-    prune_expired_routes(&mut routes, now);
-    let route = routes.get(device_id.trim()).cloned();
+    let route = with_route_maps_mut(&state, |routes, _, _| {
+        prune_expired_routes(routes, now);
+        Ok(routes.get(device_id.trim()).cloned())
+    })
+    .ok()
+    .flatten();
     Json(RouteResolveResponse {
         ok: true,
         found: route.is_some(),
@@ -925,13 +1000,15 @@ async fn route_owner_resolve(
 ) -> Json<OwnerRoutesResponse> {
     let owner_pubkey = owner_pubkey.trim().to_string();
     let now = now_unix_seconds();
-    let mut routes = state.device_routes.lock().expect("lock poisoned");
-    prune_expired_routes(&mut routes, now);
-    let devices = routes
-        .values()
-        .filter(|route| route.owner_pubkey == owner_pubkey)
-        .cloned()
-        .collect::<Vec<_>>();
+    let devices = with_route_maps_mut(&state, |routes, _, _| {
+        prune_expired_routes(routes, now);
+        Ok(routes
+            .values()
+            .filter(|route| route.owner_pubkey == owner_pubkey)
+            .cloned()
+            .collect::<Vec<_>>())
+    })
+    .unwrap_or_default();
     Json(OwnerRoutesResponse {
         ok: true,
         owner_pubkey,
@@ -965,13 +1042,15 @@ async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: We
     }
     {
         let now = now_unix_seconds();
-        let mut routes = state.device_routes.lock().expect("lock poisoned");
-        if let Some(entry) = routes.get_mut(&device_id) {
-            entry.online = true;
-            entry.last_seen_unix_s = now;
-            entry.updated_at_unix_s = now;
-            entry.expires_at_unix_s = now.saturating_add(90);
-        }
+        let _ = with_route_maps_mut(&state, |routes, _, _| {
+            if let Some(entry) = routes.get_mut(&device_id) {
+                entry.online = true;
+                entry.last_seen_unix_s = now;
+                entry.updated_at_unix_s = now;
+                entry.expires_at_unix_s = now.saturating_add(90);
+            }
+            Ok(())
+        });
     }
 
     loop {
@@ -1002,11 +1081,13 @@ async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: We
     }
     {
         let now = now_unix_seconds();
-        let mut routes = state.device_routes.lock().expect("lock poisoned");
-        if let Some(entry) = routes.get_mut(&device_id) {
-            entry.online = false;
-            entry.updated_at_unix_s = now;
-        }
+        let _ = with_route_maps_mut(&state, |routes, _, _| {
+            if let Some(entry) = routes.get_mut(&device_id) {
+                entry.online = false;
+                entry.updated_at_unix_s = now;
+            }
+            Ok(())
+        });
     }
 }
 
@@ -1045,15 +1126,17 @@ async fn handle_signal_client_message(
         return Ok(());
     }
 
-    let target_device_ids = {
+    let target_device_ids = match with_route_maps_mut(state, |routes, _, _| {
         let now = now_unix_seconds();
-        let mut routes = state.device_routes.lock().expect("lock poisoned");
-        prune_expired_routes(&mut routes, now);
-        routes
+        prune_expired_routes(routes, now);
+        Ok(routes
             .values()
             .filter(|route| route.owner_pubkey == to_owner_pubkey)
             .map(|route| route.device_id.clone())
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>())
+    }) {
+        Ok(ids) => ids,
+        Err(_) => return Err(()),
     };
     if target_device_ids.is_empty() {
         return Err(());
@@ -1119,14 +1202,12 @@ fn parse_any_ed25519_pubkey(value: &str) -> Result<[u8; 32], (StatusCode, String
         return Ok(arr);
     }
 
-    let bytes = URL_SAFE_NO_PAD
-        .decode(value.as_bytes())
-        .map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "owner_pubkey must be base58 or base64/base64url ed25519 key".to_string(),
-            )
-        })?;
+    let bytes = URL_SAFE_NO_PAD.decode(value.as_bytes()).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey must be base58 or base64/base64url ed25519 key".to_string(),
+        )
+    })?;
     let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -2232,6 +2313,8 @@ fn build_finalize_job_tx_base64(
 ) -> Result<(String, Option<String>, bool)> {
     let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
     let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
+    let (output_availability_pda, _) =
+        Pubkey::find_program_address(&[b"output", &job_id], &chain.program_id);
     let (worker_stake_0, _) =
         Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
     let (worker_stake_1, _) =
@@ -2255,6 +2338,7 @@ fn build_finalize_job_tx_base64(
         AccountMeta::new(chain.payer.pubkey(), true),
         AccountMeta::new(config_pda, false),
         AccountMeta::new(job_pda, false),
+        AccountMeta::new_readonly(output_availability_pda, false),
         AccountMeta::new(worker_stake_0, false),
         AccountMeta::new(worker_stake_1, false),
         AccountMeta::new(worker_stake_2, false),
@@ -4392,8 +4476,11 @@ mod tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use ed25519_dalek::Signer;
     use hmac::{Hmac, Mac};
+    use serde::Deserialize;
     use sha2::{Digest, Sha256};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn test_state() -> AppState {
         let data_dir =
@@ -4444,6 +4531,11 @@ mod tests {
             trust_policy_path: data_dir.join("trust-policy.json"),
             attestation_policy: Arc::new(Mutex::new(edgerun_types::AttestationPolicy::default())),
             attestation_policy_path: data_dir.join("attestation-policy.json"),
+            route_shared_state_path: None,
+            device_routes: Arc::new(Mutex::new(HashMap::new())),
+            route_challenges: Arc::new(Mutex::new(HashMap::new())),
+            route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
+            signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             chain: None,
         }
     }
@@ -6338,5 +6430,323 @@ mod tests {
             HeaderValue::from_str(&sig).expect("sig header"),
         );
         headers
+    }
+
+    #[tokio::test]
+    async fn route_registration_flow_challenge_register_resolve_owner_heartbeat() {
+        let state = test_state();
+        let device_id = "device-abc".to_string();
+        let owner_signing = SigningKey::from_bytes(&[7_u8; 32]);
+        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
+
+        let Ok(Json(challenge)) = route_challenge(
+            State(state.clone()),
+            Json(RouteChallengeRequest {
+                device_id: device_id.clone(),
+            }),
+        )
+        .await
+        else {
+            panic!("route challenge should succeed");
+        };
+        assert!(!challenge.nonce.is_empty());
+        assert!(challenge.expires_at_unix_s > now_unix_seconds());
+
+        let reachable_urls = vec!["http://127.0.0.1:8091".to_string()];
+        let signed_at = now_unix_seconds();
+        let message = route_register_signing_message(
+            &owner_pubkey,
+            &device_id,
+            &reachable_urls,
+            &challenge.nonce,
+            signed_at,
+        );
+        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
+
+        let Ok(Json(registered)) = route_register(
+            State(state.clone()),
+            Json(RouteRegisterRequest {
+                device_id: device_id.clone(),
+                owner_pubkey: owner_pubkey.clone(),
+                reachable_urls: reachable_urls.clone(),
+                capabilities: vec!["terminal-ws".to_string()],
+                relay_session_id: None,
+                ttl_secs: Some(60),
+                challenge_nonce: challenge.nonce.clone(),
+                signed_at_unix_s: signed_at,
+                signature,
+            }),
+        )
+        .await
+        else {
+            panic!("route registration should succeed");
+        };
+        assert!(registered.ok);
+        assert_eq!(registered.device_id, device_id);
+        assert!(!registered.heartbeat_token.is_empty());
+
+        let Json(resolved) = route_resolve(State(state.clone()), Path(device_id.clone())).await;
+        assert!(resolved.ok);
+        assert!(resolved.found);
+        let resolved_entry = resolved.route.expect("route entry");
+        assert_eq!(resolved_entry.device_id, device_id);
+        assert_eq!(resolved_entry.owner_pubkey, owner_pubkey);
+        assert_eq!(resolved_entry.reachable_urls, reachable_urls);
+
+        let Json(owner_routes) =
+            route_owner_resolve(State(state.clone()), Path(owner_pubkey.clone())).await;
+        assert!(owner_routes.ok);
+        assert_eq!(owner_routes.owner_pubkey, owner_pubkey);
+        assert_eq!(owner_routes.devices.len(), 1);
+        assert_eq!(owner_routes.devices[0].device_id, device_id);
+
+        let Ok(Json(heartbeat)) = route_heartbeat(
+            State(state.clone()),
+            Json(RouteHeartbeatRequest {
+                device_id: device_id.clone(),
+                token: registered.heartbeat_token,
+                ttl_secs: Some(90),
+            }),
+        )
+        .await
+        else {
+            panic!("route heartbeat should succeed");
+        };
+        assert!(heartbeat.ok);
+        assert_eq!(heartbeat.device_id, device_id);
+        assert!(heartbeat.expires_at_unix_s > now_unix_seconds());
+    }
+
+    #[tokio::test]
+    async fn route_registration_shared_state_works_across_scheduler_instances() {
+        let shared_path = std::env::temp_dir().join(format!(
+            "edgerun-route-shared-{}-{}.json",
+            std::process::id(),
+            now_unix_seconds()
+        ));
+        let _ = std::fs::remove_file(&shared_path);
+
+        let mut state_a = test_state();
+        state_a.route_shared_state_path = Some(shared_path.clone());
+        let mut state_b = test_state();
+        state_b.route_shared_state_path = Some(shared_path.clone());
+
+        let device_id = "device-cross-instance".to_string();
+        let owner_signing = SigningKey::from_bytes(&[9_u8; 32]);
+        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
+
+        // Challenge on A
+        let Ok(Json(challenge)) = route_challenge(
+            State(state_a.clone()),
+            Json(RouteChallengeRequest {
+                device_id: device_id.clone(),
+            }),
+        )
+        .await
+        else {
+            panic!("route challenge should succeed");
+        };
+
+        // Register on B using challenge from A
+        let reachable_urls = vec!["http://127.0.0.1:9001".to_string()];
+        let signed_at = now_unix_seconds();
+        let message = route_register_signing_message(
+            &owner_pubkey,
+            &device_id,
+            &reachable_urls,
+            &challenge.nonce,
+            signed_at,
+        );
+        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
+        let Ok(Json(registered)) = route_register(
+            State(state_b.clone()),
+            Json(RouteRegisterRequest {
+                device_id: device_id.clone(),
+                owner_pubkey: owner_pubkey.clone(),
+                reachable_urls: reachable_urls.clone(),
+                capabilities: vec!["terminal-ws".to_string()],
+                relay_session_id: None,
+                ttl_secs: Some(60),
+                challenge_nonce: challenge.nonce,
+                signed_at_unix_s: signed_at,
+                signature,
+            }),
+        )
+        .await
+        else {
+            panic!("route register should succeed");
+        };
+
+        // Resolve on A should see route created on B.
+        let Json(resolved) = route_resolve(State(state_a.clone()), Path(device_id.clone())).await;
+        assert!(resolved.ok && resolved.found);
+        assert_eq!(
+            resolved
+                .route
+                .as_ref()
+                .map(|r| r.reachable_urls.clone())
+                .unwrap_or_default(),
+            reachable_urls
+        );
+
+        // Heartbeat on A should accept token issued on B.
+        let Ok(Json(hb)) = route_heartbeat(
+            State(state_a.clone()),
+            Json(RouteHeartbeatRequest {
+                device_id: device_id.clone(),
+                token: registered.heartbeat_token,
+                ttl_secs: Some(90),
+            }),
+        )
+        .await
+        else {
+            panic!("cross-instance heartbeat should succeed");
+        };
+        assert!(hb.ok);
+
+        // Owner lookup on B should include route.
+        let Json(owner_routes) = route_owner_resolve(State(state_b), Path(owner_pubkey)).await;
+        assert_eq!(owner_routes.devices.len(), 1);
+        assert_eq!(owner_routes.devices[0].device_id, device_id);
+
+        let _ = std::fs::remove_file(shared_path);
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RouteChallengeHttpResponse {
+        nonce: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RouteResolveHttpResponse {
+        found: bool,
+        route: Option<RouteResolveHttpEntry>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RouteResolveHttpEntry {
+        reachable_urls: Vec<String>,
+    }
+
+    #[tokio::test]
+    async fn route_resolution_enables_real_service_to_service_connectivity() {
+        let state = test_state();
+        let scheduler_app = Router::new()
+            .route("/v1/route/challenge", post(route_challenge))
+            .route("/v1/route/register", post(route_register))
+            .route("/v1/route/resolve/{device_id}", get(route_resolve))
+            .with_state(state);
+        let scheduler_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind scheduler listener");
+        let scheduler_addr = scheduler_listener
+            .local_addr()
+            .expect("scheduler local addr");
+        let scheduler_task = tokio::spawn(async move {
+            axum::serve(scheduler_listener, scheduler_app)
+                .await
+                .expect("scheduler serve");
+        });
+
+        let service_b_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind service B listener");
+        let service_b_addr = service_b_listener.local_addr().expect("service B local addr");
+        let service_b_task = tokio::spawn(async move {
+            let (mut socket, _) = service_b_listener.accept().await.expect("accept service B");
+            let mut buf = [0_u8; 32];
+            let n = socket.read(&mut buf).await.expect("read from service A");
+            assert_eq!(&buf[..n], b"ping-from-service-a");
+            socket
+                .write_all(b"pong-from-service-b")
+                .await
+                .expect("write to service A");
+        });
+
+        let scheduler_base = format!("http://{scheduler_addr}");
+        let client = reqwest::Client::new();
+        let owner_signing = SigningKey::from_bytes(&[11_u8; 32]);
+        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
+        let service_b_device_id = "service-b".to_string();
+        let service_b_reachable_url = format!("http://{}", service_b_addr);
+
+        let challenge = client
+            .post(format!("{scheduler_base}/v1/route/challenge"))
+            .json(&serde_json::json!({ "device_id": service_b_device_id }))
+            .send()
+            .await
+            .expect("request challenge")
+            .error_for_status()
+            .expect("challenge status")
+            .json::<RouteChallengeHttpResponse>()
+            .await
+            .expect("parse challenge response");
+
+        let signed_at = now_unix_seconds();
+        let message = route_register_signing_message(
+            &owner_pubkey,
+            &service_b_device_id,
+            std::slice::from_ref(&service_b_reachable_url),
+            &challenge.nonce,
+            signed_at,
+        );
+        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
+
+        client
+            .post(format!("{scheduler_base}/v1/route/register"))
+            .json(&serde_json::json!({
+                "device_id": service_b_device_id,
+                "owner_pubkey": owner_pubkey,
+                "reachable_urls": [service_b_reachable_url],
+                "challenge_nonce": challenge.nonce,
+                "signed_at_unix_s": signed_at,
+                "signature": signature,
+                "ttl_secs": 90
+            }))
+            .send()
+            .await
+            .expect("request register")
+            .error_for_status()
+            .expect("register status");
+
+        let resolved = client
+            .get(format!(
+                "{scheduler_base}/v1/route/resolve/{service_b_device_id}"
+            ))
+            .send()
+            .await
+            .expect("request resolve")
+            .error_for_status()
+            .expect("resolve status")
+            .json::<RouteResolveHttpResponse>()
+            .await
+            .expect("parse resolve response");
+
+        assert!(resolved.found);
+        let target_url = resolved
+            .route
+            .and_then(|entry| entry.reachable_urls.into_iter().next())
+            .expect("resolved reachable URL");
+        let target = reqwest::Url::parse(&target_url).expect("valid reachable URL");
+        let host = target.host_str().expect("target host");
+        let port = target.port_or_known_default().expect("target port");
+
+        let mut stream = tokio::net::TcpStream::connect((host, port))
+            .await
+            .expect("service A connects to service B via resolved route");
+        stream
+            .write_all(b"ping-from-service-a")
+            .await
+            .expect("service A writes ping");
+        let mut reply = [0_u8; 32];
+        let n = stream
+            .read(&mut reply)
+            .await
+            .expect("service A reads response");
+        assert_eq!(&reply[..n], b"pong-from-service-b");
+
+        service_b_task.await.expect("service B task");
+        scheduler_task.abort();
+        let _ = scheduler_task.await;
     }
 }

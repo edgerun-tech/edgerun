@@ -22,11 +22,13 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 use tower_http::services::ServeDir;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 struct AppState {
     device: DeviceSigner,
     challenges: std::sync::Arc<Mutex<HashMap<String, u64>>>,
+    mux_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,8 +86,62 @@ struct RouteHeartbeatRequest {
     ttl_secs: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ShellRequest {
+    Auth {
+        token: String,
+    },
+    Spawn {
+        id: Option<u32>,
+        cmd: Option<String>,
+        args: Option<Vec<String>>,
+        cwd: Option<String>,
+        env: Option<HashMap<String, String>>,
+        cols: Option<u16>,
+        rows: Option<u16>,
+    },
+    Resize {
+        id: u32,
+        cols: u16,
+        rows: u16,
+    },
+    Close {
+        id: u32,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ShellResponse {
+    AuthOk,
+    AuthError {
+        error: String,
+    },
+    Spawned {
+        id: u32,
+        pid: Option<u32>,
+    },
+    Exit {
+        id: u32,
+        code: u32,
+        signal: Option<String>,
+    },
+    Error {
+        id: Option<u32>,
+        error: String,
+    },
+}
+
+struct PtySession {
+    master: Box<dyn portable_pty::MasterPty + Send>,
+    writer: std::sync::Mutex<Box<dyn std::io::Write + Send>>,
+    killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    edgerun_observability::init_service("edgerun-term-server")?;
     let mode = match std::env::var("EDGERUN_HARDWARE_MODE")
         .unwrap_or_else(|_| "tpm-required".to_string())
         .trim()
@@ -97,14 +153,20 @@ async fn main() -> anyhow::Result<()> {
         "failed to initialize hardware-backed device signer (set EDGERUN_HARDWARE_MODE=allow-software for explicit non-TPM fallback)"
     })?;
     let boot_sig = device.sign_b64url(b"edgerun-term-server-boot");
-    println!(
-        "term-server device identity backend={:?} pubkey={} boot_sig={}",
-        device.backend, device.public_key_b64url, boot_sig
+    info!(
+        backend = ?device.backend,
+        pubkey = %device.public_key_b64url,
+        boot_sig = %boot_sig,
+        "term-server device identity"
     );
 
     let state = AppState {
         device,
         challenges: std::sync::Arc::new(Mutex::new(HashMap::new())),
+        mux_token: env::var("EDGERUN_TERM_MUX_TOKEN")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty()),
     };
 
     let web_root = env::var("EDGERUN_TERM_WEB_ROOT")
@@ -117,6 +179,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| PathBuf::from("crates/edgerun-term-web"));
     let app = Router::new()
         .route("/ws", get(ws_handler))
+        .route("/ws-mux", get(ws_mux_handler))
         .route("/v1/device/identity", get(device_identity))
         .route("/v1/device/challenge", post(device_challenge))
         .route("/v1/device/handshake", post(device_handshake))
@@ -124,17 +187,17 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state.clone())
         .fallback_service(ServeDir::new(web_root.clone()));
 
-    let bind_addr = env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
-    let addr: SocketAddr = match bind_addr.parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            eprintln!("Failed to parse server address '{bind_addr}': {e}");
-            std::process::exit(1);
-        }
-    };
-    println!("term-server serving site root {}", web_root.display());
-    println!("term-server serving terminal client root {} at /term/", term_client_root.display());
-    println!("term-server listening on http://{addr}");
+    let bind_addr =
+        env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let addr: SocketAddr = bind_addr
+        .parse()
+        .with_context(|| format!("failed to parse EDGERUN_TERM_SERVER_ADDR '{bind_addr}'"))?;
+    info!(path = %web_root.display(), "term-server serving site root");
+    info!(
+        path = %term_client_root.display(),
+        "term-server serving terminal client root at /term/"
+    );
+    info!(%addr, "term-server listening");
     maybe_start_route_announcer(&state.device, addr);
 
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
@@ -205,6 +268,163 @@ async fn device_handshake(
 
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(handle_socket)
+}
+
+async fn ws_mux_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_mux_socket(socket, state.mux_token.clone()))
+}
+
+async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
+    const PTY_FRAME_STDIN: u8 = 1;
+    let mut authed = token.is_none();
+    let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Message>();
+    let mut sessions: HashMap<u32, PtySession> = HashMap::new();
+    let mut next_session_id = 1u32;
+
+    loop {
+        tokio::select! {
+            Some(msg) = out_rx.recv() => {
+                if socket.send(msg).await.is_err() {
+                    break;
+                }
+            }
+            incoming = socket.recv() => {
+                let Some(Ok(msg)) = incoming else { break };
+                if let Message::Binary(data) = msg {
+                    if data.len() >= 5 && data[0] == PTY_FRAME_STDIN {
+                        let id = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
+                        if let Some(session) = sessions.get(&id) {
+                            if let Ok(mut writer) = session.writer.lock() {
+                                let _ = writer.write_all(&data[5..]);
+                                let _ = writer.flush();
+                            }
+                        }
+                    }
+                    continue;
+                }
+                if let Message::Text(text) = msg {
+                    let req: ShellRequest = match serde_json::from_str(&text) {
+                        Ok(value) => value,
+                        Err(err) => {
+                            let _ = out_tx.send(Message::Text(
+                                serde_json::to_string(&ShellResponse::Error {
+                                    id: None,
+                                    error: format!("invalid request: {err}")
+                                })
+                                .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
+                                .into()
+                            ));
+                            continue;
+                        }
+                    };
+                    match req {
+                        ShellRequest::Auth { token: provided } => {
+                            if let Some(expected) = token.as_deref() {
+                                if expected == provided {
+                                    authed = true;
+                                    let _ = out_tx.send(Message::Text(
+                                        serde_json::to_string(&ShellResponse::AuthOk)
+                                            .unwrap_or_else(|_| "{\"type\":\"auth_ok\"}".to_string())
+                                            .into()
+                                    ));
+                                } else {
+                                    let _ = out_tx.send(Message::Text(
+                                        serde_json::to_string(&ShellResponse::AuthError {
+                                            error: "invalid token".to_string()
+                                        })
+                                        .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
+                                        .into()
+                                    ));
+                                    break;
+                                }
+                            } else {
+                                authed = true;
+                                let _ = out_tx.send(Message::Text(
+                                    serde_json::to_string(&ShellResponse::AuthOk)
+                                        .unwrap_or_else(|_| "{\"type\":\"auth_ok\"}".to_string())
+                                        .into()
+                                ));
+                            }
+                        }
+                        ShellRequest::Spawn { id, cmd, args, cwd, env, cols, rows } => {
+                            if !authed {
+                                let _ = out_tx.send(Message::Text(
+                                    serde_json::to_string(&ShellResponse::AuthError {
+                                        error: "missing auth".to_string()
+                                    })
+                                    .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
+                                    .into()
+                                ));
+                                continue;
+                            }
+                            let session_id = if let Some(id) = id {
+                                if sessions.contains_key(&id) {
+                                    let _ = out_tx.send(Message::Text(
+                                        serde_json::to_string(&ShellResponse::Error {
+                                            id: Some(id),
+                                            error: "session id already exists".to_string()
+                                        })
+                                        .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
+                                        .into()
+                                    ));
+                                    continue;
+                                }
+                                id
+                            } else {
+                                let id = next_session_id;
+                                next_session_id = next_session_id.wrapping_add(1);
+                                id
+                            };
+                            match spawn_pty_session(
+                                session_id,
+                                cmd,
+                                args,
+                                cwd,
+                                env,
+                                cols.unwrap_or(80),
+                                rows.unwrap_or(24),
+                                out_tx.clone(),
+                            ) {
+                                Ok((session, pid)) => {
+                                    sessions.insert(session_id, session);
+                                    let _ = out_tx.send(Message::Text(
+                                        serde_json::to_string(&ShellResponse::Spawned { id: session_id, pid })
+                                            .unwrap_or_else(|_| "{\"type\":\"spawned\"}".to_string())
+                                            .into()
+                                    ));
+                                }
+                                Err(err) => {
+                                    let _ = out_tx.send(Message::Text(
+                                        serde_json::to_string(&ShellResponse::Error {
+                                            id: Some(session_id),
+                                            error: err.to_string()
+                                        })
+                                        .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
+                                        .into()
+                                    ));
+                                }
+                            }
+                        }
+                        ShellRequest::Resize { id, cols, rows } => {
+                            if let Some(session) = sessions.get(&id) {
+                                let _ = session.master.resize(PtySize {
+                                    cols,
+                                    rows,
+                                    pixel_width: 0,
+                                    pixel_height: 0,
+                                });
+                            }
+                        }
+                        ShellRequest::Close { id } => {
+                            if let Some(session) = sessions.remove(&id) {
+                                let _ = session.killer.clone_killer().kill();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn handle_socket(mut socket: WebSocket) {
@@ -313,6 +533,98 @@ fn parse_resize(text: &str) -> Option<(u16, u16)> {
     Some((cols, rows))
 }
 
+fn spawn_pty_session(
+    id: u32,
+    cmd: Option<String>,
+    args: Option<Vec<String>>,
+    cwd: Option<String>,
+    env_vars: Option<HashMap<String, String>>,
+    cols: u16,
+    rows: u16,
+    out_tx: mpsc::UnboundedSender<Message>,
+) -> anyhow::Result<(PtySession, Option<u32>)> {
+    const PTY_FRAME_STDOUT: u8 = 2;
+    let pty_system = NativePtySystem::default();
+    let pair = pty_system.openpty(PtySize {
+        cols,
+        rows,
+        pixel_width: 0,
+        pixel_height: 0,
+    })?;
+    let mut builder = if let Some(cmd) = cmd {
+        CommandBuilder::new(cmd)
+    } else {
+        let shell = env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        CommandBuilder::new(shell)
+    };
+    if let Some(args) = args {
+        builder.args(args);
+    }
+    if let Some(cwd) = cwd {
+        builder.cwd(cwd);
+    }
+    if let Some(env_vars) = env_vars {
+        for (key, value) in env_vars {
+            builder.env(key, value);
+        }
+    }
+    builder.env("TERM", "xterm-256color");
+
+    let mut child = pair.slave.spawn_command(builder)?;
+    let pid = child.process_id();
+    let killer = child.clone_killer();
+
+    let mut reader = pair.master.try_clone_reader()?;
+    let stdout_tx = out_tx.clone();
+    thread::spawn(move || {
+        let mut buf = [0u8; 8192];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let frame = encode_pty_frame(PTY_FRAME_STDOUT, id, &buf[..n]);
+                    let _ = stdout_tx.send(Message::Binary(frame.into()));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let exit_tx = out_tx.clone();
+    thread::spawn(move || {
+        if let Ok(status) = child.wait() {
+            let resp = ShellResponse::Exit {
+                id,
+                code: status.exit_code(),
+                signal: None,
+            };
+            let _ = exit_tx.send(Message::Text(
+                serde_json::to_string(&resp)
+                    .unwrap_or_else(|_| "{\"type\":\"exit\"}".to_string())
+                    .into(),
+            ));
+        }
+    });
+
+    let writer = pair.master.take_writer()?;
+    Ok((
+        PtySession {
+            master: pair.master,
+            writer: std::sync::Mutex::new(writer),
+            killer,
+        },
+        pid,
+    ))
+}
+
+fn encode_pty_frame(kind: u8, id: u32, payload: &[u8]) -> Vec<u8> {
+    let mut frame = Vec::with_capacity(5 + payload.len());
+    frame.push(kind);
+    frame.extend_from_slice(&id.to_be_bytes());
+    frame.extend_from_slice(payload);
+    frame
+}
+
 fn now_unix_s() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -345,9 +657,11 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| format!("http://{}", routable_addr(addr)));
 
-    println!(
-        "route announcer enabled: control={} device_id={} public_base_url={}",
-        control_base, device_id, public_base_url
+    info!(
+        control = %control_base,
+        %device_id,
+        %public_base_url,
+        "route announcer enabled"
     );
     let signer = device.clone();
 
@@ -367,11 +681,11 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     Ok(resp) => {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
-                        eprintln!("route announcer heartbeat failed: status={} body={}", status, body);
+                        warn!(%status, %body, "route announcer heartbeat failed");
                         heartbeat_token = None;
                     }
                     Err(err) => {
-                        eprintln!("route announcer heartbeat error: {err}");
+                        warn!(error = %err, "route announcer heartbeat error");
                         heartbeat_token = None;
                     }
                 }
@@ -383,23 +697,25 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     device_id: device_id.clone(),
                 };
                 let challenge = match client.post(challenge_url).json(&challenge_req).send().await {
-                    Ok(resp) if resp.status().is_success() => match resp.json::<RouteChallengeResponse>().await {
-                        Ok(value) => value,
-                        Err(err) => {
-                            eprintln!("route announcer challenge parse error: {err}");
-                            sleep(Duration::from_secs(10)).await;
-                            continue;
+                    Ok(resp) if resp.status().is_success() => {
+                        match resp.json::<RouteChallengeResponse>().await {
+                            Ok(value) => value,
+                            Err(err) => {
+                                warn!(error = %err, "route announcer challenge parse error");
+                                sleep(Duration::from_secs(10)).await;
+                                continue;
+                            }
                         }
-                    },
+                    }
                     Ok(resp) => {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
-                        eprintln!("route announcer challenge failed: status={} body={}", status, body);
+                        warn!(%status, %body, "route announcer challenge failed");
                         sleep(Duration::from_secs(10)).await;
                         continue;
                     }
                     Err(err) => {
-                        eprintln!("route announcer challenge error: {err}");
+                        warn!(error = %err, "route announcer challenge error");
                         sleep(Duration::from_secs(10)).await;
                         continue;
                     }
@@ -433,25 +749,27 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                 };
                 let url = format!("{control_base}/v1/route/register");
                 match client.post(url).json(&payload).send().await {
-                    Ok(resp) if resp.status().is_success() => match resp.json::<RouteRegisterResponse>().await {
-                        Ok(value) => {
-                            if value.ok {
-                                heartbeat_token = Some(value.heartbeat_token);
-                            } else {
-                                heartbeat_token = None;
+                    Ok(resp) if resp.status().is_success() => {
+                        match resp.json::<RouteRegisterResponse>().await {
+                            Ok(value) => {
+                                if value.ok {
+                                    heartbeat_token = Some(value.heartbeat_token);
+                                } else {
+                                    heartbeat_token = None;
+                                }
+                            }
+                            Err(err) => {
+                                warn!(error = %err, "route announcer register parse error");
                             }
                         }
-                        Err(err) => {
-                            eprintln!("route announcer register parse error: {err}");
-                        }
-                    },
+                    }
                     Ok(resp) => {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
-                        eprintln!("route announcer register failed: status={} body={}", status, body);
+                        warn!(%status, %body, "route announcer register failed");
                     }
                     Err(err) => {
-                        eprintln!("route announcer register error: {err}");
+                        warn!(error = %err, "route announcer register error");
                     }
                 }
             }

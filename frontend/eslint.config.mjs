@@ -19,6 +19,23 @@ export default [
     }
   },
   {
+    files: ['cypress/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        cy: 'readonly',
+        Cypress: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        before: 'readonly',
+        beforeEach: 'readonly',
+        after: 'readonly',
+        afterEach: 'readonly'
+      }
+    }
+  },
+  {
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: {
       parserOptions: {

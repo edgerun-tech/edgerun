@@ -10,8 +10,6 @@ type RuntimeOptions = {
   tabMenuTabId: () => string | null
   closeTabMenu: () => void
   refreshDeviceStatus: () => Promise<void>
-  maybeRegisterCurrentOriginDevice: () => Promise<void>
-  autoImportTailscaleDevices: () => void
   restoreLastDevice: () => void
 }
 
@@ -20,10 +18,8 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
   options.setState(getTerminalDrawerState())
   const initialWallet = readWalletSession()
   options.setWallet(initialWallet)
-  void options.maybeRegisterCurrentOriginDevice()
   if (initialWallet.connected) {
     options.restoreLastDevice()
-    options.autoImportTailscaleDevices()
   }
 
   const unsubscribe = subscribeTerminalDrawer((next) => options.setState(next))
@@ -33,8 +29,6 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
     const nextWallet = custom.detail || readWalletSession()
     options.setWallet(nextWallet)
     if (nextWallet.connected) {
-      void options.maybeRegisterCurrentOriginDevice()
-      options.autoImportTailscaleDevices()
       options.restoreLastDevice()
       void options.refreshDeviceStatus()
     }
@@ -59,12 +53,26 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
     if (target?.closest('[data-tab-menu-trigger]')) return
     options.closeTabMenu()
   }
+  const onMessage = (event: MessageEvent) => {
+    const payload = event.data
+    if (!payload || typeof payload !== 'object') return
+    const source = (payload as { source?: unknown }).source
+    if (source !== 'edgerun-term-web') return
+    const type = (payload as { type?: unknown }).type
+    if (type !== 'transport') return
+    const sid = (payload as { sid?: unknown }).sid
+    const transport = (payload as { transport?: unknown }).transport
+    if (typeof sid !== 'string' || !sid) return
+    if (transport !== 'mux' && transport !== 'raw' && transport !== 'unknown') return
+    terminalDrawerActions.setPaneTransport(sid, transport)
+  }
 
   window.addEventListener('pointermove', onPointerMove)
   window.addEventListener('pointerup', onPointerUp)
   window.addEventListener('pointercancel', onPointerUp)
   window.addEventListener('resize', onResize)
   window.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('message', onMessage)
   window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
 
   void options.refreshDeviceStatus()
@@ -79,6 +87,7 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
     window.removeEventListener('pointercancel', onPointerUp)
     window.removeEventListener('resize', onResize)
     window.removeEventListener('pointerdown', onPointerDown)
+    window.removeEventListener('message', onMessage)
     window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
     window.clearInterval(timer)
   }

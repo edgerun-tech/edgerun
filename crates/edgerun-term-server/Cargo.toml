@@ -8,9 +8,22 @@ license.workspace = true
 anyhow = "1"
 axum = { workspace = true, features = ["ws"] }
 edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
+edgerun-observability = { path = "../edgerun-observability" }
 portable-pty = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tower-http = { workspace = true, features = ["fs"] }
+tracing.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "mux_protocol"
+harness = false
+
+[[bench]]
+name = "mux_smoke"
+harness = false

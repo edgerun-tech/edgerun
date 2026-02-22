@@ -32,6 +32,14 @@ mod wasm {
     use wgpu::util::DeviceExt;
 
     const BLINK_INTERVAL: Duration = Duration::from_millis(700);
+    const PTY_FRAME_STDIN: u8 = 1;
+    const PTY_FRAME_STDOUT: u8 = 2;
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum WsTransport {
+        Raw,
+        Mux,
+    }
 
     #[cfg(feature = "webgpu")]
     #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -127,6 +135,12 @@ mod wasm {
         last_blink: Instant,
         blink_on: bool,
         ws: Option<WebSocket>,
+        transport: WsTransport,
+        allow_raw_fallback: bool,
+        pane_id: Option<String>,
+        mux_token: Option<String>,
+        mux_session_id: Option<u32>,
+        mux_failures: u8,
         pending_input: Vec<Vec<u8>>,
         reconnect_attempts: u32,
         status_el: Option<Element>,
@@ -315,15 +329,149 @@ mod wasm {
         Ok(context)
     }
 
+    fn query_param(search: &str, key: &str) -> Option<String> {
+        let trimmed = search.strip_prefix('?').unwrap_or(search);
+        for pair in trimmed.split('&') {
+            if pair.is_empty() {
+                continue;
+            }
+            let mut parts = pair.splitn(2, '=');
+            let raw_key = parts.next().unwrap_or_default();
+            if raw_key != key {
+                continue;
+            }
+            let raw_value = parts.next().unwrap_or_default();
+            return js_sys::decode_uri_component(raw_value)
+                .ok()
+                .and_then(|value| value.as_string())
+                .or_else(|| Some(raw_value.to_string()));
+        }
+        None
+    }
+
+    fn send_mux_auth(ws: &WebSocket, token: &str) {
+        let payload = serde_json::json!({ "type": "auth", "token": token });
+        let _ = ws.send_with_str(&payload.to_string());
+    }
+
+    fn send_mux_spawn(ws: &WebSocket, cols: usize, rows: usize) {
+        let payload = serde_json::json!({ "type": "spawn", "cols": cols, "rows": rows });
+        let _ = ws.send_with_str(&payload.to_string());
+    }
+
+    fn send_mux_resize(ws: &WebSocket, session_id: u32, cols: usize, rows: usize) {
+        let payload =
+            serde_json::json!({ "type": "resize", "id": session_id, "cols": cols, "rows": rows });
+        let _ = ws.send_with_str(&payload.to_string());
+    }
+
+    fn encode_stdin_frame(session_id: u32, bytes: &[u8]) -> Vec<u8> {
+        let mut frame = Vec::with_capacity(5 + bytes.len());
+        frame.push(PTY_FRAME_STDIN);
+        frame.extend_from_slice(&session_id.to_be_bytes());
+        frame.extend_from_slice(bytes);
+        frame
+    }
+
+    fn feed_terminal_bytes(state: &mut AppState, writer: Arc<Mutex<Box<dyn Write + Send>>>, data: &[u8]) {
+        let mut performer = GridPerformer {
+            grid: &mut state.terminal,
+            writer,
+            app_cursor_keys: &mut state.app_cursor_keys,
+            dcs_state: None,
+        };
+        for byte in data {
+            state.parser.advance(&mut performer, *byte);
+        }
+    }
+
+    fn flush_pending_input(state: &mut AppState, ws: &WebSocket) {
+        if state.pending_input.is_empty() {
+            return;
+        }
+        let pending = std::mem::take(&mut state.pending_input);
+        match state.transport {
+            WsTransport::Raw => {
+                for chunk in pending {
+                    let _ = ws.send_with_u8_array(&chunk);
+                }
+            }
+            WsTransport::Mux => {
+                let Some(session_id) = state.mux_session_id else {
+                    state.pending_input = pending;
+                    return;
+                };
+                for chunk in pending {
+                    let frame = encode_stdin_frame(session_id, &chunk);
+                    let _ = ws.send_with_u8_array(&frame);
+                }
+            }
+        }
+    }
+
+    fn post_transport_status(
+        window: &web_sys::Window,
+        pane_id: Option<&str>,
+        transport: WsTransport,
+    ) {
+        let Ok(Some(parent)) = window.parent() else {
+            return;
+        };
+        let payload = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("source"),
+            &JsValue::from_str("edgerun-term-web"),
+        );
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("type"),
+            &JsValue::from_str("transport"),
+        );
+        let transport_value = match transport {
+            WsTransport::Mux => "mux",
+            WsTransport::Raw => "raw",
+        };
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("transport"),
+            &JsValue::from_str(transport_value),
+        );
+        if let Some(pane_id) = pane_id {
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("sid"),
+                &JsValue::from_str(pane_id),
+            );
+        }
+        let _ = parent.post_message(&payload, "*");
+    }
+
     fn queue_or_send(state: &Rc<RefCell<AppState>>, bytes: &[u8]) {
         if bytes.is_empty() {
             return;
         }
-        if let Some(ws) = state.borrow().ws.as_ref() {
-            let _ = ws.send_with_u8_array(bytes);
-        } else {
-            state.borrow_mut().pending_input.push(bytes.to_vec());
+        let (ws, transport, session_id) = {
+            let state = state.borrow();
+            (state.ws.clone(), state.transport, state.mux_session_id)
+        };
+        if let Some(ws) = ws {
+            match transport {
+                WsTransport::Raw => {
+                    let _ = ws.send_with_u8_array(bytes);
+                }
+                WsTransport::Mux => {
+                    if let Some(id) = session_id {
+                        let frame = encode_stdin_frame(id, bytes);
+                        let _ = ws.send_with_u8_array(&frame);
+                    } else {
+                        state.borrow_mut().pending_input.push(bytes.to_vec());
+                    }
+                }
+            }
+            return;
         }
+        state.borrow_mut().pending_input.push(bytes.to_vec());
     }
 
     fn schedule_reconnect(
@@ -423,6 +571,18 @@ mod wasm {
             Arc::new(Mutex::new(Box::new(OutboxWriter {
                 queue: outbox.clone(),
             })));
+        let location_search = window.location().search().unwrap_or_default();
+        let transport = match query_param(&location_search, "transport").as_deref() {
+            Some("mux") => WsTransport::Mux,
+            _ => WsTransport::Raw,
+        };
+        let allow_raw_fallback = !matches!(
+            query_param(&location_search, "fallback_raw").as_deref(),
+            Some("0") | Some("false") | Some("off")
+        );
+        let pane_id = query_param(&location_search, "sid");
+        let mux_token = query_param(&location_search, "mux_token")
+            .or_else(|| query_param(&location_search, "token"));
 
         let app_state = Rc::new(RefCell::new(AppState {
             terminal,
@@ -440,10 +600,17 @@ mod wasm {
             last_blink: Instant::now(),
             blink_on: true,
             ws: None,
+            transport,
+            allow_raw_fallback,
+            pane_id: pane_id.clone(),
+            mux_token,
+            mux_session_id: None,
+            mux_failures: 0,
             pending_input: Vec::new(),
             reconnect_attempts: 0,
             status_el: status_el.clone(),
         }));
+        post_transport_status(&window, pane_id.as_deref(), transport);
 
         setup_websocket(&window, app_state.clone(), writer.clone())?;
         setup_keyboard(&window, app_state.clone())?;
@@ -570,7 +737,13 @@ mod wasm {
         let protocol = location.protocol()?;
         let host = location.host()?;
         let ws_scheme = if protocol == "https:" { "wss" } else { "ws" };
-        let url = format!("{ws_scheme}://{host}/ws");
+        let transport = state.borrow().transport;
+        let endpoint = if transport == WsTransport::Mux {
+            "/ws-mux"
+        } else {
+            "/ws"
+        };
+        let url = format!("{ws_scheme}://{host}{endpoint}");
         if state.borrow().ws.is_some() {
             return Ok(());
         }
@@ -584,22 +757,63 @@ mod wasm {
             if let Ok(buffer) = event.data().dyn_into::<js_sys::ArrayBuffer>() {
                 let data = Uint8Array::new(&buffer).to_vec();
                 let mut state = onmessage_state.borrow_mut();
-                let (terminal, parser, app_cursor_keys) = {
-                    let state = &mut *state;
-                    (
-                        &mut state.terminal,
-                        &mut state.parser,
-                        &mut state.app_cursor_keys,
-                    )
+                match state.transport {
+                    WsTransport::Raw => feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data),
+                    WsTransport::Mux => {
+                        if data.len() < 5 || data[0] != PTY_FRAME_STDOUT {
+                            return;
+                        }
+                        let frame_id = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
+                        if Some(frame_id) != state.mux_session_id {
+                            return;
+                        }
+                        feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data[5..]);
+                    }
+                }
+            } else if let Some(text) = event.data().as_string() {
+                let mut state = onmessage_state.borrow_mut();
+                if state.transport != WsTransport::Mux {
+                    return;
+                }
+                let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+                    return;
                 };
-                let mut performer = GridPerformer {
-                    grid: terminal,
-                    writer: onmessage_writer.clone(),
-                    app_cursor_keys,
-                    dcs_state: None,
-                };
-                for byte in data {
-                    parser.advance(&mut performer, byte);
+                let msg_type = value.get("type").and_then(serde_json::Value::as_str);
+                match msg_type {
+                    Some("spawned") => {
+                        let id = value
+                            .get("id")
+                            .and_then(serde_json::Value::as_u64)
+                            .and_then(|id| u32::try_from(id).ok());
+                        if let Some(id) = id {
+                            state.mux_session_id = Some(id);
+                            state.mux_failures = 0;
+                            if let Some(ws) = state.ws.clone() {
+                                send_mux_resize(&ws, id, state.layout.cols, state.layout.rows);
+                                flush_pending_input(&mut state, &ws);
+                            }
+                            state.reconnect_attempts = 0;
+                            set_status(&state.status_el, None);
+                        }
+                    }
+                    Some("auth_error") | Some("error") => {
+                        let message = value
+                            .get("error")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or("terminal connection error");
+                        if state.transport == WsTransport::Mux
+                            && state.allow_raw_fallback
+                            && state.mux_failures < u8::MAX
+                        {
+                            state.mux_failures = state.mux_failures.saturating_add(1);
+                        }
+                        set_status(&state.status_el, Some(message));
+                    }
+                    Some("exit") => {
+                        state.mux_session_id = None;
+                        set_status(&state.status_el, Some("Shell exited"));
+                    }
+                    _ => {}
                 }
             }
         });
@@ -610,18 +824,24 @@ mod wasm {
         let onopen_state = state.clone();
         let onopen = Closure::<dyn FnMut()>::new(move || {
             if let Some(ws) = onopen_state.borrow().ws.as_ref() {
-                send_resize(
-                    ws,
-                    onopen_state.borrow().layout.cols,
-                    onopen_state.borrow().layout.rows,
-                );
                 let mut state = onopen_state.borrow_mut();
-                let pending = std::mem::take(&mut state.pending_input);
-                for chunk in pending {
-                    let _ = ws.send_with_u8_array(&chunk);
+                match state.transport {
+                    WsTransport::Raw => {
+                        send_resize(ws, state.layout.cols, state.layout.rows);
+                        flush_pending_input(&mut state, ws);
+                        state.reconnect_attempts = 0;
+                        state.mux_failures = 0;
+                        set_status(&state.status_el, None);
+                    }
+                    WsTransport::Mux => {
+                        state.mux_session_id = None;
+                        if let Some(token) = state.mux_token.clone() {
+                            send_mux_auth(ws, &token);
+                        }
+                        send_mux_spawn(ws, state.layout.cols, state.layout.rows);
+                        set_status(&state.status_el, Some("Starting shell…"));
+                    }
                 }
-                state.reconnect_attempts = 0;
-                set_status(&state.status_el, None);
             }
         });
         if let Some(ws) = state.borrow().ws.as_ref() {
@@ -639,7 +859,27 @@ mod wasm {
             let delay = {
                 let mut state = onclose_state.borrow_mut();
                 state.ws = None;
-                set_status(&state.status_el, Some("Connection lost. Reconnecting…"));
+                state.mux_session_id = None;
+                if state.transport == WsTransport::Mux {
+                    state.mux_failures = state.mux_failures.saturating_add(1);
+                    if state.allow_raw_fallback && state.mux_failures >= 2 {
+                        state.transport = WsTransport::Raw;
+                        state.mux_failures = 0;
+                        post_transport_status(
+                            &onclose_window,
+                            state.pane_id.as_deref(),
+                            WsTransport::Raw,
+                        );
+                        set_status(
+                            &state.status_el,
+                            Some("Mux unavailable; falling back to raw terminal transport"),
+                        );
+                    } else {
+                        set_status(&state.status_el, Some("Connection lost. Reconnecting…"));
+                    }
+                } else {
+                    set_status(&state.status_el, Some("Connection lost. Reconnecting…"));
+                }
                 let backoff = 500u64.saturating_mul(1 << state.reconnect_attempts.min(5));
                 state.reconnect_attempts = state.reconnect_attempts.saturating_add(1);
                 backoff
@@ -684,7 +924,14 @@ mod wasm {
         let rows = state.layout.rows;
         state.terminal.resize(cols, rows);
         if let Some(ws) = state.ws.as_ref() {
-            send_resize(ws, cols, rows);
+            match state.transport {
+                WsTransport::Raw => send_resize(ws, cols, rows),
+                WsTransport::Mux => {
+                    if let Some(session_id) = state.mux_session_id {
+                        send_mux_resize(ws, session_id, cols, rows);
+                    }
+                }
+            }
         }
         state.frame.resize((width * height * 4) as usize, 0);
         state.image_data = None;
@@ -814,7 +1061,7 @@ mod wasm {
                     blink_on,
                 );
 
-                drain_outbox(&state.ws, &state.outbox);
+                drain_outbox(state);
             }
 
             let render_result = match backend.borrow().clone() {
@@ -839,13 +1086,25 @@ mod wasm {
         let _ = ws.send_with_str(&format!("resize:{cols}x{rows}"));
     }
 
-    fn drain_outbox(ws: &Option<WebSocket>, outbox: &Arc<Mutex<Vec<Vec<u8>>>>) {
-        let Some(ws) = ws.as_ref() else {
+    fn drain_outbox(state: &mut AppState) {
+        let Some(ws) = state.ws.as_ref() else {
             return;
         };
-        let mut pending = outbox.lock().unwrap();
+        let mut pending = state.outbox.lock().unwrap();
         for bytes in pending.drain(..) {
-            let _ = ws.send_with_u8_array(&bytes);
+            match state.transport {
+                WsTransport::Raw => {
+                    let _ = ws.send_with_u8_array(&bytes);
+                }
+                WsTransport::Mux => {
+                    if let Some(session_id) = state.mux_session_id {
+                        let frame = encode_stdin_frame(session_id, &bytes);
+                        let _ = ws.send_with_u8_array(&frame);
+                    } else {
+                        state.pending_input.push(bytes);
+                    }
+                }
+            }
         }
     }
 

@@ -18,35 +18,34 @@ export function TerminalDevicesPanel(props: Props) {
     <aside class="border-r border-border/70 bg-card/30 p-3">
       <div class="mb-2 flex items-center justify-between">
         <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Connected Devices</p>
-        <div class="flex items-center gap-1">
-          <button
-            type="button"
-            class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-            onClick={() => void devices().refreshDeviceStatus()}
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground disabled:opacity-60"
-            disabled={devices().tailscaleImporting()}
-            onClick={() => void devices().importTailscaleDevices({ silent: false })}
-          >
-            {devices().tailscaleImporting() ? 'Importing...' : 'Import TS'}
-          </button>
-        </div>
+        <button
+          type="button"
+          class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={() => void devices().refreshDeviceStatus()}
+        >
+          Refresh
+        </button>
       </div>
-      <label class="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+      <div class="mb-3 space-y-2">
         <input
-          type="checkbox"
-          checked={devices().state().autoImportTailscale}
-          onChange={(event) => terminalDrawerActions.setAutoImportTailscale((event.currentTarget as HTMLInputElement).checked)}
+          type="text"
+          value={devices().ownerPubkeyInput()}
+          placeholder="Solana owner pubkey"
+          class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
+          onInput={(ev) => devices().setOwnerPubkeyInput(ev.currentTarget.value)}
         />
-        Auto import Tailscale on wallet connect
-      </label>
-      <Show when={devices().tailscaleImportNote().length > 0}>
-        <p class="mb-2 text-[11px] text-muted-foreground">{devices().tailscaleImportNote()}</p>
-      </Show>
+        <button
+          type="button"
+          class="h-8 w-full rounded-md border border-border/70 bg-card/70 px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
+          disabled={devices().ownerImporting()}
+          onClick={() => void devices().importOwnerDevices()}
+        >
+          {devices().ownerImporting() ? 'Importing owner...' : 'Import Owner Routes'}
+        </button>
+        <Show when={devices().ownerImportNote().length > 0}>
+          <p class="text-[11px] text-muted-foreground">{devices().ownerImportNote()}</p>
+        </Show>
+      </div>
 
       <div class="mb-3 space-y-2">
         <input

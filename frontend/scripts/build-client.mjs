@@ -11,11 +11,20 @@ mkdirSync(path.join(distRoot, 'assets'), { recursive: true })
 
 await build({
   entryPoints: [path.join(root, 'src/client.tsx')],
-  outfile: path.join(distRoot, 'assets', 'client.js'),
+  outdir: path.join(distRoot, 'assets'),
+  entryNames: '[name]',
   bundle: true,
+  splitting: true,
+  chunkNames: 'chunks/[name]-[hash]',
+  minify: true,
+  treeShaking: true,
+  legalComments: 'none',
   platform: 'browser',
   format: 'esm',
   target: 'es2022',
+  define: {
+    'process.env.NODE_ENV': '"production"'
+  },
   jsx: 'preserve',
   plugins: [solidPlugin({ solid: { generate: 'dom', hydratable: true } })]
 })

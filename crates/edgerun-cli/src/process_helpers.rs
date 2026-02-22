@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::path::Path;
 use std::process::Stdio;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 
 pub(crate) fn run_program_sync(
     label: &str,

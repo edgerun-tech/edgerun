@@ -13,7 +13,7 @@ path = "src/main.rs"
 arboard = { version = "3.3", features = ["wayland-data-control"] }
 anyhow = "1"
 dirs = "5.0"
-env_logger = "0.11"
+edgerun-observability = { path = "../edgerun-observability" }
 log = "0.4"
 once_cell = "1.19"
 pixels = "0.15"

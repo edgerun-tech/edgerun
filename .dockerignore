@@ -1,6 +1,6 @@
 .git
 .github
-out
+out/*
 target
 test-ledger
 solana-validator.log
@@ -16,3 +16,11 @@ solana-validator.log
 
 .env
 .env.*
+
+!out/target/
+!out/target/release/
+!out/target/release/edgerun
+!out/target/release/edgerun-cli
+!out/target/release/edgerun-scheduler
+!out/target/release/edgerun-term-server
+!out/target/release/edgerun-worker

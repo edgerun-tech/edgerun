@@ -7,6 +7,7 @@ const TERM_DEFAULT_RATIO = 0.35
 
 export type TerminalSplitMode = 'none' | 'split-cols' | 'split-rows'
 export type DeviceStatus = 'unknown' | 'online' | 'offline'
+export type PaneTransport = 'unknown' | 'mux' | 'raw'
 
 export type TerminalPane = {
   id: string
@@ -32,10 +33,10 @@ export type TerminalDevice = {
 export type TerminalDrawerState = {
   open: boolean
   heightRatio: number
-  autoImportTailscale: boolean
   tabs: TerminalTab[]
   activeTabId: string
   devices: TerminalDevice[]
+  paneTransport: Record<string, PaneTransport>
 }
 
 type Listener = (state: TerminalDrawerState) => void
@@ -130,13 +131,32 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
       })
     : []
 
+  const knownPaneIds = new Set<string>()
+  for (const tab of tabs) {
+    for (const pane of tab.panes) knownPaneIds.add(pane.id)
+  }
+  const paneTransport: Record<string, PaneTransport> = {}
+  if (base.paneTransport && typeof base.paneTransport === 'object') {
+    for (const [paneId, value] of Object.entries(base.paneTransport)) {
+      if (!knownPaneIds.has(paneId)) continue
+      if (value === 'mux' || value === 'raw' || value === 'unknown') {
+        paneTransport[paneId] = value
+      }
+    }
+  }
+  for (const tab of tabs) {
+    for (const pane of tab.panes) {
+      if (!paneTransport[pane.id]) paneTransport[pane.id] = 'unknown'
+    }
+  }
+
   return {
     open: Boolean(base.open),
     heightRatio,
-    autoImportTailscale: typeof base.autoImportTailscale === 'boolean' ? base.autoImportTailscale : true,
     tabs,
     activeTabId,
-    devices
+    devices,
+    paneTransport
   }
 }
 
@@ -175,6 +195,18 @@ function lastUsedDevice(current: TerminalDrawerState): TerminalDevice | null {
   return sorted[0] ?? null
 }
 
+function resetPaneTransportForTab(
+  paneTransport: Record<string, PaneTransport>,
+  tab: TerminalTab
+): Record<string, PaneTransport> {
+  const activePaneIds = new Set(tab.panes.map((pane) => pane.id))
+  const next: Record<string, PaneTransport> = {}
+  for (const [paneId, mode] of Object.entries(paneTransport)) {
+    next[paneId] = activePaneIds.has(paneId) ? 'unknown' : mode
+  }
+  return next
+}
+
 export function ensureTerminalDrawerStore(): void {
   if (initialized) return
   initialized = true
@@ -205,10 +237,6 @@ export const terminalDrawerActions = {
 
   setOpen(open: boolean): void {
     apply((prev) => ({ ...prev, open }))
-  },
-
-  setAutoImportTailscale(enabled: boolean): void {
-    apply((prev) => ({ ...prev, autoImportTailscale: enabled }))
   },
 
   addTab(): void {
@@ -327,25 +355,29 @@ export const terminalDrawerActions = {
   setSplit(mode: TerminalSplitMode): void {
     apply((prev) => {
       const tab = activeTab(prev)
+      const nextPaneTransport = { ...prev.paneTransport }
       const tabs = prev.tabs.map((entry) => {
         if (entry.id !== tab.id) return entry
         if (mode === 'none') {
+          const pane = entry.panes[0] ?? { id: termId(), baseUrl: '' }
+          nextPaneTransport[pane.id] = 'unknown'
           return {
             ...entry,
             split: 'none' as const,
-            panes: [entry.panes[0] ?? { id: termId(), baseUrl: '' }]
+            panes: [pane]
           }
         }
         const panes = entry.panes.length < 2
           ? [...entry.panes, { id: termId(), baseUrl: entry.panes[0]?.baseUrl ?? '' }]
           : entry.panes.slice(0, 2)
+        for (const pane of panes) nextPaneTransport[pane.id] = 'unknown'
         return {
           ...entry,
           split: mode,
           panes
         }
       })
-      return { ...prev, tabs, open: true }
+      return { ...prev, tabs, open: true, paneTransport: nextPaneTransport }
     })
   },
 
@@ -369,7 +401,8 @@ export const terminalDrawerActions = {
         ...prev,
         open: true,
         tabs,
-        devices
+        devices,
+        paneTransport: resetPaneTransportForTab(prev.paneTransport, tab)
       }
     })
   },
@@ -394,7 +427,8 @@ export const terminalDrawerActions = {
         ...prev,
         open: true,
         tabs,
-        devices
+        devices,
+        paneTransport: resetPaneTransportForTab(prev.paneTransport, tab)
       }
     })
   },
@@ -464,6 +498,20 @@ export const terminalDrawerActions = {
         : item
       )
     }))
+  },
+
+  setPaneTransport(paneId: string, transport: PaneTransport): void {
+    if (!paneId) return
+    apply((prev) => {
+      if (prev.paneTransport[paneId] === transport) return prev
+      return {
+        ...prev,
+        paneTransport: {
+          ...prev.paneTransport,
+          [paneId]: transport
+        }
+      }
+    })
   }
 }
 
@@ -503,6 +551,9 @@ function seedKnownDevices(): void {
 export function getTerminalPaneSrc(baseUrl: string, paneId: string): string {
   const target = (baseUrl || '').trim()
   if (!target) return ''
+  const routeLike = /^([a-z][a-z0-9+\-.]*):\/\//i.test(target)
+    && !/^https?:\/\//i.test(target)
+  if (routeLike) return ''
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
     const url = new URL(target, origin)
@@ -514,6 +565,9 @@ export function getTerminalPaneSrc(baseUrl: string, paneId: string): string {
     }
     url.searchParams.set('embed', '1')
     url.searchParams.set('sid', paneId)
+    if (!url.searchParams.has('transport')) {
+      url.searchParams.set('transport', 'mux')
+    }
     return url.toString()
   } catch {
     return ''

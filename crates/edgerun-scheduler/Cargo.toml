@@ -12,7 +12,6 @@ base64.workspace = true
 hex.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 bincode.workspace = true
@@ -20,6 +19,7 @@ solana-client.workspace = true
 solana-sdk.workspace = true
 ed25519-dalek.workspace = true
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
+edgerun-observability = { path = "../../crates/edgerun-observability" }
 edgerun-types = { path = "../../crates/edgerun-types" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
 fs2 = "0.4"
@@ -27,3 +27,4 @@ fs2 = "0.4"
 [dev-dependencies]
 hmac = "0.12"
 sha2 = "0.10"
+reqwest.workspace = true
