@@ -147,30 +147,7 @@ pub fn send_key(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-
-    type SharedWriter = Arc<Mutex<Box<dyn std::io::Write + Send>>>;
-    type SharedBytes = Arc<Mutex<Vec<u8>>>;
-
-    #[derive(Default)]
-    struct Buf(Arc<Mutex<Vec<u8>>>);
-
-    impl Write for Buf {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    fn capture_writer() -> (SharedBytes, SharedWriter) {
-        let buf: SharedBytes = Arc::new(Mutex::new(Vec::new()));
-        let writer: Box<dyn std::io::Write + Send> = Box::new(Buf(buf.clone()));
-        (buf, Arc::new(Mutex::new(writer)))
-    }
+    use term_core::test_support::capture_writer;
 
     #[test]
     fn send_cursor_key_respects_modes() {
