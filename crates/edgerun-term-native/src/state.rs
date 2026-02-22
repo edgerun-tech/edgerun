@@ -216,7 +216,10 @@ impl AutocompleteEngine {
             add(clip, base, 1);
         }
 
-        for (idx, prog) in crate::scan_path_programs(prefix, 256).into_iter().enumerate() {
+        for (idx, prog) in crate::scan_path_programs(prefix, 256)
+            .into_iter()
+            .enumerate()
+        {
             let base = 1200 - idx as i32;
             add(prog, base, 1);
         }

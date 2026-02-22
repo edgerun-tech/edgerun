@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::{BufRead, Read, Write};
@@ -14,7 +14,6 @@ use dirs::config_dir;
 use log::{debug, error, info, warn};
 use pixels::{Pixels, SurfaceTexture};
 use portable_pty::CommandBuilder;
-use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
@@ -28,7 +27,7 @@ use term_core::terminal::{
     GridPerformer, Terminal, copy_text_to_clipboard, selection_text, write_bytes,
 };
 use term_ui::app_render::{RenderInputs, TabRender, render_frame};
-use term_ui::debug::{DebugOverlay, DebugRenderMode};
+use term_ui::debug::DebugOverlay;
 use term_ui::input;
 use term_ui::suggest::{looks_like_path, path_completion_suggestions};
 use term_ui::widgets::history::{MenuColumn, MenuEntry};
@@ -46,11 +45,16 @@ use winit::platform::startup_notify::{
 };
 use winit::window::Window;
 
+mod linking;
 mod logging;
 mod state;
 mod suggest;
 mod tab;
 
+use crate::linking::{
+    detect_link_ranges, detect_link_text_at_cell, looks_like_url, open_link, open_path,
+    parse_path_candidate, resolve_existing_path,
+};
 use crate::state::{
     AutocompleteEngine, SettingsState, load_settings_state, next_log_level, next_render_mode,
     parse_log_level, parse_render_mode, persist_settings_state,
@@ -2025,280 +2029,6 @@ fn default_shell() -> CommandBuilder {
             cmd.env("PS1", ps1);
         }
         cmd
-    }
-}
-
-fn open_link(link: &str) {
-    #[cfg(target_os = "macos")]
-    let candidates = ["open"];
-    #[cfg(target_os = "linux")]
-    let candidates = ["xdg-open"];
-    #[cfg(target_os = "windows")]
-    let candidates = ["start"];
-
-    for bin in candidates {
-        if Command::new(bin)
-            .arg(link)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .is_ok()
-        {
-            break;
-        }
-    }
-}
-
-fn is_link_char(ch: char) -> bool {
-    ch.is_ascii_alphanumeric()
-        || matches!(
-            ch,
-            '-' | '_'
-                | '.'
-                | '/'
-                | ':'
-                | '?'
-                | '#'
-                | '&'
-                | '='
-                | '%'
-                | '+'
-                | '~'
-                | '@'
-                | '!'
-                | '$'
-                | '\''
-                | '('
-                | ')'
-                | '*'
-                | ','
-                | ';'
-        )
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct LinkMatch {
-    text: String,
-    start: usize,
-    end: usize,
-}
-
-fn is_trim_start(ch: char) -> bool {
-    matches!(ch, '(' | '[' | '{' | '<' | '"' | '\'')
-}
-
-fn is_trim_end(ch: char) -> bool {
-    matches!(
-        ch,
-        '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']' | '}' | '>' | '"' | '\''
-    )
-}
-
-fn trim_link_token(token: &str) -> String {
-    let mut trimmed = token.trim();
-    trimmed = trimmed.trim_start_matches(is_trim_start);
-    trimmed = trimmed.trim_end_matches(is_trim_end);
-    trimmed.to_string()
-}
-
-fn looks_like_url(token: &str) -> bool {
-    token.starts_with("http://") || token.starts_with("https://") || token.starts_with("file://")
-}
-
-fn looks_like_file_path(token: &str) -> bool {
-    if token.contains("://") {
-        return false;
-    }
-    token.starts_with('/')
-        || token.starts_with("./")
-        || token.starts_with("../")
-        || token.starts_with("~/")
-        || token.contains('/')
-}
-
-fn percent_decode(input: &str) -> String {
-    let bytes = input.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            let hi = bytes[i + 1];
-            let lo = bytes[i + 2];
-            let decode = |b| match b {
-                b'0'..=b'9' => Some(b - b'0'),
-                b'a'..=b'f' => Some(b - b'a' + 10),
-                b'A'..=b'F' => Some(b - b'A' + 10),
-                _ => None,
-            };
-            if let (Some(hi), Some(lo)) = (decode(hi), decode(lo)) {
-                out.push((hi << 4) | lo);
-                i += 3;
-                continue;
-            }
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).to_string()
-}
-
-fn parse_path_candidate(candidate: &str, tab: &Tab) -> Option<PathBuf> {
-    if let Some(rest) = candidate.strip_prefix("file://") {
-        let rest = rest.strip_prefix("localhost/").unwrap_or(rest);
-        let decoded = percent_decode(rest);
-        if decoded.starts_with('/') {
-            return Some(PathBuf::from(decoded));
-        }
-        return None;
-    }
-
-    if let Some(rest) = candidate.strip_prefix("~/") {
-        let home = dirs::home_dir()?;
-        return Some(home.join(rest));
-    }
-
-    if candidate.starts_with('/') {
-        return Some(PathBuf::from(candidate));
-    }
-
-    if candidate.starts_with("./") || candidate.starts_with("../") || candidate.contains('/') {
-        let base = tab_current_dir(tab)?;
-        return Some(base.join(candidate));
-    }
-
-    None
-}
-
-fn resolve_existing_path(candidate: &str, tab: &Tab) -> Option<PathBuf> {
-    let path = parse_path_candidate(candidate, tab)?;
-    if path.exists() { Some(path) } else { None }
-}
-
-fn detect_link_text_at_cell(term: &Terminal, col: usize, row: usize) -> Option<LinkMatch> {
-    if row >= term.rows || col >= term.cols {
-        return None;
-    }
-    let mut chars = Vec::with_capacity(term.cols);
-    for c in 0..term.cols {
-        let cell = term.display_cell(c, row);
-        let ch = if cell.wide_continuation || cell.text.is_empty() {
-            ' '
-        } else {
-            cell.text.chars().next().unwrap_or(' ')
-        };
-        chars.push(ch);
-    }
-    let ch = *chars.get(col)?;
-    if ch.is_whitespace() || !is_link_char(ch) {
-        return None;
-    }
-    let mut start = col;
-    while start > 0 && is_link_char(chars[start - 1]) {
-        start -= 1;
-    }
-    let mut end = col;
-    while end + 1 < chars.len() && is_link_char(chars[end + 1]) {
-        end += 1;
-    }
-    let token: String = chars[start..=end].iter().collect();
-    let token = trim_link_token(&token);
-    if token.is_empty() {
-        return None;
-    }
-    if looks_like_url(&token) || looks_like_file_path(&token) {
-        Some(LinkMatch {
-            text: token,
-            start,
-            end,
-        })
-    } else {
-        None
-    }
-}
-
-fn detect_link_ranges(term: &Terminal) -> Vec<Vec<(usize, usize)>> {
-    let mut ranges = Vec::with_capacity(term.rows);
-    for row in 0..term.rows {
-        let mut row_ranges = Vec::new();
-        let mut chars = Vec::with_capacity(term.cols);
-        for col in 0..term.cols {
-            let cell = term.display_cell(col, row);
-            let ch = if cell.wide_continuation || cell.text.is_empty() {
-                ' '
-            } else {
-                cell.text.chars().next().unwrap_or(' ')
-            };
-            chars.push(ch);
-        }
-
-        let mut col = 0;
-        while col < chars.len() {
-            if !is_link_char(chars[col]) {
-                col += 1;
-                continue;
-            }
-            let start = col;
-            while col + 1 < chars.len() && is_link_char(chars[col + 1]) {
-                col += 1;
-            }
-            let end = col;
-            let mut trimmed_start = start;
-            let mut trimmed_end = end;
-            while trimmed_start <= trimmed_end && is_trim_start(chars[trimmed_start]) {
-                trimmed_start += 1;
-            }
-            while trimmed_end >= trimmed_start && is_trim_end(chars[trimmed_end]) {
-                if trimmed_end == 0 {
-                    break;
-                }
-                trimmed_end -= 1;
-            }
-            if trimmed_start <= trimmed_end {
-                let token: String = chars[trimmed_start..=trimmed_end].iter().collect();
-                if looks_like_url(&token) || looks_like_file_path(&token) {
-                    row_ranges.push((trimmed_start, trimmed_end));
-                }
-            }
-            col += 1;
-        }
-        ranges.push(row_ranges);
-    }
-    ranges
-}
-
-fn is_text_file(path: &Path) -> bool {
-    let Ok(mut file) = fs::File::open(path) else {
-        return false;
-    };
-    let mut buf = [0u8; 4096];
-    let Ok(read_len) = file.read(&mut buf) else {
-        return false;
-    };
-    if buf[..read_len].contains(&0) {
-        return false;
-    }
-    std::str::from_utf8(&buf[..read_len]).is_ok()
-}
-
-fn open_path(path: &Path) {
-    #[cfg(target_os = "linux")]
-    {
-        let bin = if path.is_dir() {
-            "nautilus"
-        } else if is_text_file(path) {
-            "geany"
-        } else {
-            "nautilus"
-        };
-        let _ = Command::new(bin)
-            .arg(path)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = path;
     }
 }
 
