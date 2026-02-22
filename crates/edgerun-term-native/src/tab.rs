@@ -135,7 +135,7 @@ pub fn spawn_shell_tab(
         pixel_height: usable_height.min(u16::MAX as u32) as u16,
     })?;
 
-    let mut cmd = super::default_shell();
+    let mut cmd = crate::platform::default_shell();
     cmd.env("TERM", "xterm-256color");
     cmd.env("PROMPT_EOL_MARK", "");
     if let Some(ref dir) = cwd {
