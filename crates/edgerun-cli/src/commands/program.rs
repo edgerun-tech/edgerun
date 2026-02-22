@@ -3,12 +3,12 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 
 use crate::process_helpers::{
     run_program_capture_sync_owned, run_program_sync, run_program_sync_with_env,
 };
-use crate::{ProgramCommand, SolanaCluster, program_tool_env};
+use crate::{program_tool_env, ProgramCommand, SolanaCluster};
 
 const ACCOUNT_DISCRIMINATOR_BYTES: usize = 8;
 const GLOBAL_CONFIG_INIT_SPACE: usize = 179;

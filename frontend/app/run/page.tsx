@@ -29,6 +29,15 @@ type PresetApp = {
 }
 
 type SubmissionStatus = 'idle' | 'pending' | 'success' | 'error'
+type RunStep = 'step-1' | 'step-2' | 'step-3'
+
+type VanitySearchSpace = {
+  prefix: string
+  startCounter: string
+  endCounter: string
+  chunkAttempts: string
+  workerCount: string
+}
 
 const PRESET_APPS: PresetApp[] = [
   {
@@ -70,8 +79,16 @@ const PRESET_APPS: PresetApp[] = [
 ]
 
 const DEFAULT_PRESET = PRESET_APPS[0]!
+const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
+  prefix: 'So1',
+  startCounter: '0',
+  endCounter: '1000000',
+  chunkAttempts: '50000',
+  workerCount: '5'
+}
 
 export default function RunPage() {
+  const [activeStep, setActiveStep] = createSignal<RunStep>('step-1')
   const [safetyOpen, setSafetyOpen] = createSignal(false)
   const [submissionMode, setSubmissionMode] = createSignal<'preset' | 'custom'>('preset')
   const [selectedPresetId, setSelectedPresetId] = createSignal(DEFAULT_PRESET.id)
@@ -84,6 +101,7 @@ export default function RunPage() {
   const [customModuleName, setCustomModuleName] = createSignal('')
   const [customWasmFileName, setCustomWasmFileName] = createSignal('')
   const [inputFileName, setInputFileName] = createSignal('')
+  const [vanitySearchSpace, setVanitySearchSpace] = createSignal<VanitySearchSpace>(DEFAULT_VANITY_SEARCH_SPACE)
   const [allowSeedExposure, setAllowSeedExposure] = createSignal(true)
   const [submitStatus, setSubmitStatus] = createSignal<SubmissionStatus>('idle')
   const [submitMessage, setSubmitMessage] = createSignal('')
@@ -91,6 +109,20 @@ export default function RunPage() {
   const [lastReceiptId, setLastReceiptId] = createSignal('')
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
+  const isVanityApp = createMemo(() => selectedPresetId() === 'vanity-generator')
+  const appInputSummary = createMemo(() => {
+    if (isVanityApp()) {
+      const spec = vanitySearchSpace()
+      return `Vanity search space: prefix "${spec.prefix}" from counter ${spec.startCounter} to ${spec.endCounter} with chunk size ${spec.chunkAttempts} across ${spec.workerCount} workers.`
+    }
+    if (inputMode() === 'json') {
+      return 'App input comes from raw JSON payload.'
+    }
+    if (inputMode() === 'file') {
+      return `App input comes from uploaded file${inputFileName() ? ` (${inputFileName()})` : ''}.`
+    }
+    return 'Use app-specific JSON payload for this module.'
+  })
 
   const onPresetChange = (nextPresetId: string) => {
     const preset = PRESET_APPS.find((app) => app.id === nextPresetId) ?? DEFAULT_PRESET
@@ -98,6 +130,18 @@ export default function RunPage() {
     setJobName(preset.defaultJobName)
     setRuntimeId(preset.defaultRuntimeId)
     setInputJson(preset.defaultInputJson)
+    setInputMode(nextPresetId === 'vanity-generator' ? 'predefined' : 'json')
+    setSubmitStatus('idle')
+    setValidationErrors([])
+  }
+
+  const applyRecommendedDemo = () => {
+    onPresetChange('vanity-generator')
+    setSubmissionMode('preset')
+    setExecutionMode('distributed-insecure')
+    setSchedulerUrl('http://127.0.0.1:8090')
+    setAllowSeedExposure(true)
+    setActiveStep('step-2')
   }
 
   const isKnownLocalScheduler = (urlText: string) => {
@@ -148,6 +192,25 @@ export default function RunPage() {
       errors.push('Input file is required when Input Source is set to Upload input file.')
     }
 
+    if (isVanityApp() && inputMode() === 'predefined') {
+      const start = Number(vanitySearchSpace().startCounter)
+      const end = Number(vanitySearchSpace().endCounter)
+      const chunk = Number(vanitySearchSpace().chunkAttempts)
+      const workers = Number(vanitySearchSpace().workerCount)
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        errors.push('Vanity search space must use numeric counters and End Counter must be greater than Start Counter.')
+      }
+      if (!Number.isFinite(chunk) || chunk <= 0) {
+        errors.push('Vanity search space chunk attempts must be greater than 0.')
+      }
+      if (!Number.isFinite(workers) || workers < 1) {
+        errors.push('Vanity worker count must be at least 1.')
+      }
+      if (!vanitySearchSpace().prefix.trim()) {
+        errors.push('Vanity prefix is required.')
+      }
+    }
+
     if (executionMode() === 'distributed-insecure' && !allowSeedExposure()) {
       errors.push('Distributed mode requires explicit worker seed exposure acknowledgement.')
     }
@@ -190,10 +253,11 @@ export default function RunPage() {
       <PageHero
         title="Run Job"
         badge="Guided Flow"
-        description="Pick an app preset or upload your own module, define inputs, and review exactly what outputs and runtime steps will be produced."
+        description="Understand value, guarantees, and execution in one guided flow, then run with recommended defaults or your own app module."
         actions={
           <>
-            <a href="/docs/getting-started/quick-start/"><Button>Open Get Started Guide</Button></a>
+            <Button onClick={applyRecommendedDemo}>Use Recommended Demo</Button>
+            <a href="/docs/getting-started/quick-start/"><Button variant="outline">Open Get Started Guide</Button></a>
             <Button variant="outline" disabled>
               Live Submission
               <GeneratingIndicator class="ml-2 text-[10px]" />
@@ -210,7 +274,28 @@ export default function RunPage() {
           </AlertDescription>
         </Alert>
 
-        <Tabs defaultValue="step-1" class="space-y-4">
+        <div class="grid gap-4 md:grid-cols-3" data-testid="journey-overview">
+          <Card>
+            <CardHeader>
+              <CardTitle>Why This Helps You</CardTitle>
+              <CardDescription>Run distributed compute and still get deterministic output you can trust.</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Guarantees You Get</CardTitle>
+              <CardDescription>Deterministic execution, cross-worker consistency checks, and auditable submission receipts.</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>How To Use It</CardTitle>
+              <CardDescription>Choose app, configure platform + app fields, review exact IO contract, submit.</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+
+        <Tabs value={activeStep()} onValueChange={(next) => setActiveStep(next as RunStep)} class="space-y-4">
           <TabsList class="w-full justify-start gap-1 overflow-auto">
             <TabsTrigger value="step-1">1. Choose Module</TabsTrigger>
             <TabsTrigger value="step-2">2. Define Inputs</TabsTrigger>
@@ -225,6 +310,10 @@ export default function RunPage() {
                   <CardDescription>Select a curated app for fast onboarding, or upload your own WASM module.</CardDescription>
                 </CardHeader>
                 <CardContent class="space-y-4">
+                  <Alert>
+                    <AlertTitle>Frictionless Start</AlertTitle>
+                    <AlertDescription>Pick the recommended vanity demo to see end-to-end output first. Change advanced fields only when needed.</AlertDescription>
+                  </Alert>
                   <div class="space-y-1">
                     <Label for="submission-mode">Submission Mode</Label>
                     <Select
@@ -269,6 +358,10 @@ export default function RunPage() {
                     </div>
                     <p class="text-xs text-muted-foreground">Upload a deterministic WASM artifact and define expected output shape in step 3 before submitting.</p>
                   </div>
+
+                  <div class="flex justify-end">
+                    <Button type="button" onClick={() => setActiveStep('step-2')}>Continue to Configure App</Button>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -292,10 +385,14 @@ export default function RunPage() {
             <div class="grid gap-4 lg:grid-cols-3">
               <Card class="lg:col-span-2">
                 <CardHeader>
-                  <CardTitle>Input Configuration</CardTitle>
-                  <CardDescription>Choose predefined values, paste JSON, or upload an input file.</CardDescription>
+                  <CardTitle>Configure Platform + App Fields</CardTitle>
+                  <CardDescription>Platform envelope is separated from app-specific fields so users can configure a single app without guessing.</CardDescription>
                 </CardHeader>
                 <CardContent class="space-y-4">
+                  <div class="space-y-1">
+                    <h4 class="text-sm font-semibold">Platform Job Envelope</h4>
+                    <p class="text-xs text-muted-foreground">These values apply to scheduling and execution regardless of app.</p>
+                  </div>
                   <div class="grid gap-4 md:grid-cols-2">
                     <div class="space-y-1">
                       <Label for="job-name">Job Name</Label>
@@ -305,57 +402,6 @@ export default function RunPage() {
                       <Label for="runtime-id">Runtime ID (hex)</Label>
                       <Input id="runtime-id" aria-label="Runtime ID" class="font-mono text-xs" value={runtimeId()} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setRuntimeId(event.currentTarget.value)} />
                     </div>
-                  </div>
-
-                  <div class="space-y-1">
-                    <Label for="input-mode">Input Source</Label>
-                    <Select
-                      id="input-mode"
-                      aria-label="Input Source"
-                      value={inputMode()}
-                      onInput={(event: Event & { currentTarget: HTMLSelectElement }) => setInputMode(event.currentTarget.value as 'predefined' | 'json' | 'file')}
-                    >
-                      <option value="predefined">Predefined fields</option>
-                      <option value="json">Raw JSON payload</option>
-                      <option value="file">Upload input file</option>
-                    </Select>
-                  </div>
-
-                  <div classList={{ hidden: inputMode() !== 'predefined' }} class="space-y-3" data-testid="predefined-input-panel">
-                    <div class="grid gap-4 md:grid-cols-3">
-                      <div class="space-y-1">
-                        <Label for="prefix">Prefix</Label>
-                        <Input id="prefix" aria-label="Prefix" value="So1" class="font-mono text-xs" />
-                      </div>
-                      <div class="space-y-1">
-                        <Label for="start-counter">Start Counter</Label>
-                        <Input id="start-counter" aria-label="Start Counter" type="number" min="0" value="0" class="font-mono text-xs" />
-                      </div>
-                      <div class="space-y-1">
-                        <Label for="end-counter">End Counter</Label>
-                        <Input id="end-counter" aria-label="End Counter" type="number" min="1" value="1000000" class="font-mono text-xs" />
-                      </div>
-                    </div>
-                    <div class="grid gap-4 md:grid-cols-2">
-                      <div class="space-y-1">
-                        <Label for="chunk-attempts">Chunk Attempts</Label>
-                        <Input id="chunk-attempts" aria-label="Chunk Attempts" type="number" min="1" value="50000" class="font-mono text-xs" />
-                      </div>
-                      <div class="space-y-1">
-                        <Label for="worker-count">Worker Count</Label>
-                        <Input id="worker-count" aria-label="Worker Count" type="number" min="1" value="5" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div classList={{ hidden: inputMode() !== 'json' }} class="space-y-1" data-testid="json-input-panel">
-                    <Label for="input-json">Input JSON</Label>
-                    <Textarea id="input-json" aria-label="Input JSON" class="font-mono text-xs" value={inputJson()} onInput={(event: Event & { currentTarget: HTMLTextAreaElement }) => setInputJson(event.currentTarget.value)} />
-                  </div>
-
-                  <div classList={{ hidden: inputMode() !== 'file' }} class="space-y-1" data-testid="file-input-panel">
-                    <Label for="input-file">Input Data File</Label>
-                    <Input id="input-file" aria-label="Input Data File" type="file" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setInputFileName(event.currentTarget.files?.[0]?.name ?? '')} />
                   </div>
 
                   <div class="space-y-1">
@@ -386,6 +432,77 @@ export default function RunPage() {
                       Mode Safety
                     </Button>
                   </div>
+
+                  <Separator />
+
+                  <div class="space-y-1">
+                    <h4 class="text-sm font-semibold">App Configuration: {selectedPreset().name}</h4>
+                    <p class="text-xs text-muted-foreground">These fields define what this specific app will execute.</p>
+                  </div>
+
+                  <div class="space-y-1">
+                    <Label for="input-mode">App Input Source</Label>
+                    <Select
+                      id="input-mode"
+                      aria-label="App Input Source"
+                      value={inputMode()}
+                      onInput={(event: Event & { currentTarget: HTMLSelectElement }) => setInputMode(event.currentTarget.value as 'predefined' | 'json' | 'file')}
+                    >
+                      <option value="predefined">Predefined fields</option>
+                      <option value="json">Raw JSON payload</option>
+                      <option value="file">Upload input file</option>
+                    </Select>
+                  </div>
+
+                  <div classList={{ hidden: inputMode() !== 'predefined' }} class="space-y-3" data-testid="predefined-input-panel">
+                    <div hidden={!isVanityApp()} class="space-y-3" data-testid="vanity-app-fields">
+                      <p class="text-xs text-muted-foreground">Search space is a Vanity app field. Configure it here when running the vanity generator.</p>
+                      <div class="grid gap-4 md:grid-cols-3">
+                        <div class="space-y-1">
+                          <Label for="prefix">Prefix</Label>
+                          <Input id="prefix" aria-label="Prefix" value={vanitySearchSpace().prefix} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), prefix: event.currentTarget.value })} />
+                        </div>
+                        <div class="space-y-1">
+                          <Label for="start-counter">Start Counter</Label>
+                          <Input id="start-counter" aria-label="Start Counter" type="number" min="0" value={vanitySearchSpace().startCounter} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), startCounter: event.currentTarget.value })} />
+                        </div>
+                        <div class="space-y-1">
+                          <Label for="end-counter">End Counter</Label>
+                          <Input id="end-counter" aria-label="End Counter" type="number" min="1" value={vanitySearchSpace().endCounter} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), endCounter: event.currentTarget.value })} />
+                        </div>
+                      </div>
+                      <div class="grid gap-4 md:grid-cols-2">
+                        <div class="space-y-1">
+                          <Label for="chunk-attempts">Chunk Attempts</Label>
+                          <Input id="chunk-attempts" aria-label="Chunk Attempts" type="number" min="1" value={vanitySearchSpace().chunkAttempts} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), chunkAttempts: event.currentTarget.value })} />
+                        </div>
+                        <div class="space-y-1">
+                          <Label for="worker-count">Worker Count</Label>
+                          <Input id="worker-count" aria-label="Worker Count" type="number" min="1" value={vanitySearchSpace().workerCount} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), workerCount: event.currentTarget.value })} />
+                        </div>
+                      </div>
+                    </div>
+                    <Alert hidden={isVanityApp()}>
+                      <AlertTitle>No Predefined Search Space For This App</AlertTitle>
+                      <AlertDescription>Search-space controls are specific to the Vanity app. For this app, use raw JSON or input file.</AlertDescription>
+                    </Alert>
+                  </div>
+
+                  <div classList={{ hidden: inputMode() !== 'json' }} class="space-y-1" data-testid="json-input-panel">
+                    <Label for="input-json">Input JSON</Label>
+                    <Textarea id="input-json" aria-label="Input JSON" class="font-mono text-xs" value={inputJson()} onInput={(event: Event & { currentTarget: HTMLTextAreaElement }) => setInputJson(event.currentTarget.value)} />
+                  </div>
+
+                  <div classList={{ hidden: inputMode() !== 'file' }} class="space-y-1" data-testid="file-input-panel">
+                    <Label for="input-file">Input Data File</Label>
+                    <Input id="input-file" aria-label="Input Data File" type="file" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setInputFileName(event.currentTarget.files?.[0]?.name ?? '')} />
+                  </div>
+
+                  <div class="flex items-center justify-between">
+                    <Button type="button" variant="outline" onClick={() => setActiveStep('step-1')}>Back</Button>
+                    <Button type="button" onClick={() => setActiveStep('step-3')}>Continue to Review</Button>
+                  </div>
+
                 </CardContent>
               </Card>
 
@@ -395,7 +512,10 @@ export default function RunPage() {
                   <CardDescription>Make the contract obvious before run.</CardDescription>
                 </CardHeader>
                 <CardContent class="space-y-3 text-sm" data-testid="input-clarity-panel">
+                  <p><strong class="text-foreground">Platform:</strong> Job envelope + runtime + scheduler destination.</p>
+                  <p><strong class="text-foreground">App:</strong> {selectedPreset().name}</p>
                   <p><strong class="text-foreground">Input:</strong> {selectedPreset().inputLabel}</p>
+                  <p><strong class="text-foreground">App Field Summary:</strong> {appInputSummary()}</p>
                   <p><strong class="text-foreground">Output:</strong> {selectedPreset().outputLabel}</p>
                   <p><strong class="text-foreground">Expected Behavior:</strong> {selectedPreset().outcome}</p>
                   <Separator />
@@ -419,7 +539,8 @@ export default function RunPage() {
                         <CardTitle class="text-base">Input</CardTitle>
                       </CardHeader>
                       <CardContent class="text-sm">
-                        <p>{selectedPreset().inputLabel}</p>
+                        <p>Platform envelope: job name, runtime id, scheduler URL, execution policy.</p>
+                        <p class="mt-2">App fields: {appInputSummary()}</p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -476,10 +597,13 @@ export default function RunPage() {
                     </Alert>
                   </div>
 
-                  <Button type="button" disabled={submitStatus() === 'pending'} class="w-full" onClick={() => void handleSubmit()}>
-                    Submit Job
-                    <GeneratingIndicator class="ml-2 text-xs" />
-                  </Button>
+                  <div class="flex items-center gap-2">
+                    <Button type="button" variant="outline" onClick={() => setActiveStep('step-2')}>Back</Button>
+                    <Button type="button" disabled={submitStatus() === 'pending'} class="flex-1" onClick={() => void handleSubmit()}>
+                      Submit Job
+                      <GeneratingIndicator class="ml-2 text-xs" />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
 

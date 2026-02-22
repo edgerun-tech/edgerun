@@ -1,0 +1,21 @@
+[Unit]
+Description=Edgerun Worker %i
+After=network-online.target edgerun-scheduler.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT_DIR__
+EnvironmentFile=-__HOME__/.config/edgerun/worker-common.env
+EnvironmentFile=-__HOME__/.config/edgerun/workers/%i.env
+ExecStart=__ROOT_DIR__/out/target/release/edgerun-worker
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__ROOT_DIR__/out __HOME__/.config/edgerun
+
+[Install]
+WantedBy=default.target

@@ -208,8 +208,8 @@ fn roots_from_endpoint(endpoint: &TransportEndpoint) -> Result<RootCertStore, Tr
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr};
 
-    use base64::Engine;
     use super::*;
+    use base64::Engine;
     use edgerun_transport_core::TransportKind;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 

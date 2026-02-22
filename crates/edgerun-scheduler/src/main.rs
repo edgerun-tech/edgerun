@@ -12,26 +12,27 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use axum::{
-    Json, Router,
     body::Bytes,
-    extract::Query,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::Query,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
+    Json, Router,
 };
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use edgerun_transport_core::{
     failure_signing_message, heartbeat_signing_message, replay_signing_message,
     result_signing_message, route_register_signing_message,
 };
 use edgerun_types::control_plane::{
-    AssignmentsResponse, HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
+    assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
+    HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
     SessionCreateRequest, SessionCreateResponse, WorkerFailureReport, WorkerReplayArtifactReport,
-    WorkerResultReport, assignment_policy_message, default_policy_key_id, default_policy_version,
+    WorkerResultReport,
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -43,7 +44,7 @@ use solana_sdk::{
     hash::hash,
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
-    signature::{Keypair, Signer, read_keypair_file},
+    signature::{read_keypair_file, Keypair, Signer},
     system_program,
     transaction::Transaction,
 };
@@ -4787,10 +4788,9 @@ mod tests {
         let second = b"bundle-v2";
         let second_hash = hex::encode(edgerun_crypto::compute_bundle_hash(second));
         let err = write_bundle_cas(&path, &second_hash, second).expect_err("must reject drift");
-        assert!(
-            err.to_string()
-                .contains("bundle path already exists with different bytes")
-        );
+        assert!(err
+            .to_string()
+            .contains("bundle path already exists with different bytes"));
     }
 
     #[tokio::test]
@@ -5035,13 +5035,11 @@ mod tests {
         let jq = state.job_quorum.lock().expect("lock poisoned");
         let entry = jq.get(&job_id_hex).expect("quorum entry");
         assert!(entry.finalize_triggered);
-        assert!(
-            entry
-                .finalize_tx
-                .as_deref()
-                .unwrap_or_default()
-                .starts_with("UNAVAILABLE_FINALIZE_")
-        );
+        assert!(entry
+            .finalize_tx
+            .as_deref()
+            .unwrap_or_default()
+            .starts_with("UNAVAILABLE_FINALIZE_"));
     }
 
     #[test]
@@ -5345,11 +5343,10 @@ mod tests {
         let reached = recompute_job_quorum(&state, &job_id_hex).expect("recompute");
         assert!(reached);
         let jq = state.job_quorum.lock().expect("lock poisoned");
-        assert!(
-            jq.get(&job_id_hex)
-                .and_then(|v| v.winning_output_hash.as_ref())
-                .is_some()
-        );
+        assert!(jq
+            .get(&job_id_hex)
+            .and_then(|v| v.winning_output_hash.as_ref())
+            .is_some());
     }
 
     #[test]
