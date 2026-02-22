@@ -1,8 +1,9 @@
-import { For, Show, type Accessor } from 'solid-js'
+import { For, Show } from 'solid-js'
 import { getTerminalPaneSrc, type TerminalTab } from '../../lib/terminal-drawer-store'
+import type { TerminalPanesController } from './use-terminal-drawer-controller'
 
 type Props = {
-  activeTab: Accessor<TerminalTab | undefined>
+  controller: TerminalPanesController
 }
 
 function splitClassName(tab: TerminalTab): string {
@@ -12,9 +13,10 @@ function splitClassName(tab: TerminalTab): string {
 }
 
 export function TerminalPanesView(props: Props) {
+  const panes = () => props.controller
   return (
     <div class="min-h-0 p-2">
-      <Show when={props.activeTab()}>
+      <Show when={panes().activeTab()}>
         {(tab) => (
           <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
             <For each={tab().panes}>{(pane) => {

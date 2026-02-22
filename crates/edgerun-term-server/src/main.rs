@@ -20,6 +20,7 @@ use edgerun_hwvault_primitives::hardware::{
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc};
+use tokio::time::{Duration, sleep};
 use tower_http::services::ServeDir;
 
 #[derive(Clone)]
@@ -44,6 +45,43 @@ struct DeviceChallengeResponse {
 struct DeviceHandshakeRequest {
     owner_pubkey: String,
     nonce_b64url: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteRegisterRequest {
+    device_id: String,
+    owner_pubkey: String,
+    reachable_urls: Vec<String>,
+    capabilities: Vec<String>,
+    relay_session_id: Option<String>,
+    ttl_secs: u64,
+    challenge_nonce: String,
+    signed_at_unix_s: u64,
+    signature: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteChallengeRequest {
+    device_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteChallengeResponse {
+    nonce: String,
+    expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteRegisterResponse {
+    ok: bool,
+    heartbeat_token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteHeartbeatRequest {
+    device_id: String,
+    token: String,
+    ttl_secs: u64,
 }
 
 #[tokio::main]
@@ -83,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/device/challenge", post(device_challenge))
         .route("/v1/device/handshake", post(device_handshake))
         .nest_service("/term", ServeDir::new(term_client_root.clone()))
-        .with_state(state)
+        .with_state(state.clone())
         .fallback_service(ServeDir::new(web_root.clone()));
 
     let bind_addr = env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -97,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
     println!("term-server serving site root {}", web_root.display());
     println!("term-server serving terminal client root {} at /term/", term_client_root.display());
     println!("term-server listening on http://{addr}");
+    maybe_start_route_announcer(&state.device, addr);
 
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
         .await
@@ -279,4 +318,166 @@ fn now_unix_s() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0)
+}
+
+fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
+    let Some(control_base) = env::var("EDGERUN_ROUTE_CONTROL_BASE")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+    else {
+        return;
+    };
+
+    let device_id = env::var("EDGERUN_ROUTE_DEVICE_ID")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| device.public_key_b64url.clone());
+    let owner_pubkey = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| device.public_key_b64url.clone());
+    let public_base_url = env::var("EDGERUN_TERM_PUBLIC_BASE_URL")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| format!("http://{}", routable_addr(addr)));
+
+    println!(
+        "route announcer enabled: control={} device_id={} public_base_url={}",
+        control_base, device_id, public_base_url
+    );
+    let signer = device.clone();
+
+    tokio::spawn(async move {
+        let client = reqwest::Client::new();
+        let mut heartbeat_token: Option<String> = None;
+        loop {
+            if let Some(token) = heartbeat_token.as_ref() {
+                let hb = RouteHeartbeatRequest {
+                    device_id: device_id.clone(),
+                    token: token.clone(),
+                    ttl_secs: 90,
+                };
+                let hb_url = format!("{control_base}/v1/route/heartbeat");
+                match client.post(hb_url).json(&hb).send().await {
+                    Ok(resp) if resp.status().is_success() => {}
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        eprintln!("route announcer heartbeat failed: status={} body={}", status, body);
+                        heartbeat_token = None;
+                    }
+                    Err(err) => {
+                        eprintln!("route announcer heartbeat error: {err}");
+                        heartbeat_token = None;
+                    }
+                }
+            }
+
+            if heartbeat_token.is_none() {
+                let challenge_url = format!("{control_base}/v1/route/challenge");
+                let challenge_req = RouteChallengeRequest {
+                    device_id: device_id.clone(),
+                };
+                let challenge = match client.post(challenge_url).json(&challenge_req).send().await {
+                    Ok(resp) if resp.status().is_success() => match resp.json::<RouteChallengeResponse>().await {
+                        Ok(value) => value,
+                        Err(err) => {
+                            eprintln!("route announcer challenge parse error: {err}");
+                            sleep(Duration::from_secs(10)).await;
+                            continue;
+                        }
+                    },
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        eprintln!("route announcer challenge failed: status={} body={}", status, body);
+                        sleep(Duration::from_secs(10)).await;
+                        continue;
+                    }
+                    Err(err) => {
+                        eprintln!("route announcer challenge error: {err}");
+                        sleep(Duration::from_secs(10)).await;
+                        continue;
+                    }
+                };
+                if challenge.expires_at_unix_s <= now_unix_s() {
+                    sleep(Duration::from_secs(2)).await;
+                    continue;
+                }
+
+                let signed_at = now_unix_s();
+                let reachable_urls = vec![public_base_url.clone()];
+                let signing_message = route_register_signing_message(
+                    &owner_pubkey,
+                    &device_id,
+                    &reachable_urls,
+                    &challenge.nonce,
+                    signed_at,
+                );
+                let signature = signer.sign_b64url(signing_message.as_bytes());
+
+                let payload = RouteRegisterRequest {
+                    device_id: device_id.clone(),
+                    owner_pubkey: owner_pubkey.clone(),
+                    reachable_urls,
+                    capabilities: vec!["terminal-ws".to_string(), "webrtc-datachannel".to_string()],
+                    relay_session_id: None,
+                    ttl_secs: 90,
+                    challenge_nonce: challenge.nonce,
+                    signed_at_unix_s: signed_at,
+                    signature,
+                };
+                let url = format!("{control_base}/v1/route/register");
+                match client.post(url).json(&payload).send().await {
+                    Ok(resp) if resp.status().is_success() => match resp.json::<RouteRegisterResponse>().await {
+                        Ok(value) => {
+                            if value.ok {
+                                heartbeat_token = Some(value.heartbeat_token);
+                            } else {
+                                heartbeat_token = None;
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("route announcer register parse error: {err}");
+                        }
+                    },
+                    Ok(resp) => {
+                        let status = resp.status();
+                        let body = resp.text().await.unwrap_or_default();
+                        eprintln!("route announcer register failed: status={} body={}", status, body);
+                    }
+                    Err(err) => {
+                        eprintln!("route announcer register error: {err}");
+                    }
+                }
+            }
+            sleep(Duration::from_secs(30)).await;
+        }
+    });
+}
+
+fn routable_addr(addr: SocketAddr) -> String {
+    if addr.ip().is_unspecified() {
+        format!("127.0.0.1:{}", addr.port())
+    } else {
+        addr.to_string()
+    }
+}
+
+fn route_register_signing_message(
+    owner_pubkey: &str,
+    device_id: &str,
+    reachable_urls: &[String],
+    challenge_nonce: &str,
+    signed_at_unix_s: u64,
+) -> String {
+    let urls = reachable_urls.join(",");
+    format!(
+        "edgerun:route_register:v1|{}|{}|{}|{}|{}",
+        owner_pubkey, device_id, urls, challenge_nonce, signed_at_unix_s
+    )
 }

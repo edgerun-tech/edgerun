@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Mutex, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -204,6 +205,7 @@ const CLI_BUILD_NUMBER: &str = match option_env!("EDGERUN_BUILD_NUMBER") {
     Some(v) => v,
     None => "dev",
 };
+static LOCAL_BIN_CACHE: OnceLock<Mutex<HashMap<String, PathBuf>>> = OnceLock::new();
 
 fn ci_timeout_duration() -> Duration {
     let secs = std::env::var("EDGERUN_CI_TIMEOUT_SECS")
@@ -1096,19 +1098,13 @@ fn run_build_timing_sync(root: &Path) -> Result<()> {
 
     let step = std::time::Instant::now();
     run_program_sync(
-        "cargo install edgerun-cli",
+        "cargo build --release -p edgerun-cli",
         "cargo",
-        &[
-            "install",
-            "--path",
-            "crates/edgerun-cli",
-            "--locked",
-            "--force",
-        ],
+        &["build", "--release", "-p", "edgerun-cli"],
         root,
         false,
     )?;
-    let install_secs = step.elapsed().as_secs();
+    let cli_release_secs = step.elapsed().as_secs();
 
     let step = std::time::Instant::now();
     run_program_sync(
@@ -1136,7 +1132,7 @@ fn run_build_timing_sync(root: &Path) -> Result<()> {
     let payload = json!({
         "run_id": std::env::var("GITHUB_RUN_ID").unwrap_or_else(|_| "local".to_string()),
         "sha": std::env::var("GITHUB_SHA").unwrap_or_else(|_| "local".to_string()),
-        "install_seconds": install_secs,
+        "cli_release_build_seconds": cli_release_secs,
         "check_seconds": check_secs,
         "release_build_seconds": release_secs,
         "total_seconds": total_secs
@@ -1147,14 +1143,14 @@ fn run_build_timing_sync(root: &Path) -> Result<()> {
     )?;
 
     println!("build timings:");
-    println!("  install_seconds={install_secs}");
+    println!("  cli_release_build_seconds={cli_release_secs}");
     println!("  check_seconds={check_secs}");
     println!("  release_build_seconds={release_secs}");
     println!("  total_seconds={total_secs}");
 
     if let Ok(summary_path) = std::env::var("GITHUB_STEP_SUMMARY") {
         let summary = format!(
-            "## Build Timings\n\n| Step | Seconds |\n| --- | ---: |\n| cargo install --path crates/edgerun-cli --locked --force | {install_secs} |\n| cargo check --workspace | {check_secs} |\n| cargo build --release --workspace | {release_secs} |\n| Total | {total_secs} |\n"
+            "## Build Timings\n\n| Step | Seconds |\n| --- | ---: |\n| cargo build --release -p edgerun-cli | {cli_release_secs} |\n| cargo check --workspace | {check_secs} |\n| cargo build --release --workspace | {release_secs} |\n| Total | {total_secs} |\n"
         );
         let _ = std::fs::OpenOptions::new()
             .create(true)
@@ -2686,6 +2682,10 @@ async fn run_integration_policy_rotation(root: &Path) -> Result<()> {
                 "EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION",
                 quorum_attest.clone(),
             ),
+            (
+                "EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION",
+                "false".to_string(),
+            ),
         ],
     )
     .await?;
@@ -3133,13 +3133,15 @@ async fn spawn_cargo_bin(
             c.current_dir(root);
             c
         } else {
-            let mut c = Command::new("cargo");
-            c.arg("run").arg("-p").arg(package).current_dir(root);
+            let bin_path = ensure_local_bin(root, package)?;
+            let mut c = Command::new(bin_path);
+            c.current_dir(root);
             c
         }
     } else {
-        let mut c = Command::new("cargo");
-        c.arg("run").arg("-p").arg(package).current_dir(root);
+        let bin_path = ensure_local_bin(root, package)?;
+        let mut c = Command::new(bin_path);
+        c.current_dir(root);
         c
     };
     cmd.stdout(Stdio::from(log_file))
@@ -3148,7 +3150,38 @@ async fn spawn_cargo_bin(
         cmd.env(k, v);
     }
     cmd.spawn()
-        .with_context(|| format!("failed to spawn cargo run -p {package}"))
+        .with_context(|| format!("failed to spawn {package}"))
+}
+
+fn ensure_local_bin(root: &Path, package: &str) -> Result<PathBuf> {
+    let cache = LOCAL_BIN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(cached) = cache.lock().expect("lock poisoned").get(package).cloned() {
+        if cached.is_file() {
+            return Ok(cached);
+        }
+    }
+
+    run_program_sync("Build integration binary", "cargo", &["build", "-p", package], root, false)?;
+
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("target"));
+    let exe_name = if cfg!(windows) {
+        format!("{package}.exe")
+    } else {
+        package.to_string()
+    };
+    let bin_path = target_dir.join("debug").join(exe_name);
+    ensure(
+        bin_path.is_file(),
+        &format!("expected built binary at {}", bin_path.display()),
+    )?;
+
+    cache
+        .lock()
+        .expect("lock poisoned")
+        .insert(package.to_string(), bin_path.clone());
+    Ok(bin_path)
 }
 
 async fn wait_for_health(

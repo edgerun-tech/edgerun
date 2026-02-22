@@ -1,17 +1,59 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js'
+import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js'
 import QRCode from 'qrcode'
 import {
-  ensureTerminalDrawerStore,
   getTerminalDrawerState,
-  subscribeTerminalDrawer,
   terminalDrawerActions,
+  type TerminalDevice,
   type TerminalDrawerState,
-  type TerminalSplitMode
+  type TerminalSplitMode,
+  type TerminalTab
 } from '../../lib/terminal-drawer-store'
-import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 import { canUseCurrentOriginAsDevice, importTailscaleBridgeDevices, refreshTerminalDevices } from '../../lib/terminal-device-service'
+import { mountTerminalDrawerRuntime } from '../../lib/terminal-drawer-runtime'
+import { resolveTerminalBaseUrl } from '../../lib/webrtc-route-client'
+import { readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 
-export function useTerminalDrawerController() {
+export type TerminalTabsController = {
+  state: Accessor<TerminalDrawerState>
+  tabMenuTabId: Accessor<string | null>
+  setTabMenuTabId: Setter<string | null>
+  hasTabsLeft: (tabId: string) => boolean
+  hasTabsRight: (tabId: string) => boolean
+  hasOtherTabs: () => boolean
+  splitChange: (mode: TerminalSplitMode) => void
+}
+
+export type TerminalDevicesController = {
+  state: Accessor<TerminalDrawerState>
+  refreshDeviceStatus: () => Promise<void>
+  importTailscaleDevices: (opts?: { silent?: boolean }) => Promise<void>
+  tailscaleImporting: Accessor<boolean>
+  tailscaleImportNote: Accessor<string>
+  deviceNameInput: Accessor<string>
+  setDeviceNameInput: Setter<string>
+  deviceUrlInput: Accessor<string>
+  setDeviceUrlInput: Setter<string>
+  addDevice: () => void
+  connectDevice: (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => Promise<void>
+  qrDeviceUrl: Accessor<string>
+  setQrDeviceUrl: Setter<string>
+  qrImageDataUrl: Accessor<string>
+}
+
+export type TerminalPanesController = {
+  activeTab: Accessor<TerminalTab | undefined>
+}
+
+export type TerminalDrawerController = {
+  state: Accessor<TerminalDrawerState>
+  walletConnected: Accessor<boolean>
+  startResize: (ev: PointerEvent) => void
+  tabs: TerminalTabsController
+  devices: TerminalDevicesController
+  panes: TerminalPanesController
+}
+
+export function useTerminalDrawerController(): TerminalDrawerController {
   const [state, setState] = createSignal<TerminalDrawerState>(getTerminalDrawerState())
   const [dragging, setDragging] = createSignal(false)
   const [wallet, setWallet] = createSignal<WalletSessionState>(readWalletSession())
@@ -117,6 +159,18 @@ export function useTerminalDrawerController() {
     void refreshDeviceStatus()
   }
 
+  const connectDevice = async (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => {
+    const resolved = await resolveTerminalBaseUrl(device.baseUrl)
+    if (resolved) {
+      terminalDrawerActions.connectActiveTabToBaseUrl(resolved)
+      if (resolved !== device.baseUrl.trim()) {
+        terminalDrawerActions.markDeviceStatus(device.id, 'online')
+      }
+      return
+    }
+    terminalDrawerActions.connectActiveTabToDevice(device.id)
+  }
+
   const startResize = (ev: PointerEvent) => {
     ev.preventDefault()
     setDragging(true)
@@ -148,97 +202,57 @@ export function useTerminalDrawerController() {
   })
 
   onMount(() => {
-    ensureTerminalDrawerStore()
-    setState(getTerminalDrawerState())
-    const initialWallet = readWalletSession()
-    setWallet(initialWallet)
-    void maybeRegisterCurrentOriginDevice()
-    if (initialWallet.connected) {
-      restoreLastDevice()
-      autoImportTailscaleDevices()
-    }
-
-    const unsubscribe = subscribeTerminalDrawer((next) => setState(next))
-
-    const onWalletSession = (event: Event) => {
-      const custom = event as CustomEvent<WalletSessionState>
-      const nextWallet = custom.detail || readWalletSession()
-      setWallet(nextWallet)
-      if (nextWallet.connected) {
-        void maybeRegisterCurrentOriginDevice()
-        autoImportTailscaleDevices()
-        restoreLastDevice()
-        void refreshDeviceStatus()
-      }
-    }
-
-    const onPointerMove = (ev: PointerEvent) => {
-      if (!dragging() || !walletConnected()) return
-      const minPx = Math.round(window.innerHeight * 0.2)
-      const maxPx = Math.round(window.innerHeight * 0.85)
-      const nextHeight = window.innerHeight - ev.clientY
-      const clamped = Math.max(minPx, Math.min(maxPx, nextHeight))
-      terminalDrawerActions.setHeightRatio(clamped / window.innerHeight)
-    }
-
-    const onPointerUp = () => setDragging(false)
-    const onResize = () => setState(getTerminalDrawerState())
-    const onPointerDown = (event: PointerEvent) => {
-      const menuTab = tabMenuTabId()
-      if (!menuTab) return
-      const target = event.target as HTMLElement | null
-      if (target?.closest('[data-tab-menu]')) return
-      if (target?.closest('[data-tab-menu-trigger]')) return
-      setTabMenuTabId(null)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
-    window.addEventListener('pointercancel', onPointerUp)
-    window.addEventListener('resize', onResize)
-    window.addEventListener('pointerdown', onPointerDown)
-    window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-
-    void refreshDeviceStatus()
-    const timer = window.setInterval(() => {
-      void refreshDeviceStatus()
-    }, 12000)
+    const cleanupRuntime = mountTerminalDrawerRuntime({
+      setState,
+      setWallet,
+      walletConnected,
+      dragging,
+      setDragging,
+      tabMenuTabId,
+      closeTabMenu: () => setTabMenuTabId(null),
+      refreshDeviceStatus,
+      maybeRegisterCurrentOriginDevice,
+      autoImportTailscaleDevices,
+      restoreLastDevice
+    })
 
     onCleanup(() => {
-      unsubscribe()
+      cleanupRuntime()
       document.documentElement.style.removeProperty('--terminal-drawer-height')
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
-      window.removeEventListener('pointercancel', onPointerUp)
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-      window.clearInterval(timer)
     })
   })
 
   return {
     state,
     walletConnected,
-    activeTab,
-    tabMenuTabId,
-    setTabMenuTabId,
-    hasTabsLeft,
-    hasTabsRight,
-    hasOtherTabs,
-    splitChange,
-    refreshDeviceStatus,
-    importTailscaleDevices,
     startResize,
-    deviceNameInput,
-    setDeviceNameInput,
-    deviceUrlInput,
-    setDeviceUrlInput,
-    addDevice,
-    tailscaleImporting,
-    tailscaleImportNote,
-    qrDeviceUrl,
-    setQrDeviceUrl,
-    qrImageDataUrl
+    tabs: {
+      state,
+      tabMenuTabId,
+      setTabMenuTabId,
+      hasTabsLeft,
+      hasTabsRight,
+      hasOtherTabs,
+      splitChange
+    },
+    devices: {
+      state,
+      refreshDeviceStatus,
+      importTailscaleDevices,
+      tailscaleImporting,
+      tailscaleImportNote,
+      deviceNameInput,
+      setDeviceNameInput,
+      deviceUrlInput,
+      setDeviceUrlInput,
+      addDevice,
+      connectDevice,
+      qrDeviceUrl,
+      setQrDeviceUrl,
+      qrImageDataUrl
+    },
+    panes: {
+      activeTab
+    }
   }
 }

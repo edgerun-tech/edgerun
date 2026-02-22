@@ -1,22 +1,18 @@
-import { For, Show, type Accessor, type Setter } from 'solid-js'
-import { terminalDrawerActions, type TerminalDrawerState, type TerminalSplitMode } from '../../lib/terminal-drawer-store'
+import { For, Show } from 'solid-js'
+import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
+import type { TerminalTabsController } from './use-terminal-drawer-controller'
 
 type Props = {
-  state: Accessor<TerminalDrawerState>
-  tabMenuTabId: Accessor<string | null>
-  setTabMenuTabId: Setter<string | null>
-  hasTabsLeft: (tabId: string) => boolean
-  hasTabsRight: (tabId: string) => boolean
-  hasOtherTabs: () => boolean
-  splitChange: (mode: TerminalSplitMode) => void
+  controller: TerminalTabsController
 }
 
 export function TerminalTabsBar(props: Props) {
+  const tabs = () => props.controller
   return (
     <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2">
       <div class="flex flex-1 items-center gap-1 overflow-x-auto">
-        <For each={props.state().tabs}>{(tab) => (
-          <div class={`relative inline-flex items-center rounded-md border ${tab.id === props.state().activeTabId ? 'border-primary/70 bg-primary/20 text-foreground' : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'}`}>
+        <For each={tabs().state().tabs}>{(tab) => (
+          <div class={`relative inline-flex items-center rounded-md border ${tab.id === tabs().state().activeTabId ? 'border-primary/70 bg-primary/20 text-foreground' : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'}`}>
             <button
               type="button"
               class="px-2 py-1 text-xs"
@@ -31,12 +27,12 @@ export function TerminalTabsBar(props: Props) {
               data-tab-menu-trigger
               onClick={(event) => {
                 event.stopPropagation()
-                props.setTabMenuTabId(props.tabMenuTabId() === tab.id ? null : tab.id)
+                tabs().setTabMenuTabId(tabs().tabMenuTabId() === tab.id ? null : tab.id)
               }}
             >
               ⋮
             </button>
-            <Show when={props.state().tabs.length > 1}>
+            <Show when={tabs().state().tabs.length > 1}>
               <button
                 type="button"
                 class="px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
@@ -50,7 +46,7 @@ export function TerminalTabsBar(props: Props) {
               </button>
             </Show>
 
-            <Show when={props.tabMenuTabId() === tab.id}>
+            <Show when={tabs().tabMenuTabId() === tab.id}>
               <div
                 data-tab-menu
                 class="absolute left-0 top-full z-[90] mt-1 w-44 rounded-md border border-border/70 bg-card/95 p-1 shadow-xl backdrop-blur"
@@ -58,10 +54,10 @@ export function TerminalTabsBar(props: Props) {
                 <button
                   type="button"
                   class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
-                  disabled={!props.hasOtherTabs()}
+                  disabled={!tabs().hasOtherTabs()}
                   onClick={() => {
                     terminalDrawerActions.closeOtherTabs(tab.id)
-                    props.setTabMenuTabId(null)
+                    tabs().setTabMenuTabId(null)
                   }}
                 >
                   Close Others
@@ -69,10 +65,10 @@ export function TerminalTabsBar(props: Props) {
                 <button
                   type="button"
                   class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
-                  disabled={!props.hasTabsLeft(tab.id)}
+                  disabled={!tabs().hasTabsLeft(tab.id)}
                   onClick={() => {
                     terminalDrawerActions.closeTabsLeft(tab.id)
-                    props.setTabMenuTabId(null)
+                    tabs().setTabMenuTabId(null)
                   }}
                 >
                   Close Left
@@ -80,10 +76,10 @@ export function TerminalTabsBar(props: Props) {
                 <button
                   type="button"
                   class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
-                  disabled={!props.hasTabsRight(tab.id)}
+                  disabled={!tabs().hasTabsRight(tab.id)}
                   onClick={() => {
                     terminalDrawerActions.closeTabsRight(tab.id)
-                    props.setTabMenuTabId(null)
+                    tabs().setTabMenuTabId(null)
                   }}
                 >
                   Close Right
@@ -91,10 +87,10 @@ export function TerminalTabsBar(props: Props) {
                 <button
                   type="button"
                   class="block w-full rounded px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground disabled:opacity-50"
-                  disabled={!props.hasOtherTabs()}
+                  disabled={!tabs().hasOtherTabs()}
                   onClick={() => {
                     terminalDrawerActions.closeAllTabs()
-                    props.setTabMenuTabId(null)
+                    tabs().setTabMenuTabId(null)
                   }}
                 >
                   Close All
@@ -113,9 +109,9 @@ export function TerminalTabsBar(props: Props) {
       </div>
 
       <div class="flex items-center gap-1">
-        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => props.splitChange('split-cols')}>Split V</button>
-        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => props.splitChange('split-rows')}>Split H</button>
-        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => props.splitChange('none')}>Single</button>
+        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('split-cols')}>Split V</button>
+        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('split-rows')}>Split H</button>
+        <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => tabs().splitChange('none')}>Single</button>
         <button type="button" class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-xs text-muted-foreground hover:text-foreground" aria-label="Close terminal drawer" onClick={() => terminalDrawerActions.toggle()}>Hide</button>
       </div>
     </div>

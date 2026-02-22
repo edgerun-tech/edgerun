@@ -1,4 +1,5 @@
 import type { DeviceStatus, TerminalDevice } from './terminal-drawer-store'
+import { resolveTerminalBaseUrl } from './webrtc-route-client'
 
 type BridgeDevice = {
   name?: string
@@ -15,7 +16,9 @@ export async function probeDeviceOnline(baseUrl: string, timeoutMs = 2500): Prom
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const url = new URL('/v1/device/identity', baseUrl)
+    const resolved = await resolveTerminalBaseUrl(baseUrl)
+    if (!resolved) return false
+    const url = new URL('/v1/device/identity', resolved)
     const response = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
     return response.ok
   } catch {

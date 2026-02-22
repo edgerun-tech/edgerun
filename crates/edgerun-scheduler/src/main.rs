@@ -14,12 +14,14 @@ use axum::{
     body::Bytes,
     extract::Query,
     extract::{Path, State},
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -35,6 +37,7 @@ use solana_sdk::{
     system_program,
     transaction::Transaction,
 };
+use tokio::sync::mpsc;
 
 #[derive(Clone)]
 struct AppState {
@@ -76,6 +79,10 @@ struct AppState {
     trust_policy_path: PathBuf,
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
     attestation_policy_path: PathBuf,
+    device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
+    route_challenges: Arc<Mutex<HashMap<String, u64>>>,
+    route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
+    signal_peers: Arc<tokio::sync::Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -418,6 +425,121 @@ struct JobStatusResponse {
     quorum: Option<JobQuorumState>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct DeviceRouteEntry {
+    device_id: String,
+    owner_pubkey: String,
+    reachable_urls: Vec<String>,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    relay_session_id: Option<String>,
+    online: bool,
+    last_seen_unix_s: u64,
+    expires_at_unix_s: u64,
+    updated_at_unix_s: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteRegisterRequest {
+    device_id: String,
+    owner_pubkey: String,
+    reachable_urls: Vec<String>,
+    #[serde(default)]
+    capabilities: Vec<String>,
+    #[serde(default)]
+    relay_session_id: Option<String>,
+    #[serde(default)]
+    ttl_secs: Option<u64>,
+    challenge_nonce: String,
+    signed_at_unix_s: u64,
+    signature: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteRegisterResponse {
+    ok: bool,
+    device_id: String,
+    expires_at_unix_s: u64,
+    heartbeat_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteChallengeRequest {
+    device_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteChallengeResponse {
+    nonce: String,
+    expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct RouteHeartbeatRequest {
+    device_id: String,
+    token: String,
+    #[serde(default)]
+    ttl_secs: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteHeartbeatResponse {
+    ok: bool,
+    device_id: String,
+    expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct RouteResolveResponse {
+    ok: bool,
+    found: bool,
+    route: Option<DeviceRouteEntry>,
+}
+
+#[derive(Debug, Clone)]
+struct RouteHeartbeatToken {
+    device_id: String,
+    expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebRtcSignalConnectQuery {
+    device_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebRtcSignalClientMessage {
+    to_device_id: String,
+    kind: String,
+    #[serde(default)]
+    sdp: Option<String>,
+    #[serde(default)]
+    candidate: Option<String>,
+    #[serde(default)]
+    sdp_mid: Option<String>,
+    #[serde(default)]
+    sdp_mline_index: Option<u16>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct WebRtcSignalServerMessage {
+    from_device_id: String,
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sdp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    candidate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sdp_mid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sdp_mline_index: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata: Option<serde_json::Value>,
+}
+
 struct PostJobArgs {
     client: Pubkey,
     job_id: [u8; 32],
@@ -552,6 +674,10 @@ async fn main() -> Result<()> {
         trust_policy_path,
         attestation_policy: Arc::new(Mutex::new(attestation_policy)),
         attestation_policy_path,
+        device_routes: Arc::new(Mutex::new(HashMap::new())),
+        route_challenges: Arc::new(Mutex::new(HashMap::new())),
+        route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
+        signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         chain,
     };
     enforce_history_retention(&state);
@@ -562,6 +688,11 @@ async fn main() -> Result<()> {
         .route("/v1/session/create", post(session_create))
         .route("/v1/session/rotate", post(session_rotate))
         .route("/v1/session/invalidate", post(session_invalidate))
+        .route("/v1/route/challenge", post(route_challenge))
+        .route("/v1/route/register", post(route_register))
+        .route("/v1/route/heartbeat", post(route_heartbeat))
+        .route("/v1/route/resolve/{device_id}", get(route_resolve))
+        .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/policy/info", get(policy_info))
         .route("/v1/policy/audit", get(policy_audit_list))
         .route("/v1/trust/policy/get", get(trust_policy_get))
@@ -591,6 +722,388 @@ async fn health() -> Json<HealthResponse> {
         ok: true,
         service: "edgerun-scheduler",
     })
+}
+
+async fn route_challenge(
+    State(state): State<AppState>,
+    Json(payload): Json<RouteChallengeRequest>,
+) -> Result<Json<RouteChallengeResponse>, (StatusCode, String)> {
+    let device_id = payload.device_id.trim();
+    if device_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
+    }
+    let now = now_unix_seconds();
+    let nonce = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
+    let expires_at = now.saturating_add(120);
+
+    let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+    prune_expired_route_challenges(&mut challenges, now);
+    challenges.insert(nonce.clone(), expires_at);
+
+    Ok(Json(RouteChallengeResponse {
+        nonce,
+        expires_at_unix_s: expires_at,
+    }))
+}
+
+async fn route_register(
+    State(state): State<AppState>,
+    Json(payload): Json<RouteRegisterRequest>,
+) -> Result<Json<RouteRegisterResponse>, (StatusCode, String)> {
+    let device_id = payload.device_id.trim();
+    let owner_pubkey = payload.owner_pubkey.trim();
+    if device_id.is_empty() || owner_pubkey.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "device_id and owner_pubkey are required".to_string(),
+        ));
+    }
+    if payload.reachable_urls.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "at least one reachable_urls entry is required".to_string(),
+        ));
+    }
+
+    let sanitized_urls = payload
+        .reachable_urls
+        .into_iter()
+        .map(|v| v.trim().to_string())
+        .filter(|v| v.starts_with("https://") || v.starts_with("http://"))
+        .collect::<Vec<_>>();
+    if sanitized_urls.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "reachable_urls must include http(s) endpoints".to_string(),
+        ));
+    }
+
+    let now = now_unix_seconds();
+    if now.saturating_sub(payload.signed_at_unix_s) > 180 {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "route register signature expired".to_string(),
+        ));
+    }
+    {
+        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+        prune_expired_route_challenges(&mut challenges, now);
+        let Some(exp) = challenges.remove(payload.challenge_nonce.trim()) else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "unknown or expired route challenge".to_string(),
+            ));
+        };
+        if exp <= now {
+            return Err((StatusCode::UNAUTHORIZED, "route challenge expired".to_string()));
+        }
+    }
+
+    let msg = route_register_signing_message(
+        owner_pubkey,
+        device_id,
+        &sanitized_urls,
+        payload.challenge_nonce.trim(),
+        payload.signed_at_unix_s,
+    );
+    if !verify_any_ed25519_signature(owner_pubkey, &payload.signature, msg.as_bytes())? {
+        return Err((StatusCode::UNAUTHORIZED, "invalid route signature".to_string()));
+    }
+
+    let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
+    let expires_at = now.saturating_add(ttl);
+    let heartbeat_token = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
+    let heartbeat_exp = now.saturating_add(24 * 60 * 60);
+
+    let mut routes = state.device_routes.lock().expect("lock poisoned");
+    prune_expired_routes(&mut routes, now);
+    routes.insert(
+        device_id.to_string(),
+        DeviceRouteEntry {
+            device_id: device_id.to_string(),
+            owner_pubkey: owner_pubkey.to_string(),
+            reachable_urls: sanitized_urls,
+            capabilities: payload.capabilities,
+            relay_session_id: payload.relay_session_id,
+            online: true,
+            last_seen_unix_s: now,
+            expires_at_unix_s: expires_at,
+            updated_at_unix_s: now,
+        },
+    );
+    drop(routes);
+
+    let mut heartbeat_tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+    prune_expired_route_tokens(&mut heartbeat_tokens, now);
+    heartbeat_tokens.insert(
+        heartbeat_token.clone(),
+        RouteHeartbeatToken {
+            device_id: device_id.to_string(),
+            expires_at_unix_s: heartbeat_exp,
+        },
+    );
+
+    Ok(Json(RouteRegisterResponse {
+        ok: true,
+        device_id: device_id.to_string(),
+        expires_at_unix_s: expires_at,
+        heartbeat_token,
+    }))
+}
+
+async fn route_heartbeat(
+    State(state): State<AppState>,
+    Json(payload): Json<RouteHeartbeatRequest>,
+) -> Result<Json<RouteHeartbeatResponse>, (StatusCode, String)> {
+    let device_id = payload.device_id.trim();
+    if device_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
+    }
+    if payload.token.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "token is required".to_string()));
+    }
+    let now = now_unix_seconds();
+    let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
+    let expires_at = now.saturating_add(ttl);
+    {
+        let mut heartbeat_tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+        prune_expired_route_tokens(&mut heartbeat_tokens, now);
+        let Some(token) = heartbeat_tokens.get(payload.token.trim()) else {
+            return Err((StatusCode::UNAUTHORIZED, "invalid route token".to_string()));
+        };
+        if token.device_id != device_id {
+            return Err((StatusCode::FORBIDDEN, "route token/device mismatch".to_string()));
+        }
+    }
+
+    let mut routes = state.device_routes.lock().expect("lock poisoned");
+    prune_expired_routes(&mut routes, now);
+    let Some(entry) = routes.get_mut(device_id) else {
+        return Err((StatusCode::NOT_FOUND, "route not found".to_string()));
+    };
+    entry.online = true;
+    entry.last_seen_unix_s = now;
+    entry.expires_at_unix_s = expires_at;
+    entry.updated_at_unix_s = now;
+
+    Ok(Json(RouteHeartbeatResponse {
+        ok: true,
+        device_id: device_id.to_string(),
+        expires_at_unix_s: expires_at,
+    }))
+}
+
+async fn route_resolve(
+    State(state): State<AppState>,
+    Path(device_id): Path<String>,
+) -> Json<RouteResolveResponse> {
+    let now = now_unix_seconds();
+    let mut routes = state.device_routes.lock().expect("lock poisoned");
+    prune_expired_routes(&mut routes, now);
+    let route = routes.get(device_id.trim()).cloned();
+    Json(RouteResolveResponse {
+        ok: true,
+        found: route.is_some(),
+        route,
+    })
+}
+
+async fn webrtc_signal_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Query(query): Query<WebRtcSignalConnectQuery>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| webrtc_signal_socket(state, query.device_id, socket))
+}
+
+async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: WebSocket) {
+    let device_id = device_id.trim().to_string();
+    if device_id.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                r#"{"kind":"error","error":"device_id is required"}"#.into(),
+            ))
+            .await;
+        return;
+    }
+
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    {
+        let mut peers = state.signal_peers.lock().await;
+        peers.insert(device_id.clone(), tx);
+    }
+    {
+        let now = now_unix_seconds();
+        let mut routes = state.device_routes.lock().expect("lock poisoned");
+        if let Some(entry) = routes.get_mut(&device_id) {
+            entry.online = true;
+            entry.last_seen_unix_s = now;
+            entry.updated_at_unix_s = now;
+            entry.expires_at_unix_s = now.saturating_add(90);
+        }
+    }
+
+    loop {
+        tokio::select! {
+            Some(outbound) = rx.recv() => {
+                if socket.send(Message::Text(outbound.into())).await.is_err() {
+                    break;
+                }
+            }
+            incoming = socket.recv() => {
+                match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        if handle_signal_client_message(&state, &device_id, &text).await.is_err() {
+                            let _ = socket.send(Message::Text(r#"{"kind":"error","error":"invalid signaling message"}"#.into())).await;
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => break,
+                }
+            }
+        }
+    }
+
+    {
+        let mut peers = state.signal_peers.lock().await;
+        peers.remove(&device_id);
+    }
+    {
+        let now = now_unix_seconds();
+        let mut routes = state.device_routes.lock().expect("lock poisoned");
+        if let Some(entry) = routes.get_mut(&device_id) {
+            entry.online = false;
+            entry.updated_at_unix_s = now;
+        }
+    }
+}
+
+async fn handle_signal_client_message(
+    state: &AppState,
+    from_device_id: &str,
+    text: &str,
+) -> Result<(), ()> {
+    let msg: WebRtcSignalClientMessage = serde_json::from_str(text).map_err(|_| ())?;
+    let to_device_id = msg.to_device_id.trim();
+    if to_device_id.is_empty() {
+        return Err(());
+    }
+
+    let outbound = WebRtcSignalServerMessage {
+        from_device_id: from_device_id.to_string(),
+        kind: msg.kind,
+        sdp: msg.sdp,
+        candidate: msg.candidate,
+        sdp_mid: msg.sdp_mid,
+        sdp_mline_index: msg.sdp_mline_index,
+        metadata: msg.metadata,
+    };
+    let encoded = serde_json::to_string(&outbound).map_err(|_| ())?;
+
+    let sender = {
+        let peers = state.signal_peers.lock().await;
+        peers.get(to_device_id).cloned()
+    };
+    let Some(sender) = sender else {
+        return Err(());
+    };
+    sender.send(encoded).map_err(|_| ())?;
+    Ok(())
+}
+
+fn prune_expired_routes(routes: &mut HashMap<String, DeviceRouteEntry>, now: u64) {
+    routes.retain(|_, route| route.expires_at_unix_s > now);
+}
+
+fn prune_expired_route_challenges(challenges: &mut HashMap<String, u64>, now: u64) {
+    challenges.retain(|_, exp| *exp > now);
+}
+
+fn prune_expired_route_tokens(tokens: &mut HashMap<String, RouteHeartbeatToken>, now: u64) {
+    tokens.retain(|_, tok| tok.expires_at_unix_s > now);
+}
+
+fn route_register_signing_message(
+    owner_pubkey: &str,
+    device_id: &str,
+    reachable_urls: &[String],
+    challenge_nonce: &str,
+    signed_at_unix_s: u64,
+) -> String {
+    let urls = reachable_urls.join(",");
+    format!(
+        "edgerun:route_register:v1|{}|{}|{}|{}|{}",
+        owner_pubkey, device_id, urls, challenge_nonce, signed_at_unix_s
+    )
+}
+
+fn parse_any_ed25519_pubkey(value: &str) -> Result<[u8; 32], (StatusCode, String)> {
+    if let Ok(pubkey) = value.parse::<Pubkey>() {
+        return Ok(pubkey.to_bytes());
+    }
+
+    let decoded_std = base64::engine::general_purpose::STANDARD.decode(value.as_bytes());
+    if let Ok(bytes) = decoded_std {
+        let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "owner_pubkey must decode to 32 bytes".to_string(),
+            )
+        })?;
+        return Ok(arr);
+    }
+
+    let bytes = URL_SAFE_NO_PAD
+        .decode(value.as_bytes())
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "owner_pubkey must be base58 or base64/base64url ed25519 key".to_string(),
+            )
+        })?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey must decode to 32 bytes".to_string(),
+        )
+    })?;
+    Ok(arr)
+}
+
+fn parse_any_signature(value: &str) -> Result<Signature, (StatusCode, String)> {
+    let sig_bytes = base64::engine::general_purpose::STANDARD
+        .decode(value.as_bytes())
+        .or_else(|_| URL_SAFE_NO_PAD.decode(value.as_bytes()))
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "signature must be base64 or base64url".to_string(),
+            )
+        })?;
+    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "signature must decode to 64 bytes".to_string(),
+        )
+    })?;
+    Ok(Signature::from_bytes(&sig_arr))
+}
+
+fn verify_any_ed25519_signature(
+    owner_pubkey: &str,
+    signature_encoded: &str,
+    message: &[u8],
+) -> Result<bool, (StatusCode, String)> {
+    let pubkey_bytes = parse_any_ed25519_pubkey(owner_pubkey)?;
+    let vk = VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid owner_pubkey bytes".to_string(),
+        )
+    })?;
+    let signature = parse_any_signature(signature_encoded)?;
+    Ok(edgerun_crypto::verify(&vk, message, &signature))
 }
 
 async fn session_create(

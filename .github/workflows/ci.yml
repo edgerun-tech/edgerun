@@ -11,6 +11,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_VERSION: "v1"
+
 jobs:
   build-timing-main:
     name: Build Timing (Main)
@@ -23,6 +28,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Run timed build pipeline
         run: cargo run -p edgerun-cli -- --root . ci --job build-timing-main
@@ -46,8 +54,14 @@ jobs:
         with:
           components: rustfmt
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
+
+      - name: Setup cargo-nextest
+        uses: taiki-e/install-action@nextest
 
       - name: SPDX header check
         run: cargo run -p edgerun-cli -- --root . ci --job spdx-check
@@ -61,8 +75,8 @@ jobs:
       - name: Clippy (strict)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Workspace tests
-        run: cargo test --workspace
+      - name: Workspace tests (nextest)
+        run: cargo nextest run --workspace
 
       - name: Matrix validation references check
         run: cargo run -p edgerun-cli -- --root . ci --job matrix-check
@@ -79,6 +93,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -115,6 +132,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
@@ -145,6 +165,9 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
@@ -173,6 +196,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -203,6 +229,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -235,6 +264,9 @@ jobs:
       - name: Setup Rust (nightly)
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
 
@@ -260,6 +292,9 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: miri
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -290,6 +325,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
@@ -332,6 +370,9 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
