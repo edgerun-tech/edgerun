@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use std::env;
 use std::io::{Read, Write};
 use std::path::PathBuf;

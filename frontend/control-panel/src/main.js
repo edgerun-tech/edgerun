@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createTerminalDrawer } from './components/terminalDrawer.js';
 import { fetchStatus, runTask } from './services/api.js';
 

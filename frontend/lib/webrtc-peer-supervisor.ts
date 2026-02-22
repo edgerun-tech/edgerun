@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { getRouteControlBase, WebRtcSignalClient, parseRouteDeviceId } from './webrtc-route-client'
 
 type IntentState = {

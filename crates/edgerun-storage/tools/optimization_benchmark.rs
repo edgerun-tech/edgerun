@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Performance Optimization Benchmark
 //!
 //! Demonstrates the cumulative improvements from:

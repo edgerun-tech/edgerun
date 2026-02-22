@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js'
 import QRCode from 'qrcode'
 import {

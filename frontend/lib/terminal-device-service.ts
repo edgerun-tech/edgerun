@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { DeviceStatus, TerminalDevice } from './terminal-drawer-store'
 import { parseRouteDeviceId, resolveTerminalBaseUrl } from './webrtc-route-client'
 import { getWebRtcPeerSupervisor } from './webrtc-peer-supervisor'

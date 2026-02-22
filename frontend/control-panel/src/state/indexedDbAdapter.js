@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export function createIndexedDbAdapter({ dbName, storeName, key }) {
   function fallbackGet() {
     try {

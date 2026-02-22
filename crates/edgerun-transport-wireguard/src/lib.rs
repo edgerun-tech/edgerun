@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

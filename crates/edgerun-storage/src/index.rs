@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 use std::collections::{BTreeMap, HashMap};
 use std::sync::RwLock;
 use thiserror::Error;

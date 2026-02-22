@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For, untrack } from 'solid-js'
 import { Badge } from '../../../components/ui/badge'
 import { Button } from '../../../components/ui/button'

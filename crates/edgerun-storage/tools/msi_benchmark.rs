@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Materialized State Index (MSI) Benchmark
 //!
 //! Demonstrates the performance benefits of MSI for hot-key reads

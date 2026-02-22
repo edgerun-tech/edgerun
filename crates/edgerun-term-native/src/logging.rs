@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use once_cell::sync::OnceCell;
 
 /// Initialize global logging with a debug-friendly default so diagnostics are always available.

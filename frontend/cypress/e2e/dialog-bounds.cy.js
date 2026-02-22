@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 function assertDialogInViewport(title) {
   cy.contains('h2', title).should('be.visible')
   cy.contains('h2', title).closest('section').should('exist').then(($dialog) => {

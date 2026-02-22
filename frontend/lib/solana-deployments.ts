@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import deploymentsConfig from '../config/solana-deployments.json'
 
 export type SolanaCluster = 'localnet' | 'devnet' | 'testnet' | 'mainnet-beta'

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! io_uring vs Sync I/O Performance Comparison
 //!
 //! Demonstrates the performance benefits of io_uring:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use term_core::terminal::{GridPerformer, Terminal};
 use term_core::test_support::capture_writer;
 use vte::Parser;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import type { Component } from 'solid-js'
 
 import { blogPosts, jobs } from './content'

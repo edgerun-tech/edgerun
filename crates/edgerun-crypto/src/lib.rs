@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
 pub fn blake3_256(bytes: &[u8]) -> [u8; 32] {

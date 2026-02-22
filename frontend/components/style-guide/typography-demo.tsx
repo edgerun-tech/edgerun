@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export function TypographyDemo() {
   return (
     <div class="space-y-8">

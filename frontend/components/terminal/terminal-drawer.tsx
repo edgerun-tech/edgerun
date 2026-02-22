@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Show } from 'solid-js'
 import { TerminalDevicesPanel } from './terminal-devices-panel'
 import { TerminalPanesView } from './terminal-panes-view'

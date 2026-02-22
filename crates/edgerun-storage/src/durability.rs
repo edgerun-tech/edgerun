@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 /// Durability levels define how data is persisted before acknowledgement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DurabilityLevel {

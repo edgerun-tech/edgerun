@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use crate::render::GlyphCache;
 use crate::render::cpu::msdf_alpha;
 use crate::terminal::{Rgba, SELECTION, Terminal, ensure_contrast};

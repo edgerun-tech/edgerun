@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { cx, uiTheme } from '../../lib/ui-theme'
 
 export function Card(props: any) {

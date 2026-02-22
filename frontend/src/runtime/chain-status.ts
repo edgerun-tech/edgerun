@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../../lib/solana-deployments'
 import { acquireSolanaRpcWsClient, type SolanaRpcWsLease } from '../../lib/solana-rpc-ws'

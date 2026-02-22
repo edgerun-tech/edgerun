@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { ensureTerminalDrawerStore, getTerminalDrawerState, subscribeTerminalDrawer, terminalDrawerActions, type TerminalDrawerState } from './terminal-drawer-store'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from './wallet-session'
 

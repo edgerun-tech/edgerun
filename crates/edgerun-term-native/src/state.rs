@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 use std::env;
 use std::fs;
