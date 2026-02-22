@@ -9,6 +9,7 @@ import {
 } from '../lib/client-routes'
 import { ensureTerminalDrawerStore, getTerminalDrawerState, subscribeTerminalDrawer, type TerminalDrawerState } from '../lib/terminal-drawer-store'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
+import { JOB_TAB_STATUS_EVENT, type JobTabStatus } from '../lib/tab-job-status'
 
 declare global {
   interface Window {
@@ -21,13 +22,45 @@ function routeTitle(pathname: string): string {
 }
 
 type SiteChromeStatus = {
-  emoji: string
-  label: string
+  title: string
+  kind: 'neutral' | 'running' | 'success' | 'warning' | 'error'
   color: string
   pulse: boolean
+  progressPercent?: number
+}
+
+function computeJobChromeStatus(status: JobTabStatus): SiteChromeStatus {
+  const clampedProgress = Math.max(0, Math.min(100, Math.round(status.progressPercent ?? 0)))
+  if (status.phase === 'running') {
+    const workers = Number.isFinite(status.workersActive) ? Math.max(0, Math.round(status.workersActive || 0)) : 0
+    const workerPrefix = workers > 0 ? `[${workers} workers] ` : ''
+    return {
+      title: `[${clampedProgress}%] ${workerPrefix}Running — Edgerun`,
+      kind: 'running',
+      color: '#3b82f6',
+      pulse: true,
+      progressPercent: clampedProgress
+    }
+  }
+  if (status.phase === 'quorum') {
+    return { title: '✔ Quorum — Edgerun', kind: 'success', color: '#14b8a6', pulse: false }
+  }
+  if (status.phase === 'finalized') {
+    return { title: '✓ Finalized — Edgerun', kind: 'success', color: '#22c55e', pulse: false }
+  }
+  if (status.phase === 'settled') {
+    return { title: '✓ Settled — Edgerun', kind: 'success', color: '#16a34a', pulse: false }
+  }
+  if (status.phase === 'slashed') {
+    return { title: '⚠ Slashed — Edgerun', kind: 'error', color: '#dc2626', pulse: false }
+  }
+  return { title: '⚠ Error — Edgerun', kind: 'error', color: '#ef4444', pulse: false }
 }
 
 function computeSiteChromeStatus(): SiteChromeStatus {
+  if (jobTabStatus) {
+    return computeJobChromeStatus(jobTabStatus)
+  }
   const totalDevices = terminalDrawerState.devices.length
   const onlineDevices = terminalDrawerState.devices.filter((device) => device.status === 'online').length
   const terminalOpen = terminalDrawerState.open
@@ -35,8 +68,8 @@ function computeSiteChromeStatus(): SiteChromeStatus {
 
   if (!walletConnected) {
     return {
-      emoji: '⚪',
-      label: 'Wallet disconnected',
+      title: `${currentRouteTitle} · Wallet disconnected | Edgerun`,
+      kind: 'neutral',
       color: '#64748b',
       pulse: false
     }
@@ -44,52 +77,133 @@ function computeSiteChromeStatus(): SiteChromeStatus {
   if (onlineDevices > 0) {
     const openLabel = terminalOpen ? 'Terminal open' : 'Terminal ready'
     return {
-      emoji: '🟢',
-      label: `${openLabel} · ${onlineDevices}/${totalDevices} device${onlineDevices === 1 ? '' : 's'} online`,
+      title: `${currentRouteTitle} · ${openLabel} · ${onlineDevices}/${totalDevices} device${onlineDevices === 1 ? '' : 's'} online | Edgerun`,
+      kind: 'success',
       color: '#22c55e',
       pulse: terminalOpen
     }
   }
   if (totalDevices > 0) {
     return {
-      emoji: '🟡',
-      label: `Wallet connected · ${totalDevices} configured device${totalDevices === 1 ? '' : 's'} (offline)`,
+      title: `${currentRouteTitle} · Wallet connected · ${totalDevices} configured device${totalDevices === 1 ? '' : 's'} (offline) | Edgerun`,
+      kind: 'warning',
       color: '#f59e0b',
       pulse: false
     }
   }
   return {
-    emoji: '🟠',
-    label: 'Wallet connected · no devices configured',
+    title: `${currentRouteTitle} · Wallet connected · no devices configured | Edgerun`,
+    kind: 'warning',
     color: '#fb923c',
     pulse: false
   }
 }
 
-function faviconSvg(status: SiteChromeStatus, frame: number): string {
-  const glow = status.pulse ? (frame % 2 === 0 ? 15 : 19) : 16
-  const core = status.pulse ? (frame % 2 === 0 ? 9 : 11) : 10
-  const ringOpacity = status.pulse ? (frame % 2 === 0 ? 0.3 : 0.55) : 0.35
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#05070d"/><circle cx="32" cy="32" r="${glow}" fill="${status.color}" opacity="${ringOpacity}"/><circle cx="32" cy="32" r="${core}" fill="${status.color}"/><path d="M18 48h28" stroke="#d4d4d8" stroke-width="3" stroke-linecap="round" opacity="0.9"/></svg>`
+function initBrandFaviconAsset(): void {
+  if (brandFaviconImage || typeof Image === 'undefined') return
+  brandFaviconImage = new Image()
+  brandFaviconImage.src = '/icon-192.png'
+}
+
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath()
+  ctx.moveTo(x + r, y)
+  ctx.arcTo(x + w, y, x + w, y + h, r)
+  ctx.arcTo(x + w, y + h, x, y + h, r)
+  ctx.arcTo(x, y + h, x, y, r)
+  ctx.arcTo(x, y, x + w, y, r)
+  ctx.closePath()
+}
+
+function faviconBadgeColor(kind: SiteChromeStatus['kind']): string {
+  if (kind === 'running') return '#3b82f6'
+  if (kind === 'success') return '#22c55e'
+  if (kind === 'error') return '#dc2626'
+  if (kind === 'warning') return '#f59e0b'
+  return '#64748b'
+}
+
+function faviconPng(status: SiteChromeStatus, frame: number): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
+
+  drawRoundRect(ctx, 0, 0, 64, 64, 14)
+  ctx.fillStyle = '#05070d'
+  ctx.fill()
+
+  drawRoundRect(ctx, 5, 5, 54, 54, 11)
+  ctx.save()
+  ctx.clip()
+  if (brandFaviconImage?.complete && brandFaviconImage.naturalWidth > 0) {
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(brandFaviconImage, 5, 5, 54, 54)
+  } else {
+    const grad = ctx.createLinearGradient(8, 8, 56, 56)
+    grad.addColorStop(0, '#0f172a')
+    grad.addColorStop(1, '#111827')
+    ctx.fillStyle = grad
+    ctx.fillRect(5, 5, 54, 54)
+    ctx.strokeStyle = '#d4d4d8'
+    ctx.lineWidth = 4
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.moveTo(20, 18)
+    ctx.lineTo(44, 18)
+    ctx.moveTo(20, 32)
+    ctx.lineTo(40, 32)
+    ctx.moveTo(20, 46)
+    ctx.lineTo(44, 46)
+    ctx.stroke()
+  }
+  ctx.restore()
+
+  if (status.kind === 'running') {
+    const progress = Math.max(0, Math.min(100, status.progressPercent ?? 0))
+    const extra = status.pulse ? (frame % 2 === 0 ? 0 : 0.18) : 0
+    const end = (-Math.PI / 2) + ((Math.PI * 2) * (progress / 100 + extra))
+    ctx.strokeStyle = '#60a5fa'
+    ctx.lineWidth = 4
+    ctx.lineCap = 'round'
+    ctx.beginPath()
+    ctx.arc(32, 32, 28, -Math.PI / 2, end)
+    ctx.stroke()
+  }
+
+  const badge = faviconBadgeColor(status.kind)
+  const badgeRadius = status.pulse ? (frame % 2 === 0 ? 7.5 : 8.5) : 8
+  ctx.beginPath()
+  ctx.arc(50, 50, badgeRadius + 2, 0, Math.PI * 2)
+  ctx.fillStyle = '#05070d'
+  ctx.fill()
+  ctx.beginPath()
+  ctx.arc(50, 50, badgeRadius, 0, Math.PI * 2)
+  ctx.fillStyle = badge
+  ctx.fill()
+
+  return canvas.toDataURL('image/png')
 }
 
 function updateFavicon(status: SiteChromeStatus): void {
   if (typeof document === 'undefined') return
+  initBrandFaviconAsset()
   let link = document.querySelector<HTMLLinkElement>('link[data-edgerun-dynamic-favicon]')
   if (!link) {
     link = document.createElement('link')
     link.setAttribute('rel', 'icon')
-    link.setAttribute('type', 'image/svg+xml')
+    link.setAttribute('type', 'image/png')
     link.setAttribute('data-edgerun-dynamic-favicon', '1')
     document.head.appendChild(link)
   }
-  const svg = faviconSvg(status, faviconFrame)
-  link.setAttribute('href', `data:image/svg+xml,${encodeURIComponent(svg)}`)
+  const png = faviconPng(status, faviconFrame)
+  if (png) link.setAttribute('href', png)
 }
 
 function renderSiteChrome(): void {
   const status = computeSiteChromeStatus()
-  document.title = `${status.emoji} ${currentRouteTitle} · ${status.label} | Edgerun`
+  document.title = titleFlashOverride || status.title
   updateFavicon(status)
   if (status.pulse) {
     if (faviconAnimationTimer === null) {
@@ -104,6 +218,20 @@ function renderSiteChrome(): void {
     faviconFrame = 0
     updateFavicon(status)
   }
+}
+
+function setTitleFlashOverride(nextTitle: string, durationMs: number): void {
+  titleFlashOverride = nextTitle
+  if (titleFlashTimer !== null) {
+    window.clearTimeout(titleFlashTimer)
+    titleFlashTimer = null
+  }
+  renderSiteChrome()
+  titleFlashTimer = window.setTimeout(() => {
+    titleFlashOverride = ''
+    titleFlashTimer = null
+    renderSiteChrome()
+  }, durationMs)
 }
 
 function initSiteChromeStatus(): void {
@@ -123,6 +251,20 @@ function initSiteChromeStatus(): void {
     walletSessionState = custom.detail || readWalletSession()
     renderSiteChrome()
   })
+  window.addEventListener(JOB_TAB_STATUS_EVENT, (event) => {
+    const custom = event as CustomEvent<JobTabStatus | null>
+    const next = custom.detail ?? null
+    const shouldFlash = Boolean(next?.flashIfHidden && document.hidden)
+    jobTabStatus = next
+    if (shouldFlash) {
+      const settled = next?.phase === 'settled' || next?.phase === 'finalized'
+      const slashed = next?.phase === 'slashed'
+      const label = settled ? '✔ Finalized — Edgerun' : slashed ? '⚠ Slashed — Edgerun' : '⚠ Job Update — Edgerun'
+      setTitleFlashOverride(label, 5000)
+      return
+    }
+    renderSiteChrome()
+  })
 }
 
 let disposePage: null | (() => void) = null
@@ -135,7 +277,11 @@ let walletSessionState: WalletSessionState = readWalletSession()
 let terminalDrawerState: TerminalDrawerState = getTerminalDrawerState()
 let faviconAnimationTimer: number | null = null
 let faviconFrame = 0
+let brandFaviconImage: HTMLImageElement | null = null
 let currentRouteTitle = 'Home'
+let jobTabStatus: JobTabStatus | null = null
+let titleFlashOverride = ''
+let titleFlashTimer: number | null = null
 let docsEnhancementsModulePromise: Promise<typeof import('./runtime/docs-enhancements')> | null = null
 let chainStatusModulePromise: Promise<typeof import('./runtime/chain-status')> | null = null
 
