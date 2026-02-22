@@ -47,11 +47,14 @@ jobs:
         working-directory: frontend
 
       - name: Push wiki
-        if: ${{ secrets.WIKI_PUSH_TOKEN != '' }}
         env:
           WIKI_TOKEN: ${{ secrets.WIKI_PUSH_TOKEN }}
         run: |
           set -euo pipefail
+          if [[ -z "${WIKI_TOKEN:-}" ]]; then
+            echo "WIKI_PUSH_TOKEN is not set; skipping wiki push."
+            exit 0
+          fi
           rm -rf /tmp/edgerun-wiki
           git clone "https://x-access-token:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" /tmp/edgerun-wiki
           rsync -a --delete out/frontend/wiki/main/ /tmp/edgerun-wiki/
