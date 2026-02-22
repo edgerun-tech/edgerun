@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createTerminalDrawer } from './components/terminalDrawer.js';
-import { fetchStatus, runTask } from './services/api.js';
+import { fetchStatus, runTask, startStatusFeed, stopStatusFeed, subscribeStatus } from './services/api.js';
 
 const TASKS = [
   { id: 'doctor', label: 'Doctor', group: 'Core' },
@@ -22,18 +22,24 @@ function cardHtml(meta, data) {
   </div>`;
 }
 
+function renderStatus(body) {
+  const summaryEl = document.getElementById('summary');
+  const tasksEl = document.getElementById('tasks');
+  const map = new Map((Array.isArray(body?.tasks) ? body.tasks : []).map((t) => [t.task, t]));
+  const merged = TASKS.map((meta) => ({
+    meta,
+    task: map.get(meta.id) || { task: meta.id, state: 'idle', runs: 0, last_output: '' },
+  }));
+  summaryEl.textContent = `visible=${merged.length}`;
+  tasksEl.innerHTML = merged.map((x) => cardHtml(x.meta, x.task)).join('');
+}
+
 async function refresh() {
   const summaryEl = document.getElementById('summary');
   const tasksEl = document.getElementById('tasks');
   try {
     const body = await fetchStatus();
-    const map = new Map(body.tasks.map((t) => [t.task, t]));
-    const merged = TASKS.map((meta) => ({
-      meta,
-      task: map.get(meta.id) || { task: meta.id, state: 'idle', runs: 0, last_output: '' },
-    }));
-    summaryEl.textContent = `visible=${merged.length}`;
-    tasksEl.innerHTML = merged.map((x) => cardHtml(x.meta, x.task)).join('');
+    renderStatus(body);
   } catch (err) {
     summaryEl.textContent = `status fetch failed: ${String(err.message || err)}`;
     tasksEl.innerHTML = '';
@@ -52,5 +58,13 @@ document.addEventListener('click', async (ev) => {
 const drawer = createTerminalDrawer();
 drawer.mount();
 
-setInterval(refresh, 2000);
+const unsubscribeStatus = subscribeStatus((body) => {
+  renderStatus(body);
+});
+startStatusFeed({ pollMs: 2000 });
 refresh();
+
+window.addEventListener('beforeunload', () => {
+  unsubscribeStatus();
+  stopStatusFeed();
+});
