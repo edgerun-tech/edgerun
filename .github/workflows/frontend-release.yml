@@ -54,6 +54,7 @@ jobs:
           EDGERUN_BUILD_NUMBER: ${{ steps.meta.outputs.build_number }}
           EDGERUN_SITE_URL: https://www.edgerun.tech
           EDGERUN_SITE_DOMAIN: www.edgerun.tech
+          EDGERUN_API_URL: https://api.edgerun.tech
         run: bun run build
         working-directory: frontend
 

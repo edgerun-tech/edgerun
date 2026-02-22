@@ -16,8 +16,12 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::Query,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{
+        header::{ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN, VARY},
+        HeaderMap, HeaderValue, StatusCode,
+    },
     response::IntoResponse,
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
@@ -623,11 +627,20 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse {
+async fn health(headers: HeaderMap) -> Response {
+    let body = serde_json::to_string(&HealthResponse {
         ok: true,
         service: "edgerun-scheduler",
     })
+    .unwrap_or_else(|_| "{\"ok\":true,\"service\":\"edgerun-scheduler\"}".to_string());
+    let mut response = Response::new(axum::body::Body::from(body));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    apply_cors_headers(&mut response, &headers);
+    response
 }
 
 fn with_route_maps_mut<R>(
@@ -851,8 +864,9 @@ async fn route_heartbeat(
 
 async fn route_resolve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(device_id): Path<String>,
-) -> Json<RouteResolveResponse> {
+) -> Response {
     let now = now_unix_seconds();
     let route = with_route_maps_mut(&state, |routes, _, _| {
         prune_expired_routes(routes, now);
@@ -860,17 +874,21 @@ async fn route_resolve(
     })
     .ok()
     .flatten();
-    Json(RouteResolveResponse {
+    let mut response = Json(RouteResolveResponse {
         ok: true,
         found: route.is_some(),
         route,
     })
+    .into_response();
+    apply_cors_headers(&mut response, &headers);
+    response
 }
 
 async fn route_owner_resolve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(owner_pubkey): Path<String>,
-) -> Json<OwnerRoutesResponse> {
+) -> Response {
     let owner_pubkey = owner_pubkey.trim().to_string();
     let now = now_unix_seconds();
     let devices = with_route_maps_mut(&state, |routes, _, _| {
@@ -882,11 +900,14 @@ async fn route_owner_resolve(
             .collect::<Vec<_>>())
     })
     .unwrap_or_default();
-    Json(OwnerRoutesResponse {
+    let mut response = Json(OwnerRoutesResponse {
         ok: true,
         owner_pubkey,
         devices,
     })
+    .into_response();
+    apply_cors_headers(&mut response, &headers);
+    response
 }
 
 async fn webrtc_signal_ws(
@@ -3875,6 +3896,43 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
             _ => None,
         })
         .unwrap_or(default_value)
+}
+
+fn parse_allowed_origins() -> Vec<String> {
+    let raw = std::env::var("EDGERUN_SCHEDULER_ALLOWED_ORIGINS")
+        .unwrap_or_else(|_| "https://www.edgerun.tech,http://localhost:4173".to_string());
+    raw.split(',')
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>()
+}
+
+fn allowed_origin_for_request(headers: &HeaderMap) -> Option<HeaderValue> {
+    let request_origin = headers.get(ORIGIN)?.to_str().ok()?.trim();
+    if request_origin.is_empty() {
+        return None;
+    }
+    let allow_list = parse_allowed_origins();
+    if allow_list
+        .iter()
+        .any(|origin| origin == "*" || origin == request_origin)
+    {
+        HeaderValue::from_str(request_origin).ok()
+    } else {
+        None
+    }
+}
+
+fn apply_cors_headers(response: &mut Response, request_headers: &HeaderMap) {
+    if let Some(origin) = allowed_origin_for_request(request_headers) {
+        response
+            .headers_mut()
+            .insert(ACCESS_CONTROL_ALLOW_ORIGIN, origin);
+        response
+            .headers_mut()
+            .insert(VARY, HeaderValue::from_static("Origin"));
+    }
 }
 
 fn load_trust_policy(path: &std::path::Path) -> Result<edgerun_types::SyncTrustPolicy> {

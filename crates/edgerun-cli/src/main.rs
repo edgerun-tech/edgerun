@@ -709,6 +709,12 @@ fn is_supported_spdx_source(path: &str) -> bool {
     .any(|ext| path.ends_with(ext))
 }
 
+fn is_generated_spdx_exempt(path: &str) -> bool {
+    path.starts_with("program/target/")
+        || path.starts_with("program/target-local/")
+        || path.starts_with("out/")
+}
+
 fn run_spdx_check_sync(root: &Path) -> Result<()> {
     let output = std::process::Command::new("git")
         .arg("ls-files")
@@ -722,6 +728,9 @@ fn run_spdx_check_sync(root: &Path) -> Result<()> {
 
     for path in files.lines() {
         if path.is_empty() || path.ends_with("/LICENSE") || path == "LICENSE" {
+            continue;
+        }
+        if is_generated_spdx_exempt(path) {
             continue;
         }
         if !is_supported_spdx_source(path) {
