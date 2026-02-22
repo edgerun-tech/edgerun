@@ -4,6 +4,8 @@ pub mod gpu;
 pub mod logging;
 pub mod render;
 pub mod terminal;
+#[cfg(any(test, feature = "test-util"))]
+pub mod test_support;
 pub mod text;
 
 #[cfg(test)]

@@ -31,6 +31,10 @@ describe("edgerun", () => {
   const lifecycleWorker2 = Keypair.generate();
   const lifecycleWorker3 = Keypair.generate();
   const lifecycleWorker4 = Keypair.generate();
+  const lifecycleWorker5 = Keypair.generate();
+  const lifecycleWorker6 = Keypair.generate();
+  const lifecycleWorker7 = Keypair.generate();
+  const lifecycleWorker8 = Keypair.generate();
   const permissionlessCaller = Keypair.generate();
 
   const jobId = random32();
@@ -73,6 +77,22 @@ describe("edgerun", () => {
     [Buffer.from("worker_stake"), lifecycleWorker4.publicKey.toBuffer()],
     PROGRAM_ID
   );
+  const [lifecycleWorkerStake5Pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("worker_stake"), lifecycleWorker5.publicKey.toBuffer()],
+    PROGRAM_ID
+  );
+  const [lifecycleWorkerStake6Pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("worker_stake"), lifecycleWorker6.publicKey.toBuffer()],
+    PROGRAM_ID
+  );
+  const [lifecycleWorkerStake7Pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("worker_stake"), lifecycleWorker7.publicKey.toBuffer()],
+    PROGRAM_ID
+  );
+  const [lifecycleWorkerStake8Pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("worker_stake"), lifecycleWorker8.publicKey.toBuffer()],
+    PROGRAM_ID
+  );
   const [jobPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("job"), Buffer.from(jobId)],
     PROGRAM_ID
@@ -112,6 +132,10 @@ describe("edgerun", () => {
     await airdrop(lifecycleWorker2.publicKey, 4_000_000_000);
     await airdrop(lifecycleWorker3.publicKey, 4_000_000_000);
     await airdrop(lifecycleWorker4.publicKey, 4_000_000_000);
+    await airdrop(lifecycleWorker5.publicKey, 4_000_000_000);
+    await airdrop(lifecycleWorker6.publicKey, 4_000_000_000);
+    await airdrop(lifecycleWorker7.publicKey, 4_000_000_000);
+    await airdrop(lifecycleWorker8.publicKey, 4_000_000_000);
 
     await program.methods
       .initializeConfig({
@@ -162,6 +186,26 @@ describe("edgerun", () => {
     await registerAndFundWorker(
       lifecycleWorker4,
       lifecycleWorkerStake4Pda,
+      2_000_000_000
+    );
+    await registerAndFundWorker(
+      lifecycleWorker5,
+      lifecycleWorkerStake5Pda,
+      2_000_000_000
+    );
+    await registerAndFundWorker(
+      lifecycleWorker6,
+      lifecycleWorkerStake6Pda,
+      2_000_000_000
+    );
+    await registerAndFundWorker(
+      lifecycleWorker7,
+      lifecycleWorkerStake7Pda,
+      2_000_000_000
+    );
+    await registerAndFundWorker(
+      lifecycleWorker8,
+      lifecycleWorkerStake8Pda,
       2_000_000_000
     );
 
@@ -747,7 +791,259 @@ describe("edgerun", () => {
       .rpc();
   });
 
+  it("supports tier2 seven-worker assignment", async () => {
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(0),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+
+    const tierJobId = random32();
+    const tierJobPda = jobPdaFor(tierJobId);
+    await program.methods
+      .postJob(
+        tierJobId,
+        random32(),
+        random32(),
+        [],
+        65_536,
+        new anchor.BN(100_000),
+        new anchor.BN(2_000_000_000)
+      )
+      .accountsStrict({
+        client: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    await setJobSeed(tierJobPda);
+
+    const tierWorkers = [
+      lifecycleWorker0,
+      lifecycleWorker1,
+      lifecycleWorker2,
+      lifecycleWorker3,
+      lifecycleWorker4,
+      lifecycleWorker5,
+      lifecycleWorker6,
+    ];
+    const tierWorkerStakes = [
+      lifecycleWorkerStake0Pda,
+      lifecycleWorkerStake1Pda,
+      lifecycleWorkerStake2Pda,
+      lifecycleWorkerStake3Pda,
+      lifecycleWorkerStake4Pda,
+      lifecycleWorkerStake5Pda,
+      lifecycleWorkerStake6Pda,
+    ];
+    await program.methods
+      .assignWorkers(tierWorkers.map((w) => w.publicKey))
+      .accountsStrict({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+      })
+      .remainingAccounts(writableAccounts(tierWorkerStakes))
+      .rpc();
+
+    const assignedJob = await program.account.job.fetch(tierJobPda);
+    expect(assignedJob.committeeSize).to.equal(7);
+    expect(assignedJob.quorum).to.equal(5);
+    expect(assignedJob.assignedCount).to.equal(7);
+    expect(assignedJob.requiredLockLamports.toNumber()).to.equal(500_000_000);
+
+    await waitForSlotAfter(assignedJob.deadlineSlot.toNumber());
+    await program.methods
+      .cancelExpiredJob()
+      .accountsStrict({
+        caller: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+        client: schedulerAuthority.publicKey,
+      })
+      .remainingAccounts(writableAccounts(tierWorkerStakes))
+      .rpc();
+
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: false,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(100),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+  });
+
+  it("supports tier3 nine-worker assignment", async () => {
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(0),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+
+    const tierJobId = random32();
+    const tierJobPda = jobPdaFor(tierJobId);
+    await program.methods
+      .postJob(
+        tierJobId,
+        random32(),
+        random32(),
+        [],
+        65_536,
+        new anchor.BN(100_000),
+        new anchor.BN(10_000_000_000)
+      )
+      .accountsStrict({
+        client: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    await setJobSeed(tierJobPda);
+
+    const tierWorkers = [
+      lifecycleWorker0,
+      lifecycleWorker1,
+      lifecycleWorker2,
+      lifecycleWorker3,
+      lifecycleWorker4,
+      lifecycleWorker5,
+      lifecycleWorker6,
+      lifecycleWorker7,
+      lifecycleWorker8,
+    ];
+    const tierWorkerStakes = [
+      lifecycleWorkerStake0Pda,
+      lifecycleWorkerStake1Pda,
+      lifecycleWorkerStake2Pda,
+      lifecycleWorkerStake3Pda,
+      lifecycleWorkerStake4Pda,
+      lifecycleWorkerStake5Pda,
+      lifecycleWorkerStake6Pda,
+      lifecycleWorkerStake7Pda,
+      lifecycleWorkerStake8Pda,
+    ];
+    await program.methods
+      .assignWorkers(tierWorkers.map((w) => w.publicKey))
+      .accountsStrict({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+      })
+      .remainingAccounts(writableAccounts(tierWorkerStakes))
+      .rpc();
+
+    const assignedJob = await program.account.job.fetch(tierJobPda);
+    expect(assignedJob.committeeSize).to.equal(9);
+    expect(assignedJob.quorum).to.equal(6);
+    expect(assignedJob.assignedCount).to.equal(9);
+    expect(assignedJob.requiredLockLamports.toNumber()).to.equal(1_666_666_666);
+
+    await waitForSlotAfter(assignedJob.deadlineSlot.toNumber());
+    await program.methods
+      .cancelExpiredJob()
+      .accountsStrict({
+        caller: schedulerAuthority.publicKey,
+        config: configPda,
+        job: tierJobPda,
+        client: schedulerAuthority.publicKey,
+      })
+      .remainingAccounts(writableAccounts(tierWorkerStakes))
+      .rpc();
+
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: false,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(100),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+  });
+
   it("finalize_job unlocks winner stake and pays protocol + winners", async () => {
+    await program.methods
+      .updateConfig({
+        schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: false,
+        maxCommitteeSize: 9,
+        minWorkerStakeLamports: new anchor.BN(500_000_000),
+        protocolFeeBps: 100,
+        challengeWindowSlots: new anchor.BN(100),
+        maxMemoryBytes: 1_048_576,
+        maxInstructions: new anchor.BN(500_000),
+        allowedRuntimeRoot: new Array<number>(32).fill(0),
+        paused: false,
+      })
+      .accountsStrict({
+        admin: schedulerAuthority.publicKey,
+        config: configPda,
+      })
+      .rpc();
+
     const finalizeJobId = random32();
     const { jobPda: finalizeJobPda } = await createAssignedJob(
       finalizeJobId,
@@ -1007,10 +1303,20 @@ describe("edgerun", () => {
       ]
     );
     const cancelJobBefore = await program.account.job.fetch(cancelJobPda);
+    const cancelRequiredLock = cancelJobBefore.requiredLockLamports.toNumber();
     await waitForSlotAfter(cancelJobBefore.deadlineSlot.toNumber());
 
     const jobLamportsBefore = await provider.connection.getBalance(
       cancelJobPda
+    );
+    const stake0Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
     );
 
     await program.methods
@@ -1045,9 +1351,18 @@ describe("edgerun", () => {
     expect(cancelJobAfter.status).to.equal(3); // Cancelled
     expect(cancelJobAfter.escrowLamports.toNumber()).to.equal(0);
     expect(jobLamportsBefore - jobLamportsAfter).to.equal(700_000_000);
-    expect(stake0After.lockedStakeLamports.toNumber()).to.equal(0);
-    expect(stake1After.lockedStakeLamports.toNumber()).to.equal(0);
-    expect(stake2After.lockedStakeLamports.toNumber()).to.equal(0);
+    expect(
+      stake0Before.lockedStakeLamports.toNumber() -
+        stake0After.lockedStakeLamports.toNumber()
+    ).to.equal(cancelRequiredLock);
+    expect(
+      stake1Before.lockedStakeLamports.toNumber() -
+        stake1After.lockedStakeLamports.toNumber()
+    ).to.equal(cancelRequiredLock);
+    expect(
+      stake2Before.lockedStakeLamports.toNumber() -
+        stake2After.lockedStakeLamports.toNumber()
+    ).to.equal(cancelRequiredLock);
 
     await expectFail(
       program.methods

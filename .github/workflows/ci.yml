@@ -72,6 +72,16 @@ jobs:
       - name: Workspace check
         run: cargo check --workspace
 
+      - name: Clippy (term crates strict)
+        run: >
+          cargo clippy
+          -p edgerun-term-core
+          -p edgerun-term-ui
+          -p edgerun-term-native
+          -p edgerun-term-web
+          --all-targets
+          -- -D warnings
+
       - name: Clippy (strict)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
