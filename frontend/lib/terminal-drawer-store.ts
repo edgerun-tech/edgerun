@@ -107,6 +107,7 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
     ? Math.max(TERM_MIN_RATIO, Math.min(TERM_MAX_RATIO, heightCandidate))
     : TERM_DEFAULT_RATIO
 
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : ''
   const devices = Array.isArray(base.devices)
     ? base.devices
       .filter((item) => item && typeof item.baseUrl === 'string' && item.baseUrl.trim().length > 0)
@@ -120,6 +121,12 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
           lastSeenAt: typeof item.lastSeenAt === 'number' ? item.lastSeenAt : null,
           lastConnectedAt: typeof item.lastConnectedAt === 'number' ? item.lastConnectedAt : null
         }
+      })
+      .filter((item) => {
+        // Migrate away from the old auto-seeded "Current Origin" placeholder.
+        if (item.name !== 'Current Origin') return true
+        if (item.lastConnectedAt) return true
+        return item.baseUrl !== currentOrigin
       })
     : []
 
@@ -229,6 +236,79 @@ export const terminalDrawerActions = {
         ...prev,
         tabs,
         activeTabId: nextTab.id
+      }
+    })
+  },
+
+  closeTab(id: string): void {
+    apply((prev) => {
+      if (prev.tabs.length <= 1) return prev
+      const idx = prev.tabs.findIndex((tab) => tab.id === id)
+      if (idx < 0) return prev
+      const tabs = prev.tabs.filter((tab) => tab.id !== id)
+      if (tabs.length === 0) return prev
+      const nextActive = prev.activeTabId === id
+        ? (tabs[Math.max(0, idx - 1)] ?? tabs[0])
+        : (tabs.find((tab) => tab.id === prev.activeTabId) ?? tabs[0])
+      if (!nextActive) return prev
+      return {
+        ...prev,
+        tabs,
+        activeTabId: nextActive.id
+      }
+    })
+  },
+
+  closeOtherTabs(id: string): void {
+    apply((prev) => {
+      if (prev.tabs.length <= 1) return prev
+      const target = prev.tabs.find((tab) => tab.id === id)
+      if (!target) return prev
+      return {
+        ...prev,
+        tabs: [target],
+        activeTabId: target.id
+      }
+    })
+  },
+
+  closeTabsLeft(id: string): void {
+    apply((prev) => {
+      if (prev.tabs.length <= 1) return prev
+      const idx = prev.tabs.findIndex((tab) => tab.id === id)
+      if (idx <= 0) return prev
+      const tabs = prev.tabs.slice(idx)
+      const activeExists = tabs.some((tab) => tab.id === prev.activeTabId)
+      return {
+        ...prev,
+        tabs,
+        activeTabId: activeExists ? prev.activeTabId : id
+      }
+    })
+  },
+
+  closeTabsRight(id: string): void {
+    apply((prev) => {
+      if (prev.tabs.length <= 1) return prev
+      const idx = prev.tabs.findIndex((tab) => tab.id === id)
+      if (idx < 0 || idx >= prev.tabs.length - 1) return prev
+      const tabs = prev.tabs.slice(0, idx + 1)
+      const activeExists = tabs.some((tab) => tab.id === prev.activeTabId)
+      return {
+        ...prev,
+        tabs,
+        activeTabId: activeExists ? prev.activeTabId : id
+      }
+    })
+  },
+
+  closeAllTabs(): void {
+    apply((prev) => {
+      const tab = defaultTab(0)
+      return {
+        ...prev,
+        tabs: [tab],
+        activeTabId: tab.id
       }
     })
   },
