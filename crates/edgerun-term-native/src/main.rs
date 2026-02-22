@@ -1,17 +1,17 @@
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
+use std::sync::Mutex;
+#[cfg(test)]
 use std::sync::OnceLock;
-use std::sync::{Arc, Mutex, mpsc::TryRecvError};
+use std::sync::{Arc, mpsc::TryRecvError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use arboard::Clipboard;
 use dirs::config_dir;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use pixels::{Pixels, SurfaceTexture};
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -20,9 +20,9 @@ use term_core::gpu::GpuRenderer;
 use term_core::render::layout::{LayoutMetrics, compute_layout};
 use term_core::render::{FONT_DATA, FONT_SIZE, GlyphCache};
 use term_core::terminal::Rgba;
-use term_core::terminal::{
-    GridPerformer, Terminal, copy_text_to_clipboard, selection_text, write_bytes,
-};
+#[cfg(test)]
+use term_core::terminal::Terminal;
+use term_core::terminal::{GridPerformer, copy_text_to_clipboard};
 use term_ui::app_render::{RenderInputs, TabRender, render_frame};
 use term_ui::debug::DebugOverlay;
 use term_ui::suggest::{looks_like_path, path_completion_suggestions};
@@ -41,6 +41,7 @@ use winit::platform::startup_notify::{
 };
 use winit::window::Window;
 
+mod clipboard;
 mod input_loop;
 mod linking;
 mod logging;
@@ -49,6 +50,7 @@ mod state;
 mod suggest;
 mod tab;
 
+use crate::clipboard::{copy_selection_to_clipboard, paste_clipboard};
 use crate::input_loop::{
     apply_history_selection, handle_cheatsheet_key, handle_history_key, handle_key,
     handle_log_viewer_key, pos_to_cell,
@@ -59,7 +61,7 @@ use crate::linking::{
 };
 use crate::platform::{
     HyprPollState, fetch_hyprland_size, hyprland_ipc_info, load_kitty_primary_font,
-    resolve_window_size, run_command_with_timeout, spawn_font_loader, spawn_hyprland_listener,
+    resolve_window_size, spawn_font_loader, spawn_hyprland_listener,
 };
 use crate::state::{
     AutocompleteEngine, SettingsState, load_settings_state, next_log_level, next_render_mode,
@@ -2112,10 +2114,10 @@ mod layout_tests {
 
     #[test]
     fn bracketed_paste_wraps_payload() {
-        let plain = compose_bracketed_paste(b"hello", false);
+        let plain = crate::clipboard::compose_bracketed_paste(b"hello", false);
         assert_eq!(plain, b"hello");
 
-        let bracketed = compose_bracketed_paste(b"hello", true);
+        let bracketed = crate::clipboard::compose_bracketed_paste(b"hello", true);
         assert_eq!(bracketed, b"\x1b[200~hello\x1b[201~");
     }
 
@@ -2553,112 +2555,6 @@ fn smart_history_columns(
     ]
 }
 
-fn paste_clipboard(writer: Arc<Mutex<Box<dyn Write + Send>>>, bracketed: bool) {
-    thread::spawn(move || paste_clipboard_sync(&writer, bracketed));
-}
-
-fn compose_bracketed_paste(data: &[u8], bracketed: bool) -> Vec<u8> {
-    if bracketed {
-        let mut payload = Vec::with_capacity(data.len() + 8);
-        payload.extend_from_slice(b"\x1b[200~");
-        payload.extend_from_slice(data);
-        payload.extend_from_slice(b"\x1b[201~");
-        payload
-    } else {
-        data.to_vec()
-    }
-}
-
-fn paste_clipboard_sync(writer: &Arc<Mutex<Box<dyn Write + Send>>>, bracketed: bool) {
-    let send_text = |data: &[u8]| {
-        let payload = compose_bracketed_paste(data, bracketed);
-        write_bytes(writer, &payload);
-    };
-
-    let wl_paths = ["/usr/bin/wl-paste", "/bin/wl-paste", "wl-paste"];
-    let xclip_paths = ["/usr/bin/xclip", "/bin/xclip", "xclip"];
-    let xsel_paths = ["/usr/bin/xsel", "/bin/xsel", "xsel"];
-    let pbpaste_paths = ["/usr/bin/pbpaste", "/bin/pbpaste", "pbpaste"];
-    let powershell_paths = [
-        "/usr/bin/powershell",
-        "/bin/powershell",
-        "powershell",
-        "powershell.exe",
-    ];
-
-    // Try Wayland/X11 tools first so cliphist/portals stay in sync.
-    let mut candidates: Vec<(&str, &[&str])> = wl_paths
-        .iter()
-        .map(|p| {
-            (
-                *p,
-                &[
-                    "--no-newline",
-                    "--type",
-                    "text/plain",
-                    "--selection",
-                    "clipboard",
-                ][..],
-            )
-        })
-        .chain(wl_paths.iter().map(|p| {
-            (
-                *p,
-                &[
-                    "--no-newline",
-                    "--type",
-                    "text/plain",
-                    "--selection",
-                    "primary",
-                ][..],
-            )
-        }))
-        .collect();
-    candidates.extend(
-        xclip_paths
-            .iter()
-            .map(|p| (*p, &["-o", "-selection", "clipboard"][..])),
-    );
-    candidates.extend(
-        xclip_paths
-            .iter()
-            .map(|p| (*p, &["-o", "-selection", "primary"][..])),
-    );
-    candidates.extend(xsel_paths.iter().map(|p| (*p, &["-o", "-b"][..])));
-    candidates.extend(xsel_paths.iter().map(|p| (*p, &["-o", "-p"][..])));
-    candidates.extend(pbpaste_paths.iter().map(|p| (*p, &[][..])));
-    candidates.extend(
-        powershell_paths
-            .iter()
-            .map(|p| (*p, &["-NoProfile", "-Command", "Get-Clipboard"][..])),
-    );
-
-    for (bin, args) in candidates {
-        let exe = Path::new(bin);
-        if !exe.exists() && bin.contains('/') {
-            continue;
-        }
-        if let Some(out) = run_command_with_timeout(bin, args, None, Duration::from_millis(500)) {
-            if out.is_empty() {
-                continue;
-            }
-            send_text(&out);
-            return;
-        }
-    }
-
-    // Fallback to arboard if shell tools fail or are unavailable.
-    if let Ok(mut clipboard) = Clipboard::new()
-        && let Ok(text) = clipboard.get_text()
-        && !text.is_empty()
-    {
-        send_text(text.as_bytes());
-        return;
-    }
-
-    warn!("paste failed: no clipboard provider returned data");
-}
-
 fn help_state_path() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(path) = HELP_STATE_OVERRIDE.get() {
@@ -2695,73 +2591,19 @@ fn persist_help_visible_flag(flag: bool) {
     }
 }
 
-fn copy_selection_to_clipboard(term: &Terminal, a: (usize, usize), b: (usize, usize)) {
-    let text = selection_text(term, a, b);
-    if text.is_empty() {
-        return;
-    }
-    thread::spawn(move || copy_text_to_clipboard_sync(text));
-}
-
-fn copy_text_to_clipboard_sync(text: String) {
-    use std::path::Path;
-
-    let wl_paths = ["/usr/bin/wl-copy", "/bin/wl-copy", "wl-copy"];
-    let xclip_paths = ["/usr/bin/xclip", "/bin/xclip", "xclip"];
-    let xsel_paths = ["/usr/bin/xsel", "/bin/xsel", "xsel"];
-    let pbcopy_paths = ["/usr/bin/pbcopy", "/bin/pbcopy", "pbcopy"];
-
-    // Prefer wl-copy/xclip so cliphist sees updates even if arboard succeeds.
-    let mut attempts: Vec<(&str, &[&str])> = wl_paths
-        .iter()
-        .map(|p| (*p, &["--trim-newline"][..]))
-        .chain(
-            wl_paths
-                .iter()
-                .map(|p| (*p, &["--primary", "--trim-newline"][..])),
-        )
-        .collect();
-
-    attempts.extend(
-        xclip_paths
-            .iter()
-            .map(|p| (*p, &["-selection", "clipboard"][..])),
-    );
-    attempts.extend(
-        xclip_paths
-            .iter()
-            .map(|p| (*p, &["-selection", "primary"][..])),
-    );
-    attempts.extend(xsel_paths.iter().map(|p| (*p, &["-b"][..])));
-    attempts.extend(xsel_paths.iter().map(|p| (*p, &["-p"][..])));
-    attempts.extend(pbcopy_paths.iter().map(|p| (*p, &[][..])));
-
-    let mut copied = false;
-    for (bin, args) in &attempts {
-        let exe = Path::new(bin);
-        if !exe.exists() && bin.contains('/') {
-            continue;
-        }
-        if run_command_with_timeout(bin, args, Some(text.as_bytes()), Duration::from_millis(500))
-            .is_some()
-        {
-            copied = true;
-        }
-    }
-
-    // Also push to arboard for completeness.
-    if let Ok(mut clipboard) = Clipboard::new() {
-        let _ = clipboard.set_text(text.clone());
-    }
-
-    if !copied {
-        warn!("clipboard write failed: no provider accepted data");
-    }
-}
-
 #[cfg(test)]
 mod ui_tests {
     use super::*;
+
+    static HELP_STATE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn prepare_help_state_test_path() -> PathBuf {
+        let path = HELP_STATE_OVERRIDE
+            .get_or_init(|| env::temp_dir().join("edgerun-term-help-test.json"))
+            .clone();
+        let _ = fs::remove_file(&path);
+        path
+    }
 
     fn terminal_from_line(text: &str) -> Terminal {
         let cols = text.chars().count().max(1);
@@ -2781,6 +2623,8 @@ mod ui_tests {
 
     #[test]
     fn help_toggle_stays_visible_until_toggled() {
+        let _guard = HELP_STATE_TEST_LOCK.lock().unwrap();
+        let _ = prepare_help_state_test_path();
         let now = Instant::now();
         let mut help = HelpToggle { visible: true };
         assert!(help.should_show(now));
@@ -2794,11 +2638,8 @@ mod ui_tests {
 
     #[test]
     fn help_visibility_persists_to_config() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = HELP_STATE_OVERRIDE
-            .get_or_init(|| dir.path().join("term").join("help.json"))
-            .clone();
-        let _ = fs::remove_file(&path);
+        let _guard = HELP_STATE_TEST_LOCK.lock().unwrap();
+        let _ = prepare_help_state_test_path();
 
         persist_help_visible_flag(false);
         assert_eq!(load_help_visible_flag(), Some(false));
@@ -2810,14 +2651,14 @@ mod ui_tests {
     #[test]
     fn bracketed_paste_wraps_payload() {
         let data = b"echo hi";
-        let wrapped = compose_bracketed_paste(data, true);
+        let wrapped = crate::clipboard::compose_bracketed_paste(data, true);
         assert_eq!(wrapped, b"\x1b[200~echo hi\x1b[201~");
     }
 
     #[test]
     fn non_bracketed_paste_is_passthrough() {
         let data = b"abc123";
-        let wrapped = compose_bracketed_paste(data, false);
+        let wrapped = crate::clipboard::compose_bracketed_paste(data, false);
         assert_eq!(wrapped, data);
     }
 

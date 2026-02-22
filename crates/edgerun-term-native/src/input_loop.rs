@@ -9,6 +9,7 @@ use winit::event::{ElementState, KeyEvent};
 use winit::event_loop::EventLoopProxy;
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 
+use crate::clipboard::{copy_selection_to_clipboard, paste_clipboard};
 use crate::state::AutocompleteEngine;
 use crate::suggest::fix_command_paths;
 use crate::tab::{
@@ -17,8 +18,7 @@ use crate::tab::{
 };
 use crate::{
     AppEvent, CELL_BLINK_INTERVAL, CURSOR_BLINK_INTERVAL, CopyNotice, HelpToggle,
-    add_ssh_host_to_config, copy_selection_to_clipboard, maybe_set_copy_notice, paste_clipboard,
-    smart_history_columns,
+    add_ssh_host_to_config, maybe_set_copy_notice, smart_history_columns,
 };
 
 fn line_input_prefix(term: &Terminal) -> (String, usize) {
