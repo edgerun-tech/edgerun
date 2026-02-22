@@ -70,6 +70,8 @@ struct AppState {
     policy_key_id: String,
     policy_version: u32,
     policy_ttl_secs: u64,
+    pricing_lamports_per_billion_instructions: u64,
+    pricing_flat_lamports: u64,
     committee_size: usize,
     quorum: usize,
     heartbeat_ttl_secs: u64,
@@ -370,14 +372,14 @@ struct RouteHeartbeatResponse {
     expires_at_unix_s: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RouteResolveResponse {
     ok: bool,
     found: bool,
     route: Option<DeviceRouteEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct OwnerRoutesResponse {
     ok: bool,
     owner_pubkey: String,
@@ -477,6 +479,8 @@ struct PostJobArgs {
     escrow_lamports: u64,
 }
 
+const INSTRUCTION_PRICE_QUANTUM: u128 = 1_000_000_000;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     edgerun_observability::init_service("edgerun-scheduler")?;
@@ -565,6 +569,11 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| default_policy_key_id()),
         policy_version: read_env_u32("EDGERUN_SCHEDULER_POLICY_VERSION", default_policy_version()),
         policy_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_POLICY_TTL_SECS", 300),
+        pricing_lamports_per_billion_instructions: read_env_u64(
+            "EDGERUN_SCHEDULER_LAMPORTS_PER_BILLION_INSTRUCTIONS",
+            10_000_000,
+        ),
+        pricing_flat_lamports: read_env_u64_allow_zero("EDGERUN_SCHEDULER_FLAT_FEE_LAMPORTS", 0),
         committee_size: 3,
         quorum: 2,
         heartbeat_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_HEARTBEAT_TTL_SECS", 15),
@@ -2165,6 +2174,23 @@ async fn job_create(
     } else {
         state.quorum.max(1).min(committee_workers.len())
     };
+    let redundancy_multiplier = committee_workers.len().max(1) as u64;
+    let min_escrow_lamports = required_instruction_escrow_lamports(
+        payload.limits.max_instructions,
+        state.pricing_lamports_per_billion_instructions,
+        redundancy_multiplier,
+        state.pricing_flat_lamports,
+    );
+    if payload.escrow_lamports < min_escrow_lamports {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!(
+                "escrow_lamports below deterministic minimum: required {}, got {}",
+                min_escrow_lamports, payload.escrow_lamports
+            ),
+        ));
+    }
+
     let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
     for worker_pubkey in &committee_workers {
         let mut assignment = QueuedAssignment {
@@ -2248,12 +2274,13 @@ async fn job_create(
         action: "job_create".to_string(),
         target: bundle_hash_hex.clone(),
         details: format!(
-            "policy_key_id={} policy_version={} quorum={} committee={} escrow_lamports={}",
+            "policy_key_id={} policy_version={} quorum={} committee={} escrow_lamports={} min_escrow_lamports={}",
             state.policy_key_id,
             state.policy_version,
             effective_quorum,
             state.committee_size,
-            payload.escrow_lamports
+            payload.escrow_lamports,
+            min_escrow_lamports
         ),
     };
     if let Err(err) = edgerun_hwvault_primitives::audit::append_event_jsonl(
@@ -4220,6 +4247,32 @@ fn read_env_u64(key: &str, default_value: u64) -> u64 {
         .unwrap_or(default_value)
 }
 
+fn read_env_u64_allow_zero(key: &str, default_value: u64) -> u64 {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(default_value)
+}
+
+fn required_instruction_escrow_lamports(
+    max_instructions: u64,
+    lamports_per_billion_instructions: u64,
+    redundancy_multiplier: u64,
+    flat_fee_lamports: u64,
+) -> u64 {
+    let instructions = u128::from(max_instructions);
+    let price_per_billion = u128::from(lamports_per_billion_instructions);
+    let redundancy = u128::from(redundancy_multiplier.max(1));
+    let usage = instructions
+        .saturating_mul(price_per_billion)
+        .saturating_mul(redundancy);
+    let variable = usage
+        .saturating_add(INSTRUCTION_PRICE_QUANTUM.saturating_sub(1))
+        .saturating_div(INSTRUCTION_PRICE_QUANTUM);
+    let total = variable.saturating_add(u128::from(flat_fee_lamports));
+    total.min(u128::from(u64::MAX)) as u64
+}
+
 fn read_env_bool(key: &str, default_value: bool) -> bool {
     std::env::var(key)
         .ok()
@@ -4641,6 +4694,7 @@ fn enforce_history_retention(state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use axum::http::{HeaderMap, HeaderValue};
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use ed25519_dalek::Signer;
@@ -4674,6 +4728,8 @@ mod tests {
             policy_key_id: "dev-key-1".to_string(),
             policy_version: 1,
             policy_ttl_secs: 300,
+            pricing_lamports_per_billion_instructions: 10_000_000,
+            pricing_flat_lamports: 0,
             committee_size: 3,
             quorum: 2,
             heartbeat_ttl_secs: 15,
@@ -4737,6 +4793,18 @@ mod tests {
         let winning = find_winning_output_hash(&reports, 2).expect("quorum expected");
         assert_eq!(winning.0, "out-a");
         assert_eq!(winning.1.len(), 2);
+    }
+
+    #[test]
+    fn instruction_escrow_formula_uses_redundancy_and_ceiling() {
+        let min = required_instruction_escrow_lamports(
+            1_500_000_001,
+            10_000_000,
+            3,
+            500,
+        );
+        // ceil((1.500000001 * 10_000_000 * 3)) + 500
+        assert_eq!(min, 45_000_501);
     }
 
     #[test]
@@ -6135,6 +6203,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn job_create_rejects_escrow_below_instruction_minimum() {
+        let mut state = test_state();
+        state.pricing_lamports_per_billion_instructions = 10_000_000;
+        state.pricing_flat_lamports = 1_000;
+
+        let payload = JobCreateRequest {
+            runtime_id: "00".repeat(32),
+            wasm_base64: base64::engine::general_purpose::STANDARD.encode([0x00_u8]),
+            input_base64: base64::engine::general_purpose::STANDARD.encode([0x01_u8]),
+            abi_version: Some(edgerun_types::BUNDLE_ABI_CURRENT),
+            limits: edgerun_types::Limits {
+                max_memory_bytes: 1024,
+                max_instructions: 1_000_000_000,
+            },
+            escrow_lamports: 10_000_999,
+            assignment_worker_pubkey: Some("single-worker".to_string()),
+            client_pubkey: None,
+            client_signed_at_unix_s: None,
+            client_signature: None,
+        };
+
+        let err = job_create(State(state), Json(payload))
+            .await
+            .expect_err("escrow below deterministic minimum should fail");
+        assert_eq!(err.0, StatusCode::BAD_REQUEST);
+        assert!(err.1.contains("escrow_lamports below deterministic minimum"));
+    }
+
+    #[tokio::test]
     async fn trust_policy_endpoints_require_valid_session() {
         let mut state = test_state();
         state.require_policy_session = true;
@@ -6652,7 +6749,15 @@ mod tests {
         assert_eq!(registered.device_id, device_id);
         assert!(!registered.heartbeat_token.is_empty());
 
-        let Json(resolved) = route_resolve(State(state.clone()), Path(device_id.clone())).await;
+        let resolved_resp =
+            route_resolve(State(state.clone()), HeaderMap::new(), Path(device_id.clone())).await;
+        assert_eq!(resolved_resp.status(), StatusCode::OK);
+        let resolved = serde_json::from_slice::<RouteResolveResponse>(
+            &to_bytes(resolved_resp.into_body(), usize::MAX)
+                .await
+                .expect("route resolve body"),
+        )
+        .expect("route resolve json");
         assert!(resolved.ok);
         assert!(resolved.found);
         let resolved_entry = resolved.route.expect("route entry");
@@ -6660,8 +6765,19 @@ mod tests {
         assert_eq!(resolved_entry.owner_pubkey, owner_pubkey);
         assert_eq!(resolved_entry.reachable_urls, reachable_urls);
 
-        let Json(owner_routes) =
-            route_owner_resolve(State(state.clone()), Path(owner_pubkey.clone())).await;
+        let owner_resp = route_owner_resolve(
+            State(state.clone()),
+            HeaderMap::new(),
+            Path(owner_pubkey.clone()),
+        )
+        .await;
+        assert_eq!(owner_resp.status(), StatusCode::OK);
+        let owner_routes = serde_json::from_slice::<OwnerRoutesResponse>(
+            &to_bytes(owner_resp.into_body(), usize::MAX)
+                .await
+                .expect("owner resolve body"),
+        )
+        .expect("owner resolve json");
         assert!(owner_routes.ok);
         assert_eq!(owner_routes.owner_pubkey, owner_pubkey);
         assert_eq!(owner_routes.devices.len(), 1);
@@ -6745,7 +6861,19 @@ mod tests {
         };
 
         // Resolve on A should see route created on B.
-        let Json(resolved) = route_resolve(State(state_a.clone()), Path(device_id.clone())).await;
+        let resolved_resp = route_resolve(
+            State(state_a.clone()),
+            HeaderMap::new(),
+            Path(device_id.clone()),
+        )
+        .await;
+        assert_eq!(resolved_resp.status(), StatusCode::OK);
+        let resolved = serde_json::from_slice::<RouteResolveResponse>(
+            &to_bytes(resolved_resp.into_body(), usize::MAX)
+                .await
+                .expect("route resolve body"),
+        )
+        .expect("route resolve json");
         assert!(resolved.ok && resolved.found);
         assert_eq!(
             resolved
@@ -6772,7 +6900,15 @@ mod tests {
         assert!(hb.ok);
 
         // Owner lookup on B should include route.
-        let Json(owner_routes) = route_owner_resolve(State(state_b), Path(owner_pubkey)).await;
+        let owner_resp =
+            route_owner_resolve(State(state_b), HeaderMap::new(), Path(owner_pubkey)).await;
+        assert_eq!(owner_resp.status(), StatusCode::OK);
+        let owner_routes = serde_json::from_slice::<OwnerRoutesResponse>(
+            &to_bytes(owner_resp.into_body(), usize::MAX)
+                .await
+                .expect("owner resolve body"),
+        )
+        .expect("owner resolve json");
         assert_eq!(owner_routes.devices.len(), 1);
         assert_eq!(owner_routes.devices[0].device_id, device_id);
 

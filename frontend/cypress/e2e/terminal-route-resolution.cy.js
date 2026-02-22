@@ -31,7 +31,7 @@ describe('terminal route device resolution', () => {
     cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
     cy.get('input[placeholder="Device name"]').clear().type('Broken Route Device')
-    cy.get('input[placeholder="https://device.edgerun.tech"]').clear().type('route://deadbeef')
+    cy.get('input[placeholder="route://device-id"]').clear().type('route://deadbeef')
     cy.contains('button', /^Add Device$/).click({ force: true })
     cy.contains('p', 'Broken Route Device')
       .parents('.rounded-md.border')

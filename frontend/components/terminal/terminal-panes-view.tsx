@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { For, Show } from 'solid-js'
-import { getTerminalPaneSrc, type TerminalTab } from '../../lib/terminal-drawer-store'
+import { type TerminalTab } from '../../lib/terminal-drawer-store'
 import { parseRouteDeviceId } from '../../lib/webrtc-route-client'
 import { RoutedTerminalPane } from './routed-terminal-pane'
 import type { TerminalPanesController } from './use-terminal-drawer-controller'
@@ -23,27 +23,28 @@ export function TerminalPanesView(props: Props) {
         {(tab) => (
           <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
             <For each={tab().panes}>{(pane) => {
-              const src = getTerminalPaneSrc(pane.baseUrl, pane.id)
+              const target = pane.baseUrl.trim()
               const routeDeviceId = parseRouteDeviceId(pane.baseUrl)
               if (routeDeviceId) {
                 return <RoutedTerminalPane paneId={pane.id} routeDeviceId={routeDeviceId} />
               }
               return (
                 <Show
-                  when={src.length > 0}
+                  when={target.length > 0}
                   fallback={
                     <div class="flex h-full min-h-0 items-center justify-center rounded-md border border-dashed border-border/70 bg-background/40 p-4 text-center text-xs text-muted-foreground">
                       Select a connected device to open this pane.
                     </div>
                   }
                 >
-                  <iframe
-                    title={`Terminal ${pane.id}`}
-                    class="h-full min-h-0 w-full rounded-md border border-border/70 bg-black"
-                    src={src}
-                    loading="eager"
-                    allow="clipboard-read; clipboard-write"
-                  />
+                  <div
+                    class="flex h-full min-h-0 flex-col items-center justify-center rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-center"
+                    data-testid="terminal-nonroute-disabled"
+                  >
+                    <p class="text-sm font-semibold text-amber-300">Web iframe terminal embed is disabled.</p>
+                    <p class="mt-2 text-xs text-muted-foreground">Use a routed target (`route://&lt;device-id&gt;`) to open an in-app terminal session.</p>
+                    <p class="mt-2 break-all font-mono text-[11px] text-muted-foreground">{target}</p>
+                  </div>
                 </Show>
               )
             }}</For>

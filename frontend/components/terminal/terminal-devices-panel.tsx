@@ -59,7 +59,7 @@ export function TerminalDevicesPanel(props: Props) {
         <input
           type="text"
           value={devices().deviceUrlInput()}
-          placeholder="https://device.edgerun.tech"
+          placeholder="route://device-id"
           class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
           onInput={(ev) => devices().setDeviceUrlInput(ev.currentTarget.value)}
         />
@@ -73,7 +73,7 @@ export function TerminalDevicesPanel(props: Props) {
       </div>
 
       <div class="space-y-2 overflow-y-auto pr-1">
-        <Show when={devices().state().devices.length > 0} fallback={<p class="text-xs text-muted-foreground">No devices yet. Add a relay URL, then connect a tab.</p>}>
+        <Show when={devices().state().devices.length > 0} fallback={<p class="text-xs text-muted-foreground">No devices yet. Add a `route://` target or import owner routes, then connect a tab.</p>}>
           <For each={devices().state().devices}>{(device) => (
             <div class="rounded-md border border-border/70 bg-background/40 p-2">
               <div class="flex items-center justify-between gap-2">
