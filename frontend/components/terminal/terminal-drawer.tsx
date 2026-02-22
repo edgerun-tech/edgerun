@@ -12,6 +12,7 @@ import {
   type TerminalTab
 } from '../../lib/terminal-drawer-store'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
+import { canUseCurrentOriginAsDevice, importTailscaleBridgeDevices, refreshTerminalDevices } from '../../lib/terminal-device-service'
 
 function splitClassName(tab: TerminalTab): string {
   if (tab.split === 'split-cols') return 'terminal-grid-split-cols'
@@ -68,15 +69,26 @@ export function TerminalDrawer() {
     const connected = untrack(() => walletConnected())
     if (!connected) return
     const devices = untrack(() => state().devices)
-    await Promise.all(devices.map(async (device) => {
-      try {
-        const url = new URL('/v1/device/identity', device.baseUrl)
-        const response = await fetch(url.toString(), { method: 'GET' })
-        terminalDrawerActions.markDeviceStatus(device.id, response.ok ? 'online' : 'offline')
-      } catch {
-        terminalDrawerActions.markDeviceStatus(device.id, 'offline')
-      }
-    }))
+    await refreshTerminalDevices(
+      devices,
+      (id, status) => terminalDrawerActions.markDeviceStatus(id, status)
+    )
+  }
+
+  const maybeRegisterCurrentOriginDevice = async () => {
+    if (typeof window === 'undefined') return
+    const origin = window.location.origin
+    const existing = untrack(() => state().devices.some((device) => device.baseUrl === origin))
+    if (existing) return
+
+    try {
+      const available = await canUseCurrentOriginAsDevice(origin)
+      if (!available) return
+      terminalDrawerActions.addDevice('This Laptop', origin)
+      await refreshDeviceStatus()
+    } catch {
+      // ignore: origin is not running term-server
+    }
   }
 
   const importTailscaleDevices = async (opts?: { silent?: boolean }) => {
@@ -87,37 +99,21 @@ export function TerminalDrawer() {
     const endpoints = [
       'http://127.0.0.1:49201/v1/tailscale/devices',
       'http://localhost:49201/v1/tailscale/devices'
-    ]
+    ] as const
 
-    let payload: { ok?: boolean; devices?: Array<{ name?: string; base_url?: string; baseUrl?: string }>; error?: string } | null = null
-    for (const endpoint of endpoints) {
-      try {
-        const response = await fetch(endpoint, { method: 'GET' })
-        if (!response.ok) continue
-        payload = await response.json() as { ok?: boolean; devices?: Array<{ name?: string; base_url?: string; baseUrl?: string }>; error?: string }
-        if (payload?.ok) break
-      } catch {
-        // try next localhost variant
-      }
-    }
-
-    if (!payload?.ok || !Array.isArray(payload.devices)) {
-      if (!silent) setTailscaleImportNote('Tailscale bridge unavailable. Start: edgerun tailscale bridge')
+    const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
+    const result = await importTailscaleBridgeDevices(endpoints, existing)
+    if (result.error) {
+      if (!silent) setTailscaleImportNote(result.error)
       setTailscaleImporting(false)
       return
     }
 
-    const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
-    let imported = 0
-    for (const item of payload.devices) {
-      const baseUrl = (item.base_url || item.baseUrl || '').trim()
-      if (!baseUrl || existing.has(baseUrl)) continue
-      const name = (item.name || 'Tailscale Device').trim()
-      terminalDrawerActions.addDevice(name, baseUrl)
-      existing.add(baseUrl)
-      imported += 1
+    for (const device of result.added) {
+      terminalDrawerActions.addDevice(device.name, device.baseUrl)
     }
     await refreshDeviceStatus()
+    const imported = result.added.length
     if (!silent) {
       setTailscaleImportNote(imported > 0 ? `Imported ${imported} device${imported === 1 ? '' : 's'} from Tailscale.` : 'No new Tailscale devices to import.')
     }
@@ -165,6 +161,7 @@ export function TerminalDrawer() {
     setState(getTerminalDrawerState())
     const initialWallet = readWalletSession()
     setWallet(initialWallet)
+    void maybeRegisterCurrentOriginDevice()
     if (initialWallet.connected) {
       restoreLastDevice()
       autoImportTailscaleDevices()
@@ -177,6 +174,7 @@ export function TerminalDrawer() {
       const nextWallet = custom.detail || readWalletSession()
       setWallet(nextWallet)
       if (nextWallet.connected) {
+        void maybeRegisterCurrentOriginDevice()
         autoImportTailscaleDevices()
         restoreLastDevice()
         void refreshDeviceStatus()

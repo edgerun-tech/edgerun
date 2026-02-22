@@ -61,8 +61,11 @@
     {
       "label": "Run Dev",
       "type": "shell",
-      "command": "cargo",
-      "args": ["run", "-p", "edgerun-cli", "--", "--root", "${workspaceFolder}", "dev"],
+      "command": "bash",
+      "args": [
+        "-lc",
+        "cd \"${workspaceFolder}/frontend\" && bun run build && cd \"${workspaceFolder}\" && cargo run -p edgerun-cli -- tailscale dev"
+      ],
       "options": {
         "cwd": "${workspaceFolder}"
       },

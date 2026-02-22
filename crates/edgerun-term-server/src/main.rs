@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{Read, Write};
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -68,21 +69,33 @@ async fn main() -> anyhow::Result<()> {
         challenges: std::sync::Arc::new(Mutex::new(HashMap::new())),
     };
 
+    let web_root = env::var("EDGERUN_TERM_WEB_ROOT")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("term-web"));
+    let term_client_root = env::var("EDGERUN_TERM_CLIENT_ROOT")
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("crates/edgerun-term-web"));
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/v1/device/identity", get(device_identity))
         .route("/v1/device/challenge", post(device_challenge))
         .route("/v1/device/handshake", post(device_handshake))
+        .nest_service("/term", ServeDir::new(term_client_root.clone()))
         .with_state(state)
-        .fallback_service(ServeDir::new("term-web"));
+        .fallback_service(ServeDir::new(web_root.clone()));
 
-    let addr: SocketAddr = match "0.0.0.0:8080".parse() {
+    let bind_addr = env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    let addr: SocketAddr = match bind_addr.parse() {
         Ok(addr) => addr,
         Err(e) => {
-            eprintln!("Failed to parse server address: {e}");
+            eprintln!("Failed to parse server address '{bind_addr}': {e}");
             std::process::exit(1);
         }
     };
+    println!("term-server serving site root {}", web_root.display());
+    println!("term-server serving terminal client root {} at /term/", term_client_root.display());
     println!("term-server listening on http://{addr}");
 
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)

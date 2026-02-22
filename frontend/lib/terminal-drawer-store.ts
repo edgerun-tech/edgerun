@@ -481,6 +481,12 @@ export function getTerminalPaneSrc(baseUrl: string, paneId: string): string {
   try {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
     const url = new URL(target, origin)
+    const path = url.pathname.replace(/\/+$/, '')
+    if (!path.endsWith('/term')) {
+      url.pathname = `${path || ''}/term/`
+    } else {
+      url.pathname = `${path}/`
+    }
     url.searchParams.set('embed', '1')
     url.searchParams.set('sid', paneId)
     return url.toString()

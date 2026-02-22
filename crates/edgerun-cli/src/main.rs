@@ -147,6 +147,20 @@ enum TailscaleCommand {
         #[arg(long, default_value_t = false)]
         include_offline: bool,
     },
+    Dev {
+        #[arg(long, default_value = "127.0.0.1:49201")]
+        bridge_listen: SocketAddr,
+        #[arg(long, default_value_t = 5180)]
+        port: u16,
+        #[arg(long)]
+        web_root: Option<PathBuf>,
+        #[arg(long, default_value = "allow-software")]
+        hardware_mode: String,
+        #[arg(long, default_value_t = false)]
+        include_offline: bool,
+        #[arg(long, default_value_t = false)]
+        tailscale_serve: bool,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -256,7 +270,7 @@ async fn main() -> Result<()> {
             validate_external_security_review(&p)?
         }
         Commands::Storage { command } => run_storage_command(&root, command)?,
-        Commands::Tailscale { command } => run_tailscale_command(command).await?,
+        Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
     }
 
     Ok(())
@@ -614,7 +628,7 @@ fn run_native_task_sync(root: &Path, task: &str) -> Result<bool> {
             Ok(true)
         }
         "dev" => {
-            run_program_sync("Dev Check", "make", &["check"], root, false)?;
+            run_rust_checks_sync(root)?;
             Ok(true)
         }
         "install" => {
@@ -1430,13 +1444,32 @@ fn run_program_capture_sync_owned(
     }
 }
 
-async fn run_tailscale_command(command: TailscaleCommand) -> Result<()> {
+async fn run_tailscale_command(root: &Path, command: TailscaleCommand) -> Result<()> {
     match command {
         TailscaleCommand::Bridge {
             listen,
             term_port,
             include_offline,
         } => run_tailscale_bridge(listen, term_port, include_offline).await,
+        TailscaleCommand::Dev {
+            bridge_listen,
+            port,
+            web_root,
+            hardware_mode,
+            include_offline,
+            tailscale_serve,
+        } => {
+            run_tailscale_dev(
+                root,
+                bridge_listen,
+                port,
+                web_root,
+                &hardware_mode,
+                include_offline,
+                tailscale_serve,
+            )
+            .await
+        }
     }
 }
 
@@ -1474,6 +1507,123 @@ async fn run_tailscale_bridge(listen: SocketAddr, term_port: u16, include_offlin
     axum::serve(listener, app)
         .await
         .context("tailscale bridge server failed")?;
+    Ok(())
+}
+
+async fn run_tailscale_dev(
+    root: &Path,
+    bridge_listen: SocketAddr,
+    port: u16,
+    web_root: Option<PathBuf>,
+    hardware_mode: &str,
+    include_offline: bool,
+    tailscale_serve: bool,
+) -> Result<()> {
+    if hardware_mode != "allow-software" && hardware_mode != "tpm-required" {
+        return Err(anyhow!(
+            "invalid --hardware-mode '{}'; expected 'allow-software' or 'tpm-required'",
+            hardware_mode
+        ));
+    }
+    let web_root = web_root.unwrap_or_else(|| root.join("out/frontend/site"));
+    let term_client_root = root.join("crates/edgerun-term-web");
+    ensure(
+        web_root.exists(),
+        &format!(
+            "web root not found: {} (build frontend first: 'cd frontend && bun run build')",
+            web_root.display()
+        ),
+    )?;
+    ensure(
+        term_client_root.exists(),
+        &format!("terminal client root not found: {}", term_client_root.display()),
+    )?;
+
+    println!("starting local terminal dev stack");
+    println!(
+        "- local gateway: http://127.0.0.1:{port} (EDGERUN_HARDWARE_MODE={hardware_mode})"
+    );
+    println!("- web root: {}", web_root.display());
+    println!("- tailscale bridge: http://{bridge_listen}");
+
+    let mut term_server = Command::new("cargo");
+    term_server
+        .arg("run")
+        .arg("-p")
+        .arg("edgerun-term-server")
+        .current_dir(root)
+        .env("EDGERUN_HARDWARE_MODE", hardware_mode)
+        .env("EDGERUN_TERM_SERVER_ADDR", format!("0.0.0.0:{port}"))
+        .env("EDGERUN_TERM_WEB_ROOT", web_root.display().to_string())
+        .env(
+            "EDGERUN_TERM_CLIENT_ROOT",
+            term_client_root.display().to_string(),
+        )
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    let mut term_server = term_server
+        .spawn()
+        .context("failed to start edgerun-term-server")?;
+
+    let exe = std::env::current_exe().context("failed to resolve current executable path")?;
+    let mut bridge = Command::new(exe);
+    bridge
+        .arg("--root")
+        .arg(root.display().to_string())
+        .arg("tailscale")
+        .arg("bridge")
+        .arg("--listen")
+        .arg(bridge_listen.to_string())
+        .arg("--term-port")
+        .arg(port.to_string())
+        .current_dir(root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    if include_offline {
+        bridge.arg("--include-offline");
+    }
+    let mut bridge = bridge.spawn().context("failed to start tailscale bridge")?;
+
+    if tailscale_serve {
+        let target = format!("http://127.0.0.1:{port}");
+        println!("- enabling tailscale serve for {target}");
+        let status = Command::new("tailscale")
+            .arg("serve")
+            .arg("--bg")
+            .arg(&target)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .await
+            .context("failed to execute tailscale serve")?;
+        if !status.success() {
+            eprintln!("warning: tailscale serve exited with status {:?}", status.code());
+        }
+    }
+
+    println!("dev stack running. Press Ctrl+C to stop.");
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            println!("received Ctrl+C, shutting down...");
+        }
+        status = term_server.wait() => {
+            let code = status.ok().and_then(|s| s.code()).unwrap_or_default();
+            kill_child(&mut bridge).await;
+            return Err(anyhow!("edgerun-term-server exited unexpectedly (code={code})"));
+        }
+        status = bridge.wait() => {
+            let code = status.ok().and_then(|s| s.code()).unwrap_or_default();
+            kill_child(&mut term_server).await;
+            return Err(anyhow!("tailscale bridge exited unexpectedly (code={code})"));
+        }
+    }
+
+    kill_child(&mut term_server).await;
+    kill_child(&mut bridge).await;
     Ok(())
 }
 
