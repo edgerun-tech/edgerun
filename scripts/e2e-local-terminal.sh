@@ -8,6 +8,7 @@ cd "$ROOT_DIR"
 SCHEDULER_PORT="${EDGERUN_E2E_SCHEDULER_PORT:-8090}"
 TERM_SERVER_PORT="${EDGERUN_E2E_TERM_SERVER_PORT:-8081}"
 FRONTEND_PORT="${EDGERUN_E2E_FRONTEND_PORT:-4173}"
+ROUTE_OWNER_PUBKEY="${EDGERUN_E2E_ROUTE_OWNER_PUBKEY:-}"
 SCHEDULER_BASE="http://127.0.0.1:${SCHEDULER_PORT}"
 TERM_SERVER_BASE="http://127.0.0.1:${TERM_SERVER_PORT}"
 
@@ -106,6 +107,7 @@ echo "[e2e-local] starting term-server on :${TERM_SERVER_PORT}"
 EDGERUN_HARDWARE_MODE=allow-software \
 EDGERUN_TERM_SERVER_ADDR=127.0.0.1:${TERM_SERVER_PORT} \
 EDGERUN_ROUTE_CONTROL_BASE=${SCHEDULER_BASE} \
+EDGERUN_ROUTE_OWNER_PUBKEY=${ROUTE_OWNER_PUBKEY} \
 EDGERUN_TERM_PUBLIC_BASE_URL=${TERM_SERVER_BASE} \
 cargo run -p edgerun-term-server >"${LOG_DIR}/term-server.log" 2>&1 &
 PIDS+=("$!")
@@ -136,4 +138,6 @@ curl -fsS "${SCHEDULER_BASE}/v1/route/resolve/${device_id}" | jq -e '.ok == true
 
 echo "[e2e-local] running cypress terminal compose spec"
 cd frontend
-bunx --bun cypress run --config-file cypress.config.ts --browser electron --spec cypress/e2e/terminal-compose-stack.cy.js
+bunx --bun cypress run --config-file cypress.config.ts --browser electron \
+  --env SCHEDULER_PORT=${SCHEDULER_PORT},TERM_SERVER_PORT=${TERM_SERVER_PORT} \
+  --spec cypress/e2e/terminal-compose-stack.cy.js

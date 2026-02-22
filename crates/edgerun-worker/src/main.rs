@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -18,8 +18,8 @@ use edgerun_types::control_plane::{
     SessionCreateRequest, SessionCreateResponse, WorkerCapacity, WorkerFailureReport,
     WorkerReplayArtifactReport, WorkerResultReport,
 };
-use hmac::{Hmac, Mac};
 use futures_util::{SinkExt, StreamExt};
+use hmac::{Hmac, Mac};
 use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -198,7 +198,9 @@ async fn main() -> Result<()> {
         match poll_assignments(&cfg).await {
             Ok(assignments) => {
                 for assignment in assignments.jobs {
-                    if let Err(err) = process_assignment(&cfg, &mut submission_queue, assignment).await {
+                    if let Err(err) =
+                        process_assignment(&cfg, &mut submission_queue, assignment).await
+                    {
                         tracing::error!(error = %err, "assignment processing failed");
                     }
                 }
@@ -982,10 +984,7 @@ async fn submit_with_retry<T: Serialize>(
     true
 }
 
-async fn flush_submission_queue(
-    cfg: &WorkerConfig,
-    queue: &mut SubmissionQueue,
-) {
+async fn flush_submission_queue(cfg: &WorkerConfig, queue: &mut SubmissionQueue) {
     let now = Instant::now();
     let mut inspected = 0usize;
     let mut sent = 0usize;
@@ -1035,9 +1034,11 @@ fn enqueue_submission(
     idempotency_key: String,
     body: serde_json::Value,
 ) {
-    if queue.items.iter().any(|item| {
-        item.idempotency_key == idempotency_key && item.kind.op() == kind.op()
-    }) {
+    if queue
+        .items
+        .iter()
+        .any(|item| item.idempotency_key == idempotency_key && item.kind.op() == kind.op())
+    {
         return;
     }
 
@@ -1122,10 +1123,13 @@ async fn control_ws_request<T: DeserializeOwned>(
         payload,
     };
     let encoded = serde_json::to_string(&outbound).context("control ws request encode failed")?;
-    timeout(CONTROL_WS_TIMEOUT, socket.send(Message::Text(encoded.into())))
-        .await
-        .context("control ws send timed out")?
-        .context("control ws send failed")?;
+    timeout(
+        CONTROL_WS_TIMEOUT,
+        socket.send(Message::Text(encoded.into())),
+    )
+    .await
+    .context("control ws send timed out")?
+    .context("control ws send failed")?;
 
     loop {
         let next = timeout(CONTROL_WS_TIMEOUT, socket.next())

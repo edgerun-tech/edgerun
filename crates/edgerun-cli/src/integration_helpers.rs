@@ -120,8 +120,7 @@ pub(crate) async fn create_assigned_job_with_abi(
         "escrow_lamports":100,
         "assignment_worker_pubkey":worker
     });
-    let response: JobCreateResponse =
-        control_ws_request(sched_url, "job.create", payload).await?;
+    let response: JobCreateResponse = control_ws_request(sched_url, "job.create", payload).await?;
     Ok(response.job_id)
 }
 
@@ -133,12 +132,8 @@ pub(crate) async fn wait_for_failure_phase(
     invert: bool,
 ) -> Result<()> {
     for _ in 0..240 {
-        let status: Value = control_ws_request(
-            sched_url,
-            "job.status",
-            json!({ "job_id": job_id }),
-        )
-        .await?;
+        let status: Value =
+            control_ws_request(sched_url, "job.status", json!({ "job_id": job_id })).await?;
         let phase = status["failures"]
             .as_array()
             .and_then(|arr| arr.last())

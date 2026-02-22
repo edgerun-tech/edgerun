@@ -64,6 +64,7 @@ struct AppState {
     replay_artifacts: Arc<Mutex<HashMap<String, Vec<WorkerReplayArtifactReport>>>>,
     job_last_update: Arc<Mutex<HashMap<String, u64>>>,
     snapshot_flush_state: Arc<Mutex<SnapshotFlushState>>,
+    state_snapshot_min_interval_secs: u64,
     worker_registry: Arc<Mutex<HashMap<String, WorkerRegistryEntry>>>,
     job_quorum: Arc<Mutex<HashMap<String, JobQuorumState>>>,
     policy_signing_key: SigningKey,
@@ -89,6 +90,7 @@ struct AppState {
     policy_session_shared: bool,
     policy_session_lock_path: PathBuf,
     policy_session_flush_state: Arc<Mutex<SnapshotFlushState>>,
+    policy_session_sync_min_interval_secs: u64,
     sessions: Arc<Mutex<HashMap<String, edgerun_hwvault_primitives::session::SessionState>>>,
     policy_nonces: Arc<Mutex<HashMap<String, u64>>>,
     policy_session_state_path: PathBuf,
@@ -99,6 +101,8 @@ struct AppState {
     attestation_policy_path: PathBuf,
     route_shared_state_path: Option<PathBuf>,
     route_flush_state: Arc<Mutex<SnapshotFlushState>>,
+    route_sync_min_interval_secs: u64,
+    housekeeping_interval_secs: u64,
     device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
     route_challenges: Arc<Mutex<HashMap<String, u64>>>,
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
@@ -575,6 +579,11 @@ async fn main() -> Result<()> {
         replay_artifacts: Arc::new(Mutex::new(persisted.replay_artifacts)),
         job_last_update: Arc::new(Mutex::new(persisted.job_last_update)),
         snapshot_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+        state_snapshot_min_interval_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_STATE_SNAPSHOT_MIN_INTERVAL_SECS",
+            2,
+        )
+        .max(1),
         worker_registry: Arc::new(Mutex::new(persisted.worker_registry)),
         job_quorum: Arc::new(Mutex::new(persisted.job_quorum)),
         policy_signing_key: load_policy_signing_key()?,
@@ -623,6 +632,11 @@ async fn main() -> Result<()> {
         policy_session_shared: read_env_bool("EDGERUN_SCHEDULER_POLICY_SESSION_SHARED", false),
         policy_session_lock_path: data_dir.join("policy-session.lock"),
         policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+        policy_session_sync_min_interval_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_POLICY_SESSION_SYNC_MIN_INTERVAL_SECS",
+            2,
+        )
+        .max(1),
         sessions: Arc::new(Mutex::new(loaded_policy_session_state.sessions)),
         policy_nonces: Arc::new(Mutex::new(loaded_policy_session_state.nonces)),
         policy_session_state_path,
@@ -633,6 +647,13 @@ async fn main() -> Result<()> {
         attestation_policy_path,
         route_shared_state_path,
         route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+        route_sync_min_interval_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_ROUTE_SYNC_MIN_INTERVAL_SECS",
+            2,
+        )
+        .max(1),
+        housekeeping_interval_secs: read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5)
+            .max(1),
         device_routes: Arc::new(Mutex::new(loaded_route_state.device_routes)),
         route_challenges: Arc::new(Mutex::new(loaded_route_state.route_challenges)),
         route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
@@ -1068,10 +1089,7 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 )
             } else {
                 let status = get_job_status_inner(state, job_id);
-                control_ok_response(
-                    request_id,
-                    serde_json::to_value(status).unwrap_or_default(),
-                )
+                control_ok_response(request_id, serde_json::to_value(status).unwrap_or_default())
             }
         }
         "route.resolve" => {
@@ -2928,13 +2946,9 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
     Ok(())
 }
 
-fn state_snapshot_min_interval_secs() -> u64 {
-    read_env_u64("EDGERUN_SCHEDULER_STATE_SNAPSHOT_MIN_INTERVAL_SECS", 2).max(1)
-}
-
 fn schedule_state_snapshot(state: &AppState) -> Result<()> {
     let now = now_unix_seconds();
-    let min_interval = state_snapshot_min_interval_secs();
+    let min_interval = state.state_snapshot_min_interval_secs;
     let should_write = {
         let mut gate = state.snapshot_flush_state.lock().expect("lock poisoned");
         gate.dirty = true;
@@ -4380,8 +4394,9 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
 }
 
 fn parse_allowed_origins() -> Vec<String> {
-    let raw = std::env::var("EDGERUN_SCHEDULER_ALLOWED_ORIGINS")
-        .unwrap_or_else(|_| "https://www.edgerun.tech,http://localhost:4173".to_string());
+    let raw = std::env::var("EDGERUN_SCHEDULER_ALLOWED_ORIGINS").unwrap_or_else(|_| {
+        "https://www.edgerun.tech,http://localhost:4173,http://127.0.0.1:4173".to_string()
+    });
     raw.split(',')
         .map(|v| v.trim())
         .filter(|v| !v.is_empty())
@@ -4567,20 +4582,12 @@ fn save_route_state(path: &std::path::Path, state: &PersistedRouteState) -> Resu
     Ok(())
 }
 
-fn route_sync_min_interval_secs() -> u64 {
-    read_env_u64("EDGERUN_SCHEDULER_ROUTE_SYNC_MIN_INTERVAL_SECS", 2).max(1)
-}
-
-fn policy_session_sync_min_interval_secs() -> u64 {
-    read_env_u64("EDGERUN_SCHEDULER_POLICY_SESSION_SYNC_MIN_INTERVAL_SECS", 2).max(1)
-}
-
 fn schedule_route_state_flush(state: &AppState) -> Result<()> {
     let Some(_path) = state.route_shared_state_path.as_ref() else {
         return Ok(());
     };
     let now = now_unix_seconds();
-    let min_interval = route_sync_min_interval_secs();
+    let min_interval = state.route_sync_min_interval_secs;
     let should_write = {
         let mut gate = state.route_flush_state.lock().expect("lock poisoned");
         gate.dirty = true;
@@ -4605,8 +4612,16 @@ fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
     }
     let snapshot = PersistedRouteState {
         device_routes: state.device_routes.lock().expect("lock poisoned").clone(),
-        route_challenges: state.route_challenges.lock().expect("lock poisoned").clone(),
-        route_heartbeat_tokens: state.route_heartbeat_tokens.lock().expect("lock poisoned").clone(),
+        route_challenges: state
+            .route_challenges
+            .lock()
+            .expect("lock poisoned")
+            .clone(),
+        route_heartbeat_tokens: state
+            .route_heartbeat_tokens
+            .lock()
+            .expect("lock poisoned")
+            .clone(),
     };
     let lock_file = OpenOptions::new()
         .read(true)
@@ -4652,7 +4667,7 @@ fn sync_route_state_from_shared_file(state: &AppState) -> Result<()> {
 
 fn schedule_policy_session_state_flush(state: &AppState) -> Result<()> {
     let now = now_unix_seconds();
-    let min_interval = policy_session_sync_min_interval_secs();
+    let min_interval = state.policy_session_sync_min_interval_secs;
     let should_write = {
         let mut gate = state
             .policy_session_flush_state
@@ -4706,7 +4721,7 @@ fn flush_policy_session_state_if_dirty(state: &AppState) -> Result<()> {
 }
 
 async fn housekeeping_loop(state: AppState) {
-    let interval_secs = read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5).max(1);
+    let interval_secs = state.housekeeping_interval_secs;
     loop {
         if let Err(err) = sync_route_state_from_shared_file(&state) {
             tracing::warn!(error = %err, "housekeeping route-state sync failed");
@@ -4974,6 +4989,7 @@ mod tests {
             replay_artifacts: Arc::new(Mutex::new(HashMap::new())),
             job_last_update: Arc::new(Mutex::new(HashMap::new())),
             snapshot_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+            state_snapshot_min_interval_secs: 2,
             worker_registry: Arc::new(Mutex::new(HashMap::new())),
             job_quorum: Arc::new(Mutex::new(HashMap::new())),
             policy_signing_key: SigningKey::from_bytes(&[1_u8; 32]),
@@ -4999,6 +5015,7 @@ mod tests {
             policy_session_shared: false,
             policy_session_lock_path: data_dir.join("policy-session.lock"),
             policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+            policy_session_sync_min_interval_secs: 2,
             sessions: Arc::new(Mutex::new(HashMap::new())),
             policy_nonces: Arc::new(Mutex::new(HashMap::new())),
             policy_session_state_path: data_dir.join("policy-session-state.json"),
@@ -5009,6 +5026,8 @@ mod tests {
             attestation_policy_path: data_dir.join("attestation-policy.json"),
             route_shared_state_path: None,
             route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
+            route_sync_min_interval_secs: 2,
+            housekeeping_interval_secs: 5,
             device_routes: Arc::new(Mutex::new(HashMap::new())),
             route_challenges: Arc::new(Mutex::new(HashMap::new())),
             route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
@@ -5051,12 +5070,7 @@ mod tests {
 
     #[test]
     fn instruction_escrow_formula_uses_redundancy_and_ceiling() {
-        let min = required_instruction_escrow_lamports(
-            1_500_000_001,
-            10_000_000,
-            3,
-            500,
-        );
+        let min = required_instruction_escrow_lamports(1_500_000_001, 10_000_000, 3, 500);
         // ceil((1.500000001 * 10_000_000 * 3)) + 500
         assert_eq!(min, 45_000_501);
     }
@@ -6482,7 +6496,9 @@ mod tests {
             .await
             .expect_err("escrow below deterministic minimum should fail");
         assert_eq!(err.0, StatusCode::BAD_REQUEST);
-        assert!(err.1.contains("escrow_lamports below deterministic minimum"));
+        assert!(err
+            .1
+            .contains("escrow_lamports below deterministic minimum"));
     }
 
     #[tokio::test]
@@ -7003,8 +7019,12 @@ mod tests {
         assert_eq!(registered.device_id, device_id);
         assert!(!registered.heartbeat_token.is_empty());
 
-        let resolved_resp =
-            route_resolve(State(state.clone()), HeaderMap::new(), Path(device_id.clone())).await;
+        let resolved_resp = route_resolve(
+            State(state.clone()),
+            HeaderMap::new(),
+            Path(device_id.clone()),
+        )
+        .await;
         assert_eq!(resolved_resp.status(), StatusCode::OK);
         let resolved = serde_json::from_slice::<RouteResolveResponse>(
             &to_bytes(resolved_resp.into_body(), usize::MAX)
@@ -7084,7 +7104,8 @@ mod tests {
             panic!("route challenge should succeed");
         };
         flush_route_state_if_dirty(&state_a).expect("flush route state A after challenge");
-        sync_route_state_from_shared_file(&state_b).expect("sync route state into B after challenge");
+        sync_route_state_from_shared_file(&state_b)
+            .expect("sync route state into B after challenge");
 
         // Register on B using challenge from A
         let reachable_urls = vec!["http://127.0.0.1:9001".to_string()];
@@ -7116,7 +7137,8 @@ mod tests {
             panic!("route register should succeed");
         };
         flush_route_state_if_dirty(&state_b).expect("flush route state B after register");
-        sync_route_state_from_shared_file(&state_a).expect("sync route state into A after register");
+        sync_route_state_from_shared_file(&state_a)
+            .expect("sync route state into A after register");
 
         // Resolve on A should see route created on B.
         let resolved_resp = route_resolve(
@@ -7157,7 +7179,8 @@ mod tests {
         };
         assert!(hb.ok);
         flush_route_state_if_dirty(&state_a).expect("flush route state A after heartbeat");
-        sync_route_state_from_shared_file(&state_b).expect("sync route state into B after heartbeat");
+        sync_route_state_from_shared_file(&state_b)
+            .expect("sync route state into B after heartbeat");
 
         // Owner lookup on B should include route.
         let owner_resp =

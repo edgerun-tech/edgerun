@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError, TransportKind};
@@ -137,9 +137,9 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
                     .unwrap_or_else(|| format!("scheduler route resolve failed{status}"));
                 return Err(TransportError::Protocol(err));
             }
-            let data = response
-                .data
-                .ok_or_else(|| TransportError::Protocol("missing route resolve payload".to_string()))?;
+            let data = response.data.ok_or_else(|| {
+                TransportError::Protocol("missing route resolve payload".to_string())
+            })?;
             payload = Some(
                 serde_json::from_value::<RouteResolveResponse>(data)
                     .map_err(|e| TransportError::Protocol(e.to_string()))?,

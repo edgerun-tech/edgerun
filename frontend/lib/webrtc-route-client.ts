@@ -114,7 +114,17 @@ export async function resolveDeviceRoute(controlBase: string, deviceId: string):
     const first = reachable.find((item) => typeof item === 'string' && item.trim().length > 0)
     return first?.trim() || null
   } catch {
-    return null
+    try {
+      const resp = await fetch(`${trimmedBase}/v1/route/resolve/${encodeURIComponent(trimmedDeviceId)}`)
+      if (!resp.ok) return null
+      const body = await resp.json() as RouteResolveResponse
+      if (!body.ok || !body.found) return null
+      const reachable = Array.isArray(body.route?.reachable_urls) ? body.route?.reachable_urls : []
+      const first = reachable.find((item) => typeof item === 'string' && item.trim().length > 0)
+      return first?.trim() || null
+    } catch {
+      return null
+    }
   }
 }
 
@@ -146,7 +156,16 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
     if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
     return Array.isArray(body.devices) ? body.devices : []
   } catch {
-    // Explicit user action failed on current control channel.
+    try {
+      const resp = await fetch(`${base}/v1/route/owner/${encodeURIComponent(trimmedOwner)}`)
+      if (!resp.ok) return []
+      const body = await resp.json() as OwnerRoutesResponse
+      if (!body.ok) return []
+      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+      return Array.isArray(body.devices) ? body.devices : []
+    } catch {
+      // Explicit user action failed across ws + fallback HTTP route lookup.
+    }
   }
   return []
 }
