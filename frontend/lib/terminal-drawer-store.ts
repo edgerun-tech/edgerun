@@ -374,6 +374,31 @@ export const terminalDrawerActions = {
     })
   },
 
+  connectActiveTabToBaseUrl(baseUrl: string): void {
+    const target = baseUrl.trim()
+    if (!target) return
+    apply((prev) => {
+      const tab = activeTab(prev)
+      const tabs = prev.tabs.map((entry) => entry.id === tab.id
+        ? {
+            ...entry,
+            panes: entry.panes.map((pane) => ({ ...pane, baseUrl: target }))
+          }
+        : entry
+      )
+      const devices = prev.devices.map((item) => item.baseUrl === target
+        ? { ...item, lastConnectedAt: nowMs() }
+        : item
+      )
+      return {
+        ...prev,
+        open: true,
+        tabs,
+        devices
+      }
+    })
+  },
+
   restoreLastDeviceOnActiveTab(): void {
     apply((prev) => {
       const tab = activeTab(prev)

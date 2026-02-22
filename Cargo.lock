@@ -2057,6 +2057,7 @@ dependencies = [
  "axum",
  "edgerun-hwvault-primitives",
  "portable-pty",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",

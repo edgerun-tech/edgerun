@@ -29,33 +29,15 @@ export function TerminalDrawer() {
 
         <div class="flex h-full min-h-0 flex-col">
           <TerminalTabsBar
-            state={controller.state}
-            tabMenuTabId={controller.tabMenuTabId}
-            setTabMenuTabId={controller.setTabMenuTabId}
-            hasTabsLeft={controller.hasTabsLeft}
-            hasTabsRight={controller.hasTabsRight}
-            hasOtherTabs={controller.hasOtherTabs}
-            splitChange={controller.splitChange}
+            controller={controller.tabs}
           />
 
           <Show when={controller.state().open} fallback={<div class="flex h-full items-center px-3 text-xs text-muted-foreground">Terminal hidden. Use the navbar toggle to open.</div>}>
             <div class="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)] gap-0">
               <TerminalDevicesPanel
-                state={controller.state}
-                refreshDeviceStatus={controller.refreshDeviceStatus}
-                importTailscaleDevices={controller.importTailscaleDevices}
-                tailscaleImporting={controller.tailscaleImporting}
-                tailscaleImportNote={controller.tailscaleImportNote}
-                deviceNameInput={controller.deviceNameInput}
-                setDeviceNameInput={controller.setDeviceNameInput}
-                deviceUrlInput={controller.deviceUrlInput}
-                setDeviceUrlInput={controller.setDeviceUrlInput}
-                addDevice={controller.addDevice}
-                qrDeviceUrl={controller.qrDeviceUrl}
-                setQrDeviceUrl={controller.setQrDeviceUrl}
-                qrImageDataUrl={controller.qrImageDataUrl}
+                controller={controller.devices}
               />
-              <TerminalPanesView activeTab={controller.activeTab} />
+              <TerminalPanesView controller={controller.panes} />
             </div>
           </Show>
         </div>
