@@ -20,12 +20,141 @@ import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../lib/solana-deployments'
 import { applyPersonalizationSettings, readPersonalizationSettings } from '../lib/personalization'
 import { TerminalDrawer } from '../components/terminal/terminal-drawer'
-import { ensureTerminalDrawerStore } from '../lib/terminal-drawer-store'
+import { ensureTerminalDrawerStore, getTerminalDrawerState, subscribeTerminalDrawer, type TerminalDrawerState } from '../lib/terminal-drawer-store'
+import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 function normalizePath(pathname: string): string {
   const cleaned = pathname.replace(/index\.html$/, '')
   if (!cleaned) return '/'
   return cleaned.endsWith('/') ? cleaned : `${cleaned}/`
+}
+
+function routeTitle(pathname: string): string {
+  const route = normalizePath(pathname)
+  if (route === '/') return 'Home'
+  if (route === '/docs/') return 'Docs'
+  if (route === '/docs/getting-started/quick-start/') return 'Quick Start'
+  if (route === '/token/') return 'Token'
+  if (route === '/run/') return 'Run Job'
+  if (route === '/workers/') return 'Workers'
+  if (route === '/dashboard/') return 'Dashboard'
+  if (route === '/blog/') return 'Blog'
+  if (route === '/legal/privacy/') return 'Privacy'
+  if (route === '/legal/terms/') return 'Terms'
+  if (route === '/legal/sla/') return 'SLA'
+  if (route === '/style-guide/') return 'Style Guide'
+  for (const post of blogPosts) {
+    if (route === `/blog/${post.slug}/`) return post.title
+  }
+  for (const job of jobs) {
+    if (route === `/job/${job.id}/`) return `Job ${job.id}`
+  }
+  return 'Edgerun'
+}
+
+type SiteChromeStatus = {
+  emoji: string
+  label: string
+  color: string
+  pulse: boolean
+}
+
+function computeSiteChromeStatus(): SiteChromeStatus {
+  const totalDevices = terminalDrawerState.devices.length
+  const onlineDevices = terminalDrawerState.devices.filter((device) => device.status === 'online').length
+  const terminalOpen = terminalDrawerState.open
+  const walletConnected = walletSessionState.connected
+
+  if (!walletConnected) {
+    return {
+      emoji: '⚪',
+      label: 'Wallet disconnected',
+      color: '#64748b',
+      pulse: false
+    }
+  }
+  if (onlineDevices > 0) {
+    const openLabel = terminalOpen ? 'Terminal open' : 'Terminal ready'
+    return {
+      emoji: '🟢',
+      label: `${openLabel} · ${onlineDevices}/${totalDevices} device${onlineDevices === 1 ? '' : 's'} online`,
+      color: '#22c55e',
+      pulse: terminalOpen
+    }
+  }
+  if (totalDevices > 0) {
+    return {
+      emoji: '🟡',
+      label: `Wallet connected · ${totalDevices} configured device${totalDevices === 1 ? '' : 's'} (offline)`,
+      color: '#f59e0b',
+      pulse: false
+    }
+  }
+  return {
+    emoji: '🟠',
+    label: 'Wallet connected · no devices configured',
+    color: '#fb923c',
+    pulse: false
+  }
+}
+
+function faviconSvg(status: SiteChromeStatus, frame: number): string {
+  const glow = status.pulse ? (frame % 2 === 0 ? 15 : 19) : 16
+  const core = status.pulse ? (frame % 2 === 0 ? 9 : 11) : 10
+  const ringOpacity = status.pulse ? (frame % 2 === 0 ? 0.3 : 0.55) : 0.35
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#05070d"/><circle cx="32" cy="32" r="${glow}" fill="${status.color}" opacity="${ringOpacity}"/><circle cx="32" cy="32" r="${core}" fill="${status.color}"/><path d="M18 48h28" stroke="#d4d4d8" stroke-width="3" stroke-linecap="round" opacity="0.9"/></svg>`
+}
+
+function updateFavicon(status: SiteChromeStatus): void {
+  if (typeof document === 'undefined') return
+  let link = document.querySelector<HTMLLinkElement>('link[data-edgerun-dynamic-favicon]')
+  if (!link) {
+    link = document.createElement('link')
+    link.setAttribute('rel', 'icon')
+    link.setAttribute('type', 'image/svg+xml')
+    link.setAttribute('data-edgerun-dynamic-favicon', '1')
+    document.head.appendChild(link)
+  }
+  const svg = faviconSvg(status, faviconFrame)
+  link.setAttribute('href', `data:image/svg+xml,${encodeURIComponent(svg)}`)
+}
+
+function renderSiteChrome(): void {
+  const status = computeSiteChromeStatus()
+  document.title = `${status.emoji} ${currentRouteTitle} · ${status.label} | Edgerun`
+  updateFavicon(status)
+  if (status.pulse) {
+    if (faviconAnimationTimer === null) {
+      faviconAnimationTimer = window.setInterval(() => {
+        faviconFrame = (faviconFrame + 1) % 4
+        updateFavicon(computeSiteChromeStatus())
+      }, 700)
+    }
+  } else if (faviconAnimationTimer !== null) {
+    window.clearInterval(faviconAnimationTimer)
+    faviconAnimationTimer = null
+    faviconFrame = 0
+    updateFavicon(status)
+  }
+}
+
+function initSiteChromeStatus(): void {
+  if (chromeStatusInitialized) return
+  chromeStatusInitialized = true
+  ensureTerminalDrawerStore()
+  walletSessionState = readWalletSession()
+  terminalDrawerState = getTerminalDrawerState()
+  currentRouteTitle = routeTitle(window.location.pathname)
+  renderSiteChrome()
+  subscribeTerminalDrawer((next) => {
+    terminalDrawerState = next
+    renderSiteChrome()
+  })
+  window.addEventListener(WALLET_SESSION_EVENT, (event) => {
+    const custom = event as CustomEvent<WalletSessionState>
+    walletSessionState = custom.detail || readWalletSession()
+    renderSiteChrome()
+  })
 }
 
 const routeComponents: Record<string, Component> = {
@@ -49,6 +178,12 @@ let disposePage: null | (() => void) = null
 let bootstrapped = false
 let terminalDrawerMounted = false
 let transitionInFlight = false
+let chromeStatusInitialized = false
+let walletSessionState: WalletSessionState = readWalletSession()
+let terminalDrawerState: TerminalDrawerState = getTerminalDrawerState()
+let faviconAnimationTimer: number | null = null
+let faviconFrame = 0
+let currentRouteTitle = 'Home'
 
 if (typeof window !== 'undefined') {
   applyPersonalizationSettings(readPersonalizationSettings())
@@ -137,8 +272,10 @@ function mountCurrentRoute(): boolean {
 
   root.innerHTML = ''
   disposePage = render(() => <Page />, root)
+  currentRouteTitle = routeTitle(route)
   bootstrapped = true
   applyPageEnhancements()
+  renderSiteChrome()
   void loadChainData()
   void loadDeploymentStatus()
   return true
@@ -202,11 +339,14 @@ window.addEventListener('popstate', async () => {
 
 if (!mountCurrentRoute()) {
   applyPageEnhancements()
+  currentRouteTitle = routeTitle(window.location.pathname)
+  renderSiteChrome()
   void loadChainData()
   void loadDeploymentStatus()
 }
 
 mountGlobalTerminalDrawer()
+initSiteChromeStatus()
 
 type RpcEnvelope<T> = {
   jsonrpc: string
