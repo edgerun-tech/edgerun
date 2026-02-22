@@ -39,14 +39,14 @@ jobs:
       - name: Run replay corpus gate (extended)
         run: |
           mkdir -p /tmp/edgerun-runtime-compliance
-          cargo run -p edgerun-runtime -- replay-corpus \
+          cargo run -p edgerun-runtime --features cli -- replay-corpus \
             --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
             --artifact /tmp/edgerun-runtime-compliance/replay-corpus.json \
             --runs 10
 
       - name: Run fuel calibration gate (extended)
         run: |
-          cargo run -p edgerun-runtime -- calibrate-fuel \
+          cargo run -p edgerun-runtime --features cli -- calibrate-fuel \
             --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
             --artifact /tmp/edgerun-runtime-compliance/fuel-calibration.json \
             --runs 10 \
@@ -54,7 +54,7 @@ jobs:
 
       - name: Run SLO smoke gate (extended)
         run: |
-          cargo run -p edgerun-runtime -- slo-smoke \
+          cargo run -p edgerun-runtime --features cli -- slo-smoke \
             --profile "${{ runner.os }}-${{ runner.arch }}-extended" \
             --artifact /tmp/edgerun-runtime-compliance/slo-smoke.json \
             --runs 200 \
