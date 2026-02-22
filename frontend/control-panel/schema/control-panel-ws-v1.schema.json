@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edgerun.tech/schemas/control-panel-ws-v1.schema.json",
+  "title": "Edgerun Control Panel WebSocket Protocol v1",
+  "description": "Canonical schema for frontend/control-panel /api/ws messages.",
+  "type": "object",
+  "$defs": {
+    "taskStatus": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["task"],
+      "properties": {
+        "task": { "type": "string", "minLength": 1 },
+        "state": { "type": "string" },
+        "runs": { "type": "integer", "minimum": 0 },
+        "last_exit": { "type": ["integer", "null"] },
+        "last_output": { "type": "string" }
+      }
+    },
+    "statusBody": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["tasks"],
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/taskStatus" }
+        }
+      }
+    },
+    "clientRequest": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["request_id", "op", "payload"],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1 },
+        "op": { "type": "string", "enum": ["status", "run"] },
+        "protocol": { "type": "string", "const": "edgerun.control_panel.ws.v1" },
+        "token": { "type": "string" },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {}
+            },
+            {
+              "type": "object",
+              "additionalProperties": true,
+              "required": ["task"],
+              "properties": {
+                "task": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "const": "status" } }, "required": ["op"] },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "op": { "const": "run" } }, "required": ["op"] },
+          "then": {
+            "properties": {
+              "payload": {
+                "type": "object",
+                "required": ["task"],
+                "properties": {
+                  "task": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "serverResponse": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["request_id", "ok"],
+      "properties": {
+        "request_id": { "type": "string", "minLength": 1 },
+        "ok": { "type": "boolean" },
+        "data": {},
+        "error": { "type": "string" },
+        "status": { "type": "integer", "minimum": 100, "maximum": 599 }
+      }
+    },
+    "serverStatusPush": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["event", "data"],
+      "properties": {
+        "event": { "type": "string", "const": "status" },
+        "data": { "$ref": "#/$defs/statusBody" }
+      }
+    }
+  }
+}
