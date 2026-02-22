@@ -64,10 +64,6 @@ jobs:
           tar -czf "release-assets/edgerun-site-${{ steps.meta.outputs.version }}.tar.gz" -C out/frontend/site .
           tar -czf "release-assets/edgerun-wiki-${{ steps.meta.outputs.version }}.tar.gz" -C out/frontend/wiki .
 
-      - name: Skip publish on non-tag refs
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: echo "Skipping GitHub Release publish because ref is not a v* tag: $GITHUB_REF"
-
       - name: Publish
         if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: softprops/action-gh-release@v2
