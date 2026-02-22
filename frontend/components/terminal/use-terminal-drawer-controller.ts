@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createEffect, createMemo, createSignal, onCleanup, onMount, untrack, type Accessor, type Setter } from 'solid-js'
-import QRCode from 'qrcode'
 import {
   getTerminalDrawerState,
   terminalDrawerActions,
@@ -41,9 +40,6 @@ export type TerminalDevicesController = {
   ownerImporting: Accessor<boolean>
   ownerImportNote: Accessor<string>
   importOwnerDevices: () => Promise<void>
-  qrDeviceUrl: Accessor<string>
-  setQrDeviceUrl: Setter<string>
-  qrImageDataUrl: Accessor<string>
 }
 
 export type TerminalPanesController = {
@@ -65,8 +61,6 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   const [wallet, setWallet] = createSignal<WalletSessionState>(readWalletSession())
   const [deviceNameInput, setDeviceNameInput] = createSignal('')
   const [deviceUrlInput, setDeviceUrlInput] = createSignal('')
-  const [qrDeviceUrl, setQrDeviceUrl] = createSignal('')
-  const [qrImageDataUrl, setQrImageDataUrl] = createSignal('')
   const [ownerPubkeyInput, setOwnerPubkeyInput] = createSignal('')
   const [ownerImporting, setOwnerImporting] = createSignal(false)
   const [ownerImportNote, setOwnerImportNote] = createSignal('')
@@ -181,21 +175,6 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   }
 
   createEffect(() => {
-    const target = qrDeviceUrl().trim()
-    if (!target) {
-      setQrImageDataUrl('')
-      return
-    }
-    void QRCode.toDataURL(target, {
-      width: 220,
-      margin: 1,
-      errorCorrectionLevel: 'M'
-    })
-      .then((dataUrl: string) => setQrImageDataUrl(dataUrl))
-      .catch(() => setQrImageDataUrl(''))
-  })
-
-  createEffect(() => {
     if (typeof document === 'undefined') return
     if (!walletConnected()) {
       document.documentElement.style.removeProperty('--terminal-drawer-height')
@@ -250,10 +229,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       setOwnerPubkeyInput,
       ownerImporting,
       ownerImportNote,
-      importOwnerDevices,
-      qrDeviceUrl,
-      setQrDeviceUrl,
-      qrImageDataUrl
+      importOwnerDevices
     },
     panes: {
       activeTab

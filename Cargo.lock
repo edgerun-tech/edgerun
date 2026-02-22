@@ -1929,12 +1929,15 @@ dependencies = [
  "axum",
  "clap",
  "edgerun-types",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-tungstenite 0.28.0",
  "toml 0.8.23",
  "tower-http",
+ "url",
 ]
 
 [[package]]
@@ -1951,9 +1954,12 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "edgerun-transport-core",
- "reqwest",
+ "futures-util",
  "serde",
+ "serde_json",
  "tokio",
+ "tokio-tungstenite 0.28.0",
+ "url",
 ]
 
 [[package]]
@@ -2273,6 +2279,7 @@ dependencies = [
  "edgerun-runtime",
  "edgerun-transport-core",
  "edgerun-types",
+ "futures-util",
  "hex",
  "hmac 0.12.1",
  "reqwest",
@@ -2283,6 +2290,7 @@ dependencies = [
  "solana-sdk",
  "solana-system-interface",
  "tokio",
+ "tokio-tungstenite 0.28.0",
  "tracing",
 ]
 

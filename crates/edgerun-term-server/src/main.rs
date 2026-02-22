@@ -278,7 +278,7 @@ async fn ws_mux_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 
 async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
     const PTY_FRAME_STDIN: u8 = 1;
-    let mut authed = token.is_none();
+    let mut authed = false;
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Message>();
     let mut sessions: HashMap<u32, PtySession> = HashMap::new();
     let mut next_session_id = 1u32;
@@ -340,12 +340,14 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                                     break;
                                 }
                             } else {
-                                authed = true;
                                 let _ = out_tx.send(Message::Text(
-                                    serde_json::to_string(&ShellResponse::AuthOk)
-                                        .unwrap_or_else(|_| "{\"type\":\"auth_ok\"}".to_string())
+                                    serde_json::to_string(&ShellResponse::AuthError {
+                                        error: "mux token is not configured".to_string()
+                                    })
+                                    .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
                                         .into()
                                 ));
+                                break;
                             }
                         }
                         ShellRequest::Spawn { id, cmd, args, cwd, env, cols, rows } => {

@@ -92,13 +92,6 @@ export function TerminalDevicesPanel(props: Props) {
                 <button
                   type="button"
                   class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  onClick={() => devices().setQrDeviceUrl(device.baseUrl)}
-                >
-                  QR
-                </button>
-                <button
-                  type="button"
-                  class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
                   onClick={() => terminalDrawerActions.removeDevice(device.id)}
                 >
                   Remove
@@ -108,36 +101,6 @@ export function TerminalDevicesPanel(props: Props) {
           )}</For>
         </Show>
       </div>
-
-      <Show when={devices().qrImageDataUrl().length > 0}>
-        <div class="mt-3 rounded-md border border-border/70 bg-background/40 p-2">
-          <p class="mb-2 text-[11px] uppercase tracking-wide text-muted-foreground">Device QR</p>
-          <img src={devices().qrImageDataUrl()} alt="Device URL QR code" class="mx-auto h-40 w-40 rounded border border-border/70 bg-white p-1" />
-          <p class="mt-2 truncate font-mono text-[10px] text-muted-foreground">{devices().qrDeviceUrl()}</p>
-          <div class="mt-2 flex gap-1">
-            <button
-              type="button"
-              class="flex-1 rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(devices().qrDeviceUrl())
-                } catch {
-                  // ignore copy failures
-                }
-              }}
-            >
-              Copy URL
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border/70 bg-card/60 px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground"
-              onClick={() => devices().setQrDeviceUrl('')}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </Show>
     </aside>
   )
 }

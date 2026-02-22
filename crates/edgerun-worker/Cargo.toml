@@ -9,6 +9,8 @@ license = "Apache-2.0"
 anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+futures-util = "0.3"
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

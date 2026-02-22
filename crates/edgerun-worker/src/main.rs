@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -18,7 +19,10 @@ use edgerun_types::control_plane::{
     WorkerReplayArtifactReport, WorkerResultReport,
 };
 use hmac::{Hmac, Mac};
+use futures_util::{SinkExt, StreamExt};
 use reqwest::Url;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
@@ -31,6 +35,8 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use solana_system_interface::program as system_program;
+use tokio::time::timeout;
+use tokio_tungstenite::tungstenite::Message;
 
 #[derive(Debug)]
 struct WorkerConfig {
@@ -84,6 +90,8 @@ impl PolicySessionState {
 }
 
 type ReplayArtifactPayload = edgerun_types::control_plane::ReplayArtifactPayload;
+const CONTROL_WS_TIMEOUT: Duration = Duration::from_secs(15);
+static CONTROL_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Copy)]
 enum SubmissionKind {
@@ -93,13 +101,37 @@ enum SubmissionKind {
 }
 
 impl SubmissionKind {
-    fn endpoint(self) -> &'static str {
+    fn op(self) -> &'static str {
         match self {
-            SubmissionKind::Result => "/v1/worker/result",
-            SubmissionKind::Failure => "/v1/worker/failure",
-            SubmissionKind::Replay => "/v1/worker/replay",
+            SubmissionKind::Result => "worker.result",
+            SubmissionKind::Failure => "worker.failure",
+            SubmissionKind::Replay => "worker.replay",
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct ControlWsClientMessage<'a> {
+    request_id: String,
+    op: &'a str,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct ControlWsServerMessage {
+    request_id: String,
+    ok: bool,
+    #[serde(default)]
+    data: Option<serde_json::Value>,
+    #[serde(default)]
+    error: Option<String>,
+    #[serde(default)]
+    status: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BundleGetResponse {
+    payload_b64: String,
 }
 
 #[derive(Debug)]
@@ -155,20 +187,18 @@ async fn main() -> Result<()> {
             last_policy_refresh = Instant::now();
         }
 
-        flush_submission_queue(&client, &cfg, &mut submission_queue).await;
+        flush_submission_queue(&cfg, &mut submission_queue).await;
 
-        if let Ok(resp) = send_heartbeat(&client, &cfg).await {
+        if let Ok(resp) = send_heartbeat(&cfg).await {
             if resp.ok {
                 next_poll_ms = resp.next_poll_ms.max(200);
             }
         }
 
-        match poll_assignments(&client, &cfg).await {
+        match poll_assignments(&cfg).await {
             Ok(assignments) => {
                 for assignment in assignments.jobs {
-                    if let Err(err) =
-                        process_assignment(&client, &cfg, &mut submission_queue, assignment).await
-                    {
+                    if let Err(err) = process_assignment(&cfg, &mut submission_queue, assignment).await {
                         tracing::error!(error = %err, "assignment processing failed");
                     }
                 }
@@ -176,7 +206,7 @@ async fn main() -> Result<()> {
             Err(err) => tracing::error!(error = %err, "assignment poll failed"),
         }
 
-        flush_submission_queue(&client, &cfg, &mut submission_queue).await;
+        flush_submission_queue(&cfg, &mut submission_queue).await;
 
         tokio::time::sleep(Duration::from_millis(next_poll_ms)).await;
     }
@@ -372,8 +402,7 @@ fn load_chain_submit_config() -> Option<ChainSubmitConfig> {
     })
 }
 
-async fn send_heartbeat(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
-    let url = format!("{}/v1/worker/heartbeat", cfg.scheduler_base_url);
+async fn send_heartbeat(cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
     let mut payload = HeartbeatRequest {
         worker_pubkey: cfg.worker_pubkey.clone(),
         runtime_ids: cfg.runtime_ids.clone(),
@@ -382,50 +411,23 @@ async fn send_heartbeat(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<
         signature: None,
     };
     payload.signature = sign_worker_payload(cfg, heartbeat_signing_message(&payload));
-
-    let resp = client
-        .post(url)
-        .json(&payload)
-        .send()
-        .await
-        .context("heartbeat request failed")?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        anyhow::bail!("heartbeat failed with status {status}");
-    }
-
-    let body = resp
-        .json::<HeartbeatResponse>()
-        .await
-        .context("invalid heartbeat response")?;
-    Ok(body)
+    control_ws_request(
+        cfg,
+        "worker.heartbeat",
+        serde_json::to_value(payload).context("serialize heartbeat payload")?,
+    )
+    .await
+    .context("heartbeat request failed")
 }
 
-async fn poll_assignments(
-    client: &reqwest::Client,
-    cfg: &WorkerConfig,
-) -> Result<AssignmentsResponse> {
-    let mut url = Url::parse(&format!("{}/v1/worker/assignments", cfg.scheduler_base_url))?;
-    url.query_pairs_mut()
-        .append_pair("worker_pubkey", &cfg.worker_pubkey);
-
-    let resp = client
-        .get(url)
-        .send()
-        .await
-        .context("assignments request failed")?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        anyhow::bail!("assignments failed with status {status}");
-    }
-
-    let body = resp
-        .json::<AssignmentsResponse>()
-        .await
-        .context("invalid assignments response")?;
-    Ok(body)
+async fn poll_assignments(cfg: &WorkerConfig) -> Result<AssignmentsResponse> {
+    control_ws_request(
+        cfg,
+        "worker.assignments",
+        serde_json::json!({ "worker_pubkey": cfg.worker_pubkey }),
+    )
+    .await
+    .context("assignments request failed")
 }
 
 async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<()> {
@@ -594,7 +596,6 @@ async fn establish_policy_session(client: &reqwest::Client, cfg: &WorkerConfig) 
 }
 
 async fn process_assignment(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
     assignment: QueuedAssignment,
@@ -612,7 +613,6 @@ async fn process_assignment(
     if let Err(err) = verify_assignment_policy(cfg, &assignment) {
         let msg = format!("assignment policy verification failed: {err}");
         submit_failure_report(
-            client,
             cfg,
             queue,
             WorkerFailureReport {
@@ -637,23 +637,22 @@ async fn process_assignment(
         anyhow::bail!(msg);
     }
 
-    let bundle_bytes = client
-        .get(&assignment.bundle_url)
-        .send()
-        .await
-        .context("bundle fetch failed")?
-        .error_for_status()
-        .context("bundle fetch status error")?
-        .bytes()
-        .await
-        .context("bundle body read failed")?;
+    let bundle_response: BundleGetResponse = control_ws_request(
+        cfg,
+        "bundle.get",
+        serde_json::json!({ "bundle_hash": assignment.bundle_hash }),
+    )
+    .await
+    .context("bundle fetch failed")?;
+    let bundle_bytes = base64::engine::general_purpose::STANDARD
+        .decode(bundle_response.payload_b64.as_bytes())
+        .context("bundle payload base64 decode failed")?;
 
     let expected_runtime_id = match parse_runtime_id_hex(&assignment.runtime_id) {
         Ok(value) => value,
         Err(err) => {
             let msg = err.to_string();
             submit_failure_report(
-                client,
                 cfg,
                 queue,
                 WorkerFailureReport {
@@ -690,7 +689,6 @@ async fn process_assignment(
             let err_code = format!("{:?}", err.code);
             let err_message = err.message.clone();
             submit_replay_artifact(
-                client,
                 cfg,
                 queue,
                 WorkerReplayArtifactReport {
@@ -725,7 +723,6 @@ async fn process_assignment(
             )
             .await;
             submit_failure_report(
-                client,
                 cfg,
                 queue,
                 WorkerFailureReport {
@@ -758,7 +755,6 @@ async fn process_assignment(
             assignment.bundle_hash, computed_bundle_hash
         );
         submit_replay_artifact(
-            client,
             cfg,
             queue,
             WorkerReplayArtifactReport {
@@ -793,7 +789,6 @@ async fn process_assignment(
         )
         .await;
         submit_failure_report(
-            client,
             cfg,
             queue,
             WorkerFailureReport {
@@ -860,7 +855,6 @@ async fn process_assignment(
     result.signature = sign_worker_payload(cfg, result_signing_message(&result));
 
     if !submit_with_retry(
-        client,
         cfg,
         queue,
         SubmissionKind::Result,
@@ -906,7 +900,7 @@ async fn process_assignment(
         signature: None,
     };
 
-    submit_replay_artifact(client, cfg, queue, replay_payload).await;
+    submit_replay_artifact(cfg, queue, replay_payload).await;
 
     tracing::info!(
         output_hash = %result.output_hash,
@@ -919,14 +913,12 @@ async fn process_assignment(
 }
 
 async fn submit_replay_artifact(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
     mut replay_payload: WorkerReplayArtifactReport,
 ) {
     replay_payload.signature = sign_worker_payload(cfg, replay_signing_message(&replay_payload));
     if !submit_with_retry(
-        client,
         cfg,
         queue,
         SubmissionKind::Replay,
@@ -944,14 +936,12 @@ async fn submit_replay_artifact(
 }
 
 async fn submit_failure_report(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
     mut failure_payload: WorkerFailureReport,
 ) {
     failure_payload.signature = sign_worker_payload(cfg, failure_signing_message(&failure_payload));
     if !submit_with_retry(
-        client,
         cfg,
         queue,
         SubmissionKind::Failure,
@@ -969,7 +959,6 @@ async fn submit_failure_report(
 }
 
 async fn submit_with_retry<T: Serialize>(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
     kind: SubmissionKind,
@@ -984,9 +973,9 @@ async fn submit_with_retry<T: Serialize>(
         }
     };
 
-    if let Err(err) = post_submission(client, cfg, kind, &body).await {
+    if let Err(err) = post_submission(cfg, kind, &body).await {
         enqueue_submission(queue, kind, idempotency_key, body);
-        tracing::warn!(error = %err, endpoint = kind.endpoint(), "submission queued for retry");
+        tracing::warn!(error = %err, op = kind.op(), "submission queued for retry");
         return false;
     }
 
@@ -994,7 +983,6 @@ async fn submit_with_retry<T: Serialize>(
 }
 
 async fn flush_submission_queue(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     queue: &mut SubmissionQueue,
 ) {
@@ -1013,7 +1001,7 @@ async fn flush_submission_queue(
             continue;
         }
 
-        match post_submission(client, cfg, item.kind, &item.body).await {
+        match post_submission(cfg, item.kind, &item.body).await {
             Ok(()) => {
                 sent += 1;
             }
@@ -1022,7 +1010,7 @@ async fn flush_submission_queue(
                 item.next_attempt_at = Instant::now() + retry_backoff_delay(queue, item.attempts);
                 tracing::warn!(
                     error = %err,
-                    endpoint = item.kind.endpoint(),
+                    op = item.kind.op(),
                     idempotency_key = %item.idempotency_key,
                     attempts = item.attempts,
                     "queued submission retry failed"
@@ -1048,7 +1036,7 @@ fn enqueue_submission(
     body: serde_json::Value,
 ) {
     if queue.items.iter().any(|item| {
-        item.idempotency_key == idempotency_key && item.kind.endpoint() == kind.endpoint()
+        item.idempotency_key == idempotency_key && item.kind.op() == kind.op()
     }) {
         return;
     }
@@ -1056,7 +1044,7 @@ fn enqueue_submission(
     if queue.items.len() >= queue.max_len {
         if let Some(dropped) = queue.items.pop_front() {
             tracing::warn!(
-                endpoint = dropped.kind.endpoint(),
+                op = dropped.kind.op(),
                 idempotency_key = %dropped.idempotency_key,
                 "dropping oldest queued submission due to queue limit"
             );
@@ -1079,23 +1067,95 @@ fn retry_backoff_delay(queue: &SubmissionQueue, attempts: u32) -> Duration {
 }
 
 async fn post_submission(
-    client: &reqwest::Client,
     cfg: &WorkerConfig,
     kind: SubmissionKind,
     body: &serde_json::Value,
 ) -> Result<()> {
-    let url = format!("{}{}", cfg.scheduler_base_url, kind.endpoint());
-    let resp = client
-        .post(url)
-        .json(body)
-        .send()
+    let _resp: serde_json::Value = control_ws_request(cfg, kind.op(), body.clone())
         .await
-        .context("submission request failed")?;
-    let status = resp.status();
-    if !status.is_success() {
-        anyhow::bail!("submission failed with status {status}");
-    }
+        .with_context(|| format!("submission request failed for {}", kind.op()))?;
     Ok(())
+}
+
+fn control_ws_url(base: &str, client_id: &str) -> Result<Url> {
+    let mut url = Url::parse(base).context("invalid scheduler base url")?;
+    let scheme = match url.scheme() {
+        "http" => "ws".to_string(),
+        "https" => "wss".to_string(),
+        "ws" | "wss" => url.scheme().to_string(),
+        other => {
+            anyhow::bail!("unsupported scheduler scheme for control ws: {other}");
+        }
+    };
+    url.set_scheme(&scheme)
+        .map_err(|_| anyhow::anyhow!("failed to set websocket scheme"))?;
+    url.set_path("/v1/control/ws");
+    url.set_query(None);
+    url.query_pairs_mut().append_pair("client_id", client_id);
+    Ok(url)
+}
+
+fn next_control_request_id() -> String {
+    let seq = CONTROL_REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("{}-{seq}", now_unix_seconds())
+}
+
+async fn control_ws_request<T: DeserializeOwned>(
+    cfg: &WorkerConfig,
+    op: &str,
+    payload: serde_json::Value,
+) -> Result<T> {
+    let client_id = format!("worker-{}", cfg.worker_pubkey);
+    let ws_url = control_ws_url(&cfg.scheduler_base_url, &client_id)?;
+    let (mut socket, _resp) = timeout(
+        CONTROL_WS_TIMEOUT,
+        tokio_tungstenite::connect_async(ws_url.to_string()),
+    )
+    .await
+    .context("control ws connect timed out")?
+    .context("control ws connect failed")?;
+
+    let request_id = next_control_request_id();
+    let outbound = ControlWsClientMessage {
+        request_id: request_id.clone(),
+        op,
+        payload,
+    };
+    let encoded = serde_json::to_string(&outbound).context("control ws request encode failed")?;
+    timeout(CONTROL_WS_TIMEOUT, socket.send(Message::Text(encoded.into())))
+        .await
+        .context("control ws send timed out")?
+        .context("control ws send failed")?;
+
+    loop {
+        let next = timeout(CONTROL_WS_TIMEOUT, socket.next())
+            .await
+            .context("control ws receive timed out")?;
+        let Some(frame) = next else {
+            anyhow::bail!("control ws closed before response");
+        };
+        let frame = frame.context("control ws frame error")?;
+        let Message::Text(text) = frame else {
+            continue;
+        };
+        let msg: ControlWsServerMessage =
+            serde_json::from_str(&text).context("control ws response decode failed")?;
+        if msg.request_id != request_id {
+            continue;
+        }
+        if !msg.ok {
+            let status = msg.status.map(|v| format!(" ({v})")).unwrap_or_default();
+            let err = msg
+                .error
+                .unwrap_or_else(|| format!("control ws request failed{status}"));
+            anyhow::bail!("{err}");
+        }
+        let data = msg
+            .data
+            .ok_or_else(|| anyhow::anyhow!("control ws response missing data"))?;
+        let parsed = serde_json::from_value::<T>(data).context("control ws data decode failed")?;
+        return Ok(parsed);
+    }
 }
 
 fn idempotency_key(
@@ -1392,21 +1452,35 @@ mod tests {
         }
     }
 
-    async fn spawn_ok_server() -> (String, tokio::task::JoinHandle<()>) {
+    async fn spawn_control_ws_ok_server() -> (String, tokio::task::JoinHandle<()>) {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local_addr");
         let handle = tokio::spawn(async move {
-            while let Ok((mut stream, _)) = listener.accept().await {
-                let mut buf = [0_u8; 4096];
-                let _ = stream.read(&mut buf).await;
-                let body = b"{\"ok\":true}";
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let _ = stream.write_all(resp.as_bytes()).await;
-                let _ = stream.write_all(body).await;
-                let _ = stream.shutdown().await;
+            while let Ok((stream, _)) = listener.accept().await {
+                let mut ws = match tokio_tungstenite::accept_async(stream).await {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                while let Some(Ok(Message::Text(text))) = ws.next().await {
+                    let request: serde_json::Value = match serde_json::from_str(&text) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    let request_id = request
+                        .get("request_id")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    if request_id.is_empty() {
+                        continue;
+                    }
+                    let response = serde_json::json!({
+                        "request_id": request_id,
+                        "ok": true,
+                        "data": { "ok": true }
+                    });
+                    let _ = ws.send(Message::Text(response.to_string().into())).await;
+                }
             }
         });
         (format!("http://{addr}"), handle)
@@ -1433,10 +1507,6 @@ mod tests {
 
     #[tokio::test]
     async fn retries_result_submission_and_drains_after_recovery() {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_millis(200))
-            .build()
-            .expect("client");
         let mut queue = test_queue();
 
         let down_cfg = test_cfg("http://127.0.0.1:9".to_string());
@@ -1453,7 +1523,6 @@ mod tests {
         };
 
         let ok = submit_with_retry(
-            &client,
             &down_cfg,
             &mut queue,
             SubmissionKind::Result,
@@ -1464,9 +1533,9 @@ mod tests {
         assert!(!ok, "initial submission should fail and queue");
         assert_eq!(queue.items.len(), 1);
 
-        let (base_url, server) = spawn_ok_server().await;
+        let (base_url, server) = spawn_control_ws_ok_server().await;
         let up_cfg = test_cfg(base_url);
-        flush_submission_queue(&client, &up_cfg, &mut queue).await;
+        flush_submission_queue(&up_cfg, &mut queue).await;
         assert!(
             queue.items.is_empty(),
             "queue should drain when endpoint recovers"
