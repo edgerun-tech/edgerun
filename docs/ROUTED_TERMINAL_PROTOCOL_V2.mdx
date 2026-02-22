@@ -1,0 +1,179 @@
+# Routed Terminal Protocol v2
+
+Status: Active
+
+Protocol identifier: `edgerun.rterm.v2`
+
+Version field: `v: 2`
+
+## Goals
+
+- Session-oriented routed terminal transport over persistent multi-hop links.
+- Explicit frame typing and validation.
+- Deterministic behavior for open/close/exit/error.
+- No hidden fallback semantics inside frame payloads.
+
+## Wire Model
+
+All frames are JSON objects with:
+
+- `proto`: must be `edgerun.rterm.v2`
+- `v`: must be `2`
+- `type`: frame discriminator
+- `sessionId`: required for all session-scoped frames
+
+Unknown `type` values must be ignored safely.
+
+## Frame Types
+
+### `open`
+
+Client -> remote shell endpoint.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "open",
+  "sessionId": "pane-<id>",
+  "cols": 120,
+  "rows": 36,
+  "term": "xterm-256color"
+}
+```
+
+### `ack`
+
+Remote endpoint -> client. Confirms open acceptance/rejection.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "ack",
+  "sessionId": "pane-<id>",
+  "ok": true,
+  "message": "routed shell ready (120x36)",
+  "capabilities": ["shell-basic-v1"]
+}
+```
+
+### `input`
+
+Client -> remote endpoint terminal input stream.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "input",
+  "sessionId": "pane-<id>",
+  "data": "help\n",
+  "encoding": "utf8"
+}
+```
+
+### `output`
+
+Remote endpoint -> client terminal output stream.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "output",
+  "sessionId": "pane-<id>",
+  "data": "Connected to routed shell...\n",
+  "stream": "stdout",
+  "encoding": "utf8"
+}
+```
+
+### `resize`
+
+Client -> remote endpoint pty resize hint.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "resize",
+  "sessionId": "pane-<id>",
+  "cols": 132,
+  "rows": 42
+}
+```
+
+### `close`
+
+Either side requests session closure.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "close",
+  "sessionId": "pane-<id>"
+}
+```
+
+### `exit`
+
+Remote endpoint indicates terminal process/session completion.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "exit",
+  "sessionId": "pane-<id>",
+  "code": 0,
+  "reason": "client_requested_exit"
+}
+```
+
+### `error`
+
+Remote endpoint or client path reports protocol/session error.
+
+```json
+{
+  "proto": "edgerun.rterm.v2",
+  "v": 2,
+  "type": "error",
+  "sessionId": "pane-<id>",
+  "code": "session_not_found",
+  "message": "session-not-found",
+  "retriable": true
+}
+```
+
+## Validation Rules
+
+- Reject frames where `proto !== "edgerun.rterm.v2"` or `v !== 2`.
+- Reject frames with missing/empty `sessionId`.
+- `input` and `output` require `encoding: "utf8"`.
+- `output` requires `stream` in `{ "stdout", "stderr" }`.
+- `ack` requires `ok` boolean.
+- `error` requires `code` and `message`.
+
+## Session Semantics
+
+- Session starts on accepted `open` (`ack.ok = true`).
+- Client may send `input` after successful `ack`.
+- Remote endpoint may emit `output` at any time after open.
+- `close` is cooperative shutdown intent.
+- `exit` is terminal completion signal and should end session state.
+
+## Routing Semantics
+
+- Routed terminal frames are payloads carried inside overlay relay packets.
+- Relay packet TTL / loop prevention are transport-layer concerns and are not duplicated in terminal frames.
+- Terminal protocol stays transport-agnostic and session-focused.
+
+## Compatibility
+
+- v2 is a clean break from v1.
+- No in-protocol downgrade path is defined.
+- Future incompatible changes must bump `proto` and `v`.
+

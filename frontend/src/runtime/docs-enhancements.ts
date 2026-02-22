@@ -80,9 +80,10 @@ async function initDocsSearch(): Promise<void> {
   let index = docsSearchIndexCache.get(version) ?? null
   if (!index) {
     try {
-      const response = await fetch(`/docs/${encodeURIComponent(version)}/search-index.json`, { headers: { accept: 'application/json' } })
-      if (!response.ok) throw new Error(`search_index_${response.status}`)
-      index = await response.json() as DocsSearchEntry[]
+      const encoded = root.getAttribute('data-docs-search-index') || '[]'
+      const parsed = JSON.parse(encoded) as DocsSearchEntry[]
+      index = Array.isArray(parsed) ? parsed : []
+      if (!index.length) throw new Error('search_index_empty')
       docsSearchIndexCache.set(version, index)
     } catch {
       if (token !== docsSearchToken) return

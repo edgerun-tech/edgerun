@@ -8,6 +8,7 @@ import { PageHero } from '../../../../components/layout/page-hero'
 import { Alert, AlertDescription, AlertTitle } from '../../../../components/ui/alert'
 import { Button } from '../../../../components/ui/button'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '../../../../components/ui/sheet'
+import { docsAddressGeneratorCliHref, docsAddressGeneratorPayloadHref } from '../../../../lib/docs-links'
 import { getDocsNav } from '../../../../lib/docs-nav'
 
 const docsNav = getDocsNav('main')
@@ -98,11 +99,11 @@ export default function QuickStartPage() {
                 <Separator />
 
                 <div class="grid gap-4 md:grid-cols-2">
-                  <a href="/docs/main/address-generator-cli.html" class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
+                  <a href={docsAddressGeneratorCliHref('main')} class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
                     <p class="font-semibold">Address Generator CLI</p>
                     <p class="text-sm text-muted-foreground">Detailed CLI flags and mode semantics.</p>
                   </a>
-                  <a href="/docs/main/address-generator-payload.html" class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
+                  <a href={docsAddressGeneratorPayloadHref('main')} class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
                     <p class="font-semibold">Address Generator Payload</p>
                     <p class="text-sm text-muted-foreground">Deterministic seed/counter derivation and output encoding.</p>
                   </a>

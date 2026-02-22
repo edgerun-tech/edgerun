@@ -5,6 +5,7 @@ import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Select } from '../ui/select'
 import { RPC_CONFIG_EVENT, RPC_DEFAULT_BY_CLUSTER, readRuntimeRpcConfig, writeRuntimeRpcConfig } from '../../lib/solana-config'
+import { acquireSolanaRpcWsClient, type SolanaRpcWsLease } from '../../lib/solana-rpc-ws'
 import { clearWalletSession, readWalletSession, writeWalletSession } from '../../lib/wallet-session'
 
 type WalletProvider = {
@@ -75,6 +76,8 @@ export function WalletButton() {
   const [activeRpcUrl, setActiveRpcUrl] = createSignal(currentRpc.rpcUrl)
   let activeProvider: WalletProvider | null = null
   let unbindProvider: null | (() => void) = null
+  let rpcLease: SolanaRpcWsLease | null = null
+  let rpcLeaseUrl = ''
 
   const available = createMemo(() => getCandidates())
   const installed = createMemo(() => available().find((item) => item.provider) || null)
@@ -84,17 +87,21 @@ export function WalletButton() {
     return getCandidates().find((item) => item.provider) || null
   }
 
+  function getRpcClient(rpcUrl: string) {
+    if (rpcLease && rpcLeaseUrl === rpcUrl) return rpcLease.client
+    rpcLease?.release()
+    rpcLease = acquireSolanaRpcWsClient(rpcUrl)
+    rpcLeaseUrl = rpcUrl
+    return rpcLease.client
+  }
+
   async function refreshBalance(pubkey: string): Promise<void> {
     const rpcUrl = readRuntimeRpcConfig().rpcUrl || 'https://api.devnet.solana.com'
     setActiveRpcUrl(rpcUrl)
     try {
-      const res = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method: 'getBalance', params: [pubkey, { commitment: 'confirmed' }] })
-      })
-      const payload = await res.json() as { result?: { value: number } }
-      const lamports = payload.result?.value
+      const client = getRpcClient(rpcUrl)
+      const payload = await client.request<{ value?: number }>('getBalance', [pubkey, { commitment: 'confirmed' }])
+      const lamports = payload?.value
       if (typeof lamports !== 'number') return
       setBalance(`${(lamports / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 3 })} SOL`)
     } catch {
@@ -284,6 +291,9 @@ export function WalletButton() {
       window.removeEventListener(RPC_CONFIG_EVENT, onRpcChanged)
       window.removeEventListener('focus', onFocus)
       window.clearInterval(providerSyncTimer)
+      rpcLease?.release()
+      rpcLease = null
+      rpcLeaseUrl = ''
     })
   })
 

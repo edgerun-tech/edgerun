@@ -11,11 +11,25 @@ export function DocsSidebar(props: DocsSidebarProps) {
   const version = () => props.version || 'main'
   const searchInputId = () => `docs-search-input-${version().replace(/[^a-z0-9-]/gi, '-')}`
   const navItems = () => getDocsNav(version())
+  const serializedSearchIndex = () => JSON.stringify(
+    navItems().map((item) => ({
+      title: item.label,
+      href: item.href,
+      text: item.label
+    }))
+  )
   return (
     <aside class={props.class || 'h-fit rounded-lg border border-border bg-card/50 p-4'}>
       <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Documentation</p>
       {props.showSearch && (
-        <div class="mb-3 space-y-2" data-docs-search data-docs-version={version()} role="search" aria-busy="true">
+        <div
+          class="mb-3 space-y-2"
+          data-docs-search
+          data-docs-version={version()}
+          data-docs-search-index={serializedSearchIndex()}
+          role="search"
+          aria-busy="true"
+        >
           <p class="text-xs font-medium text-muted-foreground">Search docs</p>
           <input
             id={searchInputId()}

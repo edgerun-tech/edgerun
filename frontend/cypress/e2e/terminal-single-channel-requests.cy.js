@@ -1,5 +1,10 @@
-describe('terminal route device resolution', () => {
-  it('renders routed in-app terminal pane for route:// targets', () => {
+describe('terminal user requests use a single control channel', () => {
+  it('does not issue legacy HTTP route resolve requests on connect', () => {
+    cy.intercept('GET', '**/v1/route/resolve/*', {
+      statusCode: 200,
+      body: { ok: true, found: false }
+    }).as('routeResolve')
+
     cy.visit('/', {
       onBeforeLoad(win) {
         const provider = {
@@ -18,28 +23,33 @@ describe('terminal route device resolution', () => {
           address: 'Cypresstest111111111111111111111111111111',
           provider: 'cypress'
         }))
-        win.localStorage.setItem('edgerun.route.controlBase', 'http://127.0.0.1:1')
+        win.localStorage.setItem('edgerun.route.controlBase', 'http://127.0.0.1:8090')
       }
     })
 
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
-    cy.get('button[aria-controls="edgerun-terminal-drawer"]')
-      .first()
-      .should('not.be.disabled')
-      .click({ force: true })
+    cy.get('button[aria-controls="edgerun-terminal-drawer"]').first().click({ force: true })
     cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
-    cy.get('input[placeholder="Device name"]').clear().type('Broken Route Device')
-    cy.get('input[placeholder="https://device.edgerun.tech"]').clear().type('route://deadbeef')
+    cy.get('input[placeholder="Device name"]').clear().type('Single Channel Device')
+    cy.get('input[placeholder="https://device.edgerun.tech"]').clear().type('route://single-channel')
     cy.contains('button', /^Add Device$/).click({ force: true })
-    cy.contains('p', 'Broken Route Device')
+
+    let callsBeforeConnect = 0
+    cy.get('@routeResolve.all').then((calls) => {
+      callsBeforeConnect = calls.length
+    })
+
+    cy.contains('p', 'Single Channel Device')
       .parents('.rounded-md.border')
       .first()
       .contains('button', /^Connect$/)
       .click({ force: true })
 
-    cy.get('[data-testid="routed-terminal-log"]').should('exist')
-    cy.get('#edgerun-terminal-drawer').contains('route://deadbeef attached').should('exist')
-    cy.get('iframe[src^="route://"]').should('not.exist')
+    cy.wait(1000)
+
+    cy.get('@routeResolve.all').then((calls) => {
+      expect(calls.length - callsBeforeConnect).to.equal(0)
+    })
   })
 })

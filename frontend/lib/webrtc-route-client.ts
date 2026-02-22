@@ -1,3 +1,5 @@
+import { SchedulerControlWsClient } from './scheduler-control-ws'
+
 type RouteEntry = {
   device_id?: string
   owner_pubkey?: string
@@ -40,6 +42,7 @@ type SignalOutboundMessage = {
 
 const CONTROL_BASE_STORAGE_KEY = 'edgerun.route.controlBase'
 const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost'])
+const controlClients = new Map<string, SchedulerControlWsClient>()
 
 function normalizeBase(value: string): string {
   return value.trim().replace(/\/+$/, '')
@@ -80,26 +83,6 @@ function getControlBaseCandidates(): string[] {
   return [...new Set(candidates)]
 }
 
-async function firstReachableControlBase(candidates: string[]): Promise<string | null> {
-  for (const base of candidates) {
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 900)
-    try {
-      const url = new URL('/health', `${base}/`)
-      const response = await fetch(url.toString(), { method: 'GET', signal: controller.signal })
-      if (response.ok) {
-        window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
-        return base
-      }
-    } catch {
-      // try next
-    } finally {
-      window.clearTimeout(timeout)
-    }
-  }
-  return null
-}
-
 export function parseRouteDeviceId(target: string): string | null {
   const value = target.trim()
   if (!value) return null
@@ -121,10 +104,10 @@ export async function resolveDeviceRoute(controlBase: string, deviceId: string):
   const trimmedDeviceId = deviceId.trim()
   if (!trimmedBase || !trimmedDeviceId) return null
   try {
-    const url = new URL(`/v1/route/resolve/${encodeURIComponent(trimmedDeviceId)}`, `${trimmedBase}/`)
-    const response = await fetch(url.toString(), { method: 'GET' })
-    if (!response.ok) return null
-    const body = await response.json() as RouteResolveResponse
+    const body = await getControlClient(trimmedBase).request<RouteResolveResponse>(
+      'route.resolve',
+      { device_id: trimmedDeviceId }
+    )
     if (!body.ok || !body.found) return null
     const reachable = Array.isArray(body.route?.reachable_urls) ? body.route?.reachable_urls : []
     const first = reachable.find((item) => typeof item === 'string' && item.trim().length > 0)
@@ -139,43 +122,41 @@ export async function resolveTerminalBaseUrl(input: string, controlBase?: string
   if (!target) return ''
   const routeDeviceId = parseRouteDeviceId(target)
   if (!routeDeviceId) return target
-  const bases = controlBase ? [normalizeBase(controlBase)] : getControlBaseCandidates()
-  for (const base of bases) {
-    const resolved = await resolveDeviceRoute(base, routeDeviceId)
-    if (resolved) {
-      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
-      return resolved
-    }
-  }
-  const discovered = typeof window !== 'undefined'
-    ? await firstReachableControlBase(getControlBaseCandidates())
-    : null
-  if (discovered) {
-    const resolved = await resolveDeviceRoute(discovered, routeDeviceId)
-    if (resolved) return resolved
+  const base = normalizeBase(controlBase || getRouteControlBase())
+  if (!base) return ''
+  const resolved = await resolveDeviceRoute(base, routeDeviceId)
+  if (resolved) {
+    if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+    return resolved
   }
   return ''
 }
 
 export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: string): Promise<RouteEntry[]> {
-  const trimmedBase = normalizeBase(controlBase)
+  const base = normalizeBase(controlBase || getRouteControlBase())
   const trimmedOwner = ownerPubkey.trim()
-  if (!trimmedOwner) return []
-  const bases = trimmedBase ? [trimmedBase, ...getControlBaseCandidates()] : getControlBaseCandidates()
-  for (const base of [...new Set(bases)]) {
-    try {
-      const url = new URL(`/v1/route/owner/${encodeURIComponent(trimmedOwner)}`, `${base}/`)
-      const response = await fetch(url.toString(), { method: 'GET' })
-      if (!response.ok) continue
-      const body = await response.json() as OwnerRoutesResponse
-      if (!body.ok) continue
-      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
-      return Array.isArray(body.devices) ? body.devices : []
-    } catch {
-      // try next
-    }
+  if (!trimmedOwner || !base) return []
+  try {
+    const body = await getControlClient(base).request<OwnerRoutesResponse>(
+      'route.owner',
+      { owner_pubkey: trimmedOwner }
+    )
+    if (!body.ok) return []
+    if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+    return Array.isArray(body.devices) ? body.devices : []
+  } catch {
+    // Explicit user action failed on current control channel.
   }
   return []
+}
+
+function getControlClient(controlBase: string): SchedulerControlWsClient {
+  const normalized = normalizeBase(controlBase)
+  const existing = controlClients.get(normalized)
+  if (existing) return existing
+  const created = new SchedulerControlWsClient(normalized, 'route-client')
+  controlClients.set(normalized, created)
+  return created
 }
 
 export class WebRtcSignalClient {

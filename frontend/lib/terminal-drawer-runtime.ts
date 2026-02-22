@@ -30,7 +30,6 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
     options.setWallet(nextWallet)
     if (nextWallet.connected) {
       options.restoreLastDevice()
-      void options.refreshDeviceStatus()
     }
   }
 
@@ -75,11 +74,6 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
   window.addEventListener('message', onMessage)
   window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
 
-  void options.refreshDeviceStatus()
-  const timer = window.setInterval(() => {
-    void options.refreshDeviceStatus()
-  }, 12000)
-
   return () => {
     unsubscribe()
     window.removeEventListener('pointermove', onPointerMove)
@@ -89,6 +83,5 @@ export function mountTerminalDrawerRuntime(options: RuntimeOptions): () => void 
     window.removeEventListener('pointerdown', onPointerDown)
     window.removeEventListener('message', onMessage)
     window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-    window.clearInterval(timer)
   }
 }

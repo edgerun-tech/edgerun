@@ -174,7 +174,10 @@ function queuePersist(): void {
 }
 
 function apply(update: Updater): void {
-  state = normalizeState(update(cloneState(state)))
+  const next = normalizeState(update(cloneState(state)))
+  // Avoid notifying/persisting when an update is a semantic no-op.
+  if (JSON.stringify(next) === JSON.stringify(state)) return
+  state = next
   queuePersist()
   notify()
 }
@@ -491,13 +494,20 @@ export const terminalDrawerActions = {
   },
 
   markDeviceStatus(deviceId: string, status: DeviceStatus): void {
-    apply((prev) => ({
-      ...prev,
-      devices: prev.devices.map((item) => item.id === deviceId
-        ? { ...item, status, lastSeenAt: nowMs() }
-        : item
-      )
-    }))
+    apply((prev) => {
+      let changed = false
+      const devices = prev.devices.map((item) => {
+        if (item.id !== deviceId) return item
+        if (item.status === status) return item
+        changed = true
+        return { ...item, status, lastSeenAt: nowMs() }
+      })
+      if (!changed) return prev
+      return {
+        ...prev,
+        devices
+      }
+    })
   },
 
   setPaneTransport(paneId: string, transport: PaneTransport): void {

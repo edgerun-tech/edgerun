@@ -70,6 +70,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   const [ownerImporting, setOwnerImporting] = createSignal(false)
   const [ownerImportNote, setOwnerImportNote] = createSignal('')
   const [tabMenuTabId, setTabMenuTabId] = createSignal<string | null>(null)
+  let refreshInFlight = false
 
   const walletConnected = createMemo(() => wallet().connected)
   const activeTab = createMemo(() => {
@@ -102,13 +103,18 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   const hasOtherTabs = (): boolean => state().tabs.length > 1
 
   const refreshDeviceStatus = async () => {
+    if (refreshInFlight) return
     const connected = untrack(() => walletConnected())
     if (!connected) return
     const devices = untrack(() => state().devices)
+    if (devices.length === 0) return
+    refreshInFlight = true
     await refreshTerminalDevices(
       devices,
       (id, status) => terminalDrawerActions.markDeviceStatus(id, status)
-    )
+    ).finally(() => {
+      refreshInFlight = false
+    })
   }
 
   const restoreLastDevice = () => terminalDrawerActions.restoreLastDeviceOnActiveTab()
@@ -122,8 +128,15 @@ export function useTerminalDrawerController(): TerminalDrawerController {
 
   const connectDevice = async (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => {
     const routeDeviceId = parseRouteDeviceId(device.baseUrl)
+    const supervisor = getWebRtcPeerSupervisor()
     if (routeDeviceId) {
-      void getWebRtcPeerSupervisor().connectToDevice(routeDeviceId)
+      terminalDrawerActions.connectActiveTabToDevice(device.id)
+      await supervisor.connectToDevice(routeDeviceId).catch(() => {
+        // continue through fallback paths
+      })
+      const routedOnline = await supervisor.waitForRoutedPong(routeDeviceId, 1400).catch(() => false)
+      terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
+      if (routedOnline) return
     }
     const resolved = await resolveTerminalBaseUrl(device.baseUrl)
     if (resolved) {
@@ -134,7 +147,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       return
     }
     if (routeDeviceId) {
-      // Route targets must resolve to a concrete HTTP(S) terminal base URL before connect.
+      // Route target remained unreachable on routed and fallback resolution paths.
       terminalDrawerActions.markDeviceStatus(device.id, 'offline')
       return
     }

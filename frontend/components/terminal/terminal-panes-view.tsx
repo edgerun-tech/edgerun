@@ -1,5 +1,7 @@
 import { For, Show } from 'solid-js'
 import { getTerminalPaneSrc, type TerminalTab } from '../../lib/terminal-drawer-store'
+import { parseRouteDeviceId } from '../../lib/webrtc-route-client'
+import { RoutedTerminalPane } from './routed-terminal-pane'
 import type { TerminalPanesController } from './use-terminal-drawer-controller'
 
 type Props = {
@@ -21,6 +23,10 @@ export function TerminalPanesView(props: Props) {
           <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
             <For each={tab().panes}>{(pane) => {
               const src = getTerminalPaneSrc(pane.baseUrl, pane.id)
+              const routeDeviceId = parseRouteDeviceId(pane.baseUrl)
+              if (routeDeviceId) {
+                return <RoutedTerminalPane paneId={pane.id} routeDeviceId={routeDeviceId} />
+              }
               return (
                 <Show
                   when={src.length > 0}

@@ -17,13 +17,20 @@ export type GeneratedApiSpec = {
 }
 
 export function getDocsSources(repoRoot: string): DocsSource[] {
+  const resolveExistingPath = (candidates: string[]): string => {
+    for (const candidate of candidates) {
+      if (existsSync(path.join(repoRoot, candidate))) return candidate
+    }
+    return candidates[0] || ''
+  }
   const docsDir = path.join(repoRoot, 'docs')
   const docsEntries = existsSync(docsDir)
     ? readdirSync(docsDir)
         .filter((name) => name.endsWith('.mdx'))
         .map((name) => ({
           sourcePath: path.join('docs', name),
-          ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {})
+          ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {}),
+          ...(name === 'ROUTED_TERMINAL_PROTOCOL_V2.mdx' ? { slug: 'routed-terminal-protocol-v2', title: 'Routed Terminal Protocol v2' } : {})
         }))
     : []
 
@@ -31,12 +38,18 @@ export function getDocsSources(repoRoot: string): DocsSource[] {
     { sourcePath: 'Whitepaper.mdx' },
     { sourcePath: 'Whitepaper-phase-2.mdx' },
     {
-      sourcePath: path.join('crates', 'edgerun-vanity-client', 'README.mdx'),
+      sourcePath: resolveExistingPath([
+        path.join('edgerun-apps', 'solana-vanity-address-generator', 'edgerun-vanity-client', 'README.mdx'),
+        path.join('crates', 'edgerun-vanity-client', 'README.mdx')
+      ]),
       slug: 'address-generator-cli',
       title: 'Address Generator CLI'
     },
     {
-      sourcePath: path.join('crates', 'edgerun-vanity-payload', 'README.mdx'),
+      sourcePath: resolveExistingPath([
+        path.join('edgerun-apps', 'solana-vanity-address-generator', 'edgerun-vanity-payload', 'README.mdx'),
+        path.join('crates', 'edgerun-vanity-payload', 'README.mdx')
+      ]),
       slug: 'address-generator-payload',
       title: 'Address Generator Payload'
     },
@@ -63,14 +76,14 @@ export const generatedApiSpecs: GeneratedApiSpec[] = [
     slug: 'api-address-generator-payload-rust',
     title: 'Address Generator Payload Rust API',
     description: 'Public API surface for address generator payload crate.',
-    sourcePath: 'crates/edgerun-vanity-payload/src/lib.rs',
+    sourcePath: 'edgerun-apps/solana-vanity-address-generator/edgerun-vanity-payload/src/lib.rs',
     mode: 'rust'
   },
   {
     slug: 'api-address-generator-cli',
     title: 'Address Generator CLI Reference',
     description: 'CLI argument surface for address generator client.',
-    sourcePath: 'crates/edgerun-vanity-client/src/main.rs',
+    sourcePath: 'edgerun-apps/solana-vanity-address-generator/edgerun-vanity-client/src/main.rs',
     mode: 'cli'
   },
   {
