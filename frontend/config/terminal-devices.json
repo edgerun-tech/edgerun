@@ -1,16 +1,3 @@
 {
-  "defaults": [
-    {
-      "name": "Local Gateway",
-      "baseUrl": "http://127.0.0.1:5180"
-    },
-    {
-      "name": "Local Daemon",
-      "baseUrl": "http://127.0.0.1:8080"
-    },
-    {
-      "name": "Localhost Daemon",
-      "baseUrl": "http://localhost:8080"
-    }
-  ]
+  "defaults": []
 }

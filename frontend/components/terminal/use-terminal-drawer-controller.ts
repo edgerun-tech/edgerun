@@ -13,7 +13,7 @@ import {
 import { refreshTerminalDevices } from '../../lib/terminal-device-service'
 import { mountTerminalDrawerRuntime } from '../../lib/terminal-drawer-runtime'
 import { getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
-import { getRouteControlBase, parseRouteDeviceId, resolveOwnerRoutes, resolveTerminalBaseUrl } from '../../lib/webrtc-route-client'
+import { getRouteControlBase, parseRouteDeviceId, resolveOwnerRoutes } from '../../lib/webrtc-route-client'
 import { readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 
 export type TerminalTabsController = {
@@ -129,30 +129,19 @@ export function useTerminalDrawerController(): TerminalDrawerController {
 
   const connectDevice = async (device: Pick<TerminalDevice, 'id' | 'baseUrl'>) => {
     const routeDeviceId = parseRouteDeviceId(device.baseUrl)
-    const supervisor = getWebRtcPeerSupervisor()
-    if (routeDeviceId) {
+    if (!routeDeviceId) {
       terminalDrawerActions.connectActiveTabToDevice(device.id)
-      await supervisor.connectToDevice(routeDeviceId).catch(() => {
-        // continue through fallback paths
-      })
-      const routedOnline = await supervisor.waitForRoutedPong(routeDeviceId, 1400).catch(() => false)
-      terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
-      if (routedOnline) return
-    }
-    const resolved = await resolveTerminalBaseUrl(device.baseUrl)
-    if (resolved) {
-      terminalDrawerActions.connectActiveTabToBaseUrl(resolved)
-      if (resolved !== device.baseUrl.trim()) {
-        terminalDrawerActions.markDeviceStatus(device.id, 'online')
-      }
-      return
-    }
-    if (routeDeviceId) {
-      // Route target remained unreachable on routed and fallback resolution paths.
       terminalDrawerActions.markDeviceStatus(device.id, 'offline')
       return
     }
+
+    const supervisor = getWebRtcPeerSupervisor()
     terminalDrawerActions.connectActiveTabToDevice(device.id)
+    await supervisor.connectToDevice(routeDeviceId).catch(() => {
+      // keep probing through existing route table
+    })
+    const routedOnline = await supervisor.waitForRoutedPong(routeDeviceId, 1400).catch(() => false)
+    terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
   }
 
   const importOwnerDevices = async () => {

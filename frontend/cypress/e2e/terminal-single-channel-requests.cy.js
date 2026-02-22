@@ -33,7 +33,7 @@ describe('terminal user requests use a single control channel', () => {
     cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
     cy.get('input[placeholder="Device name"]').clear().type('Single Channel Device')
-    cy.get('input[placeholder="https://device.edgerun.tech"]').clear().type('route://single-channel')
+    cy.get('input[placeholder="route://device-id"]').clear().type('route://single-channel')
     cy.contains('button', /^Add Device$/).click({ force: true })
 
     let callsBeforeConnect = 0
