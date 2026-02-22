@@ -18,7 +18,7 @@ rustybuzz = "0.20"
 swash = "0.1"
 ttf-parser = "0.25.1"
 unicode-width = "0.1"
-vte = "0.13"
+vte = "0.15"
 
 thiserror.workspace = true
 dirs = "6.0.0"
