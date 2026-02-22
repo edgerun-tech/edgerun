@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::io::{self, Write};
-use std::net::{SocketAddr, TcpListener};
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
@@ -19,6 +19,18 @@ use serde_json::{json, Value};
 use tokio::process::Command;
 use tokio::time::{sleep, timeout};
 use tower_http::cors::{Any, CorsLayer};
+
+mod integration_helpers;
+mod process_helpers;
+
+use integration_helpers::{
+    create_assigned_job, create_assigned_job_with_abi, create_temp_dir, kill_child,
+    pick_free_port, wait_for_failure_phase, wait_for_health, wait_for_runtime_execute_failure,
+};
+use process_helpers::{
+    command_exists, run_program_capture_sync_owned, run_program_sync, run_program_sync_owned,
+    run_program_sync_with_env,
+};
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun", about = "EdgeRun project orchestration CLI")]
@@ -1288,75 +1300,6 @@ fn program_tool_env(program_root: &Path) -> Vec<(OsString, OsString)> {
     ]
 }
 
-fn run_program_sync(
-    label: &str,
-    program: &str,
-    args: &[&str],
-    cwd: &Path,
-    allow_missing: bool,
-) -> Result<()> {
-    run_program_sync_with_env(label, program, args, cwd, allow_missing, &[])
-}
-
-fn run_program_sync_with_env(
-    label: &str,
-    program: &str,
-    args: &[&str],
-    cwd: &Path,
-    allow_missing: bool,
-    envs: &[(OsString, OsString)],
-) -> Result<()> {
-    let display = if args.is_empty() {
-        program.to_string()
-    } else {
-        format!("{program} {}", args.join(" "))
-    };
-    println!("==> {label}");
-    println!("$ {display}");
-
-    let mut command = std::process::Command::new(program);
-    command
-        .args(args)
-        .current_dir(cwd)
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
-    for (k, v) in envs {
-        command.env(k, v);
-    }
-    let status = command.status();
-
-    match status {
-        Ok(status) => {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(anyhow!(
-                    "step '{}' failed with exit status {:?}",
-                    label,
-                    status.code()
-                ))
-            }
-        }
-        Err(err) if allow_missing && err.kind() == std::io::ErrorKind::NotFound => {
-            eprintln!("[warn] optional command missing: {program}");
-            Ok(())
-        }
-        Err(err) => Err(err).with_context(|| format!("failed to launch: {display}")),
-    }
-}
-
-fn run_program_sync_owned(
-    label: &str,
-    program: &str,
-    args: &[String],
-    cwd: &Path,
-    allow_missing: bool,
-) -> Result<()> {
-    let borrowed: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-    run_program_sync_with_env(label, program, &borrowed, cwd, allow_missing, &[])
-}
-
 #[derive(Debug, Deserialize)]
 struct SimpleOkResponse {
     ok: bool,
@@ -1390,54 +1333,6 @@ async fn post_json_ok(
         .json()
         .await
         .map_err(Into::into)
-}
-
-fn run_program_capture_sync_owned(
-    label: &str,
-    program: &str,
-    args: &[String],
-    cwd: &Path,
-    envs: &[(OsString, OsString)],
-) -> Result<String> {
-    let display = if args.is_empty() {
-        program.to_string()
-    } else {
-        format!("{program} {}", args.join(" "))
-    };
-    println!("==> {label}");
-    println!("$ {display}");
-
-    let mut command = std::process::Command::new(program);
-    command
-        .args(args)
-        .current_dir(cwd)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    for (k, v) in envs {
-        command.env(k, v);
-    }
-    let output = command
-        .output()
-        .with_context(|| format!("failed to launch: {display}"))?;
-
-    let mut text = String::new();
-    text.push_str(&String::from_utf8_lossy(&output.stdout));
-    if !output.stdout.is_empty() && !output.stderr.is_empty() {
-        text.push('\n');
-    }
-    text.push_str(&String::from_utf8_lossy(&output.stderr));
-    print!("{text}");
-
-    if output.status.success() {
-        Ok(text)
-    } else {
-        Err(anyhow!(
-            "step '{}' failed with exit status {:?}",
-            label,
-            output.status.code()
-        ))
-    }
 }
 
 async fn run_tailscale_command(root: &Path, command: TailscaleCommand) -> Result<()> {
@@ -3184,129 +3079,6 @@ fn ensure_local_bin(root: &Path, package: &str) -> Result<PathBuf> {
     Ok(bin_path)
 }
 
-async fn wait_for_health(
-    client: &reqwest::Client,
-    sched_url: &str,
-    scheduler: &mut tokio::process::Child,
-) -> Result<()> {
-    for _ in 0..240 {
-        if scheduler.try_wait()?.is_some() {
-            break;
-        }
-        if client
-            .get(format!("{sched_url}/health"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-        {
-            return Ok(());
-        }
-        sleep(Duration::from_millis(500)).await;
-    }
-    Err(anyhow!("scheduler failed to become healthy"))
-}
-
-async fn create_assigned_job(
-    client: &reqwest::Client,
-    sched_url: &str,
-    worker: &str,
-) -> Result<String> {
-    create_assigned_job_with_abi(client, sched_url, worker, 2).await
-}
-
-async fn create_assigned_job_with_abi(
-    client: &reqwest::Client,
-    sched_url: &str,
-    worker: &str,
-    abi_version: u8,
-) -> Result<String> {
-    let body = json!({
-        "runtime_id":"0000000000000000000000000000000000000000000000000000000000000000",
-        "abi_version": abi_version,
-        "wasm_base64":"AA==",
-        "input_base64":"",
-        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
-        "escrow_lamports":1,
-        "assignment_worker_pubkey":worker
-    });
-    let response: JobCreateResponse = client
-        .post(format!("{sched_url}/v1/job/create"))
-        .json(&body)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?;
-    Ok(response.job_id)
-}
-
-async fn wait_for_failure_phase(
-    client: &reqwest::Client,
-    sched_url: &str,
-    job_id: &str,
-    expected_phase: &str,
-    invert: bool,
-) -> Result<()> {
-    for _ in 0..240 {
-        let status: Value = client
-            .get(format!("{sched_url}/v1/job/{job_id}"))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
-        let phase = status["failures"]
-            .as_array()
-            .and_then(|arr| arr.last())
-            .and_then(|x| x["phase"].as_str())
-            .unwrap_or("");
-        if (!invert && phase == expected_phase)
-            || (invert && !phase.is_empty() && phase != expected_phase)
-        {
-            return Ok(());
-        }
-        sleep(Duration::from_millis(500)).await;
-    }
-    Err(anyhow!("timed out waiting for expected failure phase"))
-}
-
-async fn wait_for_runtime_execute_failure(
-    client: &reqwest::Client,
-    sched_url: &str,
-    job_id: &str,
-) -> Result<()> {
-    wait_for_failure_phase(client, sched_url, job_id, "runtime_execute", false).await
-}
-
-async fn kill_child(child: &mut tokio::process::Child) {
-    if child.try_wait().ok().flatten().is_none() {
-        let _ = child.kill().await;
-        let _ = child.wait().await;
-    }
-}
-
-fn pick_free_port() -> Result<u16> {
-    let listener = TcpListener::bind("127.0.0.1:0").context("failed to bind ephemeral port")?;
-    let port = listener
-        .local_addr()
-        .context("failed to resolve local addr")?
-        .port();
-    drop(listener);
-    Ok(port)
-}
-
-fn create_temp_dir(prefix: &str) -> Result<PathBuf> {
-    let path = std::env::temp_dir().join(format!(
-        "{}-{}-{}",
-        prefix,
-        now_unix_s(),
-        std::process::id()
-    ));
-    std::fs::create_dir_all(&path)?;
-    Ok(path)
-}
-
 fn count_files_recursive(path: &Path) -> Result<usize> {
     if !path.exists() {
         return Ok(0);
@@ -3380,19 +3152,6 @@ fn integration_flag_env(config: &AppConfig) -> (String, String, String) {
         .unwrap_or(false)
         .to_string();
     (sig, att, quorum)
-}
-
-fn command_exists(cmd: &str) -> bool {
-    let Some(path_var) = std::env::var_os("PATH") else {
-        return false;
-    };
-    for dir in std::env::split_paths(&path_var) {
-        let candidate = dir.join(cmd);
-        if candidate.is_file() {
-            return true;
-        }
-    }
-    false
 }
 
 fn ensure(ok: bool, msg: &str) -> Result<()> {

@@ -11,6 +11,12 @@ type RouteResolveResponse = {
   route?: RouteEntry | null
 }
 
+type OwnerRoutesResponse = {
+  ok?: boolean
+  owner_pubkey?: string
+  devices?: RouteEntry[]
+}
+
 type SignalInboundMessage = {
   from_device_id: string
   kind: string
@@ -22,7 +28,8 @@ type SignalInboundMessage = {
 }
 
 type SignalOutboundMessage = {
-  to_device_id: string
+  to_device_id?: string
+  to_owner_pubkey?: string
   kind: string
   sdp?: string
   candidate?: string
@@ -76,6 +83,22 @@ export async function resolveTerminalBaseUrl(input: string, controlBase?: string
   const base = controlBase || getRouteControlBase()
   const resolved = await resolveDeviceRoute(base, routeDeviceId)
   return resolved || ''
+}
+
+export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: string): Promise<RouteEntry[]> {
+  const trimmedBase = controlBase.trim().replace(/\/+$/, '')
+  const trimmedOwner = ownerPubkey.trim()
+  if (!trimmedBase || !trimmedOwner) return []
+  try {
+    const url = new URL(`/v1/route/owner/${encodeURIComponent(trimmedOwner)}`, `${trimmedBase}/`)
+    const response = await fetch(url.toString(), { method: 'GET' })
+    if (!response.ok) return []
+    const body = await response.json() as OwnerRoutesResponse
+    if (!body.ok) return []
+    return Array.isArray(body.devices) ? body.devices : []
+  } catch {
+    return []
+  }
 }
 
 export class WebRtcSignalClient {
