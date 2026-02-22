@@ -240,9 +240,9 @@ mod tests {
         let path = "/v1/policy/info";
         let body = b"";
         let ts = now;
-        let nonce = "n-1";
+        let nonce = format!("n-{now}");
         let body_hash = body_hash_b64(body);
-        let canonical = canonical_message(method, path, ts, nonce, &body_hash);
+        let canonical = canonical_message(method, path, ts, &nonce, &body_hash);
         let sig = sign_canonical_b64(&issue.signing_key, &canonical);
 
         let token = verify_session_request(
@@ -252,7 +252,7 @@ mod tests {
                 auth_header: Some(&format!("Bearer {}", issue.token)),
                 origin_header: Some("https://app.example"),
                 ts_header: Some(&ts.to_string()),
-                nonce_header: Some(nonce),
+                nonce_header: Some(&nonce),
                 sig_header: Some(&sig),
                 method,
                 path,

@@ -1,4 +1,4 @@
-import { For, createMemo, createSignal } from 'solid-js'
+import { For, createEffect, createMemo, createSignal, onCleanup } from 'solid-js'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
@@ -14,6 +14,7 @@ import { Separator } from '../../components/ui/separator'
 import { Table, TableBody, TableCell, TableRow } from '../../components/ui/table'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
+import { clearJobTabStatus, publishJobTabStatus } from '../../lib/tab-job-status'
 
 type PresetApp = {
   id: string
@@ -87,6 +88,15 @@ const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   workerCount: '5'
 }
 
+function defaultSchedulerUrl(): string {
+  if (typeof window === 'undefined') return 'http://127.0.0.1:8090'
+  const injected = String((window as any).__EDGERUN_API_BASE || '').trim()
+  if (injected) return injected
+  const host = window.location.hostname
+  if (host === '127.0.0.1' || host === 'localhost') return 'http://127.0.0.1:8090'
+  return 'https://api.edgerun.tech'
+}
+
 export default function RunPage() {
   const [activeStep, setActiveStep] = createSignal<RunStep>('step-1')
   const [safetyOpen, setSafetyOpen] = createSignal(false)
@@ -97,7 +107,7 @@ export default function RunPage() {
   const [jobName, setJobName] = createSignal(DEFAULT_PRESET.defaultJobName)
   const [runtimeId, setRuntimeId] = createSignal(DEFAULT_PRESET.defaultRuntimeId)
   const [inputJson, setInputJson] = createSignal(DEFAULT_PRESET.defaultInputJson)
-  const [schedulerUrl, setSchedulerUrl] = createSignal('http://127.0.0.1:8090')
+  const [schedulerUrl, setSchedulerUrl] = createSignal(defaultSchedulerUrl())
   const [customModuleName, setCustomModuleName] = createSignal('')
   const [customWasmFileName, setCustomWasmFileName] = createSignal('')
   const [inputFileName, setInputFileName] = createSignal('')
@@ -107,6 +117,48 @@ export default function RunPage() {
   const [submitMessage, setSubmitMessage] = createSignal('')
   const [validationErrors, setValidationErrors] = createSignal<string[]>([])
   const [lastReceiptId, setLastReceiptId] = createSignal('')
+
+  createEffect(() => {
+    const status = submitStatus()
+    if (status === 'pending') {
+      const workersActive = Number(vanitySearchSpace().workerCount) || undefined
+      let progress = 9
+      const timer = window.setInterval(() => {
+        progress = progress >= 92 ? 92 : progress + 7
+        publishJobTabStatus({
+          phase: 'running',
+          progressPercent: progress,
+          workersActive
+        })
+      }, 500)
+      publishJobTabStatus({
+        phase: 'running',
+        progressPercent: progress,
+        workersActive
+      })
+      onCleanup(() => window.clearInterval(timer))
+      return
+    }
+    if (status === 'success') {
+      publishJobTabStatus({
+        phase: 'settled',
+        flashIfHidden: true
+      })
+      return
+    }
+    if (status === 'error') {
+      publishJobTabStatus({
+        phase: 'error',
+        flashIfHidden: true
+      })
+      return
+    }
+    clearJobTabStatus()
+  })
+
+  onCleanup(() => {
+    clearJobTabStatus()
+  })
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
   const isVanityApp = createMemo(() => selectedPresetId() === 'vanity-generator')
@@ -148,7 +200,7 @@ export default function RunPage() {
     try {
       const parsed = new URL(urlText)
       const host = parsed.host
-      return host === '127.0.0.1:8090' || host === 'localhost:8090'
+      return host === '127.0.0.1:8090' || host === 'localhost:8090' || host === 'api.edgerun.tech'
     } catch {
       return false
     }
@@ -238,7 +290,7 @@ export default function RunPage() {
 
     if (!isKnownLocalScheduler(schedulerUrl().trim())) {
       setSubmitStatus('error')
-      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Update Scheduler URL or start local scheduler on 127.0.0.1:8090.`)
+      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Use https://api.edgerun.tech or start local scheduler on 127.0.0.1:8090.`)
       return
     }
 
