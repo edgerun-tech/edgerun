@@ -139,7 +139,7 @@ pub fn build_border_gpu(
     // Left and right edges; skip the corners because they are already filled above.
     let vertical_span = inner_h.saturating_sub(thickness * 2);
     for y in 0..vertical_span {
-        let py = inset as u32 + thickness + y;
+        let py = inset + thickness + y;
         crate::gpu::GpuRenderer::push_rect(
             rects,
             inset_f,
@@ -149,7 +149,7 @@ pub fn build_border_gpu(
             border_color,
         );
 
-        let px_right = inset as u32 + inner_w as u32 - thickness;
+        let px_right = inset + inner_w - thickness;
         crate::gpu::GpuRenderer::push_rect(
             rects,
             px_right as f32,

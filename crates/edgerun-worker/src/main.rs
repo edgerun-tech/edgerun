@@ -7,9 +7,15 @@ use anyhow::{Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use edgerun_types::control_plane::{
+    assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
+    HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
+    SessionCreateRequest, SessionCreateResponse, WorkerCapacity, WorkerFailureReport,
+    WorkerReplayArtifactReport, WorkerResultReport,
+};
 use hmac::{Hmac, Mac};
 use reqwest::Url;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -73,128 +79,7 @@ impl PolicySessionState {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct PolicyInfoResponse {
-    key_id: String,
-    version: u32,
-    signer_pubkey: String,
-    ttl_secs: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionCreateRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    bound_origin: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionCreateResponse {
-    token: String,
-    session_key: String,
-    ttl_secs: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct WorkerCapacity {
-    max_concurrent: u32,
-    mem_bytes: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct HeartbeatResponse {
-    ok: bool,
-    next_poll_ms: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct AssignmentsResponse {
-    jobs: Vec<QueuedAssignment>,
-}
-
-#[derive(Debug, Deserialize)]
-struct QueuedAssignment {
-    job_id: String,
-    bundle_hash: String,
-    bundle_url: String,
-    runtime_id: String,
-    #[serde(default = "default_abi_version")]
-    abi_version: u8,
-    limits: edgerun_types::Limits,
-    escrow_lamports: u64,
-    #[serde(default)]
-    policy_signer_pubkey: String,
-    #[serde(default)]
-    policy_signature: String,
-    #[serde(default = "default_policy_key_id")]
-    policy_key_id: String,
-    #[serde(default = "default_policy_version")]
-    policy_version: u32,
-    #[serde(default)]
-    policy_valid_after_unix_s: u64,
-    #[serde(default)]
-    policy_valid_until_unix_s: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct HeartbeatRequest {
-    worker_pubkey: String,
-    runtime_ids: Vec<String>,
-    version: String,
-    capacity: WorkerCapacity,
-    signature: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkerResultReport {
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    bundle_hash: String,
-    output_hash: String,
-    output_len: usize,
-    attestation_sig: Option<String>,
-    attestation_claim: Option<edgerun_types::AttestationClaim>,
-    signature: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkerFailureReport {
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    bundle_hash: String,
-    phase: String,
-    error_code: String,
-    error_message: String,
-    signature: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ReplayArtifactPayload {
-    bundle_hash: String,
-    ok: bool,
-    abi_version: Option<u8>,
-    runtime_id: Option<String>,
-    output_hash: Option<String>,
-    output_len: Option<usize>,
-    input_len: Option<usize>,
-    max_memory_bytes: Option<u32>,
-    max_instructions: Option<u64>,
-    fuel_limit: Option<u64>,
-    fuel_remaining: Option<u64>,
-    error_code: Option<String>,
-    error_message: Option<String>,
-    trap_code: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct WorkerReplayArtifactReport {
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    artifact: ReplayArtifactPayload,
-    signature: Option<String>,
-}
+type ReplayArtifactPayload = edgerun_types::control_plane::ReplayArtifactPayload;
 
 #[derive(Debug, Clone, Copy)]
 enum SubmissionKind {
@@ -491,7 +376,7 @@ async fn send_heartbeat(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<
         worker_pubkey: cfg.worker_pubkey.clone(),
         runtime_ids: cfg.runtime_ids.clone(),
         version: cfg.version.clone(),
-        capacity: cfg.capacity.clone(),
+        capacity: Some(cfg.capacity.clone()),
         signature: None,
     };
     payload.signature = sign_worker_payload(cfg, heartbeat_signing_message(&payload));
@@ -1338,13 +1223,14 @@ fn parse_hex32(value: &str) -> Result<[u8; 32]> {
 
 fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
     let runtime_ids = payload.runtime_ids.join(",");
+    let (max_concurrent, mem_bytes) = payload
+        .capacity
+        .as_ref()
+        .map(|c| (c.max_concurrent.to_string(), c.mem_bytes.to_string()))
+        .unwrap_or_else(|| ("".to_string(), "".to_string()));
     format!(
         "heartbeat|{}|{}|{}|{}|{}",
-        payload.worker_pubkey,
-        runtime_ids,
-        payload.version,
-        payload.capacity.max_concurrent,
-        payload.capacity.mem_bytes
+        payload.worker_pubkey, runtime_ids, payload.version, max_concurrent, mem_bytes
     )
 }
 
@@ -1392,18 +1278,6 @@ fn replay_signing_message(payload: &WorkerReplayArtifactReport) -> String {
     )
 }
 
-fn default_abi_version() -> u8 {
-    edgerun_types::BUNDLE_ABI_CURRENT
-}
-
-fn default_policy_key_id() -> String {
-    "dev-key-1".to_string()
-}
-
-fn default_policy_version() -> u32 {
-    1
-}
-
 fn default_policy_verify_pubkey_hex() -> String {
     let sk_bytes_vec = hex::decode(DEFAULT_POLICY_SIGNING_KEY_HEX)
         .expect("DEFAULT_POLICY_SIGNING_KEY_HEX must be valid hex");
@@ -1413,24 +1287,6 @@ fn default_policy_verify_pubkey_hex() -> String {
         .expect("DEFAULT_POLICY_SIGNING_KEY_HEX must decode to 32 bytes");
     let signing = SigningKey::from_bytes(&sk_bytes);
     hex::encode(signing.verifying_key().as_bytes())
-}
-
-fn assignment_policy_message(assignment: &QueuedAssignment) -> String {
-    format!(
-        "edgerun-assignment-v2|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        assignment.job_id,
-        assignment.bundle_hash,
-        assignment.runtime_id,
-        assignment.abi_version,
-        assignment.limits.max_memory_bytes,
-        assignment.limits.max_instructions,
-        assignment.escrow_lamports,
-        assignment.bundle_url,
-        assignment.policy_key_id,
-        assignment.policy_version,
-        assignment.policy_valid_after_unix_s,
-        assignment.policy_valid_until_unix_s
-    )
 }
 
 fn verify_assignment_policy(cfg: &WorkerConfig, assignment: &QueuedAssignment) -> Result<()> {

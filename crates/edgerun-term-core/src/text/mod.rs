@@ -254,16 +254,15 @@ impl GlyphCache {
 
         // Optionally generate an SDF for monochrome glyphs to improve scaling and reduce
         // repeated uploads. We'll produce an SDF in the alpha channel and keep RGB white.
-        if !is_color && self.use_sdf {
-            if let Some(msdf) = Self::rasterize_msdf(&self.fonts[font_idx], glyph, self.size) {
+        if !is_color && self.use_sdf
+            && let Some(msdf) = Self::rasterize_msdf(&self.fonts[font_idx], glyph, self.size) {
                 return Some(msdf);
             }
-        }
 
         Some(GlyphBitmap {
             metrics: GlyphMetrics {
-                width: image.placement.width as u32,
-                height: image.placement.height as u32,
+                width: image.placement.width,
+                height: image.placement.height,
                 xmin: image.placement.left,
                 ymin: image.placement.top,
                 advance_width: glyph_metrics.advance_width(glyph),
@@ -346,11 +345,10 @@ impl GlyphCache {
 
     pub fn rasterize(&mut self, ch: char) -> (GlyphMetrics, &[u8], bool) {
         if !self.char_cache.contains_key(&ch) {
-            if let Some((font_idx, glyph)) = self.find_glyph(ch) {
-                if let Some(bitmap) = self.rasterize_glyph(font_idx, glyph) {
+            if let Some((font_idx, glyph)) = self.find_glyph(ch)
+                && let Some(bitmap) = self.rasterize_glyph(font_idx, glyph) {
                     self.char_cache.insert(ch, bitmap);
                 }
-            }
             if !self.char_cache.contains_key(&ch) {
                 // Fallback: space
                 self.char_cache.insert(
@@ -480,11 +478,10 @@ impl GlyphCache {
             }
         }
 
-        if let Some(font_idx) = run_font {
-            if !flush(&mut run, font_idx, &mut out) {
+        if let Some(font_idx) = run_font
+            && !flush(&mut run, font_idx, &mut out) {
                 return None;
             }
-        }
 
         Some(out)
     }

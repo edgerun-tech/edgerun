@@ -1376,8 +1376,8 @@ impl Terminal {
     }
 
     fn should_combine_with_prev(&self, ch: char, prev: Option<&Cell>) -> bool {
-        if let Some(prev_cell) = prev {
-            if let Some(last) = prev_cell.text.chars().last() {
+        if let Some(prev_cell) = prev
+            && let Some(last) = prev_cell.text.chars().last() {
                 if last == '\u{200d}' {
                     return true;
                 }
@@ -1387,7 +1387,6 @@ impl Terminal {
                     return true;
                 }
             }
-        }
 
         // Treat zero-width codepoints, emoji modifiers, and ZWJ sequences as part of the
         // previous grapheme so they render as a single cell.
@@ -2101,7 +2100,7 @@ impl Perform for GridPerformer<'_> {
             return;
         }
         let param_at =
-            |idx: usize| -> Option<u16> { params.iter().nth(idx).and_then(|p| p.get(0)).copied() };
+            |idx: usize| -> Option<u16> { params.iter().nth(idx).and_then(|p| p.first()).copied() };
         self.dcs_state = Some(DcsState {
             data: Vec::new(),
             aspect_ratio: param_at(0),
@@ -2175,7 +2174,7 @@ impl Perform for GridPerformer<'_> {
             params
                 .iter()
                 .next()
-                .and_then(|p| p.get(0).copied())
+                .and_then(|p| p.first().copied())
                 .unwrap_or(default)
         };
 
@@ -2263,14 +2262,14 @@ impl Perform for GridPerformer<'_> {
                     let left = params
                         .iter()
                         .next()
-                        .and_then(|p| p.get(0))
+                        .and_then(|p| p.first())
                         .copied()
                         .unwrap_or(1)
                         .saturating_sub(1) as usize;
                     let right = params
                         .iter()
                         .nth(1)
-                        .and_then(|p| p.get(0))
+                        .and_then(|p| p.first())
                         .copied()
                         .unwrap_or(self.grid.cols as u16) as usize;
                     self.grid
@@ -2291,7 +2290,7 @@ impl Perform for GridPerformer<'_> {
             }
             'q' if intermediates == [b' '] => {
                 let shape = match first(1) {
-                    0 | 1 | 2 => Some(CursorShape::Block),
+                    0..=2 => Some(CursorShape::Block),
                     3 | 4 => Some(CursorShape::Underline),
                     5 | 6 => Some(CursorShape::Bar),
                     _ => None,
@@ -2394,7 +2393,7 @@ impl Perform for GridPerformer<'_> {
                 let col = params
                     .iter()
                     .nth(1)
-                    .and_then(|p| p.get(0).copied())
+                    .and_then(|p| p.first().copied())
                     .unwrap_or(1)
                     .saturating_sub(1) as usize;
                 self.grid.set_cursor(col, row);
@@ -2420,7 +2419,7 @@ impl Perform for GridPerformer<'_> {
                 let bottom = params
                     .iter()
                     .nth(1)
-                    .and_then(|p| p.get(0).copied())
+                    .and_then(|p| p.first().copied())
                     .unwrap_or(self.grid.rows as u16)
                     .saturating_sub(1) as usize;
                 self.grid.set_scroll_region(top, bottom);
@@ -2443,7 +2442,7 @@ impl Perform for GridPerformer<'_> {
             let mut merged: Vec<&[u8]> = Vec::new();
             merged.push(tag);
             merged.extend(extras);
-            merged.extend_from_slice(&params.get(1..).unwrap_or_default());
+            merged.extend_from_slice(params.get(1..).unwrap_or_default());
             let tag = merged[0];
             let decode_title = |idx: usize| -> Option<String> {
                 merged
@@ -2453,7 +2452,7 @@ impl Perform for GridPerformer<'_> {
                     .filter(|s| !s.is_empty())
             };
             if tag == b"0" {
-                if merged.get(1).map(|s| *s) == Some(b"?") {
+                if merged.get(1).copied() == Some(b"?") {
                     if let Some(title) = self.grid.window_title() {
                         let resp = format!("\x1b]0;{}\u{07}", title);
                         write_bytes(&self.writer, resp.as_bytes());
@@ -2464,21 +2463,21 @@ impl Perform for GridPerformer<'_> {
                     self.grid.set_icon_title(title);
                 }
             } else if tag == b"1" {
-                if merged.get(1).map(|s| *s) == Some(b"?") {
+                if merged.get(1).copied() == Some(b"?") {
                     if let Some(title) = self.grid.icon_title() {
                         let resp = format!("\x1b]1;{}\u{07}", title);
                         write_bytes(&self.writer, resp.as_bytes());
                     }
-                } else if merged.get(1).map(|p| *p) == Some(b"2") {
+                } else if merged.get(1).copied() == Some(b"2") {
                     self.grid.kitty_keyboard = true;
-                } else if merged.get(1).map(|p| *p) == Some(b"0") {
+                } else if merged.get(1).copied() == Some(b"0") {
                     self.grid.kitty_keyboard = false;
                 } else {
                     let title = decode_title(1);
                     self.grid.set_icon_title(title);
                 }
             } else if tag == b"2" {
-                if merged.get(1).map(|s| *s) == Some(b"?") {
+                if merged.get(1).copied() == Some(b"?") {
                     if let Some(title) = self.grid.window_title() {
                         let resp = format!("\x1b]2;{}\u{07}", title);
                         write_bytes(&self.writer, resp.as_bytes());
@@ -2502,11 +2501,10 @@ impl Perform for GridPerformer<'_> {
                     }
                 }
             } else if tag == b"7" {
-                if let Some(body) = merged.get(1).copied() {
-                    if let Ok(text) = std::str::from_utf8(body) {
+                if let Some(body) = merged.get(1).copied()
+                    && let Ok(text) = std::str::from_utf8(body) {
                         self.grid.cwd_state = Some(text.to_string());
                     }
-                }
             } else if tag == b"8" || tag.starts_with(b"8;") {
                 // OSC 8 ; params ; URI ST
                 let uri_param = merged.get(2).or_else(|| merged.get(1)).copied();
@@ -2519,25 +2517,21 @@ impl Perform for GridPerformer<'_> {
                 }
             } else if tag == b"133" {
                 if let Some(body) = merged.get(1).copied() {
-                    if let Some(marker) = body.first().copied() {
-                        if let Some(ch) = char::from_u32(marker as u32) {
+                    if let Some(marker) = body.first().copied()
+                        && let Some(ch) = char::from_u32(marker as u32) {
                             self.grid.prompt_mark = Some(ch);
                         }
-                    }
                     // Look for status in subsequent params, e.g., C;0 or D;0.
-                    if body.starts_with(b"C") || body.starts_with(b"D") {
-                        if let Some(status_bytes) = merged.get(2).or_else(|| merged.get(1)) {
-                            if let Ok(text) = std::str::from_utf8(status_bytes) {
-                                if let Ok(code) = text.parse::<i32>() {
+                    if (body.starts_with(b"C") || body.starts_with(b"D"))
+                        && let Some(status_bytes) = merged.get(2).or_else(|| merged.get(1))
+                            && let Ok(text) = std::str::from_utf8(status_bytes)
+                                && let Ok(code) = text.parse::<i32>() {
                                     self.grid.prompt_status = Some(code);
                                 }
-                            }
-                        }
-                    }
                 }
             } else if tag == b"1337" {
                 // Custom term UI helpers: OSC 1337;term;help=...;status=... ST
-                if merged.get(1).map(|p| *p) == Some(b"term") {
+                if merged.get(1).copied() == Some(b"term") {
                     for param in merged.iter().skip(2) {
                         if param.is_empty() {
                             continue;
@@ -2572,11 +2566,10 @@ impl Perform for GridPerformer<'_> {
                         let resp =
                             format!("\u{1b}]10;rgb:{:02x}/{:02x}/{:02x}\u{07}", fg.r, fg.g, fg.b);
                         write_bytes(&self.writer, resp.as_bytes());
-                    } else if let Ok(text) = std::str::from_utf8(body) {
-                        if let Some(fg) = parse_osc_color(text) {
+                    } else if let Ok(text) = std::str::from_utf8(body)
+                        && let Some(fg) = parse_osc_color(text) {
                             self.grid.set_default_fg(fg);
                         }
-                    }
                 }
             } else if tag == b"11" {
                 if let Some(body) = merged.get(1).copied() {
@@ -2585,11 +2578,10 @@ impl Perform for GridPerformer<'_> {
                         let resp =
                             format!("\u{1b}]11;rgb:{:02x}/{:02x}/{:02x}\u{07}", bg.r, bg.g, bg.b);
                         write_bytes(&self.writer, resp.as_bytes());
-                    } else if let Ok(text) = std::str::from_utf8(body) {
-                        if let Some(bg) = parse_osc_color(text) {
+                    } else if let Ok(text) = std::str::from_utf8(body)
+                        && let Some(bg) = parse_osc_color(text) {
                             self.grid.set_default_bg(bg);
                         }
-                    }
                 }
             } else if tag == b"12" {
                 if let Some(body) = merged.get(1).copied() {
@@ -2600,11 +2592,10 @@ impl Perform for GridPerformer<'_> {
                             cur.r, cur.g, cur.b
                         );
                         write_bytes(&self.writer, resp.as_bytes());
-                    } else if let Ok(text) = std::str::from_utf8(body) {
-                        if let Some(cur) = parse_osc_color(text) {
+                    } else if let Ok(text) = std::str::from_utf8(body)
+                        && let Some(cur) = parse_osc_color(text) {
                             self.grid.set_cursor_color(cur);
                         }
-                    }
                 }
             } else if tag == b"110" {
                 self.grid.set_default_fg(DEFAULT_FG);

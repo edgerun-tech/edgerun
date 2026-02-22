@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+pub mod control_plane;
+
 pub const BUNDLE_HASH_LEN: usize = 32;
 pub const OUTPUT_HASH_LEN: usize = 32;
 pub const RUNTIME_ID_LEN: usize = 32;

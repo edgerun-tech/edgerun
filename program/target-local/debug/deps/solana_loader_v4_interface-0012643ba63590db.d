@@ -1,0 +1,9 @@
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/solana_loader_v4_interface-0012643ba63590db.d: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
+
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/libsolana_loader_v4_interface-0012643ba63590db.rlib: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
+
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/libsolana_loader_v4_interface-0012643ba63590db.rmeta: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
+
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs:

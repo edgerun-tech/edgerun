@@ -95,7 +95,8 @@ fn bench_mux_frame_decode_with_payload_touch(c: &mut Criterion) {
             &frame,
             |b, frame| {
                 b.iter(|| {
-                    let (_, id, payload) = decode_frame_header(black_box(frame)).expect("valid frame");
+                    let (_, id, payload) =
+                        decode_frame_header(black_box(frame)).expect("valid frame");
                     let checksum = payload
                         .iter()
                         .fold(id as u64, |acc, byte| acc.wrapping_add(*byte as u64));

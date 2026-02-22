@@ -103,7 +103,7 @@ pub fn draw_tab_bar_cpu(
         let label = format!(" {} ", tab.title);
         let label_width = crate::render::cpu::text_width(glyphs, &label).max(0);
         let rect_w = (label_width + 14).max(48);
-        let rect_x1 = (x + rect_w as i32).min(width as i32);
+        let rect_x1 = (x + rect_w).min(width as i32);
         let bg = if idx == active {
             [72, 92, 110, 200]
         } else {
@@ -124,7 +124,7 @@ pub fn draw_tab_bar_cpu(
         } else {
             FG
         };
-        let text_x = x + ((rect_w as i32 - label_width) / 2).max(0);
+        let text_x = x + ((rect_w - label_width) / 2).max(0);
         draw_text_line_clipped(
             glyphs,
             frame,

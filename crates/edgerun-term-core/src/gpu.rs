@@ -123,8 +123,8 @@ impl GlyphAtlas {
                 return None;
             }
 
-            let w = metrics.width as u32;
-            let h = metrics.height as u32;
+            let w = metrics.width;
+            let h = metrics.height;
             let pad = 1u32;
             let w_padded = w.saturating_add(pad * 2);
             let h_padded = h.saturating_add(pad * 2);
@@ -169,7 +169,7 @@ impl GlyphAtlas {
             self.cursor_x += w_padded + 1;
             self.row_height = self.row_height.max(h_padded);
 
-            let stride = ((w_padded + 63) / 64) * 64; // keep aligned for wgpu row padding
+            let stride = w_padded.div_ceil(64) * 64; // keep aligned for wgpu row padding
             let mut padded = vec![0u8; (stride * h_padded * 4) as usize];
             for row in 0..h as usize {
                 let src_start = row * w as usize * 4;
@@ -941,14 +941,14 @@ impl GpuRenderer {
             device,
             &mut self.rect_overlay_buffer,
             &mut self.rect_overlay_capacity,
-            rects.len() * std::mem::size_of::<RectVertex>(),
+            std::mem::size_of_val(rects),
             "term_rect_overlay_buffer",
         );
         Self::ensure_buffer(
             device,
             &mut self.glyph_overlay_buffer,
             &mut self.glyph_overlay_capacity,
-            glyph_vertices.len() * std::mem::size_of::<GlyphVertex>(),
+            std::mem::size_of_val(glyph_vertices),
             "term_glyph_overlay_buffer",
         );
 
@@ -1386,8 +1386,8 @@ impl GpuRenderer {
             rects_overlay.clear();
             glyph_vertices.clear();
             overlay_glyphs.clear();
-            if let Some(damage) = damage_rects {
-                if !damage.is_empty() {
+            if let Some(damage) = damage_rects
+                && !damage.is_empty() {
                     for &(dx, dy, dw, dh) in damage.iter() {
                         if dw == 0 || dh == 0 {
                             continue;
@@ -1402,7 +1402,6 @@ impl GpuRenderer {
                         );
                     }
                 }
-            }
 
             let mut emit_row = |row: usize, overflowed: &mut bool| {
                 let row_y = origin_y as f32 + row as f32 * cell_h as f32;

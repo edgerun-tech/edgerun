@@ -1,0 +1,14 @@
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/thiserror-77ccd54a98dd4ed6.d: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/ken/src/projects/edgerun/program/target-local/debug/build/thiserror-454d5df47d01f3f0/out/private.rs
+
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/libthiserror-77ccd54a98dd4ed6.rlib: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/ken/src/projects/edgerun/program/target-local/debug/build/thiserror-454d5df47d01f3f0/out/private.rs
+
+/home/ken/src/projects/edgerun/program/target-local/debug/deps/libthiserror-77ccd54a98dd4ed6.rmeta: /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs /home/ken/src/projects/edgerun/program/target-local/debug/build/thiserror-454d5df47d01f3f0/out/private.rs
+
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/lib.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/aserror.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/display.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/var.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-1949cf8c6b5b557f/thiserror-2.0.18/src/private.rs:
+/home/ken/src/projects/edgerun/program/target-local/debug/build/thiserror-454d5df47d01f3f0/out/private.rs:
+
+# env-dep:OUT_DIR=/home/ken/src/projects/edgerun/program/target-local/debug/build/thiserror-454d5df47d01f3f0/out

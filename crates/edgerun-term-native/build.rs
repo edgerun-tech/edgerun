@@ -10,11 +10,12 @@ fn main() {
     let count = git_stdout(["rev-list", "--count", "HEAD"]);
     let sha = git_stdout(["rev-parse", "--short", "HEAD"]);
 
-    if let (Some(count), Some(sha)) = (count, sha) {
-        if !count.is_empty() && !sha.is_empty() {
-            let version = format!("{pkg_version}+{count}.g{sha}");
-            println!("cargo:rustc-env=TERM_BUILD_VERSION={version}");
-        }
+    if let (Some(count), Some(sha)) = (count, sha)
+        && !count.is_empty()
+        && !sha.is_empty()
+    {
+        let version = format!("{pkg_version}+{count}.g{sha}");
+        println!("cargo:rustc-env=TERM_BUILD_VERSION={version}");
     }
 }
 
