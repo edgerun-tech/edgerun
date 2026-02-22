@@ -5,5 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-trait = "0.1"
+bytes = "1"
 edgerun-types = { path = "../edgerun-types" }
+serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true

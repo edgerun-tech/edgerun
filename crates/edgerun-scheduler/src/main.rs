@@ -2010,7 +2010,7 @@ fn init_chain_context() -> Result<ChainContext> {
     let rpc_url = std::env::var("EDGERUN_CHAIN_RPC_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8899".to_string());
     let program_id_str = std::env::var("EDGERUN_CHAIN_PROGRAM_ID")
-        .unwrap_or_else(|_| "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T".to_string());
+        .unwrap_or_else(|_| "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG".to_string());
     let wallet_path = std::env::var("EDGERUN_CHAIN_WALLET")
         .unwrap_or_else(|_| "program/.solana/id.json".to_string());
 
