@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::borrow::Cow;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
@@ -171,7 +173,7 @@ fn build_gpu_overlays(
                 tab.link_hover
                     .and_then(|(c, r)| tab.terminal.display_cell(c, r).hyperlink.clone())
                     .as_deref(),
-                status_label_for_terminal(&tab.terminal),
+                status_label_for_terminal(tab.terminal),
             );
         }
         history_menu.draw_gpu(
@@ -282,11 +284,11 @@ fn render_gpu_frame(
     cursor_blink_on: bool,
 ) -> Result<(), PixelsError> {
     if let Some(tab) = tabs.get(active_tab) {
-        let tab_visuals: Vec<_> = tabs.iter().map(|t| TabVisual { title: &t.title }).collect();
+        let tab_visuals: Vec<_> = tabs.iter().map(|t| TabVisual { title: t.title }).collect();
         let selection = tab.selection;
         let tab_changed = match LAST_ACTIVE_TAB.get_or_init(|| Mutex::new(None)).lock() {
             Ok(mut last) => {
-                let changed = last.map_or(true, |prev| prev != active_tab);
+                let changed = last.is_none_or(|prev| prev != active_tab);
                 *last = Some(active_tab);
                 changed
             }
@@ -301,7 +303,7 @@ fn render_gpu_frame(
             let mut damage_rects: Vec<(u32, u32, u32, u32)> = Vec::new();
             let mut dirty_rows: Vec<usize> = Vec::new();
             {
-                let rows = tab.terminal.rows as usize;
+                let rows = tab.terminal.rows;
                 let mut last = LAST_ROW_VERSIONS
                     .get_or_init(|| Mutex::new(Vec::new()))
                     .lock()
@@ -364,7 +366,7 @@ fn render_gpu_frame(
             }
             let blink_changed = match LAST_BLINK_STATE.get_or_init(|| Mutex::new(None)).lock() {
                 Ok(mut last) => {
-                    let changed = last.map_or(true, |prev| prev != cell_blink_on);
+                    let changed = last.is_none_or(|prev| prev != cell_blink_on);
                     *last = Some(cell_blink_on);
                     changed
                 }
@@ -372,7 +374,7 @@ fn render_gpu_frame(
             };
             if blink_changed {
                 dirty_rows.clear();
-                dirty_rows.extend(0..tab.terminal.rows as usize);
+                dirty_rows.extend(0..tab.terminal.rows);
                 damage_rects.clear();
             }
 
@@ -393,7 +395,7 @@ fn render_gpu_frame(
                     encoder,
                     base_view,
                     context,
-                    &tab.terminal,
+                    tab.terminal,
                     tab.terminal.default_bg(),
                     tab.terminal.cursor_color(),
                     glyphs,
@@ -630,49 +632,47 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
             .unwrap_or(false)
     });
 
-    if log_cursor_cells {
-        if let Some(tab) = tabs.get(active_tab) {
-            let c = tab.terminal.cursor_col;
-            let r = tab.terminal.cursor_row;
-            let cell = tab.terminal.display_cell(c, r);
-            let snapshot = CellSnapshot {
-                col: c,
-                row: r,
-                view_offset: tab.terminal.view_offset,
-                text: cell.text.clone(),
-                wide: cell.wide,
-                cont: cell.wide_continuation,
-                blank: cell.is_blank(),
-            };
-            let last = LAST_CELL_LOG
-                .get_or_init(|| Mutex::new(None))
-                .lock()
-                .expect("cell log mutex poisoned")
-                .clone();
-            if last.as_ref() != Some(&snapshot) {
-                info!(
-                    "debug cell log: cursor ({}, {}) view_offset={} text='{}' wide={} cont={} blank={} fg=({}, {}, {}, {}) bg=({}, {}, {}, {})",
-                    c,
-                    r,
-                    tab.terminal.view_offset,
-                    cell.text.escape_default(),
-                    cell.wide,
-                    cell.wide_continuation,
-                    cell.is_blank(),
-                    cell.fg.r,
-                    cell.fg.g,
-                    cell.fg.b,
-                    cell.fg.a,
-                    cell.bg.r,
-                    cell.bg.g,
-                    cell.bg.b,
-                    cell.bg.a,
-                );
-                let row_str = row_snapshot(&tab.terminal, r, tab.terminal.cols);
-                info!("debug row {}: {}", r, row_str);
-                if let Ok(mut guard) = LAST_CELL_LOG.get_or_init(|| Mutex::new(None)).lock() {
-                    *guard = Some(snapshot);
-                }
+    if log_cursor_cells && let Some(tab) = tabs.get(active_tab) {
+        let c = tab.terminal.cursor_col;
+        let r = tab.terminal.cursor_row;
+        let cell = tab.terminal.display_cell(c, r);
+        let snapshot = CellSnapshot {
+            col: c,
+            row: r,
+            view_offset: tab.terminal.view_offset,
+            text: cell.text.clone(),
+            wide: cell.wide,
+            cont: cell.wide_continuation,
+            blank: cell.is_blank(),
+        };
+        let last = LAST_CELL_LOG
+            .get_or_init(|| Mutex::new(None))
+            .lock()
+            .expect("cell log mutex poisoned")
+            .clone();
+        if last.as_ref() != Some(&snapshot) {
+            info!(
+                "debug cell log: cursor ({}, {}) view_offset={} text='{}' wide={} cont={} blank={} fg=({}, {}, {}, {}) bg=({}, {}, {}, {})",
+                c,
+                r,
+                tab.terminal.view_offset,
+                cell.text.escape_default(),
+                cell.wide,
+                cell.wide_continuation,
+                cell.is_blank(),
+                cell.fg.r,
+                cell.fg.g,
+                cell.fg.b,
+                cell.fg.a,
+                cell.bg.r,
+                cell.bg.g,
+                cell.bg.b,
+                cell.bg.a,
+            );
+            let row_str = row_snapshot(tab.terminal, r, tab.terminal.cols);
+            info!("debug row {}: {}", r, row_str);
+            if let Ok(mut guard) = LAST_CELL_LOG.get_or_init(|| Mutex::new(None)).lock() {
+                *guard = Some(snapshot);
             }
         }
     }
@@ -809,47 +809,46 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
             debug_overlay.render_mode(),
             DebugRenderMode::Auto | DebugRenderMode::CpuOnly
         );
-    if can_cursor_only {
-        if let Some(tab) = tabs.get(active_tab) {
-            if let Ok(cached) = LAST_CPU_FRAME.get_or_init(|| Mutex::new(None)).lock() {
-                let valid = cached
-                    .as_ref()
-                    .map(|frame| frame.width == frame_width && frame.height == frame_height)
-                    .unwrap_or(false);
-                if valid {
-                    let buffer = pixels.frame_mut();
-                    if let Some(frame) = cached.as_ref() {
-                        buffer.copy_from_slice(&frame.frame);
-                    }
-                    if render_cursor {
-                        let selection = tab.selection;
-                        draw_cursor_overlay(
-                            &tab.terminal,
-                            glyphs,
-                            buffer,
-                            frame_width,
-                            frame_height,
-                            cell_w,
-                            cell_h,
-                            layout.content_x,
-                            layout.content_y,
-                            selection,
-                            cursor_blink_on,
-                            cell_blink_on,
-                        );
-                    }
-                    if let Err(err) = pixels.render() {
-                        if !handle_render_error(err, frame_width, frame_height, pixels, None) {
-                            return RenderOutcome {
-                                keep_running: false,
-                                needs_redraw,
-                            };
-                        }
-                        needs_redraw = true;
-                    } else {
-                        renderer_used = Some(DebugRendererUsed::Cpu);
-                    }
+    if can_cursor_only
+        && let Some(tab) = tabs.get(active_tab)
+        && let Ok(cached) = LAST_CPU_FRAME.get_or_init(|| Mutex::new(None)).lock()
+    {
+        let valid = cached
+            .as_ref()
+            .map(|frame| frame.width == frame_width && frame.height == frame_height)
+            .unwrap_or(false);
+        if valid {
+            let buffer = pixels.frame_mut();
+            if let Some(frame) = cached.as_ref() {
+                buffer.copy_from_slice(&frame.frame);
+            }
+            if render_cursor {
+                let selection = tab.selection;
+                draw_cursor_overlay(
+                    tab.terminal,
+                    glyphs,
+                    buffer,
+                    frame_width,
+                    frame_height,
+                    cell_w,
+                    cell_h,
+                    layout.content_x,
+                    layout.content_y,
+                    selection,
+                    cursor_blink_on,
+                    cell_blink_on,
+                );
+            }
+            if let Err(err) = pixels.render() {
+                if !handle_render_error(err, frame_width, frame_height, pixels, None) {
+                    return RenderOutcome {
+                        keep_running: false,
+                        needs_redraw,
+                    };
                 }
+                needs_redraw = true;
+            } else {
+                renderer_used = Some(DebugRendererUsed::Cpu);
             }
         }
     }
@@ -895,23 +894,21 @@ pub fn render_frame(inputs: RenderInputs<'_, '_>) -> RenderOutcome {
                     frame: pixels.frame().to_vec(),
                 });
             }
-            if render_cursor {
-                if let Some(tab) = tabs.get(active_tab) {
-                    draw_cursor_overlay(
-                        &tab.terminal,
-                        glyphs,
-                        pixels.frame_mut(),
-                        frame_width,
-                        frame_height,
-                        cell_w,
-                        cell_h,
-                        layout.content_x,
-                        layout.content_y,
-                        tab.selection,
-                        cursor_blink_on,
-                        cell_blink_on,
-                    );
-                }
+            if render_cursor && let Some(tab) = tabs.get(active_tab) {
+                draw_cursor_overlay(
+                    tab.terminal,
+                    glyphs,
+                    pixels.frame_mut(),
+                    frame_width,
+                    frame_height,
+                    cell_w,
+                    cell_h,
+                    layout.content_x,
+                    layout.content_y,
+                    tab.selection,
+                    cursor_blink_on,
+                    cell_blink_on,
+                );
             }
         }
         if overlay_active {
@@ -1030,7 +1027,7 @@ fn draw_scene(
         .map(|t| t.terminal.default_bg())
         .unwrap_or(term_core::terminal::DEFAULT_BG);
     draw_background(frame, frame_width, frame_height, start_time, bg);
-    let tab_visuals: Vec<_> = tabs.iter().map(|t| TabVisual { title: &t.title }).collect();
+    let tab_visuals: Vec<_> = tabs.iter().map(|t| TabVisual { title: t.title }).collect();
     draw_tab_bar_cpu(
         &tab_visuals,
         active,
@@ -1061,9 +1058,9 @@ fn draw_scene(
             tab.link_hover
                 .and_then(|(c, r)| tab.terminal.display_cell_ref(c, r).hyperlink.as_deref())
         });
-        let status_label = status_label_for_terminal(&tab.terminal);
+        let status_label = status_label_for_terminal(tab.terminal);
         draw_grid(
-            &tab.terminal,
+            tab.terminal,
             glyphs,
             frame,
             frame_width,
@@ -1079,7 +1076,7 @@ fn draw_scene(
             tab.link_ranges,
         );
         draw_ghost_suggestion(
-            &tab.terminal,
+            tab.terminal,
             glyphs,
             frame,
             frame_width,
@@ -1091,7 +1088,7 @@ fn draw_scene(
         );
         if draw_cursor {
             draw_cursor_overlay(
-                &tab.terminal,
+                tab.terminal,
                 glyphs,
                 frame,
                 frame_width,
@@ -1125,7 +1122,7 @@ fn draw_scene(
                     cell_h,
                     border_thickness,
                     help_text.as_ref(),
-                    link_label.as_deref(),
+                    link_label,
                     status_label,
                 );
             }
@@ -1139,11 +1136,9 @@ fn draw_scene(
         draw_settings_panel_cpu(settings, glyphs, frame, frame_width, frame_height);
         draw_log_viewer_cpu(log_viewer, glyphs, frame, frame_width, frame_height);
     }
-    if show_fps_notice {
-        if let Some(text) = notice_text {
-            let y_offset = overlay_offset_y(glyphs, settings.show_fps);
-            draw_notice_overlay_cpu(glyphs, frame, frame_width, frame_height, text, y_offset);
-        }
+    if show_fps_notice && let Some(text) = notice_text {
+        let y_offset = overlay_offset_y(glyphs, settings.show_fps);
+        draw_notice_overlay_cpu(glyphs, frame, frame_width, frame_height, text, y_offset);
     }
 
     draw_border_cpu(
@@ -1163,7 +1158,7 @@ fn text_width_px(glyphs: &mut GlyphCache, text: &str) -> i32 {
 }
 
 fn overlay_box_height(glyphs: &GlyphCache) -> u32 {
-    glyphs.cell_height() as u32 + 12
+    glyphs.cell_height() + 12
 }
 
 fn overlay_offset_y(glyphs: &GlyphCache, show_fps: bool) -> u32 {
@@ -1186,7 +1181,7 @@ fn draw_fps_in_tab_bar_cpu(
     }
     let text = format!("FPS {:.1}", fps);
     let text_w = text_width_px(glyphs, &text).max(1) as u32;
-    let icon_size = (glyphs.cell_height().saturating_sub(4)).clamp(6, 12) as u32;
+    let icon_size = (glyphs.cell_height().saturating_sub(4)).clamp(6, 12);
     let icon_gap = 6u32;
     let total_w = text_w + icon_size + icon_gap;
     let x0 = ((frame_width.saturating_sub(total_w)) / 2) as i32;

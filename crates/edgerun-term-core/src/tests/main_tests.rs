@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use vte::Parser as VteParser;
 
+type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
+type SharedBytes = Arc<Mutex<Vec<u8>>>;
+
 #[derive(Clone, Default)]
 struct LockedBuffer(Arc<Mutex<Vec<u8>>>);
 
@@ -26,8 +29,8 @@ impl io::Write for LockedBuffer {
     }
 }
 
-fn capture_writer() -> (Arc<Mutex<Vec<u8>>>, Arc<Mutex<Box<dyn Write + Send>>>) {
-    let buf = Arc::new(Mutex::new(Vec::new()));
+fn capture_writer() -> (SharedBytes, SharedWriter) {
+    let buf: SharedBytes = Arc::new(Mutex::new(Vec::new()));
     let writer: Box<dyn Write + Send> = Box::new(LockedBuffer(buf.clone()));
     (buf, Arc::new(Mutex::new(writer)))
 }
@@ -504,8 +507,7 @@ fn shaped_text_offsets_are_applied() {
 
     // Verify baseline row has non-zero alpha to ensure glyphs respect offsets.
     let baseline_row = 10 + glyphs.baseline() as usize;
-    let row_range = (baseline_row * width * 4)
-        ..((baseline_row + 1) * width * 4).min(frame.len());
+    let row_range = (baseline_row * width * 4)..((baseline_row + 1) * width * 4).min(frame.len());
     let has_pixels = frame[row_range].chunks_exact(4).any(|px| px[3] > 0);
     assert!(
         has_pixels,

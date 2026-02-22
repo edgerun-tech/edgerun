@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use pixels::wgpu::Queue;
 use term_core::gpu::GpuRenderer;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
@@ -89,33 +91,33 @@ pub fn list_panel_cpu(
     let item_h = layout.item_height;
     for (idx, (label, enabled)) in items.iter().enumerate() {
         let row_y = y0 + padding + idx as i32 * item_h;
-        if let Some(sel) = selected {
-            if sel == idx {
-                fill_rect(
-                    frame,
-                    width,
-                    height,
-                    x0 + 2,
-                    row_y - 2,
-                    x1 - 2,
-                    row_y + item_h - 2,
-                    [90, 140, 255, 64],
-                );
-            }
+        if let Some(sel) = selected
+            && sel == idx
+        {
+            fill_rect(
+                frame,
+                width,
+                height,
+                x0 + 2,
+                row_y - 2,
+                x1 - 2,
+                row_y + item_h - 2,
+                [90, 140, 255, 64],
+            );
         }
-        if let Some(hov) = hovered {
-            if hov == idx {
-                fill_rect(
-                    frame,
-                    width,
-                    height,
-                    x0 + 2,
-                    row_y - 2,
-                    x1 - 2,
-                    row_y + item_h - 2,
-                    [80, 120, 200, 96],
-                );
-            }
+        if let Some(hov) = hovered
+            && hov == idx
+        {
+            fill_rect(
+                frame,
+                width,
+                height,
+                x0 + 2,
+                row_y - 2,
+                x1 - 2,
+                row_y + item_h - 2,
+                [80, 120, 200, 96],
+            );
         }
         let color = if *enabled {
             [235, 235, 235, 255]
@@ -156,39 +158,39 @@ pub fn list_panel_gpu(
     let item_h = layout.item_height as f32;
     for (idx, (label, enabled)) in items.iter().enumerate() {
         let row_y = y0 as f32 + padding + idx as f32 * item_h;
-        if let Some(sel) = selected {
-            if sel == idx {
-                GpuRenderer::push_rect(
-                    rects,
-                    x0 as f32 + 2.0,
-                    row_y - 2.0,
-                    x1 as f32 - 2.0,
-                    row_y + item_h - 2.0,
-                    Rgba {
-                        r: 90,
-                        g: 140,
-                        b: 255,
-                        a: 64,
-                    },
-                );
-            }
+        if let Some(sel) = selected
+            && sel == idx
+        {
+            GpuRenderer::push_rect(
+                rects,
+                x0 as f32 + 2.0,
+                row_y - 2.0,
+                x1 as f32 - 2.0,
+                row_y + item_h - 2.0,
+                Rgba {
+                    r: 90,
+                    g: 140,
+                    b: 255,
+                    a: 64,
+                },
+            );
         }
-        if let Some(hov) = hovered {
-            if hov == idx {
-                GpuRenderer::push_rect(
-                    rects,
-                    x0 as f32 + 2.0,
-                    row_y - 2.0,
-                    x1 as f32 - 2.0,
-                    row_y + item_h - 2.0,
-                    Rgba {
-                        r: 80,
-                        g: 120,
-                        b: 200,
-                        a: 96,
-                    },
-                );
-            }
+        if let Some(hov) = hovered
+            && hov == idx
+        {
+            GpuRenderer::push_rect(
+                rects,
+                x0 as f32 + 2.0,
+                row_y - 2.0,
+                x1 as f32 - 2.0,
+                row_y + item_h - 2.0,
+                Rgba {
+                    r: 80,
+                    g: 120,
+                    b: 200,
+                    a: 96,
+                },
+            );
         }
         let clipped = truncate_label(label, 96);
         let color = if *enabled {

@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::time::Instant;
 
 use crate::debug::{DebugOverlay, DebugRendererUsed};
@@ -171,7 +173,7 @@ pub fn draw_debug_panel(
     let panel_w = (width as i32 * 3 / 4).max(240);
     let max_y = height.saturating_sub(10) as i32;
     let palette_h = (cell_h as i32).max(line_h);
-    let panel_h = (line_h * lines.len() as i32 + palette_h + padding as i32 * 2 + 6).min(max_y);
+    let panel_h = (line_h * lines.len() as i32 + palette_h + padding * 2 + 6).min(max_y);
     let (x0, y0, x1, y1) = center_panel_rect(width, height, panel_w, panel_h, padding);
 
     // Opaque background so preview glyphs are not ghosted beneath the panel.
@@ -320,16 +322,7 @@ pub fn build_debug_overlay_gpu(
         if y + line_h > y1 {
             break;
         }
-        GpuRenderer::push_text_line(
-            glyphs,
-            atlas,
-            glyphs_out,
-            &line,
-            x0 + 12.0,
-            y,
-            *color,
-            queue,
-        );
+        GpuRenderer::push_text_line(glyphs, atlas, glyphs_out, line, x0 + 12.0, y, *color, queue);
         y += line_h;
     }
     if y + palette_h + 4.0 < y1 {

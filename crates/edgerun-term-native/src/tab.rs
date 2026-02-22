@@ -60,14 +60,14 @@ pub fn refresh_cwd_for_tabs(tabs: &mut [Tab], log: &mut Vec<CwdHistoryEntry>) {
     #[cfg(unix)]
     {
         for (idx, tab) in tabs.iter_mut().enumerate() {
-            if let Some(path) = tab_proc_cwd(tab) {
-                if tab.last_cwd.as_ref() != Some(&path) {
-                    tab.last_cwd = Some(path.clone());
-                    log.push(CwdHistoryEntry { tab: idx, path });
-                    if log.len() > 256 {
-                        let drop = log.len().saturating_sub(256);
-                        log.drain(0..drop);
-                    }
+            if let Some(path) = tab_proc_cwd(tab)
+                && tab.last_cwd.as_ref() != Some(&path)
+            {
+                tab.last_cwd = Some(path.clone());
+                log.push(CwdHistoryEntry { tab: idx, path });
+                if log.len() > 256 {
+                    let drop = log.len().saturating_sub(256);
+                    log.drain(0..drop);
                 }
             }
         }
@@ -80,7 +80,7 @@ pub fn tab_proc_cwd(tab: &Tab) -> Option<PathBuf> {
         let TabKind::Shell(shell) = &tab.kind;
         let pid = shell.child.as_ref()?.process_id()?;
         let path = PathBuf::from(format!("/proc/{pid}/cwd"));
-        return std::fs::read_link(path).ok();
+        std::fs::read_link(path).ok()
     }
     #[cfg(not(unix))]
     {
@@ -114,6 +114,7 @@ pub fn refresh_tab_titles(tabs: &mut [Tab]) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn spawn_shell_tab(
     cols: u16,
     rows: u16,

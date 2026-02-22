@@ -8,6 +8,7 @@ pub struct LayoutMetrics {
     pub rows: usize,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn compute_layout(
     width: u32,
     height: u32,

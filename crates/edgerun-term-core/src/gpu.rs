@@ -329,7 +329,7 @@ impl GpuRenderer {
         let device = &context.device;
         // Default to a larger atlas to reduce eviction/clearing under heavy glyph variety.
         let allow_growth = Self::env_flag("TERM_ATLAS_GROW", true);
-        let max_limit = device.limits().max_texture_dimension_2d.max(512).min(1024);
+        let max_limit = device.limits().max_texture_dimension_2d.clamp(512, 1024);
         let atlas_size = env::var("TERM_ATLAS_SIZE")
             .ok()
             .and_then(|v| v.parse::<u32>().ok())
@@ -1181,6 +1181,7 @@ impl GpuRenderer {
         ]);
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn push_text_line(
         glyphs: &mut GlyphCache,
         atlas: &mut GlyphAtlas,
@@ -1214,6 +1215,7 @@ impl GpuRenderer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_glyph(
         glyphs: &mut GlyphCache,
         atlas: &mut GlyphAtlas,
@@ -1387,21 +1389,22 @@ impl GpuRenderer {
             glyph_vertices.clear();
             overlay_glyphs.clear();
             if let Some(damage) = damage_rects
-                && !damage.is_empty() {
-                    for &(dx, dy, dw, dh) in damage.iter() {
-                        if dw == 0 || dh == 0 {
-                            continue;
-                        }
-                        Self::push_rect(
-                            &mut rects_bg,
-                            dx as f32,
-                            dy as f32,
-                            (dx + dw) as f32,
-                            (dy + dh) as f32,
-                            clear_bg,
-                        );
+                && !damage.is_empty()
+            {
+                for &(dx, dy, dw, dh) in damage.iter() {
+                    if dw == 0 || dh == 0 {
+                        continue;
                     }
+                    Self::push_rect(
+                        &mut rects_bg,
+                        dx as f32,
+                        dy as f32,
+                        (dx + dw) as f32,
+                        (dy + dh) as f32,
+                        clear_bg,
+                    );
                 }
+            }
 
             let mut emit_row = |row: usize, overflowed: &mut bool| {
                 let row_y = origin_y as f32 + row as f32 * cell_h as f32;
@@ -1413,9 +1416,8 @@ impl GpuRenderer {
                         && cell.bg.g == base_bg.g
                         && cell.bg.b == base_bg.b
                         && cell.bg.a == base_bg.a
+                        || cell.bg.a == 0
                     {
-                        None
-                    } else if cell.bg.a == 0 {
                         None
                     } else {
                         Some(cell.bg)
@@ -1764,7 +1766,7 @@ impl GpuRenderer {
                 if !cursor_selected && term.cursor_visible() && cursor_blink_on {
                     let (cursor_w, cursor_h, cursor_y, cursor_x) = match term.cursor_shape() {
                         crate::terminal::CursorShape::Underline => {
-                            let cursor_thickness = cell_h.max(1).min(2);
+                            let cursor_thickness = cell_h.clamp(1, 2);
                             let base_y = origin_y as i32 + cursor_row as i32 * cell_h as i32;
                             let cursor_y = (base_y + cell_h as i32 - cursor_thickness as i32)
                                 .clamp(0, frame_height.saturating_sub(1) as i32)
@@ -2221,7 +2223,7 @@ impl GpuRenderer {
                     .min(frame_width.saturating_sub(1));
                 let (cursor_w, cursor_h, cursor_y, cursor_x) = match term.cursor_shape() {
                     crate::terminal::CursorShape::Underline => {
-                        let cursor_thickness = cell_h.max(1).min(2);
+                        let cursor_thickness = cell_h.clamp(1, 2);
                         let base_y = origin_y as i32 + cursor_row as i32 * cell_h as i32;
                         let cursor_y = (base_y + cell_h as i32 - cursor_thickness as i32)
                             .clamp(0, frame_height.saturating_sub(1) as i32)

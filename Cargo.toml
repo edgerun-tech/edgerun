@@ -3,6 +3,7 @@ members = [
   "crates/edgerun-observability",
   "crates/edgerun-cli",
   "crates/edgerun-types",
+  "crates/edgerun-transport-core",
   "crates/edgerun-crypto",
   "crates/edgerun-runtime",
   "crates/edgerun-runtime-web",

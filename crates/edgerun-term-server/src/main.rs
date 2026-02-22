@@ -17,6 +17,7 @@ use axum::{
 use edgerun_hwvault_primitives::hardware::{
     DeviceSigner, HardwareSecurityMode, load_or_create_device_signer, random_token_b64url,
 };
+use edgerun_transport_core::route_register_signing_message;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc};
@@ -784,18 +785,4 @@ fn routable_addr(addr: SocketAddr) -> String {
     } else {
         addr.to_string()
     }
-}
-
-fn route_register_signing_message(
-    owner_pubkey: &str,
-    device_id: &str,
-    reachable_urls: &[String],
-    challenge_nonce: &str,
-    signed_at_unix_s: u64,
-) -> String {
-    let urls = reachable_urls.join(",");
-    format!(
-        "edgerun:route_register:v1|{}|{}|{}|{}|{}",
-        owner_pubkey, device_id, urls, challenge_nonce, signed_at_unix_s
-    )
 }

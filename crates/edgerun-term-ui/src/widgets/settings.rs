@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::debug::DebugRenderMode;
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
@@ -22,6 +24,12 @@ pub struct SettingsPanel {
     pub log_level: String,
     pub system_fonts: Vec<SystemFont>,
     pub selected_font: Option<usize>,
+}
+
+impl Default for SettingsPanel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SettingsPanel {
@@ -130,15 +138,13 @@ fn discover_system_fonts() -> Vec<SystemFont> {
                 continue;
             };
             let ext = ext.to_ascii_lowercase();
-            if ext == "ttf" || ext == "otf" || ext == "ttc" {
-                if seen.insert(path.clone()) {
-                    let name = path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("Unknown")
-                        .to_string();
-                    fonts.push(SystemFont { name, path });
-                }
+            if (ext == "ttf" || ext == "otf" || ext == "ttc") && seen.insert(path.clone()) {
+                let name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+                fonts.push(SystemFont { name, path });
             }
         }
     }
@@ -264,7 +270,7 @@ pub fn draw_settings_panel_cpu(
                 x0 + 8,
                 y - 2,
                 x1 - 8,
-                y - 2 + line_h as i32 + 4,
+                y - 2 + line_h + 4,
                 rgba_bytes(OVERLAY_PANEL_INNER),
             );
         }

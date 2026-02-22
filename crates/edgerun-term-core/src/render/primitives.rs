@@ -20,6 +20,7 @@ pub fn push_overlay_rect(rects: &mut Vec<crate::gpu::RectVertex>, rect: OverlayR
 }
 
 /// CPU-side rectangle fill helper.
+#[allow(clippy::too_many_arguments)]
 pub fn fill_rect(
     frame: &mut [u8],
     width: u32,
@@ -94,6 +95,7 @@ pub fn draw_background(frame: &mut [u8], width: u32, height: u32, _start_time: I
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_text_line(
     glyphs: &mut GlyphCache,
     frame: &mut [u8],
@@ -165,6 +167,7 @@ pub fn draw_text_line(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_text_line_clipped(
     glyphs: &mut GlyphCache,
     frame: &mut [u8],
@@ -228,6 +231,7 @@ pub fn draw_text_line_clipped(
     draw_text_line(glyphs, frame, width, height, x, y, &acc, color);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_shaped_run(
     glyphs: &mut GlyphCache,
     frame: &mut [u8],

@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::widgets::{PanelLayout, clamp_panel_to_view, list_panel_cpu, list_panel_gpu};
 use pixels::wgpu;
 use term_core::gpu::{GlyphAtlas, GlyphVertex, RectVertex};
@@ -24,6 +26,12 @@ pub struct ContextMenu {
     pub anchor: (f64, f64),
     pub item_height: i32,
     pub padding: i32,
+}
+
+impl Default for ContextMenu {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContextMenu {

@@ -210,9 +210,14 @@ pub struct Terminal {
     dirty_epoch: u64,
 }
 
+type ClipboardHook = Arc<dyn Fn(&str) + Send + Sync>;
+#[cfg(test)]
+type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
+#[cfg(test)]
+type SharedBytes = Arc<Mutex<Vec<u8>>>;
+
 #[allow(dead_code)]
-static CLIPBOARD_HOOK: Lazy<Mutex<Option<Arc<dyn Fn(&str) + Send + Sync>>>> =
-    Lazy::new(|| Mutex::new(None));
+static CLIPBOARD_HOOK: Lazy<Mutex<Option<ClipboardHook>>> = Lazy::new(|| Mutex::new(None));
 static DEFAULT_PALETTE: Lazy<[Rgba; 256]> = Lazy::new(default_palette);
 
 pub struct AltState {
@@ -360,22 +365,22 @@ fn default_palette() -> [Rgba; 256] {
             a: 255,
         };
     }
-    for idx in 16..232 {
+    for (idx, slot) in p.iter_mut().enumerate().take(232).skip(16) {
         let i = idx - 16;
         let r = (i / 36) % 6;
         let g = (i / 6) % 6;
         let b = i % 6;
         let to_u8 = |v: u16| if v == 0 { 0 } else { 55 + v * 40 } as u8;
-        p[idx] = Rgba {
+        *slot = Rgba {
             r: to_u8(r as u16),
             g: to_u8(g as u16),
             b: to_u8(b as u16),
             a: 255,
         };
     }
-    for idx in 232..256 {
+    for (idx, slot) in p.iter_mut().enumerate().skip(232) {
         let shade = 8u16.saturating_add((idx as u16 - 232) * 10).min(255) as u8;
-        p[idx] = Rgba {
+        *slot = Rgba {
             r: shade,
             g: shade,
             b: shade,
@@ -1377,16 +1382,16 @@ impl Terminal {
 
     fn should_combine_with_prev(&self, ch: char, prev: Option<&Cell>) -> bool {
         if let Some(prev_cell) = prev
-            && let Some(last) = prev_cell.text.chars().last() {
-                if last == '\u{200d}' {
-                    return true;
-                }
-                if matches!(last, '\u{1f1e6}'..='\u{1f1ff}')
-                    && matches!(ch, '\u{1f1e6}'..='\u{1f1ff}')
-                {
-                    return true;
-                }
+            && let Some(last) = prev_cell.text.chars().last()
+        {
+            if last == '\u{200d}' {
+                return true;
             }
+            if matches!(last, '\u{1f1e6}'..='\u{1f1ff}') && matches!(ch, '\u{1f1e6}'..='\u{1f1ff}')
+            {
+                return true;
+            }
+        }
 
         // Treat zero-width codepoints, emoji modifiers, and ZWJ sequences as part of the
         // previous grapheme so they render as a single cell.
@@ -1481,7 +1486,7 @@ impl Terminal {
             return;
         }
 
-        let width = UnicodeWidthChar::width(ch).unwrap_or(1).max(1).min(2);
+        let width = UnicodeWidthChar::width(ch).unwrap_or(1).clamp(1, 2);
 
         let line_limit = self
             .right_margin
@@ -2502,9 +2507,10 @@ impl Perform for GridPerformer<'_> {
                 }
             } else if tag == b"7" {
                 if let Some(body) = merged.get(1).copied()
-                    && let Ok(text) = std::str::from_utf8(body) {
-                        self.grid.cwd_state = Some(text.to_string());
-                    }
+                    && let Ok(text) = std::str::from_utf8(body)
+                {
+                    self.grid.cwd_state = Some(text.to_string());
+                }
             } else if tag == b"8" || tag.starts_with(b"8;") {
                 // OSC 8 ; params ; URI ST
                 let uri_param = merged.get(2).or_else(|| merged.get(1)).copied();
@@ -2518,16 +2524,18 @@ impl Perform for GridPerformer<'_> {
             } else if tag == b"133" {
                 if let Some(body) = merged.get(1).copied() {
                     if let Some(marker) = body.first().copied()
-                        && let Some(ch) = char::from_u32(marker as u32) {
-                            self.grid.prompt_mark = Some(ch);
-                        }
+                        && let Some(ch) = char::from_u32(marker as u32)
+                    {
+                        self.grid.prompt_mark = Some(ch);
+                    }
                     // Look for status in subsequent params, e.g., C;0 or D;0.
                     if (body.starts_with(b"C") || body.starts_with(b"D"))
                         && let Some(status_bytes) = merged.get(2).or_else(|| merged.get(1))
-                            && let Ok(text) = std::str::from_utf8(status_bytes)
-                                && let Ok(code) = text.parse::<i32>() {
-                                    self.grid.prompt_status = Some(code);
-                                }
+                        && let Ok(text) = std::str::from_utf8(status_bytes)
+                        && let Ok(code) = text.parse::<i32>()
+                    {
+                        self.grid.prompt_status = Some(code);
+                    }
                 }
             } else if tag == b"1337" {
                 // Custom term UI helpers: OSC 1337;term;help=...;status=... ST
@@ -2567,9 +2575,10 @@ impl Perform for GridPerformer<'_> {
                             format!("\u{1b}]10;rgb:{:02x}/{:02x}/{:02x}\u{07}", fg.r, fg.g, fg.b);
                         write_bytes(&self.writer, resp.as_bytes());
                     } else if let Ok(text) = std::str::from_utf8(body)
-                        && let Some(fg) = parse_osc_color(text) {
-                            self.grid.set_default_fg(fg);
-                        }
+                        && let Some(fg) = parse_osc_color(text)
+                    {
+                        self.grid.set_default_fg(fg);
+                    }
                 }
             } else if tag == b"11" {
                 if let Some(body) = merged.get(1).copied() {
@@ -2579,9 +2588,10 @@ impl Perform for GridPerformer<'_> {
                             format!("\u{1b}]11;rgb:{:02x}/{:02x}/{:02x}\u{07}", bg.r, bg.g, bg.b);
                         write_bytes(&self.writer, resp.as_bytes());
                     } else if let Ok(text) = std::str::from_utf8(body)
-                        && let Some(bg) = parse_osc_color(text) {
-                            self.grid.set_default_bg(bg);
-                        }
+                        && let Some(bg) = parse_osc_color(text)
+                    {
+                        self.grid.set_default_bg(bg);
+                    }
                 }
             } else if tag == b"12" {
                 if let Some(body) = merged.get(1).copied() {
@@ -2593,9 +2603,10 @@ impl Perform for GridPerformer<'_> {
                         );
                         write_bytes(&self.writer, resp.as_bytes());
                     } else if let Ok(text) = std::str::from_utf8(body)
-                        && let Some(cur) = parse_osc_color(text) {
-                            self.grid.set_cursor_color(cur);
-                        }
+                        && let Some(cur) = parse_osc_color(text)
+                    {
+                        self.grid.set_cursor_color(cur);
+                    }
                 }
             } else if tag == b"110" {
                 self.grid.set_default_fg(DEFAULT_FG);
@@ -2709,8 +2720,8 @@ mod tests {
         }
     }
 
-    fn capture_writer() -> (Arc<Mutex<Vec<u8>>>, Arc<Mutex<Box<dyn Write + Send>>>) {
-        let buf = Arc::new(Mutex::new(Vec::new()));
+    fn capture_writer() -> (SharedBytes, SharedWriter) {
+        let buf: SharedBytes = Arc::new(Mutex::new(Vec::new()));
         let writer: Box<dyn Write + Send> = Box::new(LockedBuf(buf.clone()));
         (buf, Arc::new(Mutex::new(writer)))
     }

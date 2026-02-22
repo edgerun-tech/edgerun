@@ -1974,6 +1974,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-hwvault-primitives",
  "edgerun-observability",
+ "edgerun-transport-core",
  "edgerun-types",
  "fs2",
  "hex",
@@ -2070,6 +2071,7 @@ dependencies = [
  "criterion",
  "edgerun-hwvault-primitives",
  "edgerun-observability",
+ "edgerun-transport-core",
  "portable-pty",
  "reqwest",
  "serde",
@@ -2106,6 +2108,14 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu 27.0.1",
+]
+
+[[package]]
+name = "edgerun-transport-core"
+version = "0.1.0"
+dependencies = [
+ "edgerun-types",
+ "serde_json",
 ]
 
 [[package]]
@@ -2153,6 +2163,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-observability",
  "edgerun-runtime",
+ "edgerun-transport-core",
  "edgerun-types",
  "hex",
  "hmac 0.12.1",

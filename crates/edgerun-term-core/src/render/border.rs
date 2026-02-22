@@ -2,6 +2,7 @@ use std::time::Instant;
 
 use crate::terminal::Rgba;
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_border_cpu(
     frame: &mut [u8],
     width: u32,
@@ -82,6 +83,7 @@ pub fn draw_border_cpu(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 pub fn build_border_gpu(
     rects: &mut Vec<crate::gpu::RectVertex>,
     width: u32,

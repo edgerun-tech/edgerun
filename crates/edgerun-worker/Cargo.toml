@@ -24,3 +24,4 @@ edgerun-runtime = { path = "../../crates/edgerun-runtime" }
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }
 edgerun-types = { path = "../../crates/edgerun-types" }
+edgerun-transport-core = { path = "../../crates/edgerun-transport-core" }

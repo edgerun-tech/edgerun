@@ -12,11 +12,11 @@ pub fn recent_dirs_for_tab(
     let mut dirs = Vec::new();
     let mut seen: HashSet<PathBuf> = HashSet::new();
 
-    if let Some(tab) = tabs.get(active) {
-        if let Some(cwd) = tab_current_dir(tab) {
-            seen.insert(cwd.clone());
-            dirs.push(cwd);
-        }
+    if let Some(tab) = tabs.get(active)
+        && let Some(cwd) = tab_current_dir(tab)
+    {
+        seen.insert(cwd.clone());
+        dirs.push(cwd);
     }
 
     for entry in history.iter().rev().filter(|h| h.tab == active) {

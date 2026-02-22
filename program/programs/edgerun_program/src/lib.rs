@@ -263,9 +263,9 @@ pub mod edgerun_program {
                 account_info.is_writable,
                 EdgerunError::InvalidWorkerStakeAccountList
             );
-            let mut worker_stake = Account::<WorkerStake>::try_from(account_info)
-                .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
-            lock_worker_for_job(&mut worker_stake, *worker_key, required_lock)?;
+            with_worker_stake_mut(account_info, |worker_stake| {
+                lock_worker_for_job(worker_stake, *worker_key, required_lock)
+            })?;
         }
 
         job.assigned_workers = [Pubkey::default(); 9];
@@ -361,13 +361,14 @@ pub mod edgerun_program {
                     {
                         continue;
                     }
-                    let mut stake = Account::<WorkerStake>::try_from(account_info)
-                        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
-                    stake.locked_stake_lamports = stake
-                        .locked_stake_lamports
-                        .checked_sub(job.required_lock_lamports)
-                        .ok_or(EdgerunError::MathOverflow)?;
-                    unlocked.insert(stake.worker);
+                    with_worker_stake_mut(account_info, |stake| {
+                        stake.locked_stake_lamports = stake
+                            .locked_stake_lamports
+                            .checked_sub(job.required_lock_lamports)
+                            .ok_or(EdgerunError::MathOverflow)?;
+                        Ok(())
+                    })?;
+                    unlocked.insert(stored_stake.worker);
                 }
             }
             require!(
@@ -470,13 +471,14 @@ pub mod edgerun_program {
                     if !assigned_workers.contains(&stored_stake.worker) {
                         continue;
                     }
-                    let mut stake = Account::<WorkerStake>::try_from(account_info)
-                        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
-                    stake.locked_stake_lamports = stake
-                        .locked_stake_lamports
-                        .checked_sub(job.required_lock_lamports)
-                        .ok_or(EdgerunError::MathOverflow)?;
-                    unlocked.insert(stake.worker);
+                    with_worker_stake_mut(account_info, |stake| {
+                        stake.locked_stake_lamports = stake
+                            .locked_stake_lamports
+                            .checked_sub(job.required_lock_lamports)
+                            .ok_or(EdgerunError::MathOverflow)?;
+                        Ok(())
+                    })?;
+                    unlocked.insert(stored_stake.worker);
                 }
             }
             require!(
@@ -616,15 +618,13 @@ pub mod edgerun_program {
                 if !assigned_workers.contains(&stored_stake.worker) {
                     continue;
                 }
-                let mut stake = Account::<WorkerStake>::try_from(account_info)
-                    .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
                 apply_non_response_slash(
-                    &mut stake,
+                    account_info,
                     &ctx.accounts.config,
                     &ctx.accounts.job,
                     &submitted_workers,
                 )?;
-                processed.insert(stake.worker);
+                processed.insert(stored_stake.worker);
             }
         }
         require!(
@@ -767,6 +767,38 @@ fn parse_worker_stake_account(account: &AccountInfo) -> Result<Option<WorkerStak
     Ok(Some(parsed))
 }
 
+fn with_worker_stake_mut<F>(account_info: &AccountInfo, mutator: F) -> Result<()>
+where
+    F: FnOnce(&mut WorkerStake) -> Result<()>,
+{
+    require!(
+        account_info.owner == &crate::ID,
+        EdgerunError::InvalidWorkerStakeAccount
+    );
+    require!(
+        account_info.is_writable,
+        EdgerunError::InvalidWorkerStakeAccountList
+    );
+
+    let mut data = account_info
+        .try_borrow_mut_data()
+        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+    if data.len() < 8 || &data[..8] != WorkerStake::DISCRIMINATOR {
+        return Err(error!(EdgerunError::InvalidWorkerStakeAccount));
+    }
+
+    let mut bytes: &[u8] = &data;
+    let mut stake = WorkerStake::try_deserialize(&mut bytes)
+        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+    mutator(&mut stake)?;
+
+    let mut out: &mut [u8] = &mut data;
+    stake
+        .try_serialize(&mut out)
+        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+    Ok(())
+}
+
 fn required_lock_for_job(escrow_lamports: u64, committee_size: u8) -> u64 {
     if committee_size == 0 {
         return 0;
@@ -795,7 +827,7 @@ fn committee_tier_for_escrow(escrow_lamports: u64) -> (u8, u8) {
 }
 
 fn lock_worker_for_job(
-    stake: &mut Account<WorkerStake>,
+    stake: &mut WorkerStake,
     worker_key: Pubkey,
     required_lock: u64,
 ) -> Result<()> {
@@ -913,32 +945,32 @@ fn output_availability_matches(
 }
 
 fn apply_non_response_slash(
-    stake: &mut Account<WorkerStake>,
+    stake_info: &AccountInfo,
     config: &Account<GlobalConfig>,
     job: &Account<Job>,
     submitted_workers: &HashSet<Pubkey>,
 ) -> Result<()> {
-    if !job.assigned_workers.contains(&stake.worker) || submitted_workers.contains(&stake.worker) {
-        return Ok(());
-    }
-    let available = stake
-        .total_stake_lamports
-        .checked_sub(stake.locked_stake_lamports)
-        .ok_or(EdgerunError::MathOverflow)?;
-    let slash_amount = available.min(config.non_response_slash_lamports);
-    if slash_amount == 0 {
-        return Ok(());
-    }
-    stake.total_stake_lamports = stake
-        .total_stake_lamports
-        .checked_sub(slash_amount)
-        .ok_or(EdgerunError::InsufficientStake)?;
-    transfer_lamports_from_program_owned(
-        &stake.to_account_info(),
-        &config.to_account_info(),
-        slash_amount,
-    )?;
-    Ok(())
+    with_worker_stake_mut(stake_info, |stake| {
+        if !job.assigned_workers.contains(&stake.worker)
+            || submitted_workers.contains(&stake.worker)
+        {
+            return Ok(());
+        }
+        let available = stake
+            .total_stake_lamports
+            .checked_sub(stake.locked_stake_lamports)
+            .ok_or(EdgerunError::MathOverflow)?;
+        let slash_amount = available.min(config.non_response_slash_lamports);
+        if slash_amount == 0 {
+            return Ok(());
+        }
+        stake.total_stake_lamports = stake
+            .total_stake_lamports
+            .checked_sub(slash_amount)
+            .ok_or(EdgerunError::InsufficientStake)?;
+        transfer_lamports_from_program_owned(stake_info, &config.to_account_info(), slash_amount)?;
+        Ok(())
+    })
 }
 
 fn transfer_lamports_from_program_owned(

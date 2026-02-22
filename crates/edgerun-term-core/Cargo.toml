@@ -4,6 +4,10 @@ version.workspace = true
 edition = "2024"
 license.workspace = true
 
+[features]
+default = []
+test-util = []
+
 [dependencies]
 log = "0.4"
 base64 = "0.21"

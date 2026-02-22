@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, PanelLayout,
     list_panel_cpu, list_panel_gpu, modal_panel_rect,
@@ -35,6 +37,12 @@ pub struct LogViewer {
     pub scroll: usize,
     pub focus: LogFocus,
     pub editing: bool,
+}
+
+impl Default for LogViewer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogViewer {

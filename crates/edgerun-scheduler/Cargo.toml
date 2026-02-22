@@ -21,6 +21,7 @@ ed25519-dalek.workspace = true
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }
 edgerun-types = { path = "../../crates/edgerun-types" }
+edgerun-transport-core = { path = "../../crates/edgerun-transport-core" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
 fs2 = "0.4"
 
