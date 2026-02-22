@@ -184,7 +184,7 @@ jobs:
       - name: Replay corpus determinism gate
         run: |
           mkdir -p /tmp/edgerun-runtime-determinism
-          cargo run -p edgerun-runtime -- replay-corpus \
+          cargo run -p edgerun-runtime --features cli -- replay-corpus \
             --profile "${{ runner.os }}-${{ runner.arch }}" \
             --artifact /tmp/edgerun-runtime-determinism/replay-corpus.json \
             --runs 3
@@ -216,7 +216,7 @@ jobs:
       - name: Fuel calibration gate
         run: |
           mkdir -p /tmp/edgerun-runtime-calibration
-          cargo run -p edgerun-runtime -- calibrate-fuel \
+          cargo run -p edgerun-runtime --features cli -- calibrate-fuel \
             --profile "${{ runner.os }}-${{ runner.arch }}" \
             --artifact /tmp/edgerun-runtime-calibration/fuel-calibration.json \
             --runs 3 \
@@ -249,7 +249,7 @@ jobs:
       - name: Runtime SLO smoke gate
         run: |
           mkdir -p /tmp/edgerun-runtime-slo
-          cargo run -p edgerun-runtime -- slo-smoke \
+          cargo run -p edgerun-runtime --features cli -- slo-smoke \
             --profile "${{ runner.os }}-${{ runner.arch }}" \
             --artifact /tmp/edgerun-runtime-slo/slo-smoke.json \
             --runs 50 \
