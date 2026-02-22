@@ -1,0 +1,9 @@
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/libsolana_system_interface-8bf173e823ed4f47.rmeta: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/error.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/instruction.rs
+
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/libsolana_system_interface-8bf173e823ed4f47.rlib: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/error.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/instruction.rs
+
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/solana_system_interface-8bf173e823ed4f47.d: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/error.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/instruction.rs
+
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/lib.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/error.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/solana-system-interface-1.0.0/src/instruction.rs:

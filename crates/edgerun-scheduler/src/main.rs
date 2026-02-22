@@ -24,6 +24,12 @@ use axum::{
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use edgerun_types::control_plane::{
+    assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
+    HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
+    SessionCreateRequest, SessionCreateResponse, WorkerFailureReport, WorkerReplayArtifactReport,
+    WorkerResultReport,
+};
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
@@ -101,90 +107,6 @@ struct ChainContext {
     rpc: RpcClient,
     program_id: Pubkey,
     payer: Keypair,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct QueuedAssignment {
-    job_id: String,
-    bundle_hash: String,
-    bundle_url: String,
-    runtime_id: String,
-    #[serde(default = "default_abi_version")]
-    abi_version: u8,
-    limits: edgerun_types::Limits,
-    escrow_lamports: u64,
-    #[serde(default)]
-    policy_signer_pubkey: String,
-    #[serde(default)]
-    policy_signature: String,
-    #[serde(default = "default_policy_key_id")]
-    policy_key_id: String,
-    #[serde(default = "default_policy_version")]
-    policy_version: u32,
-    #[serde(default)]
-    policy_valid_after_unix_s: u64,
-    #[serde(default)]
-    policy_valid_until_unix_s: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerResultReport {
-    #[serde(default)]
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    bundle_hash: String,
-    output_hash: String,
-    output_len: usize,
-    #[serde(default)]
-    attestation_sig: Option<String>,
-    #[serde(default)]
-    attestation_claim: Option<edgerun_types::AttestationClaim>,
-    #[serde(default)]
-    signature: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerFailureReport {
-    #[serde(default)]
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    bundle_hash: String,
-    phase: String,
-    error_code: String,
-    error_message: String,
-    #[serde(default)]
-    signature: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ReplayArtifactPayload {
-    bundle_hash: String,
-    ok: bool,
-    abi_version: Option<u8>,
-    runtime_id: Option<String>,
-    output_hash: Option<String>,
-    output_len: Option<usize>,
-    input_len: Option<usize>,
-    max_memory_bytes: Option<u32>,
-    max_instructions: Option<u64>,
-    fuel_limit: Option<u64>,
-    fuel_remaining: Option<u64>,
-    error_code: Option<String>,
-    error_message: Option<String>,
-    trap_code: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerReplayArtifactReport {
-    #[serde(default)]
-    idempotency_key: String,
-    worker_pubkey: String,
-    job_id: String,
-    artifact: ReplayArtifactPayload,
-    #[serde(default)]
-    signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,29 +198,6 @@ struct HealthResponse {
     service: &'static str,
 }
 
-#[derive(Debug, Serialize)]
-struct PolicyInfoResponse {
-    key_id: String,
-    version: u32,
-    signer_pubkey: String,
-    ttl_secs: u64,
-    trust_policy: edgerun_types::SyncTrustPolicy,
-    attestation_policy: edgerun_types::AttestationPolicy,
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionCreateRequest {
-    #[serde(default)]
-    bound_origin: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionCreateResponse {
-    token: String,
-    session_key: String,
-    ttl_secs: u64,
-}
-
 #[derive(Debug, Deserialize)]
 struct SessionRotateRequest {
     #[serde(default)]
@@ -362,35 +261,6 @@ struct PersistedPolicySessionState {
     sessions: HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
     #[serde(default)]
     nonces: HashMap<String, u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct HeartbeatRequest {
-    worker_pubkey: String,
-    runtime_ids: Vec<String>,
-    version: String,
-    #[serde(default)]
-    capacity: Option<WorkerCapacity>,
-    #[serde(default)]
-    signature: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerCapacity {
-    max_concurrent: u32,
-    mem_bytes: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct HeartbeatResponse {
-    ok: bool,
-    next_poll_ms: u64,
-    server_time_unix_s: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct AssignmentsResponse {
-    jobs: Vec<QueuedAssignment>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -506,8 +376,7 @@ struct OwnerRoutesResponse {
     devices: Vec<DeviceRouteEntry>,
 }
 
-#[derive(Debug, Clone)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteHeartbeatToken {
     device_id: String,
     expires_at_unix_s: u64,
@@ -620,7 +489,7 @@ async fn main() -> Result<()> {
     };
 
     let addr: SocketAddr = std::env::var("EDGERUN_SCHEDULER_ADDR")
-        .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
+        .unwrap_or_else(|_| "127.0.0.1:5566".to_string())
         .parse()
         .context("invalid EDGERUN_SCHEDULER_ADDR")?;
     let configured_committee_size = read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3);
@@ -1393,12 +1262,14 @@ async fn policy_info(
         version: state.policy_version,
         signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
         ttl_secs: state.policy_ttl_secs,
-        trust_policy: state.trust_policy.lock().expect("lock poisoned").clone(),
-        attestation_policy: state
-            .attestation_policy
-            .lock()
-            .expect("lock poisoned")
-            .clone(),
+        trust_policy: Some(state.trust_policy.lock().expect("lock poisoned").clone()),
+        attestation_policy: Some(
+            state
+                .attestation_policy
+                .lock()
+                .expect("lock poisoned")
+                .clone(),
+        ),
     }))
 }
 
@@ -1596,7 +1467,7 @@ async fn worker_heartbeat(
     Ok(Json(HeartbeatResponse {
         ok: true,
         next_poll_ms: 2000,
-        server_time_unix_s: now,
+        server_time_unix_s: Some(now),
     }))
 }
 
@@ -2649,18 +2520,6 @@ fn internal_err<E: std::fmt::Display>(err: E) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, err.to_string())
 }
 
-fn default_abi_version() -> u8 {
-    edgerun_types::BUNDLE_ABI_CURRENT
-}
-
-fn default_policy_key_id() -> String {
-    "dev-key-1".to_string()
-}
-
-fn default_policy_version() -> u32 {
-    1
-}
-
 fn load_policy_signing_key() -> Result<SigningKey> {
     let hex_key = std::env::var("EDGERUN_SCHEDULER_POLICY_SIGNING_KEY_HEX").unwrap_or_else(|_| {
         "0101010101010101010101010101010101010101010101010101010101010101".to_string()
@@ -2671,24 +2530,6 @@ fn load_policy_signing_key() -> Result<SigningKey> {
         .try_into()
         .map_err(|_| anyhow::anyhow!("policy signing key must decode to 32 bytes"))?;
     Ok(SigningKey::from_bytes(&arr))
-}
-
-fn assignment_policy_message(assignment: &QueuedAssignment) -> String {
-    format!(
-        "edgerun-assignment-v2|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
-        assignment.job_id,
-        assignment.bundle_hash,
-        assignment.runtime_id,
-        assignment.abi_version,
-        assignment.limits.max_memory_bytes,
-        assignment.limits.max_instructions,
-        assignment.escrow_lamports,
-        assignment.bundle_url,
-        assignment.policy_key_id,
-        assignment.policy_version,
-        assignment.policy_valid_after_unix_s,
-        assignment.policy_valid_until_unix_s
-    )
 }
 
 fn sign_assignment_policy(signing_key: &SigningKey, assignment: &QueuedAssignment) -> String {
@@ -4489,7 +4330,7 @@ mod tests {
         let _ = std::fs::create_dir_all(data_dir.join("bundles"));
         AppState {
             data_dir: data_dir.clone(),
-            public_base_url: "http://127.0.0.1:8080".to_string(),
+            public_base_url: "http://127.0.0.1:5566".to_string(),
             retention: RetentionConfig {
                 max_reports_per_job: 32,
                 max_failures_per_job: 32,
@@ -6651,7 +6492,9 @@ mod tests {
         let service_b_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind service B listener");
-        let service_b_addr = service_b_listener.local_addr().expect("service B local addr");
+        let service_b_addr = service_b_listener
+            .local_addr()
+            .expect("service B local addr");
         let service_b_task = tokio::spawn(async move {
             let (mut socket, _) = service_b_listener.accept().await.expect("accept service B");
             let mut buf = [0_u8; 32];

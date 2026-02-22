@@ -227,7 +227,10 @@ pub mod edgerun_program {
         Ok(())
     }
 
-    pub fn assign_workers(ctx: Context<AssignWorkers>, workers: [Pubkey; 3]) -> Result<()> {
+    pub fn assign_workers<'info>(
+        ctx: Context<'_, '_, 'info, 'info, AssignWorkers<'info>>,
+        workers: Vec<Pubkey>,
+    ) -> Result<()> {
         let config = &ctx.accounts.config;
         let job = &mut ctx.accounts.job;
 
@@ -238,23 +241,38 @@ pub mod edgerun_program {
         if config.committee_tiering_enabled {
             require!(job.seed_set, EdgerunError::SeedNotSet);
         }
+        let expected_count = usize::from(job.committee_size.max(1));
         require!(
-            workers[0] != workers[1] && workers[0] != workers[2] && workers[1] != workers[2],
+            workers.len() == expected_count && workers.len() <= 9,
+            EdgerunError::InvalidAssignedWorkerCount
+        );
+        require!(
+            ctx.remaining_accounts.len() == workers.len(),
+            EdgerunError::InvalidWorkerStakeAccountList
+        );
+        let unique_workers: HashSet<Pubkey> = workers.iter().copied().collect();
+        require!(
+            unique_workers.len() == workers.len(),
             EdgerunError::DuplicateAssignedWorker
         );
 
-        let required_lock = required_lock_for_job(job.escrow_lamports, config.committee_size)
+        let required_lock = required_lock_for_job(job.escrow_lamports, job.committee_size)
             .max(config.min_worker_stake_lamports);
-
-        lock_worker_for_job(&mut ctx.accounts.worker_stake_0, workers[0], required_lock)?;
-        lock_worker_for_job(&mut ctx.accounts.worker_stake_1, workers[1], required_lock)?;
-        lock_worker_for_job(&mut ctx.accounts.worker_stake_2, workers[2], required_lock)?;
+        for (worker_key, account_info) in workers.iter().zip(ctx.remaining_accounts.iter()) {
+            require!(
+                account_info.is_writable,
+                EdgerunError::InvalidWorkerStakeAccountList
+            );
+            let mut worker_stake = Account::<WorkerStake>::try_from(account_info)
+                .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+            lock_worker_for_job(&mut worker_stake, *worker_key, required_lock)?;
+        }
 
         job.assigned_workers = [Pubkey::default(); 9];
-        job.assigned_workers[0] = workers[0];
-        job.assigned_workers[1] = workers[1];
-        job.assigned_workers[2] = workers[2];
-        job.assigned_count = 3;
+        for (idx, worker) in workers.iter().enumerate() {
+            job.assigned_workers[idx] = *worker;
+        }
+        job.assigned_count = workers.len() as u8;
         job.required_lock_lamports = required_lock;
         job.status = JobStatus::Assigned as u8;
 
@@ -312,7 +330,9 @@ pub mod edgerun_program {
         Ok(())
     }
 
-    pub fn finalize_job(ctx: Context<FinalizeJob>) -> Result<()> {
+    pub fn finalize_job<'info>(
+        ctx: Context<'_, '_, 'info, 'info, FinalizeJob<'info>>,
+    ) -> Result<()> {
         let job = &ctx.accounts.job;
         require!(
             job.status == JobStatus::AwaitingDa as u8,
@@ -326,15 +346,35 @@ pub mod edgerun_program {
         let finalize_inputs = parse_finalize_inputs(job, &ctx.remaining_accounts)?;
         let winner_count_u64 = finalize_inputs.winner_keys.len() as u64;
 
-        unlock_winner_stakes(
-            job.required_lock_lamports,
-            &finalize_inputs.winner_keys,
-            [
-                &mut ctx.accounts.worker_stake_0,
-                &mut ctx.accounts.worker_stake_1,
-                &mut ctx.accounts.worker_stake_2,
-            ],
-        )?;
+        let assigned_workers = assigned_worker_set(job);
+        let winner_set: HashSet<Pubkey> = finalize_inputs.winner_keys.iter().copied().collect();
+        let mut unlocked = HashSet::new();
+        if job.required_lock_lamports > 0 {
+            for account_info in ctx.remaining_accounts.iter() {
+                if let Some(stored_stake) = parse_worker_stake_account(account_info)? {
+                    require!(
+                        account_info.is_writable,
+                        EdgerunError::InvalidWorkerStakeAccountList
+                    );
+                    if !assigned_workers.contains(&stored_stake.worker)
+                        || !winner_set.contains(&stored_stake.worker)
+                    {
+                        continue;
+                    }
+                    let mut stake = Account::<WorkerStake>::try_from(account_info)
+                        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+                    stake.locked_stake_lamports = stake
+                        .locked_stake_lamports
+                        .checked_sub(job.required_lock_lamports)
+                        .ok_or(EdgerunError::MathOverflow)?;
+                    unlocked.insert(stake.worker);
+                }
+            }
+            require!(
+                unlocked.len() == winner_set.len(),
+                EdgerunError::InvalidWorkerStakeAccountList
+            );
+        }
 
         let escrow_lamports = job.escrow_lamports;
         let protocol_fee = escrow_lamports
@@ -391,7 +431,9 @@ pub mod edgerun_program {
         Ok(())
     }
 
-    pub fn cancel_expired_job(ctx: Context<CancelExpiredJob>) -> Result<()> {
+    pub fn cancel_expired_job<'info>(
+        ctx: Context<'_, '_, 'info, 'info, CancelExpiredJob<'info>>,
+    ) -> Result<()> {
         let job = &ctx.accounts.job;
         let current_slot = Clock::get()?.slot;
 
@@ -416,15 +458,32 @@ pub mod edgerun_program {
             escrow,
         )?;
 
-        unlock_all_assigned_stakes(
-            job.required_lock_lamports,
-            &job.assigned_workers,
-            [
-                &mut ctx.accounts.worker_stake_0,
-                &mut ctx.accounts.worker_stake_1,
-                &mut ctx.accounts.worker_stake_2,
-            ],
-        )?;
+        if job.required_lock_lamports > 0 {
+            let assigned_workers = assigned_worker_set(job);
+            let mut unlocked = HashSet::new();
+            for account_info in ctx.remaining_accounts.iter() {
+                if let Some(stored_stake) = parse_worker_stake_account(account_info)? {
+                    require!(
+                        account_info.is_writable,
+                        EdgerunError::InvalidWorkerStakeAccountList
+                    );
+                    if !assigned_workers.contains(&stored_stake.worker) {
+                        continue;
+                    }
+                    let mut stake = Account::<WorkerStake>::try_from(account_info)
+                        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+                    stake.locked_stake_lamports = stake
+                        .locked_stake_lamports
+                        .checked_sub(job.required_lock_lamports)
+                        .ok_or(EdgerunError::MathOverflow)?;
+                    unlocked.insert(stake.worker);
+                }
+            }
+            require!(
+                unlocked.len() == assigned_workers.len(),
+                EdgerunError::InvalidWorkerStakeAccountList
+            );
+        }
 
         let job = &mut ctx.accounts.job;
         job.escrow_lamports = 0;
@@ -535,7 +594,9 @@ pub mod edgerun_program {
         Ok(())
     }
 
-    pub fn penalize_non_submitters(ctx: Context<PenalizeNonSubmitters>) -> Result<()> {
+    pub fn penalize_non_submitters<'info>(
+        ctx: Context<'_, '_, 'info, 'info, PenalizeNonSubmitters<'info>>,
+    ) -> Result<()> {
         let job = &ctx.accounts.job;
         let now_slot = Clock::get()?.slot;
         require!(
@@ -544,24 +605,32 @@ pub mod edgerun_program {
         );
 
         let submitted_workers = collect_submitted_workers(job, &ctx.remaining_accounts)?;
-        apply_non_response_slash(
-            &mut ctx.accounts.worker_stake_0,
-            &ctx.accounts.config,
-            &ctx.accounts.job,
-            &submitted_workers,
-        )?;
-        apply_non_response_slash(
-            &mut ctx.accounts.worker_stake_1,
-            &ctx.accounts.config,
-            &ctx.accounts.job,
-            &submitted_workers,
-        )?;
-        apply_non_response_slash(
-            &mut ctx.accounts.worker_stake_2,
-            &ctx.accounts.config,
-            &ctx.accounts.job,
-            &submitted_workers,
-        )?;
+        let assigned_workers = assigned_worker_set(job);
+        let mut processed = HashSet::new();
+        for account_info in ctx.remaining_accounts.iter() {
+            if let Some(stored_stake) = parse_worker_stake_account(account_info)? {
+                require!(
+                    account_info.is_writable,
+                    EdgerunError::InvalidWorkerStakeAccountList
+                );
+                if !assigned_workers.contains(&stored_stake.worker) {
+                    continue;
+                }
+                let mut stake = Account::<WorkerStake>::try_from(account_info)
+                    .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+                apply_non_response_slash(
+                    &mut stake,
+                    &ctx.accounts.config,
+                    &ctx.accounts.job,
+                    &submitted_workers,
+                )?;
+                processed.insert(stake.worker);
+            }
+        }
+        require!(
+            processed.len() == assigned_workers.len(),
+            EdgerunError::InvalidWorkerStakeAccountList
+        );
         Ok(())
     }
 
@@ -572,7 +641,10 @@ pub mod edgerun_program {
             job.status == JobStatus::AwaitingDa as u8,
             EdgerunError::InvalidJobState
         );
-        require!(now_slot > job.da_deadline_slot, EdgerunError::DaWindowActive);
+        require!(
+            now_slot > job.da_deadline_slot,
+            EdgerunError::DaWindowActive
+        );
         job.winning_output_hash = [0_u8; 32];
         job.quorum_reached_slot = 0;
         job.da_deadline_slot = 0;
@@ -672,8 +744,26 @@ fn parse_job_result_account(account: &AccountInfo) -> Result<Option<JobResult>> 
     }
 
     let mut bytes: &[u8] = &data;
-    let parsed =
-        JobResult::try_deserialize(&mut bytes).map_err(|_| error!(EdgerunError::InvalidJobResult))?;
+    let parsed = JobResult::try_deserialize(&mut bytes)
+        .map_err(|_| error!(EdgerunError::InvalidJobResult))?;
+    Ok(Some(parsed))
+}
+
+fn parse_worker_stake_account(account: &AccountInfo) -> Result<Option<WorkerStake>> {
+    if account.owner != &crate::ID {
+        return Ok(None);
+    }
+
+    let data = account
+        .try_borrow_data()
+        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
+    if data.len() < 8 || &data[..8] != WorkerStake::DISCRIMINATOR {
+        return Ok(None);
+    }
+
+    let mut bytes: &[u8] = &data;
+    let parsed = WorkerStake::try_deserialize(&mut bytes)
+        .map_err(|_| error!(EdgerunError::InvalidWorkerStakeAccount))?;
     Ok(Some(parsed))
 }
 
@@ -729,46 +819,14 @@ fn lock_worker_for_job(
     Ok(())
 }
 
-fn unlock_winner_stakes(
-    required_lock_lamports: u64,
-    winner_keys: &[Pubkey],
-    worker_stakes: [&mut Account<WorkerStake>; 3],
-) -> Result<()> {
-    if required_lock_lamports == 0 {
-        return Ok(());
-    }
-
-    for stake in worker_stakes {
-        if winner_keys.contains(&stake.worker) {
-            stake.locked_stake_lamports = stake
-                .locked_stake_lamports
-                .checked_sub(required_lock_lamports)
-                .ok_or(EdgerunError::MathOverflow)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn unlock_all_assigned_stakes(
-    required_lock_lamports: u64,
-    assigned_workers: &[Pubkey; 9],
-    worker_stakes: [&mut Account<WorkerStake>; 3],
-) -> Result<()> {
-    if required_lock_lamports == 0 {
-        return Ok(());
-    }
-
-    for stake in worker_stakes {
-        if assigned_workers.contains(&stake.worker) {
-            stake.locked_stake_lamports = stake
-                .locked_stake_lamports
-                .checked_sub(required_lock_lamports)
-                .ok_or(EdgerunError::MathOverflow)?;
-        }
-    }
-
-    Ok(())
+fn assigned_worker_set(job: &Account<Job>) -> HashSet<Pubkey> {
+    let assigned_count = usize::from(job.assigned_count.min(9));
+    job.assigned_workers
+        .iter()
+        .take(assigned_count)
+        .copied()
+        .filter(|k| *k != Pubkey::default())
+        .collect()
 }
 
 fn parse_quorum_winning_hash(
@@ -818,7 +876,10 @@ fn parse_quorum_winning_hash(
     Ok(best.map(|v| v.0))
 }
 
-fn collect_submitted_workers(job: &Account<Job>, remaining_accounts: &[AccountInfo]) -> Result<HashSet<Pubkey>> {
+fn collect_submitted_workers(
+    job: &Account<Job>,
+    remaining_accounts: &[AccountInfo],
+) -> Result<HashSet<Pubkey>> {
     let mut out = HashSet::new();
     for account in remaining_accounts {
         if let Some(result) = parse_job_result_account(account)? {
@@ -989,12 +1050,6 @@ pub struct AssignWorkers<'info> {
     pub config: Account<'info, GlobalConfig>,
     #[account(mut)]
     pub job: Account<'info, Job>,
-    #[account(mut)]
-    pub worker_stake_0: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_1: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_2: Account<'info, WorkerStake>,
 }
 
 #[derive(Accounts)]
@@ -1038,12 +1093,6 @@ pub struct FinalizeJob<'info> {
     pub job: Account<'info, Job>,
     #[account(seeds = [b"output", job.job_id.as_ref()], bump)]
     pub output_availability: Account<'info, OutputAvailability>,
-    #[account(mut)]
-    pub worker_stake_0: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_1: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_2: Account<'info, WorkerStake>,
 }
 
 #[derive(Accounts)]
@@ -1055,12 +1104,6 @@ pub struct CancelExpiredJob<'info> {
     pub job: Account<'info, Job>,
     #[account(mut, address = job.client)]
     pub client: SystemAccount<'info>,
-    #[account(mut)]
-    pub worker_stake_0: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_1: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_2: Account<'info, WorkerStake>,
 }
 
 #[derive(Accounts)]
@@ -1110,12 +1153,6 @@ pub struct PenalizeNonSubmitters<'info> {
     #[account(mut, seeds = [b"config"], bump)]
     pub config: Account<'info, GlobalConfig>,
     pub job: Account<'info, Job>,
-    #[account(mut)]
-    pub worker_stake_0: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_1: Account<'info, WorkerStake>,
-    #[account(mut)]
-    pub worker_stake_2: Account<'info, WorkerStake>,
 }
 
 #[derive(Accounts)]
@@ -1298,6 +1335,12 @@ pub enum EdgerunError {
     PointerTooLarge,
     #[msg("DA window still active")]
     DaWindowActive,
+    #[msg("invalid assigned worker count for job committee size")]
+    InvalidAssignedWorkerCount,
+    #[msg("invalid worker stake account")]
+    InvalidWorkerStakeAccount,
+    #[msg("invalid worker stake account list")]
+    InvalidWorkerStakeAccountList,
 }
 
 fn verify_worker_attestation(
@@ -1454,7 +1497,10 @@ mod tests {
             &job_id, &winning, &other_job, &winning
         ));
         assert!(!output_availability_matches(
-            &job_id, &winning, &job_id, &other_hash
+            &job_id,
+            &winning,
+            &job_id,
+            &other_hash
         ));
         assert!(!output_availability_matches(
             &job_id,

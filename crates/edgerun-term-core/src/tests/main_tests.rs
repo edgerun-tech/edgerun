@@ -504,8 +504,8 @@ fn shaped_text_offsets_are_applied() {
 
     // Verify baseline row has non-zero alpha to ensure glyphs respect offsets.
     let baseline_row = 10 + glyphs.baseline() as usize;
-    let row_range = (baseline_row * width as usize * 4)
-        ..((baseline_row + 1) * width as usize * 4).min(frame.len());
+    let row_range = (baseline_row * width * 4)
+        ..((baseline_row + 1) * width * 4).min(frame.len());
     let has_pixels = frame[row_range].chunks_exact(4).any(|px| px[3] > 0);
     assert!(
         has_pixels,

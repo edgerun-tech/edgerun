@@ -12,13 +12,16 @@ import {
 import { blake3 } from "@noble/hashes/blake3";
 import type { EdgerunProgram } from "../target/types/edgerun_program";
 
-const PROGRAM_ID = new PublicKey("AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T");
+const PROGRAM_ID = new PublicKey(
+  "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T"
+);
 
 describe("edgerun", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.EdgerunProgram as anchor.Program<EdgerunProgram>;
+  const program = anchor.workspace
+    .EdgerunProgram as anchor.Program<EdgerunProgram>;
   const schedulerAuthority = provider.wallet as anchor.Wallet;
   const worker0 = Keypair.generate();
   const worker1 = Keypair.generate();
@@ -101,6 +104,11 @@ describe("edgerun", () => {
     await program.methods
       .initializeConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -109,7 +117,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
         systemProgram: SystemProgram.programId,
@@ -145,7 +153,7 @@ describe("edgerun", () => {
         new anchor.BN(100_000),
         new anchor.BN(1_000_000_000)
       )
-      .accounts({
+      .accountsStrict({
         client: schedulerAuthority.publicKey,
         config: configPda,
         job: jobPda,
@@ -154,19 +162,15 @@ describe("edgerun", () => {
       .rpc();
 
     await program.methods
-      .assignWorkers([
-        worker0.publicKey,
-        worker1.publicKey,
-        worker2.publicKey,
-      ])
-      .accounts({
+      .assignWorkers([worker0.publicKey, worker1.publicKey, worker2.publicKey])
+      .accountsStrict({
         schedulerAuthority: schedulerAuthority.publicKey,
         config: configPda,
         job: jobPda,
-        workerStake0: workerStake0Pda,
-        workerStake1: workerStake1Pda,
-        workerStake2: workerStake2Pda,
       })
+      .remainingAccounts(
+        writableAccounts([workerStake0Pda, workerStake1Pda, workerStake2Pda])
+      )
       .rpc();
   });
 
@@ -177,7 +181,7 @@ describe("edgerun", () => {
     await expectFail(
       program.methods
         .submitResult(outputHash, fakeSig)
-        .accounts({
+        .accountsStrict({
           worker: worker1.publicKey,
           job: jobPda,
           jobResult: jobResult1Pda,
@@ -208,7 +212,7 @@ describe("edgerun", () => {
     await expectFail(
       program.methods
         .submitResult(outputHash, attestationSig)
-        .accounts({
+        .accountsStrict({
           worker: worker2.publicKey,
           job: jobPda,
           jobResult: jobResult2Pda,
@@ -238,7 +242,7 @@ describe("edgerun", () => {
 
     await program.methods
       .submitResult(outputHash, attestationSig)
-      .accounts({
+      .accountsStrict({
         worker: worker0.publicKey,
         job: jobPda,
         jobResult: jobResult0Pda,
@@ -250,8 +254,12 @@ describe("edgerun", () => {
       .rpc();
 
     const stored = await program.account.jobResult.fetch(jobResult0Pda);
-    expect(bytesEqual(stored.outputHash as number[], outputHash)).to.equal(true);
-    expect(bytesEqual(stored.attestationSig as number[], attestationSig)).to.equal(true);
+    expect(bytesEqual(stored.outputHash as number[], outputHash)).to.equal(
+      true
+    );
+    expect(
+      bytesEqual(stored.attestationSig as number[], attestationSig)
+    ).to.equal(true);
   });
 
   it("rejects post_job when runtime is not in allowlist", async () => {
@@ -259,6 +267,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -267,7 +280,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot,
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -289,7 +302,7 @@ describe("edgerun", () => {
           new anchor.BN(100_000),
           new anchor.BN(500_000_000)
         )
-        .accounts({
+        .accountsStrict({
           client: schedulerAuthority.publicKey,
           config: configPda,
           job: blockedJobPda,
@@ -301,6 +314,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -309,7 +327,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -324,6 +342,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -332,7 +355,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot,
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -350,7 +373,7 @@ describe("edgerun", () => {
         new anchor.BN(100_000),
         new anchor.BN(500_000_000)
       )
-      .accounts({
+      .accountsStrict({
         client: schedulerAuthority.publicKey,
         config: configPda,
         job: jobWithProofPda,
@@ -359,11 +382,18 @@ describe("edgerun", () => {
       .rpc();
 
     const storedJob = await program.account.job.fetch(jobWithProofPda);
-    expect(bytesEqual(storedJob.runtimeId as number[], runtimeA)).to.equal(true);
+    expect(bytesEqual(storedJob.runtimeId as number[], runtimeA)).to.equal(
+      true
+    );
 
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -372,7 +402,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -383,6 +413,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(0),
@@ -391,7 +426,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -402,11 +437,18 @@ describe("edgerun", () => {
       expiredJobId,
       600_000_000,
       [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
-      [lifecycleWorkerStake0Pda, lifecycleWorkerStake1Pda, lifecycleWorkerStake2Pda]
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
     );
     const expiredJob = await program.account.job.fetch(expiredJobPda);
     await waitForSlotAfter(expiredJob.deadlineSlot.toNumber());
-    const expiredResultPda = jobResultPda(expiredJobId, lifecycleWorker0.publicKey);
+    const expiredResultPda = jobResultPda(
+      expiredJobId,
+      lifecycleWorker0.publicKey
+    );
 
     await expectFail(
       submitResultForJob(
@@ -419,20 +461,29 @@ describe("edgerun", () => {
     );
     await program.methods
       .cancelExpiredJob()
-      .accounts({
+      .accountsStrict({
         caller: schedulerAuthority.publicKey,
         config: configPda,
         job: expiredJobPda,
         client: schedulerAuthority.publicKey,
-        workerStake0: lifecycleWorkerStake0Pda,
-        workerStake1: lifecycleWorkerStake1Pda,
-        workerStake2: lifecycleWorkerStake2Pda,
       })
+      .remainingAccounts(
+        writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ])
+      )
       .rpc();
 
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -441,7 +492,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -461,7 +512,7 @@ describe("edgerun", () => {
         new anchor.BN(100_000),
         new anchor.BN(500_000_000)
       )
-      .accounts({
+      .accountsStrict({
         client: schedulerAuthority.publicKey,
         config: configPda,
         job: dupJobPda,
@@ -476,14 +527,18 @@ describe("edgerun", () => {
           lifecycleWorker0.publicKey,
           lifecycleWorker2.publicKey,
         ])
-        .accounts({
+        .accountsStrict({
           schedulerAuthority: schedulerAuthority.publicKey,
           config: configPda,
           job: dupJobPda,
-          workerStake0: lifecycleWorkerStake0Pda,
-          workerStake1: lifecycleWorkerStake1Pda,
-          workerStake2: lifecycleWorkerStake2Pda,
         })
+        .remainingAccounts(
+          writableAccounts([
+            lifecycleWorkerStake0Pda,
+            lifecycleWorkerStake1Pda,
+            lifecycleWorkerStake2Pda,
+          ])
+        )
         .rpc()
     );
   });
@@ -494,15 +549,28 @@ describe("edgerun", () => {
       finalizeJobId,
       900_000_000,
       [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
-      [lifecycleWorkerStake0Pda, lifecycleWorkerStake1Pda, lifecycleWorkerStake2Pda]
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
     );
     const beforeJob = await program.account.job.fetch(finalizeJobPda);
     const requiredLock = beforeJob.requiredLockLamports.toNumber();
 
     const outputHash = random32();
-    const finalizeResult0Pda = jobResultPda(finalizeJobId, lifecycleWorker0.publicKey);
-    const finalizeResult1Pda = jobResultPda(finalizeJobId, lifecycleWorker1.publicKey);
-    const finalizeResult2Pda = jobResultPda(finalizeJobId, lifecycleWorker2.publicKey);
+    const finalizeResult0Pda = jobResultPda(
+      finalizeJobId,
+      lifecycleWorker0.publicKey
+    );
+    const finalizeResult1Pda = jobResultPda(
+      finalizeJobId,
+      lifecycleWorker1.publicKey
+    );
+    const finalizeResult2Pda = jobResultPda(
+      finalizeJobId,
+      lifecycleWorker2.publicKey
+    );
     const finalizeOutputPda = outputAvailabilityPda(finalizeJobId);
     await submitResultForJob(
       finalizeJobId,
@@ -527,7 +595,7 @@ describe("edgerun", () => {
     );
     await program.methods
       .reachQuorum()
-      .accounts({
+      .accountsStrict({
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: finalizeJobPda,
@@ -541,7 +609,7 @@ describe("edgerun", () => {
       .rpc();
     await program.methods
       .declareOutput(outputHash, Buffer.from("ipfs://demo/output"))
-      .accounts({
+      .accountsStrict({
         publisher: lifecycleWorker0.publicKey,
         job: finalizeJobPda,
         jobResult: finalizeResult0Pda,
@@ -551,10 +619,18 @@ describe("edgerun", () => {
       .signers([lifecycleWorker0])
       .rpc();
 
-    const stake0Before = await program.account.workerStake.fetch(lifecycleWorkerStake0Pda);
-    const stake1Before = await program.account.workerStake.fetch(lifecycleWorkerStake1Pda);
-    const stake2Before = await program.account.workerStake.fetch(lifecycleWorkerStake2Pda);
-    const configLamportsBefore = await provider.connection.getBalance(configPda);
+    const stake0Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2Before = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
+    const configLamportsBefore = await provider.connection.getBalance(
+      configPda
+    );
     const worker0LamportsBefore = await provider.connection.getBalance(
       lifecycleWorker0.publicKey
     );
@@ -567,36 +643,60 @@ describe("edgerun", () => {
 
     const winnerCount = 3;
     const protocolFee = Math.floor(beforeJob.escrowLamports.toNumber() / 100);
-    const payoutEach = Math.floor((beforeJob.escrowLamports.toNumber() - protocolFee) / winnerCount);
+    const payoutEach = Math.floor(
+      (beforeJob.escrowLamports.toNumber() - protocolFee) / winnerCount
+    );
     const payoutRemainder =
-      beforeJob.escrowLamports.toNumber() - protocolFee - payoutEach * winnerCount;
+      beforeJob.escrowLamports.toNumber() -
+      protocolFee -
+      payoutEach * winnerCount;
 
     await program.methods
       .finalizeJob()
-      .accounts({
+      .accountsStrict({
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: finalizeJobPda,
         outputAvailability: finalizeOutputPda,
-        workerStake0: lifecycleWorkerStake0Pda,
-        workerStake1: lifecycleWorkerStake1Pda,
-        workerStake2: lifecycleWorkerStake2Pda,
       })
       .remainingAccounts([
         { pubkey: finalizeResult0Pda, isWritable: false, isSigner: false },
         { pubkey: finalizeResult1Pda, isWritable: false, isSigner: false },
         { pubkey: finalizeResult2Pda, isWritable: false, isSigner: false },
-        { pubkey: lifecycleWorker0.publicKey, isWritable: true, isSigner: false },
-        { pubkey: lifecycleWorker1.publicKey, isWritable: true, isSigner: false },
-        { pubkey: lifecycleWorker2.publicKey, isWritable: true, isSigner: false },
+        ...writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ]),
+        {
+          pubkey: lifecycleWorker0.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
+        {
+          pubkey: lifecycleWorker1.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
+        {
+          pubkey: lifecycleWorker2.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
       ])
       .signers([permissionlessCaller])
       .rpc();
 
     const afterJob = await program.account.job.fetch(finalizeJobPda);
-    const stake0After = await program.account.workerStake.fetch(lifecycleWorkerStake0Pda);
-    const stake1After = await program.account.workerStake.fetch(lifecycleWorkerStake1Pda);
-    const stake2After = await program.account.workerStake.fetch(lifecycleWorkerStake2Pda);
+    const stake0After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
     const configLamportsAfter = await provider.connection.getBalance(configPda);
     const worker0LamportsAfter = await provider.connection.getBalance(
       lifecycleWorker0.publicKey
@@ -611,38 +711,57 @@ describe("edgerun", () => {
     expect(afterJob.status).to.equal(2); // Finalized
     expect(afterJob.escrowLamports.toNumber()).to.equal(0);
     expect(
-      stake0Before.lockedStakeLamports.toNumber() - stake0After.lockedStakeLamports.toNumber()
+      stake0Before.lockedStakeLamports.toNumber() -
+        stake0After.lockedStakeLamports.toNumber()
     ).to.equal(requiredLock);
     expect(
-      stake1Before.lockedStakeLamports.toNumber() - stake1After.lockedStakeLamports.toNumber()
+      stake1Before.lockedStakeLamports.toNumber() -
+        stake1After.lockedStakeLamports.toNumber()
     ).to.equal(requiredLock);
     expect(
-      stake2Before.lockedStakeLamports.toNumber() - stake2After.lockedStakeLamports.toNumber()
+      stake2Before.lockedStakeLamports.toNumber() -
+        stake2After.lockedStakeLamports.toNumber()
     ).to.equal(requiredLock);
     expect(configLamportsAfter - configLamportsBefore).to.equal(protocolFee);
-    expect(worker0LamportsAfter - worker0LamportsBefore).to.equal(payoutEach + payoutRemainder);
+    expect(worker0LamportsAfter - worker0LamportsBefore).to.equal(
+      payoutEach + payoutRemainder
+    );
     expect(worker1LamportsAfter - worker1LamportsBefore).to.equal(payoutEach);
     expect(worker2LamportsAfter - worker2LamportsBefore).to.equal(payoutEach);
 
     await expectFail(
       program.methods
         .finalizeJob()
-        .accounts({
+        .accountsStrict({
           caller: permissionlessCaller.publicKey,
           config: configPda,
           job: finalizeJobPda,
           outputAvailability: finalizeOutputPda,
-          workerStake0: lifecycleWorkerStake0Pda,
-          workerStake1: lifecycleWorkerStake1Pda,
-          workerStake2: lifecycleWorkerStake2Pda,
         })
         .remainingAccounts([
           { pubkey: finalizeResult0Pda, isWritable: false, isSigner: false },
           { pubkey: finalizeResult1Pda, isWritable: false, isSigner: false },
           { pubkey: finalizeResult2Pda, isWritable: false, isSigner: false },
-          { pubkey: lifecycleWorker0.publicKey, isWritable: true, isSigner: false },
-          { pubkey: lifecycleWorker1.publicKey, isWritable: true, isSigner: false },
-          { pubkey: lifecycleWorker2.publicKey, isWritable: true, isSigner: false },
+          ...writableAccounts([
+            lifecycleWorkerStake0Pda,
+            lifecycleWorkerStake1Pda,
+            lifecycleWorkerStake2Pda,
+          ]),
+          {
+            pubkey: lifecycleWorker0.publicKey,
+            isWritable: true,
+            isSigner: false,
+          },
+          {
+            pubkey: lifecycleWorker1.publicKey,
+            isWritable: true,
+            isSigner: false,
+          },
+          {
+            pubkey: lifecycleWorker2.publicKey,
+            isWritable: true,
+            isSigner: false,
+          },
         ])
         .signers([permissionlessCaller])
         .rpc()
@@ -653,6 +772,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(0),
@@ -661,7 +785,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -672,31 +796,47 @@ describe("edgerun", () => {
       cancelJobId,
       700_000_000,
       [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
-      [lifecycleWorkerStake0Pda, lifecycleWorkerStake1Pda, lifecycleWorkerStake2Pda]
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
     );
     const cancelJobBefore = await program.account.job.fetch(cancelJobPda);
     await waitForSlotAfter(cancelJobBefore.deadlineSlot.toNumber());
 
-    const jobLamportsBefore = await provider.connection.getBalance(cancelJobPda);
+    const jobLamportsBefore = await provider.connection.getBalance(
+      cancelJobPda
+    );
 
     await program.methods
       .cancelExpiredJob()
-      .accounts({
+      .accountsStrict({
         caller: schedulerAuthority.publicKey,
         config: configPda,
         job: cancelJobPda,
         client: schedulerAuthority.publicKey,
-        workerStake0: lifecycleWorkerStake0Pda,
-        workerStake1: lifecycleWorkerStake1Pda,
-        workerStake2: lifecycleWorkerStake2Pda,
       })
+      .remainingAccounts(
+        writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ])
+      )
       .rpc();
 
     const cancelJobAfter = await program.account.job.fetch(cancelJobPda);
     const jobLamportsAfter = await provider.connection.getBalance(cancelJobPda);
-    const stake0After = await program.account.workerStake.fetch(lifecycleWorkerStake0Pda);
-    const stake1After = await program.account.workerStake.fetch(lifecycleWorkerStake1Pda);
-    const stake2After = await program.account.workerStake.fetch(lifecycleWorkerStake2Pda);
+    const stake0After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake0Pda
+    );
+    const stake1After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake1Pda
+    );
+    const stake2After = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
 
     expect(cancelJobAfter.status).to.equal(3); // Cancelled
     expect(cancelJobAfter.escrowLamports.toNumber()).to.equal(0);
@@ -708,15 +848,19 @@ describe("edgerun", () => {
     await expectFail(
       program.methods
         .cancelExpiredJob()
-        .accounts({
+        .accountsStrict({
           caller: schedulerAuthority.publicKey,
           config: configPda,
           job: cancelJobPda,
           client: schedulerAuthority.publicKey,
-          workerStake0: lifecycleWorkerStake0Pda,
-          workerStake1: lifecycleWorkerStake1Pda,
-          workerStake2: lifecycleWorkerStake2Pda,
         })
+        .remainingAccounts(
+          writableAccounts([
+            lifecycleWorkerStake0Pda,
+            lifecycleWorkerStake1Pda,
+            lifecycleWorkerStake2Pda,
+          ])
+        )
         .rpc()
     );
   });
@@ -725,6 +869,11 @@ describe("edgerun", () => {
     await program.methods
       .updateConfig({
         schedulerAuthority: schedulerAuthority.publicKey,
+        randomnessAuthority: schedulerAuthority.publicKey,
+        daWindowSlots: new anchor.BN(100),
+        nonResponseSlashLamports: new anchor.BN(50_000),
+        committeeTieringEnabled: true,
+        maxCommitteeSize: 9,
         minWorkerStakeLamports: new anchor.BN(500_000_000),
         protocolFeeBps: 100,
         challengeWindowSlots: new anchor.BN(100),
@@ -733,7 +882,7 @@ describe("edgerun", () => {
         allowedRuntimeRoot: new Array<number>(32).fill(0),
         paused: false,
       })
-      .accounts({
+      .accountsStrict({
         admin: schedulerAuthority.publicKey,
         config: configPda,
       })
@@ -744,15 +893,28 @@ describe("edgerun", () => {
       slashJobId,
       600_000_000,
       [lifecycleWorker0, lifecycleWorker1, lifecycleWorker2],
-      [lifecycleWorkerStake0Pda, lifecycleWorkerStake1Pda, lifecycleWorkerStake2Pda]
+      [
+        lifecycleWorkerStake0Pda,
+        lifecycleWorkerStake1Pda,
+        lifecycleWorkerStake2Pda,
+      ]
     );
     const slashJob = await program.account.job.fetch(slashJobPda);
     const slashAmount = slashJob.requiredLockLamports.toNumber();
     const winnerHash = random32();
     const loserHash = random32();
-    const slashResult0Pda = jobResultPda(slashJobId, lifecycleWorker0.publicKey);
-    const slashResult1Pda = jobResultPda(slashJobId, lifecycleWorker1.publicKey);
-    const slashResult2Pda = jobResultPda(slashJobId, lifecycleWorker2.publicKey);
+    const slashResult0Pda = jobResultPda(
+      slashJobId,
+      lifecycleWorker0.publicKey
+    );
+    const slashResult1Pda = jobResultPda(
+      slashJobId,
+      lifecycleWorker1.publicKey
+    );
+    const slashResult2Pda = jobResultPda(
+      slashJobId,
+      lifecycleWorker2.publicKey
+    );
     const slashOutputPda = outputAvailabilityPda(slashJobId);
 
     await submitResultForJob(
@@ -778,7 +940,7 @@ describe("edgerun", () => {
     );
     await program.methods
       .reachQuorum()
-      .accounts({
+      .accountsStrict({
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: slashJobPda,
@@ -792,7 +954,7 @@ describe("edgerun", () => {
       .rpc();
     await program.methods
       .declareOutput(winnerHash, Buffer.from("ipfs://demo/slash"))
-      .accounts({
+      .accountsStrict({
         publisher: lifecycleWorker0.publicKey,
         job: slashJobPda,
         jobResult: slashResult0Pda,
@@ -804,31 +966,45 @@ describe("edgerun", () => {
 
     await program.methods
       .finalizeJob()
-      .accounts({
+      .accountsStrict({
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: slashJobPda,
         outputAvailability: slashOutputPda,
-        workerStake0: lifecycleWorkerStake0Pda,
-        workerStake1: lifecycleWorkerStake1Pda,
-        workerStake2: lifecycleWorkerStake2Pda,
       })
       .remainingAccounts([
         { pubkey: slashResult0Pda, isWritable: false, isSigner: false },
         { pubkey: slashResult1Pda, isWritable: false, isSigner: false },
         { pubkey: slashResult2Pda, isWritable: false, isSigner: false },
-        { pubkey: lifecycleWorker0.publicKey, isWritable: true, isSigner: false },
-        { pubkey: lifecycleWorker1.publicKey, isWritable: true, isSigner: false },
+        ...writableAccounts([
+          lifecycleWorkerStake0Pda,
+          lifecycleWorkerStake1Pda,
+          lifecycleWorkerStake2Pda,
+        ]),
+        {
+          pubkey: lifecycleWorker0.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
+        {
+          pubkey: lifecycleWorker1.publicKey,
+          isWritable: true,
+          isSigner: false,
+        },
       ])
       .signers([permissionlessCaller])
       .rpc();
 
-    const stakeBefore = await program.account.workerStake.fetch(lifecycleWorkerStake2Pda);
-    const configLamportsBefore = await provider.connection.getBalance(configPda);
+    const stakeBefore = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
+    const configLamportsBefore = await provider.connection.getBalance(
+      configPda
+    );
 
     await program.methods
       .slashWorker()
-      .accounts({
+      .accountsStrict({
         caller: permissionlessCaller.publicKey,
         config: configPda,
         job: slashJobPda,
@@ -838,21 +1014,25 @@ describe("edgerun", () => {
       .signers([permissionlessCaller])
       .rpc();
 
-    const stakeAfter = await program.account.workerStake.fetch(lifecycleWorkerStake2Pda);
+    const stakeAfter = await program.account.workerStake.fetch(
+      lifecycleWorkerStake2Pda
+    );
     const configLamportsAfter = await provider.connection.getBalance(configPda);
 
     expect(
-      stakeBefore.totalStakeLamports.toNumber() - stakeAfter.totalStakeLamports.toNumber()
+      stakeBefore.totalStakeLamports.toNumber() -
+        stakeAfter.totalStakeLamports.toNumber()
     ).to.equal(slashAmount);
     expect(
-      stakeBefore.lockedStakeLamports.toNumber() - stakeAfter.lockedStakeLamports.toNumber()
+      stakeBefore.lockedStakeLamports.toNumber() -
+        stakeAfter.lockedStakeLamports.toNumber()
     ).to.equal(slashAmount);
     expect(configLamportsAfter - configLamportsBefore).to.equal(slashAmount);
 
     await expectFail(
       program.methods
         .slashWorker()
-        .accounts({
+        .accountsStrict({
           caller: permissionlessCaller.publicKey,
           config: configPda,
           job: slashJobPda,
@@ -866,7 +1046,7 @@ describe("edgerun", () => {
     await expectFail(
       program.methods
         .slashWorker()
-        .accounts({
+        .accountsStrict({
           caller: permissionlessCaller.publicKey,
           config: configPda,
           job: slashJobPda,
@@ -885,7 +1065,7 @@ describe("edgerun", () => {
   ) {
     await program.methods
       .registerWorkerStake()
-      .accounts({
+      .accountsStrict({
         worker: worker.publicKey,
         workerStake: workerStakePda,
         systemProgram: SystemProgram.programId,
@@ -895,7 +1075,7 @@ describe("edgerun", () => {
 
     await program.methods
       .depositStake(new anchor.BN(stakeLamports))
-      .accounts({
+      .accountsStrict({
         worker: worker.publicKey,
         workerStake: workerStakePda,
         systemProgram: SystemProgram.programId,
@@ -930,7 +1110,7 @@ describe("edgerun", () => {
         new anchor.BN(100_000),
         new anchor.BN(escrowLamports)
       )
-      .accounts({
+      .accountsStrict({
         client: schedulerAuthority.publicKey,
         config: configPda,
         job: jobPda,
@@ -944,14 +1124,12 @@ describe("edgerun", () => {
         workers[1].publicKey,
         workers[2].publicKey,
       ])
-      .accounts({
+      .accountsStrict({
         schedulerAuthority: schedulerAuthority.publicKey,
         config: configPda,
         job: jobPda,
-        workerStake0: workerStakes[0],
-        workerStake1: workerStakes[1],
-        workerStake2: workerStakes[2],
       })
+      .remainingAccounts(writableAccounts(workerStakes))
       .rpc();
 
     return { jobPda };
@@ -1001,7 +1179,8 @@ async function submitResultForJob(
   outputHash: number[]
 ) {
   const provider = anchor.getProvider() as anchor.AnchorProvider;
-  const program = anchor.workspace.EdgerunProgram as anchor.Program<EdgerunProgram>;
+  const program = anchor.workspace
+    .EdgerunProgram as anchor.Program<EdgerunProgram>;
   const job = await program.account.job.fetch(jobPda);
   const message = buildResultDigest(
     Array.from(job.jobId as number[]),
@@ -1017,7 +1196,7 @@ async function submitResultForJob(
 
   await program.methods
     .submitResult(outputHash, attestationSig)
-    .accounts({
+    .accountsStrict({
       worker: worker.publicKey,
       job: jobPda,
       jobResult,
@@ -1053,7 +1232,10 @@ function buildResultDigest(
 function merkleParentSorted(a: number[], b: number[]): number[] {
   const left = Buffer.from(a);
   const right = Buffer.from(b);
-  const preimage = Buffer.concat([Buffer.compare(left, right) <= 0 ? left : right, Buffer.compare(left, right) <= 0 ? right : left]);
+  const preimage = Buffer.concat([
+    Buffer.compare(left, right) <= 0 ? left : right,
+    Buffer.compare(left, right) <= 0 ? right : left,
+  ]);
   return Array.from(blake3(preimage));
 }
 
@@ -1065,7 +1247,15 @@ function bytesEqual(a: number[], b: number[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-async function expectFail(promise: Promise<string>) {
+function writableAccounts(pubkeys: readonly PublicKey[]) {
+  return pubkeys.map((pubkey) => ({
+    pubkey,
+    isWritable: true,
+    isSigner: false,
+  }));
+}
+
+async function expectFail(promise: Promise<unknown>) {
   try {
     await promise;
     expect.fail("expected transaction to fail");

@@ -6,16 +6,21 @@ This frontend is built as a static site using:
 - esbuild for native ESM browser scripts
 - Bun for package/runtime tooling
 
-## Build
+## Prerequisites
 
 ```bash
 bun install
+```
+
+## Build
+
+```bash
 bun run build
 ```
 
 Build output:
-- `../out/frontend/site/` static website for GitHub Pages
-- `../out/frontend/wiki/` versioned markdown docs for GitHub wiki sync
+- `../out/frontend/site/` static website output
+- `../out/frontend/wiki/` versioned markdown docs for wiki sync
 - `../out/frontend/tmp/` temporary build artifacts
 - `../out/frontend/generated/` generated auxiliary snapshots
 
@@ -24,6 +29,34 @@ Build output:
 ```bash
 bun run check
 ```
+
+This runs:
+- TypeScript type checks (`bun run typecheck`)
+- ESLint (`bun run lint`)
+- style-guide enforcement (`bun run style-guide:check`)
+
+## End-to-end tests (Cypress)
+
+Run all frontend E2E specs:
+
+```bash
+bun run test:e2e
+```
+
+Notes:
+- `test:e2e` requires an existing frontend build in `../out/frontend/site/index.html`.
+- The script serves static output on `http://127.0.0.1:4173` and runs Cypress with Electron.
+
+Run terminal stack E2E against Docker Compose:
+
+```bash
+bun run e2e:compose
+```
+
+This flow:
+- starts `scheduler`, `term-server`, and `frontend` via `docker compose`
+- waits for route/device readiness checks
+- runs `cypress/e2e/terminal-compose-stack.cy.js`
 
 ## Build metadata
 
@@ -35,5 +68,8 @@ The generator reads environment variables:
 - `EDGERUN_SITE_DOMAIN`
 - `EDGERUN_FRONTEND_DIST_ROOT`
 - `EDGERUN_FRONTEND_WIKI_ROOT`
+- `SOLANA_CLUSTER`
+- `SOLANA_RPC_URL`
+- `EDGERUN_TREASURY_ACCOUNT`
 
 These values are embedded in pages and release artifacts.

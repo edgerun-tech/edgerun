@@ -33,11 +33,6 @@ struct JobCreateResponse {
     bundle_hash: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct PolicyInfoResponse {
-    signer_pubkey: String,
-}
-
 async fn post_json_ok(
     client: &reqwest::Client,
     base: &str,
@@ -386,7 +381,7 @@ pub(crate) async fn run_integration_policy_rotation(root: &Path) -> Result<()> {
     .await?;
     wait_for_health(&client, &sched_url, &mut scheduler).await?;
 
-    let policy: PolicyInfoResponse = client
+    let policy: edgerun_types::control_plane::PolicyInfoResponse = client
         .get(format!("{sched_url}/v1/policy/info"))
         .send()
         .await?

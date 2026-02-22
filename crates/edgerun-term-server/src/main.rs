@@ -188,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
         .fallback_service(ServeDir::new(web_root.clone()));
 
     let bind_addr =
-        env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+        env::var("EDGERUN_TERM_SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:5577".to_string());
     let addr: SocketAddr = bind_addr
         .parse()
         .with_context(|| format!("failed to parse EDGERUN_TERM_SERVER_ADDR '{bind_addr}'"))?;

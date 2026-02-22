@@ -19,3 +19,4 @@ serde_json.workspace = true
 tokio.workspace = true
 toml = "0.8"
 tower-http = { workspace = true, features = ["cors"] }
+edgerun-types = { path = "../edgerun-types" }

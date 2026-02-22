@@ -373,7 +373,11 @@ mod wasm {
         frame
     }
 
-    fn feed_terminal_bytes(state: &mut AppState, writer: Arc<Mutex<Box<dyn Write + Send>>>, data: &[u8]) {
+    fn feed_terminal_bytes(
+        state: &mut AppState,
+        writer: Arc<Mutex<Box<dyn Write + Send>>>,
+        data: &[u8],
+    ) {
         let mut performer = GridPerformer {
             grid: &mut state.terminal,
             writer,
@@ -758,7 +762,9 @@ mod wasm {
                 let data = Uint8Array::new(&buffer).to_vec();
                 let mut state = onmessage_state.borrow_mut();
                 match state.transport {
-                    WsTransport::Raw => feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data),
+                    WsTransport::Raw => {
+                        feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data)
+                    }
                     WsTransport::Mux => {
                         if data.len() < 5 || data[0] != PTY_FRAME_STDOUT {
                             return;

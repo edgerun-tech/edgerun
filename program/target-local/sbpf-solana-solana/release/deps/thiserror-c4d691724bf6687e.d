@@ -1,0 +1,10 @@
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/libthiserror-c4d691724bf6687e.rmeta: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/provide.rs
+
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/libthiserror-c4d691724bf6687e.rlib: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/provide.rs
+
+/home/ken/src/projects/edgerun/program/target-local/sbpf-solana-solana/release/deps/thiserror-c4d691724bf6687e.d: /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/lib.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/aserror.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/display.rs /var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/provide.rs
+
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/lib.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/aserror.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/display.rs:
+/var/cache/build/rust/cargo/registry/src/index.crates.io-6f17d22bba15001f/thiserror-1.0.69/src/provide.rs:
