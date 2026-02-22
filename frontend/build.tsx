@@ -2,11 +2,10 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import path from 'node:path'
 import { execSync } from 'node:child_process'
 import { renderToString } from 'solid-js/web'
-import MarkdownIt from 'markdown-it'
 import { createHighlighter } from 'shiki'
-import { evaluateSync } from '@mdx-js/mdx'
 
 import { writeStaticSiteMetadata } from './lib/build-static-meta'
+import { createDocsRenderer } from './lib/build-docs-render'
 import { getDocsNav } from './lib/docs-nav'
 import { generatedApiSpecs, getDocsSources, type DocsSource } from './lib/docs-catalog'
 import { getAllSiteRoutes } from './lib/routes'
@@ -44,18 +43,7 @@ const versions = Array.from(new Set((process.env.EDGERUN_VERSIONS || currentVers
 const docsSources: DocsSource[] = getDocsSources(repoRoot)
 
 const shiki = await createHighlighter({ themes: ['github-dark'], langs: ['plaintext', 'markdown', 'rust', 'toml', 'json', 'yaml', 'bash', 'typescript', 'javascript'] })
-const markdown = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
-  highlight: (code: string, lang: string) => {
-    try {
-      return shiki.codeToHtml(code, { lang: (lang || 'plaintext').toLowerCase(), theme: 'github-dark' })
-    } catch {
-      return `<pre class="shiki"><code>${escapeHtml(code)}</code></pre>`
-    }
-  }
-})
+const docsRenderer = createDocsRenderer(shiki)
 
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
@@ -194,7 +182,7 @@ function buildChangelogMarkdown(ref: string, version: string): string {
     const commitUrl = repo ? `${repo}/commit/${hash}` : ''
     const compareUrl = repo && parent ? `${repo}/compare/${parent}...${hash}` : ''
     const links = [commitUrl ? `[commit](${commitUrl})` : '', compareUrl ? `[diff](${compareUrl})` : ''].filter(Boolean).join(' · ')
-    const normalizedSubject = normalizeDocsTerminology(
+    const normalizedSubject = docsRenderer.normalizeDocsTerminology(
       subject.replaceAll('vanity', 'address-prefix').replaceAll('Vanity', 'Address-prefix'),
       'changelog'
     )
@@ -804,142 +792,6 @@ function readVersionedDoc(ref: string, sourcePath: string): { content: string; r
   return null
 }
 
-const mdxFragment = Symbol.for('edgerun.mdx.fragment')
-
-type MdxAstNode =
-  | null
-  | undefined
-  | boolean
-  | string
-  | number
-  | {
-    type?: any
-    props?: Record<string, unknown>
-  }
-  | MdxAstNode[]
-
-function mdxJsx(type: any, props: Record<string, unknown> | null, key?: string | number): MdxAstNode {
-  return { type, props: { ...(props || {}), key } }
-}
-
-function stripFrontmatter(content: string): string {
-  return content.replace(/^---\n[\s\S]*?\n---\n?/m, '')
-}
-
-function normalizeDocsTerminology(content: string, sourcePath: string): string {
-  let out = content
-    .replaceAll('edgerun-vanity-client', 'edgerun-address-client')
-    .replaceAll('edgerun-vanity-payload', 'edgerun-address-payload')
-    .replaceAll('edgerun_vanity_payload', 'edgerun_address_payload')
-    .replace(/\b[Vv]anity-address\b/g, 'address-prefix')
-    .replace(/\b[Vv]anity\b/g, 'address-prefix')
-
-  if (sourcePath.endsWith(path.join('docs', 'ONBOARDING.mdx'))) {
-    out = `> Legacy note: this workflow was previously called "vanity" address generation.\n\n${out}`
-  }
-  return out
-}
-
-function renderMdxAst(node: MdxAstNode): string {
-  if (node === null || node === undefined || node === false || node === true) return ''
-  if (Array.isArray(node)) return node.map(renderMdxAst).join('')
-  if (typeof node === 'string' || typeof node === 'number') return escapeHtml(String(node))
-  const type = node.type
-  const props = node.props || {}
-
-  if (type === mdxFragment) return renderMdxAst(props.children as MdxAstNode)
-  if (typeof type === 'function') return renderMdxAst(type(props))
-  if (typeof type !== 'string') return renderMdxAst(props.children as MdxAstNode)
-
-  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source'])
-  const attrs = Object.entries(props)
-    .filter(([name]) => name !== 'children' && name !== 'key')
-    .map(([name, value]) => {
-      if (value === null || value === undefined || value === false) return ''
-      const attrName = name === 'className' ? 'class' : name
-      if (value === true) return ` ${attrName}`
-      if (typeof value === 'string' || typeof value === 'number') return ` ${attrName}="${escapeHtml(String(value))}"`
-      return ''
-    })
-    .join('')
-
-  if (voidTags.has(type)) return `<${type}${attrs} />`
-  return `<${type}${attrs}>${renderMdxAst(props.children as MdxAstNode)}</${type}>`
-}
-
-function decodeHtmlEntities(value: string): string {
-  return value
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&amp;', '&')
-}
-
-function highlightCodeBlocksHtml(html: string): string {
-  return html.replace(/<pre([^>]*)>\s*<code([^>]*)>([\s\S]*?)<\/code>\s*<\/pre>/g, (full, preAttrsRaw, codeAttrsRaw, codeRaw) => {
-    const preAttrs = String(preAttrsRaw || '')
-    if (/\bshiki\b/i.test(preAttrs)) return full
-    const codeAttrs = String(codeAttrsRaw || '')
-    const lang = (codeAttrs.match(/language-([a-z0-9_-]+)/i)?.[1] || 'plaintext').toLowerCase()
-    const code = decodeHtmlEntities(String(codeRaw || ''))
-    try {
-      return shiki.codeToHtml(code, { lang, theme: 'github-dark' })
-    } catch {
-      return `<pre class="shiki"><code>${escapeHtml(code)}</code></pre>`
-    }
-  })
-}
-
-function renderMdxContent(content: string): string {
-  const source = stripFrontmatter(content)
-  const Callout = (data: Record<string, unknown>) => mdxJsx('aside', {
-    className: 'rounded-lg border border-border bg-card/70 p-4',
-    children: [
-      data.title ? mdxJsx('p', { className: 'mb-1 text-sm font-semibold text-foreground', children: String(data.title) }) : null,
-      mdxJsx('div', { className: 'text-sm text-muted-foreground', children: data.children })
-    ]
-  })
-  const CodeBlock = (data: Record<string, unknown>) => {
-    const code = typeof data.code === 'string' ? data.code : typeof data.children === 'string' ? data.children : ''
-    const language = typeof data.language === 'string' ? data.language : 'plaintext'
-    return mdxJsx('pre', {
-      className: 'overflow-x-auto rounded-lg border border-border bg-black/40 p-4',
-      children: mdxJsx('code', { className: `language-${language}`, children: code })
-    })
-  }
-
-  const evaluated: any = evaluateSync(source, {
-    Fragment: mdxFragment,
-    jsx: mdxJsx,
-    jsxs: mdxJsx,
-    development: false
-  })
-  const tree = evaluated.default({ components: { Callout, CodeBlock } })
-  return highlightCodeBlocksHtml(renderMdxAst(tree))
-}
-
-function renderDocsContent(content: string, sourcePath: string): string {
-  const normalized = normalizeDocsTerminology(content, sourcePath)
-  if (sourcePath.endsWith('.mdx')) {
-    return renderMdxContent(normalized)
-  }
-  return markdown.render(normalized)
-}
-
-function stripMarkdownForSearch(content: string): string {
-  return content
-    .replace(/^---\n[\s\S]*?\n---\n?/m, '')
-    .replace(/`{3}[\s\S]*?`{3}/g, ' ')
-    .replace(/`[^`]+`/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]+\)/g, ' ')
-    .replace(/\[[^\]]+\]\([^)]+\)/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/[#>*_-]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function generateVersionDocs(version: string): string[] {
   const ref = resolveRef(version)
   const generated: string[] = [`/docs/${version}/`]
@@ -957,18 +809,18 @@ function generateVersionDocs(version: string): string[] {
     const href = `/docs/${version}/${fileName}`
     links.push({ title: pageTitle, href })
     generated.push(href)
-    const normalizedSourceContent = normalizeDocsTerminology(found.content, found.resolvedPath)
+    const normalizedSourceContent = docsRenderer.normalizeDocsTerminology(found.content, found.resolvedPath)
     searchIndex.push({
       title: pageTitle,
       href,
-      text: stripMarkdownForSearch(normalizedSourceContent)
+      text: docsRenderer.stripMarkdownForSearch(normalizedSourceContent)
     })
 
     writePage(
       path.join('docs', version, fileName),
       `${pageTitle} (${version})`,
       `Docs for ${pageTitle} in ${version}`,
-      docsLayout(version, pageTitle, renderDocsContent(found.content, found.resolvedPath), `${(source.sourceLabel || found.resolvedPath).replaceAll('vanity', 'address').replaceAll('Vanity', 'Address')} @ ${ref}`)
+      docsLayout(version, pageTitle, docsRenderer.renderDocsContent(found.content, found.resolvedPath), `${(source.sourceLabel || found.resolvedPath).replaceAll('vanity', 'address').replaceAll('Vanity', 'Address')} @ ${ref}`)
     )
     writeFileSync(path.join(wikiVersionDir, `${slug}.mdx`), `${normalizedSourceContent}\n`, 'utf8')
   }
@@ -979,7 +831,7 @@ function generateVersionDocs(version: string): string[] {
   searchIndex.push({
     title: 'scheduler-api',
     href: `/docs/${version}/scheduler-api.html`,
-    text: stripMarkdownForSearch(schedulerApi.searchText)
+    text: docsRenderer.stripMarkdownForSearch(schedulerApi.searchText)
   })
   writePage(path.join('docs', version, 'scheduler-api.html'), `scheduler-api (${version})`, `Scheduler API snapshot for ${version}`, docsLayout(version, 'scheduler-api', schedulerApi.html, `source: crates/edgerun-scheduler/src/main.rs @ ${ref}`))
   writeFileSync(path.join(wikiVersionDir, 'scheduler-api.mdx'), `${schedulerApi.wikiMdx}\n`, 'utf8')
@@ -990,9 +842,9 @@ function generateVersionDocs(version: string): string[] {
   searchIndex.push({
     title: 'changelog',
     href: `/docs/${version}/changelog.html`,
-    text: stripMarkdownForSearch(changelogMd)
+    text: docsRenderer.stripMarkdownForSearch(changelogMd)
   })
-  writePage(path.join('docs', version, 'changelog.html'), `changelog (${version})`, `Changelog for ${version}`, docsLayout(version, 'changelog', markdown.render(changelogMd), `source: git history @ ${ref}`))
+  writePage(path.join('docs', version, 'changelog.html'), `changelog (${version})`, `Changelog for ${version}`, docsLayout(version, 'changelog', docsRenderer.renderMarkdown(changelogMd), `source: git history @ ${ref}`))
   writeFileSync(path.join(wikiVersionDir, 'changelog.mdx'), `${changelogMd}\n`, 'utf8')
 
   const apiPages: Array<{ slug: string; title: string; contentHtml: string; searchText: string; wikiMdx: string }> = []
@@ -1021,21 +873,21 @@ function generateVersionDocs(version: string): string[] {
       apiPages.push({
         slug: spec.slug,
         title: spec.title,
-        contentHtml: markdown.render(cliMarkdown),
-        searchText: stripMarkdownForSearch(cliMarkdown),
+        contentHtml: docsRenderer.renderMarkdown(cliMarkdown),
+        searchText: docsRenderer.stripMarkdownForSearch(cliMarkdown),
         wikiMdx: cliMarkdown
       })
     }
   }
   for (const page of apiPages) {
     const href = `/docs/${version}/${page.slug}.html`
-    const normalizedSearchText = normalizeDocsTerminology(page.searchText, page.slug)
+    const normalizedSearchText = docsRenderer.normalizeDocsTerminology(page.searchText, page.slug)
     links.push({ title: page.slug, href })
     generated.push(href)
     searchIndex.push({
       title: page.slug,
       href,
-      text: stripMarkdownForSearch(normalizedSearchText)
+      text: docsRenderer.stripMarkdownForSearch(normalizedSearchText)
     })
     writePage(
       path.join('docs', version, `${page.slug}.html`),
@@ -1057,9 +909,9 @@ function generateVersionDocs(version: string): string[] {
   searchIndex.push({
     title: 'api-reference',
     href: `/docs/${version}/api-reference.html`,
-    text: stripMarkdownForSearch(apiIndexMarkdown)
+    text: docsRenderer.stripMarkdownForSearch(apiIndexMarkdown)
   })
-  writePage(path.join('docs', version, 'api-reference.html'), `api-reference (${version})`, `API references for ${version}`, docsLayout(version, 'api-reference', markdown.render(apiIndexMarkdown), `source: docs index @ ${ref}`))
+  writePage(path.join('docs', version, 'api-reference.html'), `api-reference (${version})`, `API references for ${version}`, docsLayout(version, 'api-reference', docsRenderer.renderMarkdown(apiIndexMarkdown), `source: docs index @ ${ref}`))
   writeFileSync(path.join(wikiVersionDir, 'api-reference.mdx'), `${apiIndexMarkdown}\n`, 'utf8')
 
   writePage(

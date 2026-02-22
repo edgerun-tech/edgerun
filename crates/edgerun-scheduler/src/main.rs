@@ -497,6 +497,13 @@ struct RouteResolveResponse {
     route: Option<DeviceRouteEntry>,
 }
 
+#[derive(Debug, Serialize)]
+struct OwnerRoutesResponse {
+    ok: bool,
+    owner_pubkey: String,
+    devices: Vec<DeviceRouteEntry>,
+}
+
 #[derive(Debug, Clone)]
 struct RouteHeartbeatToken {
     device_id: String,
@@ -510,7 +517,10 @@ struct WebRtcSignalConnectQuery {
 
 #[derive(Debug, Deserialize)]
 struct WebRtcSignalClientMessage {
+    #[serde(default)]
     to_device_id: String,
+    #[serde(default)]
+    to_owner_pubkey: String,
     kind: String,
     #[serde(default)]
     sdp: Option<String>,
@@ -692,6 +702,7 @@ async fn main() -> Result<()> {
         .route("/v1/route/register", post(route_register))
         .route("/v1/route/heartbeat", post(route_heartbeat))
         .route("/v1/route/resolve/{device_id}", get(route_resolve))
+        .route("/v1/route/owner/{owner_pubkey}", get(route_owner_resolve))
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/policy/info", get(policy_info))
         .route("/v1/policy/audit", get(policy_audit_list))
@@ -908,6 +919,26 @@ async fn route_resolve(
     })
 }
 
+async fn route_owner_resolve(
+    State(state): State<AppState>,
+    Path(owner_pubkey): Path<String>,
+) -> Json<OwnerRoutesResponse> {
+    let owner_pubkey = owner_pubkey.trim().to_string();
+    let now = now_unix_seconds();
+    let mut routes = state.device_routes.lock().expect("lock poisoned");
+    prune_expired_routes(&mut routes, now);
+    let devices = routes
+        .values()
+        .filter(|route| route.owner_pubkey == owner_pubkey)
+        .cloned()
+        .collect::<Vec<_>>();
+    Json(OwnerRoutesResponse {
+        ok: true,
+        owner_pubkey,
+        devices,
+    })
+}
+
 async fn webrtc_signal_ws(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -985,8 +1016,9 @@ async fn handle_signal_client_message(
     text: &str,
 ) -> Result<(), ()> {
     let msg: WebRtcSignalClientMessage = serde_json::from_str(text).map_err(|_| ())?;
-    let to_device_id = msg.to_device_id.trim();
-    if to_device_id.is_empty() {
+    let to_device_id = msg.to_device_id.trim().to_string();
+    let to_owner_pubkey = msg.to_owner_pubkey.trim().to_string();
+    if to_device_id.is_empty() && to_owner_pubkey.is_empty() {
         return Err(());
     }
 
@@ -1001,14 +1033,47 @@ async fn handle_signal_client_message(
     };
     let encoded = serde_json::to_string(&outbound).map_err(|_| ())?;
 
-    let sender = {
-        let peers = state.signal_peers.lock().await;
-        peers.get(to_device_id).cloned()
+    if !to_device_id.is_empty() {
+        let sender = {
+            let peers = state.signal_peers.lock().await;
+            peers.get(to_device_id.as_str()).cloned()
+        };
+        let Some(sender) = sender else {
+            return Err(());
+        };
+        sender.send(encoded).map_err(|_| ())?;
+        return Ok(());
+    }
+
+    let target_device_ids = {
+        let now = now_unix_seconds();
+        let mut routes = state.device_routes.lock().expect("lock poisoned");
+        prune_expired_routes(&mut routes, now);
+        routes
+            .values()
+            .filter(|route| route.owner_pubkey == to_owner_pubkey)
+            .map(|route| route.device_id.clone())
+            .collect::<Vec<_>>()
     };
-    let Some(sender) = sender else {
+    if target_device_ids.is_empty() {
         return Err(());
-    };
-    sender.send(encoded).map_err(|_| ())?;
+    }
+
+    let peers = state.signal_peers.lock().await;
+    let mut delivered = 0usize;
+    for device_id in target_device_ids {
+        if device_id == from_device_id {
+            continue;
+        }
+        if let Some(sender) = peers.get(device_id.as_str()) {
+            if sender.send(encoded.clone()).is_ok() {
+                delivered = delivered.saturating_add(1);
+            }
+        }
+    }
+    if delivered == 0 {
+        return Err(());
+    }
     Ok(())
 }
 
