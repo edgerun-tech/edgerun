@@ -10,6 +10,6 @@ serde.workspace = true
 serde_json.workspace = true
 ed25519-dalek.workspace = true
 hmac = "0.12"
-rand = "0.8"
+rand = "0.9"
 sha2 = "0.10"
 thiserror.workspace = true
