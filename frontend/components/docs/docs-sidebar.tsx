@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For } from 'solid-js'
 import { getDocsNav } from '../../lib/docs-nav'
 

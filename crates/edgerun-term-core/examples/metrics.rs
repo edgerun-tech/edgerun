@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use edgerun_term_core::render::FONT_DATA;
 use edgerun_term_core::text::GlyphCache;
 use std::sync::Arc;

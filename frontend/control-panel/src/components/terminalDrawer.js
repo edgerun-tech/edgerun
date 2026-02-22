@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createStore, cloneState } from '../state/store.js';
 import { createIndexedDbAdapter } from '../state/indexedDbAdapter.js';
 

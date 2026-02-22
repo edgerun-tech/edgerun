@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 use crate::arena::ObjectPool;
 use crate::event::{ActorId, Event, StreamId};
 use crate::io_reactor::{IoFileHandle, IoReactor};

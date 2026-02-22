@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For, createSignal } from 'solid-js'
 import { Card } from '../ui/card'
 import { Button } from '../ui/button'

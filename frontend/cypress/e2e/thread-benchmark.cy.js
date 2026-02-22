@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('thread benchmark', () => {
   it('benchmarks main thread and worker thread and reports throughput metrics', () => {
     cy.visit('/workers/')

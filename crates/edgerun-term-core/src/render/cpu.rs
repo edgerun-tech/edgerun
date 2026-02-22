@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! CPU rendering helpers: text clipping, grid drawing, overlays.
 pub use crate::render::primitives::{draw_text_line, draw_text_line_clipped};
 use crate::terminal::Rgba;

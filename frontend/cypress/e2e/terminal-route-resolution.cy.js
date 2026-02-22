@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('terminal route device resolution', () => {
   it('renders routed in-app terminal pane for route:// targets', () => {
     cy.visit('/', {

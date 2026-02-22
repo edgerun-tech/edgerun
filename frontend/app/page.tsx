@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { HeroSection } from '../components/landing/hero-section'
 import { FeaturesSection } from '../components/landing/features-section'
 import { TerminalDemo } from '../components/landing/terminal-demo'

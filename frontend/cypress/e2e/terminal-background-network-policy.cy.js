@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('terminal background network policy', () => {
   it('does not issue background health or device polling requests while idle', () => {
     cy.intercept('GET', '**/v1/device/identity').as('deviceIdentity')

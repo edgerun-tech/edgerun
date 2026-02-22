@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 

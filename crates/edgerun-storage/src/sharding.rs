@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Per-core sharding for lock-free concurrent writes.
 //!
 //! Provides linear scalability with CPU cores by:

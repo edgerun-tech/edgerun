@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 function openReviewStep() {
   cy.get('button[role="tab"]').contains('3. Review + Run').click({ force: true })
   cy.get('button[role="tab"]').contains('3. Review + Run').should('have.attr', 'aria-selected', 'true')

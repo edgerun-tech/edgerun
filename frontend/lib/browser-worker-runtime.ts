@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { readWalletSession } from './wallet-session'
 
 type WorkerCapacity = {

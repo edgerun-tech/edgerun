@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { ROUTED_MESSAGE_EVENT, getWebRtcPeerSupervisor } from './webrtc-peer-supervisor'
 import {
   encodeRoutedTerminalFrame,

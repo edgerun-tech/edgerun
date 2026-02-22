@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Arena allocation for zero-per-event memory allocation.
 //!
 //! Arena allocators provide:

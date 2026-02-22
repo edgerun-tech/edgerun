@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export const DOCS_DEFAULT_VERSION = 'main'
 
 export function docsVersionIndexHref(version = DOCS_DEFAULT_VERSION): string {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 function buildWsUrl() {
   const url = new URL('/api/ws', window.location.origin)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'

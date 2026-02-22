@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export const WALLET_SESSION_EVENT = 'edgerun:wallet-session'
 
 const STORAGE_KEY = 'edgerun.wallet.session.v1'

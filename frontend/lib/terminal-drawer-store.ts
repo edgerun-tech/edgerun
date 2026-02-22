@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createIndexedDbAdapter } from './state/indexeddb-adapter'
 import terminalDevicesConfig from '../config/terminal-devices.json'
 

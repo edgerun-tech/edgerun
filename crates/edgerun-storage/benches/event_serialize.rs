@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use edgerun_storage::event::{ActorId, Event, StreamId};
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 type ControlWsResponse = {
   request_id?: string
   ok?: boolean

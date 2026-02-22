@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Render entry points will eventually hold drawing primitives. For now, re-export the text glyph
 // cache so external users keep working while the renderer is modularized.
 pub use crate::text::GlyphCache;

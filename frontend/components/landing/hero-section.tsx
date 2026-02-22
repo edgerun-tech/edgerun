@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Button } from '../ui/button'
 
 export function HeroSection() {
