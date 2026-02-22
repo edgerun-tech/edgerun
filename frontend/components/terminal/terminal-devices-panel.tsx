@@ -28,10 +28,21 @@ export function TerminalDevicesPanel(props: Props) {
         </button>
       </div>
       <div class="mb-3 space-y-2">
+        <button
+          type="button"
+          class="h-8 w-full rounded-md border border-border/70 bg-card/70 px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
+          disabled={devices().ownerImporting() || devices().walletAddress().length === 0}
+          onClick={() => void devices().syncMyDevices()}
+        >
+          {devices().ownerImporting() ? 'Syncing devices...' : 'Sync My Devices'}
+        </button>
+        <Show when={devices().walletAddress().length > 0}>
+          <p class="truncate font-mono text-[11px] text-muted-foreground">Wallet owner: {devices().walletAddress()}</p>
+        </Show>
         <input
           type="text"
           value={devices().ownerPubkeyInput()}
-          placeholder="Solana owner pubkey"
+          placeholder="Owner pubkey override (optional)"
           class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
           onInput={(ev) => devices().setOwnerPubkeyInput(ev.currentTarget.value)}
         />

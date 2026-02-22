@@ -103,7 +103,8 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
         "escrow_lamports":100,
         "assignment_worker_pubkey":"worker-a"
     });
-    let create: JobCreateResponse = control_ws_request(&sched_url, "job.create", create_body).await?;
+    let create: JobCreateResponse =
+        control_ws_request(&sched_url, "job.create", create_body).await?;
     let job_id = create.job_id;
     let bundle_hash = create.bundle_hash;
 
@@ -160,12 +161,8 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-2","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_2,"output_len":20,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":900,"error_code":null,"error_message":null,"trap_code":null}})).await?;
     post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-3","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_3,"output_len":30,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":800,"error_code":null,"error_message":null,"trap_code":null}})).await?;
 
-    let status: Value = control_ws_request(
-        &sched_url,
-        "job.status",
-        json!({ "job_id": job_id }),
-    )
-    .await?;
+    let status: Value =
+        control_ws_request(&sched_url, "job.status", json!({ "job_id": job_id })).await?;
 
     let reports = status["reports"].as_array().cloned().unwrap_or_default();
     let failures = status["failures"].as_array().cloned().unwrap_or_default();
@@ -265,7 +262,8 @@ pub(crate) async fn run_integration_e2e_lifecycle(root: &Path) -> Result<()> {
         "escrow_lamports":100,
         "assignment_worker_pubkey":worker_pubkey
     });
-    let create: JobCreateResponse = control_ws_request(&sched_url, "job.create", create_body).await?;
+    let create: JobCreateResponse =
+        control_ws_request(&sched_url, "job.create", create_body).await?;
     let job_id = create.job_id;
 
     let mut success = false;
@@ -276,12 +274,8 @@ pub(crate) async fn run_integration_e2e_lifecycle(root: &Path) -> Result<()> {
         if scheduler.try_wait()?.is_some() {
             break;
         }
-        let status: Value = control_ws_request(
-            &sched_url,
-            "job.status",
-            json!({ "job_id": job_id }),
-        )
-        .await?;
+        let status: Value =
+            control_ws_request(&sched_url, "job.status", json!({ "job_id": job_id })).await?;
         let has_fail = status["failures"]
             .as_array()
             .map(|v| !v.is_empty())
@@ -482,13 +476,10 @@ pub(crate) async fn run_integration_abi_rollover(root: &Path) -> Result<()> {
         "escrow_lamports":100,
         "assignment_worker_pubkey":worker_pubkey
     });
-    let unsupported_err = control_ws_request::<serde_json::Value>(
-        &sched_url,
-        "job.create",
-        unsupported_body,
-    )
-    .await
-    .expect_err("unsupported ABI must fail");
+    let unsupported_err =
+        control_ws_request::<serde_json::Value>(&sched_url, "job.create", unsupported_body)
+            .await
+            .expect_err("unsupported ABI must fail");
     ensure(
         unsupported_err.to_string().contains("(400)")
             || unsupported_err.to_string().contains("abi_version"),

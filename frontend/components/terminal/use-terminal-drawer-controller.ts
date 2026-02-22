@@ -12,7 +12,7 @@ import {
 import { refreshTerminalDevices } from '../../lib/terminal-device-service'
 import { mountTerminalDrawerRuntime } from '../../lib/terminal-drawer-runtime'
 import { getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
-import { getRouteControlBase, parseRouteDeviceId, resolveOwnerRoutes } from '../../lib/webrtc-route-client'
+import { getRouteControlBase, parseRouteDeviceId, resolveDeviceRoute, resolveOwnerRoutes } from '../../lib/webrtc-route-client'
 import { readWalletSession, type WalletSessionState } from '../../lib/wallet-session'
 
 export type TerminalTabsController = {
@@ -29,6 +29,7 @@ export type TerminalTabsController = {
 export type TerminalDevicesController = {
   state: Accessor<TerminalDrawerState>
   refreshDeviceStatus: () => Promise<void>
+  walletAddress: Accessor<string>
   deviceNameInput: Accessor<string>
   setDeviceNameInput: Setter<string>
   deviceUrlInput: Accessor<string>
@@ -39,6 +40,7 @@ export type TerminalDevicesController = {
   setOwnerPubkeyInput: Setter<string>
   ownerImporting: Accessor<boolean>
   ownerImportNote: Accessor<string>
+  syncMyDevices: () => Promise<void>
   importOwnerDevices: () => Promise<void>
 }
 
@@ -66,8 +68,11 @@ export function useTerminalDrawerController(): TerminalDrawerController {
   const [ownerImportNote, setOwnerImportNote] = createSignal('')
   const [tabMenuTabId, setTabMenuTabId] = createSignal<string | null>(null)
   let refreshInFlight = false
+  let autoWalletRouteInFlight = false
+  let autoWalletRouteResolvedFor = ''
 
   const walletConnected = createMemo(() => wallet().connected)
+  const walletAddress = createMemo(() => wallet().address.trim())
   const activeTab = createMemo(() => {
     const current = state()
     return current.tabs.find((tab) => tab.id === current.activeTabId) ?? current.tabs[0]
@@ -138,11 +143,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
   }
 
-  const importOwnerDevices = async () => {
-    const owner = ownerPubkeyInput().trim()
-    if (!owner || ownerImporting()) return
-    setOwnerImporting(true)
-    setOwnerImportNote('')
+  const importOwnerDevicesForOwner = async (owner: string): Promise<number> => {
     try {
       const controlBase = getRouteControlBase()
       const routes = await resolveOwnerRoutes(controlBase, owner)
@@ -159,10 +160,68 @@ export function useTerminalDrawerController(): TerminalDrawerController {
         existing.add(routeUrl)
         imported += 1
       }
-      setOwnerImportNote(imported > 0 ? `Imported ${imported} routed device${imported === 1 ? '' : 's'} for owner.` : 'No new routed devices found for owner.')
+      return imported
+    } catch {
+      return 0
+    }
+  }
+
+  const importOwnerDevices = async () => {
+    const owner = ownerPubkeyInput().trim() || walletAddress()
+    if (!owner || ownerImporting()) return
+    setOwnerImporting(true)
+    setOwnerImportNote('')
+    try {
+      const imported = await importOwnerDevicesForOwner(owner)
+      if (imported > 0) {
+        setOwnerImportNote(`Imported ${imported} routed device${imported === 1 ? '' : 's'} for owner.`)
+      } else {
+        setOwnerImportNote('No new routed devices found for owner.')
+      }
       await refreshDeviceStatus()
     } catch {
       setOwnerImportNote('Owner route lookup failed.')
+    } finally {
+      setOwnerImporting(false)
+    }
+  }
+
+  const syncMyDevices = async () => {
+    const owner = walletAddress()
+    if (!owner) {
+      setOwnerImportNote('Connect wallet first to sync devices.')
+      return
+    }
+    if (ownerImporting()) return
+    setOwnerImporting(true)
+    setOwnerImportNote('')
+    setOwnerPubkeyInput(owner)
+    try {
+      const imported = await importOwnerDevicesForOwner(owner)
+      if (imported > 0) {
+        setOwnerImportNote(`Imported ${imported} routed device${imported === 1 ? '' : 's'} for owner.`)
+        await refreshDeviceStatus()
+        return
+      }
+
+      // Fallback: if owner itself is a device id, use route.resolve to add it directly.
+      const controlBase = getRouteControlBase()
+      const resolved = await resolveDeviceRoute(controlBase, owner)
+      if (resolved) {
+        const routeUrl = `route://${owner}`
+        const existing = new Set(untrack(() => state().devices.map((device) => device.baseUrl)))
+        if (!existing.has(routeUrl)) {
+          const ownerLabel = owner.length > 12 ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : owner
+          terminalDrawerActions.addDevice(`My Device · ${ownerLabel}`, routeUrl)
+        }
+        setOwnerImportNote('Synced routed device from wallet.')
+        await refreshDeviceStatus()
+        return
+      }
+
+      setOwnerImportNote('No routed devices found for connected wallet.')
+    } catch {
+      setOwnerImportNote('Wallet device sync failed.')
     } finally {
       setOwnerImporting(false)
     }
@@ -181,6 +240,38 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       return
     }
     document.documentElement.style.setProperty('--terminal-drawer-height', `${drawerHeight()}px`)
+  })
+
+  createEffect(() => {
+    const walletOwner = walletAddress()
+    if (!walletOwner) return
+    if (ownerPubkeyInput().trim()) return
+    setOwnerPubkeyInput(walletOwner)
+  })
+
+  createEffect(() => {
+    const owner = walletAddress()
+    if (!owner) return
+    if (autoWalletRouteInFlight) return
+    if (autoWalletRouteResolvedFor === owner) return
+    autoWalletRouteInFlight = true
+    void (async () => {
+      try {
+        const controlBase = getRouteControlBase()
+        const resolved = await resolveDeviceRoute(controlBase, owner)
+        if (!resolved) return
+        const target = `route://${owner}`
+        const exists = untrack(() => state().devices.some((device) => device.baseUrl === target))
+        if (!exists) {
+          const ownerLabel = owner.length > 12 ? `${owner.slice(0, 6)}...${owner.slice(-4)}` : owner
+          terminalDrawerActions.addDevice(`My Device · ${ownerLabel}`, target)
+          await refreshDeviceStatus()
+        }
+      } finally {
+        autoWalletRouteResolvedFor = owner
+        autoWalletRouteInFlight = false
+      }
+    })()
   })
 
   onMount(() => {
@@ -219,6 +310,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     devices: {
       state,
       refreshDeviceStatus,
+      walletAddress,
       deviceNameInput,
       setDeviceNameInput,
       deviceUrlInput,
@@ -229,6 +321,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       setOwnerPubkeyInput,
       ownerImporting,
       ownerImportNote,
+      syncMyDevices,
       importOwnerDevices
     },
     panes: {

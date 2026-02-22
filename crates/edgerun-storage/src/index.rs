@@ -91,8 +91,12 @@ impl EventHashIndex {
 
         for chunk in data.chunks(entry_size) {
             let hash: [u8; 32] = chunk[..32].try_into().map_err(|_| IndexError::Corrupted)?;
-            let segment_id: [u8; 32] = chunk[32..64].try_into().map_err(|_| IndexError::Corrupted)?;
-            let offset_bytes: [u8; 8] = chunk[64..72].try_into().map_err(|_| IndexError::Corrupted)?;
+            let segment_id: [u8; 32] = chunk[32..64]
+                .try_into()
+                .map_err(|_| IndexError::Corrupted)?;
+            let offset_bytes: [u8; 8] = chunk[64..72]
+                .try_into()
+                .map_err(|_| IndexError::Corrupted)?;
             let offset = u64::from_le_bytes(offset_bytes);
 
             entries.insert(hash, EventHashIndexEntry { segment_id, offset });

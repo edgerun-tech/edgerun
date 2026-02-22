@@ -2,6 +2,7 @@
 import { For, createSignal, onCleanup, onMount, untrack } from 'solid-js'
 import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
 import { ROUTED_MESSAGE_EVENT, getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
+import { getRouteControlBase, resolveDeviceRoute } from '../../lib/webrtc-route-client'
 import { encodeRoutedTerminalFrame, parseRoutedTerminalFrame } from '../../lib/routed-terminal-protocol'
 
 type Props = {
@@ -43,6 +44,18 @@ function nowLabel(): string {
   return new Date().toLocaleTimeString('en-US', { hour12: false })
 }
 
+function toDirectWsUrl(baseUrl: string): string | null {
+  const trimmed = baseUrl.trim()
+  if (!trimmed) return null
+  try {
+    const url = new URL('/ws', `${trimmed.replace(/\/+$/, '')}/`)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
 export function RoutedTerminalPane(props: Props) {
   const routeDeviceId = untrack(() => props.routeDeviceId)
   const paneId = untrack(() => props.paneId)
@@ -51,6 +64,8 @@ export function RoutedTerminalPane(props: Props) {
   const [acknowledged, setAcknowledged] = createSignal(false)
   const [draft, setDraft] = createSignal('')
   const [lines, setLines] = createSignal<string[]>([])
+  let directSocket: WebSocket | null = null
+  let directEndpoint = ''
 
   function append(text: string): void {
     const normalized = stripAnsi(text).split('\u001bc').join('')
@@ -64,6 +79,74 @@ export function RoutedTerminalPane(props: Props) {
 
   function setClearBuffer(): void {
     setLines([])
+  }
+
+  function closeDirectSocket(): void {
+    if (!directSocket) return
+    try {
+      directSocket.close()
+    } catch {
+      // ignore socket close errors
+    }
+    directSocket = null
+    directEndpoint = ''
+  }
+
+  function appendDirectData(data: unknown): void {
+    if (typeof data === 'string') {
+      append(data)
+      return
+    }
+    if (data instanceof ArrayBuffer) {
+      append(new TextDecoder().decode(new Uint8Array(data)))
+      return
+    }
+    if (data instanceof Blob) {
+      void data.arrayBuffer().then((buf) => append(new TextDecoder().decode(new Uint8Array(buf)))).catch(() => {})
+      return
+    }
+    if (data instanceof Uint8Array) {
+      append(new TextDecoder().decode(data))
+    }
+  }
+
+  function ensureDirectSocket(endpoint: string): void {
+    const target = endpoint.trim()
+    if (!target) return
+    if (directSocket && directEndpoint === target) {
+      const open = directSocket.readyState === WebSocket.OPEN
+      setConnected(open)
+      setAcknowledged(open)
+      terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
+      return
+    }
+
+    closeDirectSocket()
+    directEndpoint = target
+    const ws = new WebSocket(target)
+    ws.binaryType = 'arraybuffer'
+    ws.addEventListener('open', () => {
+      setConnected(true)
+      setAcknowledged(true)
+      terminalDrawerActions.setPaneTransport(paneId, 'raw')
+      append(`[${nowLabel()}] direct ws connected`)
+    })
+    ws.addEventListener('close', () => {
+      if (directSocket !== ws) return
+      setConnected(false)
+      setAcknowledged(false)
+      terminalDrawerActions.setPaneTransport(paneId, 'unknown')
+    })
+    ws.addEventListener('error', () => {
+      if (directSocket !== ws) return
+      setConnected(false)
+      setAcknowledged(false)
+      terminalDrawerActions.setPaneTransport(paneId, 'unknown')
+    })
+    ws.addEventListener('message', (event) => {
+      appendDirectData(event.data)
+    })
+    directSocket = ws
   }
 
   function sendOpen(cols = 120, rows = 36): boolean {
@@ -93,6 +176,15 @@ export function RoutedTerminalPane(props: Props) {
   }
 
   async function refreshState(): Promise<void> {
+    const controlBase = getRouteControlBase()
+    const resolvedBase = await resolveDeviceRoute(controlBase, routeDeviceId).catch(() => null)
+    const directWsUrl = resolvedBase ? toDirectWsUrl(resolvedBase) : null
+    if (directWsUrl) {
+      ensureDirectSocket(directWsUrl)
+      return
+    }
+
+    closeDirectSocket()
     const supervisor = getWebRtcPeerSupervisor()
     await supervisor.connectToDevice(routeDeviceId).catch(() => {
       // keep probing with existing route table
@@ -112,7 +204,17 @@ export function RoutedTerminalPane(props: Props) {
   function submitDraft(): void {
     const text = draft()
     if (!text.trim()) return
-    const sent = sendInput(`${text}\n`)
+    let sent = false
+    if (directSocket && directSocket.readyState === WebSocket.OPEN) {
+      try {
+        directSocket.send(`${text}\n`)
+        sent = true
+      } catch {
+        sent = false
+      }
+    } else {
+      sent = sendInput(`${text}\n`)
+    }
     append(`[${nowLabel()}] > ${text}`)
     if (!sent) append(`[${nowLabel()}] transport send failed`)
     setDraft('')
@@ -165,7 +267,11 @@ export function RoutedTerminalPane(props: Props) {
     onCleanup(() => {
       window.clearInterval(intervalId)
       window.removeEventListener(ROUTED_MESSAGE_EVENT, onRoutedMessage as EventListener)
-      sendClose()
+      if (directSocket && directSocket.readyState === WebSocket.OPEN) {
+        closeDirectSocket()
+      } else {
+        sendClose()
+      }
       terminalDrawerActions.setPaneTransport(paneId, 'unknown')
     })
   })
