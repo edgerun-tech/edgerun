@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export function ColorSwatch(props: { name: string; variable: string; value: string; textColor?: string }) {
   return (
     <div class="space-y-2">

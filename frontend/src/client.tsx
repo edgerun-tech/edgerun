@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { render } from 'solid-js/web'
 
 import { applyPersonalizationSettings, readPersonalizationSettings } from '../lib/personalization'

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('terminal user requests use a single control channel', () => {
   it('does not issue legacy HTTP route resolve requests on connect', () => {
     cy.intercept('GET', '**/v1/route/resolve/*', {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 use crate::render::{
     FONT_DATA, FONT_SIZE, GlyphCache, draw_background, draw_cursor_overlay, draw_grid,
     draw_text_line, draw_text_line_clipped,

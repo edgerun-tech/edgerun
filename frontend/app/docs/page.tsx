@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createSignal, For } from 'solid-js'
 import { Nav } from '../../components/nav'
 import { Footer } from '../../components/footer'

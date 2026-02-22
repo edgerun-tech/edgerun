@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { GeneratingIndicator } from '../../components/ui/generating-indicator'
 import { PageHero } from '../../components/layout/page-hero'

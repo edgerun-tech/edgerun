@@ -13,11 +13,7 @@ license_for_path() {
   local path="$1"
 
   case "$path" in
-    crates/edgerun-scheduler/*) echo "LicenseRef-Edgerun-Proprietary" ;;
-    crates/edgerun-storage/*) echo "GPL-2.0-only" ;;
-    crates/edgerun-cli/*|crates/edgerun-runtime/*|crates/edgerun-worker/*|program/*|docs/*|scripts/*)
-      echo "Apache-2.0"
-      ;;
+    crates/*|program/*|docs/*|scripts/*|frontend/*|edgerun-apps/*) echo "Apache-2.0" ;;
     *)
       echo ""
       ;;

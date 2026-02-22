@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 

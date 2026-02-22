@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For, Show } from 'solid-js'
 import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
 import type { TerminalTabsController } from './use-terminal-drawer-controller'

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For } from 'solid-js'
 import { Card, CardDescription, CardHeader, CardTitle } from '../ui/card'
 

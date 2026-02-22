@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { splitProps } from 'solid-js'
 import { cx, uiTheme } from '../../lib/ui-theme'
 

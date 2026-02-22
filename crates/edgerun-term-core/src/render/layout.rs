@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 #[derive(Clone, Copy)]
 pub struct LayoutMetrics {
     pub content_x: u32,

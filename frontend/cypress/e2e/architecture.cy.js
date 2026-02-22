@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('frontend architecture proof', () => {
   it('serves static shell, hydrates interactions, client-routes, and lazy-loads chunks', () => {
     cy.request('/').its('body').then((html) => {

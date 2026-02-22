@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Real durability benchmarks measuring fsync physics and persistence costs.
 //!
 //! This benchmark suite measures the actual cost of durability guarantees,

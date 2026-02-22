@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { JSX } from 'solid-js'
 import { Nav } from '../nav'
 import { Footer } from '../footer'

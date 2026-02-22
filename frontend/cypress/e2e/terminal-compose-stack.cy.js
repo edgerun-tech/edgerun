@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('terminal docker compose stack', () => {
   it('resolves term-server route via scheduler and blocks legacy iframe terminal embedding', () => {
     let deviceId = ''

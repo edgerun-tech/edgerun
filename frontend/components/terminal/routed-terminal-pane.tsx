@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { For, createSignal, onCleanup, onMount, untrack } from 'solid-js'
 import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
 import { ROUTED_MESSAGE_EVENT, getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'

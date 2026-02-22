@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! High-performance async segment writer with io_uring integration.
 //!
 //! This provides async segment writes for improved throughput:
