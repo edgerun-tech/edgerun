@@ -85,7 +85,7 @@ impl EventHashIndex {
         entries.clear();
 
         let entry_size = 32 + 32 + 8;
-        if data.len() % entry_size != 0 {
+        if !data.len().is_multiple_of(entry_size) {
             return Err(IndexError::Corrupted);
         }
 

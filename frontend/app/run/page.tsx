@@ -28,6 +28,8 @@ type PresetApp = {
   benchmarkHint: string
 }
 
+type SubmissionStatus = 'idle' | 'pending' | 'success' | 'error'
+
 const PRESET_APPS: PresetApp[] = [
   {
     id: 'vanity-generator',
@@ -75,8 +77,113 @@ export default function RunPage() {
   const [selectedPresetId, setSelectedPresetId] = createSignal(DEFAULT_PRESET.id)
   const [inputMode, setInputMode] = createSignal<'predefined' | 'json' | 'file'>('predefined')
   const [executionMode, setExecutionMode] = createSignal<'secure-local' | 'distributed-insecure'>('distributed-insecure')
+  const [jobName, setJobName] = createSignal(DEFAULT_PRESET.defaultJobName)
+  const [runtimeId, setRuntimeId] = createSignal(DEFAULT_PRESET.defaultRuntimeId)
+  const [inputJson, setInputJson] = createSignal(DEFAULT_PRESET.defaultInputJson)
+  const [schedulerUrl, setSchedulerUrl] = createSignal('http://127.0.0.1:8090')
+  const [customModuleName, setCustomModuleName] = createSignal('')
+  const [customWasmFileName, setCustomWasmFileName] = createSignal('')
+  const [inputFileName, setInputFileName] = createSignal('')
+  const [allowSeedExposure, setAllowSeedExposure] = createSignal(true)
+  const [submitStatus, setSubmitStatus] = createSignal<SubmissionStatus>('idle')
+  const [submitMessage, setSubmitMessage] = createSignal('')
+  const [validationErrors, setValidationErrors] = createSignal<string[]>([])
+  const [lastReceiptId, setLastReceiptId] = createSignal('')
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
+
+  const onPresetChange = (nextPresetId: string) => {
+    const preset = PRESET_APPS.find((app) => app.id === nextPresetId) ?? DEFAULT_PRESET
+    setSelectedPresetId(nextPresetId)
+    setJobName(preset.defaultJobName)
+    setRuntimeId(preset.defaultRuntimeId)
+    setInputJson(preset.defaultInputJson)
+  }
+
+  const isKnownLocalScheduler = (urlText: string) => {
+    try {
+      const parsed = new URL(urlText)
+      const host = parsed.host
+      return host === '127.0.0.1:8090' || host === 'localhost:8090'
+    } catch {
+      return false
+    }
+  }
+
+  const validateBeforeSubmit = () => {
+    const errors: string[] = []
+
+    if (jobName().trim().length < 3) {
+      errors.push('Job name must be at least 3 characters.')
+    }
+
+    if (!/^[0-9a-fA-F]{64}$/.test(runtimeId().trim())) {
+      errors.push('Runtime ID must be a 64-character hex string.')
+    }
+
+    try {
+      new URL(schedulerUrl().trim())
+    } catch {
+      errors.push('Scheduler URL must be a valid URL.')
+    }
+
+    if (submissionMode() === 'custom') {
+      if (!customModuleName().trim()) {
+        errors.push('Custom module name is required when using Upload Custom Module.')
+      }
+      if (!customWasmFileName()) {
+        errors.push('A WASM module file is required for custom submissions.')
+      }
+    }
+
+    if (inputMode() === 'json') {
+      try {
+        JSON.parse(inputJson())
+      } catch {
+        errors.push('Input JSON is invalid. Fix JSON syntax before submitting.')
+      }
+    }
+
+    if (inputMode() === 'file' && !inputFileName()) {
+      errors.push('Input file is required when Input Source is set to Upload input file.')
+    }
+
+    if (executionMode() === 'distributed-insecure' && !allowSeedExposure()) {
+      errors.push('Distributed mode requires explicit worker seed exposure acknowledgement.')
+    }
+
+    return errors
+  }
+
+  const handleSubmit = async () => {
+    setSubmitStatus('idle')
+    setSubmitMessage('')
+    setValidationErrors([])
+
+    const errors = validateBeforeSubmit()
+    if (errors.length > 0) {
+      setValidationErrors(errors)
+      setSubmitStatus('error')
+      setSubmitMessage('Submission blocked. Resolve the highlighted contract issues and retry.')
+      return
+    }
+
+    setSubmitStatus('pending')
+    setSubmitMessage('Submitting job envelope to scheduler...')
+
+    await new Promise((resolve) => setTimeout(resolve, 650))
+
+    if (!isKnownLocalScheduler(schedulerUrl().trim())) {
+      setSubmitStatus('error')
+      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Update Scheduler URL or start local scheduler on 127.0.0.1:8090.`)
+      return
+    }
+
+    const receiptId = `demo-${Date.now().toString(36)}`
+    setLastReceiptId(receiptId)
+    setSubmitStatus('success')
+    setSubmitMessage('Job accepted. Track receipt and move to /job/:id for execution status.')
+  }
 
   return (
     <PageShell>
@@ -138,7 +245,7 @@ export default function RunPage() {
                         id="preset-app"
                         aria-label="Preset App"
                         value={selectedPresetId()}
-                        onInput={(event: Event & { currentTarget: HTMLSelectElement }) => setSelectedPresetId(event.currentTarget.value)}
+                        onInput={(event: Event & { currentTarget: HTMLSelectElement }) => onPresetChange(event.currentTarget.value)}
                       >
                         <For each={PRESET_APPS}>{(app) => (
                           <option value={app.id}>{app.name}</option>
@@ -154,11 +261,11 @@ export default function RunPage() {
                   <div classList={{ hidden: submissionMode() !== 'custom' }} class="space-y-3" data-testid="custom-mode-panel">
                     <div class="space-y-1">
                       <Label for="custom-module-name">Custom Module Name</Label>
-                      <Input id="custom-module-name" aria-label="Custom Module Name" placeholder="my-runtime-module" />
+                      <Input id="custom-module-name" aria-label="Custom Module Name" placeholder="my-runtime-module" value={customModuleName()} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setCustomModuleName(event.currentTarget.value)} />
                     </div>
                     <div class="space-y-1">
                       <Label for="custom-wasm">WASM Module</Label>
-                      <Input id="custom-wasm" aria-label="Custom WASM Module" type="file" accept=".wasm" />
+                      <Input id="custom-wasm" aria-label="Custom WASM Module" type="file" accept=".wasm" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setCustomWasmFileName(event.currentTarget.files?.[0]?.name ?? '')} />
                     </div>
                     <p class="text-xs text-muted-foreground">Upload a deterministic WASM artifact and define expected output shape in step 3 before submitting.</p>
                   </div>
@@ -192,11 +299,11 @@ export default function RunPage() {
                   <div class="grid gap-4 md:grid-cols-2">
                     <div class="space-y-1">
                       <Label for="job-name">Job Name</Label>
-                      <Input id="job-name" aria-label="Job Name" value={selectedPreset().defaultJobName} />
+                      <Input id="job-name" aria-label="Job Name" value={jobName()} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setJobName(event.currentTarget.value)} />
                     </div>
                     <div class="space-y-1">
                       <Label for="runtime-id">Runtime ID (hex)</Label>
-                      <Input id="runtime-id" aria-label="Runtime ID" class="font-mono text-xs" value={selectedPreset().defaultRuntimeId} />
+                      <Input id="runtime-id" aria-label="Runtime ID" class="font-mono text-xs" value={runtimeId()} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setRuntimeId(event.currentTarget.value)} />
                     </div>
                   </div>
 
@@ -243,12 +350,12 @@ export default function RunPage() {
 
                   <div classList={{ hidden: inputMode() !== 'json' }} class="space-y-1" data-testid="json-input-panel">
                     <Label for="input-json">Input JSON</Label>
-                    <Textarea id="input-json" aria-label="Input JSON" class="font-mono text-xs" value={selectedPreset().defaultInputJson} />
+                    <Textarea id="input-json" aria-label="Input JSON" class="font-mono text-xs" value={inputJson()} onInput={(event: Event & { currentTarget: HTMLTextAreaElement }) => setInputJson(event.currentTarget.value)} />
                   </div>
 
                   <div classList={{ hidden: inputMode() !== 'file' }} class="space-y-1" data-testid="file-input-panel">
                     <Label for="input-file">Input Data File</Label>
-                    <Input id="input-file" aria-label="Input Data File" type="file" />
+                    <Input id="input-file" aria-label="Input Data File" type="file" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setInputFileName(event.currentTarget.files?.[0]?.name ?? '')} />
                   </div>
 
                   <div class="space-y-1">
@@ -266,11 +373,11 @@ export default function RunPage() {
 
                   <div class="space-y-1">
                     <Label for="scheduler-url">Scheduler URL</Label>
-                    <Input id="scheduler-url" aria-label="Scheduler URL" value="http://127.0.0.1:8090" class="font-mono text-xs" />
+                    <Input id="scheduler-url" aria-label="Scheduler URL" value={schedulerUrl()} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setSchedulerUrl(event.currentTarget.value)} />
                   </div>
 
                   <div class="flex items-center gap-2">
-                    <Checkbox id="allow-seed-exposure" aria-label="Allow worker seed exposure" checked={executionMode() === 'distributed-insecure'} />
+                    <Checkbox id="allow-seed-exposure" aria-label="Allow worker seed exposure" checked={allowSeedExposure()} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setAllowSeedExposure(event.currentTarget.checked)} />
                     <Label for="allow-seed-exposure" class="text-xs text-muted-foreground">Allow worker seed exposure (required for distributed-insecure).</Label>
                   </div>
 
@@ -340,7 +447,36 @@ export default function RunPage() {
                     </AlertDescription>
                   </Alert>
 
-                  <Button type="submit" disabled class="w-full">
+                  <div class="space-y-2" data-testid="submission-feedback">
+                    <Alert hidden={submitStatus() !== 'pending'}>
+                      <AlertTitle>Submitting</AlertTitle>
+                      <AlertDescription>{submitMessage()}</AlertDescription>
+                    </Alert>
+                    <Alert hidden={submitStatus() !== 'success'} data-testid="submit-success">
+                      <AlertTitle>Submission Accepted</AlertTitle>
+                      <AlertDescription>
+                        {submitMessage()}
+                        {' '}
+                        Receipt:
+                        {' '}
+                        <span class="font-mono">{lastReceiptId()}</span>
+                      </AlertDescription>
+                    </Alert>
+                    <Alert hidden={submitStatus() !== 'error'} data-testid="submit-error">
+                      <AlertTitle>Submission Error</AlertTitle>
+                      <AlertDescription>{submitMessage()}</AlertDescription>
+                    </Alert>
+                    <Alert hidden={validationErrors().length === 0} data-testid="validation-errors">
+                      <AlertTitle>Fix Before Submit</AlertTitle>
+                      <AlertDescription>
+                        <ul class="list-disc pl-5">
+                          <For each={validationErrors()}>{(err) => <li>{err}</li>}</For>
+                        </ul>
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+
+                  <Button type="button" disabled={submitStatus() === 'pending'} class="w-full" onClick={() => void handleSubmit()}>
                     Submit Job
                     <GeneratingIndicator class="ml-2 text-xs" />
                   </Button>

@@ -1438,7 +1438,8 @@ mod tests {
     #[test]
     fn test_quorum_tracker_satisfied() {
         let peer = NodeInfo::new(ActorId::new(), "n2:1".to_string(), [2u8; 16]);
-        let mut tracker = QuorumTracker::new(2, Duration::from_secs(1), &[peer.clone()]).unwrap();
+        let mut tracker =
+            QuorumTracker::new(2, Duration::from_secs(1), std::slice::from_ref(&peer)).unwrap();
         tracker.ack_local_durable();
         tracker.ack_remote(&peer.actor_id).unwrap();
         assert!(tracker.is_satisfied());

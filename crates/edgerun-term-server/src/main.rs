@@ -294,11 +294,11 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                 if let Message::Binary(data) = msg {
                     if data.len() >= 5 && data[0] == PTY_FRAME_STDIN {
                         let id = u32::from_be_bytes([data[1], data[2], data[3], data[4]]);
-                        if let Some(session) = sessions.get(&id) {
-                            if let Ok(mut writer) = session.writer.lock() {
-                                let _ = writer.write_all(&data[5..]);
-                                let _ = writer.flush();
-                            }
+                        if let Some(session) = sessions.get(&id)
+                            && let Ok(mut writer) = session.writer.lock()
+                        {
+                            let _ = writer.write_all(&data[5..]);
+                            let _ = writer.flush();
                         }
                     }
                     continue;
@@ -534,6 +534,7 @@ fn parse_resize(text: &str) -> Option<(u16, u16)> {
     Some((cols, rows))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_pty_session(
     id: u32,
     cmd: Option<String>,
