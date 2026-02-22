@@ -21,6 +21,7 @@ use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
+use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
     compare_replay_profiles, run_replay_corpus, run_weekly_fuzz, validate_external_security_review,
 };
@@ -89,6 +90,10 @@ enum Commands {
         #[command(subcommand)]
         command: TailscaleCommand,
     },
+    Program {
+        #[command(subcommand)]
+        command: ProgramCommand,
+    },
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -115,6 +120,52 @@ enum RunTarget {
     FuzzWeekly,
     ReplayCorpus,
     SecurityReview,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum ProgramCommand {
+    AnalyzeAccounts {
+        #[arg(value_enum, long, default_value_t = SolanaCluster::Devnet)]
+        cluster: SolanaCluster,
+    },
+    Deploy {
+        #[arg(value_enum, long, default_value_t = SolanaCluster::Devnet)]
+        cluster: SolanaCluster,
+        #[arg(long, default_value_t = false)]
+        skip_build: bool,
+        #[arg(long = "final", default_value_t = false)]
+        final_immutable: bool,
+        #[arg(long)]
+        program_id: Option<String>,
+        #[arg(long)]
+        keypair: Option<PathBuf>,
+        #[arg(long)]
+        fee_payer: Option<PathBuf>,
+        #[arg(long)]
+        max_len: Option<u32>,
+        #[arg(long, default_value_t = false)]
+        no_update_frontend_config: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum SolanaCluster {
+    Localnet,
+    Devnet,
+    Testnet,
+    #[value(name = "mainnet-beta")]
+    MainnetBeta,
+}
+
+impl SolanaCluster {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Localnet => "localhost",
+            Self::Devnet => "devnet",
+            Self::Testnet => "testnet",
+            Self::MainnetBeta => "mainnet-beta",
+        }
+    }
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -251,6 +302,7 @@ async fn main() -> Result<()> {
         }
         Commands::Storage { command } => run_storage_command(&root, command)?,
         Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
+        Commands::Program { command } => run_program_command(&root, command)?,
     }
 
     Ok(())
@@ -793,7 +845,7 @@ fn run_program_anchor_build_sync(root: &Path) -> Result<()> {
 fn run_program_local_tests_sync(root: &Path) -> Result<()> {
     let program_root = root.join("program");
     let env = program_tool_env(&program_root);
-    let program_id = "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T";
+    let program_id = "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG";
     let ledger_dir = program_root.join(".anchor/manual-test-ledger");
     let validator_log = ledger_dir.join("validator.log");
     std::fs::create_dir_all(&ledger_dir)?;
@@ -877,7 +929,7 @@ fn program_target_dir(program_root: &Path) -> PathBuf {
         .unwrap_or_else(|| program_root.join("target"))
 }
 
-fn program_tool_env(program_root: &Path) -> Vec<(OsString, OsString)> {
+pub(crate) fn program_tool_env(program_root: &Path) -> Vec<(OsString, OsString)> {
     let cargo_home = program_root.join(".cargo-home");
     let cargo_install_root = program_root.join(".cargo");
     let cargo_target_dir = program_target_dir(program_root);

@@ -4,6 +4,11 @@ members = [
   "crates/edgerun-cli",
   "crates/edgerun-types",
   "crates/edgerun-transport-core",
+  "crates/edgerun-transport-quic",
+  "crates/edgerun-transport-ws",
+  "crates/edgerun-transport-wireguard",
+  "crates/edgerun-discovery",
+  "crates/edgerun-routing",
   "crates/edgerun-crypto",
   "crates/edgerun-runtime",
   "crates/edgerun-runtime-web",
@@ -15,8 +20,8 @@ members = [
   "crates/edgerun-term-native",
   "crates/edgerun-term-web",
   "crates/edgerun-term-server",
-  "crates/edgerun-vanity-payload",
-  "crates/edgerun-vanity-client",
+  "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-payload",
+  "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-client",
   "crates/edgerun-hwvault-primitives",
 ]
 exclude = ["program/programs/edgerun_program"]

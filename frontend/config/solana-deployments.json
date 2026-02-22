@@ -3,8 +3,8 @@
     "edgerunProgram": {
       "label": "Edgerun Program",
       "programIdByCluster": {
-        "localnet": "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T",
-        "devnet": "",
+        "localnet": "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG",
+        "devnet": "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG",
         "testnet": "",
         "mainnet-beta": ""
       }

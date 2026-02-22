@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-transport-ws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+base64 = "0.22"
+bytes = "1"
+edgerun-transport-core = { path = "../edgerun-transport-core" }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { workspace = true, features = ["sync"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+url = "2"
+
+[dev-dependencies]
+tokio.workspace = true

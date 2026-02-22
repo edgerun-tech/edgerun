@@ -13,7 +13,7 @@ import { blake3 } from "@noble/hashes/blake3";
 import type { EdgerunProgram } from "../target/types/edgerun_program";
 
 const PROGRAM_ID = new PublicKey(
-  "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T"
+  "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG"
 );
 
 describe("edgerun", () => {

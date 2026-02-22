@@ -7,7 +7,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-edgerun = "AgjxA2CoMmmWXrcsJtvvpmqdRHLVHrhYf6DAuBCL4s5T"
+edgerun = "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG"
 
 [registry]
 url = "https://api.apr.dev"
