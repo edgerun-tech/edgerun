@@ -2,7 +2,7 @@ name: Wiki Sync
 
 on:
   workflow_run:
-    workflows: ["Site Pages"]
+    workflows: ["Site Deploy"]
     types: [completed]
   workflow_dispatch:
 
