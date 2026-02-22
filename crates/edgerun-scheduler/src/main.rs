@@ -406,6 +406,12 @@ struct WebRtcSignalConnectQuery {
 }
 
 #[derive(Debug, Deserialize)]
+struct ControlWsConnectQuery {
+    #[serde(default)]
+    client_id: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct WebRtcSignalClientMessage {
     #[serde(default)]
     to_device_id: String,
@@ -438,6 +444,26 @@ struct WebRtcSignalServerMessage {
     sdp_mline_index: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ControlWsClientMessage {
+    request_id: String,
+    op: String,
+    #[serde(default)]
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+struct ControlWsServerMessage {
+    request_id: String,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<u16>,
 }
 
 struct PostJobArgs {
@@ -603,6 +629,7 @@ async fn main() -> Result<()> {
         .route("/v1/route/resolve/{device_id}", get(route_resolve))
         .route("/v1/route/owner/{owner_pubkey}", get(route_owner_resolve))
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
+        .route("/v1/control/ws", get(control_ws))
         .route("/v1/policy/info", get(policy_info))
         .route("/v1/policy/audit", get(policy_audit_list))
         .route("/v1/trust/policy/get", get(trust_policy_get))
@@ -862,24 +889,46 @@ async fn route_heartbeat(
     }))
 }
 
-async fn route_resolve(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(device_id): Path<String>,
-) -> Response {
+fn resolve_route_for_device(state: &AppState, device_id: &str) -> RouteResolveResponse {
     let now = now_unix_seconds();
-    let route = with_route_maps_mut(&state, |routes, _, _| {
+    let route = with_route_maps_mut(state, |routes, _, _| {
         prune_expired_routes(routes, now);
         Ok(routes.get(device_id.trim()).cloned())
     })
     .ok()
     .flatten();
-    let mut response = Json(RouteResolveResponse {
+    RouteResolveResponse {
         ok: true,
         found: route.is_some(),
         route,
+    }
+}
+
+fn resolve_owner_routes_for_owner(state: &AppState, owner_pubkey: &str) -> OwnerRoutesResponse {
+    let owner_pubkey = owner_pubkey.trim().to_string();
+    let now = now_unix_seconds();
+    let devices = with_route_maps_mut(state, |routes, _, _| {
+        prune_expired_routes(routes, now);
+        Ok(routes
+            .values()
+            .filter(|route| route.owner_pubkey == owner_pubkey)
+            .cloned()
+            .collect::<Vec<_>>())
     })
-    .into_response();
+    .unwrap_or_default();
+    OwnerRoutesResponse {
+        ok: true,
+        owner_pubkey,
+        devices,
+    }
+}
+
+async fn route_resolve(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(device_id): Path<String>,
+) -> Response {
+    let mut response = Json(resolve_route_for_device(&state, &device_id)).into_response();
     apply_cors_headers(&mut response, &headers);
     response
 }
@@ -889,23 +938,7 @@ async fn route_owner_resolve(
     headers: HeaderMap,
     Path(owner_pubkey): Path<String>,
 ) -> Response {
-    let owner_pubkey = owner_pubkey.trim().to_string();
-    let now = now_unix_seconds();
-    let devices = with_route_maps_mut(&state, |routes, _, _| {
-        prune_expired_routes(routes, now);
-        Ok(routes
-            .values()
-            .filter(|route| route.owner_pubkey == owner_pubkey)
-            .cloned()
-            .collect::<Vec<_>>())
-    })
-    .unwrap_or_default();
-    let mut response = Json(OwnerRoutesResponse {
-        ok: true,
-        owner_pubkey,
-        devices,
-    })
-    .into_response();
+    let mut response = Json(resolve_owner_routes_for_owner(&state, &owner_pubkey)).into_response();
     apply_cors_headers(&mut response, &headers);
     response
 }
@@ -916,6 +949,268 @@ async fn webrtc_signal_ws(
     Query(query): Query<WebRtcSignalConnectQuery>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| webrtc_signal_socket(state, query.device_id, socket))
+}
+
+async fn control_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Query(query): Query<ControlWsConnectQuery>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| control_ws_socket(state, query.client_id, socket))
+}
+
+async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSocket) {
+    let client_id = client_id.trim().to_string();
+    if client_id.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                r#"{"ok":false,"error":"client_id is required","status":400}"#
+                    .to_string()
+                    .into(),
+            ))
+            .await;
+        return;
+    }
+
+    loop {
+        match socket.recv().await {
+            Some(Ok(Message::Text(text))) => {
+                let response = handle_control_client_message(&state, &text).await;
+                if socket.send(Message::Text(response.into())).await.is_err() {
+                    break;
+                }
+            }
+            Some(Ok(Message::Close(_))) | None => break,
+            Some(Ok(_)) => {}
+            Some(Err(_)) => break,
+        }
+    }
+}
+
+fn encode_control_message(msg: &ControlWsServerMessage) -> String {
+    serde_json::to_string(msg).unwrap_or_else(|_| {
+        r#"{"request_id":"","ok":false,"error":"internal serialization failure","status":500}"#
+            .to_string()
+    })
+}
+
+fn control_error_response(
+    request_id: String,
+    status: StatusCode,
+    error: String,
+) -> ControlWsServerMessage {
+    ControlWsServerMessage {
+        request_id,
+        ok: false,
+        data: None,
+        error: Some(error),
+        status: Some(status.as_u16()),
+    }
+}
+
+fn control_ok_response(request_id: String, data: serde_json::Value) -> ControlWsServerMessage {
+    ControlWsServerMessage {
+        request_id,
+        ok: true,
+        data: Some(data),
+        error: None,
+        status: None,
+    }
+}
+
+async fn handle_control_client_message(state: &AppState, text: &str) -> String {
+    let parsed = serde_json::from_str::<ControlWsClientMessage>(text);
+    let msg = match parsed {
+        Ok(message) if !message.request_id.trim().is_empty() && !message.op.trim().is_empty() => {
+            message
+        }
+        _ => {
+            return encode_control_message(&control_error_response(
+                String::new(),
+                StatusCode::BAD_REQUEST,
+                "invalid control message".to_string(),
+            ));
+        }
+    };
+
+    let request_id = msg.request_id.trim().to_string();
+    let op = msg.op.trim();
+    let reply = match op {
+        "route.resolve" => {
+            let device_id = msg
+                .payload
+                .get("device_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if device_id.is_empty() {
+                control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "device_id is required".to_string(),
+                )
+            } else {
+                let resolved = resolve_route_for_device(state, &device_id);
+                control_ok_response(
+                    request_id,
+                    serde_json::to_value(resolved).unwrap_or_default(),
+                )
+            }
+        }
+        "route.owner" => {
+            let owner_pubkey = msg
+                .payload
+                .get("owner_pubkey")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if owner_pubkey.is_empty() {
+                control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "owner_pubkey is required".to_string(),
+                )
+            } else {
+                let resolved = resolve_owner_routes_for_owner(state, &owner_pubkey);
+                control_ok_response(
+                    request_id,
+                    serde_json::to_value(resolved).unwrap_or_default(),
+                )
+            }
+        }
+        "worker.heartbeat" => {
+            let payload = serde_json::from_value::<HeartbeatRequest>(msg.payload);
+            match payload {
+                Ok(payload) => match worker_heartbeat_inner(state, payload) {
+                    Ok(ok) => control_ok_response(
+                        request_id,
+                        serde_json::to_value(ok).unwrap_or_default(),
+                    ),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                },
+                Err(_) => control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "invalid worker heartbeat payload".to_string(),
+                ),
+            }
+        }
+        "worker.assignments" => {
+            let worker_pubkey = msg
+                .payload
+                .get("worker_pubkey")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if worker_pubkey.is_empty() {
+                control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "worker_pubkey is required".to_string(),
+                )
+            } else {
+                match worker_assignments_inner(state, &worker_pubkey) {
+                    Ok(ok) => control_ok_response(
+                        request_id,
+                        serde_json::to_value(ok).unwrap_or_default(),
+                    ),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                }
+            }
+        }
+        "worker.result" => {
+            let payload = serde_json::from_value::<WorkerResultReport>(msg.payload);
+            match payload {
+                Ok(payload) => match worker_result_inner(state, payload) {
+                    Ok(ok) => control_ok_response(request_id, ok),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                },
+                Err(_) => control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "invalid worker result payload".to_string(),
+                ),
+            }
+        }
+        "worker.failure" => {
+            let payload = serde_json::from_value::<WorkerFailureReport>(msg.payload);
+            match payload {
+                Ok(payload) => match worker_failure_inner(state, payload) {
+                    Ok(ok) => control_ok_response(request_id, ok),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                },
+                Err(_) => control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "invalid worker failure payload".to_string(),
+                ),
+            }
+        }
+        "worker.replay" => {
+            let payload = serde_json::from_value::<WorkerReplayArtifactReport>(msg.payload);
+            match payload {
+                Ok(payload) => match worker_replay_artifact_inner(state, payload) {
+                    Ok(ok) => control_ok_response(request_id, ok),
+                    Err((status, err)) => control_error_response(request_id, status, err),
+                },
+                Err(_) => control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "invalid worker replay payload".to_string(),
+                ),
+            }
+        }
+        "bundle.get" => {
+            let bundle_hash = msg
+                .payload
+                .get("bundle_hash")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if bundle_hash.is_empty() {
+                control_error_response(
+                    request_id,
+                    StatusCode::BAD_REQUEST,
+                    "bundle_hash is required".to_string(),
+                )
+            } else {
+                let path = bundle_path(state, &bundle_hash);
+                match std::fs::read(path) {
+                    Ok(bytes) => control_ok_response(
+                        request_id,
+                        serde_json::json!({
+                            "ok": true,
+                            "bundle_hash": bundle_hash,
+                            "payload_b64": base64::engine::general_purpose::STANDARD.encode(bytes),
+                        }),
+                    ),
+                    Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                        control_error_response(
+                            request_id,
+                            StatusCode::NOT_FOUND,
+                            "bundle not found".to_string(),
+                        )
+                    }
+                    Err(err) => control_error_response(
+                        request_id,
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("bundle read failed: {err}"),
+                    ),
+                }
+            }
+        }
+        _ => control_error_response(
+            request_id,
+            StatusCode::BAD_REQUEST,
+            format!("unsupported op: {op}"),
+        ),
+    };
+
+    encode_control_message(&reply)
 }
 
 async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: WebSocket) {
@@ -1426,12 +1721,12 @@ async fn attestation_policy_set(
     Ok(Json(AttestationPolicyResponse { policy }))
 }
 
-async fn worker_heartbeat(
-    State(state): State<AppState>,
-    Json(payload): Json<HeartbeatRequest>,
-) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
+fn worker_heartbeat_inner(
+    state: &AppState,
+    payload: HeartbeatRequest,
+) -> Result<HeartbeatResponse, (StatusCode, String)> {
     if !verify_worker_message_signature(
-        &state,
+        state,
         &payload.worker_pubkey,
         payload.signature.as_deref(),
         &heartbeat_signing_message(&payload),
@@ -1468,42 +1763,56 @@ async fn worker_heartbeat(
             },
         );
     }
-    if let Err(err) = write_state_snapshot(&state) {
+    if let Err(err) = write_state_snapshot(state) {
         tracing::warn!(error = %err, "failed to persist state after worker heartbeat");
     }
-    if let Err(err) = evaluate_expired_jobs(&state) {
+    if let Err(err) = evaluate_expired_jobs(state) {
         tracing::warn!(error = %err, "failed to evaluate expired jobs");
     }
 
-    Ok(Json(HeartbeatResponse {
+    Ok(HeartbeatResponse {
         ok: true,
         next_poll_ms: 2000,
         server_time_unix_s: Some(now),
-    }))
+    })
+}
+
+async fn worker_heartbeat(
+    State(state): State<AppState>,
+    Json(payload): Json<HeartbeatRequest>,
+) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
+    let out = worker_heartbeat_inner(&state, payload)?;
+    Ok(Json(out))
+}
+
+fn worker_assignments_inner(
+    state: &AppState,
+    worker_pubkey: &str,
+) -> Result<AssignmentsResponse, (StatusCode, String)> {
+    tracing::info!(worker = %worker_pubkey, "assignment poll");
+    let mut assignments = state.assignments.lock().expect("lock poisoned");
+    let jobs = assignments.remove(worker_pubkey).unwrap_or_else(Vec::new);
+    drop(assignments);
+
+    write_state_snapshot(state).map_err(internal_err)?;
+    Ok(AssignmentsResponse { jobs })
 }
 
 async fn worker_assignments(
     State(state): State<AppState>,
     Query(query): Query<AssignmentsQuery>,
 ) -> Result<Json<AssignmentsResponse>, (StatusCode, String)> {
-    tracing::info!(worker = %query.worker_pubkey, "assignment poll");
-    let mut assignments = state.assignments.lock().expect("lock poisoned");
-    let jobs = assignments
-        .remove(&query.worker_pubkey)
-        .unwrap_or_else(Vec::new);
-    drop(assignments);
-
-    write_state_snapshot(&state).map_err(internal_err)?;
-    Ok(Json(AssignmentsResponse { jobs }))
+    let out = worker_assignments_inner(&state, &query.worker_pubkey)?;
+    Ok(Json(out))
 }
 
-async fn worker_result(
-    State(state): State<AppState>,
-    Json(payload): Json<WorkerResultReport>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+fn worker_result_inner(
+    state: &AppState,
+    payload: WorkerResultReport,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     validate_worker_result_payload(&payload)?;
     if !verify_worker_message_signature(
-        &state,
+        state,
         &payload.worker_pubkey,
         payload.signature.as_deref(),
         &result_signing_message(&payload),
@@ -1513,19 +1822,19 @@ async fn worker_result(
             "invalid worker signature".to_string(),
         ));
     }
-    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+    if !is_assigned_worker(state, &payload.job_id, &payload.worker_pubkey) {
         return Err((
             StatusCode::FORBIDDEN,
             "worker is not assigned to this job".to_string(),
         ));
     }
-    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.bundle_hash) {
+    if !matches_expected_bundle_hash(state, &payload.job_id, &payload.bundle_hash) {
         return Err((
             StatusCode::BAD_REQUEST,
             "bundle_hash does not match job expectation".to_string(),
         ));
     }
-    if !verify_result_attestation(&state, &payload)? {
+    if !verify_result_attestation(state, &payload)? {
         return Err((
             StatusCode::UNAUTHORIZED,
             "invalid result attestation".to_string(),
@@ -1546,30 +1855,38 @@ async fn worker_result(
         is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
     }) {
         drop(results);
-        let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
-        return Ok(Json(serde_json::json!({
+        let quorum_reached = recompute_job_quorum(state, &job_id).map_err(internal_err)?;
+        return Ok(serde_json::json!({
             "ok": true,
             "duplicate": true,
             "quorum_reached": quorum_reached
-        })));
+        }));
     }
     entries.push(payload);
     drop(results);
-    let quorum_reached = recompute_job_quorum(&state, &job_id).map_err(internal_err)?;
-    persist_job_activity(&state, &job_id).map_err(internal_err)?;
-    Ok(Json(serde_json::json!({
+    let quorum_reached = recompute_job_quorum(state, &job_id).map_err(internal_err)?;
+    persist_job_activity(state, &job_id).map_err(internal_err)?;
+    Ok(serde_json::json!({
         "ok": true,
         "duplicate": false,
         "quorum_reached": quorum_reached
-    })))
+    }))
 }
 
-async fn worker_failure(
+async fn worker_result(
     State(state): State<AppState>,
-    Json(payload): Json<WorkerFailureReport>,
+    Json(payload): Json<WorkerResultReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let out = worker_result_inner(&state, payload)?;
+    Ok(Json(out))
+}
+
+fn worker_failure_inner(
+    state: &AppState,
+    payload: WorkerFailureReport,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     if !verify_worker_message_signature(
-        &state,
+        state,
         &payload.worker_pubkey,
         payload.signature.as_deref(),
         &failure_signing_message(&payload),
@@ -1579,13 +1896,13 @@ async fn worker_failure(
             "invalid worker signature".to_string(),
         ));
     }
-    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+    if !is_assigned_worker(state, &payload.job_id, &payload.worker_pubkey) {
         return Err((
             StatusCode::FORBIDDEN,
             "worker is not assigned to this job".to_string(),
         ));
     }
-    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.bundle_hash) {
+    if !matches_expected_bundle_hash(state, &payload.job_id, &payload.bundle_hash) {
         return Err((
             StatusCode::BAD_REQUEST,
             "bundle_hash does not match job expectation".to_string(),
@@ -1606,20 +1923,28 @@ async fn worker_failure(
         is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
     }) {
         drop(failures);
-        return Ok(Json(serde_json::json!({ "ok": true, "duplicate": true })));
+        return Ok(serde_json::json!({ "ok": true, "duplicate": true }));
     }
     entries.push(payload);
     drop(failures);
-    persist_job_activity(&state, &job_id).map_err(internal_err)?;
-    Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
+    persist_job_activity(state, &job_id).map_err(internal_err)?;
+    Ok(serde_json::json!({ "ok": true, "duplicate": false }))
 }
 
-async fn worker_replay_artifact(
+async fn worker_failure(
     State(state): State<AppState>,
-    Json(payload): Json<WorkerReplayArtifactReport>,
+    Json(payload): Json<WorkerFailureReport>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let out = worker_failure_inner(&state, payload)?;
+    Ok(Json(out))
+}
+
+fn worker_replay_artifact_inner(
+    state: &AppState,
+    payload: WorkerReplayArtifactReport,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     if !verify_worker_message_signature(
-        &state,
+        state,
         &payload.worker_pubkey,
         payload.signature.as_deref(),
         &replay_signing_message(&payload),
@@ -1629,20 +1954,20 @@ async fn worker_replay_artifact(
             "invalid worker signature".to_string(),
         ));
     }
-    if !is_assigned_worker(&state, &payload.job_id, &payload.worker_pubkey) {
+    if !is_assigned_worker(state, &payload.job_id, &payload.worker_pubkey) {
         return Err((
             StatusCode::FORBIDDEN,
             "worker is not assigned to this job".to_string(),
         ));
     }
-    if !matches_expected_bundle_hash(&state, &payload.job_id, &payload.artifact.bundle_hash) {
+    if !matches_expected_bundle_hash(state, &payload.job_id, &payload.artifact.bundle_hash) {
         return Err((
             StatusCode::BAD_REQUEST,
             "artifact.bundle_hash does not match job expectation".to_string(),
         ));
     }
     if let Some(runtime_id) = payload.artifact.runtime_id.as_deref() {
-        if !matches_expected_runtime_id(&state, &payload.job_id, runtime_id) {
+        if !matches_expected_runtime_id(state, &payload.job_id, runtime_id) {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "artifact.runtime_id does not match job expectation".to_string(),
@@ -1664,12 +1989,20 @@ async fn worker_replay_artifact(
         is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
     }) {
         drop(replay_artifacts);
-        return Ok(Json(serde_json::json!({ "ok": true, "duplicate": true })));
+        return Ok(serde_json::json!({ "ok": true, "duplicate": true }));
     }
     entries.push(payload);
     drop(replay_artifacts);
-    persist_job_activity(&state, &job_id).map_err(internal_err)?;
-    Ok(Json(serde_json::json!({ "ok": true, "duplicate": false })))
+    persist_job_activity(state, &job_id).map_err(internal_err)?;
+    Ok(serde_json::json!({ "ok": true, "duplicate": false }))
+}
+
+async fn worker_replay_artifact(
+    State(state): State<AppState>,
+    Json(payload): Json<WorkerReplayArtifactReport>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let out = worker_replay_artifact_inner(&state, payload)?;
+    Ok(Json(out))
 }
 
 async fn job_create(

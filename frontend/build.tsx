@@ -795,9 +795,30 @@ function readVersionedDoc(ref: string, sourcePath: string): { content: string; r
   return null
 }
 
+function assertDocsNavPaths(version: string, generatedPaths: Set<string>): void {
+  const versionPrefix = `/docs/${version}/`
+  for (const item of getDocsNav(version)) {
+    if (!item.href.startsWith(versionPrefix)) continue
+    if (generatedPaths.has(item.href)) continue
+    throw new Error(`Broken docs nav link for ${version}: ${item.href}`)
+  }
+}
+
 function generateVersionDocs(version: string): string[] {
   const ref = resolveRef(version)
   const generated: string[] = [`/docs/${version}/`]
+  const generatedSet = new Set(generated)
+  const addGeneratedPath = (href: string) => {
+    if (generatedSet.has(href)) return
+    generatedSet.add(href)
+    generated.push(href)
+  }
+  const writeDocsLeafPage = (slug: string, title: string, description: string, bodyHtml: string) => {
+    writePage(path.join('docs', version, `${slug}.html`), title, description, bodyHtml)
+    addGeneratedPath(`/docs/${version}/${slug}.html`)
+    writePage(path.join('docs', version, slug, 'index.html'), title, description, bodyHtml)
+    addGeneratedPath(`/docs/${version}/${slug}/`)
+  }
   const links: Array<{ title: string; href: string }> = []
   const searchIndex: Array<{ title: string; href: string; text: string }> = []
   const wikiVersionDir = path.join(wikiRoot, version)
@@ -808,10 +829,9 @@ function generateVersionDocs(version: string): string[] {
     if (!found) continue
     const slug = source.slug || source.sourcePath.replaceAll(path.sep, '-').replace(/\.mdx?$/, '')
     const pageTitle = source.title || slug
-    const fileName = `${slug}.html`
-    const href = `/docs/${version}/${fileName}`
+    const href = `/docs/${version}/${slug}.html`
     links.push({ title: pageTitle, href })
-    generated.push(href)
+    addGeneratedPath(href)
     const normalizedSourceContent = docsRenderer.normalizeDocsTerminology(found.content, found.resolvedPath)
     searchIndex.push({
       title: pageTitle,
@@ -819,8 +839,8 @@ function generateVersionDocs(version: string): string[] {
       text: docsRenderer.stripMarkdownForSearch(normalizedSourceContent)
     })
 
-    writePage(
-      path.join('docs', version, fileName),
+    writeDocsLeafPage(
+      slug,
       `${pageTitle} (${version})`,
       `Docs for ${pageTitle} in ${version}`,
       docsLayout(version, pageTitle, docsRenderer.renderDocsContent(found.content, found.resolvedPath), `${(source.sourceLabel || found.resolvedPath).replaceAll('vanity', 'address').replaceAll('Vanity', 'Address')} @ ${ref}`)
@@ -830,24 +850,34 @@ function generateVersionDocs(version: string): string[] {
 
   const schedulerApi = buildSchedulerApiHtml(ref)
   links.push({ title: 'scheduler-api', href: `/docs/${version}/scheduler-api.html` })
-  generated.push(`/docs/${version}/scheduler-api.html`)
+  addGeneratedPath(`/docs/${version}/scheduler-api.html`)
   searchIndex.push({
     title: 'scheduler-api',
     href: `/docs/${version}/scheduler-api.html`,
     text: docsRenderer.stripMarkdownForSearch(schedulerApi.searchText)
   })
-  writePage(path.join('docs', version, 'scheduler-api.html'), `scheduler-api (${version})`, `Scheduler API snapshot for ${version}`, docsLayout(version, 'scheduler-api', schedulerApi.html, `source: crates/edgerun-scheduler/src/main.rs @ ${ref}`))
+  writeDocsLeafPage(
+    'scheduler-api',
+    `scheduler-api (${version})`,
+    `Scheduler API snapshot for ${version}`,
+    docsLayout(version, 'scheduler-api', schedulerApi.html, `source: crates/edgerun-scheduler/src/main.rs @ ${ref}`)
+  )
   writeFileSync(path.join(wikiVersionDir, 'scheduler-api.mdx'), `${schedulerApi.wikiMdx}\n`, 'utf8')
 
   const changelogMd = buildChangelogMarkdown(ref, version)
   links.push({ title: 'changelog', href: `/docs/${version}/changelog.html` })
-  generated.push(`/docs/${version}/changelog.html`)
+  addGeneratedPath(`/docs/${version}/changelog.html`)
   searchIndex.push({
     title: 'changelog',
     href: `/docs/${version}/changelog.html`,
     text: docsRenderer.stripMarkdownForSearch(changelogMd)
   })
-  writePage(path.join('docs', version, 'changelog.html'), `changelog (${version})`, `Changelog for ${version}`, docsLayout(version, 'changelog', docsRenderer.renderMarkdown(changelogMd), `source: git history @ ${ref}`))
+  writeDocsLeafPage(
+    'changelog',
+    `changelog (${version})`,
+    `Changelog for ${version}`,
+    docsLayout(version, 'changelog', docsRenderer.renderMarkdown(changelogMd), `source: git history @ ${ref}`)
+  )
   writeFileSync(path.join(wikiVersionDir, 'changelog.mdx'), `${changelogMd}\n`, 'utf8')
 
   const apiPages: Array<{ slug: string; title: string; contentHtml: string; searchText: string; wikiMdx: string }> = []
@@ -886,14 +916,14 @@ function generateVersionDocs(version: string): string[] {
     const href = `/docs/${version}/${page.slug}.html`
     const normalizedSearchText = docsRenderer.normalizeDocsTerminology(page.searchText, page.slug)
     links.push({ title: page.slug, href })
-    generated.push(href)
+    addGeneratedPath(href)
     searchIndex.push({
       title: page.slug,
       href,
       text: docsRenderer.stripMarkdownForSearch(normalizedSearchText)
     })
-    writePage(
-      path.join('docs', version, `${page.slug}.html`),
+    writeDocsLeafPage(
+      page.slug,
       `${page.slug} (${version})`,
       `API reference for ${page.slug} (${version})`,
       docsLayout(version, page.slug, page.contentHtml, `source: API snapshot @ ${ref}`)
@@ -908,13 +938,18 @@ function generateVersionDocs(version: string): string[] {
     '- [Scheduler API (HTTP)](/docs/' + version + '/scheduler-api.html)'
   ].join('\n')
   links.push({ title: 'api-reference', href: `/docs/${version}/api-reference.html` })
-  generated.push(`/docs/${version}/api-reference.html`)
+  addGeneratedPath(`/docs/${version}/api-reference.html`)
   searchIndex.push({
     title: 'api-reference',
     href: `/docs/${version}/api-reference.html`,
     text: docsRenderer.stripMarkdownForSearch(apiIndexMarkdown)
   })
-  writePage(path.join('docs', version, 'api-reference.html'), `api-reference (${version})`, `API references for ${version}`, docsLayout(version, 'api-reference', docsRenderer.renderMarkdown(apiIndexMarkdown), `source: docs index @ ${ref}`))
+  writeDocsLeafPage(
+    'api-reference',
+    `api-reference (${version})`,
+    `API references for ${version}`,
+    docsLayout(version, 'api-reference', docsRenderer.renderMarkdown(apiIndexMarkdown), `source: docs index @ ${ref}`)
+  )
   writeFileSync(path.join(wikiVersionDir, 'api-reference.mdx'), `${apiIndexMarkdown}\n`, 'utf8')
 
   writePage(
@@ -924,8 +959,10 @@ function generateVersionDocs(version: string): string[] {
     docsLayout(version, `Documentation ${version}`, `<ul class="space-y-2">${links.map((entry) => `<li><a class="underline decoration-dotted hover:text-primary" href="${entry.href}">${escapeHtml(entry.title)}</a></li>`).join('\n')}</ul>`, `source: version index @ ${ref}`)
   )
   writeFileSync(path.join(distRoot, 'docs', version, 'search-index.json'), `${JSON.stringify(searchIndex, null, 2)}\n`, 'utf8')
+  addGeneratedPath(`/docs/${version}/search-index.json`)
 
   writeFileSync(path.join(wikiVersionDir, 'Home.md'), ['# Edgerun Docs ' + version, '', `Build: \`${buildNumber}\``, `Source ref: \`${ref}\``, '', 'Pages:', ...links.map((entry) => `- [${entry.title}](${entry.href})`)].join('\n') + '\n', 'utf8')
+  assertDocsNavPaths(version, generatedSet)
   return generated
 }
 

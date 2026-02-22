@@ -1,18 +1,17 @@
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../../lib/solana-deployments'
-
-type RpcEnvelope<T> = {
-  jsonrpc: string
-  id: number
-  result?: T
-  error?: { code: number; message: string }
-}
+import { acquireSolanaRpcWsClient, type SolanaRpcWsLease } from '../../lib/solana-rpc-ws'
 
 let initialized = false
 let chainDataLoading = false
 let deploymentStatusLoading = false
 let chainDataLastUpdateMs = 0
 let deploymentStatusLastUpdateMs = 0
+let rpcLease: SolanaRpcWsLease | null = null
+let rpcLeaseUrl = ''
+let slotUnsubscribe: null | (() => void) = null
+let treasuryUnsubscribe: null | (() => void) = null
+let periodicRefreshTimer: number | null = null
 const CHAIN_DATA_REFRESH_DEBOUNCE_MS = 2500
 
 function setField(name: string, value: string): void {
@@ -33,23 +32,81 @@ function formatSol(lamports: number): string {
   return `${(lamports / 1_000_000_000).toLocaleString('en-US', { maximumFractionDigits: 4 })} SOL`
 }
 
-async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[] = []): Promise<T> {
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method,
-      params
-    })
-  })
+function resetRpcBindings(): void {
+  if (slotUnsubscribe) {
+    slotUnsubscribe()
+    slotUnsubscribe = null
+  }
+  if (treasuryUnsubscribe) {
+    treasuryUnsubscribe()
+    treasuryUnsubscribe = null
+  }
+  if (periodicRefreshTimer !== null) {
+    window.clearInterval(periodicRefreshTimer)
+    periodicRefreshTimer = null
+  }
+  if (rpcLease) {
+    rpcLease.release()
+    rpcLease = null
+    rpcLeaseUrl = ''
+  }
+}
 
-  if (!res.ok) throw new Error(`rpc_http_${res.status}`)
-  const payload = (await res.json()) as RpcEnvelope<T>
-  if (payload.error) throw new Error(payload.error.message)
-  if (payload.result === undefined) throw new Error('rpc_no_result')
-  return payload.result
+function ensureRpcClient(rpcUrl: string) {
+  if (!rpcUrl) return null
+  if (rpcLease && rpcLeaseUrl === rpcUrl) return rpcLease.client
+  resetRpcBindings()
+  rpcLease = acquireSolanaRpcWsClient(rpcUrl)
+  rpcLeaseUrl = rpcUrl
+  return rpcLease.client
+}
+
+async function rpcCall<T>(rpcUrl: string, method: string, params: unknown[] = []): Promise<T> {
+  const client = ensureRpcClient(rpcUrl)
+  if (!client) throw new Error('rpc_client_unavailable')
+  const result = await client.request<T>(method, params)
+  return result
+}
+
+function readLamportsFromAccountNotification(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null
+  const result = value as {
+    value?: { lamports?: number }
+  }
+  const lamports = result.value?.lamports
+  return typeof lamports === 'number' ? lamports : null
+}
+
+async function bindRpcStreams(): Promise<void> {
+  const cfg = readRuntimeRpcConfig()
+  const rpcUrl = cfg.rpcUrl || ''
+  if (!rpcUrl) return
+  const client = ensureRpcClient(rpcUrl)
+  if (!client) return
+
+  if (!slotUnsubscribe) {
+    slotUnsubscribe = await client.subscribe('slotSubscribe', [], 'slotNotification', () => {
+      void Promise.all([loadChainData(), loadDeploymentStatus()])
+    })
+  }
+
+  if (cfg.treasuryAccount && !treasuryUnsubscribe) {
+    treasuryUnsubscribe = await client.subscribe(
+      'accountSubscribe',
+      [cfg.treasuryAccount, { commitment: 'confirmed', encoding: 'jsonParsed' }],
+      'accountNotification',
+      (payload: unknown) => {
+        const lamports = readLamportsFromAccountNotification(payload)
+        if (typeof lamports === 'number') setField('treasurySol', formatSol(lamports))
+      }
+    )
+  }
+
+  if (periodicRefreshTimer === null) {
+    periodicRefreshTimer = window.setInterval(() => {
+      void Promise.all([loadChainData(), loadDeploymentStatus()])
+    }, 20_000)
+  }
 }
 
 async function loadChainData(): Promise<void> {
@@ -167,10 +224,13 @@ export async function initChainStatusWidgets(): Promise<void> {
   if (!initialized) {
     initialized = true
     window.addEventListener(RPC_CONFIG_EVENT, () => {
+      resetRpcBindings()
       void loadChainData()
       void loadDeploymentStatus()
+      void bindRpcStreams()
     })
   }
 
+  await bindRpcStreams()
   await Promise.all([loadChainData(), loadDeploymentStatus()])
 }

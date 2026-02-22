@@ -17,6 +17,9 @@ declare global {
   }
 }
 
+const TERMINAL_DRAWER_HOST_ID = 'edgerun-terminal-drawer-root'
+const TERMINAL_DRAWER_SECTION_ID = 'edgerun-terminal-drawer'
+
 function routeTitle(pathname: string): string {
   return getClientRouteChromeTitle(pathname)
 }
@@ -299,13 +302,36 @@ async function mountGlobalTerminalDrawer(): Promise<void> {
   ensureTerminalDrawerStore()
   try {
     const { TerminalDrawer } = await import('../components/terminal/terminal-drawer')
-    const host = document.createElement('div')
-    host.id = 'edgerun-terminal-drawer-root'
-    document.body.appendChild(host)
+    let host = document.getElementById(TERMINAL_DRAWER_HOST_ID)
+    if (!host) {
+      host = document.createElement('div')
+      host.id = TERMINAL_DRAWER_HOST_ID
+      document.body.appendChild(host)
+    }
+    host.innerHTML = ''
     render(() => <TerminalDrawer />, host)
     terminalDrawerMounted = true
+  } catch {
+    terminalDrawerMounted = false
   } finally {
     terminalDrawerMounting = false
+  }
+}
+
+function forceRemountTerminalDrawer(): void {
+  if (typeof document === 'undefined') return
+  const host = document.getElementById(TERMINAL_DRAWER_HOST_ID)
+  if (host) host.remove()
+  terminalDrawerMounted = false
+  void mountGlobalTerminalDrawer()
+}
+
+function ensureTerminalDrawerMounted(): void {
+  if (typeof document === 'undefined') return
+  const host = document.getElementById(TERMINAL_DRAWER_HOST_ID)
+  const section = document.getElementById(TERMINAL_DRAWER_SECTION_ID)
+  if (!host || !section) {
+    forceRemountTerminalDrawer()
   }
 }
 
@@ -401,6 +427,7 @@ async function mountCurrentRoute(): Promise<boolean> {
   window.__EDGERUN_HYDRATED = true
   applyPageEnhancements()
   renderSiteChrome()
+  ensureTerminalDrawerMounted()
   return true
 }
 
@@ -456,6 +483,7 @@ window.addEventListener('popstate', async () => {
     const mounted = await mountCurrentRoute()
     if (!mounted) window.location.assign(window.location.pathname)
   })
+  ensureTerminalDrawerMounted()
   transitionInFlight = false
 })
 
@@ -470,10 +498,21 @@ void mountCurrentRoute().then((mounted) => {
 
 void mountGlobalTerminalDrawer()
 initSiteChromeStatus()
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) ensureTerminalDrawerMounted()
+})
+window.addEventListener('edgerun:terminal-rerender', () => {
+  forceRemountTerminalDrawer()
+})
 queueMicrotask(() => {
   import('../lib/webrtc-peer-supervisor')
     .then((mod) => mod.initWebRtcPeerSupervisor())
     .catch(() => {
       // WebRTC supervisor is an enhancement path; fail-soft on bootstrap.
+    })
+  import('../lib/routed-terminal-shell')
+    .then((mod) => mod.initRoutedTerminalShell())
+    .catch(() => {
+      // Routed terminal shell is an enhancement path; fail-soft on bootstrap.
     })
 })

@@ -9,14 +9,23 @@ import { GeneratingIndicator } from '../../components/ui/generating-indicator'
 import { PageHero } from '../../components/layout/page-hero'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '../../components/ui/sheet'
+import {
+  docsAddressGeneratorCliHref,
+  docsAddressGeneratorPayloadHref,
+  docsApiReferenceHref,
+  docsChangelogHref,
+  docsQuickStartHref,
+  docsLeafPrettyHref
+} from '../../lib/docs-links'
 import { getDocsNav } from '../../lib/docs-nav'
 
 const quickLinks = [
-  { title: 'Get Started Guide', description: 'Step-by-step onboarding with local and distributed execution modes', href: '/docs/getting-started/quick-start/', live: true },
-  { title: 'Address Generator CLI', description: 'Bulk Solana address generation workflow and command semantics', href: '/docs/main/address-generator-cli.html', live: true },
-  { title: 'Address Generator Payload', description: 'Deterministic payload behavior and encoding details', href: '/docs/main/address-generator-payload.html', live: true },
-  { title: 'API Reference', description: 'Generated HTTP, Rust, and CLI references from source', href: '/docs/main/api-reference.html', live: true },
-  { title: 'Changelog', description: 'Auto-generated release log with commit dates and diff links', href: '/docs/main/changelog.html', live: true }
+  { title: 'Get Started Guide', description: 'Step-by-step onboarding with local and distributed execution modes', href: docsQuickStartHref(), live: true },
+  { title: 'Address Generator CLI', description: 'Bulk Solana address generation workflow and command semantics', href: docsAddressGeneratorCliHref('main'), live: true },
+  { title: 'Address Generator Payload', description: 'Deterministic payload behavior and encoding details', href: docsAddressGeneratorPayloadHref('main'), live: true },
+  { title: 'API Reference', description: 'Generated HTTP, Rust, and CLI references from source', href: docsApiReferenceHref('main'), live: true },
+  { title: 'Changelog', description: 'Auto-generated release log with commit dates and diff links', href: docsChangelogHref('main'), live: true },
+  { title: 'Routed Terminal Protocol v2', description: 'Current wire contract for routed terminal sessions over multi-hop WebRTC overlays', href: docsLeafPrettyHref('main', 'routed-terminal-protocol-v2'), live: true }
 ]
 
 const docsNav = getDocsNav('main')

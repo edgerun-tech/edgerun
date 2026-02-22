@@ -10,7 +10,11 @@ const distRoot = process.env.EDGERUN_FRONTEND_DIST_ROOT || path.join(outRoot, 's
 mkdirSync(path.join(distRoot, 'assets'), { recursive: true })
 
 await build({
-  entryPoints: [path.join(root, 'src/client.tsx')],
+  entryPoints: {
+    client: path.join(root, 'src/client.tsx'),
+    'workers/browser-worker-runtime.worker': path.join(root, 'lib/browser-worker-runtime.worker.ts'),
+    'workers/thread-benchmark.worker': path.join(root, 'lib/thread-benchmark.worker.ts')
+  },
   outdir: path.join(distRoot, 'assets'),
   entryNames: '[name]',
   bundle: true,
