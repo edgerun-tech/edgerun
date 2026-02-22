@@ -1,0 +1,20 @@
+[Unit]
+Description=Edgerun Scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT_DIR__
+EnvironmentFile=-__HOME__/.config/edgerun/scheduler.env
+ExecStart=__ROOT_DIR__/out/target/release/edgerun-scheduler
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__ROOT_DIR__/.edgerun-scheduler-data __ROOT_DIR__/out __HOME__/.config/edgerun
+
+[Install]
+WantedBy=default.target

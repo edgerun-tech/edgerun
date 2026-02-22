@@ -5,9 +5,9 @@
 //! worker threads enqueue requests, and one dedicated reactor thread executes them.
 
 use crossbeam_channel::{
-    Receiver as CommandReceiver, RecvTimeoutError, Sender as CommandSender, bounded,
+    bounded, Receiver as CommandReceiver, RecvTimeoutError, Sender as CommandSender,
 };
-use io_uring::{IoUring, opcode, squeue, types};
+use io_uring::{opcode, squeue, types, IoUring};
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io;

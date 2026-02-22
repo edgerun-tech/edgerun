@@ -1,4 +1,4 @@
-import { createContext, createSignal, splitProps, useContext } from 'solid-js'
+import { createContext, createMemo, createSignal, splitProps, useContext } from 'solid-js'
 import { cx, uiTheme } from '../../lib/ui-theme'
 
 type TabsContextValue = {
@@ -8,9 +8,15 @@ type TabsContextValue = {
 
 const TabsContext = createContext<TabsContextValue>()
 
-export function Tabs(props: { defaultValue: string; class?: string; children?: any } & Record<string, any>) {
-  const [local, rest] = splitProps(props, ['defaultValue', 'class', 'children'])
-  const [value, setValue] = createSignal(local.defaultValue)
+export function Tabs(props: { defaultValue?: string; value?: string; onValueChange?: (next: string) => void; class?: string; children?: any } & Record<string, any>) {
+  const [local, rest] = splitProps(props, ['defaultValue', 'value', 'onValueChange', 'class', 'children'])
+  const [internalValue, setInternalValue] = createSignal(local.defaultValue ?? '')
+  const value = createMemo(() => local.value ?? internalValue())
+  const controlled = createMemo(() => local.value !== undefined)
+  const setValue = (next: string) => {
+    if (!controlled()) setInternalValue(next)
+    local.onValueChange?.(next)
+  }
   return (
     <TabsContext.Provider value={{ value, setValue }}>
       <div {...rest} class={cx('space-y-4', local.class)}>{local.children}</div>

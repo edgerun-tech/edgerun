@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-only
-use edgerun_storage::StorageEngine;
 use edgerun_storage::event::{ActorId, Event, StreamId};
 use edgerun_storage::index::EventHashIndex;
 use edgerun_storage::replication::Replicator;
 use edgerun_storage::segment::{SegmentReader, SegmentWriter};
+use edgerun_storage::StorageEngine;
 use rand::Rng;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const TARGET_SIZE_GB: usize = 10;
