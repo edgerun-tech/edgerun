@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 log = "0.4"
-base64 = "0.21"
+base64 = "0.22"
 bytemuck = { version = "1.14", features = ["derive"] }
 fdsm = "0.8"
 fdsm-ttf-parser = "0.2"
