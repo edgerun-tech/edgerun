@@ -17,3 +17,7 @@ This directory is the starting point for moving UI out of `crates/edgerun-cli` a
 - Drawer state persists via IndexedDB (`edgerun-control-ui/ui_state`).
 - Drawer still uses iframe panes pointed at `/term/` by default.
 - This is framework-agnostic vanilla JS for now, intended as a cleanup baseline before selecting a full frontend stack.
+- WebSocket protocol is pinned and versioned:
+  - Human-readable contract: `frontend/control-panel/WS_PROTOCOL.md`
+  - JSON Schema: `frontend/control-panel/schema/control-panel-ws-v1.schema.json`
+  - Enforcement check: `cd frontend && bun run ws-schema:check`
