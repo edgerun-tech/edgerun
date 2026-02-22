@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 
 [dependencies]
-dirs = "5.0"
+dirs = "6.0"
 log = "0.4"
 pixels = "0.15"
 term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
