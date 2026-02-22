@@ -9,7 +9,7 @@ export function HeroSection() {
             <div class="h-2 w-2 animate-pulse rounded-full bg-primary" />
             <span class="text-sm font-medium text-primary" data-deployment-badge>Live on Localnet</span>
           </div>
-          <h1 class="text-balance text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">Dependable Compute.<br />Financially Enforced.</h1>
+          <h1 class="text-balance text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">Dependable Compute.<br />Financially Enforced.<br />Independently verifiable.</h1>
           <p class="mx-auto max-w-3xl text-balance text-xl leading-relaxed text-muted-foreground md:text-2xl">Security by stake. Pricing by competition.</p>
           <p class="mx-auto max-w-3xl text-sm leading-relaxed text-muted-foreground" data-deployment-detail>
             Cluster availability is derived from deployed on-chain program IDs.

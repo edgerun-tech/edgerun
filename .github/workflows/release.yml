@@ -70,18 +70,24 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [build-cli]
     steps:
+      - name: Skip publish on non-tag refs
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: echo "Skipping GitHub Release publish because ref is not a v* tag: $GITHUB_REF"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-downloads
 
       - name: Flatten artifacts
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           mkdir -p release-assets
           find release-downloads -type f -exec cp {} release-assets/ \;
           ls -la release-assets
 
       - name: Publish release
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*

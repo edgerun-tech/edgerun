@@ -587,9 +587,7 @@ fn ensure_local_bin(root: &Path, package: &str) -> Result<PathBuf> {
         false,
     )?;
 
-    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("target"));
+    let target_dir = resolve_target_dir(root);
     let exe_name = if cfg!(windows) {
         format!("{package}.exe")
     } else {
@@ -606,4 +604,30 @@ fn ensure_local_bin(root: &Path, package: &str) -> Result<PathBuf> {
         .expect("lock poisoned")
         .insert(package.to_string(), bin_path.clone());
     Ok(bin_path)
+}
+
+fn resolve_target_dir(root: &Path) -> PathBuf {
+    if let Some(dir) = std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from) {
+        return dir;
+    }
+
+    let output = std::process::Command::new("cargo")
+        .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
+        .arg("--no-deps")
+        .current_dir(root)
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+                if let Some(dir) = value.get("target_directory").and_then(|v| v.as_str()) {
+                    return PathBuf::from(dir);
+                }
+            }
+        }
+    }
+
+    root.join("target")
 }
