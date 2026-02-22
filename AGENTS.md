@@ -56,3 +56,7 @@ A task is done only when:
 - `Known limitations`: explicit, if any
 
 DONT PUT ANYTHING ON PORT 8080!!!
+
+## Operator Override
+- If unexpected/foreign workspace changes are detected, pause and ask before proceeding by default.
+- If the operator explicitly says to `commit all` and continue, treat that as approval to include all current changes and proceed without further pause.
