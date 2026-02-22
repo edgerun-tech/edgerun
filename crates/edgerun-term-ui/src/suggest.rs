@@ -70,11 +70,12 @@ pub fn guess_command_paths(
     let mut tokens = Vec::new();
 
     for tok in entry.split_whitespace() {
-        let replace = if tok.starts_with('-') || tok.starts_with('~') || tok.contains('$') {
-            None
-        } else if tok.starts_with('/') {
-            None
-        } else if !looks_like_path(tok) {
+        let replace = if tok.starts_with('-')
+            || tok.starts_with('~')
+            || tok.contains('$')
+            || tok.starts_with('/')
+            || !looks_like_path(tok)
+        {
             None
         } else {
             let rel = Path::new(tok);

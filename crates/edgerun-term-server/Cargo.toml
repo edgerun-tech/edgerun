@@ -9,6 +9,7 @@ anyhow = "1"
 axum = { workspace = true, features = ["ws"] }
 edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
 edgerun-observability = { path = "../edgerun-observability" }
+edgerun-transport-core = { path = "../edgerun-transport-core" }
 portable-pty = "0.8"
 serde.workspace = true
 serde_json.workspace = true

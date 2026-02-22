@@ -330,10 +330,10 @@ fn expand_home_path(path: &str) -> PathBuf {
     if path == "~" {
         return dirs::home_dir().unwrap_or_else(|| PathBuf::from(path));
     }
-    if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = dirs::home_dir() {
-            return home.join(rest);
-        }
+    if let Some(rest) = path.strip_prefix("~/")
+        && let Some(home) = dirs::home_dir()
+    {
+        return home.join(rest);
     }
     PathBuf::from(path)
 }
@@ -446,18 +446,15 @@ fn refresh_log_viewer(viewer: &mut LogViewer, sources: &[LogSource], max_lines: 
         }
     }
 
-    if let LogSourceKind::Dmesg = source.kind {
-        if lines.len() > max_lines {
-            lines = lines.split_off(lines.len().saturating_sub(max_lines));
-        }
+    if let LogSourceKind::Dmesg = source.kind
+        && lines.len() > max_lines
+    {
+        lines = lines.split_off(lines.len().saturating_sub(max_lines));
     }
 
     if !viewer.query.is_empty() {
         let needle = viewer.query.to_lowercase();
-        lines = lines
-            .into_iter()
-            .filter(|line| line.to_lowercase().contains(&needle))
-            .collect();
+        lines.retain(|line| line.to_lowercase().contains(&needle));
     }
 
     viewer.lines = lines;
@@ -896,10 +893,10 @@ fn run() -> Result<()> {
                 if tab.title.is_empty() {
                     tab.title = format!("Tab {}", idx + 1);
                 }
-                if let Some(title) = tab.terminal.window_title().map(|t| t.to_string()) {
-                    if tab.title != title {
-                        tab.title = title;
-                    }
+                if let Some(title) = tab.terminal.window_title().map(|t| t.to_string())
+                    && tab.title != title
+                {
+                    tab.title = title;
                 }
                 if idx == active_tab {
                     active_window_title = tab.terminal.window_title().map(|t| t.to_string());
@@ -1035,15 +1032,13 @@ fn run() -> Result<()> {
                 window.request_redraw();
             }
             AppEvent::HyprPoll => {
-                if let Some(state) = hypr_poll.as_mut() {
-                    if let Some(size) =
+                if let Some(state) = hypr_poll.as_mut()
+                    && let Some(size) =
                         fetch_hyprland_size(&state.info.request_socket, state.info.pid)
-                    {
-                        if state.last_size != Some(size) {
-                            state.last_size = Some(size);
-                            let _ = proxy.send_event(AppEvent::HyprResize(size));
-                        }
-                    }
+                    && state.last_size != Some(size)
+                {
+                    state.last_size = Some(size);
+                    let _ = proxy.send_event(AppEvent::HyprResize(size));
                 }
             }
             AppEvent::Fonts(fonts) => {
@@ -1138,17 +1133,17 @@ fn run() -> Result<()> {
             // If the user is viewing scrollback, any key press should jump back to live output
             // and not be forwarded. This avoids cursor/history arrows adding text while the
             // screen appears "stuck" on older content.
-            if let Some(tab) = tabs.get_mut(active_tab) {
-                if tab.terminal.view_offset > 0 {
-                    tab.selection_anchor = None;
-                    tab.selection_edge = None;
-                    tab.selecting = false;
-                    tab.pending_selection = None;
-                    tab.mouse_down_pos = None;
-                    tab.terminal.set_view_offset(0);
-                    needs_redraw = true;
-                    return;
-                }
+            if let Some(tab) = tabs.get_mut(active_tab)
+                && tab.terminal.view_offset > 0
+            {
+                tab.selection_anchor = None;
+                tab.selection_edge = None;
+                tab.selecting = false;
+                tab.pending_selection = None;
+                tab.mouse_down_pos = None;
+                tab.terminal.set_view_offset(0);
+                needs_redraw = true;
+                return;
             }
 
             if context_menu.open {
@@ -1205,11 +1200,11 @@ fn run() -> Result<()> {
                 return;
             }
 
-            if log_viewer.is_open() {
-                if handle_log_viewer_key(&event, &mut log_viewer, &mut log_refresh_needed) {
-                    needs_redraw = true;
-                    return;
-                }
+            if log_viewer.is_open()
+                && handle_log_viewer_key(&event, &mut log_viewer, &mut log_refresh_needed)
+            {
+                needs_redraw = true;
+                return;
             }
 
             if debug_overlay.is_active() {
@@ -1378,34 +1373,31 @@ fn run() -> Result<()> {
                 context_menu.close();
                 return;
             }
-            if let Some((mx, my)) = last_cursor_pos {
-                if let Some(cell) = pos_to_cell(mx, my, &layout, cell_w, cell_h, active_tab, &tabs)
-                {
-                    if let Some(tab) = tabs.get_mut(active_tab) {
-                        if tab.terminal.mouse_btn_report {
-                            let kind = match delta {
-                                winit::event::MouseScrollDelta::LineDelta(_, y) if y > 0.0 => {
-                                    term_core::terminal::MouseEventKind::WheelUp
-                                }
-                                winit::event::MouseScrollDelta::LineDelta(_, y) if y < 0.0 => {
-                                    term_core::terminal::MouseEventKind::WheelDown
-                                }
-                                winit::event::MouseScrollDelta::PixelDelta(pos) if pos.y > 0.0 => {
-                                    term_core::terminal::MouseEventKind::WheelUp
-                                }
-                                winit::event::MouseScrollDelta::PixelDelta(pos) if pos.y < 0.0 => {
-                                    term_core::terminal::MouseEventKind::WheelDown
-                                }
-                                _ => term_core::terminal::MouseEventKind::WheelUp,
-                            };
-                            let TabKind::Shell(shell) = &tab.kind;
-                            tab.terminal
-                                .report_mouse_event(cell.0, cell.1, kind, &shell.writer);
-                            needs_redraw = true;
-                            return;
-                        }
+            if let Some((mx, my)) = last_cursor_pos
+                && let Some(cell) = pos_to_cell(mx, my, &layout, cell_w, cell_h, active_tab, &tabs)
+                && let Some(tab) = tabs.get_mut(active_tab)
+                && tab.terminal.mouse_btn_report
+            {
+                let kind = match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) if y > 0.0 => {
+                        term_core::terminal::MouseEventKind::WheelUp
                     }
-                }
+                    winit::event::MouseScrollDelta::LineDelta(_, y) if y < 0.0 => {
+                        term_core::terminal::MouseEventKind::WheelDown
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) if pos.y > 0.0 => {
+                        term_core::terminal::MouseEventKind::WheelUp
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(pos) if pos.y < 0.0 => {
+                        term_core::terminal::MouseEventKind::WheelDown
+                    }
+                    _ => term_core::terminal::MouseEventKind::WheelUp,
+                };
+                let TabKind::Shell(shell) = &tab.kind;
+                tab.terminal
+                    .report_mouse_event(cell.0, cell.1, kind, &shell.writer);
+                needs_redraw = true;
+                return;
             }
             if history_menu.open {
                 let lines = match delta {
@@ -1540,20 +1532,20 @@ fn run() -> Result<()> {
             }
             if history_menu.open {
                 if button == MouseButton::Left && state == ElementState::Released {
-                    if let Some((mx, my)) = last_cursor_pos {
-                        if let Some(sel_idx) = history_menu.click(mx, my) {
-                            if let Some(text) = apply_history_selection(
-                                &mut history_menu,
-                                &mut tabs,
-                                active_tab,
-                                false,
-                                &cwd_history,
-                            ) {
-                                autocomplete.record_accept(&text);
-                            } else {
-                                history_menu.selected =
-                                    sel_idx.min(history_menu.entries.len().saturating_sub(1));
-                            }
+                    if let Some((mx, my)) = last_cursor_pos
+                        && let Some(sel_idx) = history_menu.click(mx, my)
+                    {
+                        if let Some(text) = apply_history_selection(
+                            &mut history_menu,
+                            &mut tabs,
+                            active_tab,
+                            false,
+                            &cwd_history,
+                        ) {
+                            autocomplete.record_accept(&text);
+                        } else {
+                            history_menu.selected =
+                                sel_idx.min(history_menu.entries.len().saturating_sub(1));
                         }
                     }
                 } else if button == MouseButton::Right && state == ElementState::Released {
@@ -1802,16 +1794,14 @@ fn run() -> Result<()> {
                 window.request_redraw();
             }
             let mut next_wake = next_layout_refresh;
-            if focused {
-                if let Some(next_blink) = tabs
+            if focused
+                && let Some(next_blink) = tabs
                     .iter()
                     .map(|tab| tab.next_cell_blink.min(tab.next_cursor_blink))
                     .min()
-                {
-                    if next_blink < next_wake {
-                        next_wake = next_blink;
-                    }
-                }
+                && next_blink < next_wake
+            {
+                next_wake = next_blink;
             }
             if let Some(state) = hypr_poll.as_mut() {
                 if now.duration_since(state.last_check) >= state.interval {
@@ -1955,7 +1945,7 @@ fn fetch_hyprland_size(socket_path: &str, pid: u32) -> Option<PhysicalSize<u32>>
                 continue;
             }
             let size = client.get("size").and_then(|v| v.as_array())?;
-            let width = size.get(0)?.as_u64()? as u32;
+            let width = size.first()?.as_u64()? as u32;
             let height = size.get(1)?.as_u64()? as u32;
             return Some(PhysicalSize::new(width, height));
         }
@@ -1974,12 +1964,12 @@ fn resolve_window_size(
     hypr_ipc: &Option<HyprIpcInfo>,
 ) -> PhysicalSize<u32> {
     let window_size = window.inner_size();
-    if let Some(info) = hypr_ipc.as_ref() {
-        if let Some(size) = fetch_hyprland_size(&info.request_socket, info.pid) {
-            if size.width > 0 && size.height > 0 {
-                return size;
-            }
-        }
+    if let Some(info) = hypr_ipc.as_ref()
+        && let Some(size) = fetch_hyprland_size(&info.request_socket, info.pid)
+        && size.width > 0
+        && size.height > 0
+    {
+        return size;
     }
     window_size
 }
@@ -2186,9 +2176,7 @@ fn detect_link_text_at_cell(term: &Terminal, col: usize, row: usize) -> Option<L
     let mut chars = Vec::with_capacity(term.cols);
     for c in 0..term.cols {
         let cell = term.display_cell(c, row);
-        let ch = if cell.wide_continuation {
-            ' '
-        } else if cell.text.is_empty() {
+        let ch = if cell.wide_continuation || cell.text.is_empty() {
             ' '
         } else {
             cell.text.chars().next().unwrap_or(' ')
@@ -2230,9 +2218,7 @@ fn detect_link_ranges(term: &Terminal) -> Vec<Vec<(usize, usize)>> {
         let mut chars = Vec::with_capacity(term.cols);
         for col in 0..term.cols {
             let cell = term.display_cell(col, row);
-            let ch = if cell.wide_continuation {
-                ' '
-            } else if cell.text.is_empty() {
+            let ch = if cell.wide_continuation || cell.text.is_empty() {
                 ' '
             } else {
                 cell.text.chars().next().unwrap_or(' ')
@@ -2283,7 +2269,7 @@ fn is_text_file(path: &Path) -> bool {
     let Ok(read_len) = file.read(&mut buf) else {
         return false;
     };
-    if buf[..read_len].iter().any(|b| *b == 0) {
+    if buf[..read_len].contains(&0) {
         return false;
     }
     std::str::from_utf8(&buf[..read_len]).is_ok()
@@ -2326,21 +2312,20 @@ fn line_input_prefix(term: &Terminal) -> (String, usize) {
         }
     }
 
-    if prompt_cols == 0 {
-        if let Some((idx, ch)) = prefix
+    if prompt_cols == 0
+        && let Some((idx, ch)) = prefix
             .char_indices()
             .rev()
             .find(|&(_, c)| matches!(c, '$' | '#' | '%' | '>' | '❯' | '➜' | '»' | '›' | 'λ'))
-        {
-            let mut end_idx = idx + ch.len_utf8();
-            while let Some(c) = prefix[end_idx..].chars().next() {
-                if c != ' ' {
-                    break;
-                }
-                end_idx += c.len_utf8();
+    {
+        let mut end_idx = idx + ch.len_utf8();
+        while let Some(c) = prefix[end_idx..].chars().next() {
+            if c != ' ' {
+                break;
             }
-            prompt_cols = prefix[..end_idx].chars().count();
+            end_idx += c.len_utf8();
         }
+        prompt_cols = prefix[..end_idx].chars().count();
     }
 
     if prompt_cols == 0 {
@@ -2389,17 +2374,16 @@ fn handle_key(
         return;
     }
 
-    if matches!(event.logical_key, Key::Named(NamedKey::Escape)) {
-        if let Some(tab) = tabs.get_mut(*active_tab)
-            && (tab.selection_anchor.is_some() || tab.selection_edge.is_some())
-        {
-            tab.selection_anchor = None;
-            tab.selection_edge = None;
-            tab.selecting = false;
-            tab.pending_selection = None;
-            tab.mouse_down_pos = None;
-            return;
-        }
+    if matches!(event.logical_key, Key::Named(NamedKey::Escape))
+        && let Some(tab) = tabs.get_mut(*active_tab)
+        && (tab.selection_anchor.is_some() || tab.selection_edge.is_some())
+    {
+        tab.selection_anchor = None;
+        tab.selection_edge = None;
+        tab.selecting = false;
+        tab.pending_selection = None;
+        tab.mouse_down_pos = None;
+        return;
     }
 
     if modifiers.control_key() && matches!(event.logical_key, Key::Named(NamedKey::Space)) {
@@ -2598,7 +2582,7 @@ fn handle_key(
             && let Some((a, b)) = selection_bounds(tab)
         {
             copy_selection_to_clipboard(&tab.terminal, a, b);
-            maybe_set_copy_notice(&settings, copy_notice, "Selection copied", Instant::now());
+            maybe_set_copy_notice(settings, copy_notice, "Selection copied", Instant::now());
         }
         return;
     }
@@ -2663,38 +2647,36 @@ fn handle_history_key(
             return apply_history_selection(history_menu, tabs, active_tab, true, cwd_history);
         }
         Key::Named(NamedKey::F8) => {
-            if let Some((col, row)) = history_menu.selected_cell() {
-                if let Some(col_data) = history_menu.columns.get(col) {
-                    if let Some(entry) = col_data.entries.get(row).cloned() {
-                        let command_text = entry.command.clone();
-                        if col_data.title == "Bookmarks" {
-                            history_menu
-                                .bookmarks
-                                .retain(|b| b.command != entry.command);
-                        } else if !history_menu
-                            .bookmarks
-                            .iter()
-                            .any(|b| b.command == entry.command)
-                        {
-                            history_menu.bookmarks.push(entry);
-                        }
-                        if let Some(tab) = tabs.get(active_tab) {
-                            let (prefix, _) = line_input_prefix(&tab.terminal);
-                            let cols = smart_history_columns(
-                                history_menu,
-                                &prefix,
-                                active_tab,
-                                tabs,
-                                cwd_history,
-                                autocomplete,
-                            );
-                            history_menu.open(cols);
-                        }
-                        if command_text.starts_with("ssh ") || command_text.starts_with("sudo ssh")
-                        {
-                            let _ = add_ssh_host_to_config(&command_text);
-                        }
-                    }
+            if let Some((col, row)) = history_menu.selected_cell()
+                && let Some(col_data) = history_menu.columns.get(col)
+                && let Some(entry) = col_data.entries.get(row).cloned()
+            {
+                let command_text = entry.command.clone();
+                if col_data.title == "Bookmarks" {
+                    history_menu
+                        .bookmarks
+                        .retain(|b| b.command != entry.command);
+                } else if !history_menu
+                    .bookmarks
+                    .iter()
+                    .any(|b| b.command == entry.command)
+                {
+                    history_menu.bookmarks.push(entry);
+                }
+                if let Some(tab) = tabs.get(active_tab) {
+                    let (prefix, _) = line_input_prefix(&tab.terminal);
+                    let cols = smart_history_columns(
+                        history_menu,
+                        &prefix,
+                        active_tab,
+                        tabs,
+                        cwd_history,
+                        autocomplete,
+                    );
+                    history_menu.open(cols);
+                }
+                if command_text.starts_with("ssh ") || command_text.starts_with("sudo ssh") {
+                    let _ = add_ssh_host_to_config(&command_text);
                 }
             }
         }
@@ -2706,7 +2688,7 @@ fn handle_history_key(
 
 fn apply_history_selection(
     history_menu: &mut HistoryMenu,
-    tabs: &mut Vec<Tab>,
+    tabs: &mut [Tab],
     active_tab: usize,
     run: bool,
     cwd_history: &[CwdHistoryEntry],
@@ -2862,10 +2844,8 @@ fn start_download(url: &str, filename: &str, proxy: EventLoopProxy<AppEvent>) {
             Err(err) => (false, format!("Download failed: {err}")),
         };
         let _ = proxy.send_event(AppEvent::DownloadStatus(msg));
-        if ok {
-            if let Ok(bytes) = fs::read(&target) {
-                let _ = proxy.send_event(AppEvent::Fonts(vec![Arc::new(bytes)]));
-            }
+        if ok && let Ok(bytes) = fs::read(&target) {
+            let _ = proxy.send_event(AppEvent::Fonts(vec![Arc::new(bytes)]));
         }
     });
 }
@@ -2930,8 +2910,6 @@ fn pos_to_cell(
 mod layout_tests {
     use super::*;
     use crate::tab::ShellTab;
-    #[cfg(unix)]
-    use libc;
     #[cfg(unix)]
     use portable_pty::unix;
     use portable_pty::{MasterPty, PtySize};
@@ -3199,6 +3177,7 @@ mod layout_tests {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn refresh_layout_for_size(
     new_size: PhysicalSize<u32>,
     cell_w: u32,
@@ -4188,18 +4167,16 @@ fn kitty_font_family() -> String {
         &["@", "get-config"],
         None,
         Duration::from_millis(500),
-    ) {
-        if let Some(family) = parse_kitty_font_family(&String::from_utf8_lossy(&config)) {
-            return family;
-        }
+    ) && let Some(family) = parse_kitty_font_family(&String::from_utf8_lossy(&config))
+    {
+        return family;
     }
 
-    if let Some(path) = kitty_config_path() {
-        if let Ok(contents) = fs::read_to_string(path) {
-            if let Some(family) = parse_kitty_font_family(&contents) {
-                return family;
-            }
-        }
+    if let Some(path) = kitty_config_path()
+        && let Ok(contents) = fs::read_to_string(path)
+        && let Some(family) = parse_kitty_font_family(&contents)
+    {
+        return family;
     }
 
     "monospace".to_string()
@@ -4287,8 +4264,10 @@ mod ui_tests {
     #[test]
     fn help_visibility_persists_to_config() {
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", dir.path()) };
-        let _ = fs::remove_file(dir.path().join("term").join("help.json"));
+        let path = HELP_STATE_OVERRIDE
+            .get_or_init(|| dir.path().join("term").join("help.json"))
+            .clone();
+        let _ = fs::remove_file(&path);
 
         persist_help_visible_flag(false);
         assert_eq!(load_help_visible_flag(), Some(false));

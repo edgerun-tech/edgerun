@@ -420,7 +420,7 @@ pub fn draw_cursor_overlay(
             let cursor_shape = term.cursor_shape();
             let (cursor_w, cursor_h, cursor_y, cursor_x) = match cursor_shape {
                 crate::terminal::CursorShape::Underline => {
-                    let cursor_thickness = cell_h.max(1).min(2);
+                    let cursor_thickness = cell_h.clamp(1, 2);
                     let base_y = origin_y as i32 + cursor_row as i32 * cell_h as i32;
                     let cursor_y = (base_y + cell_h as i32 - cursor_thickness as i32)
                         .clamp(0, height.saturating_sub(1) as i32)
@@ -685,6 +685,7 @@ fn draw_cell_glyphs(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_missing_glyph_bar(
     frame: &mut [u8],
     width: u32,

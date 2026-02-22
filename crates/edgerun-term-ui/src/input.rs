@@ -120,14 +120,13 @@ pub fn send_key(
                 return;
             }
 
-            if kitty_keyboard {
-                if let Some(ch) = event.text.as_deref().and_then(|t| t.chars().next()) {
-                    let codepoint = ch as u32;
-                    let mod_bits = encode_modifiers(modifiers);
-                    let seq = format!("\x1b[{};{}u", codepoint, mod_bits);
-                    write_bytes(writer, seq.as_bytes());
-                    return;
-                }
+            if kitty_keyboard && let Some(ch) = event.text.as_deref().and_then(|t| t.chars().next())
+            {
+                let codepoint = ch as u32;
+                let mod_bits = encode_modifiers(modifiers);
+                let seq = format!("\x1b[{};{}u", codepoint, mod_bits);
+                write_bytes(writer, seq.as_bytes());
+                return;
             }
 
             if modifiers.control_key() && !modifiers.shift_key() {
@@ -150,6 +149,9 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    type SharedWriter = Arc<Mutex<Box<dyn std::io::Write + Send>>>;
+    type SharedBytes = Arc<Mutex<Vec<u8>>>;
+
     #[derive(Default)]
     struct Buf(Arc<Mutex<Vec<u8>>>);
 
@@ -164,11 +166,8 @@ mod tests {
         }
     }
 
-    fn capture_writer() -> (
-        Arc<Mutex<Vec<u8>>>,
-        Arc<Mutex<Box<dyn std::io::Write + Send>>>,
-    ) {
-        let buf = Arc::new(Mutex::new(Vec::new()));
+    fn capture_writer() -> (SharedBytes, SharedWriter) {
+        let buf: SharedBytes = Arc::new(Mutex::new(Vec::new()));
         let writer: Box<dyn std::io::Write + Send> = Box::new(Buf(buf.clone()));
         (buf, Arc::new(Mutex::new(writer)))
     }

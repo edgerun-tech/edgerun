@@ -255,6 +255,7 @@ fn help_bar_metrics(
     (bar_top, bar_bottom)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw_help_bar_cpu(
     glyphs: &mut GlyphCache,
     frame: &mut [u8],
@@ -334,6 +335,7 @@ pub fn draw_help_bar_cpu(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 pub fn build_help_bar_gpu(
     rects: &mut Vec<RectVertex>,
     glyphs_out: &mut Vec<GlyphVertex>,

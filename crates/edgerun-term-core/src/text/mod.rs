@@ -254,10 +254,12 @@ impl GlyphCache {
 
         // Optionally generate an SDF for monochrome glyphs to improve scaling and reduce
         // repeated uploads. We'll produce an SDF in the alpha channel and keep RGB white.
-        if !is_color && self.use_sdf
-            && let Some(msdf) = Self::rasterize_msdf(&self.fonts[font_idx], glyph, self.size) {
-                return Some(msdf);
-            }
+        if !is_color
+            && self.use_sdf
+            && let Some(msdf) = Self::rasterize_msdf(&self.fonts[font_idx], glyph, self.size)
+        {
+            return Some(msdf);
+        }
 
         Some(GlyphBitmap {
             metrics: GlyphMetrics {
@@ -346,9 +348,10 @@ impl GlyphCache {
     pub fn rasterize(&mut self, ch: char) -> (GlyphMetrics, &[u8], bool) {
         if !self.char_cache.contains_key(&ch) {
             if let Some((font_idx, glyph)) = self.find_glyph(ch)
-                && let Some(bitmap) = self.rasterize_glyph(font_idx, glyph) {
-                    self.char_cache.insert(ch, bitmap);
-                }
+                && let Some(bitmap) = self.rasterize_glyph(font_idx, glyph)
+            {
+                self.char_cache.insert(ch, bitmap);
+            }
             if !self.char_cache.contains_key(&ch) {
                 // Fallback: space
                 self.char_cache.insert(
@@ -425,7 +428,7 @@ impl GlyphCache {
                 Some(f) => f,
                 None => return false,
             };
-            let mut face = match rustybuzz::Face::from_slice(font_bytes, 0) {
+            let face = match rustybuzz::Face::from_slice(font_bytes, 0) {
                 Some(f) => f,
                 None => return false,
             };
@@ -438,7 +441,7 @@ impl GlyphCache {
 
             let mut buffer = UnicodeBuffer::new();
             buffer.push_str(run);
-            let shaped = shape(&mut face, &[], buffer);
+            let shaped = shape(&face, &[], buffer);
             for (info, pos) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
                 out.push(ShapedGlyph {
                     font_idx,
@@ -479,9 +482,10 @@ impl GlyphCache {
         }
 
         if let Some(font_idx) = run_font
-            && !flush(&mut run, font_idx, &mut out) {
-                return None;
-            }
+            && !flush(&mut run, font_idx, &mut out)
+        {
+            return None;
+        }
 
         Some(out)
     }

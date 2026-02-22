@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
 };
@@ -11,6 +13,12 @@ use term_core::render::{
 
 pub struct Cheatsheet {
     open: bool,
+}
+
+impl Default for Cheatsheet {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Cheatsheet {

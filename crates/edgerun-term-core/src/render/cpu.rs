@@ -13,7 +13,7 @@ pub fn text_width(glyphs: &mut GlyphCache, text: &str) -> i32 {
 
 pub fn msdf_alpha(r: u8, g: u8, b: u8, min_width: f32) -> u8 {
     let dist = median(r, g, b) / 255.0;
-    let w = min_width.min(0.5 / MSDF_SPREAD).max(0.001);
+    let w = min_width.clamp(0.001, 0.5 / MSDF_SPREAD);
     let alpha = smoothstep(0.5 - w, 0.5 + w, dist);
     (alpha.clamp(0.0, 1.0) * 255.0).round() as u8
 }

@@ -242,18 +242,20 @@ pub fn load_fallback_fonts() -> Vec<Arc<Vec<u8>>> {
             .and_then(|n| n.to_str())
             .map(|n| n.to_ascii_lowercase());
         if let Some(name) = &file_name
-            && !seen_names.insert(name.clone()) {
-                continue;
-            }
+            && !seen_names.insert(name.clone())
+        {
+            continue;
+        }
         if let Some(font) = load_font_from_path(Path::new(path)) {
             if let Some(name) = &file_name {
                 loaded.insert(name.clone());
             }
             fonts.push(font);
         } else if let Some(name) = file_name
-            && !missing_names.contains(&name) {
-                missing_names.push(name);
-            }
+            && !missing_names.contains(&name)
+        {
+            missing_names.push(name);
+        }
     }
 
     for path in FALLBACK_FONT_PATHS {
@@ -263,9 +265,10 @@ pub fn load_fallback_fonts() -> Vec<Arc<Vec<u8>>> {
             .map(|n| n.to_ascii_lowercase());
 
         if let Some(name) = &file_name
-            && !seen_names.insert(name.clone()) {
-                continue;
-            }
+            && !seen_names.insert(name.clone())
+        {
+            continue;
+        }
 
         if let Some(font) = load_font_from_path(Path::new(path)) {
             if let Some(name) = &file_name {
@@ -273,9 +276,10 @@ pub fn load_fallback_fonts() -> Vec<Arc<Vec<u8>>> {
             }
             fonts.push(font);
         } else if let Some(name) = file_name
-            && !missing_names.contains(&name) {
-                missing_names.push(name);
-            }
+            && !missing_names.contains(&name)
+        {
+            missing_names.push(name);
+        }
     }
 
     for font in load_fonts_by_name(&missing_names, &mut loaded) {

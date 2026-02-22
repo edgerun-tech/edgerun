@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::widgets::{
     MODAL_PANEL_H_FRAC, MODAL_PANEL_MIN_H, MODAL_PANEL_MIN_W, MODAL_PANEL_W_FRAC, modal_panel_rect,
 };
@@ -46,6 +48,12 @@ pub struct HistoryMenuLayout {
     pub item_height: i32,
     pub column_bounds: Vec<(i32, i32)>,
     pub max_rows: usize,
+}
+
+impl Default for HistoryMenu {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HistoryMenu {
@@ -235,14 +243,12 @@ impl HistoryMenu {
             }
         }
 
-        if dy != 0 {
-            if let Some(target_len) = self.columns.get(col).map(|c| c.entries.len()) {
-                if target_len > 0 {
-                    let new_row =
-                        (row as i32 + dy).clamp(0, target_len.saturating_sub(1) as i32) as usize;
-                    row = new_row;
-                }
-            }
+        if dy != 0
+            && let Some(target_len) = self.columns.get(col).map(|c| c.entries.len())
+            && target_len > 0
+        {
+            let new_row = (row as i32 + dy).clamp(0, target_len.saturating_sub(1) as i32) as usize;
+            row = new_row;
         }
 
         if let Some(idx) = self.index_for_cell(col, row) {
@@ -282,10 +288,10 @@ impl HistoryMenu {
                 continue;
             }
             let row = (local_y / self.item_height) as usize;
-            if let Some(col) = self.columns.get(idx) {
-                if row >= col.entries.len() {
-                    continue;
-                }
+            if let Some(col) = self.columns.get(idx)
+                && row >= col.entries.len()
+            {
+                continue;
             }
             if let Some(idx_flat) = self.index_for_cell(idx, row) {
                 self.selected = idx_flat;
@@ -674,7 +680,7 @@ mod tests {
         let mut frame = vec![0u8; width as usize * height as usize * 4];
         menu.draw_cpu(&mut glyphs, &mut frame, width, height);
         let (cx0, cy0, _cx1, _cy1) = menu.column_rects[0];
-        let y = cy0 + menu.header_height + menu.item_height * 1 + 1;
+        let y = cy0 + menu.header_height + menu.item_height + 1;
         menu.update_hover((cx0 + 5) as f64, y as f64);
         assert_eq!(menu.selected_cell(), Some((0, 1)));
         assert_eq!(menu.active_column, 0);
