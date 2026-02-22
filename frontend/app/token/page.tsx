@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Card, CardContent, CardHeader } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import { GeneratingIndicator } from '../../components/ui/generating-indicator'

@@ -1,9 +1,9 @@
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: Apache-2.0
 [package]
 name = "edgerun-storage"
 version.workspace = true
 edition.workspace = true
-license = "GPL-2.0-only"
+license = "Apache-2.0"
 description = "High-performance storage engine with io_uring I/O, durability tiers, and replication primitives"
 readme = "README.mdx"
 keywords = ["storage", "io-uring", "durability", "lsm", "replication"]

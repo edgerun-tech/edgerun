@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { PageHero } from './page-hero'
 import { PageShell } from './page-shell'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card'

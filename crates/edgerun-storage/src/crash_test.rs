@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: Apache-2.0
 //! Crash test harness for validating durability guarantees.
 //!
 //! This module provides chaos testing capabilities to ensure the storage

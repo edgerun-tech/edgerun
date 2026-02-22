@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('browser worker runtime', () => {
   it('runs browser worker loop off-thread and surfaces runtime state/errors in UI', () => {
     cy.visit('/workers/')

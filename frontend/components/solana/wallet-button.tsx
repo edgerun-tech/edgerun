@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { createMemo, createSignal, For, onCleanup, onMount } from 'solid-js'
 import { Button } from '../ui/button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog'

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Nav } from '../../components/nav'
 import { Footer } from '../../components/footer'
 import { ColorSwatch } from '../../components/style-guide/color-swatch'

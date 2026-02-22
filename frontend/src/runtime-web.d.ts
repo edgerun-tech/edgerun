@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 declare module '/wasm/edgerun-runtime-web/edgerun_runtime_web.js' {
   export default function initRuntimeWeb(moduleOrPath?: string | URL | Request): Promise<unknown>
 

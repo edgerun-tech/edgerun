@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 export const RPC_CONFIG_EVENT = 'edgerun:rpc-config-changed'
 export const RPC_STORAGE_CLUSTER_KEY = 'edgerun.rpc.cluster'
 export const RPC_STORAGE_URL_KEY = 'edgerun.rpc.url'

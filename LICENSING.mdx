@@ -1,32 +1,22 @@
 # Edgerun Licensing Matrix
 
-This repository uses a mixed licensing model.
+This repository is licensed under **Apache License 2.0**.
 
-## Intended Policy
+## Policy (current)
 
-- Core protocol: Apache 2.0
-- Scheduler + advanced infra: Proprietary (for now)
-- Storage engine: GPL-2.0-only
+- Everything in this repository is **Apache-2.0** unless explicitly stated otherwise.
+- The Edgerun name and logo are trademarks (see `TRADEMARKS.md`).
 
 ## Current Directory Mapping
 
-- `program/` -> Apache 2.0
-- `crates/edgerun-runtime/` -> Apache 2.0
-- `crates/edgerun-cli/` (verifier CLI) -> Apache 2.0
-- `docs/` -> Apache 2.0
-- `crates/edgerun-worker/` (worker daemon) -> Apache 2.0
-- `crates/edgerun-scheduler/` -> Proprietary
-- `crates/edgerun-storage/` -> GPL-2.0-only
+- `program/` -> Apache-2.0
+- `crates/` -> Apache-2.0
+- `docs/` -> Apache-2.0
+- `scripts/` -> Apache-2.0
+- `frontend/` -> Apache-2.0
+- `edgerun-apps/` -> Apache-2.0
 
 ## Notes
 
-- Not every crate carries a local `LICENSE` file; many inherit the repository root license
-  and use SPDX headers + `Cargo.toml` `license` metadata as the source of truth.
-- `crates/edgerun-scheduler/Cargo.toml` is marked with:
-  `license = "LicenseRef-Edgerun-Proprietary"`.
-- `crates/edgerun-storage/Cargo.toml` is marked with:
-  `license = "GPL-2.0-only"`.
-- Apache-licensed components remain usable for community adoption and ecosystem growth.
-- Proprietary scheduler code preserves commercialization and fundraising flexibility.
 - SPDX headers are enforced in CI via `scripts/spdx-check.sh`.
 - You can normalize/update headers locally with `scripts/spdx-normalize.sh`.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { LegalPlaceholderPage } from '../../../components/layout/legal-placeholder-page'
 
 export default function TermsPage() {

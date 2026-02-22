@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 describe('docs links integrity', () => {
   it('serves key docs pages and pretty URLs without 404s', () => {
     const hrefs = [
