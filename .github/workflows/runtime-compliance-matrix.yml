@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload compliance artifacts
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: runtime-compliance-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-compliance
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload fuzz corpus artifacts
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: runtime-fuzz-corpus-${{ runner.os }}-${{ runner.arch }}
           path: |

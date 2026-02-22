@@ -34,7 +34,7 @@ jobs:
           sha256sum /tmp/edgerun-runtime-release/edgerun-runtime > /tmp/edgerun-runtime-release/SHA256SUMS
 
       - name: Upload runtime release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: edgerun-runtime-release-${{ github.sha }}
           path: /tmp/edgerun-runtime-release

@@ -28,7 +28,7 @@ jobs:
         run: cargo run -p edgerun-cli -- --root . ci --job build-timing-main
 
       - name: Upload timing artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-timings-main-${{ github.run_id }}
           path: out/ci/build-timings.json
@@ -99,7 +99,7 @@ jobs:
 
       - name: Upload coverage artifact
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: workspace-coverage-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-coverage/lcov.info
@@ -158,7 +158,7 @@ jobs:
 
       - name: Upload replay artifact
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: replay-corpus-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-determinism/replay-corpus.json
@@ -188,7 +188,7 @@ jobs:
 
       - name: Upload calibration artifact
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fuel-calibration-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-calibration/fuel-calibration.json
@@ -219,7 +219,7 @@ jobs:
 
       - name: Upload SLO artifact
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: slo-smoke-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-slo/slo-smoke.json
@@ -317,7 +317,7 @@ jobs:
 
       - name: Upload runtime SBOM artifact
         if: ${{ env.ACT != 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: runtime-sbom-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-security
