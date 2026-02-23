@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 concurrency:
@@ -19,7 +21,7 @@ env:
 jobs:
   build-timing-main:
     name: Build Timing (Main)
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -93,7 +95,7 @@ jobs:
 
   coverage:
     name: Coverage (llvm-cov)
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -134,6 +136,7 @@ jobs:
 
   integration:
     name: Integration
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
@@ -163,7 +166,7 @@ jobs:
 
   runtime-determinism:
     name: Runtime Determinism (${{ matrix.os }})
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -200,7 +203,7 @@ jobs:
 
   runtime-calibration:
     name: Runtime Fuel Calibration
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -234,7 +237,7 @@ jobs:
 
   runtime-slo:
     name: Runtime SLO Smoke
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -269,7 +272,7 @@ jobs:
 
   runtime-fuzz-sanity:
     name: Runtime Fuzz Sanity
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -297,7 +300,7 @@ jobs:
 
   runtime-ub-safety:
     name: Runtime UB Safety (Miri/ASan/UBSan)
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -333,7 +336,7 @@ jobs:
 
   runtime-security:
     name: Runtime Security Gates
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -379,7 +382,7 @@ jobs:
 
   program-localnet:
     name: Program Localnet
-    if: ${{ github.event_name != 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
