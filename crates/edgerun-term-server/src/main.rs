@@ -103,8 +103,7 @@ struct RouteHeartbeatRequest {
     ttl_secs: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug)]
 enum ShellRequest {
     Auth {
         token: String,
@@ -128,8 +127,7 @@ enum ShellRequest {
     },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug)]
 enum ShellResponse {
     AuthOk,
     AuthError {
@@ -170,7 +168,7 @@ fn parse_exit_session_id(msg: &Message) -> Option<u32> {
     if bytes.first().copied() != Some(PTY_FRAME_CONTROL_RESP) {
         return None;
     }
-    let decoded = bincode::deserialize::<ShellResponse>(&bytes[1..]).ok()?;
+    let decoded = decode_shell_response(&bytes[1..]).ok()?;
     match decoded {
         ShellResponse::Exit { id, .. } => Some(id),
         _ => None,
@@ -352,7 +350,7 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                     if data.first().copied() != Some(PTY_FRAME_CONTROL_REQ) {
                         continue;
                     }
-                    let req: ShellRequest = match bincode::deserialize(&data[1..]) {
+                    let req: ShellRequest = match decode_shell_request(&data[1..]) {
                         Ok(value) => value,
                         Err(err) => {
                             send_mux_response(&out_tx, &ShellResponse::Error {
@@ -673,12 +671,224 @@ fn encode_pty_frame(kind: u8, id: u32, payload: &[u8]) -> Vec<u8> {
 
 fn send_mux_response(out_tx: &mpsc::UnboundedSender<Message>, response: &ShellResponse) {
     const PTY_FRAME_CONTROL_RESP: u8 = 0x7f;
-    if let Ok(payload) = bincode::serialize(response) {
+    if let Ok(payload) = encode_shell_response(response) {
         let mut frame = Vec::with_capacity(1 + payload.len());
         frame.push(PTY_FRAME_CONTROL_RESP);
         frame.extend_from_slice(&payload);
         let _ = out_tx.send(Message::Binary(frame.into()));
     }
+}
+
+fn encode_shell_response(response: &ShellResponse) -> anyhow::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    match response {
+        ShellResponse::AuthOk => out.push(0),
+        ShellResponse::AuthError { error } => {
+            out.push(1);
+            put_str(&mut out, error)?;
+        }
+        ShellResponse::Spawned { id, pid } => {
+            out.push(2);
+            out.extend_from_slice(&id.to_be_bytes());
+            match pid {
+                Some(pid) => {
+                    out.push(1);
+                    out.extend_from_slice(&pid.to_be_bytes());
+                }
+                None => out.push(0),
+            }
+        }
+        ShellResponse::Exit { id, code, signal } => {
+            out.push(3);
+            out.extend_from_slice(&id.to_be_bytes());
+            out.extend_from_slice(&code.to_be_bytes());
+            match signal {
+                Some(signal) => {
+                    out.push(1);
+                    put_str(&mut out, signal)?;
+                }
+                None => out.push(0),
+            }
+        }
+        ShellResponse::Error { id, error } => {
+            out.push(4);
+            match id {
+                Some(id) => {
+                    out.push(1);
+                    out.extend_from_slice(&id.to_be_bytes());
+                }
+                None => out.push(0),
+            }
+            put_str(&mut out, error)?;
+        }
+    }
+    Ok(out)
+}
+
+fn decode_shell_response(bytes: &[u8]) -> anyhow::Result<ShellResponse> {
+    let mut cur = 0usize;
+    let tag = take_u8(bytes, &mut cur)?;
+    let value = match tag {
+        0 => ShellResponse::AuthOk,
+        1 => ShellResponse::AuthError {
+            error: take_str(bytes, &mut cur)?,
+        },
+        2 => {
+            let id = take_u32(bytes, &mut cur)?;
+            let has_pid = take_u8(bytes, &mut cur)? != 0;
+            let pid = if has_pid {
+                Some(take_u32(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            ShellResponse::Spawned { id, pid }
+        }
+        3 => {
+            let id = take_u32(bytes, &mut cur)?;
+            let code = take_u32(bytes, &mut cur)?;
+            let has_signal = take_u8(bytes, &mut cur)? != 0;
+            let signal = if has_signal {
+                Some(take_str(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            ShellResponse::Exit { id, code, signal }
+        }
+        4 => {
+            let has_id = take_u8(bytes, &mut cur)? != 0;
+            let id = if has_id {
+                Some(take_u32(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            let error = take_str(bytes, &mut cur)?;
+            ShellResponse::Error { id, error }
+        }
+        _ => anyhow::bail!("unknown response tag"),
+    };
+    Ok(value)
+}
+
+fn decode_shell_request(bytes: &[u8]) -> anyhow::Result<ShellRequest> {
+    let mut cur = 0usize;
+    let tag = take_u8(bytes, &mut cur)?;
+    let value = match tag {
+        0 => ShellRequest::Auth {
+            token: take_str(bytes, &mut cur)?,
+        },
+        1 => {
+            let flags = take_u8(bytes, &mut cur)?;
+            let id = if flags & (1 << 0) != 0 {
+                Some(take_u32(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            let cmd = if flags & (1 << 1) != 0 {
+                Some(take_str(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            let args = if flags & (1 << 2) != 0 {
+                let count = take_u16(bytes, &mut cur)? as usize;
+                let mut values = Vec::with_capacity(count);
+                for _ in 0..count {
+                    values.push(take_str(bytes, &mut cur)?);
+                }
+                Some(values)
+            } else {
+                None
+            };
+            let cwd = if flags & (1 << 3) != 0 {
+                Some(take_str(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            let env = if flags & (1 << 4) != 0 {
+                let count = take_u16(bytes, &mut cur)? as usize;
+                let mut values = HashMap::with_capacity(count);
+                for _ in 0..count {
+                    let key = take_str(bytes, &mut cur)?;
+                    let value = take_str(bytes, &mut cur)?;
+                    values.insert(key, value);
+                }
+                Some(values)
+            } else {
+                None
+            };
+            let cols = if flags & (1 << 5) != 0 {
+                Some(take_u16(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            let rows = if flags & (1 << 6) != 0 {
+                Some(take_u16(bytes, &mut cur)?)
+            } else {
+                None
+            };
+            ShellRequest::Spawn {
+                id,
+                cmd,
+                args,
+                cwd,
+                env,
+                cols,
+                rows,
+            }
+        }
+        2 => ShellRequest::Resize {
+            id: take_u32(bytes, &mut cur)?,
+            cols: take_u16(bytes, &mut cur)?,
+            rows: take_u16(bytes, &mut cur)?,
+        },
+        3 => ShellRequest::Close {
+            id: take_u32(bytes, &mut cur)?,
+        },
+        _ => anyhow::bail!("unknown request tag"),
+    };
+    Ok(value)
+}
+
+fn put_str(out: &mut Vec<u8>, value: &str) -> anyhow::Result<()> {
+    let len = u16::try_from(value.len()).context("string too long")?;
+    out.extend_from_slice(&len.to_be_bytes());
+    out.extend_from_slice(value.as_bytes());
+    Ok(())
+}
+
+fn take_u8(bytes: &[u8], cur: &mut usize) -> anyhow::Result<u8> {
+    let Some(value) = bytes.get(*cur).copied() else {
+        anyhow::bail!("unexpected eof")
+    };
+    *cur += 1;
+    Ok(value)
+}
+
+fn take_u16(bytes: &[u8], cur: &mut usize) -> anyhow::Result<u16> {
+    if bytes.len().saturating_sub(*cur) < 2 {
+        anyhow::bail!("unexpected eof");
+    }
+    let value = u16::from_be_bytes([bytes[*cur], bytes[*cur + 1]]);
+    *cur += 2;
+    Ok(value)
+}
+
+fn take_u32(bytes: &[u8], cur: &mut usize) -> anyhow::Result<u32> {
+    if bytes.len().saturating_sub(*cur) < 4 {
+        anyhow::bail!("unexpected eof");
+    }
+    let value = u32::from_be_bytes([bytes[*cur], bytes[*cur + 1], bytes[*cur + 2], bytes[*cur + 3]]);
+    *cur += 4;
+    Ok(value)
+}
+
+fn take_str(bytes: &[u8], cur: &mut usize) -> anyhow::Result<String> {
+    let len = take_u16(bytes, cur)? as usize;
+    if bytes.len().saturating_sub(*cur) < len {
+        anyhow::bail!("unexpected eof");
+    }
+    let slice = &bytes[*cur..*cur + len];
+    *cur += len;
+    String::from_utf8(slice.to_vec()).context("invalid utf8")
 }
 
 fn now_unix_s() -> u64 {

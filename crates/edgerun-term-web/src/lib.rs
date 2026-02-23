@@ -5,13 +5,13 @@ pub fn start() {}
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::io::{self, Write};
     use std::rc::Rc;
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
     use js_sys::Uint8Array;
-    use serde::{Deserialize, Serialize};
     use term_core::render::{
         FONT_DATA, FONT_SIZE, GlyphCache, draw_background, draw_cursor_overlay, draw_grid,
         layout::compute_layout,
@@ -45,7 +45,7 @@ mod wasm {
         Mux,
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug)]
     enum ShellRequest {
         Auth {
             token: String,
@@ -55,7 +55,7 @@ mod wasm {
             cmd: Option<String>,
             args: Option<Vec<String>>,
             cwd: Option<String>,
-            env: Option<std::collections::HashMap<String, String>>,
+            env: Option<HashMap<String, String>>,
             cols: Option<u16>,
             rows: Option<u16>,
         },
@@ -69,7 +69,7 @@ mod wasm {
         },
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug)]
     enum ShellResponse {
         AuthOk,
         AuthError { error: String },
@@ -387,7 +387,7 @@ mod wasm {
     }
 
     fn send_mux_request(ws: &WebSocket, request: ShellRequest) {
-        if let Ok(encoded) = bincode::serialize(&request) {
+        if let Ok(encoded) = encode_shell_request(&request) {
             let mut frame = Vec::with_capacity(1 + encoded.len());
             frame.push(PTY_FRAME_CONTROL_REQ);
             frame.extend_from_slice(&encoded);
@@ -484,6 +484,179 @@ mod wasm {
         for byte in data {
             state.parser.advance(&mut performer, *byte);
         }
+    }
+
+    fn encode_shell_request(request: &ShellRequest) -> Result<Vec<u8>, JsValue> {
+        let mut out = Vec::new();
+        match request {
+            ShellRequest::Auth { token } => {
+                out.push(0);
+                put_str(&mut out, token)?;
+            }
+            ShellRequest::Spawn {
+                id,
+                cmd,
+                args,
+                cwd,
+                env,
+                cols,
+                rows,
+            } => {
+                out.push(1);
+                let mut flags = 0u8;
+                if id.is_some() {
+                    flags |= 1 << 0;
+                }
+                if cmd.is_some() {
+                    flags |= 1 << 1;
+                }
+                if args.is_some() {
+                    flags |= 1 << 2;
+                }
+                if cwd.is_some() {
+                    flags |= 1 << 3;
+                }
+                if env.is_some() {
+                    flags |= 1 << 4;
+                }
+                if cols.is_some() {
+                    flags |= 1 << 5;
+                }
+                if rows.is_some() {
+                    flags |= 1 << 6;
+                }
+                out.push(flags);
+                if let Some(id) = id {
+                    out.extend_from_slice(&id.to_be_bytes());
+                }
+                if let Some(cmd) = cmd {
+                    put_str(&mut out, cmd)?;
+                }
+                if let Some(args) = args {
+                    let count =
+                        u16::try_from(args.len()).map_err(|_| JsValue::from_str("too many args"))?;
+                    out.extend_from_slice(&count.to_be_bytes());
+                    for value in args {
+                        put_str(&mut out, value)?;
+                    }
+                }
+                if let Some(cwd) = cwd {
+                    put_str(&mut out, cwd)?;
+                }
+                if let Some(env) = env {
+                    let count = u16::try_from(env.len())
+                        .map_err(|_| JsValue::from_str("too many env vars"))?;
+                    out.extend_from_slice(&count.to_be_bytes());
+                    for (key, value) in env {
+                        put_str(&mut out, key)?;
+                        put_str(&mut out, value)?;
+                    }
+                }
+                if let Some(cols) = cols {
+                    out.extend_from_slice(&cols.to_be_bytes());
+                }
+                if let Some(rows) = rows {
+                    out.extend_from_slice(&rows.to_be_bytes());
+                }
+            }
+            ShellRequest::Resize { id, cols, rows } => {
+                out.push(2);
+                out.extend_from_slice(&id.to_be_bytes());
+                out.extend_from_slice(&cols.to_be_bytes());
+                out.extend_from_slice(&rows.to_be_bytes());
+            }
+            ShellRequest::Close { id } => {
+                out.push(3);
+                out.extend_from_slice(&id.to_be_bytes());
+            }
+        }
+        Ok(out)
+    }
+
+    fn decode_shell_response(bytes: &[u8]) -> Result<ShellResponse, JsValue> {
+        let mut cur = 0usize;
+        let tag = take_u8(bytes, &mut cur)?;
+        match tag {
+            0 => Ok(ShellResponse::AuthOk),
+            1 => Ok(ShellResponse::AuthError {
+                error: take_str(bytes, &mut cur)?,
+            }),
+            2 => {
+                let id = take_u32(bytes, &mut cur)?;
+                let has_pid = take_u8(bytes, &mut cur)? != 0;
+                let pid = if has_pid {
+                    Some(take_u32(bytes, &mut cur)?)
+                } else {
+                    None
+                };
+                Ok(ShellResponse::Spawned { id, pid })
+            }
+            3 => {
+                let id = take_u32(bytes, &mut cur)?;
+                let code = take_u32(bytes, &mut cur)?;
+                let has_signal = take_u8(bytes, &mut cur)? != 0;
+                let signal = if has_signal {
+                    Some(take_str(bytes, &mut cur)?)
+                } else {
+                    None
+                };
+                Ok(ShellResponse::Exit { id, code, signal })
+            }
+            4 => {
+                let has_id = take_u8(bytes, &mut cur)? != 0;
+                let id = if has_id {
+                    Some(take_u32(bytes, &mut cur)?)
+                } else {
+                    None
+                };
+                let error = take_str(bytes, &mut cur)?;
+                Ok(ShellResponse::Error { id, error })
+            }
+            _ => Err(JsValue::from_str("unknown response tag")),
+        }
+    }
+
+    fn put_str(out: &mut Vec<u8>, value: &str) -> Result<(), JsValue> {
+        let len = u16::try_from(value.len()).map_err(|_| JsValue::from_str("string too long"))?;
+        out.extend_from_slice(&len.to_be_bytes());
+        out.extend_from_slice(value.as_bytes());
+        Ok(())
+    }
+
+    fn take_u8(bytes: &[u8], cur: &mut usize) -> Result<u8, JsValue> {
+        let Some(value) = bytes.get(*cur).copied() else {
+            return Err(JsValue::from_str("unexpected eof"));
+        };
+        *cur += 1;
+        Ok(value)
+    }
+
+    fn take_u16(bytes: &[u8], cur: &mut usize) -> Result<u16, JsValue> {
+        if bytes.len().saturating_sub(*cur) < 2 {
+            return Err(JsValue::from_str("unexpected eof"));
+        }
+        let value = u16::from_be_bytes([bytes[*cur], bytes[*cur + 1]]);
+        *cur += 2;
+        Ok(value)
+    }
+
+    fn take_u32(bytes: &[u8], cur: &mut usize) -> Result<u32, JsValue> {
+        if bytes.len().saturating_sub(*cur) < 4 {
+            return Err(JsValue::from_str("unexpected eof"));
+        }
+        let value = u32::from_be_bytes([bytes[*cur], bytes[*cur + 1], bytes[*cur + 2], bytes[*cur + 3]]);
+        *cur += 4;
+        Ok(value)
+    }
+
+    fn take_str(bytes: &[u8], cur: &mut usize) -> Result<String, JsValue> {
+        let len = take_u16(bytes, cur)? as usize;
+        if bytes.len().saturating_sub(*cur) < len {
+            return Err(JsValue::from_str("unexpected eof"));
+        }
+        let slice = &bytes[*cur..*cur + len];
+        *cur += len;
+        String::from_utf8(slice.to_vec()).map_err(|_| JsValue::from_str("invalid utf8"))
     }
 
     fn flush_pending_input(state: &mut AppState, ws: &WebSocket) {
@@ -864,7 +1037,7 @@ mod wasm {
                     }
                     WsTransport::Mux => {
                         if data.first().copied() == Some(PTY_FRAME_CONTROL_RESP) {
-                            if let Ok(value) = bincode::deserialize::<ShellResponse>(&data[1..]) {
+                            if let Ok(value) = decode_shell_response(&data[1..]) {
                                 handle_mux_control_response(&mut state, value);
                             }
                             return;
