@@ -228,9 +228,14 @@ export function getCachedRouteControlStatus(): RouteControlProbeStatus | null {
   }
 }
 
+export type RouteControlProbeOptions = {
+  skipWsProbe?: boolean
+}
+
 export async function probeRouteControlStatus(
   controlBaseOverride?: string,
   sourceOverride?: RouteControlSource,
+  options?: RouteControlProbeOptions,
 ): Promise<RouteControlProbeStatus> {
   const selection = getRouteControlBaseSelection()
   const overrideRequested = typeof controlBaseOverride === 'string' && controlBaseOverride.trim().length > 0
@@ -252,25 +257,8 @@ export async function probeRouteControlStatus(
     out.error = 'invalid control base override'
   }
 
-  const httpStarted = Date.now()
-  const httpController = new AbortController()
-  const httpTimer = window.setTimeout(() => httpController.abort(), CONTROL_PROBE_TIMEOUT_MS)
-  try {
-    const response = await fetch(`${base}/health`, {
-      signal: httpController.signal,
-      cache: 'no-store'
-    })
-    out.httpReachable = response.ok
-    out.httpStatus = Number.isFinite(response.status) ? response.status : null
-  } catch (error) {
-    out.error = error instanceof Error ? error.message : 'http probe failed'
-  } finally {
-    window.clearTimeout(httpTimer)
-    out.httpLatencyMs = Date.now() - httpStarted
-  }
-
   const wsUrl = controlWsProbeUrl(base)
-  if (wsUrl) {
+  if (!options?.skipWsProbe && wsUrl) {
     out.controlWsReachable = await new Promise<boolean>((resolve) => {
       let settled = false
       let ws: WebSocket | null = null
@@ -310,13 +298,9 @@ export async function probeRouteControlStatus(
     })
   }
 
-  if (!out.error && !out.controlWsReachable) {
+  if (!out.error && !options?.skipWsProbe && !out.controlWsReachable) {
     out.error = 'control ws probe failed'
   }
-  if (!out.error && !out.httpReachable) {
-    out.error = 'scheduler probe failed'
-  }
-
   out.checkedAt = Date.now()
   cachedControlStatus = {
     base: out.base,
@@ -355,17 +339,7 @@ export async function resolveDeviceRoute(controlBase: string, deviceId: string):
     const first = reachable.find((item) => typeof item === 'string' && item.trim().length > 0)
     return first?.trim() || null
   } catch {
-    try {
-      const resp = await fetch(`${trimmedBase}/v1/route/resolve/${encodeURIComponent(trimmedDeviceId)}`)
-      if (!resp.ok) return null
-      const body = await resp.json() as RouteResolveResponse
-      if (!body.ok || !body.found) return null
-      const reachable = Array.isArray(body.route?.reachable_urls) ? body.route?.reachable_urls : []
-      const first = reachable.find((item) => typeof item === 'string' && item.trim().length > 0)
-      return first?.trim() || null
-    } catch {
-      return null
-    }
+    return null
   }
 }
 
@@ -397,32 +371,9 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
     rememberControlBase(base)
     return Array.isArray(body.devices) ? body.devices : []
   } catch {
-    try {
-      const resp = await fetch(`${base}/v1/route/owner/${encodeURIComponent(trimmedOwner)}`)
-      if (!resp.ok) return []
-      const body = await resp.json() as OwnerRoutesResponse
-      if (!body.ok) return []
-      rememberControlBase(base)
-      return Array.isArray(body.devices) ? body.devices : []
-    } catch {
-      // Explicit user action failed across ws + fallback HTTP route lookup.
-    }
+    // Explicit user action failed on the WS control channel.
   }
   return []
-}
-
-export function routeRelayWsUrl(controlBase: string, deviceId: string): string | null {
-  const base = normalizeControlBase(controlBase)
-  const target = deviceId.trim()
-  if (!base || !target) return null
-  try {
-    const url = new URL('/v1/route/ws', `${base}/`)
-    url.searchParams.set('device_id', target)
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    return url.toString()
-  } catch {
-    return null
-  }
 }
 
 function getControlClient(controlBase: string): SchedulerControlWsClient {
