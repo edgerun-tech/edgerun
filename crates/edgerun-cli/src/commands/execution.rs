@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use edgerun_storage::os::proto::{
     ExecutionFinishedV1, ExecutionStartedV1, ExecutionStateV1, ExecutionStepFinishedV1,
     ExecutionStepStartedV1, IntentPriorityV1, IntentSubmittedV1,

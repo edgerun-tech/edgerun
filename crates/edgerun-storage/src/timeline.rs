@@ -13,7 +13,9 @@ pub mod proto {
     include!(concat!(env!("OUT_DIR"), "/edgerun.timeline.v1.rs"));
 }
 
-pub use proto::{InteractionPayloadV1, TimelineActorTypeV1, TimelineEventEnvelopeV1, TimelineEventTypeV1};
+pub use proto::{
+    InteractionPayloadV1, TimelineActorTypeV1, TimelineEventEnvelopeV1, TimelineEventTypeV1,
+};
 
 static TIMELINE_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -243,7 +245,10 @@ impl StorageBackedTimeline {
         })
     }
 
-    fn append_raw_event(&mut self, envelope: &TimelineEventEnvelopeV1) -> Result<u64, StorageError> {
+    fn append_raw_event(
+        &mut self,
+        envelope: &TimelineEventEnvelopeV1,
+    ) -> Result<u64, StorageError> {
         let payload = envelope.encode_to_vec();
         let event = StorageEvent::new(self.stream_id.clone(), self.actor_id.clone(), payload);
         self.engine.append_event_to_segmented_journal(
@@ -380,8 +385,12 @@ mod tests {
         }
         .encode_to_vec();
         ev2.payload_hash_blake3 = blake3::hash(&ev2.payload).as_bytes().to_vec();
-        let err = timeline.publish(&ev2).expect_err("must reject conflicting duplicate id");
-        assert!(err.to_string().contains("duplicate event_id with conflicting envelope"));
+        let err = timeline
+            .publish(&ev2)
+            .expect_err("must reject conflicting duplicate id");
+        assert!(err
+            .to_string()
+            .contains("duplicate event_id with conflicting envelope"));
     }
 
     #[test]

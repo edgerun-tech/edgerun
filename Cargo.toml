@@ -20,6 +20,7 @@ members = [
   "crates/edgerun-term-native",
   "crates/edgerun-term-web",
   "crates/edgerun-term-server",
+  "crates/edgerun-node-manager",
   "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-payload",
   "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-client",
   "crates/edgerun-hwvault-primitives",
@@ -42,6 +43,7 @@ clap = { version = "4", features = ["derive"] }
 ed25519-dalek = "2"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "fs", "time", "process"] }
 tracing = "0.1"

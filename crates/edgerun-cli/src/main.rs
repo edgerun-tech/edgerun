@@ -22,7 +22,6 @@ use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
-use crate::integration_helpers::pick_free_port;
 use crate::commands::observer::run_observer_command;
 use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
@@ -32,6 +31,7 @@ use crate::commands::storage::run_storage_command;
 use crate::commands::tailscale::run_tailscale_command;
 use crate::commands::tasks::{run_interactive, run_named_task_sync};
 use crate::commands::timeline::run_timeline_command;
+use crate::integration_helpers::pick_free_port;
 use process_helpers::{
     command_exists, run_program_sync, run_program_sync_owned, run_program_sync_with_env,
 };
@@ -1193,10 +1193,7 @@ fn run_build_timing_sync(root: &Path) -> Result<()> {
         release_secs,
         total_secs
     );
-    fs::write(
-        out_dir.join("build-timings.json"),
-        payload.as_bytes(),
-    )?;
+    fs::write(out_dir.join("build-timings.json"), payload.as_bytes())?;
 
     println!("build timings:");
     println!("  cli_release_build_seconds={cli_release_secs}");

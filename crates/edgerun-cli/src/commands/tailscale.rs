@@ -316,10 +316,7 @@ fn append_tailscale_entry(
         .unwrap_or("")
         .trim_end_matches('.')
         .to_string();
-    let host_name = entry["HostName"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let host_name = entry["HostName"].as_str().unwrap_or("").to_string();
     let tailnet_name = if !host_name.is_empty() {
         host_name
     } else if !dns_name.is_empty() {

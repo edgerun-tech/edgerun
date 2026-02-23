@@ -5,12 +5,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, ensure, Result};
-use edgerun_types::Limits;
 use edgerun_types::control_plane::{
     ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
     ControlWsServerMessage, JobCreateRequest, JobCreateResponse, JobStatusRequest,
     JobStatusResponse, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
+use edgerun_types::Limits;
 use futures_util::{SinkExt, StreamExt};
 use tokio::process::Child;
 use tokio::time::sleep;
@@ -53,9 +53,7 @@ pub(crate) async fn control_ws_request(
         payload,
     };
     let encoded = bincode::serialize(&request)?;
-    socket
-        .send(Message::Binary(encoded.into()))
-        .await?;
+    socket.send(Message::Binary(encoded.into())).await?;
     while let Some(frame) = socket.next().await {
         let frame = frame?;
         let Message::Binary(bytes) = frame else {
@@ -112,10 +110,13 @@ pub(crate) async fn create_assigned_job_with_abi(
         client_signed_at_unix_s: None,
         client_signature: None,
     };
-    let response = control_ws_request(sched_url, ControlWsRequestPayload::JobCreate(request)).await?;
+    let response =
+        control_ws_request(sched_url, ControlWsRequestPayload::JobCreate(request)).await?;
     match response {
         ControlWsResponsePayload::JobCreate(JobCreateResponse { job_id, .. }) => Ok(job_id),
-        other => Err(anyhow!("unexpected control payload for job.create: {other:?}")),
+        other => Err(anyhow!(
+            "unexpected control payload for job.create: {other:?}"
+        )),
     }
 }
 
@@ -136,7 +137,11 @@ pub(crate) async fn wait_for_failure_phase(
         .await?;
         let status = match response {
             ControlWsResponsePayload::JobStatus(body) => *body,
-            other => return Err(anyhow!("unexpected control payload for job.status: {other:?}")),
+            other => {
+                return Err(anyhow!(
+                    "unexpected control payload for job.status: {other:?}"
+                ))
+            }
         };
         let phase = status
             .failures
@@ -238,7 +243,9 @@ pub(crate) async fn fetch_job_status(sched_url: &str, job_id: &str) -> Result<Jo
     .await?
     {
         ControlWsResponsePayload::JobStatus(body) => Ok(*body),
-        other => Err(anyhow!("unexpected control payload for job.status: {other:?}")),
+        other => Err(anyhow!(
+            "unexpected control payload for job.status: {other:?}"
+        )),
     }
 }
 

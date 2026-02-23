@@ -73,10 +73,7 @@ pub(crate) fn run_observer_command(_root: &Path, command: ObserveCommand) -> Res
                     payload,
                     prev_hash.clone(),
                 )?;
-                prev_hash = envelope
-                    ["event_hash"]
-                    .as_str()
-                    .map(ToString::to_string);
+                prev_hash = envelope["event_hash"].as_str().map(ToString::to_string);
                 sink.append(&job_id, &actor, &envelope, to_durability(durability))?;
                 count = count.saturating_add(1);
             }
@@ -114,7 +111,11 @@ impl ObserverSink {
         durability: DurabilityLevel,
     ) -> Result<()> {
         let payload = envelope.dump().into_bytes();
-        let event = StorageEvent::new(stream_id_for_job(job_id), actor_id_for_actor(actor), payload);
+        let event = StorageEvent::new(
+            stream_id_for_job(job_id),
+            actor_id_for_actor(actor),
+            payload,
+        );
         self.session.append_with_durability(&event, durability)?;
         Ok(())
     }
@@ -129,8 +130,8 @@ fn load_payload(payload_json: Option<String>, payload_file: Option<PathBuf>) -> 
         (None, Some(path)) => {
             let raw = fs::read_to_string(&path)
                 .with_context(|| format!("failed to read payload file {}", path.display()))?;
-            let value: JsonValue = json::parse(&raw)
-                .with_context(|| format!("invalid JSON in {}", path.display()))?;
+            let value: JsonValue =
+                json::parse(&raw).with_context(|| format!("invalid JSON in {}", path.display()))?;
             Ok(value)
         }
         (None, None) => Ok(json::object! {}),

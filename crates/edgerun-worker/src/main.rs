@@ -14,11 +14,10 @@ use edgerun_transport_core::{
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
-    BundleGetRequest, ControlWsClientMessage, ControlWsRequestPayload,
-    ControlWsResponsePayload, ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse,
-    PolicyInfoResponse, QueuedAssignment, SessionCreateRequest, SessionCreateResponse,
-    WorkerAssignmentsRequest, WorkerCapacity, WorkerFailureReport,
-    WorkerReplayArtifactReport, WorkerResultReport,
+    BundleGetRequest, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
+    ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse,
+    QueuedAssignment, SessionCreateRequest, SessionCreateResponse, WorkerAssignmentsRequest,
+    WorkerCapacity, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
@@ -1511,7 +1510,7 @@ mod tests {
                         continue;
                     }
                     let data = match request.payload {
-                        ControlWsRequestPayload::WorkerResult(_)=> {
+                        ControlWsRequestPayload::WorkerResult(_) => {
                             ControlWsResponsePayload::WorkerResult(SubmissionAck {
                                 ok: true,
                                 duplicate: false,

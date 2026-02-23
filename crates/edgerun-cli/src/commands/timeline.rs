@@ -2,8 +2,8 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use anyhow::{bail, Result};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use edgerun_storage::timeline::{
     InteractionPayloadV1, StorageBackedTimeline, TimelineActorTypeV1, TimelineEventTypeV1,
     TimelineQueryFilter,

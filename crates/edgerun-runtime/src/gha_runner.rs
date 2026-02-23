@@ -57,11 +57,8 @@ impl std::error::Error for BackendError {}
 
 pub trait ControlPlane {
     fn fetch_next_job(&mut self) -> Result<Option<ActionsJobLease>, BackendError>;
-    fn append_log_chunk(
-        &mut self,
-        lease: &ActionsJobLease,
-        text: &str,
-    ) -> Result<(), BackendError>;
+    fn append_log_chunk(&mut self, lease: &ActionsJobLease, text: &str)
+        -> Result<(), BackendError>;
     fn report_state(
         &mut self,
         lease: &ActionsJobLease,
@@ -173,7 +170,10 @@ where
         ) {
             reporting_errors.push(format!("append_log_chunk: {err}"));
         }
-        if let Err(err) = self.control_plane.report_state(&lease, result.state, &result.detail) {
+        if let Err(err) = self
+            .control_plane
+            .report_state(&lease, result.state, &result.detail)
+        {
             reporting_errors.push(format!("report_state: {err}"));
         }
         if let Err(err) = self.control_plane.report_result(&lease, &result) {

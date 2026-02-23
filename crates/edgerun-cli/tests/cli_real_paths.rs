@@ -3,7 +3,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use edgerun_storage::event_bus::{EventBusPolicyV1, PolicyRuleV1, PolicyUpdateRequestV1};
 use prost::Message;
 use tempfile::tempdir;
@@ -243,7 +243,9 @@ fn timeline_append_query_text_file_and_stdin_real_path() {
         .expect("spawn timeline append --stdin");
     {
         let stdin = child.stdin.as_mut().expect("stdin");
-        stdin.write_all(b"stdin payload").expect("write stdin payload");
+        stdin
+            .write_all(b"stdin payload")
+            .expect("write stdin payload");
     }
     let out_stdin = child.wait_with_output().expect("collect output");
     assert!(

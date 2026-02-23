@@ -138,6 +138,35 @@ pub fn random_token_b64url(num_bytes: usize) -> String {
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
+pub fn tpm_nv_available() -> bool {
+    tpm_available()
+}
+
+pub fn tpm_nv_write_blob(nv_index: u32, data: &[u8], nv_size: usize) -> Result<(), HardwareError> {
+    if data.len() > nv_size {
+        return Err(HardwareError::Parse(format!(
+            "data length {} exceeds nv size {}",
+            data.len(),
+            nv_size
+        )));
+    }
+    ensure_nv_index_defined(nv_index, nv_size)?;
+    let mut padded = vec![0_u8; nv_size];
+    padded[..data.len()].copy_from_slice(data);
+    write_nv_blob(nv_index, &padded)
+}
+
+pub fn tpm_nv_read_blob(nv_index: u32, nv_size: usize) -> Result<Vec<u8>, HardwareError> {
+    let blob = read_nv_blob(nv_index, nv_size)?;
+    if blob.len() != nv_size {
+        return Err(HardwareError::Parse(format!(
+            "TPM blob size mismatch: expected {nv_size}, got {}",
+            blob.len()
+        )));
+    }
+    Ok(blob)
+}
+
 fn signer_from_record(
     record: &DeviceIdentityRecord,
     mode: HardwareSecurityMode,
@@ -253,7 +282,9 @@ fn read_record(path: &Path) -> Result<Option<DeviceIdentityRecord>, HardwareErro
         .ok_or_else(|| HardwareError::Parse("missing public_key_b64url".to_string()))?
         .to_string();
     let tpm_nv_index = parsed["tpm_nv_index"].as_u32();
-    let software_seed_b64url = parsed["software_seed_b64url"].as_str().map(ToString::to_string);
+    let software_seed_b64url = parsed["software_seed_b64url"]
+        .as_str()
+        .map(ToString::to_string);
     let record = DeviceIdentityRecord {
         version,
         backend,
@@ -334,36 +365,51 @@ fn command_exists(name: &str) -> bool {
 }
 
 fn tpm_seal_seed(nv_index: u32, seed: &[u8; 32]) -> Result<(), HardwareError> {
-    let index_arg = format!("0x{nv_index:08x}");
+    ensure_nv_index_defined(nv_index, 32)?;
+    write_nv_blob(nv_index, seed)
+}
 
+fn tpm_unseal_seed(nv_index: u32) -> Result<[u8; 32], HardwareError> {
+    let data = read_nv_blob(nv_index, 32)?;
+    data.as_slice()
+        .try_into()
+        .map_err(|_| HardwareError::Parse("TPM seed must be 32 bytes".to_string()))
+}
+
+fn ensure_nv_index_defined(nv_index: u32, nv_size: usize) -> Result<(), HardwareError> {
+    let index_arg = format!("0x{nv_index:08x}");
     let exists = Command::new("tpm2_nvreadpublic")
         .arg(&index_arg)
         .output()
         .map_err(|e| HardwareError::TpmCommand(format!("nvreadpublic spawn failed: {e}")))?;
-
-    if !exists.status.success() {
-        let define = Command::new("tpm2_nvdefine")
-            .args([
-                &index_arg,
-                "-C",
-                "o",
-                "-s",
-                "32",
-                "-a",
-                "ownerread|ownerwrite",
-            ])
-            .output()
-            .map_err(|e| HardwareError::TpmCommand(format!("nvdefine spawn failed: {e}")))?;
-        if !define.status.success() {
-            return Err(HardwareError::TpmCommand(format!(
-                "nvdefine failed: {}",
-                String::from_utf8_lossy(&define.stderr)
-            )));
-        }
+    if exists.status.success() {
+        return Ok(());
     }
+    let define = Command::new("tpm2_nvdefine")
+        .args([
+            &index_arg,
+            "-C",
+            "o",
+            "-s",
+            &nv_size.to_string(),
+            "-a",
+            "ownerread|ownerwrite",
+        ])
+        .output()
+        .map_err(|e| HardwareError::TpmCommand(format!("nvdefine spawn failed: {e}")))?;
+    if !define.status.success() {
+        return Err(HardwareError::TpmCommand(format!(
+            "nvdefine failed: {}",
+            String::from_utf8_lossy(&define.stderr)
+        )));
+    }
+    Ok(())
+}
 
-    let tmp_path = std::env::temp_dir().join(format!("edgerun-seed-{nv_index}.bin"));
-    fs::write(&tmp_path, seed).map_err(|e| HardwareError::Io(e.to_string()))?;
+fn write_nv_blob(nv_index: u32, data: &[u8]) -> Result<(), HardwareError> {
+    let index_arg = format!("0x{nv_index:08x}");
+    let tmp_path = std::env::temp_dir().join(format!("edgerun-nvwrite-{nv_index}.bin"));
+    fs::write(&tmp_path, data).map_err(|e| HardwareError::Io(e.to_string()))?;
     let write = Command::new("tpm2_nvwrite")
         .args([&index_arg, "-C", "o", "-i"])
         .arg(&tmp_path)
@@ -376,20 +422,17 @@ fn tpm_seal_seed(nv_index: u32, seed: &[u8; 32]) -> Result<(), HardwareError> {
             String::from_utf8_lossy(&write.stderr)
         )));
     }
-
     Ok(())
 }
 
-fn tpm_unseal_seed(nv_index: u32) -> Result<[u8; 32], HardwareError> {
+fn read_nv_blob(nv_index: u32, nv_size: usize) -> Result<Vec<u8>, HardwareError> {
     let index_arg = format!("0x{nv_index:08x}");
-    let tmp_path = std::env::temp_dir().join(format!("edgerun-unseal-{nv_index}.bin"));
-
+    let tmp_path = std::env::temp_dir().join(format!("edgerun-nvread-{nv_index}.bin"));
     let read = Command::new("tpm2_nvread")
-        .args([&index_arg, "-C", "o", "-s", "32", "-o"])
+        .args([&index_arg, "-C", "o", "-s", &nv_size.to_string(), "-o"])
         .arg(&tmp_path)
         .output()
         .map_err(|e| HardwareError::TpmCommand(format!("nvread spawn failed: {e}")))?;
-
     if !read.status.success() {
         let _ = fs::remove_file(&tmp_path);
         return Err(HardwareError::TpmCommand(format!(
@@ -397,11 +440,7 @@ fn tpm_unseal_seed(nv_index: u32) -> Result<[u8; 32], HardwareError> {
             String::from_utf8_lossy(&read.stderr)
         )));
     }
-
     let data = fs::read(&tmp_path).map_err(|e| HardwareError::Io(e.to_string()))?;
     let _ = fs::remove_file(&tmp_path);
-
-    data.as_slice()
-        .try_into()
-        .map_err(|_| HardwareError::Parse("TPM seed must be 32 bytes".to_string()))
+    Ok(data)
 }

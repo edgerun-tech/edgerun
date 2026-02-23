@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+# Format:
+#   dir <path> <mode>
+#   bin <name> <dest_path> <mode> <opts>
+#   file <source_path> <dest_path> <mode> <opts>
+#
+# opts is a comma-separated set:
+#   strip     -> run strip --strip-unneeded on staged file
+#   libs      -> include runtime-linked shared libs from ldd
+#   optional  -> do not fail if source path is missing
+
+dir /dev 0755
+dir /proc 0555
+dir /sys 0555
+dir /run 0755
+dir /tmp 1777
+dir /etc 0755
+dir /etc/ssl 0755
+dir /etc/ssl/certs 0755
+dir /usr 0755
+dir /usr/bin 0755
+
+bin edgerun-node-manager /init 0755 strip
+file /usr/bin/tpm2_getcap /usr/bin/tpm2_getcap 0755 libs,optional
+file /usr/bin/tpm2_nvreadpublic /usr/bin/tpm2_nvreadpublic 0755 libs,optional
+file /usr/bin/tpm2_nvdefine /usr/bin/tpm2_nvdefine 0755 libs,optional
+file /usr/bin/tpm2_nvread /usr/bin/tpm2_nvread 0755 libs,optional
+file /usr/bin/tpm2_nvwrite /usr/bin/tpm2_nvwrite 0755 libs,optional
+file /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt 0644 optional
