@@ -123,3 +123,6 @@ bench = false
 name = "encryption_overhead_benchmark"
 path = "tools/encryption_overhead_benchmark.rs"
 bench = false
+
+[package.metadata.cargo-machete]
+ignored = ["prost-build"]

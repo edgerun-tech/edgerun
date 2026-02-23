@@ -251,7 +251,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-types",
  "hex",
- "serde",
  "thiserror",
  "wasmi",
  "wasmparser 0.239.0",
