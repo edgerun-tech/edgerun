@@ -83,7 +83,7 @@ export default function QuickStartPage() {
                       code={`cargo run -p edgerun-address-client -- \\
   --mode distributed-insecure \\
   --allow-worker-seed-exposure \\
-  --scheduler-url http://127.0.0.1:8080 \\
+  --scheduler-url https://api.edgerun.tech \\
   --runtime-id 0000000000000000000000000000000000000000000000000000000000000000 \\
   --wasm-path target/wasm32-unknown-unknown/debug/edgerun_address_payload.wasm \\
   --seed-hex 0101010101010101010101010101010101010101010101010101010101010101 \\

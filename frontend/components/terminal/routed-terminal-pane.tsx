@@ -2,7 +2,7 @@
 import { For, createSignal, onCleanup, onMount, untrack } from 'solid-js'
 import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
 import { ROUTED_MESSAGE_EVENT, getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
-import { getRouteControlBase, resolveDeviceRoute } from '../../lib/webrtc-route-client'
+import { getRouteControlBase, resolveDeviceRoute, routeRelayWsUrl } from '../../lib/webrtc-route-client'
 import { encodeRoutedTerminalFrame, parseRoutedTerminalFrame } from '../../lib/routed-terminal-protocol'
 
 type Props = {
@@ -14,6 +14,8 @@ type RoutedMessageEvent = CustomEvent<{
   from?: string
   payload?: string
 }>
+
+const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost', '::1'])
 
 function stripAnsi(value: string): string {
   let out = ''
@@ -54,6 +56,45 @@ function toDirectWsUrl(baseUrl: string): string | null {
   } catch {
     return null
   }
+}
+
+function localDirectWsCandidate(): string | null {
+  if (typeof window === 'undefined') return null
+  const host = window.location.hostname.toLowerCase()
+  if (!LOCALHOST_NAMES.has(host)) return null
+  return 'ws://127.0.0.1:5577/ws'
+}
+
+async function probeDirectWs(endpoint: string, timeoutMs = 1200): Promise<boolean> {
+  const target = endpoint.trim()
+  if (!target) return false
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    let ws: WebSocket | null = null
+    const finish = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeoutId)
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.close()
+        } catch {
+          // ignore close errors
+        }
+      }
+      resolve(ok)
+    }
+    const timeoutId = window.setTimeout(() => finish(false), timeoutMs)
+    try {
+      ws = new WebSocket(target)
+    } catch {
+      finish(false)
+      return
+    }
+    ws.addEventListener('open', () => finish(true))
+    ws.addEventListener('error', () => finish(false))
+    ws.addEventListener('close', () => finish(false))
+  })
 }
 
 export function RoutedTerminalPane(props: Props) {
@@ -114,11 +155,14 @@ export function RoutedTerminalPane(props: Props) {
     const target = endpoint.trim()
     if (!target) return
     if (directSocket && directEndpoint === target) {
-      const open = directSocket.readyState === WebSocket.OPEN
-      setConnected(open)
-      setAcknowledged(open)
-      terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
-      return
+      if (directSocket.readyState === WebSocket.OPEN || directSocket.readyState === WebSocket.CONNECTING) {
+        const open = directSocket.readyState === WebSocket.OPEN
+        setConnected(open)
+        setAcknowledged(open)
+        terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
+        return
+      }
+      closeDirectSocket()
     }
 
     closeDirectSocket()
@@ -136,12 +180,14 @@ export function RoutedTerminalPane(props: Props) {
       setConnected(false)
       setAcknowledged(false)
       terminalDrawerActions.setPaneTransport(paneId, 'unknown')
+      directSocket = null
     })
     ws.addEventListener('error', () => {
       if (directSocket !== ws) return
       setConnected(false)
       setAcknowledged(false)
       terminalDrawerActions.setPaneTransport(paneId, 'unknown')
+      directSocket = null
     })
     ws.addEventListener('message', (event) => {
       appendDirectData(event.data)
@@ -176,11 +222,28 @@ export function RoutedTerminalPane(props: Props) {
   }
 
   async function refreshState(): Promise<void> {
+    if (directSocket && (directSocket.readyState === WebSocket.OPEN || directSocket.readyState === WebSocket.CONNECTING)) {
+      const open = directSocket.readyState === WebSocket.OPEN
+      setConnected(open)
+      setAcknowledged(open)
+      terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
+      return
+    }
+
     const controlBase = getRouteControlBase()
     const resolvedBase = await resolveDeviceRoute(controlBase, routeDeviceId).catch(() => null)
-    const directWsUrl = resolvedBase ? toDirectWsUrl(resolvedBase) : null
-    if (directWsUrl) {
-      ensureDirectSocket(directWsUrl)
+    const directCandidates = [
+      resolvedBase ? toDirectWsUrl(resolvedBase) : null,
+      localDirectWsCandidate(),
+      routeRelayWsUrl(controlBase, routeDeviceId)
+    ]
+      .filter((value): value is string => Boolean(value && value.trim()))
+      .map((value) => value.trim())
+    const uniqueCandidates = [...new Set(directCandidates)]
+    for (const candidate of uniqueCandidates) {
+      const reachable = await probeDirectWs(candidate).catch(() => false)
+      if (!reachable) continue
+      ensureDirectSocket(candidate)
       return
     }
 

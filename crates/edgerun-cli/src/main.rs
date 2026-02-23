@@ -256,6 +256,8 @@ const CLI_BUILD_NUMBER: &str = match option_env!("EDGERUN_BUILD_NUMBER") {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let cli = Cli::parse();
     let root = std::fs::canonicalize(&cli.root)
         .with_context(|| format!("failed to resolve root path: {}", cli.root.display()))?;

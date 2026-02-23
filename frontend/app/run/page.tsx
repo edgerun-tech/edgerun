@@ -90,11 +90,9 @@ const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
 }
 
 function defaultSchedulerUrl(): string {
-  if (typeof window === 'undefined') return 'http://127.0.0.1:8090'
+  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
   const injected = String((window as any).__EDGERUN_API_BASE || '').trim()
   if (injected) return injected
-  const host = window.location.hostname
-  if (host === '127.0.0.1' || host === 'localhost') return 'http://127.0.0.1:8090'
   return 'https://api.edgerun.tech'
 }
 
@@ -192,7 +190,7 @@ export default function RunPage() {
     onPresetChange('vanity-generator')
     setSubmissionMode('preset')
     setExecutionMode('distributed-insecure')
-    setSchedulerUrl('http://127.0.0.1:8090')
+    setSchedulerUrl('https://api.edgerun.tech')
     setAllowSeedExposure(true)
     setActiveStep('step-2')
   }
@@ -201,7 +199,7 @@ export default function RunPage() {
     try {
       const parsed = new URL(urlText)
       const host = parsed.host
-      return host === '127.0.0.1:8090' || host === 'localhost:8090' || host === 'api.edgerun.tech'
+      return host === 'api.edgerun.tech'
     } catch {
       return false
     }
@@ -291,7 +289,7 @@ export default function RunPage() {
 
     if (!isKnownLocalScheduler(schedulerUrl().trim())) {
       setSubmitStatus('error')
-      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Use https://api.edgerun.tech or start local scheduler on 127.0.0.1:8090.`)
+      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Use https://api.edgerun.tech.`)
       return
     }
 

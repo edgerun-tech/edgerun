@@ -9,7 +9,7 @@ import {
   type TerminalSplitMode,
   type TerminalTab
 } from '../../lib/terminal-drawer-store'
-import { refreshTerminalDevices } from '../../lib/terminal-device-service'
+import { probeDeviceOnline, refreshTerminalDevices } from '../../lib/terminal-device-service'
 import { mountTerminalDrawerRuntime } from '../../lib/terminal-drawer-runtime'
 import { getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
 import { getRouteControlBase, parseRouteDeviceId, resolveDeviceRoute, resolveOwnerRoutes } from '../../lib/webrtc-route-client'
@@ -139,7 +139,7 @@ export function useTerminalDrawerController(): TerminalDrawerController {
     await supervisor.connectToDevice(routeDeviceId).catch(() => {
       // keep probing through existing route table
     })
-    const routedOnline = await supervisor.waitForRoutedPong(routeDeviceId, 1400).catch(() => false)
+    const routedOnline = await probeDeviceOnline(device.baseUrl, 2200).catch(() => false)
     terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
   }
 

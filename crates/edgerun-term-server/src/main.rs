@@ -2,8 +2,9 @@
 use std::collections::HashMap;
 use std::env;
 use std::io::{Read, Write};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,6 +16,9 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ed25519_dalek::{Signer, SigningKey};
 use edgerun_hwvault_primitives::hardware::{
     DeviceSigner, HardwareSecurityMode, load_or_create_device_signer, random_token_b64url,
 };
@@ -38,6 +42,8 @@ struct DeviceIdentityResponse {
     backend: String,
     device_pubkey_b64url: String,
 }
+
+type RouteSigner = Arc<dyn Fn(&[u8]) -> String + Send + Sync>;
 
 #[derive(Debug, Serialize)]
 struct DeviceChallengeResponse {
@@ -143,6 +149,8 @@ struct PtySession {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     edgerun_observability::init_service("edgerun-term-server")?;
     let mode = match std::env::var("EDGERUN_HARDWARE_MODE")
         .unwrap_or_else(|_| "tpm-required".to_string())
@@ -638,37 +646,96 @@ fn now_unix_s() -> u64 {
 }
 
 fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
-    let Some(control_base) = env::var("EDGERUN_ROUTE_CONTROL_BASE")
+    let control_base = env::var("EDGERUN_ROUTE_CONTROL_BASE")
         .ok()
         .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
-    else {
-        return;
-    };
+        .unwrap_or_else(|| "https://api.edgerun.tech".to_string());
+    let control_base_is_local =
+        is_non_public_route_url(&control_base, "EDGERUN_ROUTE_CONTROL_BASE");
 
     let device_id = env::var("EDGERUN_ROUTE_DEVICE_ID")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| device.public_key_b64url.clone());
-    let owner_pubkey = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
+    let owner_signing_key = parse_owner_signing_key_from_env();
+    let owner_pubkey_from_signing_key = owner_signing_key
+        .as_ref()
+        .map(|sk| bs58::encode(sk.verifying_key().to_bytes()).into_string());
+    let configured_owner_pubkey = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
+        .or(owner_pubkey_from_signing_key)
         .unwrap_or_else(|| device.public_key_b64url.clone());
-    let public_base_url = env::var("EDGERUN_TERM_PUBLIC_BASE_URL")
+    let mut owner_pubkey = configured_owner_pubkey.clone();
+    if owner_signing_key.is_none() && owner_pubkey != device.public_key_b64url {
+        warn!(
+            configured_owner_pubkey = %configured_owner_pubkey,
+            owner_pubkey = %owner_pubkey,
+            "owner pubkey configured without a matching EDGERUN_ROUTE_OWNER_SECRET_KEY_B58; route registration will fail signature validation. Falling back to device pubkey to keep terminal announcements alive."
+        );
+        owner_pubkey = device.public_key_b64url.clone();
+    }
+    let (public_base_url, public_base_was_set) = env::var("EDGERUN_TERM_PUBLIC_BASE_URL")
+        .map(|v| {
+            let value = v.trim().trim_end_matches('/').to_string();
+            let was_set = !value.is_empty();
+            (value, was_set)
+        })
         .ok()
-        .map(|v| v.trim().trim_end_matches('/').to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| format!("http://{}", routable_addr(addr)));
+        .filter(|(_, is_set)| *is_set)
+        .unwrap_or_else(|| (format!("http://{}", routable_addr(addr)), false));
+    let mut reachable_urls = match parse_reachable_urls("EDGERUN_ROUTE_REACHABLE_URLS") {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(env = "EDGERUN_ROUTE_REACHABLE_URLS", error = %err, "ignoring configured reachable URLs");
+            vec![]
+        }
+    };
+    let public_base_is_non_public =
+        is_non_public_route_url(&public_base_url, "EDGERUN_TERM_PUBLIC_BASE_URL");
+
+    if public_base_is_non_public && !control_base_is_local {
+        if public_base_was_set {
+            warn!(
+                control_base = %control_base,
+                public_base_url = %public_base_url,
+                "EDGERUN_TERM_PUBLIC_BASE_URL must be publicly routable when control base is remote"
+            );
+        } else {
+            warn!(
+                control_base = %control_base,
+                public_base_url = %public_base_url,
+                "EDGERUN_TERM_PUBLIC_BASE_URL was not provided; defaulted URL may not be externally reachable"
+            );
+        }
+        warn!("route announcer disabled to avoid publishing unreachable terminal endpoint");
+        return;
+    }
+
+    if !reachable_urls.iter().any(|value| value == &public_base_url) {
+        reachable_urls.push(public_base_url.clone());
+    }
 
     info!(
         control = %control_base,
         %device_id,
+        %owner_pubkey,
         %public_base_url,
         "route announcer enabled"
     );
-    let signer = device.clone();
+    let sign_route_payload: RouteSigner = if let Some(owner_signing_key) = owner_signing_key {
+        let signer = Arc::new(owner_signing_key);
+        Arc::new(move |message: &[u8]| {
+            let sig = signer.sign(message);
+            URL_SAFE_NO_PAD.encode(sig.to_bytes())
+        })
+    } else {
+        let signer = device.clone();
+        Arc::new(move |message: &[u8]| signer.sign_b64url(message))
+    };
 
     tokio::spawn(async move {
         let client = reqwest::Client::new();
@@ -731,7 +798,7 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                 }
 
                 let signed_at = now_unix_s();
-                let reachable_urls = vec![public_base_url.clone()];
+                let reachable_urls = reachable_urls.clone();
                 let signing_message = route_register_signing_message(
                     &owner_pubkey,
                     &device_id,
@@ -739,7 +806,7 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     &challenge.nonce,
                     signed_at,
                 );
-                let signature = signer.sign_b64url(signing_message.as_bytes());
+                let signature = sign_route_payload(signing_message.as_bytes());
 
                 let payload = RouteRegisterRequest {
                     device_id: device_id.clone(),
@@ -783,10 +850,131 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
     });
 }
 
+fn parse_owner_signing_key_from_env() -> Option<SigningKey> {
+    let raw = env::var("EDGERUN_ROUTE_OWNER_SECRET_KEY_B58").ok()?;
+    let encoded = raw.trim();
+    if encoded.is_empty() {
+        return None;
+    }
+    let bytes = match bs58::decode(encoded).into_vec() {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(error = %err, "invalid EDGERUN_ROUTE_OWNER_SECRET_KEY_B58");
+            return None;
+        }
+    };
+
+    let seed: [u8; 32] = match bytes.len() {
+        32 => bytes.as_slice().try_into().expect("length checked"),
+        64 => {
+            let mut seed = [0_u8; 32];
+            seed.copy_from_slice(&bytes[..32]);
+            seed
+        }
+        _ => {
+            warn!(
+                len = bytes.len(),
+                "EDGERUN_ROUTE_OWNER_SECRET_KEY_B58 must decode to 32 or 64 bytes"
+            );
+            return None;
+        }
+    };
+
+    Some(SigningKey::from_bytes(&seed))
+}
+
+fn parse_reachable_urls(env_name: &str) -> Result<Vec<String>, String> {
+    let raw = std::env::var(env_name).map_err(|_| "missing value".to_string())?;
+    let mut normalized = Vec::<String>::new();
+    let mut seen = std::collections::HashSet::<String>::new();
+    for item in raw.split(',') {
+        let value = item.trim().trim_end_matches('/').to_string();
+        if value.is_empty() {
+            continue;
+        }
+        if seen.insert(value.clone()) {
+            normalized.push(value);
+        }
+    }
+    if normalized.is_empty() {
+        return Err(format!("{env_name} has no valid URLs"));
+    }
+    Ok(normalized)
+}
+
 fn routable_addr(addr: SocketAddr) -> String {
     if addr.ip().is_unspecified() {
         format!("127.0.0.1:{}", addr.port())
     } else {
         addr.to_string()
+    }
+}
+
+fn is_non_public_route_url(url: &str, env_name: &str) -> bool {
+    let parsed = match reqwest::Url::parse(url) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!(
+                env = env_name,
+                url = %url,
+                error = %err,
+                "route URL is invalid for route announcement"
+            );
+            return true;
+        }
+    };
+
+    let Some(host) = parsed.host_str() else {
+        warn!(
+            env = env_name,
+            url = %url,
+            "route URL has no host for route announcement"
+        );
+        return true;
+    };
+
+    let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
+    if normalized_host.eq_ignore_ascii_case("localhost") || normalized_host == "::1" {
+        return true;
+    }
+
+    match normalized_host.parse::<IpAddr>() {
+        Ok(IpAddr::V4(ip)) => {
+            ip.is_loopback()
+                || ip.is_private()
+                || ip.is_link_local()
+                || ip.is_multicast()
+                || ip.is_broadcast()
+                || ip.is_unspecified()
+        }
+        Ok(IpAddr::V6(ip)) => {
+            ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() || ip.is_unique_local()
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_non_public_route_url;
+
+    #[test]
+    fn localhost_route_urls_are_rejected() {
+        assert!(is_non_public_route_url("http://127.0.0.1:5577", "TEST"));
+        assert!(is_non_public_route_url("http://localhost:5577", "TEST"));
+    }
+
+    #[test]
+    fn private_ipv6_addresses_are_rejected() {
+        assert!(is_non_public_route_url("https://[::1]:443", "TEST"));
+        assert!(is_non_public_route_url("http://10.0.0.7", "TEST"));
+    }
+
+    #[test]
+    fn public_dns_names_are_allowed() {
+        assert!(!is_non_public_route_url(
+            "https://term.edgerun.tech",
+            "TEST"
+        ));
     }
 }

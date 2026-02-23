@@ -155,8 +155,15 @@ struct SubmissionQueue {
 const DEFAULT_POLICY_SIGNING_KEY_HEX: &str =
     "0101010101010101010101010101010101010101010101010101010101010101";
 
+fn install_rustls_crypto_provider() {
+    // rustls 0.23 panics when more than one provider backend is compiled unless
+    // a process-level provider is explicitly installed.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    install_rustls_crypto_provider();
     edgerun_observability::init_service("edgerun-worker")?;
 
     let cfg = load_config();
@@ -218,7 +225,7 @@ fn load_config() -> WorkerConfig {
     let mut worker_pubkey =
         std::env::var("EDGERUN_WORKER_PUBKEY").unwrap_or_else(|_| "worker-demo-1".to_string());
     let scheduler_base_url = std::env::var("EDGERUN_SCHEDULER_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string());
+        .unwrap_or_else(|_| "https://api.edgerun.tech".to_string());
     let runtime_ids = std::env::var("EDGERUN_WORKER_RUNTIME_IDS")
         .ok()
         .map(|v| {
