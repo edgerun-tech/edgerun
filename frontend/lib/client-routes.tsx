@@ -2,7 +2,7 @@
 import type { Component } from 'solid-js'
 
 import { blogPosts, jobs } from './content'
-import { normalizeRoutePath } from './route-path'
+import { normalizeRoutePath as normalizeClientRoutePath } from './route-path'
 
 type LoadedComponent = { default: Component }
 type RouteLoader = () => Promise<LoadedComponent>
@@ -103,9 +103,7 @@ const routeMap: ClientRouteMap = {
   ...jobRoutes
 }
 
-export function normalizeClientRoutePath(pathname: string): string {
-  return normalizeRoutePath(pathname)
-}
+export { normalizeClientRoutePath }
 
 export function getClientRouteChromeTitle(pathname: string): string {
   const route = normalizeClientRoutePath(pathname)
