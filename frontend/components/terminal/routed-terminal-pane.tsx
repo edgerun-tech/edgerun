@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import { For, createSignal, onCleanup, onMount, untrack } from 'solid-js'
-import { terminalDrawerActions } from '../../lib/terminal-drawer-store'
 import { ROUTED_MESSAGE_EVENT, getWebRtcPeerSupervisor } from '../../lib/webrtc-peer-supervisor'
 import { getRouteControlBase, resolveDeviceRoute, routeRelayWsUrl } from '../../lib/webrtc-route-client'
 import { encodeRoutedTerminalFrame, parseRoutedTerminalFrame } from '../../lib/routed-terminal-protocol'
@@ -131,7 +130,6 @@ export function RoutedTerminalPane(props: Props) {
         const open = directSocket.readyState === WebSocket.OPEN
         setConnected(open)
         setAcknowledged(open)
-        terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
         return
       }
       closeDirectSocket()
@@ -144,21 +142,18 @@ export function RoutedTerminalPane(props: Props) {
     ws.addEventListener('open', () => {
       setConnected(true)
       setAcknowledged(true)
-      terminalDrawerActions.setPaneTransport(paneId, 'raw')
       append(`[${nowLabel()}] direct ws connected`)
     })
     ws.addEventListener('close', () => {
       if (directSocket !== ws) return
       setConnected(false)
       setAcknowledged(false)
-      terminalDrawerActions.setPaneTransport(paneId, 'unknown')
       directSocket = null
     })
     ws.addEventListener('error', () => {
       if (directSocket !== ws) return
       setConnected(false)
       setAcknowledged(false)
-      terminalDrawerActions.setPaneTransport(paneId, 'unknown')
       directSocket = null
     })
     ws.addEventListener('message', (event) => {
@@ -204,7 +199,6 @@ export function RoutedTerminalPane(props: Props) {
       const open = directSocket.readyState === WebSocket.OPEN
       setConnected(open)
       setAcknowledged(open)
-      terminalDrawerActions.setPaneTransport(paneId, open ? 'raw' : 'unknown')
       return
     }
 
@@ -232,7 +226,6 @@ export function RoutedTerminalPane(props: Props) {
     const ok = await supervisor.waitForRoutedPong(routeDeviceId, 1200).catch(() => false)
     setConnected(ok)
     if (!ok) setAcknowledged(false)
-    terminalDrawerActions.setPaneTransport(paneId, ok ? 'raw' : 'unknown')
     if (ok && !untrack(() => acknowledged())) {
       const opened = sendOpen()
       if (!opened) {
@@ -315,7 +308,6 @@ export function RoutedTerminalPane(props: Props) {
       } else {
         sendClose()
       }
-      terminalDrawerActions.setPaneTransport(paneId, 'unknown')
     })
   })
 

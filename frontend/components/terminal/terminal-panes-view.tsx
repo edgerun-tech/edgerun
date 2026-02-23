@@ -22,11 +22,12 @@ export function TerminalPanesView(props: Props) {
       <Show when={panes().activeTab()}>
         {(tab) => (
           <div class={`grid h-full gap-2 ${splitClassName(tab())}`}>
-            <For each={tab().panes}>{(pane) => {
-              const target = pane.baseUrl.trim()
-              const routeDeviceId = parseRouteDeviceId(pane.baseUrl)
+            <For each={tab().panes.map((pane) => pane.id)}>{(paneId) => {
+              const pane = () => tab().panes.find((entry) => entry.id === paneId)
+              const target = pane()?.baseUrl.trim() || ''
+              const routeDeviceId = parseRouteDeviceId(target)
               if (routeDeviceId) {
-                return <RoutedTerminalPane paneId={pane.id} routeDeviceId={routeDeviceId} />
+                return <RoutedTerminalPane paneId={paneId} routeDeviceId={routeDeviceId} />
               }
               return (
                 <Show
