@@ -15,7 +15,6 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_NAME="cloud-os"
 DEPLOY_TARGET="workers"
-REQUIRED_NODE_VERSION="18"
 
 # Parse arguments
 CLEAN_BUILD=false
@@ -69,33 +68,19 @@ log_error() {
 
 check_prerequisites() {
   log_info "Checking prerequisites..."
-  
-  # Check Node.js version
-  if ! command -v node &> /dev/null; then
-    log_error "Node.js is not installed"
+
+  # Check bun/bunx
+  if ! command -v bun &> /dev/null; then
+    log_error "bun is not installed"
     exit 1
   fi
-  
-  NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-  if [ "$NODE_VERSION" -lt "$REQUIRED_NODE_VERSION" ]; then
-    log_error "Node.js version $REQUIRED_NODE_VERSION or higher is required (found: $NODE_VERSION)"
+  log_success "bun version: $(bun --version)"
+
+  if ! command -v bunx &> /dev/null; then
+    log_error "bunx is not installed"
     exit 1
   fi
-  log_success "Node.js version: $(node -v)"
-  
-  # Check npm
-  if ! command -v npm &> /dev/null; then
-    log_error "npm is not installed"
-    exit 1
-  fi
-  log_success "npm version: $(npm -v)"
-  
-  # Check wrangler
-  if ! command -v npx &> /dev/null; then
-    log_error "npx is not installed"
-    exit 1
-  fi
-  log_success "wrangler available"
+  log_success "wrangler launcher (bunx) available"
   
   # Check Cloudflare authentication
   if [ -z "$CLOUDFLARE_API_TOKEN" ] && [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
@@ -123,13 +108,13 @@ clean_build() {
 
 build_workers() {
   log_info "Building MCP workers..."
-  node scripts/build-workers.mjs
+  bun scripts/build-workers.mjs
   log_success "Workers built"
 }
 
 build_project() {
   log_info "Building project..."
-  npm run build
+  bun run build
   log_success "Project built"
 }
 
@@ -164,7 +149,7 @@ deploy() {
   log_info "Deploying to Cloudflare Workers..."
   log_info "Project: $PROJECT_NAME"
   
-  npx wrangler deploy
+  bunx --bun wrangler deploy --config wrangler.jsonc
   
   if [ $? -eq 0 ]; then
     log_success "Deployment complete!"

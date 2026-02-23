@@ -1,0 +1,17 @@
+{
+  "name": "edgerun-workflow",
+  "private": true,
+  "packageManager": "bun@1.3.9",
+  "scripts": {
+    "drift:check": "./scripts/check-workflow-drift.sh",
+    "cloudflare:targets:check": "./scripts/verify-cloudflare-targets.sh",
+    "deploy:site": "./scripts/deploy-frontends.sh site",
+    "deploy:cloud-os": "./scripts/deploy-frontends.sh cloud-os",
+    "deploy:frontends": "./scripts/deploy-frontends.sh all",
+    "ecosystem:drift": "./scripts/ecosystem-workflow.sh drift",
+    "ecosystem:check": "./scripts/ecosystem-workflow.sh check",
+    "ecosystem:build": "./scripts/ecosystem-workflow.sh build",
+    "ecosystem:test": "./scripts/ecosystem-workflow.sh test",
+    "ecosystem:verify": "./scripts/ecosystem-workflow.sh verify"
+  }
+}
