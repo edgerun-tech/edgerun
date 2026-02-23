@@ -60,3 +60,13 @@ DONT PUT ANYTHING ON PORT 8080!!!
 ## Operator Override
 - If unexpected/foreign workspace changes are detected, pause and ask before proceeding by default.
 - If the operator explicitly says to `commit all` and continue, treat that as approval to include all current changes and proceed without further pause.
+
+## Operator Workflow Preference
+- Operate autonomously end-to-end by default: investigate, implement, run required checks, and report outcomes without asking the operator to execute commands that the agent can run directly.
+- Treat user requests as completion-oriented: continue until the issue is actually resolved (or a concrete external blocker is proven).
+- Ask the operator only when truly necessary:
+  1. missing credentials/secrets/access the agent cannot obtain,
+  2. destructive/high-risk decisions requiring explicit sign-off,
+  3. ambiguous product direction that materially changes scope.
+- When escalation is required, ask one concrete question and include the exact command/context already attempted.
+- After achieving a working state, offer explicit follow-up choices: make permanent, rollback, or leave as-is.
