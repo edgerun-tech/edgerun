@@ -39,8 +39,6 @@ use edgerun_types::control_plane::{
     WorkerResultReport,
 };
 use fs2::FileExt;
-use futures_util::{SinkExt, StreamExt};
-use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcProgramAccountsConfig;
@@ -55,7 +53,6 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use tokio::sync::mpsc;
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message as TungsteniteMessage};
 
 #[derive(Clone)]
 struct AppState {
@@ -402,12 +399,6 @@ struct OwnerRoutesResponse {
     devices: Vec<DeviceRouteEntry>,
 }
 
-#[derive(Debug, Deserialize)]
-struct RouteRelayWsQuery {
-    #[serde(default)]
-    device_id: String,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteHeartbeatToken {
     device_id: String,
@@ -682,7 +673,6 @@ async fn main() -> Result<()> {
         .route("/v1/route/register", post(route_register))
         .route("/v1/route/heartbeat", post(route_heartbeat))
         .route("/v1/route/resolve/{device_id}", get(route_resolve))
-        .route("/v1/route/ws", get(route_terminal_ws))
         .route("/v1/route/owner/{owner_pubkey}", get(route_owner_resolve))
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
@@ -970,166 +960,6 @@ async fn route_owner_resolve(
     let mut response = Json(resolve_owner_routes_for_owner(&state, &owner_pubkey)).into_response();
     apply_cors_headers(&mut response, &headers);
     response
-}
-
-async fn route_terminal_ws(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-    Query(query): Query<RouteRelayWsQuery>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| route_terminal_ws_socket(state, query.device_id, socket))
-}
-
-async fn route_terminal_ws_socket(state: AppState, device_id: String, mut socket: WebSocket) {
-    let device_id = device_id.trim().to_string();
-    if device_id.is_empty() {
-        let _ = socket
-            .send(Message::Text(
-                r#"{"ok":false,"error":"device_id is required"}"#.to_string().into(),
-            ))
-            .await;
-        let _ = socket.close().await;
-        return;
-    }
-
-    let route_urls = resolve_route_for_device(&state, &device_id)
-        .route
-        .and_then(|entry| {
-            let candidates = entry
-                .reachable_urls
-                .into_iter()
-                .filter_map(|url| terminal_ws_url(&url))
-                .collect::<Vec<_>>();
-            if candidates.is_empty() {
-                None
-            } else {
-                Some(candidates)
-            }
-        });
-    let Some(urls) = route_urls else {
-        let _ = socket
-            .send(Message::Text(
-                r#"{"ok":false,"error":"route has no reachable terminal websocket"}"#
-                    .to_string()
-                    .into(),
-            ))
-            .await;
-        let _ = socket.close().await;
-        return;
-    };
-
-    for terminal_ws_url in urls {
-        let terminal_socket = match connect_async(terminal_ws_url.as_str()).await {
-            Ok(connected) => connected.0,
-            Err(err) => {
-                tracing::warn!(
-                    device_id = %device_id,
-                    terminal_ws_url = %terminal_ws_url,
-                    error = %err,
-                    "route relay failed to connect terminal websocket"
-                );
-                continue;
-            }
-        };
-
-        let (mut browser_tx, mut browser_rx) = socket.split();
-        let (mut terminal_tx, mut terminal_rx) = terminal_socket.split();
-        let browser_to_terminal = async {
-            while let Some(message) = browser_rx.next().await {
-                let Ok(message) = message else {
-                    break;
-                };
-                match message {
-                    Message::Close(_) => {
-                        break;
-                    }
-                    _ => {}
-                }
-                let Some(outbound) = browser_to_terminal_message(message) else {
-                    continue;
-                };
-                if terminal_tx.send(outbound).await.is_err() {
-                    break;
-                }
-            }
-        };
-
-        let terminal_to_browser = async {
-            while let Some(message) = terminal_rx.next().await {
-                let Ok(message) = message else {
-                    break;
-                };
-                match message {
-                    TungsteniteMessage::Text(payload) => {
-                        if browser_tx
-                            .send(Message::Text(payload.to_string().into()))
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    TungsteniteMessage::Binary(payload) => {
-                        if browser_tx.send(Message::Binary(payload)).await.is_err() {
-                            break;
-                        }
-                    }
-                    TungsteniteMessage::Close(_) => {
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-        };
-
-        tokio::select! {
-            _ = browser_to_terminal => {}
-            _ = terminal_to_browser => {}
-        }
-
-        let _ = browser_tx.send(Message::Close(None)).await;
-        let _ = terminal_tx.send(TungsteniteMessage::Close(None)).await;
-        return;
-    }
-
-    let _ = socket
-        .send(Message::Text(
-            r#"{"ok":false,"error":"route has no reachable terminal websocket"}"#
-                .to_string()
-                .into(),
-        ))
-        .await;
-    let _ = socket.close().await;
-}
-
-fn terminal_ws_url(reachable_url: &str) -> Option<String> {
-    let mut parsed = Url::parse(reachable_url).ok()?;
-    match parsed.scheme() {
-        "http" => parsed.set_scheme("ws").ok()?,
-        "https" => parsed.set_scheme("wss").ok()?,
-        _ => return None,
-    }
-    let path = parsed.path().trim_end_matches('/');
-    let terminal_path = if path.is_empty() || path == "/" {
-        "/ws".to_string()
-    } else if path.ends_with("/ws") || path.ends_with("/ws-mux") {
-        path.to_string()
-    } else {
-        format!("{path}/ws")
-    };
-    parsed.set_path(&terminal_path);
-    parsed.set_fragment(None);
-    Some(parsed.to_string())
-}
-
-fn browser_to_terminal_message(message: Message) -> Option<TungsteniteMessage> {
-    match message {
-        Message::Text(payload) => Some(TungsteniteMessage::Text(payload.to_string().into())),
-        Message::Binary(payload) => Some(TungsteniteMessage::Binary(payload)),
-        Message::Ping(payload) => Some(TungsteniteMessage::Ping(payload)),
-        Message::Pong(payload) => Some(TungsteniteMessage::Pong(payload)),
-        Message::Close(_) => None,
-    }
 }
 
 async fn webrtc_signal_ws(

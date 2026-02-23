@@ -13,13 +13,9 @@ import {
 } from '../lib/terminal-drawer-store'
 import { getWebRtcPeerSupervisor, initWebRtcPeerSupervisor } from '../lib/webrtc-peer-supervisor'
 import {
-  getCachedRouteControlStatus,
   getRouteControlBaseSelection,
-  probeRouteControlStatus,
-  type RouteControlProbeStatus,
   type RouteControlSource
 } from '../lib/webrtc-route-client'
-import { JOB_TAB_STATUS_EVENT, type JobTabStatus } from '../lib/tab-job-status'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 const navLinks = [
@@ -54,6 +50,11 @@ export function Nav() {
   const refreshNodeCounts = (state: TerminalDrawerState) => {
     setOnlineNodes(state.devices.filter((device) => device.status === 'online').length)
     setTotalNodes(state.devices.length)
+    setActiveWorkers(
+      state.devices.filter((device) => (
+        device.status === 'online' && device.baseUrl.trim().toLowerCase().startsWith('route://')
+      )).length
+    )
   }
 
   const routeSourceLabel = (source: RouteControlSource): string => {
@@ -64,61 +65,7 @@ export function Nav() {
     return 'def'
   }
 
-  const applySchedulerProbe = (status: RouteControlProbeStatus | null): void => {
-    if (!status) return
-    setSchedulerReachable(status.httpReachable)
-    setSchedulerWsReachable(status.controlWsReachable)
-    const statusParts: string[] = []
-    statusParts.push(status.httpReachable ? 'scheduler online' : 'scheduler offline')
-    if (status.httpStatus) statusParts.push(`HTTP ${status.httpStatus}`)
-    if (status.controlWsReachable) statusParts.push('control-ws up')
-    if (status.error) statusParts.push(`error: ${status.error}`)
-    setSchedulerStatus(statusParts.join(' · '))
-    setSchedulerBase(status.base)
-    setSchedulerSource(status.source)
-  }
-
-  const refreshRouteDebug = async () => {
-    const selection = getRouteControlBaseSelection()
-    setSchedulerBase(selection.selected)
-    setSchedulerSource(selection.source)
-    const cached = getCachedRouteControlStatus()
-    if (cached && cached.base === selection.selected) {
-      applySchedulerProbe(cached)
-    }
-
-    const candidates = selection.candidates.length > 0
-      ? selection.candidates
-      : [{ base: selection.selected, source: selection.source }]
-    let fallbackStatus: RouteControlProbeStatus | null = null
-
-    for (const candidate of candidates) {
-      try {
-        const status = await probeRouteControlStatus(candidate.base, candidate.source)
-        if (!fallbackStatus) {
-          fallbackStatus = status
-        }
-        if (status.httpReachable || status.controlWsReachable) {
-          applySchedulerProbe(status)
-          return
-        }
-        if (!fallbackStatus.httpReachable && !fallbackStatus.controlWsReachable) {
-          fallbackStatus = status
-        }
-      } catch {
-        // keep probing until a usable candidate is found
-      }
-    }
-
-    if (fallbackStatus) {
-      applySchedulerProbe(fallbackStatus)
-      return
-    }
-
-    setSchedulerReachable(false)
-    setSchedulerWsReachable(false)
-    setSchedulerStatus('scheduler probe failed')
-
+  const refreshOverlayStatus = (): boolean => {
     try {
       const status = getWebRtcPeerSupervisor().getStatus()
       setRoutePeers(status.directPeers)
@@ -129,13 +76,31 @@ export function Nav() {
       const advertFresh = advertAge !== null ? advertAge < ROUTE_ADVERT_STALE_MS : false
       setRouteAdvertAgeMs(advertAge ?? 0)
       setRouteAdvertised(advertFresh && (status.directPeers > 0 || status.controlSignalConnected))
+      return status.controlSignalConnected
     } catch {
       setRoutePeers(0)
       setRouteEntries(0)
       setRouteSignalConnected(false)
       setRouteAdvertised(false)
       setRouteAdvertAgeMs(0)
+      return false
     }
+  }
+
+  const refreshRouteDebug = () => {
+    const selection = getRouteControlBaseSelection()
+    setSchedulerBase(selection.selected)
+    setSchedulerSource(selection.source)
+    const signalConnected = refreshOverlayStatus()
+    setSchedulerWsReachable(signalConnected)
+    setSchedulerReachable(signalConnected)
+    if (signalConnected) {
+      setSchedulerReachable(true)
+      setSchedulerWsReachable(true)
+      setSchedulerStatus('scheduler online · overlay signal active')
+      return
+    }
+    setSchedulerStatus('scheduler offline · waiting for overlay signal')
   }
 
   onMount(() => {
@@ -148,7 +113,7 @@ export function Nav() {
       setRouteAdvertised(false)
     }
     refreshNodeCounts(getTerminalDrawerState())
-    void refreshRouteDebug()
+    refreshRouteDebug()
     setTerminalOpen(getTerminalDrawerState().open)
     const unsubscribe = subscribeTerminalDrawer((next) => {
       refreshNodeCounts(next)
@@ -158,23 +123,13 @@ export function Nav() {
       const custom = event as CustomEvent<WalletSessionState>
       setWalletConnected(Boolean(custom.detail?.connected))
     }
-    const onJobStatus = (event: Event) => {
-      const custom = event as CustomEvent<JobTabStatus | null>
-      const next = custom.detail ?? null
-      const workersActive = Number.isFinite(next?.workersActive ?? NaN)
-        ? Math.max(0, Math.round((next?.workersActive ?? 0)))
-        : 0
-      setActiveWorkers(workersActive)
-    }
     const routeDebugInterval = window.setInterval(() => {
-      void refreshRouteDebug()
+      refreshRouteDebug()
     }, 5000)
     window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-    window.addEventListener(JOB_TAB_STATUS_EVENT, onJobStatus as EventListener)
     onCleanup(() => {
       unsubscribe()
       window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-      window.removeEventListener(JOB_TAB_STATUS_EVENT, onJobStatus as EventListener)
       window.clearInterval(routeDebugInterval)
     })
   })

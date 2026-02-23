@@ -147,6 +147,26 @@ struct PtySession {
     killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
 }
 
+fn kill_all_sessions(sessions: &mut HashMap<u32, PtySession>) {
+    for (_, session) in sessions.drain() {
+        let _ = session.killer.clone_killer().kill();
+    }
+}
+
+fn parse_exit_session_id(msg: &Message) -> Option<u32> {
+    let Message::Text(text) = msg else {
+        return None;
+    };
+    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    if value.get("type")?.as_str()? != "exit" {
+        return None;
+    }
+    value
+        .get("id")?
+        .as_u64()
+        .and_then(|id| u32::try_from(id).ok())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -294,6 +314,9 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
     loop {
         tokio::select! {
             Some(msg) = out_rx.recv() => {
+                if let Some(id) = parse_exit_session_id(&msg) {
+                    sessions.remove(&id);
+                }
                 if socket.send(msg).await.is_err() {
                     break;
                 }
@@ -437,6 +460,7 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
             }
         }
     }
+    kill_all_sessions(&mut sessions);
 }
 
 async fn handle_socket(mut socket: WebSocket) {
@@ -460,11 +484,30 @@ async fn handle_socket(mut socket: WebSocket) {
     let mut cmd = CommandBuilder::new(shell);
     cmd.env("TERM", "xterm-256color");
 
-    if let Err(err) = pair.slave.spawn_command(cmd) {
+    let mut child = match pair.slave.spawn_command(cmd) {
+        Ok(child) => child,
+        Err(err) => {
+            let _ = socket
+                .send(Message::Text(format!("spawn error: {err}").into()))
+                .await;
+            return;
+        }
+    };
+    let killer = child.clone_killer();
+
+    thread::spawn(move || {
+        let _ = child.wait();
+    });
+
+    let mut closed = false;
+    if closed {
+        let _ = killer.clone_killer().kill();
+    }
+
+    if false {
         let _ = socket
-            .send(Message::Text(format!("spawn error: {err}").into()))
+            .send(Message::Text("spawn error".to_string().into()))
             .await;
-        return;
     }
 
     let master = pair.master;
@@ -528,12 +571,16 @@ async fn handle_socket(mut socket: WebSocket) {
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => {
+                        closed = true;
                         break;
                     }
                     _ => {}
                 }
             }
         }
+    }
+    if closed {
+        let _ = killer.clone_killer().kill();
     }
 }
 

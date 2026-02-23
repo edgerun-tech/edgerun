@@ -12,6 +12,8 @@ let rpcLease: SolanaRpcWsLease | null = null
 let rpcLeaseUrl = ''
 let slotUnsubscribe: null | (() => void) = null
 let treasuryUnsubscribe: null | (() => void) = null
+const deploymentUnsubscribers: Array<() => void> = []
+const deploymentProgramLive = new Map<string, boolean>()
 let periodicRefreshTimer: number | null = null
 let chainDataRequestToken = 0
 let deploymentStatusRequestToken = 0
@@ -44,6 +46,15 @@ function resetRpcBindings(): void {
     treasuryUnsubscribe()
     treasuryUnsubscribe = null
   }
+  while (deploymentUnsubscribers.length > 0) {
+    const unsub = deploymentUnsubscribers.pop()
+    try {
+      unsub?.()
+    } catch {
+      // ignore unsubscribe errors
+    }
+  }
+  deploymentProgramLive.clear()
   if (periodicRefreshTimer !== null) {
     window.clearInterval(periodicRefreshTimer)
     periodicRefreshTimer = null
@@ -80,6 +91,33 @@ function readLamportsFromAccountNotification(value: unknown): number | null {
   return typeof lamports === 'number' ? lamports : null
 }
 
+function readExecutableFromAccountNotification(value: unknown): boolean | null {
+  if (!value || typeof value !== 'object') return null
+  const result = value as {
+    value?: { executable?: boolean } | null
+  }
+  if (!result.value || typeof result.value !== 'object') return null
+  return Boolean(result.value.executable)
+}
+
+function renderDeploymentStatusFromCache(cluster: string): boolean {
+  const configuredCount = getConfiguredProgramCount(cluster)
+  const badgePrefix = cluster === 'localnet' ? 'Live on Localnet' : `Cluster: ${cluster}`
+  if (!configuredCount) {
+    setText('[data-deployment-badge]', `${badgePrefix} (No deployment)`)
+    setText('[data-deployment-detail]', `No program IDs configured for ${cluster} yet.`)
+    return true
+  }
+  const ids = getConfiguredProgramIds(cluster)
+  const known = ids.filter((id: string) => deploymentProgramLive.has(id))
+  if (known.length === 0) return false
+  const liveCount = ids.filter((id: string) => deploymentProgramLive.get(id) === true).length
+  const isLive = liveCount > 0
+  setText('[data-deployment-badge]', isLive ? `${badgePrefix} (${liveCount}/${configuredCount} live)` : `${badgePrefix} (Not deployed)`)
+  setText('[data-deployment-detail]', `Program deployments verified on ${cluster} via RPC subscriptions: ${liveCount} of ${configuredCount} configured IDs.`)
+  return known.length === ids.length
+}
+
 async function bindRpcStreams(): Promise<void> {
   const cfg = readRuntimeRpcConfig()
   const rpcUrl = cfg.rpcUrl || ''
@@ -90,7 +128,7 @@ async function bindRpcStreams(): Promise<void> {
 
   if (!slotUnsubscribe) {
     slotUnsubscribe = await client.subscribe('slotSubscribe', [], 'slotNotification', () => {
-      void Promise.all([loadChainData(), loadDeploymentStatus()])
+      void loadChainData()
     })
   }
 
@@ -107,9 +145,28 @@ async function bindRpcStreams(): Promise<void> {
     )
   }
 
+  if (deploymentUnsubscribers.length === 0) {
+    const cluster = cfg.cluster || 'unknown'
+    const ids = getConfiguredProgramIds(cluster)
+    for (const programId of ids) {
+      const unsub = await client.subscribe(
+        'accountSubscribe',
+        [programId, { commitment: 'confirmed', encoding: 'base64' }],
+        'accountNotification',
+        (payload: unknown) => {
+          const executable = readExecutableFromAccountNotification(payload)
+          if (executable === null) return
+          deploymentProgramLive.set(programId, executable)
+          renderDeploymentStatusFromCache(cluster)
+        }
+      )
+      deploymentUnsubscribers.push(unsub)
+    }
+  }
+
   if (periodicRefreshTimer === null) {
     periodicRefreshTimer = window.setInterval(() => {
-      void Promise.all([loadChainData(), loadDeploymentStatus()])
+      void loadChainData()
     }, 20_000)
   }
 }
@@ -214,6 +271,11 @@ async function loadDeploymentStatus(): Promise<void> {
     if (requestToken !== deploymentStatusRequestToken) return
     setText('[data-deployment-badge]', `${badgePrefix} (RPC unavailable)`)
     setText('[data-deployment-detail]', `Configured program IDs: ${configuredCount}. Live verification requires RPC connectivity.`)
+    return
+  }
+
+  if (renderDeploymentStatusFromCache(cluster)) {
+    deploymentStatusLastUpdateMs = Date.now()
     return
   }
 
