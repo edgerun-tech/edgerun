@@ -23,6 +23,7 @@ enable_user_linger() {
   fi
 }
 
+"${ROOT_DIR}/scripts/systemd/build-user-binaries.sh" terminal
 "${ROOT_DIR}/scripts/systemd/install-user-services.sh" "${PROFILE}" 3
 enable_user_linger
 

@@ -82,6 +82,7 @@ enable_user_linger() {
   fi
 }
 
+"${ROOT_DIR}/scripts/systemd/build-user-binaries.sh" stack
 "${ROOT_DIR}/scripts/systemd/install-user-services.sh" "${PROFILE}" "${WORKER_COUNT}"
 
 if [[ "${PROFILE}" == "local" ]]; then
