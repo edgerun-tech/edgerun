@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { normalizeRoutePath } from '../../lib/routes'
+import { normalizeRoutePath } from '../../lib/route-path'
 
 type DocsSearchEntry = {
   title: string

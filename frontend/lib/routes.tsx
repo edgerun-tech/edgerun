@@ -16,6 +16,7 @@ import TermsPage from '../app/legal/terms/page'
 import SlaPage from '../app/legal/sla/page'
 import StyleGuidePage from '../app/style-guide/page'
 import { blogPosts, jobs } from './content'
+import { normalizeRoutePath } from './route-path'
 
 export type SiteRoute = {
   path: string
@@ -153,12 +154,6 @@ export function getSiteRouteMap(): Record<string, Component> {
   const map: Record<string, Component> = {}
   for (const route of allRoutes) map[route.path] = route.component
   return map
-}
-
-export function normalizeRoutePath(pathname: string): string {
-  const cleaned = pathname.replace(/index\.html$/, '')
-  if (!cleaned) return '/'
-  return cleaned.endsWith('/') ? cleaned : `${cleaned}/`
 }
 
 export function getRouteChromeTitle(pathname: string): string {
