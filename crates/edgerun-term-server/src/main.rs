@@ -10,9 +10,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
 use axum::{
-    Json, Router,
-    extract::State,
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    Router,
+    body::Bytes,
+    extract::{State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
 };
@@ -24,7 +25,6 @@ use edgerun_hwvault_primitives::hardware::{
 };
 use edgerun_transport_core::route_register_signing_message;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
-use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};
 use tower_http::services::ServeDir;
@@ -37,7 +37,7 @@ struct AppState {
     mux_token: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct DeviceIdentityResponse {
     backend: String,
     device_pubkey_b64url: String,
@@ -45,28 +45,26 @@ struct DeviceIdentityResponse {
 
 type RouteSigner = Arc<dyn Fn(&[u8]) -> String + Send + Sync>;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct DeviceChallengeResponse {
     nonce_b64url: String,
     expires_at_unix_s: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct DeviceHandshakeRequest {
     owner_pubkey: String,
     nonce_b64url: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct DeviceHandshakeResponse {
     ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     handshake: Option<edgerun_hwvault_primitives::hardware::DeviceHandshake>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct RouteRegisterRequest {
     device_id: String,
     owner_pubkey: String,
@@ -79,24 +77,24 @@ struct RouteRegisterRequest {
     signature: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct RouteChallengeRequest {
     device_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct RouteChallengeResponse {
     nonce: String,
     expires_at_unix_s: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct RouteRegisterResponse {
     ok: bool,
     heartbeat_token: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct RouteHeartbeatRequest {
     device_id: String,
     token: String,
@@ -245,14 +243,14 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn device_identity(State(state): State<AppState>) -> Json<DeviceIdentityResponse> {
-    Json(DeviceIdentityResponse {
+async fn device_identity(State(state): State<AppState>) -> impl IntoResponse {
+    json_response(StatusCode::OK, device_identity_json(&DeviceIdentityResponse {
         backend: format!("{:?}", state.device.backend).to_lowercase(),
         device_pubkey_b64url: state.device.public_key_b64url.clone(),
-    })
+    }))
 }
 
-async fn device_challenge(State(state): State<AppState>) -> Json<DeviceChallengeResponse> {
+async fn device_challenge(State(state): State<AppState>) -> impl IntoResponse {
     let now = now_unix_s();
     let expires_at = now + 120;
     let nonce = random_token_b64url(24);
@@ -261,33 +259,52 @@ async fn device_challenge(State(state): State<AppState>) -> Json<DeviceChallenge
     guard.retain(|_, exp| *exp > now);
     guard.insert(nonce.clone(), expires_at);
 
-    Json(DeviceChallengeResponse {
+    json_response(StatusCode::OK, device_challenge_json(&DeviceChallengeResponse {
         nonce_b64url: nonce,
         expires_at_unix_s: expires_at,
-    })
+    }))
 }
 
 async fn device_handshake(
     State(state): State<AppState>,
-    Json(req): Json<DeviceHandshakeRequest>,
+    body: Bytes,
 ) -> impl IntoResponse {
+    let req = match parse_device_handshake_request(&body) {
+        Ok(value) => value,
+        Err(err) => {
+                return json_response(
+                    StatusCode::BAD_REQUEST,
+                    device_handshake_json(&DeviceHandshakeResponse {
+                        ok: false,
+                        handshake: None,
+                        error: Some(err),
+                    }),
+                );
+        }
+    };
     let now = now_unix_s();
     let mut challenges = state.challenges.lock().await;
     challenges.retain(|_, exp| *exp > now);
 
     let Some(exp) = challenges.remove(req.nonce_b64url.trim()) else {
-        return Json(DeviceHandshakeResponse {
-            ok: false,
-            handshake: None,
-            error: Some("unknown or expired nonce".to_string()),
-        });
+        return json_response(
+            StatusCode::OK,
+            device_handshake_json(&DeviceHandshakeResponse {
+                ok: false,
+                handshake: None,
+                error: Some("unknown or expired nonce".to_string()),
+            }),
+        );
     };
     if exp <= now {
-        return Json(DeviceHandshakeResponse {
-            ok: false,
-            handshake: None,
-            error: Some("nonce expired".to_string()),
-        });
+        return json_response(
+            StatusCode::OK,
+            device_handshake_json(&DeviceHandshakeResponse {
+                ok: false,
+                handshake: None,
+                error: Some("nonce expired".to_string()),
+            }),
+        );
     }
     drop(challenges);
 
@@ -295,17 +312,127 @@ async fn device_handshake(
         .device
         .build_handshake(req.owner_pubkey.trim(), req.nonce_b64url.trim(), now)
     {
-        Ok(handshake) => Json(DeviceHandshakeResponse {
-            ok: true,
-            handshake: Some(handshake),
-            error: None,
-        }),
-        Err(err) => Json(DeviceHandshakeResponse {
-            ok: false,
-            handshake: None,
-            error: Some(err.to_string()),
-        }),
+        Ok(handshake) => json_response(
+            StatusCode::OK,
+            device_handshake_json(&DeviceHandshakeResponse {
+                ok: true,
+                handshake: Some(handshake),
+                error: None,
+            }),
+        ),
+        Err(err) => json_response(
+            StatusCode::OK,
+            device_handshake_json(&DeviceHandshakeResponse {
+                ok: false,
+                handshake: None,
+                error: Some(err.to_string()),
+            }),
+        ),
     }
+}
+
+fn json_response(status: StatusCode, body: String) -> axum::response::Response {
+    (
+        status,
+        [(header::CONTENT_TYPE, "application/json; charset=utf-8")],
+        body,
+    )
+        .into_response()
+}
+
+fn json_escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len() + 8);
+    for ch in input.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => {
+                let code = c as u32;
+                out.push_str(&format!("\\u{code:04x}"));
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+fn json_string(input: &str) -> String {
+    format!("\"{}\"", json_escape(input))
+}
+
+fn device_identity_json(value: &DeviceIdentityResponse) -> String {
+    format!(
+        "{{\"backend\":{},\"device_pubkey_b64url\":{}}}",
+        json_string(&value.backend),
+        json_string(&value.device_pubkey_b64url)
+    )
+}
+
+fn device_challenge_json(value: &DeviceChallengeResponse) -> String {
+    format!(
+        "{{\"nonce_b64url\":{},\"expires_at_unix_s\":{}}}",
+        json_string(&value.nonce_b64url),
+        value.expires_at_unix_s
+    )
+}
+
+fn device_handshake_json(value: &DeviceHandshakeResponse) -> String {
+    let mut body = String::from("{\"ok\":");
+    body.push_str(if value.ok { "true" } else { "false" });
+    if let Some(handshake) = value.handshake.as_ref() {
+        body.push_str(",\"handshake\":");
+        body.push_str(&device_handshake_payload_json(handshake));
+    }
+    if let Some(error) = value.error.as_ref() {
+        body.push_str(",\"error\":");
+        body.push_str(&json_string(error));
+    }
+    body.push('}');
+    body
+}
+
+fn device_handshake_payload_json(
+    handshake: &edgerun_hwvault_primitives::hardware::DeviceHandshake,
+) -> String {
+    format!(
+        "{{\"payload\":{{\"version\":{},\"owner_pubkey\":{},\"device_pubkey_b64url\":{},\"nonce_b64url\":{},\"issued_at_unix_s\":{}}},\"canonical\":{},\"signature_b64url\":{},\"backend\":{}}}",
+        handshake.payload.version,
+        json_string(&handshake.payload.owner_pubkey),
+        json_string(&handshake.payload.device_pubkey_b64url),
+        json_string(&handshake.payload.nonce_b64url),
+        handshake.payload.issued_at_unix_s,
+        json_string(&handshake.canonical),
+        json_string(&handshake.signature_b64url),
+        json_string(&format!("{:?}", handshake.backend).to_lowercase())
+    )
+}
+
+fn parse_device_handshake_request(body: &[u8]) -> Result<DeviceHandshakeRequest, String> {
+    let text = std::str::from_utf8(body).map_err(|_| "request body must be valid utf-8")?;
+    let parsed = json::parse(text).map_err(|err| format!("invalid json: {err}"))?;
+    let owner_pubkey = parsed["owner_pubkey"]
+        .as_str()
+        .ok_or("owner_pubkey must be a string")?
+        .trim()
+        .to_string();
+    let nonce_b64url = parsed["nonce_b64url"]
+        .as_str()
+        .ok_or("nonce_b64url must be a string")?
+        .trim()
+        .to_string();
+    if owner_pubkey.is_empty() {
+        return Err("owner_pubkey is required".to_string());
+    }
+    if nonce_b64url.is_empty() {
+        return Err("nonce_b64url is required".to_string());
+    }
+    Ok(DeviceHandshakeRequest {
+        owner_pubkey,
+        nonce_b64url,
+    })
 }
 
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
@@ -1001,7 +1128,13 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     ttl_secs: 90,
                 };
                 let hb_url = format!("{control_base}/v1/route/heartbeat");
-                match client.post(hb_url).json(&hb).send().await {
+                match client
+                    .post(hb_url)
+                    .header("content-type", "application/json")
+                    .body(route_heartbeat_request_json(&hb))
+                    .send()
+                    .await
+                {
                     Ok(resp) if resp.status().is_success() => {}
                     Ok(resp) => {
                         let status = resp.status();
@@ -1021,12 +1154,25 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                 let challenge_req = RouteChallengeRequest {
                     device_id: device_id.clone(),
                 };
-                let challenge = match client.post(challenge_url).json(&challenge_req).send().await {
+                let challenge = match client
+                    .post(challenge_url)
+                    .header("content-type", "application/json")
+                    .body(route_challenge_request_json(&challenge_req))
+                    .send()
+                    .await
+                {
                     Ok(resp) if resp.status().is_success() => {
-                        match resp.json::<RouteChallengeResponse>().await {
-                            Ok(value) => value,
+                        match resp.text().await {
+                            Ok(text) => match parse_route_challenge_response(&text) {
+                                Ok(value) => value,
+                                Err(err) => {
+                                    warn!(error = %err, "route announcer challenge parse error");
+                                    sleep(Duration::from_secs(10)).await;
+                                    continue;
+                                }
+                            },
                             Err(err) => {
-                                warn!(error = %err, "route announcer challenge parse error");
+                                warn!(error = %err, "route announcer challenge body read error");
                                 sleep(Duration::from_secs(10)).await;
                                 continue;
                             }
@@ -1073,18 +1219,29 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     signature,
                 };
                 let url = format!("{control_base}/v1/route/register");
-                match client.post(url).json(&payload).send().await {
+                match client
+                    .post(url)
+                    .header("content-type", "application/json")
+                    .body(route_register_request_json(&payload))
+                    .send()
+                    .await
+                {
                     Ok(resp) if resp.status().is_success() => {
-                        match resp.json::<RouteRegisterResponse>().await {
-                            Ok(value) => {
-                                if value.ok {
-                                    heartbeat_token = Some(value.heartbeat_token);
-                                } else {
-                                    heartbeat_token = None;
+                        match resp.text().await {
+                            Ok(text) => match parse_route_register_response(&text) {
+                                Ok(value) => {
+                                    if value.ok {
+                                        heartbeat_token = Some(value.heartbeat_token);
+                                    } else {
+                                        heartbeat_token = None;
+                                    }
                                 }
-                            }
+                                Err(err) => {
+                                    warn!(error = %err, "route announcer register parse error");
+                                }
+                            },
                             Err(err) => {
-                                warn!(error = %err, "route announcer register parse error");
+                                warn!(error = %err, "route announcer register body read error");
                             }
                         }
                     }
@@ -1101,6 +1258,79 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
             sleep(Duration::from_secs(30)).await;
         }
     });
+}
+
+fn route_challenge_request_json(value: &RouteChallengeRequest) -> String {
+    format!("{{\"device_id\":{}}}", json_string(&value.device_id))
+}
+
+fn route_heartbeat_request_json(value: &RouteHeartbeatRequest) -> String {
+    format!(
+        "{{\"device_id\":{},\"token\":{},\"ttl_secs\":{}}}",
+        json_string(&value.device_id),
+        json_string(&value.token),
+        value.ttl_secs
+    )
+}
+
+fn route_register_request_json(value: &RouteRegisterRequest) -> String {
+    let reachable_urls = value
+        .reachable_urls
+        .iter()
+        .map(|item| json_string(item))
+        .collect::<Vec<_>>()
+        .join(",");
+    let capabilities = value
+        .capabilities
+        .iter()
+        .map(|item| json_string(item))
+        .collect::<Vec<_>>()
+        .join(",");
+    let relay_session_id = value
+        .relay_session_id
+        .as_ref()
+        .map(|item| json_string(item))
+        .unwrap_or_else(|| "null".to_string());
+    format!(
+        "{{\"device_id\":{},\"owner_pubkey\":{},\"reachable_urls\":[{}],\"capabilities\":[{}],\"relay_session_id\":{},\"ttl_secs\":{},\"challenge_nonce\":{},\"signed_at_unix_s\":{},\"signature\":{}}}",
+        json_string(&value.device_id),
+        json_string(&value.owner_pubkey),
+        reachable_urls,
+        capabilities,
+        relay_session_id,
+        value.ttl_secs,
+        json_string(&value.challenge_nonce),
+        value.signed_at_unix_s,
+        json_string(&value.signature)
+    )
+}
+
+fn parse_route_challenge_response(body: &str) -> Result<RouteChallengeResponse, String> {
+    let parsed = json::parse(body).map_err(|err| format!("invalid json: {err}"))?;
+    let nonce = parsed["nonce"]
+        .as_str()
+        .ok_or("missing nonce")?
+        .to_string();
+    let expires_at_unix_s = parsed["expires_at_unix_s"]
+        .as_u64()
+        .ok_or("missing expires_at_unix_s")?;
+    Ok(RouteChallengeResponse {
+        nonce,
+        expires_at_unix_s,
+    })
+}
+
+fn parse_route_register_response(body: &str) -> Result<RouteRegisterResponse, String> {
+    let parsed = json::parse(body).map_err(|err| format!("invalid json: {err}"))?;
+    let ok = parsed["ok"].as_bool().ok_or("missing ok")?;
+    let heartbeat_token = parsed["heartbeat_token"]
+        .as_str()
+        .unwrap_or_default()
+        .to_string();
+    Ok(RouteRegisterResponse {
+        ok,
+        heartbeat_token,
+    })
 }
 
 fn parse_owner_signing_key_from_env() -> Option<SigningKey> {
