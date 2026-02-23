@@ -7,7 +7,7 @@ license = "Apache-2.0"
 
 [features]
 default = []
-cli = ["dep:clap", "dep:tokio", "dep:serde_json", "dep:wat"]
+cli = ["dep:clap", "dep:tokio", "dep:json", "dep:wat"]
 gha-runner-backend = []
 
 [dependencies]
@@ -16,8 +16,7 @@ blake3.workspace = true
 clap = { workspace = true, optional = true }
 hex.workspace = true
 tokio = { workspace = true, optional = true }
-serde.workspace = true
-serde_json = { workspace = true, optional = true }
+json = { version = "0.12", optional = true }
 wasmparser.workspace = true
 wasmi.workspace = true
 thiserror.workspace = true
