@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -48,3 +48,15 @@ tree:
 
 docker-binaries:
 	./scripts/build-docker-binaries.sh
+
+actions-local-list:
+	./scripts/actions-local-run.sh --list
+
+actions-local-run:
+	./scripts/actions-local-run.sh
+
+actions-local-dry-run:
+	./scripts/actions-local-run.sh --dry-run
+
+actions-local-runtime-dry-run:
+	./scripts/actions-local-run.sh --workflow ci.yml --event pull_request --job runtime-slo --dry-run
