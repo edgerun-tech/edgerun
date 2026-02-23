@@ -93,6 +93,7 @@ jobs:
 
   coverage:
     name: Coverage (llvm-cov)
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -111,7 +112,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov --locked
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Generate workspace coverage report
         run: |
@@ -162,6 +163,7 @@ jobs:
 
   runtime-determinism:
     name: Runtime Determinism (${{ matrix.os }})
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -198,6 +200,7 @@ jobs:
 
   runtime-calibration:
     name: Runtime Fuel Calibration
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -231,6 +234,7 @@ jobs:
 
   runtime-slo:
     name: Runtime SLO Smoke
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -265,6 +269,7 @@ jobs:
 
   runtime-fuzz-sanity:
     name: Runtime Fuzz Sanity
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -281,7 +286,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+        uses: taiki-e/install-action@cargo-fuzz
 
       - name: Fuzz sanity runs
         working-directory: crates/edgerun-runtime/fuzz
@@ -292,6 +297,7 @@ jobs:
 
   runtime-ub-safety:
     name: Runtime UB Safety (Miri/ASan/UBSan)
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -327,6 +333,7 @@ jobs:
 
   runtime-security:
     name: Runtime Security Gates
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -346,13 +353,13 @@ jobs:
         run: cargo run -p edgerun-cli -- --root . validate-security --path crates/edgerun-runtime/SECURITY_FINDINGS.json
 
       - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
+        uses: taiki-e/install-action@cargo-audit
 
       - name: Dependency vulnerability audit
         run: cargo audit
 
       - name: Install cargo-cyclonedx
-        run: cargo install cargo-cyclonedx --locked
+        uses: taiki-e/install-action@cargo-cyclonedx
 
       - name: Generate runtime SBOM
         run: |
@@ -372,6 +379,7 @@ jobs:
 
   program-localnet:
     name: Program Localnet
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -389,6 +397,18 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies (program)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            program/node_modules
+          key: bun-program-${{ runner.os }}-${{ hashFiles('program/bun.lock') }}
+          restore-keys: |
+            bun-program-${{ runner.os }}-
 
       - name: Install Solana CLI
         run: |
