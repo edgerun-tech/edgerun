@@ -29,5 +29,10 @@ describe('frontend architecture proof', () => {
 
     cy.wait('@chunk')
     cy.get('[data-docs-search-input]').should('exist')
+    cy.get('[data-docs-search-input]').clear().type('edgerun')
+    cy.get('[data-docs-search-results]').should('have.attr', 'role', 'status')
+    cy.get('[data-docs-search-results]').should('have.attr', 'aria-live', 'polite')
+    cy.get('[data-docs-search-input]').clear().type('zzzz-no-match')
+    cy.get('[data-docs-search-results]').should('contain.text', 'No matching docs yet.')
   })
 })
