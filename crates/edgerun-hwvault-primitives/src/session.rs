@@ -3,14 +3,13 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use hmac::{Hmac, Mac};
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use thiserror::Error;
 
 type HmacSha256 = Hmac<Sha256>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SessionState {
     pub expires_at: u64,
     pub signing_key: String,
@@ -36,7 +35,7 @@ impl Default for SessionConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SessionIssue {
     pub token: String,
     pub signing_key: String,

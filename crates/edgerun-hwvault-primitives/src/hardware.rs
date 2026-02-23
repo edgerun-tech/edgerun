@@ -8,7 +8,6 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 use rand::RngCore;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const DEFAULT_TPM_NV_INDEX: u32 = 0x0150_0016;
@@ -19,8 +18,7 @@ pub enum HardwareSecurityMode {
     AllowSoftwareFallback,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareBackend {
     Tpm,
     Software,
@@ -69,7 +67,7 @@ impl DeviceSigner {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DeviceHandshakePayload {
     pub version: u8,
     pub owner_pubkey: String,
@@ -78,7 +76,7 @@ pub struct DeviceHandshakePayload {
     pub issued_at_unix_s: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DeviceHandshake {
     pub payload: DeviceHandshakePayload,
     pub canonical: String,
@@ -86,7 +84,7 @@ pub struct DeviceHandshake {
     pub backend: HardwareBackend,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 struct DeviceIdentityRecord {
     version: u8,
     backend: HardwareBackend,
@@ -244,8 +242,25 @@ fn read_record(path: &Path) -> Result<Option<DeviceIdentityRecord>, HardwareErro
         return Ok(None);
     }
     let raw = fs::read_to_string(path).map_err(|e| HardwareError::Io(e.to_string()))?;
-    let record = serde_json::from_str::<DeviceIdentityRecord>(&raw)
-        .map_err(|e| HardwareError::Parse(e.to_string()))?;
+    let parsed = json::parse(&raw).map_err(|e| HardwareError::Parse(e.to_string()))?;
+    let version = parsed["version"]
+        .as_u8()
+        .ok_or_else(|| HardwareError::Parse("missing version".to_string()))?;
+    let backend = parse_backend(parsed["backend"].as_str())
+        .ok_or_else(|| HardwareError::Parse("missing backend".to_string()))?;
+    let public_key_b64url = parsed["public_key_b64url"]
+        .as_str()
+        .ok_or_else(|| HardwareError::Parse("missing public_key_b64url".to_string()))?
+        .to_string();
+    let tpm_nv_index = parsed["tpm_nv_index"].as_u32();
+    let software_seed_b64url = parsed["software_seed_b64url"].as_str().map(ToString::to_string);
+    let record = DeviceIdentityRecord {
+        version,
+        backend,
+        public_key_b64url,
+        tpm_nv_index,
+        software_seed_b64url,
+    };
     Ok(Some(record))
 }
 
@@ -255,9 +270,32 @@ fn write_record(path: &Path, record: &DeviceIdentityRecord) -> Result<(), Hardwa
         fs::set_permissions(parent, fs::Permissions::from_mode(0o700))
             .map_err(|e| HardwareError::Io(e.to_string()))?;
     }
-    let payload =
-        serde_json::to_string_pretty(record).map_err(|e| HardwareError::Parse(e.to_string()))?;
+    let payload = json::stringify_pretty(
+        json::object! {
+            version: record.version,
+            backend: backend_str(record.backend),
+            public_key_b64url: record.public_key_b64url.as_str(),
+            tpm_nv_index: record.tpm_nv_index.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+            software_seed_b64url: record.software_seed_b64url.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        },
+        2,
+    );
     fs::write(path, payload).map_err(|e| HardwareError::Io(e.to_string()))
+}
+
+fn backend_str(value: HardwareBackend) -> &'static str {
+    match value {
+        HardwareBackend::Tpm => "tpm",
+        HardwareBackend::Software => "software",
+    }
+}
+
+fn parse_backend(value: Option<&str>) -> Option<HardwareBackend> {
+    match value? {
+        "tpm" => Some(HardwareBackend::Tpm),
+        "software" => Some(HardwareBackend::Software),
+        _ => None,
+    }
 }
 
 fn default_record_path() -> Result<PathBuf, HardwareError> {
