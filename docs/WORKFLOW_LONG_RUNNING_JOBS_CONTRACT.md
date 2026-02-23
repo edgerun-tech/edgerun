@@ -89,6 +89,35 @@ JSONL-only local files can exist for local troubleshooting, but are not canonica
   - exclude: clipboard/process/window telemetry unless explicitly enabled
 - Secrets must be redacted before append.
 
+## Zero-Trust Storage Partitioning (v1.1)
+
+To minimize blast radius and enforce least-privilege access, event capture is split across distinct storages:
+
+1. `ops_storage` (default, broader access)
+   - `job.*`, `action.*`, `fs.changed`, service/log summaries, tool-call outcomes
+   - MUST NOT store raw clipboard contents
+   - MUST NOT store high-sensitivity raw interaction payloads
+
+2. `interaction_storage` (restricted access)
+   - clipboard events
+   - raw user-input streams
+   - optional window/process telemetry
+
+Cross-reference rules:
+
+- `ops_storage` may reference sensitive events by ID only (for example `interaction_ref_id`), without embedding raw payload.
+- Both storages MUST share correlation keys:
+  - `run_id`
+  - `job_id`
+  - `event_id` (or mapped reference field)
+- Reconstruction joins are explicit and policy-gated; queries should succeed with partial data when restricted storage is unavailable.
+
+Access and retention:
+
+- Access controls are independent per storage.
+- `interaction_storage` should default to shorter retention and stricter query permissions.
+- Deletion/retention policies must not break integrity of `ops_storage` timelines; references may remain after sensitive payload expiry.
+
 ## Environment Policy
 
 - `localnet`: permissive capture settings allowed.
@@ -114,4 +143,3 @@ Implementation is accepted when:
 - Disable observer ingestion path via flag/env.
 - Preserve already written append-only segments.
 - Resume legacy workflow without deleting prior audit data.
-
