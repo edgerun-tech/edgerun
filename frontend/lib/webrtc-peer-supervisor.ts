@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { getRouteControlBase, WebRtcSignalClient, parseRouteDeviceId } from './webrtc-route-client'
+import { getRouteControlBase, normalizeControlBase, WebRtcSignalClient, parseRouteDeviceId } from './webrtc-route-client'
 
 type IntentState = {
   deviceIds: string[]
@@ -53,6 +53,7 @@ type RoutedControlPayload =
 const SUPERVISOR_STATE_KEY = 'edgerun.webrtc.peerSupervisor.v1'
 const SUPERVISOR_DEVICE_ID_KEY = 'edgerun.webrtc.localDeviceId.v1'
 export const ROUTED_MESSAGE_EVENT = 'edgerun:webrtc-routed-message'
+export const ROUTE_SUPERVISOR_STATUS_EVENT = 'edgerun:route-supervisor-status'
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -64,6 +65,20 @@ const ROUTE_MAX_HOPS = 8
 const ROUTE_ADVERT_INTERVAL_MS = 12_000
 const ROUTE_EXPIRY_MS = 60_000
 const PACKET_DEDUPE_TTL_MS = 30_000
+
+export type RouteSupervisorStatus = {
+  controlBase: string
+  localDeviceId: string
+  started: boolean
+  controlSignalConnected: boolean
+  controlSignalConnectedAt: number | null
+  controlSignalDisconnectedAt: number | null
+  directPeers: number
+  routeEntries: number
+  intents: number
+  lastAdvertBroadcastAt: number
+  lastRouteAdvertReceivedAt: number
+}
 
 function parseIntentState(raw: string | null): IntentState {
   if (!raw) return { deviceIds: [] }
@@ -102,16 +117,30 @@ export class WebRtcPeerSupervisor {
   private intents: IntentState
   private started = false
   private routeAdvertTimer: number | null = null
+  private controlSignalConnected = false
+  private controlSignalConnectedAt: number | null = null
+  private controlSignalDisconnectedAt: number | null = null
+  private lastAdvertBroadcastAt = 0
+  private lastRouteAdvertReceivedAt = 0
 
   constructor(controlBase?: string, localDeviceId?: string) {
-    this.controlBase = (controlBase || getRouteControlBase()).replace(/\/+$/, '')
+    const resolvedBase = normalizeControlBase(controlBase || getRouteControlBase())
+    if (!resolvedBase) throw new Error('invalid route control base')
+    this.controlBase = resolvedBase
     this.localDeviceId = localDeviceId?.trim() || persistentLocalDeviceId()
     this.intents = parseIntentState(typeof window !== 'undefined' ? window.localStorage.getItem(SUPERVISOR_STATE_KEY) : null)
     this.signal = new WebRtcSignalClient(this.controlBase, this.localDeviceId)
     this.signal.onMessage = (message) => {
       void this.handleSignalMessage(message)
     }
+    this.signal.onOpen = () => {
+      this.controlSignalConnected = true
+      this.controlSignalConnectedAt = Date.now()
+      this.controlSignalDisconnectedAt = null
+    }
     this.signal.onClose = () => {
+      this.controlSignalConnected = false
+      this.controlSignalDisconnectedAt = Date.now()
       this.scheduleReconnectAll(1200)
     }
   }
@@ -129,8 +158,27 @@ export class WebRtcPeerSupervisor {
     return this.localDeviceId
   }
 
+  getStatus(): RouteSupervisorStatus {
+    this.pruneRoutes()
+    return {
+      controlBase: this.controlBase,
+      localDeviceId: this.localDeviceId,
+      started: this.started,
+      controlSignalConnected: this.controlSignalConnected,
+      controlSignalConnectedAt: this.controlSignalConnectedAt,
+      controlSignalDisconnectedAt: this.controlSignalDisconnectedAt,
+      directPeers: this.directOpenNeighbors().length,
+      routeEntries: this.routes.size,
+      intents: this.intents.deviceIds.length,
+      lastAdvertBroadcastAt: this.lastAdvertBroadcastAt,
+      lastRouteAdvertReceivedAt: this.lastRouteAdvertReceivedAt
+    }
+  }
+
   stop(): void {
     this.started = false
+    this.controlSignalConnected = false
+    this.controlSignalDisconnectedAt = Date.now()
     if (this.routeAdvertTimer !== null) {
       window.clearInterval(this.routeAdvertTimer)
       this.routeAdvertTimer = null
@@ -151,6 +199,9 @@ export class WebRtcPeerSupervisor {
   }
 
   async connectToDevice(deviceId: string): Promise<void> {
+    if (!this.started) {
+      this.start()
+    }
     const target = deviceId.trim()
     if (!target) return
     const existing = this.sessions.get(target)
@@ -495,6 +546,7 @@ export class WebRtcPeerSupervisor {
     }
 
     if (packet.kind === 'route-advert') {
+      this.lastRouteAdvertReceivedAt = Date.now()
       this.setRoute(fromPeerId, fromPeerId, 1)
       const routes = Array.isArray(packet.routes) ? packet.routes : []
       for (const route of routes) {
@@ -587,6 +639,7 @@ export class WebRtcPeerSupervisor {
   }
 
   private broadcastRouteAdvert(): void {
+    this.lastAdvertBroadcastAt = Date.now()
     for (const peerId of this.directOpenNeighbors()) {
       this.sendPacketToPeer(peerId, {
         kind: 'route-advert',

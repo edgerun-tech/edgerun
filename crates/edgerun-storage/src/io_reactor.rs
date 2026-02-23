@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 //! Centralized process-wide I/O reactor.
 //!
 //! This module enforces a single submission path for disk I/O at the segment layer:

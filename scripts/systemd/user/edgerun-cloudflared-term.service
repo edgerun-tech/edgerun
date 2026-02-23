@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=__ROOT_DIR__
 EnvironmentFile=-__HOME__/.config/edgerun/cloudflared-term.env
+EnvironmentFile=-__HOME__/.config/edgerun/cloudflared-term.override.env
 ExecStart=__ROOT_DIR__/scripts/cloudflared/run-term-tunnel.sh
 Restart=on-failure
 RestartSec=2

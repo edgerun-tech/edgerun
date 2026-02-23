@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 //! LSM vs Hash Index Benchmark
 //!
 //! Compares memory usage, insertion throughput, and lookup performance

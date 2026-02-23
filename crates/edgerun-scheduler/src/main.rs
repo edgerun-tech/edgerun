@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Edgerun-Proprietary
 #![allow(deprecated)]
 
 use std::collections::{HashMap, HashSet};
@@ -1477,8 +1477,20 @@ async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: We
             incoming = socket.recv() => {
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
-                        if handle_signal_client_message(&state, &device_id, &text).await.is_err() {
-                            let _ = socket.send(Message::Text(r#"{"kind":"error","error":"invalid signaling message"}"#.into())).await;
+                        if let Err(error) = handle_signal_client_message(&state, &device_id, &text).await {
+                            let payload = serde_json::json!({
+                                "kind": "error",
+                                "error": error,
+                            });
+                            if let Ok(encoded) = serde_json::to_string(&payload) {
+                                let _ = socket.send(Message::Text(encoded.into())).await;
+                            } else {
+                                let _ = socket
+                                    .send(Message::Text(
+                                        r#"{"kind":"error","error":"invalid signaling message"}"#.into(),
+                                    ))
+                                    .await;
+                            }
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
@@ -1509,12 +1521,13 @@ async fn handle_signal_client_message(
     state: &AppState,
     from_device_id: &str,
     text: &str,
-) -> Result<(), ()> {
-    let msg: WebRtcSignalClientMessage = serde_json::from_str(text).map_err(|_| ())?;
+) -> Result<(), String> {
+    let msg: WebRtcSignalClientMessage =
+        serde_json::from_str(text).map_err(|_| "invalid signaling json".to_string())?;
     let to_device_id = msg.to_device_id.trim().to_string();
     let to_owner_pubkey = msg.to_owner_pubkey.trim().to_string();
     if to_device_id.is_empty() && to_owner_pubkey.is_empty() {
-        return Err(());
+        return Err("missing signal target: set to_device_id or to_owner_pubkey".to_string());
     }
 
     let outbound = WebRtcSignalServerMessage {
@@ -1526,7 +1539,8 @@ async fn handle_signal_client_message(
         sdp_mline_index: msg.sdp_mline_index,
         metadata: msg.metadata,
     };
-    let encoded = serde_json::to_string(&outbound).map_err(|_| ())?;
+    let encoded = serde_json::to_string(&outbound)
+        .map_err(|_| "failed to encode outbound signaling message".to_string())?;
 
     if !to_device_id.is_empty() {
         let sender = {
@@ -1534,9 +1548,17 @@ async fn handle_signal_client_message(
             peers.get(to_device_id.as_str()).cloned()
         };
         let Some(sender) = sender else {
-            return Err(());
+            return Err(format!(
+                "target device not connected to signaling ws: {}",
+                to_device_id
+            ));
         };
-        sender.send(encoded).map_err(|_| ())?;
+        sender.send(encoded).map_err(|_| {
+            format!(
+                "failed to deliver signaling message to target device: {}",
+                to_device_id
+            )
+        })?;
         return Ok(());
     }
 
@@ -1550,10 +1572,10 @@ async fn handle_signal_client_message(
             .collect::<Vec<_>>())
     }) {
         Ok(ids) => ids,
-        Err(_) => return Err(()),
+        Err(_) => return Err("failed to resolve route targets for owner".to_string()),
     };
     if target_device_ids.is_empty() {
-        return Err(());
+        return Err(format!("no routed devices found for owner: {}", to_owner_pubkey));
     }
 
     let peers = state.signal_peers.lock().await;
@@ -1569,7 +1591,10 @@ async fn handle_signal_client_message(
         }
     }
     if delivered == 0 {
-        return Err(());
+        return Err(format!(
+            "no online signaling peers available for owner: {}",
+            to_owner_pubkey
+        ));
     }
     Ok(())
 }

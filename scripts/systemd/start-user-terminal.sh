@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROFILE="${1:-${EDGERUN_STACK_PROFILE:-local}}"
 
 enable_user_linger() {
   if ! command -v loginctl >/dev/null 2>&1; then
@@ -22,7 +23,7 @@ enable_user_linger() {
   fi
 }
 
-"${ROOT_DIR}/scripts/systemd/install-user-services.sh"
+"${ROOT_DIR}/scripts/systemd/install-user-services.sh" "${PROFILE}" 3
 enable_user_linger
 
 systemctl --user enable --now edgerun-term-server.service

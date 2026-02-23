@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=__ROOT_DIR__
 EnvironmentFile=-__HOME__/.config/edgerun/term-server.env
+EnvironmentFile=-__HOME__/.config/edgerun/term-server.override.env
 ExecStart=__ROOT_DIR__/out/target/release/edgerun-term-server
 Restart=on-failure
 RestartSec=2

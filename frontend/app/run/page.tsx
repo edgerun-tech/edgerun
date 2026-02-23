@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableRow } from '../../components/ui/table
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
 import { clearJobTabStatus, publishJobTabStatus } from '../../lib/tab-job-status'
+import { DEFAULT_ROUTE_CONTROL_BASE, getRouteControlBase } from '../../lib/webrtc-route-client'
 
 type PresetApp = {
   id: string
@@ -89,13 +90,6 @@ const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   workerCount: '5'
 }
 
-function defaultSchedulerUrl(): string {
-  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
-  const injected = String((window as any).__EDGERUN_API_BASE || '').trim()
-  if (injected) return injected
-  return 'https://api.edgerun.tech'
-}
-
 export default function RunPage() {
   const [activeStep, setActiveStep] = createSignal<RunStep>('step-1')
   const [safetyOpen, setSafetyOpen] = createSignal(false)
@@ -106,7 +100,7 @@ export default function RunPage() {
   const [jobName, setJobName] = createSignal(DEFAULT_PRESET.defaultJobName)
   const [runtimeId, setRuntimeId] = createSignal(DEFAULT_PRESET.defaultRuntimeId)
   const [inputJson, setInputJson] = createSignal(DEFAULT_PRESET.defaultInputJson)
-  const [schedulerUrl, setSchedulerUrl] = createSignal(defaultSchedulerUrl())
+  const [schedulerUrl, setSchedulerUrl] = createSignal(getRouteControlBase())
   const [customModuleName, setCustomModuleName] = createSignal('')
   const [customWasmFileName, setCustomWasmFileName] = createSignal('')
   const [inputFileName, setInputFileName] = createSignal('')
@@ -190,7 +184,7 @@ export default function RunPage() {
     onPresetChange('vanity-generator')
     setSubmissionMode('preset')
     setExecutionMode('distributed-insecure')
-    setSchedulerUrl('https://api.edgerun.tech')
+    setSchedulerUrl(DEFAULT_ROUTE_CONTROL_BASE)
     setAllowSeedExposure(true)
     setActiveStep('step-2')
   }

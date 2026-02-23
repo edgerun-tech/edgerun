@@ -9,6 +9,24 @@ This sets up an internal-only Edgerun stack with:
 Default bind is loopback only:
 - Scheduler: `127.0.0.1:5566`
 
+By default, configuration is rendered from:
+
+- `scripts/systemd/env/profiles/local`
+
+Set another profile via argument:
+
+```bash
+./scripts/systemd/install-user-services.sh dev
+```
+
+Machine-specific overrides (optional):
+
+- `~/.config/edgerun/scheduler.override.env`
+- `~/.config/edgerun/worker-common.override.env`
+- `~/.config/edgerun/workers/{1,2,3}.override.env`
+- `~/.config/edgerun/term-server.override.env`
+- `~/.config/edgerun/cloudflared-term.override.env`
+
 ## Prerequisites
 - Binaries built at `out/target/release/`:
   - `edgerun-scheduler`
@@ -16,6 +34,8 @@ Default bind is loopback only:
   - `edgerun-term-server`
 - User systemd session running (`systemctl --user status`)
 - `cloudflared` installed and tunnel credentials at `~/.cloudflared/<tunnel-id>.json`
+
+This installer now also validates the rendered config values for required keys, address formats, ports, and UUID/base64-like fields, then fails fast if anything is invalid.
 
 ## Install Unit Files + Env Templates
 
@@ -28,6 +48,7 @@ This creates:
 - `~/.config/systemd/user/edgerun-worker@.service`
 - `~/.config/systemd/user/edgerun-term-server.service`
 - `~/.config/systemd/user/edgerun-cloudflared-term.service`
+- `~/.config/systemd/user/solana-test-validator.service`
 - `~/.config/edgerun/scheduler.env`
 - `~/.config/edgerun/worker-common.env`
 - `~/.config/edgerun/workers/{1,2,3}.env`
@@ -37,10 +58,11 @@ This creates:
 ## Start Stack (Scheduler + 3 Workers)
 
 ```bash
-./scripts/systemd/start-user-stack.sh 3
+./scripts/systemd/start-user-stack.sh 3 dev
+./scripts/systemd/start-user-stack.sh --profile dev --workers 3
 ```
 
-The startup scripts now enable user lingering for boot-persistent services if possible.
+The startup script now enables user lingering for boot-persistent services if possible.
 
 ```bash
 loginctl show-user "$USER" -p Linger --value
@@ -87,6 +109,20 @@ systemctl --user is-enabled edgerun-cloudflared-term.service
 ```
 
 All outputs should be `enabled`.
+
+## Local Solana Test Validator (Local Dev Profile)
+
+If you use local chain mode, start it after install:
+
+```bash
+systemctl --user enable --now solana-test-validator.service
+```
+
+Expected log path:
+
+```bash
+journalctl --user -u solana-test-validator.service -f
+```
 
 ## Service Controls
 

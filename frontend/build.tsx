@@ -96,7 +96,7 @@ function pageDocument(title: string, description: string, bodyHtml: string): str
     <div id="edgerun-root">${bodyHtml}</div>
     <script>
       window.__EDGERUN_RPC_CONFIG = ${JSON.stringify({ cluster: solanaCluster, rpcUrl: solanaRpcUrl, treasuryAccount, deployments: solanaDeployments })}
-      window.__EDGERUN_API_BASE = ${JSON.stringify(apiUrl)}
+      window.__EDGERUN_API_BASE = window.__EDGERUN_API_BASE || ${JSON.stringify(apiUrl)}
     </script>
     <script type="module" src="/assets/client.js"></script>
     <script>window.__EDGERUN_BUILD = ${JSON.stringify({ version: currentVersion, buildNumber, marker })};</script>
