@@ -28,12 +28,23 @@ Machine-specific overrides (optional):
 - `~/.config/edgerun/cloudflared-term.override.env`
 
 ## Prerequisites
-- Binaries built at `out/target/release/`:
-  - `edgerun-scheduler`
-  - `edgerun-worker`
-  - `edgerun-term-server`
 - User systemd session running (`systemctl --user status`)
 - `cloudflared` installed and tunnel credentials at `~/.cloudflared/<tunnel-id>.json`
+
+## Canonical Binary Build Path
+
+Always build service binaries into `out/target/release`:
+
+```bash
+./scripts/systemd/build-user-binaries.sh all
+```
+
+Modes:
+- `all` (default): scheduler + worker + term-server
+- `stack`: scheduler + worker
+- `terminal`: term-server
+
+`start-user-stack.sh` and `start-user-terminal.sh` run this build step automatically before service start/restart, so systemd units do not drift from source changes.
 
 This installer now also validates the rendered config values for required keys, address formats, ports, and UUID/base64-like fields, then fails fast if anything is invalid.
 
