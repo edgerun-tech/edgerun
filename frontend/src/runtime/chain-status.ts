@@ -86,6 +86,7 @@ async function bindRpcStreams(): Promise<void> {
   if (!rpcUrl) return
   const client = ensureRpcClient(rpcUrl)
   if (!client) return
+  const treasuryStreamToken = chainDataRequestToken
 
   if (!slotUnsubscribe) {
     slotUnsubscribe = await client.subscribe('slotSubscribe', [], 'slotNotification', () => {
@@ -99,6 +100,7 @@ async function bindRpcStreams(): Promise<void> {
       [cfg.treasuryAccount, { commitment: 'confirmed', encoding: 'jsonParsed' }],
       'accountNotification',
       (payload: unknown) => {
+        if (chainDataRequestToken !== treasuryStreamToken) return
         const lamports = readLamportsFromAccountNotification(payload)
         if (typeof lamports === 'number') setField('treasurySol', formatSol(lamports))
       }
