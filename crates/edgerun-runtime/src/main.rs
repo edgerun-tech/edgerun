@@ -8,7 +8,6 @@ use edgerun_runtime::{
     decode_bundle_from_canonical_bytes, execute_bundle_payload_bytes, RuntimeError,
     RuntimeErrorCode,
 };
-use serde::Serialize;
 
 #[derive(Debug, Parser)]
 #[command(name = "edgerun-runtime")]
@@ -100,7 +99,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ReplayCorpusArtifact {
     profile: String,
     host_os: String,
@@ -109,7 +108,7 @@ struct ReplayCorpusArtifact {
     cases: Vec<ReplayCorpusCaseResult>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ReplayCorpusCaseResult {
     case: String,
     expected: String,
@@ -118,7 +117,7 @@ struct ReplayCorpusCaseResult {
     passed: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ReplayArtifact {
     bundle_hash: String,
     ok: bool,
@@ -136,7 +135,7 @@ struct ReplayArtifact {
     trap_code: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct FuelCalibrationArtifact {
     profile: String,
     host_os: String,
@@ -147,7 +146,7 @@ struct FuelCalibrationArtifact {
     workloads: Vec<FuelCalibrationWorkloadSummary>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct FuelCalibrationCase {
     workload: String,
     units: u32,
@@ -159,7 +158,7 @@ struct FuelCalibrationCase {
     stable: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct FuelCalibrationWorkloadSummary {
     workload: String,
     monotonic_fuel_used: bool,
@@ -168,7 +167,7 @@ struct FuelCalibrationWorkloadSummary {
     per_unit_spread: f64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct SloSmokeArtifact {
     profile: String,
     host_os: String,
@@ -181,7 +180,7 @@ struct SloSmokeArtifact {
     cases: Vec<SloSmokeCaseResult>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct SloSmokeCaseResult {
     case: String,
     expected: String,
@@ -221,8 +220,7 @@ async fn replay(
         Err(err) => replay_error_artifact(bundle_hash, decoded, err),
     };
 
-    let body = serde_json::to_vec_pretty(&artifact)?;
-    tokio::fs::write(&artifact_path, body).await?;
+    write_json_pretty(&artifact_path, replay_artifact_json(&artifact)).await?;
     println!("artifact={}", artifact_path.display());
     println!("ok={}", artifact.ok);
     if let Some(expected) = expect_output_hash {
@@ -313,8 +311,7 @@ async fn slo_smoke(
         all_passed,
         cases: results,
     };
-    let body = serde_json::to_vec_pretty(&artifact)?;
-    tokio::fs::write(&artifact_path, body).await?;
+    write_json_pretty(&artifact_path, slo_smoke_artifact_json(&artifact)).await?;
     println!("artifact={}", artifact_path.display());
     println!("overall_ops_per_sec={overall_ops_per_sec:.2}");
     println!("all_passed={all_passed}");
@@ -397,8 +394,7 @@ async fn calibrate_fuel(
         cases,
         workloads,
     };
-    let body = serde_json::to_vec_pretty(&artifact)?;
-    tokio::fs::write(&artifact_path, body).await?;
+    write_json_pretty(&artifact_path, fuel_calibration_artifact_json(&artifact)).await?;
     println!("artifact={}", artifact_path.display());
     println!("all_stable={all_stable}");
     println!("all_monotonic={all_monotonic}");
@@ -650,8 +646,7 @@ async fn replay_corpus(profile: String, artifact_path: PathBuf, runs: u32) -> Re
     };
 
     let all_passed = artifact.cases.iter().all(|c| c.passed);
-    let body = serde_json::to_vec_pretty(&artifact)?;
-    tokio::fs::write(&artifact_path, body).await?;
+    write_json_pretty(&artifact_path, replay_corpus_artifact_json(&artifact)).await?;
     println!("artifact={}", artifact_path.display());
     println!("all_passed={all_passed}");
     if !all_passed {
@@ -753,6 +748,117 @@ fn percentile(values: &[f64], q: f64) -> Result<f64> {
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let idx = ((sorted.len() - 1) as f64 * q).ceil() as usize;
     Ok(sorted[idx])
+}
+
+async fn write_json_pretty(path: &PathBuf, value: json::JsonValue) -> Result<()> {
+    let body = json::stringify_pretty(value, 2);
+    tokio::fs::write(path, body.as_bytes()).await?;
+    Ok(())
+}
+
+fn replay_artifact_json(value: &ReplayArtifact) -> json::JsonValue {
+    json::object! {
+        bundle_hash: value.bundle_hash.as_str(),
+        ok: value.ok,
+        abi_version: value.abi_version.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        runtime_id: value.runtime_id.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        output_hash: value.output_hash.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        output_len: value.output_len.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        input_len: value.input_len.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        max_memory_bytes: value.max_memory_bytes.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        max_instructions: value.max_instructions.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        fuel_limit: value.fuel_limit.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        fuel_remaining: value.fuel_remaining.map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        error_code: value.error_code.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        error_message: value.error_message.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+        trap_code: value.trap_code.as_deref().map(json::JsonValue::from).unwrap_or(json::JsonValue::Null),
+    }
+}
+
+fn replay_corpus_artifact_json(value: &ReplayCorpusArtifact) -> json::JsonValue {
+    let mut cases = json::JsonValue::new_array();
+    for case in &value.cases {
+        let _ = cases.push(json::object! {
+            case: case.case.as_str(),
+            expected: case.expected.as_str(),
+            actual: case.actual.as_str(),
+            stable: case.stable,
+            passed: case.passed,
+        });
+    }
+    json::object! {
+        profile: value.profile.as_str(),
+        host_os: value.host_os.as_str(),
+        host_arch: value.host_arch.as_str(),
+        runs_per_case: value.runs_per_case,
+        cases: cases,
+    }
+}
+
+fn fuel_calibration_artifact_json(value: &FuelCalibrationArtifact) -> json::JsonValue {
+    let mut cases = json::JsonValue::new_array();
+    for case in &value.cases {
+        let mut samples = json::JsonValue::new_array();
+        for sample in &case.fuel_used_samples {
+            let _ = samples.push(*sample);
+        }
+        let _ = cases.push(json::object! {
+            workload: case.workload.as_str(),
+            units: case.units,
+            max_instructions: case.max_instructions,
+            fuel_used_samples: samples,
+            fuel_used_min: case.fuel_used_min,
+            fuel_used_max: case.fuel_used_max,
+            fuel_used_mean: case.fuel_used_mean,
+            stable: case.stable,
+        });
+    }
+    let mut workloads = json::JsonValue::new_array();
+    for workload in &value.workloads {
+        let _ = workloads.push(json::object! {
+            workload: workload.workload.as_str(),
+            monotonic_fuel_used: workload.monotonic_fuel_used,
+            per_unit_min: workload.per_unit_min,
+            per_unit_max: workload.per_unit_max,
+            per_unit_spread: workload.per_unit_spread,
+        });
+    }
+    json::object! {
+        profile: value.profile.as_str(),
+        host_os: value.host_os.as_str(),
+        host_arch: value.host_arch.as_str(),
+        runs_per_case: value.runs_per_case,
+        max_per_unit_spread: value.max_per_unit_spread,
+        cases: cases,
+        workloads: workloads,
+    }
+}
+
+fn slo_smoke_artifact_json(value: &SloSmokeArtifact) -> json::JsonValue {
+    let mut cases = json::JsonValue::new_array();
+    for case in &value.cases {
+        let _ = cases.push(json::object! {
+            case: case.case.as_str(),
+            expected: case.expected.as_str(),
+            actual: case.actual.as_str(),
+            stable: case.stable,
+            passed: case.passed,
+            p50_ms: case.p50_ms,
+            p95_ms: case.p95_ms,
+            max_ms: case.max_ms,
+        });
+    }
+    json::object! {
+        profile: value.profile.as_str(),
+        host_os: value.host_os.as_str(),
+        host_arch: value.host_arch.as_str(),
+        runs_per_case: value.runs_per_case,
+        max_p95_ms: value.max_p95_ms,
+        min_ops_per_sec: value.min_ops_per_sec,
+        overall_ops_per_sec: value.overall_ops_per_sec,
+        all_passed: value.all_passed,
+        cases: cases,
+    }
 }
 
 async fn run(bundle_path: PathBuf, output_path: PathBuf) -> Result<()> {
