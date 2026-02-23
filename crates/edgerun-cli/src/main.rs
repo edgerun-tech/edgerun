@@ -21,6 +21,7 @@ use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
+use crate::commands::observer::run_observer_command;
 use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
     compare_replay_profiles, run_replay_corpus, run_weekly_fuzz, validate_external_security_review,
@@ -93,6 +94,10 @@ enum Commands {
     Program {
         #[command(subcommand)]
         command: ProgramCommand,
+    },
+    Observe {
+        #[command(subcommand)]
+        command: ObserveCommand,
     },
 }
 
@@ -226,6 +231,56 @@ enum TailscaleCommand {
     },
 }
 
+#[derive(Subcommand, Debug, Clone)]
+enum ObserveCommand {
+    Append {
+        #[arg(long)]
+        job_id: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        event_type: String,
+        #[arg(long)]
+        payload_json: Option<String>,
+        #[arg(long)]
+        payload_file: Option<PathBuf>,
+        #[arg(long)]
+        prev_event_hash: Option<String>,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "long-jobs.seg")]
+        segment: String,
+        #[arg(value_enum, long, default_value_t = ObserveDurability::Local)]
+        durability: ObserveDurability,
+    },
+    IngestStdio {
+        #[arg(long)]
+        job_id: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        event_type: String,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "long-jobs.seg")]
+        segment: String,
+        #[arg(value_enum, long, default_value_t = ObserveDurability::Local)]
+        durability: ObserveDurability,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ObserveDurability {
+    Buffered,
+    Local,
+    Durable,
+    Checkpointed,
+}
+
 #[derive(Clone, Debug, Deserialize, Default)]
 struct AppConfig {
     #[serde(default)]
@@ -305,6 +360,7 @@ async fn main() -> Result<()> {
         Commands::Storage { command } => run_storage_command(&root, command)?,
         Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
         Commands::Program { command } => run_program_command(&root, command)?,
+        Commands::Observe { command } => run_observer_command(&root, command)?,
     }
 
     Ok(())
