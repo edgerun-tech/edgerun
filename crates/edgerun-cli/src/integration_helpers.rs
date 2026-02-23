@@ -5,32 +5,19 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, ensure, Result};
+use edgerun_types::Limits;
+use edgerun_types::control_plane::{
+    ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
+    ControlWsServerMessage, JobCreateRequest, JobCreateResponse, JobStatusRequest,
+    JobStatusResponse, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
+};
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
-use serde_json::{json, Value};
 use tokio::process::Child;
 use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
 static CONTROL_SEQ: AtomicU64 = AtomicU64::new(1);
-
-#[derive(Debug, Deserialize)]
-struct JobCreateResponse {
-    job_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct ControlWsServerMessage {
-    request_id: String,
-    ok: bool,
-    #[serde(default)]
-    data: Option<serde_json::Value>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    status: Option<u16>,
-}
 
 fn control_ws_url(base: &str) -> Result<Url> {
     let mut url = Url::parse(base)?;
@@ -54,28 +41,27 @@ fn next_request_id() -> String {
     format!("cli-int-{seq}")
 }
 
-pub(crate) async fn control_ws_request<T: for<'de> Deserialize<'de>>(
+pub(crate) async fn control_ws_request(
     sched_url: &str,
-    op: &str,
-    payload: serde_json::Value,
-) -> Result<T> {
+    payload: ControlWsRequestPayload,
+) -> Result<ControlWsResponsePayload> {
     let ws_url = control_ws_url(sched_url)?;
     let (mut socket, _) = tokio_tungstenite::connect_async(ws_url.as_str()).await?;
     let request_id = next_request_id();
-    let request = json!({
-        "request_id": request_id,
-        "op": op,
-        "payload": payload
-    });
+    let request = ControlWsClientMessage {
+        request_id: request_id.clone(),
+        payload,
+    };
+    let encoded = bincode::serialize(&request)?;
     socket
-        .send(Message::Text(request.to_string().into()))
+        .send(Message::Binary(encoded.into()))
         .await?;
     while let Some(frame) = socket.next().await {
         let frame = frame?;
-        let Message::Text(text) = frame else {
+        let Message::Binary(bytes) = frame else {
             continue;
         };
-        let response: ControlWsServerMessage = serde_json::from_str(&text)?;
+        let response: ControlWsServerMessage = bincode::deserialize(&bytes)?;
         if response.request_id != request_id {
             continue;
         }
@@ -92,7 +78,7 @@ pub(crate) async fn control_ws_request<T: for<'de> Deserialize<'de>>(
         let data = response
             .data
             .ok_or_else(|| anyhow!("control ws response missing data"))?;
-        return Ok(serde_json::from_value(data)?);
+        return Ok(data);
     }
     Err(anyhow!("scheduler closed control ws before response"))
 }
@@ -111,17 +97,26 @@ pub(crate) async fn create_assigned_job_with_abi(
     worker: &str,
     abi_version: u8,
 ) -> Result<String> {
-    let payload = json!({
-        "runtime_id":"0000000000000000000000000000000000000000000000000000000000000000",
-        "abi_version": abi_version,
-        "wasm_base64":"AA==",
-        "input_base64":"",
-        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
-        "escrow_lamports":100,
-        "assignment_worker_pubkey":worker
-    });
-    let response: JobCreateResponse = control_ws_request(sched_url, "job.create", payload).await?;
-    Ok(response.job_id)
+    let request = JobCreateRequest {
+        runtime_id: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        wasm_base64: "AA==".to_string(),
+        input_base64: String::new(),
+        abi_version: Some(abi_version),
+        limits: Limits {
+            max_memory_bytes: 1_048_576,
+            max_instructions: 10_000,
+        },
+        escrow_lamports: 100,
+        assignment_worker_pubkey: Some(worker.to_string()),
+        client_pubkey: None,
+        client_signed_at_unix_s: None,
+        client_signature: None,
+    };
+    let response = control_ws_request(sched_url, ControlWsRequestPayload::JobCreate(request)).await?;
+    match response {
+        ControlWsResponsePayload::JobCreate(JobCreateResponse { job_id, .. }) => Ok(job_id),
+        other => Err(anyhow!("unexpected control payload for job.create: {other:?}")),
+    }
 }
 
 pub(crate) async fn wait_for_failure_phase(
@@ -132,12 +127,21 @@ pub(crate) async fn wait_for_failure_phase(
     invert: bool,
 ) -> Result<()> {
     for _ in 0..240 {
-        let status: Value =
-            control_ws_request(sched_url, "job.status", json!({ "job_id": job_id })).await?;
-        let phase = status["failures"]
-            .as_array()
-            .and_then(|arr| arr.last())
-            .and_then(|x| x["phase"].as_str())
+        let response = control_ws_request(
+            sched_url,
+            ControlWsRequestPayload::JobStatus(JobStatusRequest {
+                job_id: job_id.to_string(),
+            }),
+        )
+        .await?;
+        let status = match response {
+            ControlWsResponsePayload::JobStatus(body) => *body,
+            other => return Err(anyhow!("unexpected control payload for job.status: {other:?}")),
+        };
+        let phase = status
+            .failures
+            .last()
+            .map(|f| f.phase.as_str())
             .unwrap_or("");
         if (!invert && phase == expected_phase)
             || (invert && !phase.is_empty() && phase != expected_phase)
@@ -158,7 +162,7 @@ pub(crate) async fn wait_for_runtime_execute_failure(
 }
 
 pub(crate) async fn wait_for_health(
-    client: &reqwest::Client,
+    _client: &reqwest::Client,
     sched_url: &str,
     scheduler: &mut Child,
 ) -> Result<()> {
@@ -166,13 +170,14 @@ pub(crate) async fn wait_for_health(
         if scheduler.try_wait()?.is_some() {
             break;
         }
-        if client
-            .get(format!("{sched_url}/health"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false)
-        {
+        let ping = control_ws_request(
+            sched_url,
+            ControlWsRequestPayload::JobStatus(JobStatusRequest {
+                job_id: "health-probe".to_string(),
+            }),
+        )
+        .await;
+        if ping.is_ok() {
             return Ok(());
         }
         sleep(Duration::from_millis(500)).await;
@@ -184,6 +189,56 @@ pub(crate) async fn kill_child(child: &mut Child) {
     if child.try_wait().ok().flatten().is_none() {
         let _ = child.kill().await;
         let _ = child.wait().await;
+    }
+}
+
+pub(crate) async fn submit_worker_result(
+    sched_url: &str,
+    payload: WorkerResultReport,
+) -> Result<bool> {
+    match control_ws_request(sched_url, ControlWsRequestPayload::WorkerResult(payload)).await? {
+        ControlWsResponsePayload::WorkerResult(ack) => Ok(ack.duplicate),
+        other => Err(anyhow!(
+            "unexpected control payload for worker.result: {other:?}"
+        )),
+    }
+}
+
+pub(crate) async fn submit_worker_failure(
+    sched_url: &str,
+    payload: WorkerFailureReport,
+) -> Result<bool> {
+    match control_ws_request(sched_url, ControlWsRequestPayload::WorkerFailure(payload)).await? {
+        ControlWsResponsePayload::WorkerFailure(ack) => Ok(ack.duplicate),
+        other => Err(anyhow!(
+            "unexpected control payload for worker.failure: {other:?}"
+        )),
+    }
+}
+
+pub(crate) async fn submit_worker_replay(
+    sched_url: &str,
+    payload: WorkerReplayArtifactReport,
+) -> Result<bool> {
+    match control_ws_request(sched_url, ControlWsRequestPayload::WorkerReplay(payload)).await? {
+        ControlWsResponsePayload::WorkerReplay(ack) => Ok(ack.duplicate),
+        other => Err(anyhow!(
+            "unexpected control payload for worker.replay: {other:?}"
+        )),
+    }
+}
+
+pub(crate) async fn fetch_job_status(sched_url: &str, job_id: &str) -> Result<JobStatusResponse> {
+    match control_ws_request(
+        sched_url,
+        ControlWsRequestPayload::JobStatus(JobStatusRequest {
+            job_id: job_id.to_string(),
+        }),
+    )
+    .await?
+    {
+        ControlWsResponsePayload::JobStatus(body) => Ok(*body),
+        other => Err(anyhow!("unexpected control payload for job.status: {other:?}")),
     }
 }
 

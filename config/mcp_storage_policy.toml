@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+[storage]
+default_tier = "ops"
+default_segment = "events.seg"
+
+[append]
+enabled = true
+require_signature = false
+default_actor = "codex"
+default_stream = "session"
+default_event_type = "event"
+default_durability = "local"
+max_payload_bytes = 262144

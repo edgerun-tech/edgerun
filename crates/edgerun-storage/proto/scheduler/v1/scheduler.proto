@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: GPL-2.0-only
+syntax = "proto3";
+
+package edgerun.scheduler.v1;
+
+enum JobStateV1 {
+  JOB_STATE_V1_UNSPECIFIED = 0;
+  JOB_STATE_V1_QUEUED = 1;
+  JOB_STATE_V1_ASSIGNED = 2;
+  JOB_STATE_V1_RUNNING = 3;
+  JOB_STATE_V1_SUCCEEDED = 4;
+  JOB_STATE_V1_FAILED = 5;
+  JOB_STATE_V1_EXPIRED = 6;
+}
+
+message JobSubmittedEventV1 {
+  uint32 schema_version = 1;
+  string job_id = 2;
+  string owner = 3;
+  bytes job_spec = 4;
+  uint64 created_at_unix_ms = 5;
+}
+
+message JobAssignedEventV1 {
+  uint32 schema_version = 1;
+  string job_id = 2;
+  string worker_id = 3;
+  uint64 assigned_at_unix_ms = 4;
+  string assignment_id = 5;
+}
+
+message JobResultEventV1 {
+  uint32 schema_version = 1;
+  string job_id = 2;
+  string worker_id = 3;
+  JobStateV1 final_state = 4;
+  bytes result_payload = 5;
+  uint64 completed_at_unix_ms = 6;
+  string attestation = 7;
+}
+
+message WorkerHeartbeatEventV1 {
+  uint32 schema_version = 1;
+  string worker_id = 2;
+  bool online = 3;
+  uint64 observed_at_unix_ms = 4;
+  uint32 capacity_units = 5;
+}
+
+message SchedulerStatusV1 {
+  uint32 schema_version = 1;
+  bool online = 2;
+  uint32 live_workers = 3;
+  string last_consumed_bus_event_id = 4;
+}

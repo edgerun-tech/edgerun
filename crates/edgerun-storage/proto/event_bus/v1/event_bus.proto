@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: GPL-2.0-only
+syntax = "proto3";
+
+package edgerun.event_bus.v1;
+
+message BusEventEnvelope {
+  string event_id = 1;
+  uint64 nonce = 2;
+  string publisher = 3;
+  string signature = 4;
+  string policy_id = 5;
+  repeated string recipients = 6;
+  string payload_type = 7;
+  bytes payload = 8;
+  uint64 ts_unix_ms = 9;
+}
+
+message PolicyRuleV1 {
+  string publisher = 1;
+  string payload_type = 2;
+}
+
+message EventBusPolicyV1 {
+  uint32 version = 1;
+  repeated PolicyRuleV1 rules = 2;
+}
+
+message PolicyUpdateRequestV1 {
+  uint32 schema_version = 1;
+  EventBusPolicyV1 policy = 2;
+}
+
+message PolicyUpdatedEventV1 {
+  uint32 schema_version = 1;
+  EventBusPolicyV1 policy = 2;
+  string applied_policy_id = 3;
+}
+
+message PolicyUpdateDeniedEventV1 {
+  uint32 schema_version = 1;
+  string denied_policy_id = 2;
+  string reason = 3;
+}
+
+enum BusPhaseV1 {
+  BUS_PHASE_V1_UNSPECIFIED = 0;
+  BUS_PHASE_V1_AWAITING_INIT = 1;
+  BUS_PHASE_V1_RUNNING = 2;
+  BUS_PHASE_V1_HALTED = 3;
+  BUS_PHASE_V1_EMERGENCY_SEAL_ONLY = 4;
+}
+
+message BusStatusV1 {
+  uint32 schema_version = 1;
+  BusPhaseV1 phase = 2;
+  uint32 policy_version = 3;
+  string last_applied_event_id = 4;
+  uint64 last_offset = 5;
+  string latest_chain_progress_event_id = 6;
+  bool storage_ok = 7;
+}
+
+message InitConfigV1 {
+  uint32 schema_version = 1;
+  EventBusPolicyV1 policy = 2;
+  bool require_chain_progress_signature_verification = 3;
+}
+
+message HaltEventV1 {
+  uint32 schema_version = 1;
+  string reason = 2;
+  string last_event_id = 3;
+}
+
+message ResumeFromV1 {
+  uint32 schema_version = 1;
+  oneof cursor {
+    string event_id = 2;
+    uint64 offset = 3;
+  }
+}

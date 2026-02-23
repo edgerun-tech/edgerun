@@ -60,10 +60,6 @@ use crate::linking::{
     detect_link_ranges, detect_link_text_at_cell, looks_like_url, open_link, open_path,
     parse_path_candidate, resolve_existing_path,
 };
-use crate::platform::{
-    HyprPollState, fetch_hyprland_size, hyprland_ipc_info, load_kitty_primary_font,
-    resolve_window_size, spawn_font_loader, spawn_hyprland_listener,
-};
 use crate::state::{
     AutocompleteEngine, SettingsState, load_settings_state, next_log_level, next_render_mode,
     parse_log_level, parse_render_mode, persist_settings_state,
@@ -359,8 +355,6 @@ fn expand_home_path(path: &str) -> PathBuf {
 #[derive(Debug, Clone)]
 enum AppEvent {
     Wake,
-    HyprResize(PhysicalSize<u32>),
-    HyprPoll,
     Fonts(Vec<Arc<Vec<u8>>>),
     PrimaryFont(Arc<Vec<u8>>),
     FontLoadDone,
@@ -603,19 +597,6 @@ fn run() -> Result<()> {
     let mut event_loop_builder = EventLoop::<AppEvent>::with_user_event();
     let event_loop = event_loop_builder.build()?;
     let proxy = event_loop.create_proxy();
-    let hypr_ipc = hyprland_ipc_info();
-    let mut hypr_poll = hypr_ipc.as_ref().map(|info| HyprPollState {
-        info: info.clone(),
-        last_check: Instant::now(),
-        interval: Duration::from_millis(350),
-        last_size: None,
-    });
-    if let Some(info) = hypr_ipc.clone() {
-        spawn_hyprland_listener(proxy.clone(), info);
-    }
-    // Respect compositor-provided activation token (e.g. Hyprland binds) so the new
-    // window grabs focus on the originating workspace instead of bouncing to
-    // whichever workspace already has focus.
     let activation_token = None;
     let base_title = format!("{} {}", APP_NAME, app_version());
     let mut window_attributes = Window::default_attributes()
@@ -755,7 +736,7 @@ fn run() -> Result<()> {
             event: WindowEvent::Resized(_new_size),
             ..
         } => {
-            let size = resolve_window_size(&window, &hypr_ipc);
+            let size = resolve_window_size(&window);
             let changed = refresh_layout_for_size(
                 size,
                 cell_w,
@@ -816,7 +797,7 @@ fn run() -> Result<()> {
             }
             let inner = window.inner_size();
             let _ = inner_size_writer.request_inner_size(inner);
-            let size = resolve_window_size(&window, &hypr_ipc);
+            let size = resolve_window_size(&window);
             refresh_layout_for_size(
                 size,
                 cell_w,
@@ -837,7 +818,7 @@ fn run() -> Result<()> {
             event: WindowEvent::RedrawRequested,
             ..
         } => {
-            let current_size = resolve_window_size(&window, &hypr_ipc);
+            let current_size = resolve_window_size(&window);
             if current_size.width == 0 || current_size.height == 0 {
                 return;
             }
@@ -1010,54 +991,6 @@ fn run() -> Result<()> {
             AppEvent::Wake => {
                 needs_redraw = true;
                 window.request_redraw();
-            }
-            AppEvent::HyprResize(size) => {
-                let size = if size.width > 0 && size.height > 0 {
-                    size
-                } else {
-                    window.inner_size()
-                };
-                let changed = refresh_layout_for_size(
-                    size,
-                    cell_w,
-                    cell_h,
-                    tab_bar_height,
-                    &mut pixels,
-                    &mut tabs,
-                    &mut debug_overlay,
-                    &mut gpu_renderer,
-                    &mut layout,
-                    &mut frame_width,
-                    &mut frame_height,
-                );
-                if !changed {
-                    return;
-                }
-                debug!(
-                    "hypr resize: size={}x{} frame={}x{} cell={}x{} layout={}x{} usable={}x{}",
-                    size.width,
-                    size.height,
-                    frame_width,
-                    frame_height,
-                    cell_w,
-                    cell_h,
-                    layout.cols,
-                    layout.rows,
-                    layout.usable_width,
-                    layout.usable_height
-                );
-                needs_redraw = true;
-                window.request_redraw();
-            }
-            AppEvent::HyprPoll => {
-                if let Some(state) = hypr_poll.as_mut()
-                    && let Some(size) =
-                        fetch_hyprland_size(&state.info.request_socket, state.info.pid)
-                    && state.last_size != Some(size)
-                {
-                    state.last_size = Some(size);
-                    let _ = proxy.send_event(AppEvent::HyprResize(size));
-                }
             }
             AppEvent::Fonts(fonts) => {
                 let (old_w, old_h) = glyphs.cell_size();
@@ -1792,7 +1725,7 @@ fn run() -> Result<()> {
             }
             if now >= next_layout_refresh {
                 if refresh_layout_for_size(
-                    resolve_window_size(&window, &hypr_ipc),
+                    resolve_window_size(&window),
                     cell_w,
                     cell_h,
                     tab_bar_height,
@@ -1820,16 +1753,6 @@ fn run() -> Result<()> {
                 && next_blink < next_wake
             {
                 next_wake = next_blink;
-            }
-            if let Some(state) = hypr_poll.as_mut() {
-                if now.duration_since(state.last_check) >= state.interval {
-                    state.last_check = now;
-                    let _ = proxy.send_event(AppEvent::HyprPoll);
-                }
-                let poll_due = state.last_check + state.interval;
-                if poll_due < next_wake {
-                    next_wake = poll_due;
-                }
             }
             elwt.set_control_flow(ControlFlow::WaitUntil(next_wake));
         }

@@ -6,50 +6,23 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use serde::Deserialize;
-use serde_json::{json, Value};
+use edgerun_types::Limits;
+use edgerun_types::control_plane::{
+    ControlWsRequestPayload, JobCreateRequest, JobStatusResponse, ReplayArtifactPayload,
+    WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
+};
 use tokio::process::Command;
 use tokio::time::sleep;
 
 use crate::integration_helpers::{
     control_ws_request, create_assigned_job, create_assigned_job_with_abi, create_temp_dir,
-    kill_child, pick_free_port, wait_for_failure_phase, wait_for_health,
-    wait_for_runtime_execute_failure,
+    fetch_job_status, kill_child, pick_free_port, submit_worker_failure, submit_worker_replay,
+    submit_worker_result, wait_for_failure_phase, wait_for_health, wait_for_runtime_execute_failure,
 };
 use crate::process_helpers::run_program_sync;
 use crate::{ensure, integration_flag_env, load_app_config};
 
 static LOCAL_BIN_CACHE: OnceLock<Mutex<HashMap<String, PathBuf>>> = OnceLock::new();
-
-#[derive(Debug, Deserialize)]
-struct SimpleOkResponse {
-    ok: bool,
-    #[serde(default)]
-    duplicate: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct JobCreateResponse {
-    job_id: String,
-    bundle_hash: String,
-}
-
-async fn post_json_ok(
-    client: &reqwest::Client,
-    base: &str,
-    path: &str,
-    body: &Value,
-) -> Result<SimpleOkResponse> {
-    client
-        .post(format!("{base}{path}"))
-        .json(body)
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await
-        .map_err(Into::into)
-}
 
 pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     let cfg = load_app_config(root)?;
@@ -95,16 +68,29 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     wait_for_health(&client, &sched_url, &mut scheduler).await?;
 
     let runtime_id = "1111111111111111111111111111111111111111111111111111111111111111";
-    let create_body = json!({
-        "runtime_id": runtime_id,
-        "wasm_base64":"AA==",
-        "input_base64":"",
-        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
-        "escrow_lamports":100,
-        "assignment_worker_pubkey":"worker-a"
-    });
-    let create: JobCreateResponse =
-        control_ws_request(&sched_url, "job.create", create_body).await?;
+    let create_request = JobCreateRequest {
+        runtime_id: runtime_id.to_string(),
+        wasm_base64: "AA==".to_string(),
+        input_base64: String::new(),
+        abi_version: None,
+        limits: Limits {
+            max_memory_bytes: 1_048_576,
+            max_instructions: 10_000,
+        },
+        escrow_lamports: 100,
+        assignment_worker_pubkey: Some("worker-a".to_string()),
+        client_pubkey: None,
+        client_signed_at_unix_s: None,
+        client_signature: None,
+    };
+    let create = match control_ws_request(
+        &sched_url,
+        ControlWsRequestPayload::JobCreate(create_request),
+    )
+    .await? {
+        edgerun_types::control_plane::ControlWsResponsePayload::JobCreate(v) => v,
+        other => anyhow::bail!("unexpected payload for job.create: {other:?}"),
+    };
     let job_id = create.job_id;
     let bundle_hash = create.bundle_hash;
 
@@ -112,79 +98,172 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     let output_hash_2 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     let output_hash_3 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-    let r1 = json!({
-        "idempotency_key":"k-result-1","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_1,"output_len":10
-    });
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/result", &r1).await?;
+    let r1 = WorkerResultReport {
+        idempotency_key: "k-result-1".to_string(),
+        worker_pubkey: "worker-a".to_string(),
+        job_id: job_id.clone(),
+        bundle_hash: bundle_hash.clone(),
+        output_hash: output_hash_1.to_string(),
+        output_len: 10,
+        attestation_sig: None,
+        attestation_claim: None,
+        signature: None,
+    };
     ensure(
-        resp.ok && !resp.duplicate,
+        !submit_worker_result(&sched_url, r1.clone()).await?,
         "result first submit should not duplicate",
     )?;
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/result", &r1).await?;
     ensure(
-        resp.ok && resp.duplicate,
+        submit_worker_result(&sched_url, r1).await?,
         "result second submit should duplicate",
     )?;
 
-    let f1 = json!({
-        "idempotency_key":"k-failure-1","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"runtime_execute","error_code":"InstructionLimitExceeded","error_message":"out of fuel"
-    });
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/failure", &f1).await?;
+    let f1 = WorkerFailureReport {
+        idempotency_key: "k-failure-1".to_string(),
+        worker_pubkey: "worker-a".to_string(),
+        job_id: job_id.clone(),
+        bundle_hash: bundle_hash.clone(),
+        phase: "runtime_execute".to_string(),
+        error_code: "InstructionLimitExceeded".to_string(),
+        error_message: "out of fuel".to_string(),
+        signature: None,
+    };
     ensure(
-        resp.ok && !resp.duplicate,
+        !submit_worker_failure(&sched_url, f1.clone()).await?,
         "failure first submit should not duplicate",
     )?;
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/failure", &f1).await?;
     ensure(
-        resp.ok && resp.duplicate,
+        submit_worker_failure(&sched_url, f1).await?,
         "failure second submit should duplicate",
     )?;
 
-    let p1 = json!({
-        "idempotency_key":"k-replay-1","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":false,"abi_version":1,"runtime_id":runtime_id,"output_hash":null,"output_len":null,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":0,"error_code":"InstructionLimitExceeded","error_message":"out of fuel","trap_code":"OutOfFuel"}
-    });
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/replay", &p1).await?;
-    ensure(
-        resp.ok && !resp.duplicate,
-        "replay first submit should not duplicate",
-    )?;
-    let resp = post_json_ok(&client, &sched_url, "/v1/worker/replay", &p1).await?;
-    ensure(
-        resp.ok && resp.duplicate,
-        "replay second submit should duplicate",
-    )?;
+    submit_worker_result(
+        &sched_url,
+        WorkerResultReport {
+            idempotency_key: "k-result-2".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            bundle_hash: bundle_hash.clone(),
+            output_hash: output_hash_2.to_string(),
+            output_len: 20,
+            attestation_sig: None,
+            attestation_claim: None,
+            signature: None,
+        },
+    )
+    .await?;
+    submit_worker_result(
+        &sched_url,
+        WorkerResultReport {
+            idempotency_key: "k-result-3".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            bundle_hash: bundle_hash.clone(),
+            output_hash: output_hash_3.to_string(),
+            output_len: 30,
+            attestation_sig: None,
+            attestation_claim: None,
+            signature: None,
+        },
+    )
+    .await?;
+    submit_worker_failure(
+        &sched_url,
+        WorkerFailureReport {
+            idempotency_key: "k-failure-2".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            bundle_hash: bundle_hash.clone(),
+            phase: "post_execution_verify".to_string(),
+            error_code: "BundleHashMismatch".to_string(),
+            error_message: "mismatch".to_string(),
+            signature: None,
+        },
+    )
+    .await?;
+    submit_worker_failure(
+        &sched_url,
+        WorkerFailureReport {
+            idempotency_key: "k-failure-3".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            bundle_hash: bundle_hash.clone(),
+            phase: "runtime_execute".to_string(),
+            error_code: "Trap".to_string(),
+            error_message: "trap".to_string(),
+            signature: None,
+        },
+    )
+    .await?;
+    submit_worker_replay(
+        &sched_url,
+        WorkerReplayArtifactReport {
+            idempotency_key: "k-replay-2".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            artifact: ReplayArtifactPayload {
+                bundle_hash: bundle_hash.clone(),
+                ok: true,
+                abi_version: Some(1),
+                runtime_id: Some(runtime_id.to_string()),
+                output_hash: Some(output_hash_2.to_string()),
+                output_len: Some(20),
+                input_len: Some(3),
+                max_memory_bytes: Some(1024),
+                max_instructions: Some(1000),
+                fuel_limit: Some(1000),
+                fuel_remaining: Some(900),
+                error_code: None,
+                error_message: None,
+                trap_code: None,
+            },
+            signature: None,
+        },
+    )
+    .await?;
+    submit_worker_replay(
+        &sched_url,
+        WorkerReplayArtifactReport {
+            idempotency_key: "k-replay-3".to_string(),
+            worker_pubkey: "worker-a".to_string(),
+            job_id: job_id.clone(),
+            artifact: ReplayArtifactPayload {
+                bundle_hash: bundle_hash.clone(),
+                ok: true,
+                abi_version: Some(1),
+                runtime_id: Some(runtime_id.to_string()),
+                output_hash: Some(output_hash_3.to_string()),
+                output_len: Some(30),
+                input_len: Some(3),
+                max_memory_bytes: Some(1024),
+                max_instructions: Some(1000),
+                fuel_limit: Some(1000),
+                fuel_remaining: Some(800),
+                error_code: None,
+                error_message: None,
+                trap_code: None,
+            },
+            signature: None,
+        },
+    )
+    .await?;
 
-    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-2","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_2,"output_len":20})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/result", &json!({"idempotency_key":"k-result-3","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"output_hash":output_hash_3,"output_len":30})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-2","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"post_execution_verify","error_code":"BundleHashMismatch","error_message":"mismatch"})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/failure", &json!({"idempotency_key":"k-failure-3","worker_pubkey":"worker-a","job_id":job_id,"bundle_hash":bundle_hash,"phase":"runtime_execute","error_code":"Trap","error_message":"trap"})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-2","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_2,"output_len":20,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":900,"error_code":null,"error_message":null,"trap_code":null}})).await?;
-    post_json_ok(&client, &sched_url, "/v1/worker/replay", &json!({"idempotency_key":"k-replay-3","worker_pubkey":"worker-a","job_id":job_id,"artifact":{"bundle_hash":bundle_hash,"ok":true,"abi_version":1,"runtime_id":runtime_id,"output_hash":output_hash_3,"output_len":30,"input_len":3,"max_memory_bytes":1024,"max_instructions":1000,"fuel_limit":1000,"fuel_remaining":800,"error_code":null,"error_message":null,"trap_code":null}})).await?;
+    let status = fetch_job_status(&sched_url, &job_id).await?;
 
-    let status: Value =
-        control_ws_request(&sched_url, "job.status", json!({ "job_id": job_id })).await?;
-
-    let reports = status["reports"].as_array().cloned().unwrap_or_default();
-    let failures = status["failures"].as_array().cloned().unwrap_or_default();
-    let replays = status["replay_artifacts"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
+    let reports = status.reports;
+    let failures = status.failures;
+    let replays = status.replay_artifacts;
     ensure(reports.len() == 2, "expected 2 reports")?;
     ensure(failures.len() == 2, "expected 2 failures")?;
     ensure(replays.len() == 2, "expected 2 replay artifacts")?;
     ensure(
-        reports
-            .last()
-            .and_then(|x| x["output_hash"].as_str())
-            .unwrap_or_default()
-            == output_hash_3,
+        reports.last().map(|x| x.output_hash.as_str()).unwrap_or_default() == output_hash_3,
         "expected newest result output_hash=o3",
     )?;
     ensure(
         failures
             .last()
-            .and_then(|x| x["idempotency_key"].as_str())
+            .map(|x| x.idempotency_key.as_str())
             .unwrap_or_default()
             == "k-failure-3",
         "expected newest failure idempotency key",
@@ -192,7 +271,7 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     ensure(
         replays
             .last()
-            .and_then(|x| x["idempotency_key"].as_str())
+            .map(|x| x.idempotency_key.as_str())
             .unwrap_or_default()
             == "k-replay-3",
         "expected newest replay idempotency key",
@@ -254,16 +333,29 @@ pub(crate) async fn run_integration_e2e_lifecycle(root: &Path) -> Result<()> {
     )
     .await?;
 
-    let create_body = json!({
-        "runtime_id":"0000000000000000000000000000000000000000000000000000000000000000",
-        "wasm_base64":"AA==",
-        "input_base64":"",
-        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
-        "escrow_lamports":100,
-        "assignment_worker_pubkey":worker_pubkey
-    });
-    let create: JobCreateResponse =
-        control_ws_request(&sched_url, "job.create", create_body).await?;
+    let create_request = JobCreateRequest {
+        runtime_id: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        wasm_base64: "AA==".to_string(),
+        input_base64: String::new(),
+        abi_version: None,
+        limits: Limits {
+            max_memory_bytes: 1_048_576,
+            max_instructions: 10_000,
+        },
+        escrow_lamports: 100,
+        assignment_worker_pubkey: Some(worker_pubkey.to_string()),
+        client_pubkey: None,
+        client_signed_at_unix_s: None,
+        client_signature: None,
+    };
+    let create = match control_ws_request(
+        &sched_url,
+        ControlWsRequestPayload::JobCreate(create_request),
+    )
+    .await? {
+        edgerun_types::control_plane::ControlWsResponsePayload::JobCreate(v) => v,
+        other => anyhow::bail!("unexpected payload for job.create: {other:?}"),
+    };
     let job_id = create.job_id;
 
     let mut success = false;
@@ -274,21 +366,14 @@ pub(crate) async fn run_integration_e2e_lifecycle(root: &Path) -> Result<()> {
         if scheduler.try_wait()?.is_some() {
             break;
         }
-        let status: Value =
-            control_ws_request(&sched_url, "job.status", json!({ "job_id": job_id })).await?;
-        let has_fail = status["failures"]
-            .as_array()
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
-        let has_replay = status["replay_artifacts"]
-            .as_array()
-            .map(|v| !v.is_empty())
-            .unwrap_or(false);
+        let status: JobStatusResponse = fetch_job_status(&sched_url, &job_id).await?;
+        let has_fail = !status.failures.is_empty();
+        let has_replay = !status.replay_artifacts.is_empty();
         if has_fail && has_replay {
-            let artifact_ok = status["replay_artifacts"]
-                .as_array()
-                .and_then(|arr| arr.last())
-                .and_then(|last| last["artifact"]["ok"].as_bool())
+            let artifact_ok = status
+                .replay_artifacts
+                .last()
+                .map(|last| last.artifact.ok)
                 .unwrap_or(true);
             ensure(!artifact_ok, "expected replay artifact ok=false")?;
             success = true;
@@ -467,19 +552,27 @@ pub(crate) async fn run_integration_abi_rollover(root: &Path) -> Result<()> {
     let job_v2 = create_assigned_job_with_abi(&client, &sched_url, worker_pubkey, 2).await?;
     wait_for_runtime_execute_failure(&client, &sched_url, &job_v2).await?;
 
-    let unsupported_body = json!({
-        "runtime_id":"0000000000000000000000000000000000000000000000000000000000000000",
-        "abi_version":3,
-        "wasm_base64":"AA==",
-        "input_base64":"",
-        "limits":{"max_memory_bytes":1048576,"max_instructions":10000},
-        "escrow_lamports":100,
-        "assignment_worker_pubkey":worker_pubkey
-    });
-    let unsupported_err =
-        control_ws_request::<serde_json::Value>(&sched_url, "job.create", unsupported_body)
-            .await
-            .expect_err("unsupported ABI must fail");
+    let unsupported_err = control_ws_request(
+        &sched_url,
+        ControlWsRequestPayload::JobCreate(JobCreateRequest {
+            runtime_id: "0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string(),
+            wasm_base64: "AA==".to_string(),
+            input_base64: String::new(),
+            abi_version: Some(3),
+            limits: Limits {
+                max_memory_bytes: 1_048_576,
+                max_instructions: 10_000,
+            },
+            escrow_lamports: 100,
+            assignment_worker_pubkey: Some(worker_pubkey.to_string()),
+            client_pubkey: None,
+            client_signed_at_unix_s: None,
+            client_signature: None,
+        }),
+    )
+    .await
+    .expect_err("unsupported ABI must fail");
     ensure(
         unsupported_err.to_string().contains("(400)")
             || unsupported_err.to_string().contains("abi_version"),
@@ -599,13 +692,20 @@ fn resolve_target_dir(root: &Path) -> PathBuf {
 
     if let Ok(out) = output {
         if out.status.success() {
-            if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
-                if let Some(dir) = value.get("target_directory").and_then(|v| v.as_str()) {
-                    return PathBuf::from(dir);
-                }
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if let Some(dir) = extract_json_string_field(&stdout, "target_directory") {
+                return PathBuf::from(dir);
             }
         }
     }
 
     root.join("target")
+}
+
+fn extract_json_string_field(raw: &str, field: &str) -> Option<String> {
+    let needle = format!("\"{field}\":\"");
+    let start = raw.find(&needle)? + needle.len();
+    let rest = &raw[start..];
+    let end_rel = rest.find('"')?;
+    Some(rest[..end_rel].to_string())
 }

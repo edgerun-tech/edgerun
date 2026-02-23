@@ -10,18 +10,17 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use serde::Deserialize;
-use serde_json::json;
 
 mod commands;
 mod integration_helpers;
 mod process_helpers;
 
 use crate::commands::ci::run_ci;
+use crate::commands::event_bus::run_event_bus_command;
 use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
-use crate::commands::mcp::run_mcp_server;
 use crate::commands::observer::run_observer_command;
 use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
@@ -100,9 +99,9 @@ enum Commands {
         #[command(subcommand)]
         command: ObserveCommand,
     },
-    Mcp {
+    Event {
         #[command(subcommand)]
-        command: McpCommand,
+        command: EventBusCommand,
     },
 }
 
@@ -287,10 +286,36 @@ enum ObserveDurability {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-enum McpCommand {
-    Serve {
+pub enum EventBusCommand {
+    Submit {
         #[arg(long)]
-        state_dir: Option<PathBuf>,
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "events.seg")]
+        segment: String,
+        #[arg(long)]
+        nonce: u64,
+        #[arg(long)]
+        publisher: String,
+        #[arg(long)]
+        signature: String,
+        #[arg(long)]
+        policy_id: String,
+        #[arg(long = "recipient")]
+        recipients: Vec<String>,
+        #[arg(long)]
+        payload_type: String,
+        #[arg(long)]
+        payload_base64: String,
+    },
+    Query {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "events.seg")]
+        segment: String,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        cursor_offset: u64,
     },
 }
 
@@ -374,9 +399,7 @@ async fn main() -> Result<()> {
         Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
         Commands::Program { command } => run_program_command(&root, command)?,
         Commands::Observe { command } => run_observer_command(&root, command)?,
-        Commands::Mcp { command } => match command {
-            McpCommand::Serve { state_dir } => run_mcp_server(&root, state_dir)?,
-        },
+        Commands::Event { command } => run_event_bus_command(&root, command)?,
     }
 
     Ok(())
@@ -879,17 +902,29 @@ fn run_build_timing_sync(root: &Path) -> Result<()> {
 
     let out_dir = root.join("out/ci");
     fs::create_dir_all(&out_dir)?;
-    let payload = json!({
-        "run_id": std::env::var("GITHUB_RUN_ID").unwrap_or_else(|_| "local".to_string()),
-        "sha": std::env::var("GITHUB_SHA").unwrap_or_else(|_| "local".to_string()),
-        "cli_release_build_seconds": cli_release_secs,
-        "check_seconds": check_secs,
-        "release_build_seconds": release_secs,
-        "total_seconds": total_secs
-    });
+    let run_id = std::env::var("GITHUB_RUN_ID").unwrap_or_else(|_| "local".to_string());
+    let sha = std::env::var("GITHUB_SHA").unwrap_or_else(|_| "local".to_string());
+    let payload = format!(
+        concat!(
+            "{{\n",
+            "  \"run_id\": \"{}\",\n",
+            "  \"sha\": \"{}\",\n",
+            "  \"cli_release_build_seconds\": {},\n",
+            "  \"check_seconds\": {},\n",
+            "  \"release_build_seconds\": {},\n",
+            "  \"total_seconds\": {}\n",
+            "}}\n"
+        ),
+        run_id.replace('\"', "\\\""),
+        sha.replace('\"', "\\\""),
+        cli_release_secs,
+        check_secs,
+        release_secs,
+        total_secs
+    );
     fs::write(
         out_dir.join("build-timings.json"),
-        serde_json::to_vec_pretty(&payload)?,
+        payload.as_bytes(),
     )?;
 
     println!("build timings:");

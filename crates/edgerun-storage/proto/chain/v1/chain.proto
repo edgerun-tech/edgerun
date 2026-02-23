@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-2.0-only
+syntax = "proto3";
+
+package edgerun.chain.v1;
+
+enum ChainNetworkV1 {
+  CHAIN_NETWORK_V1_UNSPECIFIED = 0;
+  CHAIN_NETWORK_V1_LOCALNET = 1;
+  CHAIN_NETWORK_V1_DEVNET = 2;
+  CHAIN_NETWORK_V1_TESTNET = 3;
+  CHAIN_NETWORK_V1_MAINNET_BETA = 4;
+}
+
+message ChainProgressEventV1 {
+  uint32 schema_version = 1;
+  ChainNetworkV1 network = 2;
+  uint64 slot = 3;
+  uint64 epoch = 4;
+  uint64 observed_at_unix_ms = 5;
+  string rpc_source = 6;
+  string signer = 7;
+  string signature = 8;
+  string progress_event_id = 9;
+}
+
+message ChainIngressConfigV1 {
+  uint32 schema_version = 1;
+  ChainNetworkV1 network = 2;
+  string rpc_http_url = 3;
+  string rpc_ws_url = 4;
+  bool require_verified_signature = 5;
+}

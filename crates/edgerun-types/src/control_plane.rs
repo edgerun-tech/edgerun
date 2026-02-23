@@ -142,6 +142,203 @@ pub struct WorkerReplayArtifactReport {
     pub signature: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobCreateRequest {
+    pub runtime_id: String,
+    pub wasm_base64: String,
+    pub input_base64: String,
+    pub abi_version: Option<u8>,
+    pub limits: Limits,
+    pub escrow_lamports: u64,
+    pub assignment_worker_pubkey: Option<String>,
+    pub client_pubkey: Option<String>,
+    pub client_signed_at_unix_s: Option<u64>,
+    pub client_signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobCreateResponse {
+    pub job_id: String,
+    pub bundle_hash: String,
+    pub bundle_url: String,
+    pub post_job_tx: String,
+    pub post_job_sig: Option<String>,
+    pub assign_workers_tx: Option<String>,
+    pub assign_workers_sig: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobStatusRequest {
+    pub job_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobStatusResponse {
+    pub job_id: String,
+    pub reports: Vec<WorkerResultReport>,
+    pub failures: Vec<WorkerFailureReport>,
+    pub replay_artifacts: Vec<WorkerReplayArtifactReport>,
+    pub quorum: Option<JobQuorumState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JobQuorumState {
+    #[serde(default)]
+    pub expected_bundle_hash: String,
+    #[serde(default)]
+    pub expected_runtime_id: String,
+    pub committee_workers: Vec<String>,
+    pub committee_size: u8,
+    pub quorum: u8,
+    #[serde(default)]
+    pub assign_tx: Option<String>,
+    #[serde(default)]
+    pub assign_sig: Option<String>,
+    #[serde(default)]
+    pub assign_submitted: bool,
+    pub quorum_reached: bool,
+    pub winning_output_hash: Option<String>,
+    pub winning_workers: Vec<String>,
+    #[serde(default)]
+    pub finalize_triggered: bool,
+    pub finalize_tx: Option<String>,
+    pub finalize_sig: Option<String>,
+    #[serde(default)]
+    pub finalize_submitted: bool,
+    #[serde(default)]
+    pub cancel_triggered: bool,
+    #[serde(default)]
+    pub cancel_tx: Option<String>,
+    #[serde(default)]
+    pub cancel_sig: Option<String>,
+    #[serde(default)]
+    pub cancel_submitted: bool,
+    #[serde(default)]
+    pub onchain_status: Option<String>,
+    #[serde(default)]
+    pub onchain_last_observed_slot: Option<u64>,
+    #[serde(default)]
+    pub onchain_last_update_unix_s: Option<u64>,
+    #[serde(default)]
+    pub onchain_deadline_slot: Option<u64>,
+    #[serde(default)]
+    pub slash_artifacts: Vec<SlashWorkerArtifact>,
+    pub created_at_unix_s: u64,
+    pub quorum_reached_at_unix_s: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SlashWorkerArtifact {
+    pub worker_pubkey: String,
+    pub tx: String,
+    pub sig: Option<String>,
+    pub submitted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteResolveRequest {
+    pub device_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteOwnerRequest {
+    pub owner_pubkey: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteResolveEntry {
+    pub device_id: String,
+    pub owner_pubkey: String,
+    pub reachable_urls: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub relay_session_id: Option<String>,
+    pub online: bool,
+    pub last_seen_unix_s: u64,
+    pub expires_at_unix_s: u64,
+    pub updated_at_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteResolveResponse {
+    pub ok: bool,
+    pub found: bool,
+    pub route: Option<RouteResolveEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OwnerRoutesResponse {
+    pub ok: bool,
+    pub owner_pubkey: String,
+    pub devices: Vec<RouteResolveEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerAssignmentsRequest {
+    pub worker_pubkey: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleGetRequest {
+    pub bundle_hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BundleGetResponse {
+    pub ok: bool,
+    pub bundle_hash: String,
+    pub payload_b64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubmissionAck {
+    pub ok: bool,
+    pub duplicate: bool,
+    pub quorum_reached: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ControlWsRequestPayload {
+    JobCreate(JobCreateRequest),
+    JobStatus(JobStatusRequest),
+    RouteResolve(RouteResolveRequest),
+    RouteOwner(RouteOwnerRequest),
+    WorkerHeartbeat(HeartbeatRequest),
+    WorkerAssignments(WorkerAssignmentsRequest),
+    WorkerResult(WorkerResultReport),
+    WorkerFailure(WorkerFailureReport),
+    WorkerReplay(WorkerReplayArtifactReport),
+    BundleGet(BundleGetRequest),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControlWsClientMessage {
+    pub request_id: String,
+    pub payload: ControlWsRequestPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ControlWsResponsePayload {
+    JobCreate(JobCreateResponse),
+    JobStatus(Box<JobStatusResponse>),
+    RouteResolve(RouteResolveResponse),
+    RouteOwner(Box<OwnerRoutesResponse>),
+    WorkerHeartbeat(HeartbeatResponse),
+    WorkerAssignments(Box<AssignmentsResponse>),
+    WorkerResult(SubmissionAck),
+    WorkerFailure(SubmissionAck),
+    WorkerReplay(SubmissionAck),
+    BundleGet(BundleGetResponse),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ControlWsServerMessage {
+    pub request_id: String,
+    pub ok: bool,
+    pub data: Option<ControlWsResponsePayload>,
+    pub error: Option<String>,
+    pub status: Option<u16>,
+}
+
 pub fn default_abi_version() -> u8 {
     BUNDLE_ABI_CURRENT
 }

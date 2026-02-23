@@ -16,13 +16,13 @@ tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 reqwest.workspace = true
 tracing.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 bincode.workspace = true
 solana-client.workspace = true
 solana-sdk.workspace = true
 ed25519-dalek.workspace = true
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }
+edgerun-storage = { path = "../../crates/edgerun-storage" }
 edgerun-types = { path = "../../crates/edgerun-types" }
 edgerun-transport-core = { path = "../../crates/edgerun-transport-core" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }

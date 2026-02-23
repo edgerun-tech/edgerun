@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
-use serde_json::Value;
+use json::JsonValue;
 
 use crate::process_helpers::run_program_sync_owned;
 use crate::{command_exists, ensure, AppConfig};
@@ -134,25 +134,23 @@ pub(crate) async fn run_weekly_fuzz(root: &Path, config: &AppConfig) -> Result<(
 }
 
 pub(crate) fn compare_replay_profiles(a_path: &Path, b_path: &Path) -> Result<()> {
-    let a: Value = serde_json::from_slice(&std::fs::read(a_path)?)
+    let a: JsonValue = json::parse(&String::from_utf8_lossy(&std::fs::read(a_path)?))
         .with_context(|| format!("failed parsing {}", a_path.display()))?;
-    let b: Value = serde_json::from_slice(&std::fs::read(b_path)?)
+    let b: JsonValue = json::parse(&String::from_utf8_lossy(&std::fs::read(b_path)?))
         .with_context(|| format!("failed parsing {}", b_path.display()))?;
 
-    fn normalize(doc: &Value) -> BTreeMap<String, (Value, bool, bool)> {
+    fn normalize(doc: &JsonValue) -> BTreeMap<String, (String, bool, bool)> {
         let mut out = BTreeMap::new();
-        if let Some(cases) = doc["cases"].as_array() {
-            for case in cases {
-                if let Some(name) = case["case"].as_str() {
-                    out.insert(
-                        name.to_string(),
-                        (
-                            case.get("actual").cloned().unwrap_or(Value::Null),
-                            case["passed"].as_bool().unwrap_or(false),
-                            case["stable"].as_bool().unwrap_or(false),
-                        ),
-                    );
-                }
+        for case in doc["cases"].members() {
+            if let Some(name) = case["case"].as_str() {
+                out.insert(
+                    name.to_string(),
+                    (
+                        case["actual"].dump(),
+                        case["passed"].as_bool().unwrap_or(false),
+                        case["stable"].as_bool().unwrap_or(false),
+                    ),
+                );
             }
         }
         out
@@ -171,7 +169,7 @@ pub(crate) fn compare_replay_profiles(a_path: &Path, b_path: &Path) -> Result<()
 }
 
 pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
-    let doc: Value = serde_json::from_slice(&std::fs::read(path)?)
+    let doc: JsonValue = json::parse(&String::from_utf8_lossy(&std::fs::read(path)?))
         .with_context(|| format!("failed parsing {}", path.display()))?;
 
     for key in [
@@ -182,10 +180,7 @@ pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
         "sign_off",
         "findings",
     ] {
-        ensure(
-            doc.get(key).is_some(),
-            &format!("missing top-level key: {key}"),
-        )?;
+        ensure(doc.has_key(key), &format!("missing top-level key: {key}"))?;
     }
 
     let status = doc["status"].as_str().unwrap_or_default();
@@ -197,11 +192,11 @@ pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
     let provider = &doc["provider"];
     ensure(provider.is_object(), "provider must be an object")?;
     ensure(
-        provider.get("organization").is_some(),
+        provider.has_key("organization"),
         "missing provider.organization",
     )?;
     ensure(
-        provider.get("reviewer").is_some(),
+        provider.has_key("reviewer"),
         "missing provider.reviewer",
     )?;
 
@@ -209,25 +204,21 @@ pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
     ensure(sign_off.is_object(), "sign_off must be an object")?;
     for key in ["date", "approved", "notes"] {
         ensure(
-            sign_off.get(key).is_some(),
+            sign_off.has_key(key),
             &format!("missing sign_off.{key}"),
         )?;
     }
 
-    let findings = doc["findings"]
-        .as_array()
-        .ok_or_else(|| anyhow!("findings must be a list"))?;
+    let findings = &doc["findings"];
+    ensure(findings.is_array(), "findings must be a list")?;
     let mut unresolved_high_or_critical = Vec::new();
-    for (i, finding) in findings.iter().enumerate() {
+    for (i, finding) in findings.members().enumerate() {
         ensure(
             finding.is_object(),
             &format!("finding[{i}] must be an object"),
         )?;
         for key in ["id", "title", "severity", "status", "owner", "notes"] {
-            ensure(
-                finding.get(key).is_some(),
-                &format!("finding[{i}] missing key: {key}"),
-            )?;
+            ensure(finding.has_key(key), &format!("finding[{i}] missing key: {key}"))?;
         }
         let severity = finding["severity"].as_str().unwrap_or_default();
         let finding_status = finding["status"].as_str().unwrap_or_default();

@@ -11,6 +11,7 @@ mod wasm {
     use std::time::{Duration, Instant};
 
     use js_sys::Uint8Array;
+    use serde::{Deserialize, Serialize};
     use term_core::render::{
         FONT_DATA, FONT_SIZE, GlyphCache, draw_background, draw_cursor_overlay, draw_grid,
         layout::compute_layout,
@@ -35,11 +36,46 @@ mod wasm {
     const BLINK_INTERVAL: Duration = Duration::from_millis(700);
     const PTY_FRAME_STDIN: u8 = 1;
     const PTY_FRAME_STDOUT: u8 = 2;
+    const PTY_FRAME_CONTROL_REQ: u8 = 0x7e;
+    const PTY_FRAME_CONTROL_RESP: u8 = 0x7f;
 
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum WsTransport {
         Raw,
         Mux,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    enum ShellRequest {
+        Auth {
+            token: String,
+        },
+        Spawn {
+            id: Option<u32>,
+            cmd: Option<String>,
+            args: Option<Vec<String>>,
+            cwd: Option<String>,
+            env: Option<std::collections::HashMap<String, String>>,
+            cols: Option<u16>,
+            rows: Option<u16>,
+        },
+        Resize {
+            id: u32,
+            cols: u16,
+            rows: u16,
+        },
+        Close {
+            id: u32,
+        },
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    enum ShellResponse {
+        AuthOk,
+        AuthError { error: String },
+        Spawned { id: u32, pid: Option<u32> },
+        Exit { id: u32, code: u32, signal: Option<String> },
+        Error { id: Option<u32>, error: String },
     }
 
     #[cfg(feature = "webgpu")]
@@ -350,20 +386,80 @@ mod wasm {
         None
     }
 
+    fn send_mux_request(ws: &WebSocket, request: ShellRequest) {
+        if let Ok(encoded) = bincode::serialize(&request) {
+            let mut frame = Vec::with_capacity(1 + encoded.len());
+            frame.push(PTY_FRAME_CONTROL_REQ);
+            frame.extend_from_slice(&encoded);
+            let _ = ws.send_with_u8_array(&frame);
+        }
+    }
+
     fn send_mux_auth(ws: &WebSocket, token: &str) {
-        let payload = serde_json::json!({ "type": "auth", "token": token });
-        let _ = ws.send_with_str(&payload.to_string());
+        send_mux_request(
+            ws,
+            ShellRequest::Auth {
+                token: token.to_string(),
+            },
+        );
     }
 
     fn send_mux_spawn(ws: &WebSocket, cols: usize, rows: usize) {
-        let payload = serde_json::json!({ "type": "spawn", "cols": cols, "rows": rows });
-        let _ = ws.send_with_str(&payload.to_string());
+        send_mux_request(
+            ws,
+            ShellRequest::Spawn {
+                id: None,
+                cmd: None,
+                args: None,
+                cwd: None,
+                env: None,
+                cols: u16::try_from(cols).ok(),
+                rows: u16::try_from(rows).ok(),
+            },
+        );
     }
 
     fn send_mux_resize(ws: &WebSocket, session_id: u32, cols: usize, rows: usize) {
-        let payload =
-            serde_json::json!({ "type": "resize", "id": session_id, "cols": cols, "rows": rows });
-        let _ = ws.send_with_str(&payload.to_string());
+        let (Some(cols), Some(rows)) = (u16::try_from(cols).ok(), u16::try_from(rows).ok()) else {
+            return;
+        };
+        send_mux_request(
+            ws,
+            ShellRequest::Resize {
+                id: session_id,
+                cols,
+                rows,
+            },
+        );
+    }
+
+    fn handle_mux_control_response(state: &mut AppState, value: ShellResponse) {
+        match value {
+            ShellResponse::Spawned { id, .. } => {
+                state.mux_session_id = Some(id);
+                state.mux_failures = 0;
+                if let Some(ws) = state.ws.clone() {
+                    send_mux_resize(&ws, id, state.layout.cols, state.layout.rows);
+                    flush_pending_input(state, &ws);
+                }
+                state.reconnect_attempts = 0;
+                set_status(&state.status_el, None);
+            }
+            ShellResponse::AuthError { error } | ShellResponse::Error { error, .. } => {
+                if state.transport == WsTransport::Mux
+                    && state.allow_raw_fallback
+                    && state.mux_failures < u8::MAX
+                {
+                    state.mux_failures = state.mux_failures.saturating_add(1);
+                }
+                set_status(&state.status_el, Some(&error));
+            }
+            ShellResponse::Exit { .. } => {
+                state.mux_session_id = None;
+                set_status(&state.status_el, Some("Shell exited"));
+            }
+            ShellResponse::AuthOk => {}
+        }
     }
 
     fn encode_stdin_frame(session_id: u32, bytes: &[u8]) -> Vec<u8> {
@@ -767,6 +863,12 @@ mod wasm {
                         feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data)
                     }
                     WsTransport::Mux => {
+                        if data.first().copied() == Some(PTY_FRAME_CONTROL_RESP) {
+                            if let Ok(value) = bincode::deserialize::<ShellResponse>(&data[1..]) {
+                                handle_mux_control_response(&mut state, value);
+                            }
+                            return;
+                        }
                         if data.len() < 5 || data[0] != PTY_FRAME_STDOUT {
                             return;
                         }
@@ -776,51 +878,6 @@ mod wasm {
                         }
                         feed_terminal_bytes(&mut state, onmessage_writer.clone(), &data[5..]);
                     }
-                }
-            } else if let Some(text) = event.data().as_string() {
-                let mut state = onmessage_state.borrow_mut();
-                if state.transport != WsTransport::Mux {
-                    return;
-                }
-                let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
-                    return;
-                };
-                let msg_type = value.get("type").and_then(serde_json::Value::as_str);
-                match msg_type {
-                    Some("spawned") => {
-                        let id = value
-                            .get("id")
-                            .and_then(serde_json::Value::as_u64)
-                            .and_then(|id| u32::try_from(id).ok());
-                        if let Some(id) = id {
-                            state.mux_session_id = Some(id);
-                            state.mux_failures = 0;
-                            if let Some(ws) = state.ws.clone() {
-                                send_mux_resize(&ws, id, state.layout.cols, state.layout.rows);
-                                flush_pending_input(&mut state, &ws);
-                            }
-                            state.reconnect_attempts = 0;
-                            set_status(&state.status_el, None);
-                        }
-                    }
-                    Some("auth_error") | Some("error") => {
-                        let message = value
-                            .get("error")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or("terminal connection error");
-                        if state.transport == WsTransport::Mux
-                            && state.allow_raw_fallback
-                            && state.mux_failures < u8::MAX
-                        {
-                            state.mux_failures = state.mux_failures.saturating_add(1);
-                        }
-                        set_status(&state.status_el, Some(message));
-                    }
-                    Some("exit") => {
-                        state.mux_session_id = None;
-                        set_status(&state.status_el, Some("Shell exited"));
-                    }
-                    _ => {}
                 }
             }
         });

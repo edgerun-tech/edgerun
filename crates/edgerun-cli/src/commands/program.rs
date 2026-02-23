@@ -296,13 +296,15 @@ fn parse_program_id_from_deploy_json(output: &str) -> Result<String> {
         .find('{')
         .ok_or_else(|| anyhow!("deploy output did not include json payload"))?;
     let payload = &output[start..];
-    let value: serde_json::Value =
-        serde_json::from_str(payload).context("failed to parse deploy json payload")?;
-    let id = value
-        .get("programId")
-        .and_then(|v| v.as_str())
+    let needle = "\"programId\":\"";
+    let offset = payload
+        .find(needle)
         .ok_or_else(|| anyhow!("deploy output missing programId"))?;
-    Ok(id.to_string())
+    let rest = &payload[offset + needle.len()..];
+    let end = rest
+        .find('"')
+        .ok_or_else(|| anyhow!("deploy output missing closing quote for programId"))?;
+    Ok(rest[..end].to_string())
 }
 
 fn phase2_account_specs() -> Vec<Phase2AccountSpec> {
