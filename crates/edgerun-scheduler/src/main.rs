@@ -26,6 +26,10 @@ use base64::Engine;
 use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
 use edgerun_storage::durability::DurabilityLevel;
 use edgerun_storage::event::{ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId};
+use edgerun_storage::event_bus::{
+    BusPhaseV1, BusQueryFilter, EventBus, EventBusPolicyV1, PolicyRuleV1, PolicyUpdateRequestV1,
+    StorageBackedEventBus,
+};
 use edgerun_storage::StorageEngine;
 use edgerun_transport_core::{
     failure_signing_message, heartbeat_signing_message, replay_signing_message,
@@ -56,6 +60,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use tokio::sync::mpsc;
+use prost::Message as ProstCodec;
 
 #[derive(Clone)]
 struct AppState {
@@ -100,6 +105,7 @@ struct AppState {
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
     signal_peers: Arc<tokio::sync::Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
     chain_progress_sink: Arc<Mutex<Option<ChainProgressSink>>>,
+    chain_event_bus_sink: Arc<Mutex<Option<ChainEventBusSink>>>,
     latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
     require_chain_progress_signature_verification: bool,
     chain: Option<Arc<ChainContext>>,
@@ -126,6 +132,11 @@ struct ChainProgressSink {
     actor_id: StorageActorId,
     signer_pubkey: String,
     seq: u64,
+}
+
+struct ChainEventBusSink {
+    bus: StorageBackedEventBus,
+    next_nonce: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,6 +178,7 @@ struct PersistedState {
     worker_registry: HashMap<String, WorkerRegistryEntry>,
     job_quorum: HashMap<String, JobQuorumState>,
     latest_chain_progress_event_id: Option<String>,
+    latest_chain_progress_bus_nonce: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -348,6 +360,10 @@ implement cryptographic verification for scheduler signed chain progress events 
         &data_dir,
         hex::encode(policy_signing_key.verifying_key().to_bytes()),
     );
+    let chain_event_bus_sink = init_chain_event_bus_sink(
+        &data_dir,
+        persisted.latest_chain_progress_bus_nonce,
+    )?;
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -420,6 +436,7 @@ implement cryptographic verification for scheduler signed chain progress events 
         route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
         signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         chain_progress_sink: Arc::new(Mutex::new(chain_progress_sink)),
+        chain_event_bus_sink: Arc::new(Mutex::new(chain_event_bus_sink)),
         latest_chain_progress_event_id: Arc::new(Mutex::new(
             persisted.latest_chain_progress_event_id.clone(),
         )),
@@ -1672,6 +1689,88 @@ fn fixed_storage_actor_id(seed: &str) -> StorageActorId {
     StorageActorId::from_bytes(out)
 }
 
+fn query_max_nonce_for_publisher(
+    bus: &mut StorageBackedEventBus,
+    publisher: &str,
+) -> Result<u64> {
+    let mut cursor = 0_u64;
+    let mut max_nonce = 0_u64;
+    loop {
+        let page = bus.query(
+            1024,
+            cursor,
+            BusQueryFilter {
+                publisher: Some(publisher.to_string()),
+                payload_type: None,
+            },
+        )?;
+        for row in page.events {
+            if row.envelope.nonce > max_nonce {
+                max_nonce = row.envelope.nonce;
+            }
+        }
+        let Some(next) = page.next_cursor_offset else {
+            break;
+        };
+        cursor = next;
+    }
+    Ok(max_nonce)
+}
+
+fn ensure_chain_progress_policy(bus: &mut StorageBackedEventBus, next_nonce: u64) -> Result<u64> {
+    let status = bus.status()?;
+    if status.phase == BusPhaseV1::Running as i32 {
+        return Ok(next_nonce);
+    }
+    let policy_req = PolicyUpdateRequestV1 {
+        schema_version: 1,
+        policy: Some(EventBusPolicyV1 {
+            version: 1,
+            rules: vec![
+                PolicyRuleV1 {
+                    publisher: "*".to_string(),
+                    payload_type: "policy_update_request".to_string(),
+                },
+                PolicyRuleV1 {
+                    publisher: "scheduler".to_string(),
+                    payload_type: "chain_progress".to_string(),
+                },
+            ],
+        }),
+    };
+    let envelope = StorageBackedEventBus::build_envelope(
+        next_nonce,
+        "scheduler".to_string(),
+        "scheduler-internal".to_string(),
+        "scheduler-chain-progress-v1".to_string(),
+        vec!["*".to_string()],
+        "policy_update_request".to_string(),
+        ProstCodec::encode_to_vec(&policy_req),
+    );
+    let _ = bus.publish(&envelope)?;
+    Ok(next_nonce.saturating_add(1))
+}
+
+fn init_chain_event_bus_sink(
+    data_dir: &FsPath,
+    persisted_nonce: Option<u64>,
+) -> Result<Option<ChainEventBusSink>> {
+    let bus_data_dir = data_dir.join("event-bus");
+    std::fs::create_dir_all(&bus_data_dir)
+        .with_context(|| format!("create event bus dir: {}", bus_data_dir.display()))?;
+    let mut bus = StorageBackedEventBus::open_writer(bus_data_dir, "events.seg")
+        .context("open scheduler event bus sink")?;
+    let discovered_max = query_max_nonce_for_publisher(&mut bus, "scheduler")
+        .context("query scheduler nonce in event bus")?;
+    let mut next_nonce = discovered_max.saturating_add(1);
+    if let Some(saved) = persisted_nonce {
+        next_nonce = next_nonce.max(saved.saturating_add(1));
+    }
+    next_nonce = ensure_chain_progress_policy(&mut bus, next_nonce)
+        .context("ensure chain progress policy in event bus")?;
+    Ok(Some(ChainEventBusSink { bus, next_nonce }))
+}
+
 fn read_and_record_chain_progress(state: &AppState) -> Option<SchedulerSignedChainProgressEvent> {
     let chain = state.chain.as_ref()?;
     let epoch_info = match chain.rpc.get_epoch_info() {
@@ -1723,15 +1822,43 @@ implement verification before enabling this mode"
         signature: signature_hex,
     };
     let payload = bincode::serialize(&event_payload).context("serialize chain progress event")?;
-    let event = StorageEvent::new(sink.stream_id.clone(), sink.actor_id.clone(), payload);
+    let event = StorageEvent::new(sink.stream_id.clone(), sink.actor_id.clone(), payload.clone());
     sink.session
         .append_with_durability(&event, DurabilityLevel::AckDurable)
         .context("append chain progress event to storage")?;
     drop(sink_guard);
+
+    let mut latest_chain_event_id = progress_event_id;
+    if let Some(bus_sink) = state
+        .chain_event_bus_sink
+        .lock()
+        .expect("lock poisoned")
+        .as_mut()
+    {
+        let envelope = StorageBackedEventBus::build_envelope(
+            bus_sink.next_nonce,
+            "scheduler".to_string(),
+            "scheduler-internal".to_string(),
+            "scheduler-chain-progress-v1".to_string(),
+            vec!["*".to_string()],
+            "chain_progress".to_string(),
+            payload,
+        );
+        match bus_sink.bus.publish(&envelope) {
+            Ok(_) => {
+                bus_sink.next_nonce = bus_sink.next_nonce.saturating_add(1);
+                latest_chain_event_id = envelope.event_id;
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to publish chain progress into event bus");
+            }
+        }
+    }
+
     *state
         .latest_chain_progress_event_id
         .lock()
-        .expect("lock poisoned") = Some(progress_event_id);
+        .expect("lock poisoned") = Some(latest_chain_event_id);
     Ok(event_payload)
 }
 
@@ -2203,6 +2330,12 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
             .lock()
             .expect("lock poisoned")
             .clone(),
+        latest_chain_progress_bus_nonce: state
+            .chain_event_bus_sink
+            .lock()
+            .expect("lock poisoned")
+            .as_ref()
+            .map(|sink| sink.next_nonce.saturating_sub(1)),
     };
     let bytes = bincode::serialize(&snapshot)?;
     let final_path = state.data_dir.join("state.bin");

@@ -955,6 +955,11 @@ pub fn request_network_acks_stream(
     timeout: Duration,
     retry_policy: RetryPolicy,
 ) -> Vec<[u8; 32]> {
+    println!(
+        "request_network_acks_stream node {} pending {}",
+        node.address,
+        op_ids.len()
+    );
     let started = Instant::now();
     let mut acked = Vec::new();
     let mut stream: Option<TcpStream> = try_take_pooled_stream(node);
@@ -1101,6 +1106,11 @@ pub fn collect_network_acks_for_ops(
     op_ids: &[[u8; 32]],
     timeout: Duration,
 ) -> HashMap<[u8; 32], Vec<ActorId>> {
+    println!(
+        "collect_network_acks_for_ops nodes={} op_ids={}",
+        nodes.len(),
+        op_ids.len()
+    );
     let mut per_op: HashMap<[u8; 32], Vec<ActorId>> =
         op_ids.iter().copied().map(|op| (op, Vec::new())).collect();
     if op_ids.is_empty() {

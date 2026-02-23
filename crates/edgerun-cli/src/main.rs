@@ -17,6 +17,7 @@ mod process_helpers;
 
 use crate::commands::ci::run_ci;
 use crate::commands::event_bus::run_event_bus_command;
+use crate::commands::execution::run_execution_command;
 use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
@@ -107,6 +108,10 @@ enum Commands {
     Timeline {
         #[command(subcommand)]
         command: TimelineCommand,
+    },
+    Execution {
+        #[command(subcommand)]
+        command: ExecutionCommand,
     },
 }
 
@@ -321,6 +326,16 @@ pub enum EventBusCommand {
         limit: usize,
         #[arg(long, default_value_t = 0)]
         cursor_offset: u64,
+        #[arg(long)]
+        publisher: Option<String>,
+        #[arg(long)]
+        payload_type: Option<String>,
+    },
+    Status {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "events.seg")]
+        segment: String,
     },
 }
 
@@ -361,6 +376,22 @@ pub enum TimelineCommand {
         cursor_offset: u64,
         #[arg(value_enum, long)]
         kind: Option<TimelineEventKind>,
+        #[arg(long)]
+        run_id: Option<String>,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long)]
+        actor_id: Option<String>,
+        #[arg(long)]
+        payload_type: Option<String>,
+    },
+    Status {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
     },
 }
 
@@ -375,6 +406,123 @@ pub enum TimelineActor {
 pub enum TimelineEventKind {
     UserInput,
     AgentOutput,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ExecutionCommand {
+    IntentSubmitted {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "system")]
+        actor_id: String,
+        #[arg(long)]
+        intent_id: String,
+        #[arg(long)]
+        intent_text: String,
+    },
+    ExecutionStarted {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "executor")]
+        actor_id: String,
+        #[arg(long)]
+        intent_id: String,
+        #[arg(long)]
+        executor_id: String,
+    },
+    StepStarted {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "executor")]
+        actor_id: String,
+        #[arg(long)]
+        step_id: String,
+    },
+    StepFinished {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "executor")]
+        actor_id: String,
+        #[arg(long)]
+        step_id: String,
+        #[arg(value_enum, long)]
+        state: ExecutionStateArg,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    ExecutionFinished {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(long, default_value = "executor")]
+        actor_id: String,
+        #[arg(value_enum, long)]
+        state: ExecutionStateArg,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    QueryRun {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long, default_value_t = 200)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        cursor_offset: u64,
+        #[arg(long, default_value_t = false)]
+        protobuf: bool,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum ExecutionStateArg {
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Halted,
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
@@ -459,6 +607,7 @@ async fn main() -> Result<()> {
         Commands::Observe { command } => run_observer_command(&root, command)?,
         Commands::Event { command } => run_event_bus_command(&root, command)?,
         Commands::Timeline { command } => run_timeline_command(&root, command)?,
+        Commands::Execution { command } => run_execution_command(&root, command)?,
     }
 
     Ok(())

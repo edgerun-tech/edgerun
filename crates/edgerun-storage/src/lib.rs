@@ -14,6 +14,7 @@ pub mod key_management;
 pub mod lsm_index;
 pub mod manifest;
 pub mod materialized_state;
+pub mod os;
 pub mod optimized_writer;
 pub mod replication;
 pub mod seal_policy;
@@ -1318,6 +1319,7 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
+        replication::close_pooled_ack_connections();
         let temp_dir = TempDir::new().unwrap();
         let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
         let mut session = engine.create_append_session("replicated4.seg", 1024 * 1024)?;
@@ -1341,6 +1343,7 @@ mod tests {
             b"replicated-network".to_vec(),
         );
         let _ = session.append_with_durability(&event, DurabilityLevel::AckReplicatedN(2))?;
+        replication::close_pooled_ack_connections();
         server.join().unwrap();
         Ok(())
     }
@@ -1352,6 +1355,7 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
+        replication::close_pooled_ack_connections();
         let temp_dir = TempDir::new().unwrap();
         let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
         let mut session = engine.create_append_session("replicated5.seg", 1024 * 1024)?;
@@ -1394,6 +1398,7 @@ mod tests {
             .append_batch_with_durability(&[event1, event2], DurabilityLevel::AckReplicatedN(2))?;
         assert_eq!(offsets.len(), 2);
 
+        replication::close_pooled_ack_connections();
         server.join().unwrap();
         Ok(())
     }
@@ -1405,6 +1410,7 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
+        replication::close_pooled_ack_connections();
         let temp_dir = TempDir::new().unwrap();
         let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
         let mut session = engine.create_append_session("replicated6.seg", 1024 * 1024)?;
@@ -1412,42 +1418,44 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-
-            // First batch should contain 2 ops.
-            let mut header1 = [0u8; 6];
-            stream.read_exact(&mut header1).unwrap();
-            assert_eq!(&header1[0..4], b"AKB?");
-            let count1 = u16::from_be_bytes([header1[4], header1[5]]) as usize;
-            assert_eq!(count1, 2);
-            let mut body1 = vec![0u8; count1 * 32];
-            stream.read_exact(&mut body1).unwrap();
-            let mut resp1 = Vec::with_capacity(6 + body1.len());
-            resp1.extend_from_slice(b"AKB!");
-            resp1.extend_from_slice(&(count1 as u16).to_be_bytes());
-            resp1.extend_from_slice(&body1);
-            stream.write_all(&resp1).unwrap();
-
-            // Tail chunk can be sent as single-op ACK? frame.
-            let mut magic2 = [0u8; 4];
-            stream.read_exact(&mut magic2).unwrap();
-            if &magic2 == b"AKB?" {
-                let mut count = [0u8; 2];
-                stream.read_exact(&mut count).unwrap();
-                let count2 = u16::from_be_bytes(count) as usize;
-                assert_eq!(count2, 1);
-                let mut body2 = vec![0u8; count2 * 32];
-                stream.read_exact(&mut body2).unwrap();
-                let mut resp2 = Vec::with_capacity(6 + body2.len());
-                resp2.extend_from_slice(b"AKB!");
-                resp2.extend_from_slice(&(count2 as u16).to_be_bytes());
-                resp2.extend_from_slice(&body2);
-                stream.write_all(&resp2).unwrap();
-            } else {
-                assert_eq!(&magic2, b"ACK?");
-                let mut op = [0u8; 32];
-                stream.read_exact(&mut op).unwrap();
-                stream.write_all(b"ACK\n").unwrap();
+            let mut handled = 0usize;
+            let mut stream: Option<std::net::TcpStream> = None;
+            while handled < 2 {
+                if stream.is_none() {
+                    let (accepted, _) = listener.accept().unwrap();
+                    stream = Some(accepted);
+                }
+                let mut current = stream.take().unwrap();
+                let mut magic = [0u8; 4];
+                match current.read_exact(&mut magic) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => continue,
+                    Err(e) => panic!("failed to read ack magic: {e}"),
+                }
+                if &magic == b"AKB?" {
+                    let mut count = [0u8; 2];
+                    current.read_exact(&mut count).unwrap();
+                    let batch_count = u16::from_be_bytes(count) as usize;
+                    if handled == 0 {
+                        assert_eq!(batch_count, 2);
+                    } else {
+                        assert_eq!(batch_count, 1);
+                    }
+                    let mut body = vec![0u8; batch_count * 32];
+                    current.read_exact(&mut body).unwrap();
+                    let mut resp = Vec::with_capacity(6 + body.len());
+                    resp.extend_from_slice(b"AKB!");
+                    resp.extend_from_slice(&(batch_count as u16).to_be_bytes());
+                    resp.extend_from_slice(&body);
+                    current.write_all(&resp).unwrap();
+                } else {
+                    assert_eq!(&magic, b"ACK?");
+                    let mut op = [0u8; 32];
+                    current.read_exact(&mut op).unwrap();
+                    current.write_all(b"ACK\n").unwrap();
+                }
+                handled += 1;
+                stream = Some(current);
             }
         });
 
@@ -1488,6 +1496,7 @@ mod tests {
         use std::thread;
         use std::time::Duration;
 
+        replication::close_pooled_ack_connections();
         let temp_dir = TempDir::new().unwrap();
         let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
         let mut session = engine.create_append_session("replicated7.seg", 1024 * 1024)?;
@@ -1498,29 +1507,45 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-
-            // First request should be batch of 2.
-            let mut header1 = [0u8; 6];
-            stream.read_exact(&mut header1).unwrap();
-            assert_eq!(&header1[0..4], b"AKB?");
-            let count1 = u16::from_be_bytes([header1[4], header1[5]]) as usize;
-            assert_eq!(count1, 2);
-            let mut body1 = vec![0u8; count1 * 32];
-            stream.read_exact(&mut body1).unwrap();
-            let mut resp1 = Vec::with_capacity(6 + body1.len());
-            resp1.extend_from_slice(b"AKB!");
-            resp1.extend_from_slice(&(count1 as u16).to_be_bytes());
-            resp1.extend_from_slice(&body1);
-            stream.write_all(&resp1).unwrap();
-
-            // Tail can be single ACK?.
-            let mut magic2 = [0u8; 4];
-            stream.read_exact(&mut magic2).unwrap();
-            assert_eq!(&magic2, b"ACK?");
-            let mut op = [0u8; 32];
-            stream.read_exact(&mut op).unwrap();
-            stream.write_all(b"ACK\n").unwrap();
+            let mut handled = 0usize;
+            let mut stream: Option<std::net::TcpStream> = None;
+            while handled < 2 {
+                if stream.is_none() {
+                    let (accepted, _) = listener.accept().unwrap();
+                    stream = Some(accepted);
+                }
+                let mut current = stream.take().unwrap();
+                let mut magic = [0u8; 4];
+                match current.read_exact(&mut magic) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => continue,
+                    Err(e) => panic!("failed to read ack magic: {e}"),
+                }
+                if &magic == b"AKB?" {
+                    let mut count = [0u8; 2];
+                    current.read_exact(&mut count).unwrap();
+                    let batch_count = u16::from_be_bytes(count) as usize;
+                    if handled == 0 {
+                        assert_eq!(batch_count, 2);
+                    } else {
+                        assert_eq!(batch_count, 1);
+                    }
+                    let mut body = vec![0u8; batch_count * 32];
+                    current.read_exact(&mut body).unwrap();
+                    let mut resp = Vec::with_capacity(6 + body.len());
+                    resp.extend_from_slice(b"AKB!");
+                    resp.extend_from_slice(&(batch_count as u16).to_be_bytes());
+                    resp.extend_from_slice(&body);
+                    current.write_all(&resp).unwrap();
+                } else {
+                    assert_eq!(&magic, b"ACK?");
+                    let mut op = [0u8; 32];
+                    current.read_exact(&mut op).unwrap();
+                    current.write_all(b"ACK\n").unwrap();
+                }
+                handled += 1;
+                stream = Some(current);
+            }
         });
 
         let peer = replication::NodeInfo::new(event::ActorId::new(), addr.to_string(), [0x77; 16]);
