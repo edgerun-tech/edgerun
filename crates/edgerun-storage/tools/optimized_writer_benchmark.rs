@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 use edgerun_storage::optimized_writer::{OptimizedSegmentWriter, OptimizedSegmentWriterConfig};
 use std::time::Instant;
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 use edgerun_storage::crash_test::{CrashTestConfig, CrashTestHarness, KillPoint};
 use std::path::PathBuf;
 use std::time::Duration;

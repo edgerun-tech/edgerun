@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 use blake3::Hasher;
 use std::collections::HashMap;
 use thiserror::Error;

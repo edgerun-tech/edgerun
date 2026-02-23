@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { readWalletSession } from './wallet-session'
+import { getRouteControlBase } from './webrtc-route-client'
 
 type WorkerCapacity = {
   max_concurrent: number
@@ -60,10 +61,7 @@ const EMPTY_STATS: BrowserWorkerStats = {
 const BROWSER_RUNTIME_WORKER_ASSET = '/assets/browser-worker-runtime.worker.js'
 
 function defaultSchedulerUrl(): string {
-  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
-  const injected = String((window as any).__EDGERUN_API_BASE || '').trim()
-  if (injected) return injected
-  return 'https://api.edgerun.tech'
+  return getRouteControlBase()
 }
 
 export function defaultBrowserWorkerConfig(): BrowserWorkerConfig {

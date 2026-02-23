@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 pub mod arena;
 pub mod async_segment_writer;
 pub mod block;

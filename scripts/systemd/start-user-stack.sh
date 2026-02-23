@@ -3,10 +3,64 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-WORKER_COUNT="${1:-3}"
+WORKER_COUNT=3
+PROFILE="${EDGERUN_STACK_PROFILE:-local}"
+PROFILE_SET=0
+
+usage() {
+  echo "usage: $0 [worker_count] [profile] [--workers N] [--profile PROFILE]"
+  echo
+  echo "examples:"
+  echo "  $0"
+  echo "  $0 3"
+  echo "  $0 --profile local --workers 3"
+  echo "  $0 3 local"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --profile)
+      PROFILE="${2:?missing --profile value}"
+      PROFILE_SET=1
+      shift 2
+      ;;
+    --profile=*)
+      PROFILE="${1#*=}"
+      PROFILE_SET=1
+      shift
+      ;;
+    --workers)
+      WORKER_COUNT="${2:?missing --workers value}"
+      shift 2
+      ;;
+    --workers=*)
+      WORKER_COUNT="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    [0-9]*)
+      WORKER_COUNT="$1"
+      shift
+      ;;
+    *)
+      if [[ "${PROFILE_SET}" -eq 0 ]]; then
+        PROFILE="$1"
+        PROFILE_SET=1
+        shift
+      else
+        echo "ERR: unexpected argument '$1'" >&2
+        usage
+        exit 1
+      fi
+      ;;
+  esac
+done
 
 if ! [[ "${WORKER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${WORKER_COUNT}" -lt 1 ]]; then
-  echo "usage: $0 [worker_count>=1]" >&2
+  echo "ERR: usage: $0 [worker_count>=1]" >&2
   exit 1
 fi
 
@@ -28,7 +82,12 @@ enable_user_linger() {
   fi
 }
 
-"${ROOT_DIR}/scripts/systemd/install-user-services.sh"
+"${ROOT_DIR}/scripts/systemd/install-user-services.sh" "${PROFILE}" "${WORKER_COUNT}"
+
+if [[ "${PROFILE}" == "local" ]]; then
+  systemctl --user enable --now solana-test-validator.service
+fi
+
 enable_user_linger
 
 mkdir -p "${HOME}/.config/edgerun/workers"
@@ -51,5 +110,8 @@ systemctl --user enable --now "${worker_units[@]}"
 echo "Stack started with ${WORKER_COUNT} workers."
 echo "Health check:"
 echo "  curl -fsS http://127.0.0.1:5566/health"
+if [[ "${PROFILE}" == "local" ]]; then
+  echo "  curl -fsS http://127.0.0.1:8899"
+fi
 echo
 systemctl --user --no-pager --full status edgerun-scheduler.service "${worker_units[@]}" | sed -n '1,160p'

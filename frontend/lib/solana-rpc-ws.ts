@@ -34,6 +34,7 @@ const REQUEST_TIMEOUT_MS = 12_000
 const RECONNECT_MS = 1_200
 const WS_CLOSE_NORMAL = 1000
 const DEFAULT_WS_URL = 'wss://api.devnet.solana.com'
+const DEFAULT_HTTP_URL = 'https://api.devnet.solana.com'
 
 function toWsUrl(rpcUrl: string): string {
   try {
@@ -56,12 +57,34 @@ function toWsUrl(rpcUrl: string): string {
   return DEFAULT_WS_URL
 }
 
+function toHttpUrl(rpcUrl: string): string {
+  try {
+    const parsed = new URL(rpcUrl)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return parsed.toString()
+    }
+    if (parsed.protocol === 'ws:' || parsed.protocol === 'wss:') {
+      const http = new URL(parsed.toString())
+      http.protocol = parsed.protocol === 'wss:' ? 'https:' : 'http:'
+      if (parsed.port) {
+        const value = Number(parsed.port)
+        if (Number.isFinite(value) && value > 1) http.port = String(value - 1)
+      }
+      return http.toString()
+    }
+  } catch {
+    // ignore and fallback
+  }
+  return DEFAULT_HTTP_URL
+}
+
 function unsubscribeMethod(subscribeMethod: string): string {
   return subscribeMethod.replace(/Subscribe$/, 'Unsubscribe')
 }
 
 export class SolanaRpcWsClient {
   private wsUrl: string
+  private httpUrl: string
   private socket: WebSocket | null = null
   private connecting: Promise<void> | null = null
   private nextRequestId = 1
@@ -75,6 +98,7 @@ export class SolanaRpcWsClient {
 
   constructor(rpcUrl: string) {
     this.wsUrl = toWsUrl(rpcUrl)
+    this.httpUrl = toHttpUrl(rpcUrl)
   }
 
   private clearPending(reason: string): void {
@@ -198,7 +222,7 @@ export class SolanaRpcWsClient {
     this.socket.send(message)
   }
 
-  async request<T>(method: string, params: unknown[] = []): Promise<T> {
+  private async requestOverWs<T>(method: string, params: unknown[] = []): Promise<T> {
     await this.ensureConnected()
     const id = this.nextRequestId++
     const payload = JSON.stringify({
@@ -221,6 +245,44 @@ export class SolanaRpcWsClient {
         reject(error)
       }
     })
+  }
+
+  private async requestOverHttp<T>(method: string, params: unknown[] = []): Promise<T> {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    try {
+      const response = await fetch(this.httpUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: this.nextRequestId++,
+          method,
+          params
+        }),
+        signal: controller.signal
+      })
+      if (!response.ok) {
+        throw new Error(`rpc_http_status_${response.status}`)
+      }
+      const payload = await response.json() as RpcResponse
+      if (payload.error) throw new Error(payload.error.message || 'rpc_error')
+      return payload.result as T
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`rpc_timeout_${method}`)
+      }
+      throw error
+    } finally {
+      window.clearTimeout(timeoutId)
+    }
+  }
+
+  async request<T>(method: string, params: unknown[] = []): Promise<T> {
+    if (/Subscribe$|Unsubscribe$/.test(method)) {
+      return this.requestOverWs<T>(method, params)
+    }
+    return this.requestOverHttp<T>(method, params)
   }
 
   private sendSubscription(localId: string, sub: ActiveSubscription): void {

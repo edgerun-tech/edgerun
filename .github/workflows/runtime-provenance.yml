@@ -37,7 +37,7 @@ jobs:
       - name: Build runtime release artifact
         run: |
           mkdir -p /tmp/edgerun-runtime-release
-          cargo build --locked --release -p edgerun-runtime
+          CARGO_TARGET_DIR=out/target cargo build --locked --release -p edgerun-runtime
           cp out/target/release/edgerun-runtime /tmp/edgerun-runtime-release/edgerun-runtime
           sha256sum /tmp/edgerun-runtime-release/edgerun-runtime > /tmp/edgerun-runtime-release/SHA256SUMS
 

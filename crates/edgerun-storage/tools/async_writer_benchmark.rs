@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 use crossbeam_channel::bounded;
 use edgerun_storage::async_segment_writer::AsyncSegmentWriterFactory;
 use edgerun_storage::event::{ActorId, Event, HlcTimestamp, StreamId};

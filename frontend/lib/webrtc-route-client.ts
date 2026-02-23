@@ -41,46 +41,294 @@ type SignalOutboundMessage = {
   metadata?: unknown
 }
 
+export const DEFAULT_ROUTE_CONTROL_BASE = 'https://api.edgerun.tech'
 const CONTROL_BASE_STORAGE_KEY = 'edgerun.route.controlBase'
-const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost'])
+const CONTROL_PROBE_TIMEOUT_MS = 2000
+const CONTROL_STATUS_CACHE_TTL_MS = 5000
+const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost', '::1'])
 const controlClients = new Map<string, SchedulerControlWsClient>()
+
+export type RouteControlSource = 'configured' | 'storage' | 'local' | 'origin' | 'default'
+
+type RouteControlCandidate = {
+  base: string
+  source: RouteControlSource
+}
+
+type RouteControlCachedStatus = {
+  base: string
+  source: RouteControlSource
+  selectedAt: number
+  httpReachable: boolean
+  httpStatus: number | null
+  httpLatencyMs: number | null
+  controlWsReachable: boolean
+  controlWsLatencyMs: number | null
+}
+
+export type RouteControlSelection = {
+  candidates: RouteControlCandidate[]
+  selected: string
+  source: RouteControlSource
+  selectedFromStorage: boolean
+}
+
+export type RouteControlProbeStatus = {
+  base: string
+  source: RouteControlSource
+  checkedAt: number
+  httpReachable: boolean
+  httpStatus: number | null
+  httpLatencyMs: number | null
+  controlWsReachable: boolean
+  controlWsLatencyMs: number | null
+  error: string
+}
 
 function normalizeBase(value: string): string {
   return value.trim().replace(/\/+$/, '')
 }
 
+function withScheme(raw: string): string {
+  const trimmed = normalizeBase(raw)
+  if (!trimmed) return ''
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
+export function normalizeControlBase(value: string): string {
+  const raw = withScheme(value).trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return ''
+    if (!parsed.hostname) return ''
+    return `${parsed.protocol}//${parsed.host}`
+  } catch {
+    return ''
+  }
+}
+
+function isLocalHostHost(host: string): boolean {
+  return LOCALHOST_NAMES.has(host.toLowerCase())
+}
+
+function isBrowserLocalContext(): boolean {
+  if (typeof window === 'undefined') return false
+  return isLocalHostHost(window.location.hostname)
+}
+
+function toRouteControlCandidate(value: string, source: RouteControlSource): RouteControlCandidate | null {
+  const normalized = normalizeControlBase(value)
+  if (!normalized) return null
+  try {
+    const parsed = new URL(`${normalized}/`)
+    const isLocal = isLocalHostHost(parsed.hostname)
+    if ((source === 'configured' || source === 'local') && isLocal && !isBrowserLocalContext()) return null
+    if (source === 'storage' && !isBrowserLocalContext()) return null
+    return { base: normalized, source }
+  } catch {
+    return null
+  }
+}
+
+function mergeCandidates(target: RouteControlCandidate[], next: RouteControlCandidate | null): void {
+  if (!next) return
+  if (target.some((candidate) => candidate.base === next.base)) return
+  target.push(next)
+}
+
 function configuredApiBase(): string {
-  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
+  if (typeof window === 'undefined') return ''
   const explicit = normalizeBase(String((window as any).__EDGERUN_API_BASE || ''))
-  if (explicit) return explicit
-  return 'https://api.edgerun.tech'
+  if (!explicit) return ''
+  return normalizeControlBase(explicit)
 }
 
 function localControlBaseCandidates(): string[] {
-  if (typeof window === 'undefined') return []
+  if (typeof window === 'undefined' || !isBrowserLocalContext()) return []
   const { protocol, hostname, port } = window.location
-  if (!LOCALHOST_NAMES.has(hostname)) return []
   const scheme = protocol === 'https:' ? 'https:' : 'http:'
   const out: string[] = []
   if (port !== '8090') out.push(`${scheme}//${hostname}:8090`)
-  if (port !== '8080') out.push(`${scheme}//${hostname}:8080`)
-  if (port !== '8090') out.push(`${scheme}//127.0.0.1:8090`)
+  if (hostname !== '127.0.0.1') out.push(`${scheme}//127.0.0.1:8090`)
   return [...new Set(out.map(normalizeBase))]
 }
 
-function getControlBaseCandidates(): string[] {
-  if (typeof window === 'undefined') return ['https://api.edgerun.tech']
-  const fromStorage = normalizeBase(window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY) || '')
+export function getRouteControlBaseSelection(): RouteControlSelection {
+  if (typeof window === 'undefined') {
+    return {
+      selected: DEFAULT_ROUTE_CONTROL_BASE,
+      source: 'default',
+      selectedFromStorage: false,
+      candidates: [{ base: DEFAULT_ROUTE_CONTROL_BASE, source: 'default' }]
+    }
+  }
+
+  const candidates: RouteControlCandidate[] = []
   const configured = configuredApiBase()
-  const origin = normalizeBase(window.location.origin)
-  const local = localControlBaseCandidates()
-  const candidates = [
-    configured,
-    ...local,
-    fromStorage,
-    origin
-  ].filter((value) => value.length > 0)
-  return [...new Set(candidates)]
+  mergeCandidates(candidates, toRouteControlCandidate(configured, 'configured'))
+  for (const candidate of localControlBaseCandidates().map((value) => toRouteControlCandidate(value, 'local'))) {
+    mergeCandidates(candidates, candidate)
+  }
+  mergeCandidates(candidates, toRouteControlCandidate(window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY) || '', 'storage'))
+  if (isBrowserLocalContext()) {
+    mergeCandidates(candidates, toRouteControlCandidate(window.location.origin, 'origin'))
+  }
+
+  if (candidates.length === 0) {
+    candidates.push({ base: DEFAULT_ROUTE_CONTROL_BASE, source: 'default' })
+  }
+
+  const selected = candidates[0]!
+  return {
+    candidates,
+    selected: selected.base,
+    source: selected.source,
+    selectedFromStorage: selected.source === 'storage'
+  }
+}
+
+function rememberControlBase(controlBase: string): void {
+  if (typeof window === 'undefined') return
+  const normalized = normalizeControlBase(controlBase)
+  if (!normalized) return
+  window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, normalized)
+}
+
+let cachedControlStatus: RouteControlCachedStatus | null = null
+
+function controlWsProbeUrl(controlBase: string): string {
+  const normalized = normalizeControlBase(controlBase)
+  if (!normalized) return ''
+  const url = new URL('/v1/control/ws', `${normalized}/`)
+  url.searchParams.set('client_id', 'route-control-probe')
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}
+
+export function getRouteControlBase(): string {
+  const selection = getRouteControlBaseSelection()
+  return selection.selected || DEFAULT_ROUTE_CONTROL_BASE
+}
+
+export function getCachedRouteControlStatus(): RouteControlProbeStatus | null {
+  if (!cachedControlStatus) return null
+  if (Date.now() - cachedControlStatus.selectedAt > CONTROL_STATUS_CACHE_TTL_MS) return null
+  return {
+    base: cachedControlStatus.base,
+    source: cachedControlStatus.source,
+    checkedAt: cachedControlStatus.selectedAt,
+    httpReachable: cachedControlStatus.httpReachable,
+    httpStatus: cachedControlStatus.httpStatus,
+    httpLatencyMs: cachedControlStatus.httpLatencyMs,
+    controlWsReachable: cachedControlStatus.controlWsReachable,
+    controlWsLatencyMs: cachedControlStatus.controlWsLatencyMs,
+    error: ''
+  }
+}
+
+export async function probeRouteControlStatus(
+  controlBaseOverride?: string,
+  sourceOverride?: RouteControlSource,
+): Promise<RouteControlProbeStatus> {
+  const selection = getRouteControlBaseSelection()
+  const overrideRequested = typeof controlBaseOverride === 'string' && controlBaseOverride.trim().length > 0
+  const overridden = normalizeControlBase(controlBaseOverride || '')
+  const base = overridden || selection.selected || DEFAULT_ROUTE_CONTROL_BASE
+  const source = sourceOverride ?? (overridden ? 'configured' : selection.source)
+  const out: RouteControlProbeStatus = {
+    base,
+    source,
+    checkedAt: Date.now(),
+    httpReachable: false,
+    httpStatus: null,
+    httpLatencyMs: null,
+    controlWsReachable: false,
+    controlWsLatencyMs: null,
+    error: ''
+  }
+  if (overrideRequested && !overridden) {
+    out.error = 'invalid control base override'
+  }
+
+  const httpStarted = Date.now()
+  const httpController = new AbortController()
+  const httpTimer = window.setTimeout(() => httpController.abort(), CONTROL_PROBE_TIMEOUT_MS)
+  try {
+    const response = await fetch(`${base}/health`, {
+      signal: httpController.signal,
+      cache: 'no-store'
+    })
+    out.httpReachable = response.ok
+    out.httpStatus = Number.isFinite(response.status) ? response.status : null
+  } catch (error) {
+    out.error = error instanceof Error ? error.message : 'http probe failed'
+  } finally {
+    window.clearTimeout(httpTimer)
+    out.httpLatencyMs = Date.now() - httpStarted
+  }
+
+  const wsUrl = controlWsProbeUrl(base)
+  if (wsUrl) {
+    out.controlWsReachable = await new Promise<boolean>((resolve) => {
+      let settled = false
+      let ws: WebSocket | null = null
+      const started = Date.now()
+      const timer = window.setTimeout(() => {
+        if (settled) return
+        settled = true
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.close() } catch { /* ignore */ }
+        }
+        out.controlWsLatencyMs = Date.now() - started
+        resolve(false)
+      }, CONTROL_PROBE_TIMEOUT_MS)
+      try {
+        ws = new WebSocket(wsUrl)
+      } catch {
+        settled = true
+        window.clearTimeout(timer)
+        out.controlWsLatencyMs = Date.now() - started
+        resolve(false)
+        return
+      }
+
+      const finish = (ok: boolean) => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.close() } catch { /* ignore */ }
+        }
+        out.controlWsLatencyMs = Date.now() - started
+        resolve(ok)
+      }
+      ws.addEventListener('open', () => finish(true), { once: true })
+      ws.addEventListener('error', () => finish(false), { once: true })
+      ws.addEventListener('close', () => finish(false), { once: true })
+    })
+  }
+
+  if (!out.error && !out.controlWsReachable) {
+    out.error = 'control ws probe failed'
+  }
+  if (!out.error && !out.httpReachable) {
+    out.error = 'scheduler probe failed'
+  }
+
+  out.checkedAt = Date.now()
+  cachedControlStatus = {
+    base: out.base,
+    source: out.source,
+    selectedAt: out.checkedAt,
+    httpReachable: out.httpReachable,
+    httpStatus: out.httpStatus,
+    httpLatencyMs: out.httpLatencyMs,
+    controlWsReachable: out.controlWsReachable,
+    controlWsLatencyMs: out.controlWsLatencyMs
+  }
+  return out
 }
 
 export function parseRouteDeviceId(target: string): string | null {
@@ -93,14 +341,8 @@ export function parseRouteDeviceId(target: string): string | null {
   return null
 }
 
-export function getRouteControlBase(): string {
-  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
-  const candidates = getControlBaseCandidates()
-  return candidates[0] || normalizeBase(window.location.origin)
-}
-
 export async function resolveDeviceRoute(controlBase: string, deviceId: string): Promise<string | null> {
-  const trimmedBase = controlBase.trim().replace(/\/+$/, '')
+  const trimmedBase = normalizeControlBase(controlBase)
   const trimmedDeviceId = deviceId.trim()
   if (!trimmedBase || !trimmedDeviceId) return null
   try {
@@ -132,18 +374,18 @@ export async function resolveTerminalBaseUrl(input: string, controlBase?: string
   if (!target) return ''
   const routeDeviceId = parseRouteDeviceId(target)
   if (!routeDeviceId) return target
-  const base = normalizeBase(controlBase || getRouteControlBase())
+  const base = normalizeControlBase(controlBase || getRouteControlBase())
   if (!base) return ''
   const resolved = await resolveDeviceRoute(base, routeDeviceId)
   if (resolved) {
-    if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+    rememberControlBase(base)
     return resolved
   }
   return ''
 }
 
 export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: string): Promise<RouteEntry[]> {
-  const base = normalizeBase(controlBase || getRouteControlBase())
+  const base = normalizeControlBase(controlBase || getRouteControlBase())
   const trimmedOwner = ownerPubkey.trim()
   if (!trimmedOwner || !base) return []
   try {
@@ -152,7 +394,7 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
       { owner_pubkey: trimmedOwner }
     )
     if (!body.ok) return []
-    if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+    rememberControlBase(base)
     return Array.isArray(body.devices) ? body.devices : []
   } catch {
     try {
@@ -160,7 +402,7 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
       if (!resp.ok) return []
       const body = await resp.json() as OwnerRoutesResponse
       if (!body.ok) return []
-      if (typeof window !== 'undefined') window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, base)
+      rememberControlBase(base)
       return Array.isArray(body.devices) ? body.devices : []
     } catch {
       // Explicit user action failed across ws + fallback HTTP route lookup.
@@ -170,7 +412,7 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
 }
 
 export function routeRelayWsUrl(controlBase: string, deviceId: string): string | null {
-  const base = controlBase.trim().replace(/\/+$/, '')
+  const base = normalizeControlBase(controlBase)
   const target = deviceId.trim()
   if (!base || !target) return null
   try {
@@ -184,7 +426,8 @@ export function routeRelayWsUrl(controlBase: string, deviceId: string): string |
 }
 
 function getControlClient(controlBase: string): SchedulerControlWsClient {
-  const normalized = normalizeBase(controlBase)
+  const normalized = normalizeControlBase(controlBase)
+  if (!normalized) throw new Error('invalid route control base')
   const existing = controlClients.get(normalized)
   if (existing) return existing
   const created = new SchedulerControlWsClient(normalized, 'route-client')
@@ -200,7 +443,8 @@ export class WebRtcSignalClient {
   onOpen?: () => void
 
   constructor(controlBase: string, deviceId: string) {
-    const base = controlBase.trim().replace(/\/+$/, '')
+    const base = normalizeControlBase(controlBase)
+    if (!base) throw new Error('invalid route control base')
     const url = new URL('/v1/webrtc/ws', `${base}/`)
     url.searchParams.set('device_id', deviceId)
     const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -208,6 +452,9 @@ export class WebRtcSignalClient {
     this.ws = new WebSocket(url.toString())
     this.ws.addEventListener('open', () => this.onOpen?.())
     this.ws.addEventListener('close', () => this.onClose?.())
+    this.ws.addEventListener('error', () => {
+      // no-op: existing handlers manage retry and fallback behavior
+    })
     this.ws.addEventListener('message', (event) => {
       if (typeof event.data !== 'string') return
       try {

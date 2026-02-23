@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: GPL-2.0-only
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 use thiserror::Error;
