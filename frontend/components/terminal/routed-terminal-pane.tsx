@@ -16,6 +16,8 @@ type RoutedMessageEvent = CustomEvent<{
 }>
 
 const LOCALHOST_NAMES = new Set(['127.0.0.1', 'localhost', '::1'])
+const REFRESH_INTERVAL_MS = 8000
+const REFRESH_COOLDOWN_MS = 1500
 
 function stripAnsi(value: string): string {
   let out = ''
@@ -65,38 +67,6 @@ function localDirectWsCandidate(): string | null {
   return 'ws://127.0.0.1:5577/ws'
 }
 
-async function probeDirectWs(endpoint: string, timeoutMs = 1200): Promise<boolean> {
-  const target = endpoint.trim()
-  if (!target) return false
-  return new Promise<boolean>((resolve) => {
-    let settled = false
-    let ws: WebSocket | null = null
-    const finish = (ok: boolean) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeoutId)
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.close()
-        } catch {
-          // ignore close errors
-        }
-      }
-      resolve(ok)
-    }
-    const timeoutId = window.setTimeout(() => finish(false), timeoutMs)
-    try {
-      ws = new WebSocket(target)
-    } catch {
-      finish(false)
-      return
-    }
-    ws.addEventListener('open', () => finish(true))
-    ws.addEventListener('error', () => finish(false))
-    ws.addEventListener('close', () => finish(false))
-  })
-}
-
 export function RoutedTerminalPane(props: Props) {
   const routeDeviceId = untrack(() => props.routeDeviceId)
   const paneId = untrack(() => props.paneId)
@@ -107,6 +77,8 @@ export function RoutedTerminalPane(props: Props) {
   const [lines, setLines] = createSignal<string[]>([])
   let directSocket: WebSocket | null = null
   let directEndpoint = ''
+  let refreshInFlight = false
+  let nextRefreshAllowedAt = 0
 
   function append(text: string): void {
     const normalized = stripAnsi(text).split('\u001bc').join('')
@@ -221,7 +193,13 @@ export function RoutedTerminalPane(props: Props) {
     }))
   }
 
-  async function refreshState(): Promise<void> {
+  async function refreshState(force = false): Promise<void> {
+    if (refreshInFlight) return
+    const now = Date.now()
+    if (!force && now < nextRefreshAllowedAt) return
+    refreshInFlight = true
+    nextRefreshAllowedAt = now + REFRESH_COOLDOWN_MS
+    try {
     if (directSocket && (directSocket.readyState === WebSocket.OPEN || directSocket.readyState === WebSocket.CONNECTING)) {
       const open = directSocket.readyState === WebSocket.OPEN
       setConnected(open)
@@ -240,10 +218,9 @@ export function RoutedTerminalPane(props: Props) {
       .filter((value): value is string => Boolean(value && value.trim()))
       .map((value) => value.trim())
     const uniqueCandidates = [...new Set(directCandidates)]
-    for (const candidate of uniqueCandidates) {
-      const reachable = await probeDirectWs(candidate).catch(() => false)
-      if (!reachable) continue
-      ensureDirectSocket(candidate)
+    const directCandidate = uniqueCandidates[0]
+    if (directCandidate) {
+      ensureDirectSocket(directCandidate)
       return
     }
 
@@ -261,6 +238,9 @@ export function RoutedTerminalPane(props: Props) {
       if (!opened) {
         append(`[${nowLabel()}] open failed`)
       }
+    }
+    } finally {
+      refreshInFlight = false
     }
   }
 
@@ -285,10 +265,10 @@ export function RoutedTerminalPane(props: Props) {
 
   onMount(() => {
     append(`[${nowLabel()}] route://${routeDeviceId} attached`)
-    void refreshState()
+    void refreshState(true)
     const intervalId = window.setInterval(() => {
       void refreshState()
-    }, 5000)
+    }, REFRESH_INTERVAL_MS)
 
     const onRoutedMessage = (event: Event) => {
       const custom = event as RoutedMessageEvent
@@ -330,7 +310,7 @@ export function RoutedTerminalPane(props: Props) {
     onCleanup(() => {
       window.clearInterval(intervalId)
       window.removeEventListener(ROUTED_MESSAGE_EVENT, onRoutedMessage as EventListener)
-      if (directSocket && directSocket.readyState === WebSocket.OPEN) {
+      if (directSocket) {
         closeDirectSocket()
       } else {
         sendClose()
