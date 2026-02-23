@@ -396,7 +396,15 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
       - name: Install Anchor CLI
-        run: cargo install --locked anchor-cli --version 0.31.1
+        run: |
+          cargo install --locked --force anchor-cli --version 0.31.1
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Anchor CLI version
+        run: |
+          which anchor
+          anchor --version
+          "${CARGO_HOME:-$HOME/.cargo}/bin/anchor" --version
 
       - name: Install cargo-build-sbf (local program toolchain)
         run: cargo install cargo-build-sbf --version 4.0.0
