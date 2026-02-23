@@ -21,6 +21,7 @@ use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
+use crate::commands::mcp::run_mcp_server;
 use crate::commands::observer::run_observer_command;
 use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
@@ -98,6 +99,10 @@ enum Commands {
     Observe {
         #[command(subcommand)]
         command: ObserveCommand,
+    },
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommand,
     },
 }
 
@@ -281,6 +286,14 @@ enum ObserveDurability {
     Checkpointed,
 }
 
+#[derive(Subcommand, Debug, Clone)]
+enum McpCommand {
+    Serve {
+        #[arg(long)]
+        state_dir: Option<PathBuf>,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, Default)]
 struct AppConfig {
     #[serde(default)]
@@ -361,6 +374,9 @@ async fn main() -> Result<()> {
         Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
         Commands::Program { command } => run_program_command(&root, command)?,
         Commands::Observe { command } => run_observer_command(&root, command)?,
+        Commands::Mcp { command } => match command {
+            McpCommand::Serve { state_dir } => run_mcp_server(&root, state_dir)?,
+        },
     }
 
     Ok(())
