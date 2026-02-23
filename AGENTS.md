@@ -49,6 +49,11 @@ This repository must be operated with production-grade discipline. Work is accep
 - Keep generated assets optimized.
 - Avoid adding heavy client-side libraries unless strictly justified.
 - Track bundle/output size impact when making frontend runtime changes.
+- Maintain dependency/build-artifact hygiene continuously.
+- Baseline cleanup evidence (2026-02-23):
+  - `cargo clean` removed `111799 files, 56.9GiB total`
+  - subsequent cleanup removed `12413 files, 5.5GiB total`
+- This indicates dependency/cache/build drift can exceed tens of GiB; schedule routine cleanup and avoid stale target/cache accumulation.
 
 ## Definition of Done
 A task is done only when:
