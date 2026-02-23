@@ -29,6 +29,7 @@ use crate::commands::runtime_ops::{
 use crate::commands::storage::run_storage_command;
 use crate::commands::tailscale::run_tailscale_command;
 use crate::commands::tasks::{run_interactive, run_named_task_sync};
+use crate::commands::timeline::run_timeline_command;
 use process_helpers::{
     command_exists, run_program_sync, run_program_sync_owned, run_program_sync_with_env,
 };
@@ -102,6 +103,10 @@ enum Commands {
     Event {
         #[command(subcommand)]
         command: EventBusCommand,
+    },
+    Timeline {
+        #[command(subcommand)]
+        command: TimelineCommand,
     },
 }
 
@@ -319,6 +324,59 @@ pub enum EventBusCommand {
     },
 }
 
+#[derive(Subcommand, Debug, Clone)]
+pub enum TimelineCommand {
+    Append {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        job_id: Option<String>,
+        #[arg(long)]
+        session_id: Option<String>,
+        #[arg(value_enum, long, default_value_t = TimelineActor::User)]
+        actor: TimelineActor,
+        #[arg(long, default_value = "interactive")]
+        actor_id: String,
+        #[arg(value_enum, long)]
+        kind: TimelineEventKind,
+        #[arg(long)]
+        text: Option<String>,
+        #[arg(long)]
+        text_file: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        stdin: bool,
+    },
+    Query {
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "interactions.seg")]
+        segment: String,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+        #[arg(long, default_value_t = 0)]
+        cursor_offset: u64,
+        #[arg(value_enum, long)]
+        kind: Option<TimelineEventKind>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum TimelineActor {
+    User,
+    Agent,
+    System,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum TimelineEventKind {
+    UserInput,
+    AgentOutput,
+}
+
 #[derive(Clone, Debug, Deserialize, Default)]
 struct AppConfig {
     #[serde(default)]
@@ -400,6 +458,7 @@ async fn main() -> Result<()> {
         Commands::Program { command } => run_program_command(&root, command)?,
         Commands::Observe { command } => run_observer_command(&root, command)?,
         Commands::Event { command } => run_event_bus_command(&root, command)?,
+        Commands::Timeline { command } => run_timeline_command(&root, command)?,
     }
 
     Ok(())

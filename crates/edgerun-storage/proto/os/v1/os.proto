@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: GPL-2.0-only
+syntax = "proto3";
+
+package edgerun.os.v1;
+
+enum IntentPriorityV1 {
+  INTENT_PRIORITY_V1_UNSPECIFIED = 0;
+  INTENT_PRIORITY_V1_LOW = 1;
+  INTENT_PRIORITY_V1_NORMAL = 2;
+  INTENT_PRIORITY_V1_HIGH = 3;
+  INTENT_PRIORITY_V1_CRITICAL = 4;
+}
+
+enum ExecutionStateV1 {
+  EXECUTION_STATE_V1_UNSPECIFIED = 0;
+  EXECUTION_STATE_V1_PENDING = 1;
+  EXECUTION_STATE_V1_RUNNING = 2;
+  EXECUTION_STATE_V1_SUCCEEDED = 3;
+  EXECUTION_STATE_V1_FAILED = 4;
+  EXECUTION_STATE_V1_HALTED = 5;
+}
+
+enum RollbackModeV1 {
+  ROLLBACK_MODE_V1_UNSPECIFIED = 0;
+  ROLLBACK_MODE_V1_EXCLUDE_EVENT_IDS = 1;
+  ROLLBACK_MODE_V1_TO_SEQ = 2;
+  ROLLBACK_MODE_V1_LAST_N = 3;
+}
+
+message IntentSubmittedV1 {
+  uint32 schema_version = 1;
+  string intent_id = 2;
+  string session_id = 3;
+  string actor_id = 4;
+  IntentPriorityV1 priority = 5;
+  string intent_text = 6;
+  bytes attachment = 7;
+  string attachment_type = 8;
+  uint64 submitted_at_unix_ms = 9;
+}
+
+message IntentAcceptedV1 {
+  uint32 schema_version = 1;
+  string intent_id = 2;
+  string run_id = 3;
+  uint32 policy_version = 4;
+  string planner_id = 5;
+  uint64 accepted_at_unix_ms = 6;
+}
+
+message IntentRejectedV1 {
+  uint32 schema_version = 1;
+  string intent_id = 2;
+  string reason_code = 3;
+  string reason = 4;
+  uint32 policy_version = 5;
+  uint64 rejected_at_unix_ms = 6;
+}
+
+message PlanStepV1 {
+  string step_id = 1;
+  string kind = 2;
+  string description = 3;
+  bytes input = 4;
+  string input_type = 5;
+}
+
+message PlanCreatedV1 {
+  uint32 schema_version = 1;
+  string intent_id = 2;
+  string run_id = 3;
+  repeated PlanStepV1 steps = 4;
+  uint64 created_at_unix_ms = 5;
+}
+
+message ExecutionStartedV1 {
+  uint32 schema_version = 1;
+  string run_id = 2;
+  string intent_id = 3;
+  string executor_id = 4;
+  uint64 started_at_unix_ms = 5;
+}
+
+message ExecutionStepStartedV1 {
+  uint32 schema_version = 1;
+  string run_id = 2;
+  string step_id = 3;
+  uint64 started_at_unix_ms = 4;
+}
+
+message ExecutionStepFinishedV1 {
+  uint32 schema_version = 1;
+  string run_id = 2;
+  string step_id = 3;
+  ExecutionStateV1 state = 4;
+  bytes output = 5;
+  string output_type = 6;
+  string output_digest = 7;
+  uint64 finished_at_unix_ms = 8;
+}
+
+message ExecutionFinishedV1 {
+  uint32 schema_version = 1;
+  string run_id = 2;
+  ExecutionStateV1 state = 3;
+  string reason = 4;
+  uint64 finished_at_unix_ms = 5;
+}
+
+message ArtifactDiffProducedV1 {
+  uint32 schema_version = 1;
+  string run_id = 2;
+  string step_id = 3;
+  string artifact_id = 4;
+  string diff_format = 5;
+  bytes diff = 6;
+  uint64 produced_at_unix_ms = 7;
+}
+
+message ProjectionUpdatedV1 {
+  uint32 schema_version = 1;
+  string projection_id = 2;
+  string projection_version = 3;
+  uint64 materialized_at_seq = 4;
+  bytes projection_hash = 5;
+  uint64 updated_at_unix_ms = 6;
+}
+
+message RollbackControlV1 {
+  uint32 schema_version = 1;
+  string control_id = 2;
+  RollbackModeV1 mode = 3;
+  repeated string exclude_event_ids = 4;
+  uint64 to_seq = 5;
+  uint32 last_n = 6;
+  string reason = 7;
+  uint64 requested_at_unix_ms = 8;
+}
+
+message RollbackAppliedV1 {
+  uint32 schema_version = 1;
+  string control_id = 2;
+  uint64 effective_head_seq = 3;
+  repeated string excluded_event_ids = 4;
+  bytes projection_hash = 5;
+  uint64 applied_at_unix_ms = 6;
+}
+
