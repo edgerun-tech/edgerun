@@ -2145,7 +2145,6 @@ dependencies = [
  "anyhow",
  "axum",
  "base64 0.22.1",
- "bincode",
  "bs58",
  "criterion",
  "ed25519-dalek 2.2.0",
@@ -2178,12 +2177,10 @@ dependencies = [
 name = "edgerun-term-web"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "bytemuck",
  "console_error_panic_hook",
  "edgerun-term-core",
  "js-sys",
- "serde",
  "vte",
  "wasm-bindgen",
  "wasm-bindgen-futures",

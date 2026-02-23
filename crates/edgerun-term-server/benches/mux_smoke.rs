@@ -1,25 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::collections::HashMap;
 use std::time::Duration;
 
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
-use serde::{Deserialize, Serialize};
 
 const PTY_FRAME_STDIN: u8 = 1;
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-enum ShellRequest {
-    Spawn {
-        id: Option<u32>,
-        cmd: Option<String>,
-        args: Option<Vec<String>>,
-        cwd: Option<String>,
-        env: Option<HashMap<String, String>>,
-        cols: Option<u16>,
-        rows: Option<u16>,
-    },
-}
 
 fn encode_pty_frame(kind: u8, id: u32, payload: &[u8]) -> Vec<u8> {
     let mut frame = Vec::with_capacity(5 + payload.len());
@@ -63,38 +47,12 @@ fn bench_mux_4k_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_spawn_json(c: &mut Criterion) {
-    let mut env = HashMap::new();
-    env.insert("TERM".to_string(), "xterm-256color".to_string());
-    env.insert("COLORTERM".to_string(), "truecolor".to_string());
-    let spawn = serde_json::to_string(&ShellRequest::Spawn {
-        id: Some(7),
-        cmd: Some("/bin/bash".to_string()),
-        args: Some(vec!["-lc".to_string(), "echo benchmark".to_string()]),
-        cwd: Some("/tmp".to_string()),
-        env: Some(env),
-        cols: Some(160),
-        rows: Some(52),
-    })
-    .expect("serialize spawn");
-
-    let mut group = c.benchmark_group("mux_smoke");
-    group.throughput(Throughput::Bytes(spawn.len() as u64));
-    group.bench_function("spawn_json_deserialize", |b| {
-        b.iter(|| {
-            let req: ShellRequest = serde_json::from_str(black_box(&spawn)).expect("valid json");
-            black_box(req);
-        })
-    });
-    group.finish();
-}
-
 criterion_group! {
     name = benches;
     config = Criterion::default()
         .sample_size(10)
         .warm_up_time(Duration::from_millis(150))
         .measurement_time(Duration::from_millis(250));
-    targets = bench_mux_4k_roundtrip, bench_spawn_json
+    targets = bench_mux_4k_roundtrip
 }
 criterion_main!(benches);
