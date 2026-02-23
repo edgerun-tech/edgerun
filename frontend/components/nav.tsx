@@ -188,7 +188,7 @@ export function Nav() {
           </div>
         </div>
       </div>
-      <div class="hidden border-t border-border/70 sm:block">
+      <div data-testid="route-debug-rail" class="hidden border-t border-border/70 sm:block">
         <div class="w-full px-4 py-2 sm:px-6 lg:px-8">
           <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <div class="flex items-center gap-3 rounded-md border border-border/80 bg-muted/20 px-2 py-1">
