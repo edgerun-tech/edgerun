@@ -289,6 +289,16 @@ let titleFlashTimer: number | null = null
 let docsEnhancementsModulePromise: Promise<typeof import('./runtime/docs-enhancements')> | null = null
 let chainStatusModulePromise: Promise<typeof import('./runtime/chain-status')> | null = null
 
+async function withRouteTransition(update: () => Promise<void> | void): Promise<void> {
+  if (transitionInFlight) return
+  transitionInFlight = true
+  try {
+    await runRouteTransition(update)
+  } finally {
+    transitionInFlight = false
+  }
+}
+
 if (typeof window !== 'undefined') {
   window.__EDGERUN_HYDRATED = false
   applyPersonalizationSettings(readPersonalizationSettings())
@@ -362,13 +372,17 @@ async function runRouteTransition(update: () => void | Promise<void>): Promise<v
   }
 
   root.classList.add('route-fade-out')
-  await sleep(80)
-  await update()
-  root.classList.remove('route-fade-out')
-  root.classList.add('route-fade-in')
-  window.requestAnimationFrame(() => {
+  try {
+    await sleep(80)
+    await update()
+    root.classList.add('route-fade-in')
+  } finally {
+    root.classList.remove('route-fade-out')
     root.classList.remove('route-fade-in')
-  })
+    window.requestAnimationFrame(() => {
+      root.classList.remove('route-fade-in')
+    })
+  }
 }
 
 function applyPageEnhancements(): void {
@@ -455,7 +469,6 @@ document.addEventListener('click', async (event) => {
   if (event.defaultPrevented) return
   if (event.button !== 0) return
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-  if (transitionInFlight) return
 
   const node = event.target as HTMLElement | null
   const anchor = node?.closest('a') as HTMLAnchorElement | null
@@ -467,25 +480,20 @@ document.addEventListener('click', async (event) => {
   if (nextPath === currentPath) return
 
   event.preventDefault()
-  transitionInFlight = true
-  await runRouteTransition(async () => {
+  await withRouteTransition(async () => {
     window.history.pushState({}, '', nextPath)
     const mounted = await mountCurrentRoute()
     if (!mounted) window.location.assign(nextPath)
   })
-  transitionInFlight = false
 })
 
 window.addEventListener('popstate', async () => {
   if (!bootstrapped) return
-  if (transitionInFlight) return
-  transitionInFlight = true
-  await runRouteTransition(async () => {
+  await withRouteTransition(async () => {
     const mounted = await mountCurrentRoute()
     if (!mounted) window.location.assign(window.location.pathname)
+    ensureTerminalDrawerMounted()
   })
-  ensureTerminalDrawerMounted()
-  transitionInFlight = false
 })
 
 void mountCurrentRoute().then((mounted) => {
