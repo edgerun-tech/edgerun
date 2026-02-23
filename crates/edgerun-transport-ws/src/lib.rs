@@ -20,7 +20,6 @@ use url::Url;
 pub struct WebSocketConnector;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 enum WsMuxFrame {
     Open { stream_id: u64 },
     Data { stream_id: u64, chunk_b64: String },
@@ -192,11 +191,11 @@ where
 
     tokio::spawn(async move {
         while let Some(frame) = writer_rx.recv().await {
-            let encoded = match serde_json::to_string(&frame) {
+            let encoded = match bincode::serialize(&frame) {
                 Ok(v) => v,
                 Err(_) => break,
             };
-            if sink.send(Message::Text(encoded.into())).await.is_err() {
+            if sink.send(Message::Binary(encoded.into())).await.is_err() {
                 break;
             }
         }
@@ -208,16 +207,12 @@ where
                 Ok(v) => v,
                 Err(_) => break,
             };
-            if !msg.is_text() {
-                continue;
-            }
-            let text = match msg.to_text() {
-                Ok(v) => v,
-                Err(_) => continue,
+            let bytes = match msg {
+                Message::Binary(bytes) => bytes,
+                _ => continue,
             };
-            let frame = match serde_json::from_str::<WsMuxFrame>(text) {
-                Ok(v) => v,
-                Err(_) => continue,
+            let Ok(frame) = bincode::deserialize::<WsMuxFrame>(&bytes) else {
+                continue;
             };
             match frame {
                 WsMuxFrame::Open { stream_id } => {

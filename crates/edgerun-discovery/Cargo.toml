@@ -7,9 +7,9 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
+bincode.workspace = true
 edgerun-transport-core = { path = "../edgerun-transport-core" }
-serde.workspace = true
-serde_json.workspace = true
+edgerun-types = { path = "../edgerun-types" }
 futures-util = "0.3"
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 url = "2.5"

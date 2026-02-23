@@ -7,6 +7,7 @@ pub mod crdt;
 pub mod durability;
 pub mod encryption;
 pub mod event;
+pub mod event_bus;
 pub mod index;
 pub mod io_reactor;
 pub mod key_management;
@@ -15,11 +16,12 @@ pub mod manifest;
 pub mod materialized_state;
 pub mod optimized_writer;
 pub mod replication;
+pub mod seal_policy;
 pub mod segment;
 pub mod sharding;
 
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -31,8 +33,6 @@ pub enum StorageError {
     Event(#[from] event::EventError),
     #[error("Segment error: {0}")]
     Segment(#[from] segment::SegmentError),
-    #[error("Manifest error: {0}")]
-    Manifest(#[from] manifest::ManifestError),
     #[error("Index error: {0}")]
     Index(#[from] index::IndexError),
     #[error("CRDT error: {0}")]
@@ -43,6 +43,78 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("Key management error: {0}")]
     KeyManagement(#[from] key_management::KeyManagementError),
+    #[error("Invalid epoch")]
+    InvalidEpoch,
+    #[error("Not found")]
+    NotFound,
+    #[error("Corrupted")]
+    Corrupted,
+    #[error("Invalid data: {0}")]
+    InvalidData(String),
+    #[error("Invalid seal policy: {0}")]
+    InvalidSealPolicy(String),
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct QueryCursor {
+    pub offset: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EventQueryFilter {
+    pub stream_id: Option<event::StreamId>,
+    pub actor_id: Option<event::ActorId>,
+    pub min_hlc: Option<event::HlcTimestamp>,
+    pub max_hlc: Option<event::HlcTimestamp>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EventQueryOptions {
+    pub limit: usize,
+    pub cursor: Option<QueryCursor>,
+    pub filter: EventQueryFilter,
+}
+
+impl Default for EventQueryOptions {
+    fn default() -> Self {
+        Self {
+            limit: 100,
+            cursor: None,
+            filter: EventQueryFilter::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct QueriedEvent {
+    pub offset: u64,
+    pub wire_len: u64,
+    pub event_hash: [u8; 32],
+    pub event: event::Event,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct EventQueryResult {
+    pub events: Vec<QueriedEvent>,
+    pub next_cursor: Option<QueryCursor>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SealPendingResult {
+    pub decision: seal_policy::SealDecision,
+    pub sealed: bool,
+    pub segment_id: Option<[u8; 32]>,
+    pub progress_event_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SignedChainProgressEvent {
+    pub progress_event_id: String,
+    pub slot: u64,
+    pub epoch: u64,
+    pub observed_at_unix_ms: u64,
+    pub signer: String,
+    pub signature: String,
 }
 
 pub struct StorageEngine {
@@ -76,8 +148,249 @@ impl StorageEngine {
             replica_nodes: Vec::new(),
             replication_timeout: Duration::from_millis(250),
             replication_batch_size: 64,
+            opened_at_unix_ms: now_unix_ms(),
+            last_append_unix_ms: now_unix_ms(),
+            opened_chain: None,
+            latest_chain: None,
+            latest_progress_event_id: None,
+            auto_seal_controller: None,
         })
     }
+
+    /// Query events from a segment through the storage engine abstraction.
+    /// Returns at most `limit` events in segment order.
+    pub fn query_events(
+        &self,
+        segment_file: &str,
+        limit: usize,
+    ) -> Result<Vec<event::Event>, StorageError> {
+        let options = EventQueryOptions {
+            limit,
+            ..EventQueryOptions::default()
+        };
+        let result = self.query_events_raw(segment_file, options)?;
+        Ok(result.events.into_iter().map(|entry| entry.event).collect())
+    }
+
+    /// Query raw event entries (offset + wire length + hash + decoded event)
+    /// through the engine abstraction. This is the stable primitive to build
+    /// higher-level query APIs without coupling callers to segment internals.
+    pub fn query_events_raw(
+        &self,
+        segment_file: &str,
+        options: EventQueryOptions,
+    ) -> Result<EventQueryResult, StorageError> {
+        let segment_path = self.data_dir.join(segment_file);
+        if !segment_path.exists() {
+            return Ok(EventQueryResult::default());
+        }
+        let reader = segment::SegmentReader::from_file(segment_path)?;
+        let capped_limit = options.limit.min(10_000);
+        let start_offset = options.cursor.map(|c| c.offset).unwrap_or(0);
+        if capped_limit == 0 {
+            return Ok(EventQueryResult {
+                events: Vec::new(),
+                next_cursor: Some(QueryCursor {
+                    offset: start_offset,
+                }),
+            });
+        }
+
+        let mut rows = Vec::with_capacity(capped_limit.min(1024));
+        let mut current_offset = 0u64;
+
+        for item in reader.iter_events() {
+            let event = item?;
+            let wire_len = event.serialize()?.len() as u64;
+            let event_offset = current_offset;
+            current_offset = current_offset.saturating_add(wire_len);
+
+            if event_offset < start_offset {
+                continue;
+            }
+            if !matches_filter(&event, &options.filter) {
+                continue;
+            }
+
+            rows.push(QueriedEvent {
+                offset: event_offset,
+                wire_len,
+                event_hash: event.compute_hash(),
+                event,
+            });
+            if rows.len() >= capped_limit {
+                break;
+            }
+        }
+
+        let next_cursor = if rows.len() == capped_limit
+            && current_offset < reader.data_len() as u64
+            && !rows.is_empty()
+        {
+            Some(QueryCursor {
+                offset: current_offset,
+            })
+        } else {
+            None
+        };
+
+        Ok(EventQueryResult {
+            events: rows,
+            next_cursor,
+        })
+    }
+
+    /// Append a single event into a storage-managed segmented journal.
+    /// Storage owns segment part naming, cache/registry persistence and sealing.
+    pub fn append_event_to_segmented_journal(
+        &self,
+        journal_base: &str,
+        event: &event::Event,
+        max_segment_size: u64,
+        durability: durability::DurabilityLevel,
+    ) -> Result<u64, StorageError> {
+        let mut segments = self.load_segmented_journal_registry(journal_base)?;
+        let next_idx = segments.len().saturating_add(1);
+        let segment_file = format!("{}.part-{:020}.seg", journal_base, next_idx);
+        let mut session = self.create_append_session(&segment_file, max_segment_size)?;
+        let offset = session.append_with_durability(event, durability)?;
+        let _ = session.seal_now()?;
+        segments.push(segment_file);
+        self.save_segmented_journal_registry(journal_base, &segments)?;
+        Ok(offset)
+    }
+
+    /// Query all raw events from a storage-managed segmented journal.
+    /// Includes backward-compatible fallback to single-segment mode.
+    pub fn query_segmented_journal_raw(
+        &self,
+        journal_base: &str,
+    ) -> Result<Vec<QueriedEvent>, StorageError> {
+        let segments = self.load_segmented_journal_registry(journal_base)?;
+        let mut rows = Vec::new();
+        if segments.is_empty() {
+            let result = self.query_events_raw(
+                journal_base,
+                EventQueryOptions {
+                    limit: 100_000,
+                    cursor: Some(QueryCursor { offset: 0 }),
+                    filter: EventQueryFilter::default(),
+                },
+            )?;
+            rows.extend(result.events);
+            return Ok(rows);
+        }
+
+        for segment_file in segments {
+            let result = self.query_events_raw(
+                &segment_file,
+                EventQueryOptions {
+                    limit: 100_000,
+                    cursor: Some(QueryCursor { offset: 0 }),
+                    filter: EventQueryFilter::default(),
+                },
+            )?;
+            rows.extend(result.events);
+        }
+        Ok(rows)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn query_events_raw_with_seal(
+        &self,
+        segment_file: &str,
+        options: EventQueryOptions,
+        sessions: &mut [&mut EngineAppendSession],
+        controller: &seal_policy::SealController,
+        now_unix_ms: u64,
+        chain_now: Option<seal_policy::ChainProgress>,
+    ) -> Result<EventQueryResult, StorageError> {
+        let _ = self.seal_pending_segments(sessions, controller, now_unix_ms, chain_now)?;
+        self.query_events_raw(segment_file, options)
+    }
+
+    pub fn seal_pending_segments(
+        &self,
+        sessions: &mut [&mut EngineAppendSession],
+        controller: &seal_policy::SealController,
+        now_unix_ms: u64,
+        chain_now: Option<seal_policy::ChainProgress>,
+    ) -> Result<Vec<SealPendingResult>, StorageError> {
+        let mut out = Vec::with_capacity(sessions.len());
+        for session in sessions.iter_mut() {
+            out.push(session.seal_pending_segment(controller, now_unix_ms, chain_now)?);
+        }
+        Ok(out)
+    }
+
+    fn load_segmented_journal_registry(
+        &self,
+        journal_base: &str,
+    ) -> Result<Vec<String>, StorageError> {
+        let path = self.segmented_journal_registry_path(journal_base);
+        if !path.exists() {
+            return Ok(Vec::new());
+        }
+        let raw = std::fs::read_to_string(path)?;
+        let mut segments = Vec::new();
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                segments.push(trimmed.to_string());
+            }
+        }
+        Ok(segments)
+    }
+
+    fn save_segmented_journal_registry(
+        &self,
+        journal_base: &str,
+        segments: &[String],
+    ) -> Result<(), StorageError> {
+        let path = self.segmented_journal_registry_path(journal_base);
+        let mut raw = String::new();
+        for segment in segments {
+            raw.push_str(segment);
+            raw.push('\n');
+        }
+        std::fs::write(path, raw)?;
+        Ok(())
+    }
+
+    fn segmented_journal_registry_path(&self, journal_base: &str) -> PathBuf {
+        self.data_dir.join(format!("{}.segments", journal_base))
+    }
+}
+
+fn matches_filter(event: &event::Event, filter: &EventQueryFilter) -> bool {
+    if let Some(stream_id) = &filter.stream_id {
+        if &event.stream_id != stream_id {
+            return false;
+        }
+    }
+    if let Some(actor_id) = &filter.actor_id {
+        if &event.actor_id != actor_id {
+            return false;
+        }
+    }
+    if let Some(min_hlc) = filter.min_hlc {
+        if event.hlc_timestamp < min_hlc {
+            return false;
+        }
+    }
+    if let Some(max_hlc) = filter.max_hlc {
+        if event.hlc_timestamp > max_hlc {
+            return false;
+        }
+    }
+    true
+}
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 pub struct EngineAppendSession {
@@ -86,6 +399,12 @@ pub struct EngineAppendSession {
     replica_nodes: Vec<replication::NodeInfo>,
     replication_timeout: Duration,
     replication_batch_size: usize,
+    opened_at_unix_ms: u64,
+    last_append_unix_ms: u64,
+    opened_chain: Option<seal_policy::ChainProgress>,
+    latest_chain: Option<seal_policy::ChainProgress>,
+    latest_progress_event_id: Option<String>,
+    auto_seal_controller: Option<seal_policy::SealController>,
 }
 
 impl EngineAppendSession {
@@ -103,6 +422,121 @@ impl EngineAppendSession {
 
     pub fn replication_batch_size(&self) -> usize {
         self.replication_batch_size
+    }
+
+    pub fn mark_chain_progress(&mut self, slot: u64, epoch: u64) {
+        self.latest_chain = Some(seal_policy::ChainProgress { slot, epoch });
+        if self.opened_chain.is_none() {
+            self.opened_chain = Some(seal_policy::ChainProgress { slot, epoch });
+        }
+    }
+
+    pub fn apply_signed_chain_progress_event(
+        &mut self,
+        event: &SignedChainProgressEvent,
+    ) -> Result<(), StorageError> {
+        if event.progress_event_id.trim().is_empty() {
+            return Err(StorageError::InvalidSealPolicy(
+                "signed chain progress event has empty progress_event_id".to_string(),
+            ));
+        }
+        if event.signature.trim().is_empty() || event.signer.trim().is_empty() {
+            return Err(StorageError::InvalidSealPolicy(
+                "signed chain progress event requires signer and signature".to_string(),
+            ));
+        }
+        if let Some(prev) = self.latest_chain {
+            if event.epoch < prev.epoch || (event.epoch == prev.epoch && event.slot < prev.slot) {
+                return Err(StorageError::InvalidSealPolicy(format!(
+                    "chain progress regression: prev=({}, {}), new=({}, {})",
+                    prev.slot, prev.epoch, event.slot, event.epoch
+                )));
+            }
+        }
+        self.latest_progress_event_id = Some(event.progress_event_id.clone());
+        self.mark_chain_progress(event.slot, event.epoch);
+        Ok(())
+    }
+
+    /// Update chain progress from an RPC reader callback without coupling this
+    /// crate to any specific chain/RPC client implementation.
+    pub fn refresh_chain_progress_from_rpc_read<F>(&mut self, read_rpc: F) -> Result<(), StorageError>
+    where
+        F: FnOnce() -> Result<Option<seal_policy::ChainProgress>, StorageError>,
+    {
+        if let Some(progress) = read_rpc()? {
+            self.mark_chain_progress(progress.slot, progress.epoch);
+        }
+        Ok(())
+    }
+
+    pub fn enable_auto_seal(&mut self, controller: seal_policy::SealController) {
+        self.auto_seal_controller = Some(controller);
+    }
+
+    pub fn disable_auto_seal(&mut self) {
+        self.auto_seal_controller = None;
+    }
+
+    pub fn active_segment_state(&self) -> seal_policy::ActiveSegmentState {
+        seal_policy::ActiveSegmentState {
+            opened_at_unix_ms: self.opened_at_unix_ms,
+            last_append_unix_ms: self.last_append_unix_ms,
+            opened_chain: self.opened_chain,
+        }
+    }
+
+    pub fn should_seal(
+        &self,
+        controller: &seal_policy::SealController,
+        now_unix_ms: u64,
+        chain_now: Option<seal_policy::ChainProgress>,
+    ) -> Result<seal_policy::SealDecision, StorageError> {
+        controller.decide(now_unix_ms, chain_now, self.active_segment_state())
+    }
+
+    pub fn is_sealed(&self) -> bool {
+        self.writer.is_sealed()
+    }
+
+    pub fn seal_now(&mut self) -> Result<Option<[u8; 32]>, StorageError> {
+        if self.writer.is_sealed() {
+            return Ok(None);
+        }
+        let segment_id = self.writer.seal()?;
+        Ok(Some(segment_id))
+    }
+
+    pub fn seal_pending_segment(
+        &mut self,
+        controller: &seal_policy::SealController,
+        now_unix_ms: u64,
+        chain_now: Option<seal_policy::ChainProgress>,
+    ) -> Result<SealPendingResult, StorageError> {
+        if self.writer.is_sealed() {
+            return Ok(SealPendingResult {
+                decision: seal_policy::SealDecision::no(),
+                sealed: false,
+                segment_id: None,
+                progress_event_id: self.latest_progress_event_id.clone(),
+            });
+        }
+        let decision = self.should_seal(controller, now_unix_ms, chain_now)?;
+        if !decision.should_seal {
+            return Ok(SealPendingResult {
+                decision,
+                sealed: false,
+                segment_id: None,
+                progress_event_id: self.latest_progress_event_id.clone(),
+            });
+        }
+        let segment_id = self.writer.seal()?;
+        Ok(SealPendingResult {
+            decision,
+            sealed: true,
+            segment_id: Some(segment_id),
+            progress_event_id: self.latest_progress_event_id.clone(),
+        })
     }
 
     pub fn enable_encryption(
@@ -150,6 +584,7 @@ impl EngineAppendSession {
         acked_replicas: &[event::ActorId],
     ) -> Result<u64, StorageError> {
         let offset = self.writer.append(event)?;
+        self.last_append_unix_ms = now_unix_ms();
         self.writer
             .flush_with_durability(durability::DurabilityLevel::AckDurable)?;
 
@@ -163,6 +598,7 @@ impl EngineAppendSession {
             quorum.ack_remote(peer)?;
         }
         quorum.finalize()?;
+        self.auto_seal_after_append()?;
         Ok(offset)
     }
 
@@ -188,6 +624,7 @@ impl EngineAppendSession {
         if events.is_empty() {
             return Ok(Vec::new());
         }
+        self.last_append_unix_ms = now_unix_ms();
         let mut offsets = Vec::with_capacity(events.len());
         for event in events {
             offsets.push(self.writer.append(event)?);
@@ -250,6 +687,7 @@ impl EngineAppendSession {
             }
             durability::DurabilityLevel::AckLocal | durability::DurabilityLevel::AckBuffered => {}
         }
+        self.auto_seal_after_append()?;
         Ok(offsets)
     }
 
@@ -309,6 +747,14 @@ impl EngineAppendSession {
         self.writer.flush_with_durability(durability)?;
         Ok(())
     }
+
+    fn auto_seal_after_append(&mut self) -> Result<(), StorageError> {
+        let Some(controller) = self.auto_seal_controller.clone() else {
+            return Ok(());
+        };
+        let _ = self.seal_pending_segment(&controller, now_unix_ms(), self.latest_chain)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -331,6 +777,366 @@ mod tests {
         let new_dir = temp_dir.path().join("data");
         let _engine = StorageEngine::new(new_dir.clone())?;
         assert!(new_dir.exists());
+        Ok(())
+    }
+
+    #[test]
+    fn test_query_events_raw_with_cursor_and_filter() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let path = engine.data_dir().join("query.seg");
+        let mut writer = segment::SegmentWriter::new(path, 1024 * 1024);
+
+        let actor_a = event::ActorId::from_bytes([1u8; 16]);
+        let actor_b = event::ActorId::from_bytes([2u8; 16]);
+        let stream = event::StreamId::from_bytes([9u8; 16]);
+
+        let e1 = event::Event::new(stream.clone(), actor_a.clone(), b"one".to_vec());
+        let e2 = event::Event::new(stream.clone(), actor_b, b"two".to_vec());
+        let e3 = event::Event::new(stream.clone(), actor_a.clone(), b"three".to_vec());
+
+        let _ = writer.append(&e1)?;
+        let _ = writer.append(&e2)?;
+        let _ = writer.append(&e3)?;
+        let _ = writer.seal_and_flush()?;
+
+        let first = engine.query_events_raw(
+            "query.seg",
+            EventQueryOptions {
+                limit: 2,
+                ..EventQueryOptions::default()
+            },
+        )?;
+        assert_eq!(first.events.len(), 2);
+        assert!(first.next_cursor.is_some());
+        assert_eq!(first.events[0].offset, 0);
+
+        let second = engine.query_events_raw(
+            "query.seg",
+            EventQueryOptions {
+                limit: 2,
+                cursor: first.next_cursor.clone(),
+                ..EventQueryOptions::default()
+            },
+        )?;
+        assert_eq!(second.events.len(), 1);
+
+        let filtered = engine.query_events_raw(
+            "query.seg",
+            EventQueryOptions {
+                limit: 10,
+                filter: EventQueryFilter {
+                    actor_id: Some(actor_a),
+                    ..EventQueryFilter::default()
+                },
+                ..EventQueryOptions::default()
+            },
+        )?;
+        assert_eq!(filtered.events.len(), 2);
+        assert_eq!(filtered.events[0].event.payload, b"one");
+        assert_eq!(filtered.events[1].event.payload, b"three");
+        Ok(())
+    }
+
+    #[test]
+    fn test_engine_should_seal_uses_chain_policy() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("seal-check.seg", 1024 * 1024)?;
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            b"seal-me".to_vec(),
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+        session.mark_chain_progress(100, 1);
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 10,
+                max_epoch_span: 10,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+
+        let decision = session.should_seal(
+            &controller,
+            now_unix_ms(),
+            Some(seal_policy::ChainProgress {
+                slot: 111,
+                epoch: 1,
+            }),
+        )?;
+        assert!(decision.should_seal);
+        assert_eq!(
+            decision.trigger,
+            Some(seal_policy::SealTrigger::ChainSlotSpan)
+        );
+        let applied = session.seal_pending_segment(
+            &controller,
+            now_unix_ms(),
+            Some(seal_policy::ChainProgress {
+                slot: 111,
+                epoch: 1,
+            }),
+        )?;
+        assert!(applied.sealed);
+        assert!(applied.segment_id.is_some());
+        assert!(session.is_sealed());
+        Ok(())
+    }
+
+    #[test]
+    fn test_auto_seal_on_append_chain_trigger() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("auto-seal.seg", 1024 * 1024)?;
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 1,
+                max_epoch_span: 10,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+        session.enable_auto_seal(controller);
+        session.mark_chain_progress(100, 1);
+        session.mark_chain_progress(101, 1);
+
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            b"auto-seal-now".to_vec(),
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+        assert!(session.is_sealed());
+        Ok(())
+    }
+
+    #[test]
+    fn test_query_events_raw_with_seal_seals_pending_then_reads() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("query-with-seal.seg", 1024 * 1024)?;
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            b"visible-after-seal".to_vec(),
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+        session.mark_chain_progress(50, 1);
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 1,
+                max_epoch_span: 10,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+        let mut sessions: Vec<&mut EngineAppendSession> = vec![&mut session];
+        let result = engine.query_events_raw_with_seal(
+            "query-with-seal.seg",
+            EventQueryOptions {
+                limit: 10,
+                ..EventQueryOptions::default()
+            },
+            &mut sessions,
+            &controller,
+            now_unix_ms(),
+            Some(seal_policy::ChainProgress { slot: 51, epoch: 1 }),
+        )?;
+
+        assert!(session.is_sealed());
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].event.payload, b"visible-after-seal");
+        Ok(())
+    }
+
+    #[test]
+    fn test_auto_seal_on_append_with_rpc_read_progress() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("auto-seal-rpc.seg", 1024 * 1024)?;
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 1,
+                max_epoch_span: 10,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+        session.enable_auto_seal(controller);
+
+        session.refresh_chain_progress_from_rpc_read(|| {
+            Ok(Some(seal_policy::ChainProgress {
+                slot: 500,
+                epoch: 2,
+            }))
+        })?;
+        session.refresh_chain_progress_from_rpc_read(|| {
+            Ok(Some(seal_policy::ChainProgress {
+                slot: 501,
+                epoch: 2,
+            }))
+        })?;
+
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            b"rpc-fed-progress".to_vec(),
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+        assert!(session.is_sealed());
+        Ok(())
+    }
+
+    #[test]
+    fn test_signed_chain_progress_event_is_monotonic_and_attached_to_seal_result(
+    ) -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("signed-progress.seg", 1024 * 1024)?;
+
+        let event1 = SignedChainProgressEvent {
+            progress_event_id: "prog-1".to_string(),
+            slot: 700,
+            epoch: 3,
+            observed_at_unix_ms: now_unix_ms(),
+            signer: "scheduler-key".to_string(),
+            signature: "sig-1".to_string(),
+        };
+        session.apply_signed_chain_progress_event(&event1)?;
+
+        let regressive = SignedChainProgressEvent {
+            progress_event_id: "prog-0".to_string(),
+            slot: 699,
+            epoch: 3,
+            observed_at_unix_ms: now_unix_ms(),
+            signer: "scheduler-key".to_string(),
+            signature: "sig-0".to_string(),
+        };
+        let err = session
+            .apply_signed_chain_progress_event(&regressive)
+            .unwrap_err();
+        assert!(err.to_string().contains("chain progress regression"));
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 1,
+                max_epoch_span: 10,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            b"signed-path".to_vec(),
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+
+        let event2 = SignedChainProgressEvent {
+            progress_event_id: "prog-2".to_string(),
+            slot: 701,
+            epoch: 3,
+            observed_at_unix_ms: now_unix_ms(),
+            signer: "scheduler-key".to_string(),
+            signature: "sig-2".to_string(),
+        };
+        session.apply_signed_chain_progress_event(&event2)?;
+        let seal = session.seal_pending_segment(
+            &controller,
+            now_unix_ms(),
+            Some(seal_policy::ChainProgress {
+                slot: 701,
+                epoch: 3,
+            }),
+        )?;
+        assert_eq!(seal.progress_event_id.as_deref(), Some("prog-2"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_end_to_end_signed_progress_seal_and_query_roundtrip() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let mut session = engine.create_append_session("roundtrip.seg", 1024 * 1024)?;
+
+        let controller = seal_policy::SealController::new(seal_policy::StorageSealPolicy {
+            mode: seal_policy::SealPolicyMode::ChainPreferred,
+            chain: seal_policy::ChainSealPolicy {
+                max_slot_span: 1,
+                max_epoch_span: 1,
+            },
+            time: seal_policy::TimeSealPolicy {
+                max_age_ms: u64::MAX / 2,
+                idle_ms: u64::MAX / 2,
+            },
+        })?;
+
+        session.apply_signed_chain_progress_event(&SignedChainProgressEvent {
+            progress_event_id: "rt-1".to_string(),
+            slot: 1000,
+            epoch: 4,
+            observed_at_unix_ms: now_unix_ms(),
+            signer: "scheduler".to_string(),
+            signature: "sig-1".to_string(),
+        })?;
+        let payload = b"kind=roundtrip;n=1".to_vec();
+        let event = event::Event::new(
+            event::StreamId::new(),
+            event::ActorId::new(),
+            payload,
+        );
+        let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
+
+        session.apply_signed_chain_progress_event(&SignedChainProgressEvent {
+            progress_event_id: "rt-2".to_string(),
+            slot: 1001,
+            epoch: 4,
+            observed_at_unix_ms: now_unix_ms(),
+            signer: "scheduler".to_string(),
+            signature: "sig-2".to_string(),
+        })?;
+        let sealed = session.seal_pending_segment(
+            &controller,
+            now_unix_ms(),
+            Some(seal_policy::ChainProgress {
+                slot: 1001,
+                epoch: 4,
+            }),
+        )?;
+        assert!(sealed.sealed);
+        assert_eq!(sealed.progress_event_id.as_deref(), Some("rt-2"));
+
+        let queried = engine.query_events_raw(
+            "roundtrip.seg",
+            EventQueryOptions {
+                limit: 10,
+                ..EventQueryOptions::default()
+            },
+        )?;
+        assert_eq!(queried.events.len(), 1);
+        assert_eq!(queried.events[0].event.payload, b"kind=roundtrip;n=1".to_vec());
         Ok(())
     }
 

@@ -5,9 +5,11 @@ use std::sync::{Arc, RwLock};
 
 use async_trait::async_trait;
 use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError, TransportKind};
+use edgerun_types::control_plane::{
+    ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
+    ControlWsServerMessage, RouteResolveRequest, RouteResolveResponse,
+};
 use futures_util::{SinkExt, StreamExt};
-use serde::Deserialize;
-use serde_json::json;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
@@ -50,29 +52,6 @@ impl SchedulerRouteDiscovery {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct RouteResolveResponse {
-    found: bool,
-    route: Option<RouteResolveEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteResolveEntry {
-    reachable_urls: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ControlWsServerMessage {
-    request_id: String,
-    ok: bool,
-    #[serde(default)]
-    data: Option<serde_json::Value>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    status: Option<u16>,
-}
-
 fn next_request_id() -> String {
     let seq = REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
     format!("discovery-{seq}")
@@ -107,22 +86,24 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
             .await
             .map_err(|e| TransportError::Protocol(e.to_string()))?;
         let request_id = next_request_id();
-        let request = json!({
-            "request_id": request_id,
-            "op": "route.resolve",
-            "payload": { "device_id": peer_id }
-        });
+        let request = ControlWsClientMessage {
+            request_id: request_id.clone(),
+            payload: ControlWsRequestPayload::RouteResolve(RouteResolveRequest {
+                device_id: peer_id.to_string(),
+            }),
+        };
+        let encoded = bincode::serialize(&request).map_err(|e| TransportError::Protocol(e.to_string()))?;
         socket
-            .send(Message::Text(request.to_string().into()))
+            .send(Message::Binary(encoded.into()))
             .await
             .map_err(|e| TransportError::Protocol(e.to_string()))?;
         let mut payload: Option<RouteResolveResponse> = None;
         while let Some(frame) = socket.next().await {
             let frame = frame.map_err(|e| TransportError::Protocol(e.to_string()))?;
-            let Message::Text(text) = frame else {
+            let Message::Binary(bytes) = frame else {
                 continue;
             };
-            let response = serde_json::from_str::<ControlWsServerMessage>(&text)
+            let response = bincode::deserialize::<ControlWsServerMessage>(&bytes)
                 .map_err(|e| TransportError::Protocol(e.to_string()))?;
             if response.request_id != request_id {
                 continue;
@@ -137,13 +118,15 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
                     .unwrap_or_else(|| format!("scheduler route resolve failed{status}"));
                 return Err(TransportError::Protocol(err));
             }
-            let data = response.data.ok_or_else(|| {
-                TransportError::Protocol("missing route resolve payload".to_string())
-            })?;
-            payload = Some(
-                serde_json::from_value::<RouteResolveResponse>(data)
-                    .map_err(|e| TransportError::Protocol(e.to_string()))?,
-            );
+            let data = response
+                .data
+                .ok_or_else(|| TransportError::Protocol("missing route resolve payload".to_string()))?;
+            let ControlWsResponsePayload::RouteResolve(resolved) = data else {
+                return Err(TransportError::Protocol(
+                    "unexpected route resolve response payload".to_string(),
+                ));
+            };
+            payload = Some(resolved);
             break;
         }
         let payload = payload.ok_or_else(|| {

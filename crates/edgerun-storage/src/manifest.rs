@@ -1,28 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-only
-use serde::{Deserialize, Serialize};
+use prost::Message;
 use std::sync::RwLock;
-use thiserror::Error;
 use uuid::Uuid;
 
-use crate::event::HlcTimestamp;
+use crate::{StorageError, event::HlcTimestamp};
 
-#[derive(Error, Debug)]
-pub enum ManifestError {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Serialization error: {0}")]
-    Serialization(#[from] serde_json::Error),
-    #[error("Invalid epoch")]
-    InvalidEpoch,
-    #[error("Not found")]
-    NotFound,
-    #[error("Corrupted")]
-    Corrupted,
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+pub type ManifestError = StorageError;
+
+pub mod proto {
+    include!(concat!(env!("OUT_DIR"), "/edgerun.storage.v1.rs"));
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SealedSegment {
     pub segment_id: [u8; 32],
     pub offset: u64,
@@ -53,7 +42,7 @@ impl SealedSegment {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct IndexRoots {
     pub event_hash_index: Option<[u8; 32]>,
     pub stream_index: Option<[u8; 32]>,
@@ -61,14 +50,14 @@ pub struct IndexRoots {
     pub materialized_state_index: Option<[u8; 32]>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Checkpoint {
     pub segment_id: [u8; 32],
     pub offset: u64,
     pub hlc: HlcTimestamp,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Manifest {
     pub store_uuid: Uuid,
     pub epoch: u64,
@@ -121,13 +110,13 @@ impl Manifest {
     }
 
     pub fn serialize(&self) -> Result<Vec<u8>, ManifestError> {
-        let json = serde_json::to_string(self)?;
-        Ok(json.into_bytes())
+        Ok(self.to_proto().encode_to_vec())
     }
 
     pub fn deserialize(data: &[u8]) -> Result<Self, ManifestError> {
-        let manifest: Manifest = serde_json::from_slice(data)?;
-        Ok(manifest)
+        let proto = proto::ManifestV1::decode(data)
+            .map_err(|e| StorageError::InvalidData(format!("invalid manifest protobuf: {e}")))?;
+        Self::from_proto(proto)
     }
 
     pub fn compute_crc(&self) -> u32 {
@@ -136,10 +125,155 @@ impl Manifest {
         // Exclude CRC field itself so checksum verification is deterministic.
         let mut canonical = self.clone();
         canonical.manifest_crc = 0;
-        let json = serde_json::to_string(&canonical).unwrap_or_default();
-        hasher.update(json.as_bytes());
+        hasher.update(&canonical.to_proto().encode_to_vec());
         hasher.finalize()
     }
+
+    fn to_proto(&self) -> proto::ManifestV1 {
+        proto::ManifestV1 {
+            store_uuid: self.store_uuid.as_bytes().to_vec(),
+            epoch: self.epoch,
+            sealed_segments: self
+                .sealed_segments
+                .iter()
+                .map(|segment| proto::SealedSegmentV1 {
+                    segment_id: segment.segment_id.to_vec(),
+                    offset: segment.offset,
+                    size: segment.size,
+                    min_hlc: segment.min_hlc.map(to_proto_hlc),
+                    max_hlc: segment.max_hlc.map(to_proto_hlc),
+                })
+                .collect(),
+            active_segment: self.active_segment.as_ref().map(|segment| proto::SealedSegmentV1 {
+                segment_id: segment.segment_id.to_vec(),
+                offset: segment.offset,
+                size: segment.size,
+                min_hlc: segment.min_hlc.map(to_proto_hlc),
+                max_hlc: segment.max_hlc.map(to_proto_hlc),
+            }),
+            index_roots: Some(proto::IndexRootsV1 {
+                event_hash_index: self
+                    .index_roots
+                    .event_hash_index
+                    .map(|v| v.to_vec())
+                    .unwrap_or_default(),
+                stream_index: self
+                    .index_roots
+                    .stream_index
+                    .map(|v| v.to_vec())
+                    .unwrap_or_default(),
+                time_index: self
+                    .index_roots
+                    .time_index
+                    .map(|v| v.to_vec())
+                    .unwrap_or_default(),
+                materialized_state_index: self
+                    .index_roots
+                    .materialized_state_index
+                    .map(|v| v.to_vec())
+                    .unwrap_or_default(),
+            }),
+            last_checkpoint: self
+                .last_checkpoint
+                .as_ref()
+                .map(|checkpoint| proto::ManifestCheckpointV1 {
+                    segment_id: checkpoint.segment_id.to_vec(),
+                    offset: checkpoint.offset,
+                    hlc: Some(to_proto_hlc(checkpoint.hlc)),
+                }),
+            compaction_watermark: self.compaction_watermark,
+            manifest_crc: self.manifest_crc,
+        }
+    }
+
+    fn from_proto(proto: proto::ManifestV1) -> Result<Self, ManifestError> {
+        let uuid_bytes: [u8; 16] = proto
+            .store_uuid
+            .as_slice()
+            .try_into()
+            .map_err(|_| StorageError::InvalidData("manifest.store_uuid must be 16 bytes".to_string()))?;
+        let store_uuid = Uuid::from_bytes(uuid_bytes);
+        let sealed_segments = proto
+            .sealed_segments
+            .into_iter()
+            .map(from_proto_segment)
+            .collect::<Result<Vec<_>, _>>()?;
+        let active_segment = proto.active_segment.map(from_proto_segment).transpose()?;
+        let index_roots = match proto.index_roots {
+            Some(roots) => IndexRoots {
+                event_hash_index: bytes_to_32_opt(&roots.event_hash_index)?,
+                stream_index: bytes_to_32_opt(&roots.stream_index)?,
+                time_index: bytes_to_32_opt(&roots.time_index)?,
+                materialized_state_index: bytes_to_32_opt(&roots.materialized_state_index)?,
+            },
+            None => IndexRoots::default(),
+        };
+        let last_checkpoint = match proto.last_checkpoint {
+            Some(checkpoint) => {
+                let segment_id = bytes_to_32_required(&checkpoint.segment_id, "last_checkpoint.segment_id")?;
+                let hlc = from_proto_hlc(
+                    checkpoint.hlc.ok_or_else(|| {
+                        StorageError::InvalidData(
+                            "manifest.last_checkpoint.hlc is required".to_string(),
+                        )
+                    })?,
+                );
+                Some(Checkpoint {
+                    segment_id,
+                    offset: checkpoint.offset,
+                    hlc,
+                })
+            }
+            None => None,
+        };
+        Ok(Self {
+            store_uuid,
+            epoch: proto.epoch,
+            sealed_segments,
+            active_segment,
+            index_roots,
+            last_checkpoint,
+            compaction_watermark: proto.compaction_watermark,
+            manifest_crc: proto.manifest_crc,
+        })
+    }
+}
+
+fn to_proto_hlc(value: HlcTimestamp) -> proto::HlcTimestampV1 {
+    proto::HlcTimestampV1 {
+        physical: value.physical,
+        logical: value.logical,
+    }
+}
+
+fn from_proto_hlc(value: proto::HlcTimestampV1) -> HlcTimestamp {
+    HlcTimestamp {
+        physical: value.physical,
+        logical: value.logical,
+    }
+}
+
+fn bytes_to_32_required(bytes: &[u8], field: &str) -> Result<[u8; 32], StorageError> {
+    bytes.try_into().map_err(|_| {
+        StorageError::InvalidData(format!("{field} must be 32 bytes, got {}", bytes.len()))
+    })
+}
+
+fn bytes_to_32_opt(bytes: &[u8]) -> Result<Option<[u8; 32]>, StorageError> {
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(bytes_to_32_required(bytes, "index root")?))
+}
+
+fn from_proto_segment(segment: proto::SealedSegmentV1) -> Result<SealedSegment, StorageError> {
+    Ok(SealedSegment {
+        segment_id: bytes_to_32_required(&segment.segment_id, "sealed_segment.segment_id")?,
+        offset: segment.offset,
+        size: segment.size,
+        min_hlc: segment.min_hlc.map(from_proto_hlc),
+        max_hlc: segment.max_hlc.map(from_proto_hlc),
+    })
 }
 
 pub struct ManifestManager {
@@ -152,8 +286,8 @@ pub struct ManifestManager {
 
 impl ManifestManager {
     pub fn new(dir: std::path::PathBuf) -> Result<Self, ManifestError> {
-        let path_a = dir.join("manifest_a.json");
-        let path_b = dir.join("manifest_b.json");
+        let path_a = dir.join("manifest_a.pb");
+        let path_b = dir.join("manifest_b.pb");
 
         let (manifest_a, manifest_b, current_a) = if path_a.exists() && path_b.exists() {
             let data_a = std::fs::read(&path_a)?;

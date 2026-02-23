@@ -7,8 +7,8 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use axum::http::{HeaderValue, Method};
 use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
+use json::JsonValue;
 use serde::Serialize;
-use serde_json::{json, Value};
 use tokio::process::Command;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -27,6 +27,19 @@ struct TailscaleBridgeDevice {
     base_url: String,
     online: bool,
     source: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct TailscaleDevicesResponse {
+    ok: bool,
+    count: usize,
+    devices: Vec<TailscaleBridgeDevice>,
+}
+
+#[derive(Debug, Serialize)]
+struct TailscaleErrorResponse {
+    ok: bool,
+    error: String,
 }
 
 pub(crate) async fn run_tailscale_command(root: &Path, command: TailscaleCommand) -> Result<()> {
@@ -227,19 +240,19 @@ async fn tailscale_devices_handler(State(state): State<TailscaleBridgeState>) ->
                 axum::http::header::CACHE_CONTROL,
                 HeaderValue::from_static("no-store"),
             )],
-            Json(json!({
-                "ok": true,
-                "count": devices.len(),
-                "devices": devices
-            })),
+            Json(TailscaleDevicesResponse {
+                ok: true,
+                count: devices.len(),
+                devices,
+            }),
         )
             .into_response(),
         Err(err) => (
             axum::http::StatusCode::BAD_GATEWAY,
-            Json(json!({
-                "ok": false,
-                "error": err.to_string()
-            })),
+            Json(TailscaleErrorResponse {
+                ok: false,
+                error: err.to_string(),
+            }),
         )
             .into_response(),
     }
@@ -265,20 +278,18 @@ async fn discover_tailscale_devices(
         return Err(anyhow!(msg.to_string()));
     }
 
-    let doc: Value =
-        serde_json::from_slice(&output.stdout).context("failed to parse tailscale status JSON")?;
+    let doc: JsonValue = json::parse(&String::from_utf8_lossy(&output.stdout))
+        .context("failed to parse tailscale status JSON")?;
     let mut devices = Vec::new();
     append_tailscale_entry(
         &mut devices,
-        doc.get("Self"),
+        Some(&doc["Self"]),
         true,
         term_port,
         include_offline,
     );
-    if let Some(peers) = doc.get("Peer").and_then(|v| v.as_object()) {
-        for peer in peers.values() {
-            append_tailscale_entry(&mut devices, Some(peer), false, term_port, include_offline);
-        }
+    for (_, peer) in doc["Peer"].entries() {
+        append_tailscale_entry(&mut devices, Some(peer), false, term_port, include_offline);
     }
     devices.sort_by(|a, b| a.name.cmp(&b.name));
     devices.dedup_by(|a, b| a.base_url == b.base_url);
@@ -287,7 +298,7 @@ async fn discover_tailscale_devices(
 
 fn append_tailscale_entry(
     out: &mut Vec<TailscaleBridgeDevice>,
-    entry: Option<&Value>,
+    entry: Option<&JsonValue>,
     is_self: bool,
     term_port: u16,
     include_offline: bool,
@@ -295,23 +306,18 @@ fn append_tailscale_entry(
     let Some(entry) = entry else {
         return;
     };
-    let online = entry
-        .get("Online")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(is_self);
+    let online = entry["Online"].as_bool().unwrap_or(is_self);
     if !include_offline && !online {
         return;
     }
 
-    let dns_name = entry
-        .get("DNSName")
-        .and_then(|v| v.as_str())
+    let dns_name = entry["DNSName"]
+        .as_str()
         .unwrap_or("")
         .trim_end_matches('.')
         .to_string();
-    let host_name = entry
-        .get("HostName")
-        .and_then(|v| v.as_str())
+    let host_name = entry["HostName"]
+        .as_str()
         .unwrap_or("")
         .to_string();
     let tailnet_name = if !host_name.is_empty() {
@@ -324,10 +330,9 @@ fn append_tailscale_entry(
     let base_host = if !dns_name.is_empty() {
         dns_name
     } else {
-        let maybe_ip = entry
-            .get("TailscaleIPs")
-            .and_then(|v| v.as_array())
-            .and_then(|ips| ips.first())
+        let maybe_ip = entry["TailscaleIPs"]
+            .members()
+            .next()
             .and_then(|v| v.as_str())
             .unwrap_or("");
         if maybe_ip.is_empty() {

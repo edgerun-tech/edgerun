@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pub mod ci;
+pub mod event_bus;
 pub mod integration;
-pub mod mcp;
 pub mod observer;
 pub mod program;
 pub mod runtime_ops;

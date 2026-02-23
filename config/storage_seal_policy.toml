@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# Storage sealing policy scaffold.
+# Runtime wiring is intentionally separate; this file defines canonical repo policy.
+
+mode = "chain_preferred"
+
+[chain]
+# Seal active segments after this many Solana slots, when chain clock is available.
+max_slot_span = 128
+# Safety cap in epochs for long-lived active segments.
+max_epoch_span = 1
+
+[time]
+# Fallback/local mode thresholds when chain clock is unavailable or mode=time_only.
+max_age_ms = 30000
+idle_ms = 5000

@@ -14,15 +14,15 @@ use edgerun_transport_core::{
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
-    HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
-    SessionCreateRequest, SessionCreateResponse, WorkerCapacity, WorkerFailureReport,
+    BundleGetRequest, ControlWsClientMessage, ControlWsRequestPayload,
+    ControlWsResponsePayload, ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse,
+    PolicyInfoResponse, QueuedAssignment, SessionCreateRequest, SessionCreateResponse,
+    WorkerAssignmentsRequest, WorkerCapacity, WorkerFailureReport,
     WorkerReplayArtifactReport, WorkerResultReport,
 };
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use reqwest::Url;
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
@@ -110,35 +110,11 @@ impl SubmissionKind {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct ControlWsClientMessage<'a> {
-    request_id: String,
-    op: &'a str,
-    payload: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct ControlWsServerMessage {
-    request_id: String,
-    ok: bool,
-    #[serde(default)]
-    data: Option<serde_json::Value>,
-    #[serde(default)]
-    error: Option<String>,
-    #[serde(default)]
-    status: Option<u16>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BundleGetResponse {
-    payload_b64: String,
-}
-
 #[derive(Debug)]
 struct PendingSubmission {
     kind: SubmissionKind,
     idempotency_key: String,
-    body: serde_json::Value,
+    body: ControlWsRequestPayload,
     attempts: u32,
     next_attempt_at: Instant,
 }
@@ -420,23 +396,34 @@ async fn send_heartbeat(cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
         signature: None,
     };
     payload.signature = sign_worker_payload(cfg, heartbeat_signing_message(&payload));
-    control_ws_request(
-        cfg,
-        "worker.heartbeat",
-        serde_json::to_value(payload).context("serialize heartbeat payload")?,
-    )
-    .await
-    .context("heartbeat request failed")
+    let response = control_ws_request(cfg, ControlWsRequestPayload::WorkerHeartbeat(payload))
+        .await
+        .context("heartbeat request failed")?;
+    match response {
+        ControlWsResponsePayload::WorkerHeartbeat(v) => Ok(v),
+        other => anyhow::bail!(
+            "heartbeat request returned unexpected payload variant: {:?}",
+            other
+        ),
+    }
 }
 
 async fn poll_assignments(cfg: &WorkerConfig) -> Result<AssignmentsResponse> {
-    control_ws_request(
+    let response = control_ws_request(
         cfg,
-        "worker.assignments",
-        serde_json::json!({ "worker_pubkey": cfg.worker_pubkey }),
+        ControlWsRequestPayload::WorkerAssignments(WorkerAssignmentsRequest {
+            worker_pubkey: cfg.worker_pubkey.clone(),
+        }),
     )
     .await
-    .context("assignments request failed")
+    .context("assignments request failed")?;
+    match response {
+        ControlWsResponsePayload::WorkerAssignments(v) => Ok(*v),
+        other => anyhow::bail!(
+            "assignments request returned unexpected payload variant: {:?}",
+            other
+        ),
+    }
 }
 
 async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) -> Result<()> {
@@ -646,13 +633,21 @@ async fn process_assignment(
         anyhow::bail!(msg);
     }
 
-    let bundle_response: BundleGetResponse = control_ws_request(
+    let bundle_response = match control_ws_request(
         cfg,
-        "bundle.get",
-        serde_json::json!({ "bundle_hash": assignment.bundle_hash }),
+        ControlWsRequestPayload::BundleGet(BundleGetRequest {
+            bundle_hash: assignment.bundle_hash.clone(),
+        }),
     )
     .await
-    .context("bundle fetch failed")?;
+    .context("bundle fetch failed")?
+    {
+        ControlWsResponsePayload::BundleGet(v) => v,
+        other => anyhow::bail!(
+            "bundle.get request returned unexpected payload variant: {:?}",
+            other
+        ),
+    };
     let bundle_bytes = base64::engine::general_purpose::STANDARD
         .decode(bundle_response.payload_b64.as_bytes())
         .context("bundle payload base64 decode failed")?;
@@ -974,11 +969,36 @@ async fn submit_with_retry<T: Serialize>(
     idempotency_key: String,
     payload: &T,
 ) -> bool {
-    let body = match serde_json::to_value(payload) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!(error = %err, "failed to serialize worker submission");
-            return false;
+    let body = match kind {
+        SubmissionKind::Result => {
+            let Some(value) = bincode::serialize(payload)
+                .ok()
+                .and_then(|bytes| bincode::deserialize::<WorkerResultReport>(&bytes).ok())
+            else {
+                tracing::error!("failed to encode worker.result payload");
+                return false;
+            };
+            ControlWsRequestPayload::WorkerResult(value)
+        }
+        SubmissionKind::Failure => {
+            let Some(value) = bincode::serialize(payload)
+                .ok()
+                .and_then(|bytes| bincode::deserialize::<WorkerFailureReport>(&bytes).ok())
+            else {
+                tracing::error!("failed to encode worker.failure payload");
+                return false;
+            };
+            ControlWsRequestPayload::WorkerFailure(value)
+        }
+        SubmissionKind::Replay => {
+            let Some(value) = bincode::serialize(payload)
+                .ok()
+                .and_then(|bytes| bincode::deserialize::<WorkerReplayArtifactReport>(&bytes).ok())
+            else {
+                tracing::error!("failed to encode worker.replay payload");
+                return false;
+            };
+            ControlWsRequestPayload::WorkerReplay(value)
         }
     };
 
@@ -1039,7 +1059,7 @@ fn enqueue_submission(
     queue: &mut SubmissionQueue,
     kind: SubmissionKind,
     idempotency_key: String,
-    body: serde_json::Value,
+    body: ControlWsRequestPayload,
 ) {
     if queue
         .items
@@ -1077,11 +1097,22 @@ fn retry_backoff_delay(queue: &SubmissionQueue, attempts: u32) -> Duration {
 async fn post_submission(
     cfg: &WorkerConfig,
     kind: SubmissionKind,
-    body: &serde_json::Value,
+    body: &ControlWsRequestPayload,
 ) -> Result<()> {
-    let _resp: serde_json::Value = control_ws_request(cfg, kind.op(), body.clone())
+    let resp = control_ws_request(cfg, body.clone())
         .await
         .with_context(|| format!("submission request failed for {}", kind.op()))?;
+    if !matches!(
+        resp,
+        ControlWsResponsePayload::WorkerResult(_)
+            | ControlWsResponsePayload::WorkerFailure(_)
+            | ControlWsResponsePayload::WorkerReplay(_)
+    ) {
+        anyhow::bail!(
+            "submission request returned unexpected payload variant: {:?}",
+            resp
+        );
+    }
     Ok(())
 }
 
@@ -1108,11 +1139,10 @@ fn next_control_request_id() -> String {
     format!("{}-{seq}", now_unix_seconds())
 }
 
-async fn control_ws_request<T: DeserializeOwned>(
+async fn control_ws_request(
     cfg: &WorkerConfig,
-    op: &str,
-    payload: serde_json::Value,
-) -> Result<T> {
+    payload: ControlWsRequestPayload,
+) -> Result<ControlWsResponsePayload> {
     let client_id = format!("worker-{}", cfg.worker_pubkey);
     let ws_url = control_ws_url(&cfg.scheduler_base_url, &client_id)?;
     let (mut socket, _resp) = timeout(
@@ -1126,13 +1156,12 @@ async fn control_ws_request<T: DeserializeOwned>(
     let request_id = next_control_request_id();
     let outbound = ControlWsClientMessage {
         request_id: request_id.clone(),
-        op,
         payload,
     };
-    let encoded = serde_json::to_string(&outbound).context("control ws request encode failed")?;
+    let encoded = bincode::serialize(&outbound).context("control ws request encode failed")?;
     timeout(
         CONTROL_WS_TIMEOUT,
-        socket.send(Message::Text(encoded.into())),
+        socket.send(Message::Binary(encoded.into())),
     )
     .await
     .context("control ws send timed out")?
@@ -1146,11 +1175,11 @@ async fn control_ws_request<T: DeserializeOwned>(
             anyhow::bail!("control ws closed before response");
         };
         let frame = frame.context("control ws frame error")?;
-        let Message::Text(text) = frame else {
+        let Message::Binary(bytes) = frame else {
             continue;
         };
         let msg: ControlWsServerMessage =
-            serde_json::from_str(&text).context("control ws response decode failed")?;
+            bincode::deserialize(&bytes).context("control ws response decode failed")?;
         if msg.request_id != request_id {
             continue;
         }
@@ -1164,8 +1193,7 @@ async fn control_ws_request<T: DeserializeOwned>(
         let data = msg
             .data
             .ok_or_else(|| anyhow::anyhow!("control ws response missing data"))?;
-        let parsed = serde_json::from_value::<T>(data).context("control ws data decode failed")?;
-        return Ok(parsed);
+        return Ok(data);
     }
 }
 
@@ -1416,6 +1444,7 @@ fn parse_runtime_id_hex(runtime_id: &str) -> Result<[u8; 32]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_types::control_plane::SubmissionAck;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -1472,25 +1501,50 @@ mod tests {
                     Ok(v) => v,
                     Err(_) => continue,
                 };
-                while let Some(Ok(Message::Text(text))) = ws.next().await {
-                    let request: serde_json::Value = match serde_json::from_str(&text) {
+                while let Some(Ok(Message::Binary(bytes))) = ws.next().await {
+                    let request: ControlWsClientMessage = match bincode::deserialize(&bytes) {
                         Ok(v) => v,
                         Err(_) => continue,
                     };
-                    let request_id = request
-                        .get("request_id")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("")
-                        .to_string();
+                    let request_id = request.request_id.trim().to_string();
                     if request_id.is_empty() {
                         continue;
                     }
-                    let response = serde_json::json!({
-                        "request_id": request_id,
-                        "ok": true,
-                        "data": { "ok": true }
-                    });
-                    let _ = ws.send(Message::Text(response.to_string().into())).await;
+                    let data = match request.payload {
+                        ControlWsRequestPayload::WorkerResult(_)=> {
+                            ControlWsResponsePayload::WorkerResult(SubmissionAck {
+                                ok: true,
+                                duplicate: false,
+                                quorum_reached: Some(false),
+                            })
+                        }
+                        ControlWsRequestPayload::WorkerFailure(_) => {
+                            ControlWsResponsePayload::WorkerFailure(SubmissionAck {
+                                ok: true,
+                                duplicate: false,
+                                quorum_reached: None,
+                            })
+                        }
+                        ControlWsRequestPayload::WorkerReplay(_) => {
+                            ControlWsResponsePayload::WorkerReplay(SubmissionAck {
+                                ok: true,
+                                duplicate: false,
+                                quorum_reached: None,
+                            })
+                        }
+                        _ => continue,
+                    };
+                    let response = ControlWsServerMessage {
+                        request_id,
+                        ok: true,
+                        data: Some(data),
+                        error: None,
+                        status: None,
+                    };
+                    let Ok(encoded) = bincode::serialize(&response) else {
+                        continue;
+                    };
+                    let _ = ws.send(Message::Binary(encoded.into())).await;
                 }
             }
         });
@@ -1562,13 +1616,31 @@ mod tests {
             &mut queue,
             SubmissionKind::Failure,
             "ik-failure-1".to_string(),
-            serde_json::json!({"idempotency_key":"ik-failure-1"}),
+            ControlWsRequestPayload::WorkerFailure(WorkerFailureReport {
+                idempotency_key: "ik-failure-1".to_string(),
+                worker_pubkey: "worker-test".to_string(),
+                job_id: "job-test".to_string(),
+                bundle_hash: "bundle-hash".to_string(),
+                phase: "exec".to_string(),
+                error_code: "err".to_string(),
+                error_message: "boom".to_string(),
+                signature: None,
+            }),
         );
         enqueue_submission(
             &mut queue,
             SubmissionKind::Failure,
             "ik-failure-1".to_string(),
-            serde_json::json!({"idempotency_key":"ik-failure-1"}),
+            ControlWsRequestPayload::WorkerFailure(WorkerFailureReport {
+                idempotency_key: "ik-failure-1".to_string(),
+                worker_pubkey: "worker-test".to_string(),
+                job_id: "job-test".to_string(),
+                bundle_hash: "bundle-hash".to_string(),
+                phase: "exec".to_string(),
+                error_code: "err".to_string(),
+                error_message: "boom".to_string(),
+                signature: None,
+            }),
         );
         assert_eq!(queue.items.len(), 1);
 
@@ -1576,7 +1648,28 @@ mod tests {
             &mut queue,
             SubmissionKind::Replay,
             "ik-failure-1".to_string(),
-            serde_json::json!({"idempotency_key":"ik-failure-1"}),
+            ControlWsRequestPayload::WorkerReplay(WorkerReplayArtifactReport {
+                idempotency_key: "ik-failure-1".to_string(),
+                worker_pubkey: "worker-test".to_string(),
+                job_id: "job-test".to_string(),
+                artifact: ReplayArtifactPayload {
+                    bundle_hash: "bundle-hash".to_string(),
+                    ok: false,
+                    abi_version: None,
+                    runtime_id: Some("runtime-id".to_string()),
+                    output_hash: Some("output-hash".to_string()),
+                    output_len: Some(1),
+                    input_len: Some(1),
+                    max_memory_bytes: None,
+                    max_instructions: None,
+                    fuel_limit: None,
+                    fuel_remaining: None,
+                    error_code: Some("err".to_string()),
+                    error_message: Some("boom".to_string()),
+                    trap_code: None,
+                },
+                signature: None,
+            }),
         );
         assert_eq!(
             queue.items.len(),

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Edgerun-Proprietary
 #![allow(deprecated)]
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
@@ -12,31 +13,33 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use axum::{
-    body::Bytes,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::Query,
-    extract::{Path, State},
-    http::{
-        header::{ACCESS_CONTROL_ALLOW_ORIGIN, ORIGIN, VARY},
-        HeaderMap, HeaderValue, StatusCode,
-    },
+    extract::State,
+    http::StatusCode,
     response::IntoResponse,
-    response::Response,
-    routing::{get, post},
-    Json, Router,
+    routing::get,
+    Router,
 };
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
+use edgerun_storage::durability::DurabilityLevel;
+use edgerun_storage::event::{ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId};
+use edgerun_storage::StorageEngine;
 use edgerun_transport_core::{
     failure_signing_message, heartbeat_signing_message, replay_signing_message,
-    result_signing_message, route_register_signing_message,
+    result_signing_message,
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
-    HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse, QueuedAssignment,
-    SessionCreateRequest, SessionCreateResponse, WorkerFailureReport, WorkerReplayArtifactReport,
-    WorkerResultReport,
+    BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
+    ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, JobCreateRequest,
+    JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse,
+    QueuedAssignment, RouteOwnerRequest, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
+    RouteResolveResponse as CpRouteResolveResponse, SlashWorkerArtifact, SubmissionAck,
+    WorkerAssignmentsRequest, WorkerFailureReport,
+    WorkerReplayArtifactReport, WorkerResultReport,
 };
 use fs2::FileExt;
 use serde::{Deserialize, Serialize};
@@ -85,21 +88,9 @@ struct AppState {
     client_signature_max_age_secs: u64,
     chain_auto_submit: bool,
     job_timeout_secs: u64,
-    session_ttl_secs: u64,
-    require_policy_session: bool,
-    policy_session_bootstrap_token: Option<String>,
-    policy_session_shared: bool,
-    policy_session_lock_path: PathBuf,
-    policy_session_flush_state: Arc<Mutex<SnapshotFlushState>>,
-    policy_session_sync_min_interval_secs: u64,
-    sessions: Arc<Mutex<HashMap<String, edgerun_hwvault_primitives::session::SessionState>>>,
-    policy_nonces: Arc<Mutex<HashMap<String, u64>>>,
-    policy_session_state_path: PathBuf,
     policy_audit_path: PathBuf,
     trust_policy: Arc<Mutex<edgerun_types::SyncTrustPolicy>>,
-    trust_policy_path: PathBuf,
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
-    attestation_policy_path: PathBuf,
     route_shared_state_path: PathBuf,
     route_flush_state: Arc<Mutex<SnapshotFlushState>>,
     route_sync_min_interval_secs: u64,
@@ -108,6 +99,9 @@ struct AppState {
     route_challenges: Arc<Mutex<HashMap<String, u64>>>,
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
     signal_peers: Arc<tokio::sync::Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
+    chain_progress_sink: Arc<Mutex<Option<ChainProgressSink>>>,
+    latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
+    require_chain_progress_signature_verification: bool,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -124,6 +118,24 @@ struct ChainContext {
     rpc: RpcClient,
     program_id: Pubkey,
     payer: Keypair,
+}
+
+struct ChainProgressSink {
+    session: edgerun_storage::EngineAppendSession,
+    stream_id: StorageStreamId,
+    actor_id: StorageActorId,
+    signer_pubkey: String,
+    seq: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SchedulerSignedChainProgressEvent {
+    progress_event_id: String,
+    slot: u64,
+    epoch: u64,
+    observed_at_unix_ms: u64,
+    signer: String,
+    signature: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -144,60 +156,6 @@ struct WorkerRegistryEntry {
     last_heartbeat_unix_s: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct JobQuorumState {
-    #[serde(default)]
-    expected_bundle_hash: String,
-    #[serde(default)]
-    expected_runtime_id: String,
-    committee_workers: Vec<String>,
-    committee_size: u8,
-    quorum: u8,
-    #[serde(default)]
-    assign_tx: Option<String>,
-    #[serde(default)]
-    assign_sig: Option<String>,
-    #[serde(default)]
-    assign_submitted: bool,
-    quorum_reached: bool,
-    winning_output_hash: Option<String>,
-    winning_workers: Vec<String>,
-    #[serde(default)]
-    finalize_triggered: bool,
-    finalize_tx: Option<String>,
-    finalize_sig: Option<String>,
-    #[serde(default)]
-    finalize_submitted: bool,
-    #[serde(default)]
-    cancel_triggered: bool,
-    #[serde(default)]
-    cancel_tx: Option<String>,
-    #[serde(default)]
-    cancel_sig: Option<String>,
-    #[serde(default)]
-    cancel_submitted: bool,
-    #[serde(default)]
-    onchain_status: Option<String>,
-    #[serde(default)]
-    onchain_last_observed_slot: Option<u64>,
-    #[serde(default)]
-    onchain_last_update_unix_s: Option<u64>,
-    #[serde(default)]
-    onchain_deadline_slot: Option<u64>,
-    #[serde(default)]
-    slash_artifacts: Vec<SlashWorkerArtifact>,
-    created_at_unix_s: u64,
-    quorum_reached_at_unix_s: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SlashWorkerArtifact {
-    worker_pubkey: String,
-    tx: String,
-    sig: Option<String>,
-    submitted: bool,
-}
-
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 struct PersistedState {
@@ -208,116 +166,7 @@ struct PersistedState {
     job_last_update: HashMap<String, u64>,
     worker_registry: HashMap<String, WorkerRegistryEntry>,
     job_quorum: HashMap<String, JobQuorumState>,
-}
-
-#[derive(Debug, Deserialize)]
-struct AssignmentsQuery {
-    worker_pubkey: String,
-}
-
-#[derive(Debug, Serialize)]
-struct HealthResponse {
-    ok: bool,
-    service: &'static str,
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionRotateRequest {
-    #[serde(default)]
-    bound_origin: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionRotateResponse {
-    token: String,
-    session_key: String,
-    ttl_secs: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct SessionInvalidateRequest {
-    #[serde(default)]
-    token: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SessionInvalidateResponse {
-    ok: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct PolicyAuditQuery {
-    limit: Option<usize>,
-}
-
-#[derive(Debug, Serialize)]
-struct PolicyAuditListResponse {
-    events: Vec<edgerun_hwvault_primitives::audit::PolicyAuditEvent>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct TrustPolicySetRequest {
-    profile: String,
-}
-
-#[derive(Debug, Serialize)]
-struct TrustPolicyResponse {
-    policy: edgerun_types::SyncTrustPolicy,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct AttestationPolicySetRequest {
-    required: bool,
-    max_age_secs: u64,
-    #[serde(default)]
-    allowed_measurements: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct AttestationPolicyResponse {
-    policy: edgerun_types::AttestationPolicy,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct PersistedPolicySessionState {
-    #[serde(default)]
-    sessions: HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
-    #[serde(default)]
-    nonces: HashMap<String, u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct JobCreateRequest {
-    runtime_id: String,
-    wasm_base64: String,
-    input_base64: String,
-    abi_version: Option<u8>,
-    limits: edgerun_types::Limits,
-    escrow_lamports: u64,
-    assignment_worker_pubkey: Option<String>,
-    client_pubkey: Option<String>,
-    client_signed_at_unix_s: Option<u64>,
-    client_signature: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct JobCreateResponse {
-    job_id: String,
-    bundle_hash: String,
-    bundle_url: String,
-    post_job_tx: String,
-    post_job_sig: Option<String>,
-    assign_workers_tx: Option<String>,
-    assign_workers_sig: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct JobStatusResponse {
-    job_id: String,
-    reports: Vec<WorkerResultReport>,
-    failures: Vec<WorkerFailureReport>,
-    replay_artifacts: Vec<WorkerReplayArtifactReport>,
-    quorum: Option<JobQuorumState>,
+    latest_chain_progress_event_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -333,56 +182,6 @@ struct DeviceRouteEntry {
     last_seen_unix_s: u64,
     expires_at_unix_s: u64,
     updated_at_unix_s: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteRegisterRequest {
-    device_id: String,
-    owner_pubkey: String,
-    reachable_urls: Vec<String>,
-    #[serde(default)]
-    capabilities: Vec<String>,
-    #[serde(default)]
-    relay_session_id: Option<String>,
-    #[serde(default)]
-    ttl_secs: Option<u64>,
-    challenge_nonce: String,
-    signed_at_unix_s: u64,
-    signature: String,
-}
-
-#[derive(Debug, Serialize)]
-struct RouteRegisterResponse {
-    ok: bool,
-    device_id: String,
-    expires_at_unix_s: u64,
-    heartbeat_token: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteChallengeRequest {
-    device_id: String,
-}
-
-#[derive(Debug, Serialize)]
-struct RouteChallengeResponse {
-    nonce: String,
-    expires_at_unix_s: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct RouteHeartbeatRequest {
-    device_id: String,
-    token: String,
-    #[serde(default)]
-    ttl_secs: Option<u64>,
-}
-
-#[derive(Debug, Serialize)]
-struct RouteHeartbeatResponse {
-    ok: bool,
-    device_id: String,
-    expires_at_unix_s: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -428,58 +227,27 @@ struct ControlWsConnectQuery {
 
 #[derive(Debug, Deserialize)]
 struct WebRtcSignalClientMessage {
-    #[serde(default)]
     to_device_id: String,
-    #[serde(default)]
     to_owner_pubkey: String,
     kind: String,
-    #[serde(default)]
     sdp: Option<String>,
-    #[serde(default)]
     candidate: Option<String>,
-    #[serde(default)]
     sdp_mid: Option<String>,
-    #[serde(default)]
     sdp_mline_index: Option<u16>,
-    #[serde(default)]
-    metadata: Option<serde_json::Value>,
+    metadata: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct WebRtcSignalServerMessage {
     from_device_id: String,
     kind: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     sdp: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     candidate: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     sdp_mid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     sdp_mline_index: Option<u16>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    metadata: Option<serde_json::Value>,
+    metadata: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct ControlWsClientMessage {
-    request_id: String,
-    op: String,
-    #[serde(default)]
-    payload: serde_json::Value,
-}
-
-#[derive(Debug, Serialize)]
-struct ControlWsServerMessage {
-    request_id: String,
-    ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    status: Option<u16>,
-}
 
 struct PostJobArgs {
     client: Pubkey,
@@ -505,7 +273,7 @@ async fn main() -> Result<()> {
     std::fs::create_dir_all(data_dir.join("bundles"))?;
     let route_shared_state_path = std::env::var("EDGERUN_SCHEDULER_ROUTE_STATE_PATH")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| data_dir.join("route-state.json"));
+        .unwrap_or_else(|_| data_dir.join("route-state.bin"));
     if let Some(parent) = route_shared_state_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -560,14 +328,26 @@ async fn main() -> Result<()> {
             "MVP scheduler enforces quorum=2; ignoring configured value"
         );
     }
-    let trust_policy_path = data_dir.join("trust-policy.json");
+    let trust_policy_path = data_dir.join("trust-policy.bin");
     let trust_policy = load_trust_policy(&trust_policy_path).unwrap_or_default();
-    let attestation_policy_path = data_dir.join("attestation-policy.json");
+    let attestation_policy_path = data_dir.join("attestation-policy.bin");
     let attestation_policy = load_attestation_policy(&attestation_policy_path).unwrap_or_default();
-    let policy_session_state_path = data_dir.join("policy-session-state.json");
-    let loaded_policy_session_state =
-        load_policy_session_state(&policy_session_state_path).unwrap_or_default();
     let loaded_route_state = load_route_state(&route_shared_state_path).unwrap_or_default();
+    let require_chain_progress_signature_verification = read_env_bool(
+        "EDGERUN_SCHEDULER_REQUIRE_CHAIN_PROGRESS_SIGNATURE_VERIFICATION",
+        false,
+    );
+    if require_chain_progress_signature_verification {
+        anyhow::bail!(
+            "EDGERUN_SCHEDULER_REQUIRE_CHAIN_PROGRESS_SIGNATURE_VERIFICATION=true is not supported yet: \
+implement cryptographic verification for scheduler signed chain progress events before enabling"
+        );
+    }
+    let policy_signing_key = load_policy_signing_key()?;
+    let chain_progress_sink = init_chain_progress_sink(
+        &data_dir,
+        hex::encode(policy_signing_key.verifying_key().to_bytes()),
+    );
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -587,7 +367,7 @@ async fn main() -> Result<()> {
         .max(1),
         worker_registry: Arc::new(Mutex::new(persisted.worker_registry)),
         job_quorum: Arc::new(Mutex::new(persisted.job_quorum)),
-        policy_signing_key: load_policy_signing_key()?,
+        policy_signing_key,
         policy_key_id: std::env::var("EDGERUN_SCHEDULER_POLICY_KEY_ID")
             .unwrap_or_else(|_| default_policy_key_id()),
         policy_version: read_env_u32("EDGERUN_SCHEDULER_POLICY_VERSION", default_policy_version()),
@@ -623,29 +403,9 @@ async fn main() -> Result<()> {
         ),
         chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
-        session_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_SESSION_TTL_SECS", 15 * 60),
-        require_policy_session: read_env_bool("EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION", true),
-        policy_session_bootstrap_token: std::env::var(
-            "EDGERUN_SCHEDULER_POLICY_SESSION_BOOTSTRAP_TOKEN",
-        )
-        .ok()
-        .filter(|v| !v.trim().is_empty()),
-        policy_session_shared: read_env_bool("EDGERUN_SCHEDULER_POLICY_SESSION_SHARED", false),
-        policy_session_lock_path: data_dir.join("policy-session.lock"),
-        policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
-        policy_session_sync_min_interval_secs: read_env_u64(
-            "EDGERUN_SCHEDULER_POLICY_SESSION_SYNC_MIN_INTERVAL_SECS",
-            2,
-        )
-        .max(1),
-        sessions: Arc::new(Mutex::new(loaded_policy_session_state.sessions)),
-        policy_nonces: Arc::new(Mutex::new(loaded_policy_session_state.nonces)),
-        policy_session_state_path,
         policy_audit_path: data_dir.join("policy-audit.jsonl"),
         trust_policy: Arc::new(Mutex::new(trust_policy)),
-        trust_policy_path,
         attestation_policy: Arc::new(Mutex::new(attestation_policy)),
-        attestation_policy_path,
         route_shared_state_path,
         route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
         route_sync_min_interval_secs: read_env_u64(
@@ -659,37 +419,19 @@ async fn main() -> Result<()> {
         route_challenges: Arc::new(Mutex::new(loaded_route_state.route_challenges)),
         route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
         signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+        chain_progress_sink: Arc::new(Mutex::new(chain_progress_sink)),
+        latest_chain_progress_event_id: Arc::new(Mutex::new(
+            persisted.latest_chain_progress_event_id.clone(),
+        )),
+        require_chain_progress_signature_verification,
         chain,
     };
     enforce_history_retention(&state);
 
     let housekeeping_state = state.clone();
     let app = Router::new()
-        .route("/health", get(health))
-        .route("/v1/session/create", post(session_create))
-        .route("/v1/session/rotate", post(session_rotate))
-        .route("/v1/session/invalidate", post(session_invalidate))
-        .route("/v1/route/challenge", post(route_challenge))
-        .route("/v1/route/register", post(route_register))
-        .route("/v1/route/heartbeat", post(route_heartbeat))
-        .route("/v1/route/resolve/{device_id}", get(route_resolve))
-        .route("/v1/route/owner/{owner_pubkey}", get(route_owner_resolve))
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
-        .route("/v1/policy/info", get(policy_info))
-        .route("/v1/policy/audit", get(policy_audit_list))
-        .route("/v1/trust/policy/get", get(trust_policy_get))
-        .route("/v1/trust/policy/set", post(trust_policy_set))
-        .route("/v1/attestation/policy/get", get(attestation_policy_get))
-        .route("/v1/attestation/policy/set", post(attestation_policy_set))
-        .route("/v1/worker/heartbeat", post(worker_heartbeat))
-        .route("/v1/worker/assignments", get(worker_assignments))
-        .route("/v1/worker/result", post(worker_result))
-        .route("/v1/worker/failure", post(worker_failure))
-        .route("/v1/worker/replay", post(worker_replay_artifact))
-        .route("/v1/job/create", post(job_create))
-        .route("/v1/job/{job_id}", get(get_job_status))
-        .route("/bundle/{bundle_hash}", get(get_bundle))
         .with_state(state);
     tokio::spawn(async move {
         housekeeping_loop(housekeeping_state).await;
@@ -698,22 +440,6 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-async fn health(headers: HeaderMap) -> Response {
-    let body = serde_json::to_string(&HealthResponse {
-        ok: true,
-        service: "edgerun-scheduler",
-    })
-    .unwrap_or_else(|_| "{\"ok\":true,\"service\":\"edgerun-scheduler\"}".to_string());
-    let mut response = Response::new(axum::body::Body::from(body));
-    *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        axum::http::header::CONTENT_TYPE,
-        HeaderValue::from_static("application/json"),
-    );
-    apply_cors_headers(&mut response, &headers);
-    response
 }
 
 fn with_route_maps_mut<R>(
@@ -732,180 +458,6 @@ fn with_route_maps_mut<R>(
     };
     schedule_route_state_flush(state).map_err(internal_err)?;
     Ok(out)
-}
-
-async fn route_challenge(
-    State(state): State<AppState>,
-    Json(payload): Json<RouteChallengeRequest>,
-) -> Result<Json<RouteChallengeResponse>, (StatusCode, String)> {
-    let device_id = payload.device_id.trim();
-    if device_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
-    }
-    let now = now_unix_seconds();
-    let nonce = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
-    let expires_at = now.saturating_add(120);
-    with_route_maps_mut(&state, |_, challenges, _| {
-        prune_expired_route_challenges(challenges, now);
-        challenges.insert(nonce.clone(), expires_at);
-        Ok(())
-    })?;
-
-    Ok(Json(RouteChallengeResponse {
-        nonce,
-        expires_at_unix_s: expires_at,
-    }))
-}
-
-async fn route_register(
-    State(state): State<AppState>,
-    Json(payload): Json<RouteRegisterRequest>,
-) -> Result<Json<RouteRegisterResponse>, (StatusCode, String)> {
-    let device_id = payload.device_id.trim();
-    let owner_pubkey = payload.owner_pubkey.trim();
-    if device_id.is_empty() || owner_pubkey.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "device_id and owner_pubkey are required".to_string(),
-        ));
-    }
-    if payload.reachable_urls.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "at least one reachable_urls entry is required".to_string(),
-        ));
-    }
-
-    let sanitized_urls = payload
-        .reachable_urls
-        .into_iter()
-        .map(|v| v.trim().to_string())
-        .filter(|v| v.starts_with("https://") || v.starts_with("http://"))
-        .collect::<Vec<_>>();
-    if sanitized_urls.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "reachable_urls must include http(s) endpoints".to_string(),
-        ));
-    }
-
-    let now = now_unix_seconds();
-    if now.saturating_sub(payload.signed_at_unix_s) > 180 {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "route register signature expired".to_string(),
-        ));
-    }
-
-    let msg = route_register_signing_message(
-        owner_pubkey,
-        device_id,
-        &sanitized_urls,
-        payload.challenge_nonce.trim(),
-        payload.signed_at_unix_s,
-    );
-    if !verify_any_ed25519_signature(owner_pubkey, &payload.signature, msg.as_bytes())? {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "invalid route signature".to_string(),
-        ));
-    }
-
-    let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
-    let expires_at = now.saturating_add(ttl);
-    let heartbeat_token = edgerun_hwvault_primitives::hardware::random_token_b64url(24);
-    let heartbeat_exp = now.saturating_add(24 * 60 * 60);
-    with_route_maps_mut(&state, |routes, challenges, heartbeat_tokens| {
-        prune_expired_route_challenges(challenges, now);
-        let Some(exp) = challenges.remove(payload.challenge_nonce.trim()) else {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "unknown or expired route challenge".to_string(),
-            ));
-        };
-        if exp <= now {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "route challenge expired".to_string(),
-            ));
-        }
-
-        prune_expired_routes(routes, now);
-        routes.insert(
-            device_id.to_string(),
-            DeviceRouteEntry {
-                device_id: device_id.to_string(),
-                owner_pubkey: owner_pubkey.to_string(),
-                reachable_urls: sanitized_urls,
-                capabilities: payload.capabilities,
-                relay_session_id: payload.relay_session_id,
-                online: true,
-                last_seen_unix_s: now,
-                expires_at_unix_s: expires_at,
-                updated_at_unix_s: now,
-            },
-        );
-
-        prune_expired_route_tokens(heartbeat_tokens, now);
-        heartbeat_tokens.insert(
-            heartbeat_token.clone(),
-            RouteHeartbeatToken {
-                device_id: device_id.to_string(),
-                expires_at_unix_s: heartbeat_exp,
-            },
-        );
-        Ok(())
-    })?;
-
-    Ok(Json(RouteRegisterResponse {
-        ok: true,
-        device_id: device_id.to_string(),
-        expires_at_unix_s: expires_at,
-        heartbeat_token,
-    }))
-}
-
-async fn route_heartbeat(
-    State(state): State<AppState>,
-    Json(payload): Json<RouteHeartbeatRequest>,
-) -> Result<Json<RouteHeartbeatResponse>, (StatusCode, String)> {
-    let device_id = payload.device_id.trim();
-    if device_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
-    }
-    if payload.token.trim().is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "token is required".to_string()));
-    }
-    let now = now_unix_seconds();
-    let ttl = payload.ttl_secs.unwrap_or(90).clamp(15, 3600);
-    let expires_at = now.saturating_add(ttl);
-    with_route_maps_mut(&state, |routes, _, heartbeat_tokens| {
-        prune_expired_route_tokens(heartbeat_tokens, now);
-        let Some(token) = heartbeat_tokens.get(payload.token.trim()) else {
-            return Err((StatusCode::UNAUTHORIZED, "invalid route token".to_string()));
-        };
-        if token.device_id != device_id {
-            return Err((
-                StatusCode::FORBIDDEN,
-                "route token/device mismatch".to_string(),
-            ));
-        }
-        prune_expired_routes(routes, now);
-        let Some(entry) = routes.get_mut(device_id) else {
-            return Err((StatusCode::NOT_FOUND, "route not found".to_string()));
-        };
-        entry.online = true;
-        entry.last_seen_unix_s = now;
-        entry.expires_at_unix_s = expires_at;
-        entry.updated_at_unix_s = now;
-        Ok(())
-    })?;
-
-    Ok(Json(RouteHeartbeatResponse {
-        ok: true,
-        device_id: device_id.to_string(),
-        expires_at_unix_s: expires_at,
-    }))
 }
 
 fn resolve_route_for_device(state: &AppState, device_id: &str) -> RouteResolveResponse {
@@ -942,26 +494,6 @@ fn resolve_owner_routes_for_owner(state: &AppState, owner_pubkey: &str) -> Owner
     }
 }
 
-async fn route_resolve(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(device_id): Path<String>,
-) -> Response {
-    let mut response = Json(resolve_route_for_device(&state, &device_id)).into_response();
-    apply_cors_headers(&mut response, &headers);
-    response
-}
-
-async fn route_owner_resolve(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Path(owner_pubkey): Path<String>,
-) -> Response {
-    let mut response = Json(resolve_owner_routes_for_owner(&state, &owner_pubkey)).into_response();
-    apply_cors_headers(&mut response, &headers);
-    response
-}
-
 async fn webrtc_signal_ws(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -981,21 +513,28 @@ async fn control_ws(
 async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSocket) {
     let client_id = client_id.trim().to_string();
     if client_id.is_empty() {
+        let response = ControlWsServerMessage {
+            request_id: String::new(),
+            ok: false,
+            data: None,
+            error: Some("client_id is required".to_string()),
+            status: Some(400),
+        };
         let _ = socket
-            .send(Message::Text(
-                r#"{"ok":false,"error":"client_id is required","status":400}"#
-                    .to_string()
-                    .into(),
-            ))
+            .send(Message::Binary(encode_control_message(&response).into()))
             .await;
         return;
     }
 
     loop {
         match socket.recv().await {
-            Some(Ok(Message::Text(text))) => {
-                let response = handle_control_client_message(&state, &text).await;
-                if socket.send(Message::Text(response.into())).await.is_err() {
+            Some(Ok(Message::Binary(bytes))) => {
+                let response = handle_control_client_message(&state, &bytes).await;
+                if socket
+                    .send(Message::Binary(encode_control_message(&response).into()))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -1006,11 +545,8 @@ async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSo
     }
 }
 
-fn encode_control_message(msg: &ControlWsServerMessage) -> String {
-    serde_json::to_string(msg).unwrap_or_else(|_| {
-        r#"{"request_id":"","ok":false,"error":"internal serialization failure","status":500}"#
-            .to_string()
-    })
+fn encode_control_message(msg: &ControlWsServerMessage) -> Vec<u8> {
+    bincode::serialize(msg).unwrap_or_default()
 }
 
 fn control_error_response(
@@ -1027,7 +563,10 @@ fn control_error_response(
     }
 }
 
-fn control_ok_response(request_id: String, data: serde_json::Value) -> ControlWsServerMessage {
+fn control_ok_response(
+    request_id: String,
+    data: ControlWsResponsePayload,
+) -> ControlWsServerMessage {
     ControlWsServerMessage {
         request_id,
         ok: true,
@@ -1037,49 +576,32 @@ fn control_ok_response(request_id: String, data: serde_json::Value) -> ControlWs
     }
 }
 
-async fn handle_control_client_message(state: &AppState, text: &str) -> String {
-    let parsed = serde_json::from_str::<ControlWsClientMessage>(text);
+async fn handle_control_client_message(
+    state: &AppState,
+    bytes: &[u8],
+) -> ControlWsServerMessage {
+    let parsed = bincode::deserialize::<ControlWsClientMessage>(bytes);
     let msg = match parsed {
-        Ok(message) if !message.request_id.trim().is_empty() && !message.op.trim().is_empty() => {
+        Ok(message) if !message.request_id.trim().is_empty() => {
             message
         }
         _ => {
-            return encode_control_message(&control_error_response(
+            return control_error_response(
                 String::new(),
                 StatusCode::BAD_REQUEST,
                 "invalid control message".to_string(),
-            ));
+            );
         }
     };
 
     let request_id = msg.request_id.trim().to_string();
-    let op = msg.op.trim();
-    let reply = match op {
-        "job.create" => {
-            let payload = serde_json::from_value::<JobCreateRequest>(msg.payload);
-            match payload {
-                Ok(payload) => match job_create_inner(state, payload) {
-                    Ok(ok) => control_ok_response(
-                        request_id,
-                        serde_json::to_value(ok).unwrap_or_default(),
-                    ),
-                    Err((status, err)) => control_error_response(request_id, status, err),
-                },
-                Err(_) => control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "invalid job create payload".to_string(),
-                ),
-            }
-        }
-        "job.status" => {
-            let job_id = msg
-                .payload
-                .get("job_id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
+    match msg.payload {
+        ControlWsRequestPayload::JobCreate(payload) => match job_create_inner(state, payload) {
+            Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::JobCreate(ok)),
+            Err((status, err)) => control_error_response(request_id, status, err),
+        },
+        ControlWsRequestPayload::JobStatus(JobStatusRequest { job_id }) => {
+            let job_id = job_id.trim().to_string();
             if job_id.is_empty() {
                 control_error_response(
                     request_id,
@@ -1088,17 +610,11 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 )
             } else {
                 let status = get_job_status_inner(state, job_id);
-                control_ok_response(request_id, serde_json::to_value(status).unwrap_or_default())
+                control_ok_response(request_id, ControlWsResponsePayload::JobStatus(Box::new(status)))
             }
         }
-        "route.resolve" => {
-            let device_id = msg
-                .payload
-                .get("device_id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
+        ControlWsRequestPayload::RouteResolve(RouteResolveRequest { device_id }) => {
+            let device_id = device_id.trim().to_string();
             if device_id.is_empty() {
                 control_error_response(
                     request_id,
@@ -1107,20 +623,26 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 )
             } else {
                 let resolved = resolve_route_for_device(state, &device_id);
-                control_ok_response(
-                    request_id,
-                    serde_json::to_value(resolved).unwrap_or_default(),
-                )
+                let mapped = CpRouteResolveResponse {
+                    ok: resolved.ok,
+                    found: resolved.found,
+                    route: resolved.route.map(|entry| CpRouteEntry {
+                        device_id: entry.device_id,
+                        owner_pubkey: entry.owner_pubkey,
+                        reachable_urls: entry.reachable_urls,
+                        capabilities: entry.capabilities,
+                        relay_session_id: entry.relay_session_id,
+                        online: entry.online,
+                        last_seen_unix_s: entry.last_seen_unix_s,
+                        expires_at_unix_s: entry.expires_at_unix_s,
+                        updated_at_unix_s: entry.updated_at_unix_s,
+                    }),
+                };
+                control_ok_response(request_id, ControlWsResponsePayload::RouteResolve(mapped))
             }
         }
-        "route.owner" => {
-            let owner_pubkey = msg
-                .payload
-                .get("owner_pubkey")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
+        ControlWsRequestPayload::RouteOwner(RouteOwnerRequest { owner_pubkey }) => {
+            let owner_pubkey = owner_pubkey.trim().to_string();
             if owner_pubkey.is_empty() {
                 control_error_response(
                     request_id,
@@ -1129,37 +651,37 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 )
             } else {
                 let resolved = resolve_owner_routes_for_owner(state, &owner_pubkey);
+                let mapped = edgerun_types::control_plane::OwnerRoutesResponse {
+                    ok: resolved.ok,
+                    owner_pubkey: resolved.owner_pubkey,
+                    devices: resolved
+                        .devices
+                        .into_iter()
+                        .map(|entry| CpRouteEntry {
+                            device_id: entry.device_id,
+                            owner_pubkey: entry.owner_pubkey,
+                            reachable_urls: entry.reachable_urls,
+                            capabilities: entry.capabilities,
+                            relay_session_id: entry.relay_session_id,
+                            online: entry.online,
+                            last_seen_unix_s: entry.last_seen_unix_s,
+                            expires_at_unix_s: entry.expires_at_unix_s,
+                            updated_at_unix_s: entry.updated_at_unix_s,
+                        })
+                        .collect(),
+                };
                 control_ok_response(
                     request_id,
-                    serde_json::to_value(resolved).unwrap_or_default(),
+                    ControlWsResponsePayload::RouteOwner(Box::new(mapped)),
                 )
             }
         }
-        "worker.heartbeat" => {
-            let payload = serde_json::from_value::<HeartbeatRequest>(msg.payload);
-            match payload {
-                Ok(payload) => match worker_heartbeat_inner(state, payload) {
-                    Ok(ok) => control_ok_response(
-                        request_id,
-                        serde_json::to_value(ok).unwrap_or_default(),
-                    ),
-                    Err((status, err)) => control_error_response(request_id, status, err),
-                },
-                Err(_) => control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "invalid worker heartbeat payload".to_string(),
-                ),
-            }
-        }
-        "worker.assignments" => {
-            let worker_pubkey = msg
-                .payload
-                .get("worker_pubkey")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
+        ControlWsRequestPayload::WorkerHeartbeat(payload) => match worker_heartbeat_inner(state, payload) {
+            Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerHeartbeat(ok)),
+            Err((status, err)) => control_error_response(request_id, status, err),
+        },
+        ControlWsRequestPayload::WorkerAssignments(WorkerAssignmentsRequest { worker_pubkey }) => {
+            let worker_pubkey = worker_pubkey.trim().to_string();
             if worker_pubkey.is_empty() {
                 control_error_response(
                     request_id,
@@ -1168,64 +690,36 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 )
             } else {
                 match worker_assignments_inner(state, &worker_pubkey) {
-                    Ok(ok) => control_ok_response(
-                        request_id,
-                        serde_json::to_value(ok).unwrap_or_default(),
-                    ),
+                    Ok(ok) => {
+                        control_ok_response(
+                            request_id,
+                            ControlWsResponsePayload::WorkerAssignments(Box::new(ok)),
+                        )
+                    }
                     Err((status, err)) => control_error_response(request_id, status, err),
                 }
             }
         }
-        "worker.result" => {
-            let payload = serde_json::from_value::<WorkerResultReport>(msg.payload);
-            match payload {
-                Ok(payload) => match worker_result_inner(state, payload) {
-                    Ok(ok) => control_ok_response(request_id, ok),
-                    Err((status, err)) => control_error_response(request_id, status, err),
-                },
-                Err(_) => control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "invalid worker result payload".to_string(),
-                ),
+        ControlWsRequestPayload::WorkerResult(payload) => match worker_result_inner(state, payload) {
+            Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerResult(ok)),
+            Err((status, err)) => control_error_response(request_id, status, err),
+        },
+        ControlWsRequestPayload::WorkerFailure(payload) => {
+            match worker_failure_inner(state, payload) {
+                Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerFailure(ok)),
+                Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
-        "worker.failure" => {
-            let payload = serde_json::from_value::<WorkerFailureReport>(msg.payload);
-            match payload {
-                Ok(payload) => match worker_failure_inner(state, payload) {
-                    Ok(ok) => control_ok_response(request_id, ok),
-                    Err((status, err)) => control_error_response(request_id, status, err),
-                },
-                Err(_) => control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "invalid worker failure payload".to_string(),
-                ),
+        ControlWsRequestPayload::WorkerReplay(payload) => {
+            match worker_replay_artifact_inner(state, payload) {
+                Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerReplay(ok)),
+                Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
-        "worker.replay" => {
-            let payload = serde_json::from_value::<WorkerReplayArtifactReport>(msg.payload);
-            match payload {
-                Ok(payload) => match worker_replay_artifact_inner(state, payload) {
-                    Ok(ok) => control_ok_response(request_id, ok),
-                    Err((status, err)) => control_error_response(request_id, status, err),
-                },
-                Err(_) => control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "invalid worker replay payload".to_string(),
-                ),
-            }
-        }
-        "bundle.get" => {
-            let bundle_hash = msg
-                .payload
-                .get("bundle_hash")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
+        ControlWsRequestPayload::BundleGet(edgerun_types::control_plane::BundleGetRequest {
+            bundle_hash,
+        }) => {
+            let bundle_hash = bundle_hash.trim().to_string();
             if bundle_hash.is_empty() {
                 control_error_response(
                     request_id,
@@ -1237,10 +731,10 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 match std::fs::read(path) {
                     Ok(bytes) => control_ok_response(
                         request_id,
-                        serde_json::json!({
-                            "ok": true,
-                            "bundle_hash": bundle_hash,
-                            "payload_b64": base64::engine::general_purpose::STANDARD.encode(bytes),
+                        ControlWsResponsePayload::BundleGet(BundleGetResponse {
+                            ok: true,
+                            bundle_hash,
+                            payload_b64: base64::engine::general_purpose::STANDARD.encode(bytes),
                         }),
                     ),
                     Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -1258,14 +752,7 @@ async fn handle_control_client_message(state: &AppState, text: &str) -> String {
                 }
             }
         }
-        _ => control_error_response(
-            request_id,
-            StatusCode::BAD_REQUEST,
-            format!("unsupported op: {op}"),
-        ),
-    };
-
-    encode_control_message(&reply)
+    }
 }
 
 async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: WebSocket) {
@@ -1308,19 +795,8 @@ async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: We
                 match incoming {
                     Some(Ok(Message::Text(text))) => {
                         if let Err(error) = handle_signal_client_message(&state, &device_id, &text).await {
-                            let payload = serde_json::json!({
-                                "kind": "error",
-                                "error": error,
-                            });
-                            if let Ok(encoded) = serde_json::to_string(&payload) {
-                                let _ = socket.send(Message::Text(encoded.into())).await;
-                            } else {
-                                let _ = socket
-                                    .send(Message::Text(
-                                        r#"{"kind":"error","error":"invalid signaling message"}"#.into(),
-                                    ))
-                                    .await;
-                            }
+                            let encoded = encode_signal_error(&device_id, &error);
+                            let _ = socket.send(Message::Text(encoded.into())).await;
                         }
                     }
                     Some(Ok(Message::Close(_))) | None => break,
@@ -1352,8 +828,7 @@ async fn handle_signal_client_message(
     from_device_id: &str,
     text: &str,
 ) -> Result<(), String> {
-    let msg: WebRtcSignalClientMessage =
-        serde_json::from_str(text).map_err(|_| "invalid signaling json".to_string())?;
+    let msg = decode_signal_client_message(text)?;
     let to_device_id = msg.to_device_id.trim().to_string();
     let to_owner_pubkey = msg.to_owner_pubkey.trim().to_string();
     if to_device_id.is_empty() && to_owner_pubkey.is_empty() {
@@ -1369,8 +844,7 @@ async fn handle_signal_client_message(
         sdp_mline_index: msg.sdp_mline_index,
         metadata: msg.metadata,
     };
-    let encoded = serde_json::to_string(&outbound)
-        .map_err(|_| "failed to encode outbound signaling message".to_string())?;
+    let encoded = encode_signal_server_message(&outbound);
 
     if !to_device_id.is_empty() {
         let sender = {
@@ -1429,376 +903,105 @@ async fn handle_signal_client_message(
     Ok(())
 }
 
+fn b64_encode_text(value: &str) -> String {
+    URL_SAFE_NO_PAD.encode(value.as_bytes())
+}
+
+fn b64_decode_text(value: &str) -> Result<String, String> {
+    if value.is_empty() {
+        return Ok(String::new());
+    }
+    let bytes = URL_SAFE_NO_PAD
+        .decode(value.as_bytes())
+        .map_err(|_| "invalid signaling payload encoding".to_string())?;
+    String::from_utf8(bytes).map_err(|_| "invalid signaling utf8 payload".to_string())
+}
+
+fn encode_optional_text(value: Option<&str>) -> String {
+    value.map(b64_encode_text).unwrap_or_default()
+}
+
+fn encode_signal_server_message(message: &WebRtcSignalServerMessage) -> String {
+    let sdp_mline_index = message
+        .sdp_mline_index
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    [
+        b64_encode_text(&message.from_device_id),
+        b64_encode_text(&message.kind),
+        encode_optional_text(message.sdp.as_deref()),
+        encode_optional_text(message.candidate.as_deref()),
+        encode_optional_text(message.sdp_mid.as_deref()),
+        b64_encode_text(&sdp_mline_index),
+        encode_optional_text(message.metadata.as_deref()),
+        String::new(),
+    ]
+    .join("|")
+}
+
+fn encode_signal_error(from_device_id: &str, error: &str) -> String {
+    [
+        b64_encode_text(from_device_id),
+        b64_encode_text("error"),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        String::new(),
+        b64_encode_text(error),
+    ]
+    .join("|")
+}
+
+fn decode_signal_client_message(text: &str) -> Result<WebRtcSignalClientMessage, String> {
+    let mut parts = text.split('|');
+    let fields: [Cow<'_, str>; 8] = std::array::from_fn(|_| Cow::Borrowed(parts.next().unwrap_or("")));
+    if parts.next().is_some() {
+        return Err("invalid signaling frame format".to_string());
+    }
+
+    let to_device_id = b64_decode_text(&fields[0])?;
+    let to_owner_pubkey = b64_decode_text(&fields[1])?;
+    let kind = b64_decode_text(&fields[2])?;
+    let sdp = b64_decode_text(&fields[3])?;
+    let candidate = b64_decode_text(&fields[4])?;
+    let sdp_mid = b64_decode_text(&fields[5])?;
+    let sdp_mline_index = b64_decode_text(&fields[6])?;
+    let metadata = b64_decode_text(&fields[7])?;
+
+    let parsed_mline = if sdp_mline_index.trim().is_empty() {
+        None
+    } else {
+        Some(
+            sdp_mline_index
+                .trim()
+                .parse::<u16>()
+                .map_err(|_| "invalid sdp_mline_index".to_string())?,
+        )
+    };
+
+    Ok(WebRtcSignalClientMessage {
+        to_device_id,
+        to_owner_pubkey,
+        kind,
+        sdp: if sdp.is_empty() { None } else { Some(sdp) },
+        candidate: if candidate.is_empty() {
+            None
+        } else {
+            Some(candidate)
+        },
+        sdp_mid: if sdp_mid.is_empty() { None } else { Some(sdp_mid) },
+        sdp_mline_index: parsed_mline,
+        metadata: if metadata.is_empty() {
+            None
+        } else {
+            Some(metadata)
+        },
+    })
+}
+
 fn prune_expired_routes(routes: &mut HashMap<String, DeviceRouteEntry>, now: u64) {
     routes.retain(|_, route| route.expires_at_unix_s > now);
-}
-
-fn prune_expired_route_challenges(challenges: &mut HashMap<String, u64>, now: u64) {
-    challenges.retain(|_, exp| *exp > now);
-}
-
-fn prune_expired_route_tokens(tokens: &mut HashMap<String, RouteHeartbeatToken>, now: u64) {
-    tokens.retain(|_, tok| tok.expires_at_unix_s > now);
-}
-
-fn parse_any_ed25519_pubkey(value: &str) -> Result<[u8; 32], (StatusCode, String)> {
-    if let Ok(pubkey) = value.parse::<Pubkey>() {
-        return Ok(pubkey.to_bytes());
-    }
-
-    let decoded_std = base64::engine::general_purpose::STANDARD.decode(value.as_bytes());
-    if let Ok(bytes) = decoded_std {
-        let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "owner_pubkey must decode to 32 bytes".to_string(),
-            )
-        })?;
-        return Ok(arr);
-    }
-
-    let bytes = URL_SAFE_NO_PAD.decode(value.as_bytes()).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey must be base58 or base64/base64url ed25519 key".to_string(),
-        )
-    })?;
-    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey must decode to 32 bytes".to_string(),
-        )
-    })?;
-    Ok(arr)
-}
-
-fn parse_any_signature(value: &str) -> Result<Signature, (StatusCode, String)> {
-    let sig_bytes = base64::engine::general_purpose::STANDARD
-        .decode(value.as_bytes())
-        .or_else(|_| URL_SAFE_NO_PAD.decode(value.as_bytes()))
-        .map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "signature must be base64 or base64url".to_string(),
-            )
-        })?;
-    let sig_arr: [u8; 64] = sig_bytes.as_slice().try_into().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "signature must decode to 64 bytes".to_string(),
-        )
-    })?;
-    Ok(Signature::from_bytes(&sig_arr))
-}
-
-fn verify_any_ed25519_signature(
-    owner_pubkey: &str,
-    signature_encoded: &str,
-    message: &[u8],
-) -> Result<bool, (StatusCode, String)> {
-    let pubkey_bytes = parse_any_ed25519_pubkey(owner_pubkey)?;
-    let vk = VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid owner_pubkey bytes".to_string(),
-        )
-    })?;
-    let signature = parse_any_signature(signature_encoded)?;
-    Ok(edgerun_crypto::verify(&vk, message, &signature))
-}
-
-async fn session_create(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<SessionCreateRequest>,
-) -> Result<Json<SessionCreateResponse>, (StatusCode, String)> {
-    if let Some(expected) = state.policy_session_bootstrap_token.as_deref() {
-        let provided = header_value(&headers, "x-edgerun-bootstrap-token").unwrap_or_default();
-        if provided != expected {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "invalid bootstrap token".to_string(),
-            ));
-        }
-    }
-
-    let now = now_unix_seconds();
-    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
-        ttl_secs: state.session_ttl_secs.max(1),
-        ..edgerun_hwvault_primitives::session::SessionConfig::default()
-    };
-    let issue = with_policy_session_store_mut(&state, |sessions, _nonces| {
-        Ok(edgerun_hwvault_primitives::session::create_session(
-            sessions,
-            now,
-            &cfg,
-            payload.bound_origin,
-        ))
-    })?;
-    Ok(Json(SessionCreateResponse {
-        token: issue.token,
-        session_key: issue.signing_key,
-        ttl_secs: issue.ttl_secs,
-    }))
-}
-
-async fn session_rotate(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<SessionRotateRequest>,
-) -> Result<Json<SessionRotateResponse>, (StatusCode, String)> {
-    let now = now_unix_seconds();
-    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
-        ttl_secs: state.session_ttl_secs.max(1),
-        ..edgerun_hwvault_primitives::session::SessionConfig::default()
-    };
-    let auth_header = header_value(&headers, "authorization");
-    let origin_header = header_value(&headers, "origin");
-    let ts_header = header_value(&headers, "x-hwv-ts");
-    let nonce_header = header_value(&headers, "x-hwv-nonce");
-    let sig_header = header_value(&headers, "x-hwv-sig");
-    let issue = with_policy_session_store_mut(&state, |sessions, nonces| {
-        let token = edgerun_hwvault_primitives::session::verify_session_request(
-            sessions,
-            nonces,
-            edgerun_hwvault_primitives::session::SessionAuthInput {
-                auth_header,
-                origin_header,
-                ts_header,
-                nonce_header,
-                sig_header,
-                method: "POST",
-                path: "/v1/session/rotate",
-                body: b"",
-            },
-            now,
-            &cfg,
-        )
-        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
-        invalidate_session_token(sessions, nonces, &token);
-        Ok(edgerun_hwvault_primitives::session::create_session(
-            sessions,
-            now,
-            &cfg,
-            payload.bound_origin,
-        ))
-    })?;
-    Ok(Json(SessionRotateResponse {
-        token: issue.token,
-        session_key: issue.signing_key,
-        ttl_secs: issue.ttl_secs,
-    }))
-}
-
-async fn session_invalidate(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<SessionInvalidateRequest>,
-) -> Result<Json<SessionInvalidateResponse>, (StatusCode, String)> {
-    let now = now_unix_seconds();
-    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
-        ttl_secs: state.session_ttl_secs.max(1),
-        ..edgerun_hwvault_primitives::session::SessionConfig::default()
-    };
-    let auth_header = header_value(&headers, "authorization");
-    let origin_header = header_value(&headers, "origin");
-    let ts_header = header_value(&headers, "x-hwv-ts");
-    let nonce_header = header_value(&headers, "x-hwv-nonce");
-    let sig_header = header_value(&headers, "x-hwv-sig");
-    with_policy_session_store_mut(&state, |sessions, nonces| {
-        let caller = edgerun_hwvault_primitives::session::verify_session_request(
-            sessions,
-            nonces,
-            edgerun_hwvault_primitives::session::SessionAuthInput {
-                auth_header,
-                origin_header,
-                ts_header,
-                nonce_header,
-                sig_header,
-                method: "POST",
-                path: "/v1/session/invalidate",
-                body: b"",
-            },
-            now,
-            &cfg,
-        )
-        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))?;
-
-        if let Some(target) = payload.token.as_deref() {
-            if target != caller {
-                return Err((
-                    StatusCode::FORBIDDEN,
-                    "cross-session invalidation is not allowed".to_string(),
-                ));
-            }
-        }
-        invalidate_session_token(sessions, nonces, &caller);
-        Ok(())
-    })?;
-    Ok(Json(SessionInvalidateResponse { ok: true }))
-}
-
-async fn policy_info(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<PolicyInfoResponse>, (StatusCode, String)> {
-    require_policy_session_headers(&state, &headers, "GET", "/v1/policy/info", &[])?;
-    Ok(Json(PolicyInfoResponse {
-        key_id: state.policy_key_id.clone(),
-        version: state.policy_version,
-        signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
-        ttl_secs: state.policy_ttl_secs,
-        trust_policy: Some(state.trust_policy.lock().expect("lock poisoned").clone()),
-        attestation_policy: Some(
-            state
-                .attestation_policy
-                .lock()
-                .expect("lock poisoned")
-                .clone(),
-        ),
-    }))
-}
-
-async fn policy_audit_list(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<PolicyAuditQuery>,
-) -> Result<Json<PolicyAuditListResponse>, (StatusCode, String)> {
-    require_policy_session_headers(&state, &headers, "GET", "/v1/policy/audit", &[])?;
-    let limit = query.limit.unwrap_or(100).clamp(1, 10_000);
-    let events = edgerun_hwvault_primitives::audit::list_recent_events_jsonl(
-        &state.policy_audit_path,
-        limit,
-    )
-    .map_err(internal_err)?;
-    Ok(Json(PolicyAuditListResponse { events }))
-}
-
-async fn trust_policy_get(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<TrustPolicyResponse>, (StatusCode, String)> {
-    require_policy_session_headers(&state, &headers, "GET", "/v1/trust/policy/get", &[])?;
-    let policy = state.trust_policy.lock().expect("lock poisoned").clone();
-    Ok(Json(TrustPolicyResponse { policy }))
-}
-
-async fn trust_policy_set(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Json<TrustPolicyResponse>, (StatusCode, String)> {
-    require_policy_session_headers(&state, &headers, "POST", "/v1/trust/policy/set", &body)?;
-    let payload: TrustPolicySetRequest = serde_json::from_slice(&body).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid trust policy payload".to_string(),
-        )
-    })?;
-    let Some(policy) = edgerun_types::SyncTrustPolicy::from_profile_name(&payload.profile, true)
-    else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "profile must be one of: strict, balanced, monitor".to_string(),
-        ));
-    };
-
-    {
-        let mut current = state.trust_policy.lock().expect("lock poisoned");
-        *current = policy.clone();
-    }
-    save_trust_policy(&state.trust_policy_path, &policy).map_err(internal_err)?;
-
-    let evt = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
-        ts: now_unix_seconds(),
-        action: "trust_policy_set".to_string(),
-        target: "scheduler".to_string(),
-        details: format!(
-            "profile={:?} warn_risk={} max_risk={} block_revoked={}",
-            policy.profile, policy.warn_risk, policy.max_risk, policy.block_revoked
-        ),
-    };
-    if let Err(err) =
-        edgerun_hwvault_primitives::audit::append_event_jsonl(&state.policy_audit_path, &evt)
-    {
-        tracing::warn!(error = %err, "failed to append trust policy audit event");
-    }
-
-    Ok(Json(TrustPolicyResponse { policy }))
-}
-
-async fn attestation_policy_get(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<AttestationPolicyResponse>, (StatusCode, String)> {
-    require_policy_session_headers(&state, &headers, "GET", "/v1/attestation/policy/get", &[])?;
-    let policy = state
-        .attestation_policy
-        .lock()
-        .expect("lock poisoned")
-        .clone();
-    Ok(Json(AttestationPolicyResponse { policy }))
-}
-
-async fn attestation_policy_set(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Result<Json<AttestationPolicyResponse>, (StatusCode, String)> {
-    require_policy_session_headers(
-        &state,
-        &headers,
-        "POST",
-        "/v1/attestation/policy/set",
-        &body,
-    )?;
-    let payload: AttestationPolicySetRequest = serde_json::from_slice(&body).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid attestation policy payload".to_string(),
-        )
-    })?;
-    if payload.max_age_secs == 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "max_age_secs must be > 0".to_string(),
-        ));
-    }
-    let mut allowed = payload
-        .allowed_measurements
-        .into_iter()
-        .map(|v| v.trim().to_ascii_lowercase())
-        .filter(|v| !v.is_empty())
-        .collect::<Vec<_>>();
-    allowed.sort();
-    allowed.dedup();
-    let policy = edgerun_types::AttestationPolicy {
-        required: payload.required,
-        max_age_secs: payload.max_age_secs,
-        allowed_measurements: allowed,
-    };
-    {
-        let mut current = state.attestation_policy.lock().expect("lock poisoned");
-        *current = policy.clone();
-    }
-    save_attestation_policy(&state.attestation_policy_path, &policy).map_err(internal_err)?;
-    let evt = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
-        ts: now_unix_seconds(),
-        action: "attestation_policy_set".to_string(),
-        target: "scheduler".to_string(),
-        details: format!(
-            "required={} max_age_secs={} allowed_measurements={}",
-            policy.required,
-            policy.max_age_secs,
-            policy.allowed_measurements.join(",")
-        ),
-    };
-    if let Err(err) =
-        edgerun_hwvault_primitives::audit::append_event_jsonl(&state.policy_audit_path, &evt)
-    {
-        tracing::warn!(error = %err, "failed to append attestation policy audit event");
-    }
-    Ok(Json(AttestationPolicyResponse { policy }))
 }
 
 fn worker_heartbeat_inner(
@@ -1816,7 +1019,7 @@ fn worker_heartbeat_inner(
             "invalid worker signature".to_string(),
         ));
     }
-    prune_expired_workers(&state);
+    prune_expired_workers(state);
     tracing::info!(
         worker = %payload.worker_pubkey,
         runtime_count = payload.runtime_ids.len(),
@@ -1857,39 +1060,23 @@ fn worker_heartbeat_inner(
     })
 }
 
-async fn worker_heartbeat(
-    State(state): State<AppState>,
-    Json(payload): Json<HeartbeatRequest>,
-) -> Result<Json<HeartbeatResponse>, (StatusCode, String)> {
-    let out = worker_heartbeat_inner(&state, payload)?;
-    Ok(Json(out))
-}
-
 fn worker_assignments_inner(
     state: &AppState,
     worker_pubkey: &str,
 ) -> Result<AssignmentsResponse, (StatusCode, String)> {
     tracing::info!(worker = %worker_pubkey, "assignment poll");
     let mut assignments = state.assignments.lock().expect("lock poisoned");
-    let jobs = assignments.remove(worker_pubkey).unwrap_or_else(Vec::new);
+    let jobs = assignments.remove(worker_pubkey).unwrap_or_default();
     drop(assignments);
 
     schedule_state_snapshot(state).map_err(internal_err)?;
     Ok(AssignmentsResponse { jobs })
 }
 
-async fn worker_assignments(
-    State(state): State<AppState>,
-    Query(query): Query<AssignmentsQuery>,
-) -> Result<Json<AssignmentsResponse>, (StatusCode, String)> {
-    let out = worker_assignments_inner(&state, &query.worker_pubkey)?;
-    Ok(Json(out))
-}
-
 fn worker_result_inner(
     state: &AppState,
     payload: WorkerResultReport,
-) -> Result<serde_json::Value, (StatusCode, String)> {
+) -> Result<SubmissionAck, (StatusCode, String)> {
     validate_worker_result_payload(&payload)?;
     if !verify_worker_message_signature(
         state,
@@ -1936,35 +1123,27 @@ fn worker_result_inner(
     }) {
         drop(results);
         let quorum_reached = recompute_job_quorum(state, &job_id).map_err(internal_err)?;
-        return Ok(serde_json::json!({
-            "ok": true,
-            "duplicate": true,
-            "quorum_reached": quorum_reached
-        }));
+        return Ok(SubmissionAck {
+            ok: true,
+            duplicate: true,
+            quorum_reached: Some(quorum_reached),
+        });
     }
     entries.push(payload);
     drop(results);
     let quorum_reached = recompute_job_quorum(state, &job_id).map_err(internal_err)?;
     persist_job_activity(state, &job_id).map_err(internal_err)?;
-    Ok(serde_json::json!({
-        "ok": true,
-        "duplicate": false,
-        "quorum_reached": quorum_reached
-    }))
-}
-
-async fn worker_result(
-    State(state): State<AppState>,
-    Json(payload): Json<WorkerResultReport>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let out = worker_result_inner(&state, payload)?;
-    Ok(Json(out))
+    Ok(SubmissionAck {
+        ok: true,
+        duplicate: false,
+        quorum_reached: Some(quorum_reached),
+    })
 }
 
 fn worker_failure_inner(
     state: &AppState,
     payload: WorkerFailureReport,
-) -> Result<serde_json::Value, (StatusCode, String)> {
+) -> Result<SubmissionAck, (StatusCode, String)> {
     if !verify_worker_message_signature(
         state,
         &payload.worker_pubkey,
@@ -2003,26 +1182,26 @@ fn worker_failure_inner(
         is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
     }) {
         drop(failures);
-        return Ok(serde_json::json!({ "ok": true, "duplicate": true }));
+        return Ok(SubmissionAck {
+            ok: true,
+            duplicate: true,
+            quorum_reached: None,
+        });
     }
     entries.push(payload);
     drop(failures);
     persist_job_activity(state, &job_id).map_err(internal_err)?;
-    Ok(serde_json::json!({ "ok": true, "duplicate": false }))
-}
-
-async fn worker_failure(
-    State(state): State<AppState>,
-    Json(payload): Json<WorkerFailureReport>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let out = worker_failure_inner(&state, payload)?;
-    Ok(Json(out))
+    Ok(SubmissionAck {
+        ok: true,
+        duplicate: false,
+        quorum_reached: None,
+    })
 }
 
 fn worker_replay_artifact_inner(
     state: &AppState,
     payload: WorkerReplayArtifactReport,
-) -> Result<serde_json::Value, (StatusCode, String)> {
+) -> Result<SubmissionAck, (StatusCode, String)> {
     if !verify_worker_message_signature(
         state,
         &payload.worker_pubkey,
@@ -2069,28 +1248,20 @@ fn worker_replay_artifact_inner(
         is_duplicate_idempotency(&existing.idempotency_key, &payload.idempotency_key)
     }) {
         drop(replay_artifacts);
-        return Ok(serde_json::json!({ "ok": true, "duplicate": true }));
+        return Ok(SubmissionAck {
+            ok: true,
+            duplicate: true,
+            quorum_reached: None,
+        });
     }
     entries.push(payload);
     drop(replay_artifacts);
     persist_job_activity(state, &job_id).map_err(internal_err)?;
-    Ok(serde_json::json!({ "ok": true, "duplicate": false }))
-}
-
-async fn worker_replay_artifact(
-    State(state): State<AppState>,
-    Json(payload): Json<WorkerReplayArtifactReport>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let out = worker_replay_artifact_inner(&state, payload)?;
-    Ok(Json(out))
-}
-
-async fn job_create(
-    State(state): State<AppState>,
-    Json(payload): Json<JobCreateRequest>,
-) -> Result<Json<JobCreateResponse>, (StatusCode, String)> {
-    let out = job_create_inner(&state, payload)?;
-    Ok(Json(out))
+    Ok(SubmissionAck {
+        ok: true,
+        duplicate: false,
+        quorum_reached: None,
+    })
 }
 
 fn job_create_inner(
@@ -2221,16 +1392,16 @@ fn job_create_inner(
         "job create requested"
     );
 
-    let bundle_path = bundle_path(&state, &bundle_hash_hex);
+    let bundle_path = bundle_path(state, &bundle_hash_hex);
     write_bundle_cas(&bundle_path, &bundle_hash_hex, &bundle_payload_bytes)
         .map_err(internal_err)?;
 
-    prune_expired_workers(&state);
+    prune_expired_workers(state);
     let committee_workers = if let Some(worker_pubkey) = payload.assignment_worker_pubkey.as_ref() {
         vec![worker_pubkey.clone()]
     } else {
         let selected = select_committee_workers(
-            &state,
+            state,
             &payload.runtime_id,
             &bundle_hash_hex,
             state.committee_size,
@@ -2335,9 +1506,9 @@ fn job_create_inner(
             },
         );
     }
-    touch_job_last_update(&state, &bundle_hash_hex);
+    touch_job_last_update(state, &bundle_hash_hex);
     let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
-        build_assign_workers_artifact(&state, &bundle_hash_hex).map_err(internal_err)?;
+        build_assign_workers_artifact(state, &bundle_hash_hex).map_err(internal_err)?;
     {
         let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
         if let Some(quorum_state) = job_quorum.get_mut(&bundle_hash_hex) {
@@ -2346,8 +1517,8 @@ fn job_create_inner(
             quorum_state.assign_submitted = assign_workers_submitted;
         }
     }
-    schedule_state_snapshot(&state).map_err(internal_err)?;
-    evaluate_expired_jobs(&state).map_err(internal_err)?;
+    schedule_state_snapshot(state).map_err(internal_err)?;
+    evaluate_expired_jobs(state).map_err(internal_err)?;
     let audit_event = edgerun_hwvault_primitives::audit::PolicyAuditEvent {
         ts: now,
         action: "job_create".to_string(),
@@ -2418,13 +1589,6 @@ fn job_create_inner(
     })
 }
 
-async fn get_job_status(
-    State(state): State<AppState>,
-    Path(job_id): Path<String>,
-) -> Json<JobStatusResponse> {
-    Json(get_job_status_inner(&state, job_id))
-}
-
 fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
     let results = state.results.lock().expect("lock poisoned");
     let reports = results.get(&job_id).cloned().unwrap_or_default();
@@ -2450,26 +1614,6 @@ fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
     }
 }
 
-async fn get_bundle(
-    State(state): State<AppState>,
-    Path(bundle_hash): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let path = bundle_path(&state, &bundle_hash);
-    let bytes =
-        std::fs::read(path).map_err(|_| (StatusCode::NOT_FOUND, "bundle not found".to_string()))?;
-    let computed = hex::encode(edgerun_crypto::compute_bundle_hash(&bytes));
-    if !computed.eq_ignore_ascii_case(&bundle_hash) {
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "bundle content hash mismatch".to_string(),
-        ));
-    }
-    Ok((
-        [(axum::http::header::CONTENT_TYPE, "application/cbor")],
-        Bytes::from(bytes),
-    ))
-}
-
 fn init_chain_context() -> Result<ChainContext> {
     let rpc_url = std::env::var("EDGERUN_CHAIN_RPC_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8899".to_string());
@@ -2491,6 +1635,104 @@ fn init_chain_context() -> Result<ChainContext> {
         program_id,
         payer,
     })
+}
+
+fn init_chain_progress_sink(data_dir: &FsPath, signer_pubkey: String) -> Option<ChainProgressSink> {
+    let storage_dir = data_dir.join("storage").join("scheduler-chain-progress");
+    let stream_id = fixed_storage_stream_id("edgerun-scheduler-chain-progress-stream");
+    let actor_id = fixed_storage_actor_id("edgerun-scheduler-chain-progress-actor");
+    match StorageEngine::new(storage_dir)
+        .and_then(|engine| engine.create_append_session("chain-progress.seg", 128 * 1024 * 1024))
+    {
+        Ok(session) => Some(ChainProgressSink {
+            session,
+            stream_id,
+            actor_id,
+            signer_pubkey,
+            seq: 0,
+        }),
+        Err(err) => {
+            tracing::warn!(error = %err, "chain progress storage sink unavailable");
+            None
+        }
+    }
+}
+
+fn fixed_storage_stream_id(seed: &str) -> StorageStreamId {
+    let digest = hash(seed.as_bytes()).to_bytes();
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&digest[..16]);
+    StorageStreamId::from_bytes(out)
+}
+
+fn fixed_storage_actor_id(seed: &str) -> StorageActorId {
+    let digest = hash(seed.as_bytes()).to_bytes();
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&digest[16..32]);
+    StorageActorId::from_bytes(out)
+}
+
+fn read_and_record_chain_progress(state: &AppState) -> Option<SchedulerSignedChainProgressEvent> {
+    let chain = state.chain.as_ref()?;
+    let epoch_info = match chain.rpc.get_epoch_info() {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to read current chain epoch info");
+            return None;
+        }
+    };
+    match append_signed_chain_progress_event(state, epoch_info.absolute_slot, epoch_info.epoch) {
+        Ok(ev) => Some(ev),
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to append signed chain progress event");
+            None
+        }
+    }
+}
+
+fn append_signed_chain_progress_event(
+    state: &AppState,
+    slot: u64,
+    epoch: u64,
+) -> Result<SchedulerSignedChainProgressEvent> {
+    if state.require_chain_progress_signature_verification {
+        anyhow::bail!(
+            "chain progress signature verification required but not implemented; \
+implement verification before enabling this mode"
+        );
+    }
+    let mut sink_guard = state.chain_progress_sink.lock().expect("lock poisoned");
+    let sink = sink_guard
+        .as_mut()
+        .context("chain progress sink not initialized")?;
+    sink.seq = sink.seq.saturating_add(1);
+    let observed_at_unix_ms = now_unix_millis();
+    let signing_message = format!(
+        "edgerun:chain_progress:v1:{}:{}:{}:{}:{}",
+        slot, epoch, observed_at_unix_ms, sink.signer_pubkey, sink.seq
+    );
+    let signature = state.policy_signing_key.sign(signing_message.as_bytes());
+    let signature_hex = hex::encode(signature.to_bytes());
+    let progress_event_id = hex::encode(hash(signing_message.as_bytes()).to_bytes());
+    let event_payload = SchedulerSignedChainProgressEvent {
+        progress_event_id: progress_event_id.clone(),
+        slot,
+        epoch,
+        observed_at_unix_ms,
+        signer: sink.signer_pubkey.clone(),
+        signature: signature_hex,
+    };
+    let payload = bincode::serialize(&event_payload).context("serialize chain progress event")?;
+    let event = StorageEvent::new(sink.stream_id.clone(), sink.actor_id.clone(), payload);
+    sink.session
+        .append_with_durability(&event, DurabilityLevel::AckDurable)
+        .context("append chain progress event to storage")?;
+    drop(sink_guard);
+    *state
+        .latest_chain_progress_event_id
+        .lock()
+        .expect("lock poisoned") = Some(progress_event_id);
+    Ok(event_payload)
 }
 
 fn build_post_job_tx_base64(
@@ -2931,12 +2173,12 @@ fn write_bundle_cas(path: &PathBuf, expected_bundle_hash_hex: &str, bytes: &[u8]
 }
 
 fn load_state(data_dir: &FsPath) -> Result<PersistedState> {
-    let path = data_dir.join("state.json");
+    let path = data_dir.join("state.bin");
     if !path.exists() {
         return Ok(PersistedState::default());
     }
     let bytes = std::fs::read(path)?;
-    let state = serde_json::from_slice::<PersistedState>(&bytes)?;
+    let state = bincode::deserialize::<PersistedState>(&bytes)?;
     Ok(state)
 }
 
@@ -2956,15 +2198,20 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
         job_last_update: state.job_last_update.lock().expect("lock poisoned").clone(),
         worker_registry: state.worker_registry.lock().expect("lock poisoned").clone(),
         job_quorum: state.job_quorum.lock().expect("lock poisoned").clone(),
+        latest_chain_progress_event_id: state
+            .latest_chain_progress_event_id
+            .lock()
+            .expect("lock poisoned")
+            .clone(),
     };
-    let bytes = serde_json::to_vec_pretty(&snapshot)?;
-    let final_path = state.data_dir.join("state.json");
+    let bytes = bincode::serialize(&snapshot)?;
+    let final_path = state.data_dir.join("state.bin");
     // Snapshot writes can run concurrently from heartbeat/poll handlers.
     // Use a unique temp name per write attempt to avoid rename races.
     let tmp_seq = STATE_SNAPSHOT_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp_path = state
         .data_dir
-        .join(format!("state.json.tmp-{}-{tmp_seq}", std::process::id()));
+        .join(format!("state.bin.tmp-{}-{tmp_seq}", std::process::id()));
     std::fs::write(&tmp_path, &bytes)?;
     if let Err(err) = std::fs::rename(&tmp_path, &final_path) {
         let _ = std::fs::remove_file(&tmp_path);
@@ -3458,16 +2705,8 @@ fn build_assign_workers_artifact(
 fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
     let now = now_unix_seconds();
     let timeout = state.job_timeout_secs.max(1);
-    let chain_slot = state
-        .chain
-        .as_ref()
-        .and_then(|chain| match chain.rpc.get_slot() {
-            Ok(slot) => Some(slot),
-            Err(err) => {
-                tracing::warn!(error = %err, "failed to read current chain slot for expiry evaluation");
-                None
-            }
-        });
+    let chain_progress = read_and_record_chain_progress(state);
+    let chain_slot = chain_progress.as_ref().map(|p| p.slot);
     let candidates = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
         job_quorum
@@ -3490,6 +2729,15 @@ fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
             })
             .collect::<Vec<_>>()
     };
+
+    if let Some(progress) = chain_progress.as_ref() {
+        tracing::debug!(
+            slot = progress.slot,
+            epoch = progress.epoch,
+            progress_event_id = %progress.progress_event_id,
+            "using signed chain progress snapshot for expiry evaluation"
+        );
+    }
 
     if candidates.is_empty() {
         return Ok(());
@@ -4420,52 +3668,14 @@ fn read_env_bool(key: &str, default_value: bool) -> bool {
         .unwrap_or(default_value)
 }
 
-fn parse_allowed_origins() -> Vec<String> {
-    let raw = std::env::var("EDGERUN_SCHEDULER_ALLOWED_ORIGINS").unwrap_or_else(|_| {
-        "https://www.edgerun.tech,http://localhost:4173,http://127.0.0.1:4173".to_string()
-    });
-    raw.split(',')
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>()
-}
-
-fn allowed_origin_for_request(headers: &HeaderMap) -> Option<HeaderValue> {
-    let request_origin = headers.get(ORIGIN)?.to_str().ok()?.trim();
-    if request_origin.is_empty() {
-        return None;
-    }
-    let allow_list = parse_allowed_origins();
-    if allow_list
-        .iter()
-        .any(|origin| origin == "*" || origin == request_origin)
-    {
-        HeaderValue::from_str(request_origin).ok()
-    } else {
-        None
-    }
-}
-
-fn apply_cors_headers(response: &mut Response, request_headers: &HeaderMap) {
-    if let Some(origin) = allowed_origin_for_request(request_headers) {
-        response
-            .headers_mut()
-            .insert(ACCESS_CONTROL_ALLOW_ORIGIN, origin);
-        response
-            .headers_mut()
-            .insert(VARY, HeaderValue::from_static("Origin"));
-    }
-}
-
 fn load_trust_policy(path: &std::path::Path) -> Result<edgerun_types::SyncTrustPolicy> {
     if !path.exists() {
         return Ok(edgerun_types::SyncTrustPolicy::default());
     }
-    let raw = std::fs::read_to_string(path)
+    let raw = std::fs::read(path)
         .with_context(|| format!("failed to read trust policy file {}", path.display()))?;
     let parsed: edgerun_types::SyncTrustPolicy =
-        serde_json::from_str(&raw).context("invalid trust policy json")?;
+        bincode::deserialize(&raw).context("invalid trust policy binary")?;
     Ok(parsed)
 }
 
@@ -4473,112 +3683,24 @@ fn load_attestation_policy(path: &std::path::Path) -> Result<edgerun_types::Atte
     if !path.exists() {
         return Ok(edgerun_types::AttestationPolicy::default());
     }
-    let raw = std::fs::read_to_string(path)
+    let raw = std::fs::read(path)
         .with_context(|| format!("failed to read attestation policy file {}", path.display()))?;
     let parsed: edgerun_types::AttestationPolicy =
-        serde_json::from_str(&raw).context("invalid attestation policy json")?;
+        bincode::deserialize(&raw).context("invalid attestation policy binary")?;
     Ok(parsed)
-}
-
-fn save_trust_policy(
-    path: &std::path::Path,
-    policy: &edgerun_types::SyncTrustPolicy,
-) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create trust policy parent directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let bytes = serde_json::to_vec_pretty(policy).context("serialize trust policy")?;
-    std::fs::write(path, bytes)
-        .with_context(|| format!("failed to write trust policy file {}", path.display()))?;
-    Ok(())
-}
-
-fn save_attestation_policy(
-    path: &std::path::Path,
-    policy: &edgerun_types::AttestationPolicy,
-) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create attestation policy parent directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let bytes = serde_json::to_vec_pretty(policy).context("serialize attestation policy")?;
-    std::fs::write(path, bytes)
-        .with_context(|| format!("failed to write attestation policy file {}", path.display()))?;
-    Ok(())
-}
-
-fn load_policy_session_state(path: &std::path::Path) -> Result<PersistedPolicySessionState> {
-    if !path.exists() {
-        return Ok(PersistedPolicySessionState::default());
-    }
-    let raw = std::fs::read_to_string(path).with_context(|| {
-        format!(
-            "failed to read policy session state file {}",
-            path.display()
-        )
-    })?;
-    let parsed: PersistedPolicySessionState =
-        serde_json::from_str(&raw).context("invalid policy session state json")?;
-    Ok(parsed)
-}
-
-fn save_policy_session_state(
-    path: &std::path::Path,
-    state: &PersistedPolicySessionState,
-) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create policy session state parent directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let bytes = serde_json::to_vec_pretty(state).context("serialize policy session state")?;
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes).with_context(|| {
-        format!(
-            "failed to write temp policy session state file {}",
-            tmp.display()
-        )
-    })?;
-    std::fs::rename(&tmp, path).with_context(|| {
-        format!(
-            "failed to rename policy session state temp file {} to {}",
-            tmp.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
-}
-
-fn persist_policy_session_state(state: &AppState) -> Result<()> {
-    let sessions = state.sessions.lock().expect("lock poisoned").clone();
-    let nonces = state.policy_nonces.lock().expect("lock poisoned").clone();
-    let snapshot = PersistedPolicySessionState { sessions, nonces };
-    save_policy_session_state(&state.policy_session_state_path, &snapshot)
 }
 
 fn load_route_state(path: &std::path::Path) -> Result<PersistedRouteState> {
     if !path.exists() {
         return Ok(PersistedRouteState::default());
     }
-    let raw = std::fs::read_to_string(path)
+    let raw = std::fs::read(path)
         .with_context(|| format!("failed to read route shared state file {}", path.display()))?;
-    if raw.trim().is_empty() {
+    if raw.is_empty() {
         return Ok(PersistedRouteState::default());
     }
     let parsed: PersistedRouteState =
-        serde_json::from_str(&raw).context("invalid route shared state json")?;
+        bincode::deserialize(&raw).context("invalid route shared state binary")?;
     Ok(parsed)
 }
 
@@ -4591,7 +3713,7 @@ fn save_route_state(path: &std::path::Path, state: &PersistedRouteState) -> Resu
             )
         })?;
     }
-    let bytes = serde_json::to_vec(state).context("serialize route shared state")?;
+    let bytes = bincode::serialize(state).context("serialize route shared state")?;
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, bytes).with_context(|| {
         format!(
@@ -4688,61 +3810,6 @@ fn sync_route_state_from_shared_file(state: &AppState) -> Result<()> {
     Ok(())
 }
 
-fn schedule_policy_session_state_flush(state: &AppState) -> Result<()> {
-    let now = now_unix_seconds();
-    let min_interval = state.policy_session_sync_min_interval_secs;
-    let should_write = {
-        let mut gate = state
-            .policy_session_flush_state
-            .lock()
-            .expect("lock poisoned");
-        gate.dirty = true;
-        gate.last_write_unix_s == 0 || now.saturating_sub(gate.last_write_unix_s) >= min_interval
-    };
-    if !should_write {
-        return Ok(());
-    }
-    flush_policy_session_state_if_dirty(state)
-}
-
-fn flush_policy_session_state_if_dirty(state: &AppState) -> Result<()> {
-    let should_write = {
-        let gate = state
-            .policy_session_flush_state
-            .lock()
-            .expect("lock poisoned");
-        gate.dirty
-    };
-    if !should_write {
-        return Ok(());
-    }
-    if state.policy_session_shared {
-        if let Some(parent) = state.policy_session_lock_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let lock_file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&state.policy_session_lock_path)?;
-        lock_file.lock_exclusive()?;
-        let persist_result = persist_policy_session_state(state);
-        let _ = lock_file.unlock();
-        persist_result?;
-    } else {
-        persist_policy_session_state(state)?;
-    }
-    let now = now_unix_seconds();
-    let mut gate = state
-        .policy_session_flush_state
-        .lock()
-        .expect("lock poisoned");
-    gate.dirty = false;
-    gate.last_write_unix_s = now;
-    Ok(())
-}
-
 async fn housekeeping_loop(state: AppState) {
     let interval_secs = state.housekeeping_interval_secs;
     loop {
@@ -4761,18 +3828,8 @@ async fn housekeeping_loop(state: AppState) {
         if let Err(err) = reconcile_onchain_job_statuses(&state) {
             tracing::warn!(error = %err, "housekeeping on-chain reconciliation failed");
         }
-        let now = now_unix_seconds();
-        if let Err((_, err)) = with_policy_session_store_mut(&state, |sessions, nonces| {
-            edgerun_hwvault_primitives::session::cleanup_expired(sessions, nonces, now);
-            Ok(())
-        }) {
-            tracing::warn!(error = %err, "failed to cleanup policy session state");
-        }
         if let Err(err) = flush_state_snapshot_if_dirty(&state) {
             tracing::warn!(error = %err, "housekeeping state snapshot flush failed");
-        }
-        if let Err(err) = flush_policy_session_state_if_dirty(&state) {
-            tracing::warn!(error = %err, "housekeeping policy session flush failed");
         }
         if let Err(err) = flush_route_state_if_dirty(&state) {
             tracing::warn!(error = %err, "housekeeping route-state flush failed");
@@ -4788,77 +3845,11 @@ fn now_unix_seconds() -> u64 {
         .unwrap_or(0)
 }
 
-fn require_policy_session_headers(
-    state: &AppState,
-    headers: &HeaderMap,
-    method: &str,
-    path: &str,
-    body: &[u8],
-) -> Result<(), (StatusCode, String)> {
-    if !state.require_policy_session {
-        return Ok(());
-    }
-    let now = now_unix_seconds();
-    let cfg = edgerun_hwvault_primitives::session::SessionConfig {
-        ttl_secs: state.session_ttl_secs.max(1),
-        ..edgerun_hwvault_primitives::session::SessionConfig::default()
-    };
-
-    let auth_header = header_value(headers, "authorization");
-    let origin_header = header_value(headers, "origin");
-    let ts_header = header_value(headers, "x-hwv-ts");
-    let nonce_header = header_value(headers, "x-hwv-nonce");
-    let sig_header = header_value(headers, "x-hwv-sig");
-
-    with_policy_session_store_mut(state, |sessions, nonces| {
-        edgerun_hwvault_primitives::session::verify_session_request(
-            sessions,
-            nonces,
-            edgerun_hwvault_primitives::session::SessionAuthInput {
-                auth_header,
-                origin_header,
-                ts_header,
-                nonce_header,
-                sig_header,
-                method,
-                path,
-                body,
-            },
-            now,
-            &cfg,
-        )
-        .map(|_| ())
-        .map_err(|e| (StatusCode::UNAUTHORIZED, e.to_string()))
-    })?;
-    Ok(())
-}
-
-fn with_policy_session_store_mut<T>(
-    state: &AppState,
-    mutator: impl FnOnce(
-        &mut HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
-        &mut HashMap<String, u64>,
-    ) -> Result<T, (StatusCode, String)>,
-) -> Result<T, (StatusCode, String)> {
-    let op_result = {
-        let mut sessions = state.sessions.lock().expect("lock poisoned");
-        let mut nonces = state.policy_nonces.lock().expect("lock poisoned");
-        mutator(&mut sessions, &mut nonces)
-    };
-    if let Err(err) = schedule_policy_session_state_flush(state) {
-        tracing::warn!(error = %err, "failed to schedule policy session state flush");
-    }
-    op_result
-}
-
-fn invalidate_session_token(
-    sessions: &mut HashMap<String, edgerun_hwvault_primitives::session::SessionState>,
-    nonces: &mut HashMap<String, u64>,
-    token: &str,
-) {
-    sessions.remove(token);
-    let prefix = format!("{token}:");
-    nonces.retain(|k, _| !k.starts_with(&prefix));
+fn now_unix_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 fn verify_attestation_claim_stub(
@@ -4895,10 +3886,6 @@ fn verify_attestation_claim_stub(
         }
     }
     true
-}
-
-fn header_value<'a>(headers: &'a HeaderMap, key: &str) -> Option<&'a str> {
-    headers.get(key).and_then(|v| v.to_str().ok())
 }
 
 fn touch_job_last_update(state: &AppState, job_id: &str) {
@@ -4977,2387 +3964,5 @@ fn enforce_history_retention(state: &AppState) {
         replay_artifacts.remove(job_id);
         job_quorum.remove(job_id);
         job_last_update.remove(job_id);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::body::to_bytes;
-    use axum::http::{HeaderMap, HeaderValue};
-    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-    use ed25519_dalek::Signer;
-    use hmac::{Hmac, Mac};
-    use serde::Deserialize;
-    use sha2::{Digest, Sha256};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    fn test_state() -> AppState {
-        let data_dir =
-            std::env::temp_dir().join(format!("edgerun-scheduler-tests-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&data_dir);
-        let _ = std::fs::create_dir_all(data_dir.join("bundles"));
-        AppState {
-            data_dir: data_dir.clone(),
-            public_base_url: "http://127.0.0.1:5566".to_string(),
-            retention: RetentionConfig {
-                max_reports_per_job: 32,
-                max_failures_per_job: 32,
-                max_replays_per_job: 32,
-                max_jobs_tracked: 100,
-            },
-            assignments: Arc::new(Mutex::new(HashMap::new())),
-            results: Arc::new(Mutex::new(HashMap::new())),
-            failures: Arc::new(Mutex::new(HashMap::new())),
-            replay_artifacts: Arc::new(Mutex::new(HashMap::new())),
-            job_last_update: Arc::new(Mutex::new(HashMap::new())),
-            snapshot_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
-            state_snapshot_min_interval_secs: 2,
-            worker_registry: Arc::new(Mutex::new(HashMap::new())),
-            job_quorum: Arc::new(Mutex::new(HashMap::new())),
-            policy_signing_key: SigningKey::from_bytes(&[1_u8; 32]),
-            policy_key_id: "dev-key-1".to_string(),
-            policy_version: 1,
-            policy_ttl_secs: 300,
-            pricing_lamports_per_billion_instructions: 10_000_000,
-            pricing_flat_lamports: 0,
-            committee_size: 3,
-            quorum: 2,
-            heartbeat_ttl_secs: 15,
-            require_worker_signatures: false,
-            require_result_attestation: false,
-            quorum_requires_attestation: true,
-            enable_slash_artifacts: true,
-            require_client_signatures: false,
-            client_signature_max_age_secs: 300,
-            chain_auto_submit: false,
-            job_timeout_secs: 60,
-            session_ttl_secs: 900,
-            require_policy_session: false,
-            policy_session_bootstrap_token: None,
-            policy_session_shared: false,
-            policy_session_lock_path: data_dir.join("policy-session.lock"),
-            policy_session_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
-            policy_session_sync_min_interval_secs: 2,
-            sessions: Arc::new(Mutex::new(HashMap::new())),
-            policy_nonces: Arc::new(Mutex::new(HashMap::new())),
-            policy_session_state_path: data_dir.join("policy-session-state.json"),
-            policy_audit_path: data_dir.join("policy-audit.jsonl"),
-            trust_policy: Arc::new(Mutex::new(edgerun_types::SyncTrustPolicy::default())),
-            trust_policy_path: data_dir.join("trust-policy.json"),
-            attestation_policy: Arc::new(Mutex::new(edgerun_types::AttestationPolicy::default())),
-            attestation_policy_path: data_dir.join("attestation-policy.json"),
-            route_shared_state_path: data_dir.join("route-state.json"),
-            route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
-            route_sync_min_interval_secs: 2,
-            housekeeping_interval_secs: 5,
-            device_routes: Arc::new(Mutex::new(HashMap::new())),
-            route_challenges: Arc::new(Mutex::new(HashMap::new())),
-            route_heartbeat_tokens: Arc::new(Mutex::new(HashMap::new())),
-            signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-            chain: None,
-        }
-    }
-
-    #[test]
-    fn winning_output_reaches_quorum() {
-        let reports = vec![
-            WorkerResultReport {
-                idempotency_key: "a".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "b".to_string(),
-                worker_pubkey: "w2".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 12,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-        ];
-
-        let winning = find_winning_output_hash(&reports, 2).expect("quorum expected");
-        assert_eq!(winning.0, "out-a");
-        assert_eq!(winning.1.len(), 2);
-    }
-
-    #[test]
-    fn instruction_escrow_formula_uses_redundancy_and_ceiling() {
-        let min = required_instruction_escrow_lamports(1_500_000_001, 10_000_000, 3, 500);
-        // ceil((1.500000001 * 10_000_000 * 3)) + 500
-        assert_eq!(min, 45_000_501);
-    }
-
-    #[test]
-    fn duplicate_worker_reports_do_not_count_twice() {
-        let reports = vec![
-            WorkerResultReport {
-                idempotency_key: "a".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "b".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "c".to_string(),
-                worker_pubkey: "w2".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-b".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-        ];
-
-        assert!(find_winning_output_hash(&reports, 2).is_none());
-    }
-
-    #[test]
-    fn tie_at_quorum_returns_no_winner() {
-        let reports = vec![
-            WorkerResultReport {
-                idempotency_key: "a".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "b".to_string(),
-                worker_pubkey: "w2".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-a".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "c".to_string(),
-                worker_pubkey: "w3".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-b".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "d".to_string(),
-                worker_pubkey: "w4".to_string(),
-                job_id: "j1".to_string(),
-                bundle_hash: "b1".to_string(),
-                output_hash: "out-b".to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            },
-        ];
-
-        assert!(find_winning_output_hash(&reports, 2).is_none());
-    }
-
-    #[test]
-    fn randomized_ties_never_select_winner() {
-        for seed in 0..64_u32 {
-            let quorum = 2_usize + (seed as usize % 3);
-            let mut reports = Vec::new();
-            for i in 0..quorum {
-                reports.push(WorkerResultReport {
-                    idempotency_key: format!("a-{seed}-{i}"),
-                    worker_pubkey: format!("wa-{seed}-{i}"),
-                    job_id: "j1".to_string(),
-                    bundle_hash: "b1".to_string(),
-                    output_hash: "out-a".to_string(),
-                    output_len: 10,
-                    attestation_sig: None,
-                    attestation_claim: None,
-                    signature: None,
-                });
-                reports.push(WorkerResultReport {
-                    idempotency_key: format!("b-{seed}-{i}"),
-                    worker_pubkey: format!("wb-{seed}-{i}"),
-                    job_id: "j1".to_string(),
-                    bundle_hash: "b1".to_string(),
-                    output_hash: "out-b".to_string(),
-                    output_len: 10,
-                    attestation_sig: None,
-                    attestation_claim: None,
-                    signature: None,
-                });
-            }
-            assert!(find_winning_output_hash(&reports, quorum).is_none());
-        }
-    }
-
-    #[test]
-    fn randomized_unique_max_selects_winner() {
-        for seed in 0..64_u32 {
-            let quorum = 2_usize;
-            let a_count = 3_usize + (seed as usize % 3);
-            let b_count = 2_usize;
-            let mut reports = Vec::new();
-            for i in 0..a_count {
-                reports.push(WorkerResultReport {
-                    idempotency_key: format!("a-{seed}-{i}"),
-                    worker_pubkey: format!("wa-{seed}-{i}"),
-                    job_id: "j1".to_string(),
-                    bundle_hash: "b1".to_string(),
-                    output_hash: "out-a".to_string(),
-                    output_len: 10,
-                    attestation_sig: None,
-                    attestation_claim: None,
-                    signature: None,
-                });
-            }
-            for i in 0..b_count {
-                reports.push(WorkerResultReport {
-                    idempotency_key: format!("b-{seed}-{i}"),
-                    worker_pubkey: format!("wb-{seed}-{i}"),
-                    job_id: "j1".to_string(),
-                    bundle_hash: "b1".to_string(),
-                    output_hash: "out-b".to_string(),
-                    output_len: 10,
-                    attestation_sig: None,
-                    attestation_claim: None,
-                    signature: None,
-                });
-            }
-            let winning = find_winning_output_hash(&reports, quorum).expect("winner expected");
-            assert_eq!(winning.0, "out-a");
-            assert_eq!(winning.1.len(), a_count);
-        }
-    }
-
-    #[test]
-    fn winner_worker_set_is_unique_and_from_reports() {
-        for seed in 0..64_u32 {
-            let quorum = 2_usize;
-            let mut reports = Vec::new();
-            for i in 0..6_usize {
-                reports.push(WorkerResultReport {
-                    idempotency_key: format!("a-{seed}-{i}"),
-                    worker_pubkey: format!("wa-{seed}-{}", i % 3),
-                    job_id: "j1".to_string(),
-                    bundle_hash: "b1".to_string(),
-                    output_hash: if i < 4 {
-                        "out-a".to_string()
-                    } else {
-                        "out-b".to_string()
-                    },
-                    output_len: 10,
-                    attestation_sig: None,
-                    attestation_claim: None,
-                    signature: None,
-                });
-            }
-            let winning = find_winning_output_hash(&reports, quorum).expect("winner expected");
-            let winner_set: HashSet<String> = winning.1.iter().cloned().collect();
-            assert_eq!(winner_set.len(), winning.1.len());
-            for worker in &winning.1 {
-                let exists = reports
-                    .iter()
-                    .any(|r| r.worker_pubkey == *worker && r.output_hash == winning.0);
-                assert!(exists);
-            }
-        }
-    }
-
-    #[test]
-    fn validate_worker_result_payload_rejects_bad_hex() {
-        let payload = WorkerResultReport {
-            idempotency_key: "k".to_string(),
-            worker_pubkey: "w".to_string(),
-            job_id: "not-hex".to_string(),
-            bundle_hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                .to_string(),
-            output_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                .to_string(),
-            output_len: 1,
-            attestation_sig: None,
-            attestation_claim: None,
-            signature: None,
-        };
-        let err = validate_worker_result_payload(&payload).expect_err("must reject");
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
-        assert_eq!(err.1, "job_id must be 32-byte hex");
-    }
-
-    #[test]
-    fn merkle_root_and_proof_roundtrip() {
-        let leaves = vec![[1_u8; 32], [2_u8; 32], [3_u8; 32], [4_u8; 32]];
-        let target = [3_u8; 32];
-        let (root, proof) = build_merkle_root_and_proof(&leaves, &target).expect("proof");
-        let mut acc = target;
-        for sibling in proof {
-            acc = merkle_parent_sorted(&acc, &sibling);
-        }
-        assert_eq!(acc, root);
-    }
-
-    #[test]
-    fn merkle_root_and_proof_missing_leaf_returns_none() {
-        let leaves = vec![[1_u8; 32], [2_u8; 32]];
-        let target = [9_u8; 32];
-        assert!(build_merkle_root_and_proof(&leaves, &target).is_none());
-    }
-
-    #[test]
-    fn committee_selection_uses_runtime_and_live_heartbeats() {
-        let state = test_state();
-        let now = now_unix_seconds();
-        {
-            let mut registry = state.worker_registry.lock().expect("lock poisoned");
-            registry.insert(
-                "w1".to_string(),
-                WorkerRegistryEntry {
-                    worker_pubkey: "w1".to_string(),
-                    runtime_ids: vec!["r1".to_string()],
-                    version: "1".to_string(),
-                    max_concurrent: Some(1),
-                    mem_bytes: Some(1024),
-                    last_heartbeat_unix_s: now,
-                },
-            );
-            registry.insert(
-                "w2".to_string(),
-                WorkerRegistryEntry {
-                    worker_pubkey: "w2".to_string(),
-                    runtime_ids: vec!["r1".to_string()],
-                    version: "1".to_string(),
-                    max_concurrent: Some(1),
-                    mem_bytes: Some(1024),
-                    last_heartbeat_unix_s: now,
-                },
-            );
-            registry.insert(
-                "stale".to_string(),
-                WorkerRegistryEntry {
-                    worker_pubkey: "stale".to_string(),
-                    runtime_ids: vec!["r1".to_string()],
-                    version: "1".to_string(),
-                    max_concurrent: Some(1),
-                    mem_bytes: Some(1024),
-                    last_heartbeat_unix_s: now.saturating_sub(60),
-                },
-            );
-            registry.insert(
-                "wrong-runtime".to_string(),
-                WorkerRegistryEntry {
-                    worker_pubkey: "wrong-runtime".to_string(),
-                    runtime_ids: vec!["r2".to_string()],
-                    version: "1".to_string(),
-                    max_concurrent: Some(1),
-                    mem_bytes: Some(1024),
-                    last_heartbeat_unix_s: now,
-                },
-            );
-        }
-
-        let selected = select_committee_workers(&state, "r1", "seed-1", 3);
-        assert_eq!(selected.len(), 2);
-        assert!(selected.contains(&"w1".to_string()));
-        assert!(selected.contains(&"w2".to_string()));
-    }
-
-    #[test]
-    fn verifies_worker_signature_when_present() {
-        let state = test_state();
-        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-        let worker_pubkey = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
-        let message = "result|worker|job|bundle|output|10";
-        let digest = edgerun_crypto::blake3_256(message.as_bytes());
-        let sig = edgerun_crypto::sign(&signing_key, &digest);
-        let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
-
-        let ok = verify_worker_message_signature(
-            &state,
-            &worker_pubkey.to_string(),
-            Some(&sig_b64),
-            message,
-        )
-        .expect("verification should not error");
-        assert!(ok);
-    }
-
-    #[test]
-    fn expired_job_without_quorum_gets_cancel_artifact() {
-        let state = test_state();
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds().saturating_sub(3600),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        evaluate_expired_jobs(&state).expect("expiry evaluation");
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        let entry = job_quorum
-            .get("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-            .expect("entry exists");
-        assert!(entry.cancel_triggered);
-        assert!(entry.cancel_tx.is_some());
-    }
-
-    #[test]
-    fn worker_must_be_in_committee() {
-        let state = test_state();
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                "job-1".to_string(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        assert!(is_assigned_worker(&state, "job-1", "w2"));
-        assert!(!is_assigned_worker(&state, "job-1", "intruder"));
-        assert!(matches_expected_bundle_hash(
-            &state,
-            "job-1",
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        ));
-        assert!(!matches_expected_bundle_hash(&state, "job-1", "deadbeef"));
-    }
-
-    #[test]
-    fn empty_idempotency_is_not_deduped() {
-        assert!(!is_duplicate_idempotency("abc", ""));
-        assert!(is_duplicate_idempotency("abc", "abc"));
-    }
-
-    #[test]
-    fn bundle_cas_rejects_overwrite_with_different_bytes() {
-        let state = test_state();
-        let path = state
-            .data_dir
-            .join("bundles")
-            .join("cas-overwrite-test.cbor");
-
-        let first = b"bundle-v1";
-        let first_hash = hex::encode(edgerun_crypto::compute_bundle_hash(first));
-        write_bundle_cas(&path, &first_hash, first).expect("initial write");
-
-        let second = b"bundle-v2";
-        let second_hash = hex::encode(edgerun_crypto::compute_bundle_hash(second));
-        let err = write_bundle_cas(&path, &second_hash, second).expect_err("must reject drift");
-        assert!(err
-            .to_string()
-            .contains("bundle path already exists with different bytes"));
-    }
-
-    #[tokio::test]
-    async fn get_bundle_rejects_hash_mismatch_for_tampered_bytes() {
-        let state = test_state();
-        let canonical = b"bundle-canonical";
-        let bundle_hash = hex::encode(edgerun_crypto::compute_bundle_hash(canonical));
-        let path = bundle_path(&state, &bundle_hash);
-
-        // Simulate local-disk tamper/drift at the expected bundle path.
-        std::fs::write(path, b"bundle-tampered").expect("write tampered bundle");
-
-        match get_bundle(State(state), Path(bundle_hash)).await {
-            Ok(_) => panic!("tampered bytes should be rejected"),
-            Err(err) => {
-                assert_eq!(err.0, StatusCode::INTERNAL_SERVER_ERROR);
-                assert_eq!(err.1, "bundle content hash mismatch");
-            }
-        }
-    }
-
-    #[test]
-    fn posted_job_rpc_filters_include_discriminator_and_status() {
-        let filters = posted_job_rpc_filters();
-        assert_eq!(filters.len(), 3);
-        match &filters[0] {
-            RpcFilterType::DataSize(v) => assert_eq!(*v, JOB_ACCOUNT_MIN_LEN as u64),
-            _ => panic!("expected data size filter"),
-        }
-        match &filters[2] {
-            RpcFilterType::Memcmp(memcmp) => assert_eq!(
-                memcmp.offset(),
-                ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR
-            ),
-            _ => panic!("expected memcmp status filter"),
-        }
-    }
-
-    #[test]
-    fn job_result_rpc_filters_include_discriminator() {
-        let filters = job_result_rpc_filters();
-        assert_eq!(filters.len(), 2);
-        match &filters[0] {
-            RpcFilterType::DataSize(v) => assert_eq!(*v, JOB_RESULT_ACCOUNT_MIN_LEN as u64),
-            _ => panic!("expected data size filter"),
-        }
-    }
-
-    #[test]
-    fn parses_onchain_job_status_byte() {
-        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 2;
-        assert_eq!(parse_onchain_job_status(&data), Some(2));
-    }
-
-    #[test]
-    fn parses_onchain_job_view_fields() {
-        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
-        data[..ANCHOR_DISCRIMINATOR_LEN].copy_from_slice(&anchor_account_discriminator("Job"));
-        let job_id = [0x11_u8; 32];
-        let bundle_hash = [0x22_u8; 32];
-        let runtime_id = [0x33_u8; 32];
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_ID_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_ID_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(&job_id);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(&bundle_hash);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(&runtime_id);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR + 8]
-            .copy_from_slice(&123_u64.to_le_bytes());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR + 4]
-            .copy_from_slice(&456_u32.to_le_bytes());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR + 8]
-            .copy_from_slice(&789_u64.to_le_bytes());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR] = 3;
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_QUORUM_OFFSET_FROM_ANCHOR] = 2;
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR + 8]
-            .copy_from_slice(&900_u64.to_le_bytes());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR + 8]
-            .copy_from_slice(&901_u64.to_le_bytes());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 0;
-
-        let parsed = parse_onchain_job_view(&data).expect("parse");
-        assert_eq!(parsed.job_id, job_id);
-        assert_eq!(parsed.bundle_hash, bundle_hash);
-        assert_eq!(parsed.runtime_id, runtime_id);
-        assert_eq!(parsed.escrow_lamports, 123);
-        assert_eq!(parsed.max_memory_bytes, 456);
-        assert_eq!(parsed.max_instructions, 789);
-        assert_eq!(parsed.committee_size, 3);
-        assert_eq!(parsed.quorum, 2);
-        assert_eq!(parsed.created_slot, 900);
-        assert_eq!(parsed.deadline_slot, 901);
-        assert_eq!(parsed.status, 0);
-    }
-
-    #[test]
-    fn parses_onchain_job_result_view_fields() {
-        let mut data = vec![0_u8; JOB_RESULT_ACCOUNT_MIN_LEN];
-        data[..ANCHOR_DISCRIMINATOR_LEN]
-            .copy_from_slice(&anchor_account_discriminator("JobResult"));
-        let job_id = [0x11_u8; 32];
-        let worker = Pubkey::new_unique();
-        let output_hash = [0x22_u8; 32];
-        let sig = [0x33_u8; 64];
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(&job_id);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(worker.as_ref());
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR + 32]
-            .copy_from_slice(&output_hash);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR + 64]
-            .copy_from_slice(&sig);
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR
-            ..ANCHOR_DISCRIMINATOR_LEN + JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR + 8]
-            .copy_from_slice(&77_u64.to_le_bytes());
-
-        let parsed = parse_onchain_job_result_view(&data).expect("parse");
-        assert_eq!(parsed.job_id, job_id);
-        assert_eq!(parsed.worker, worker);
-        assert_eq!(parsed.output_hash, output_hash);
-        assert_eq!(parsed.attestation_sig, sig);
-        assert_eq!(parsed.submitted_slot, 77);
-    }
-
-    #[test]
-    fn rejects_non_job_discriminator_in_job_parser() {
-        let mut data = vec![0_u8; ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR + 1];
-        data[..ANCHOR_DISCRIMINATOR_LEN]
-            .copy_from_slice(&anchor_account_discriminator("WorkerStake"));
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR] = 3;
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_QUORUM_OFFSET_FROM_ANCHOR] = 2;
-        data[ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR] = 0;
-        assert!(parse_onchain_job_view(&data).is_none());
-    }
-
-    #[test]
-    fn validates_job_pda_against_job_id() {
-        let program_id = Pubkey::new_unique();
-        let job_id = [0x55_u8; 32];
-        let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &program_id);
-        assert!(is_valid_job_account_address(&program_id, &job_pda, &job_id));
-        assert!(!is_valid_job_account_address(
-            &program_id,
-            &Pubkey::new_unique(),
-            &job_id
-        ));
-    }
-
-    #[test]
-    fn discovered_job_lifecycle_generates_assign_and_finalize_artifacts() {
-        let mut state = test_state();
-        state.quorum_requires_attestation = false;
-        let state = state;
-        let now = now_unix_seconds();
-        let runtime_id = [0_u8; 32];
-        let runtime_hex = hex::encode(runtime_id);
-        {
-            let mut registry = state.worker_registry.lock().expect("lock poisoned");
-            for worker in ["w1", "w2", "w3"] {
-                registry.insert(
-                    worker.to_string(),
-                    WorkerRegistryEntry {
-                        worker_pubkey: worker.to_string(),
-                        runtime_ids: vec![runtime_hex.clone()],
-                        version: "1".to_string(),
-                        max_concurrent: Some(1),
-                        mem_bytes: Some(1024),
-                        last_heartbeat_unix_s: now,
-                    },
-                );
-            }
-        }
-
-        let view = OnchainJobView {
-            job_id: [0x44_u8; 32],
-            bundle_hash: [0x55_u8; 32],
-            runtime_id,
-            max_memory_bytes: 64 * 1024 * 1024,
-            max_instructions: 1_000_000,
-            escrow_lamports: 1_000,
-            committee_size: 3,
-            quorum: 2,
-            created_slot: 10,
-            deadline_slot: 20,
-            status: 0,
-        };
-        let bundle_hash_hex = hex::encode(view.bundle_hash);
-        std::fs::write(bundle_path(&state, &bundle_hash_hex), b"bundle").expect("write bundle");
-        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
-        assert!(inserted);
-
-        let job_id_hex = hex::encode(view.job_id);
-        let queued_assignments = state.assignments.lock().expect("lock poisoned");
-        let queued_total = queued_assignments.values().map(Vec::len).sum::<usize>();
-        assert_eq!(queued_total, 3);
-        drop(queued_assignments);
-
-        {
-            let mut results = state.results.lock().expect("lock poisoned");
-            let entries = results.entry(job_id_hex.clone()).or_default();
-            entries.push(WorkerResultReport {
-                idempotency_key: "r1".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: job_id_hex.clone(),
-                bundle_hash: bundle_hash_hex.clone(),
-                output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                    .to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            });
-            entries.push(WorkerResultReport {
-                idempotency_key: "r2".to_string(),
-                worker_pubkey: "w2".to_string(),
-                job_id: job_id_hex.clone(),
-                bundle_hash: bundle_hash_hex,
-                output_hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                    .to_string(),
-                output_len: 10,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            });
-        }
-
-        let reached = recompute_job_quorum(&state, &job_id_hex).expect("recompute");
-        assert!(reached);
-        let jq = state.job_quorum.lock().expect("lock poisoned");
-        let entry = jq.get(&job_id_hex).expect("quorum entry");
-        assert!(entry.finalize_triggered);
-        assert!(entry
-            .finalize_tx
-            .as_deref()
-            .unwrap_or_default()
-            .starts_with("UNAVAILABLE_FINALIZE_"));
-    }
-
-    #[test]
-    fn quorum_requires_attestation_by_default() {
-        let state = test_state();
-        let job_id = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".to_string();
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                job_id.clone(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-        {
-            let mut results = state.results.lock().expect("lock poisoned");
-            let entries = results.entry(job_id.clone()).or_default();
-            entries.push(WorkerResultReport {
-                idempotency_key: "q1".to_string(),
-                worker_pubkey: "w1".to_string(),
-                job_id: job_id.clone(),
-                bundle_hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-                    .to_string(),
-                output_hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-                    .to_string(),
-                output_len: 1,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            });
-            entries.push(WorkerResultReport {
-                idempotency_key: "q2".to_string(),
-                worker_pubkey: "w2".to_string(),
-                job_id: job_id.clone(),
-                bundle_hash: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-                    .to_string(),
-                output_hash: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-                    .to_string(),
-                output_len: 1,
-                attestation_sig: None,
-                attestation_claim: None,
-                signature: None,
-            });
-        }
-        let reached = recompute_job_quorum(&state, &job_id).expect("recompute");
-        assert!(!reached);
-    }
-
-    #[test]
-    fn timeout_lifecycle_generates_cancel_artifact_without_chain() {
-        let mut state = test_state();
-        state.job_timeout_secs = 1;
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec!["w1".to_string(), "w2".to_string(), "w3".to_string()],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds().saturating_sub(60),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-        evaluate_expired_jobs(&state).expect("expire");
-        let jq = state.job_quorum.lock().expect("lock poisoned");
-        let entry = jq
-            .get("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-            .expect("entry");
-        assert!(entry.cancel_triggered);
-        assert_eq!(
-            entry.cancel_tx.as_deref(),
-            Some("UNAVAILABLE_NO_CHAIN_CONTEXT")
-        );
-    }
-
-    #[test]
-    fn discovered_job_without_local_bundle_is_skipped() {
-        let state = test_state();
-        let now = now_unix_seconds();
-        let runtime_id = [0_u8; 32];
-        let runtime_hex = hex::encode(runtime_id);
-        {
-            let mut registry = state.worker_registry.lock().expect("lock poisoned");
-            for worker in ["w1", "w2", "w3"] {
-                registry.insert(
-                    worker.to_string(),
-                    WorkerRegistryEntry {
-                        worker_pubkey: worker.to_string(),
-                        runtime_ids: vec![runtime_hex.clone()],
-                        version: "1".to_string(),
-                        max_concurrent: Some(1),
-                        mem_bytes: Some(1024),
-                        last_heartbeat_unix_s: now,
-                    },
-                );
-            }
-        }
-        let view = OnchainJobView {
-            job_id: [0x66_u8; 32],
-            bundle_hash: [0x77_u8; 32],
-            runtime_id,
-            max_memory_bytes: 1,
-            max_instructions: 1,
-            escrow_lamports: 1,
-            committee_size: 3,
-            quorum: 2,
-            created_slot: 10,
-            deadline_slot: 20,
-            status: 0,
-        };
-        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
-        assert!(!inserted);
-        let job_id_hex = hex::encode(view.job_id);
-        let jq = state.job_quorum.lock().expect("lock poisoned");
-        assert!(!jq.contains_key(&job_id_hex));
-    }
-
-    #[test]
-    fn discovered_job_with_non_mvp_committee_policy_is_skipped() {
-        let state = test_state();
-        let now = now_unix_seconds();
-        let runtime_id = [0_u8; 32];
-        let runtime_hex = hex::encode(runtime_id);
-        {
-            let mut registry = state.worker_registry.lock().expect("lock poisoned");
-            for worker in ["w1", "w2", "w3"] {
-                registry.insert(
-                    worker.to_string(),
-                    WorkerRegistryEntry {
-                        worker_pubkey: worker.to_string(),
-                        runtime_ids: vec![runtime_hex.clone()],
-                        version: "1".to_string(),
-                        max_concurrent: Some(1),
-                        mem_bytes: Some(1024),
-                        last_heartbeat_unix_s: now,
-                    },
-                );
-            }
-        }
-        let view = OnchainJobView {
-            job_id: [0x68_u8; 32],
-            bundle_hash: [0x69_u8; 32],
-            runtime_id,
-            max_memory_bytes: 1,
-            max_instructions: 1,
-            escrow_lamports: 1,
-            committee_size: 5,
-            quorum: 3,
-            created_slot: 10,
-            deadline_slot: 20,
-            status: 0,
-        };
-        let bundle_hash_hex = hex::encode(view.bundle_hash);
-        std::fs::write(bundle_path(&state, &bundle_hash_hex), b"bundle").expect("write bundle");
-        let inserted = seed_discovered_posted_job(&state, &view).expect("seed");
-        assert!(!inserted);
-    }
-
-    #[test]
-    fn onchain_result_ingest_can_drive_quorum() {
-        let mut state = test_state();
-        state.quorum_requires_attestation = false;
-        let state = state;
-
-        let worker1_sk = SigningKey::from_bytes(&[31_u8; 32]);
-        let worker2_sk = SigningKey::from_bytes(&[32_u8; 32]);
-        let worker3_sk = SigningKey::from_bytes(&[33_u8; 32]);
-        let worker1 = Pubkey::new_from_array(*worker1_sk.verifying_key().as_bytes());
-        let worker2 = Pubkey::new_from_array(*worker2_sk.verifying_key().as_bytes());
-        let worker3 = Pubkey::new_from_array(*worker3_sk.verifying_key().as_bytes());
-        let job_id = [0x90_u8; 32];
-        let job_id_hex = hex::encode(job_id);
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                job_id_hex.clone(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec![
-                        worker1.to_string(),
-                        worker2.to_string(),
-                        worker3.to_string(),
-                    ],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        let output_hash = [0xAB_u8; 32];
-        let bundle_hash =
-            parse_hex32("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-                .expect("hex");
-        let runtime_id =
-            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
-                .expect("hex");
-        let msg1 = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
-        let msg2 = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
-        let sig1 = edgerun_crypto::sign(&worker1_sk, &msg1).to_bytes();
-        let sig2 = edgerun_crypto::sign(&worker2_sk, &msg2).to_bytes();
-        let r1 = OnchainJobResultView {
-            job_id,
-            worker: worker1,
-            output_hash,
-            attestation_sig: sig1,
-            submitted_slot: 10,
-        };
-        let r2 = OnchainJobResultView {
-            job_id,
-            worker: worker2,
-            output_hash,
-            attestation_sig: sig2,
-            submitted_slot: 11,
-        };
-        assert!(ingest_onchain_job_result_view(&state, &r1).is_some());
-        assert!(ingest_onchain_job_result_view(&state, &r2).is_some());
-
-        let reached = recompute_job_quorum(&state, &job_id_hex).expect("recompute");
-        assert!(reached);
-        let jq = state.job_quorum.lock().expect("lock poisoned");
-        assert!(jq
-            .get(&job_id_hex)
-            .and_then(|v| v.winning_output_hash.as_ref())
-            .is_some());
-    }
-
-    #[test]
-    fn onchain_result_ingest_rejects_invalid_attestation() {
-        let state = test_state();
-        let worker_sk = SigningKey::from_bytes(&[41_u8; 32]);
-        let worker = Pubkey::new_from_array(*worker_sk.verifying_key().as_bytes());
-        let job_id = [0x91_u8; 32];
-        let job_id_hex = hex::encode(job_id);
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                job_id_hex.clone(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec![worker.to_string()],
-                    committee_size: 1,
-                    quorum: 1,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-        let bad = OnchainJobResultView {
-            job_id,
-            worker,
-            output_hash: [0xAB_u8; 32],
-            attestation_sig: [0_u8; 64],
-            submitted_slot: 99,
-        };
-        assert!(ingest_onchain_job_result_view(&state, &bad).is_none());
-    }
-
-    #[test]
-    fn slash_artifacts_include_losing_workers() {
-        let state = test_state();
-        let worker_win_sk = SigningKey::from_bytes(&[51_u8; 32]);
-        let worker_lose_sk = SigningKey::from_bytes(&[52_u8; 32]);
-        let worker_other_sk = SigningKey::from_bytes(&[53_u8; 32]);
-        let worker_win = Pubkey::new_from_array(*worker_win_sk.verifying_key().as_bytes());
-        let worker_lose = Pubkey::new_from_array(*worker_lose_sk.verifying_key().as_bytes());
-        let worker_other = Pubkey::new_from_array(*worker_other_sk.verifying_key().as_bytes());
-        let job_id = [0xA1_u8; 32];
-        let job_id_hex = hex::encode(job_id);
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                job_id_hex.clone(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec![
-                        worker_win.to_string(),
-                        worker_lose.to_string(),
-                        worker_other.to_string(),
-                    ],
-                    committee_size: 3,
-                    quorum: 2,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        let winning_hash =
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
-        let losing_hash =
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string();
-
-        let runtime_id =
-            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
-                .expect("hex");
-        let bundle_hash =
-            parse_hex32("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
-                .expect("hex");
-        let msg_win = build_worker_result_digest(
-            &job_id,
-            &bundle_hash,
-            &parse_hex32(&winning_hash).expect("hex"),
-            &runtime_id,
-        );
-        let msg_lose = build_worker_result_digest(
-            &job_id,
-            &bundle_hash,
-            &parse_hex32(&losing_hash).expect("hex"),
-            &runtime_id,
-        );
-        let sig_win = base64::engine::general_purpose::STANDARD
-            .encode(edgerun_crypto::sign(&worker_win_sk, &msg_win).to_bytes());
-        let sig_lose = base64::engine::general_purpose::STANDARD
-            .encode(edgerun_crypto::sign(&worker_lose_sk, &msg_lose).to_bytes());
-
-        let reports = vec![
-            WorkerResultReport {
-                idempotency_key: "s1".to_string(),
-                worker_pubkey: worker_win.to_string(),
-                job_id: job_id_hex.clone(),
-                bundle_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                    .to_string(),
-                output_hash: winning_hash.clone(),
-                output_len: 1,
-                attestation_sig: Some(sig_win),
-                attestation_claim: None,
-                signature: None,
-            },
-            WorkerResultReport {
-                idempotency_key: "s2".to_string(),
-                worker_pubkey: worker_lose.to_string(),
-                job_id: job_id_hex.clone(),
-                bundle_hash: "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-                    .to_string(),
-                output_hash: losing_hash,
-                output_len: 1,
-                attestation_sig: Some(sig_lose),
-                attestation_claim: None,
-                signature: None,
-            },
-        ];
-
-        let artifacts = build_slash_worker_artifacts(
-            &state,
-            &job_id_hex,
-            &winning_hash,
-            &[
-                worker_win.to_string(),
-                worker_lose.to_string(),
-                worker_other.to_string(),
-            ],
-            &reports,
-        );
-        assert_eq!(artifacts.len(), 1);
-        assert_eq!(artifacts[0].worker_pubkey, worker_lose.to_string());
-        assert_eq!(artifacts[0].tx, "UNAVAILABLE_NO_CHAIN_CONTEXT");
-    }
-
-    #[test]
-    fn verifies_result_attestation() {
-        let state = test_state();
-        let signing_key = SigningKey::from_bytes(&[9_u8; 32]);
-        let worker = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
-        let job_id = [1_u8; 32];
-        let output_hash = [2_u8; 32];
-        let bundle_hash =
-            parse_hex32("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-                .expect("hex");
-        let runtime_id =
-            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
-                .expect("hex");
-        let message = build_worker_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
-        let sig = edgerun_crypto::sign(&signing_key, &message);
-        let attestation_sig = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
-
-        let payload = WorkerResultReport {
-            idempotency_key: "ik".to_string(),
-            worker_pubkey: worker.to_string(),
-            job_id: hex::encode(job_id),
-            bundle_hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                .to_string(),
-            output_hash: hex::encode(output_hash),
-            output_len: 7,
-            attestation_sig: Some(attestation_sig),
-            attestation_claim: None,
-            signature: None,
-        };
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                payload.job_id.clone(),
-                JobQuorumState {
-                    expected_bundle_hash:
-                        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-                            .to_string(),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec![worker.to_string()],
-                    committee_size: 1,
-                    quorum: 1,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
-        assert!(ok);
-    }
-
-    #[test]
-    fn rejects_result_attestation_when_bundle_hash_mismatch() {
-        let state = test_state();
-        let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-        let worker = Pubkey::new_from_array(*signing_key.verifying_key().as_bytes());
-        let job_id = [3_u8; 32];
-        let expected_bundle_hash =
-            parse_hex32("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-                .expect("hex");
-        let wrong_bundle_hash =
-            parse_hex32("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
-                .expect("hex");
-        let output_hash = [4_u8; 32];
-        let runtime_id =
-            parse_hex32("1111111111111111111111111111111111111111111111111111111111111111")
-                .expect("hex");
-        let message =
-            build_worker_result_digest(&job_id, &wrong_bundle_hash, &output_hash, &runtime_id);
-        let sig = edgerun_crypto::sign(&signing_key, &message);
-        let attestation_sig = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());
-
-        let payload = WorkerResultReport {
-            idempotency_key: "ik-bundle-mismatch".to_string(),
-            worker_pubkey: worker.to_string(),
-            job_id: hex::encode(job_id),
-            bundle_hash: hex::encode(wrong_bundle_hash),
-            output_hash: hex::encode(output_hash),
-            output_len: 7,
-            attestation_sig: Some(attestation_sig),
-            attestation_claim: None,
-            signature: None,
-        };
-        {
-            let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-            job_quorum.insert(
-                payload.job_id.clone(),
-                JobQuorumState {
-                    expected_bundle_hash: hex::encode(expected_bundle_hash),
-                    expected_runtime_id:
-                        "1111111111111111111111111111111111111111111111111111111111111111"
-                            .to_string(),
-                    committee_workers: vec![worker.to_string()],
-                    committee_size: 1,
-                    quorum: 1,
-                    assign_tx: None,
-                    assign_sig: None,
-                    assign_submitted: false,
-                    quorum_reached: false,
-                    winning_output_hash: None,
-                    winning_workers: Vec::new(),
-                    finalize_triggered: false,
-                    finalize_tx: None,
-                    finalize_sig: None,
-                    finalize_submitted: false,
-                    cancel_triggered: false,
-                    cancel_tx: None,
-                    cancel_sig: None,
-                    cancel_submitted: false,
-                    onchain_status: None,
-                    onchain_last_observed_slot: None,
-                    onchain_last_update_unix_s: None,
-                    onchain_deadline_slot: None,
-                    slash_artifacts: Vec::new(),
-                    created_at_unix_s: now_unix_seconds(),
-                    quorum_reached_at_unix_s: None,
-                },
-            );
-        }
-
-        let ok = verify_result_attestation(&state, &payload).expect("attestation verify");
-        assert!(!ok);
-    }
-
-    #[test]
-    fn trust_policy_file_roundtrip() {
-        let state = test_state();
-        let path = state.data_dir.join("trust-policy-roundtrip.json");
-        let expected = edgerun_types::SyncTrustPolicy::strict(true);
-        save_trust_policy(&path, &expected).expect("save");
-        let loaded = load_trust_policy(&path).expect("load");
-        assert_eq!(loaded, expected);
-    }
-
-    #[test]
-    fn policy_session_state_file_roundtrip() {
-        let state = test_state();
-        let path = state.data_dir.join("policy-session-roundtrip.json");
-
-        let mut sessions = HashMap::new();
-        sessions.insert(
-            "tok-1".to_string(),
-            edgerun_hwvault_primitives::session::SessionState {
-                expires_at: 123,
-                signing_key: "sk-1".to_string(),
-                bound_origin: Some("https://app.example".to_string()),
-            },
-        );
-        let mut nonces = HashMap::new();
-        nonces.insert("tok-1:n-1".to_string(), 999);
-        let snapshot = PersistedPolicySessionState { sessions, nonces };
-
-        save_policy_session_state(&path, &snapshot).expect("save");
-        let loaded = load_policy_session_state(&path).expect("load");
-        assert_eq!(loaded.sessions.len(), 1);
-        assert_eq!(loaded.nonces.len(), 1);
-        assert_eq!(
-            loaded.sessions.get("tok-1").expect("session").signing_key,
-            "sk-1"
-        );
-    }
-
-    #[tokio::test]
-    async fn strict_trust_policy_requires_client_signature() {
-        let state = test_state();
-        {
-            let mut policy = state.trust_policy.lock().expect("lock poisoned");
-            *policy = edgerun_types::SyncTrustPolicy::strict(true);
-        }
-
-        let payload = JobCreateRequest {
-            runtime_id: "00".repeat(32),
-            wasm_base64: base64::engine::general_purpose::STANDARD.encode([0x00_u8]),
-            input_base64: base64::engine::general_purpose::STANDARD.encode([0x01_u8]),
-            abi_version: Some(edgerun_types::BUNDLE_ABI_CURRENT),
-            limits: edgerun_types::Limits {
-                max_memory_bytes: 1024,
-                max_instructions: 10_000,
-            },
-            escrow_lamports: 1,
-            assignment_worker_pubkey: None,
-            client_pubkey: None,
-            client_signed_at_unix_s: None,
-            client_signature: None,
-        };
-
-        let err = job_create(State(state), Json(payload))
-            .await
-            .expect_err("strict policy must require auth");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-        assert!(err.1.contains("strict trust policy"));
-    }
-
-    #[tokio::test]
-    async fn job_create_rejects_escrow_below_instruction_minimum() {
-        let mut state = test_state();
-        state.pricing_lamports_per_billion_instructions = 10_000_000;
-        state.pricing_flat_lamports = 1_000;
-
-        let payload = JobCreateRequest {
-            runtime_id: "00".repeat(32),
-            wasm_base64: base64::engine::general_purpose::STANDARD.encode([0x00_u8]),
-            input_base64: base64::engine::general_purpose::STANDARD.encode([0x01_u8]),
-            abi_version: Some(edgerun_types::BUNDLE_ABI_CURRENT),
-            limits: edgerun_types::Limits {
-                max_memory_bytes: 1024,
-                max_instructions: 1_000_000_000,
-            },
-            escrow_lamports: 10_000_999,
-            assignment_worker_pubkey: Some("single-worker".to_string()),
-            client_pubkey: None,
-            client_signed_at_unix_s: None,
-            client_signature: None,
-        };
-
-        let err = job_create(State(state), Json(payload))
-            .await
-            .expect_err("escrow below deterministic minimum should fail");
-        assert_eq!(err.0, StatusCode::BAD_REQUEST);
-        assert!(err
-            .1
-            .contains("escrow_lamports below deterministic minimum"));
-    }
-
-    #[tokio::test]
-    async fn trust_policy_endpoints_require_valid_session() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let err = trust_policy_get(State(state.clone()), HeaderMap::new())
-            .await
-            .expect_err("missing session must fail");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn trust_policy_set_and_get_with_signed_session_headers() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let set_body = serde_json::to_vec(&TrustPolicySetRequest {
-            profile: "strict".to_string(),
-        })
-        .expect("serialize trust policy payload");
-        let headers_set = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "POST",
-            "/v1/trust/policy/set",
-            "nonce-set-1",
-            &set_body,
-        );
-        let set_resp = trust_policy_set(State(state.clone()), headers_set, Bytes::from(set_body))
-            .await
-            .expect("set must succeed")
-            .0;
-        assert!(matches!(
-            set_resp.policy.profile,
-            edgerun_types::SyncTrustProfile::Strict
-        ));
-
-        let headers_get = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/trust/policy/get",
-            "nonce-get-1",
-            &[],
-        );
-        let get_resp = trust_policy_get(State(state.clone()), headers_get)
-            .await
-            .expect("get must succeed")
-            .0;
-        assert!(matches!(
-            get_resp.policy.profile,
-            edgerun_types::SyncTrustProfile::Strict
-        ));
-
-        let persisted = load_trust_policy(&state.trust_policy_path).expect("load trust policy");
-        assert!(matches!(
-            persisted.profile,
-            edgerun_types::SyncTrustProfile::Strict
-        ));
-        assert!(persisted.configured);
-    }
-
-    #[tokio::test]
-    async fn trust_policy_endpoints_reject_replayed_nonce() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let headers = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/trust/policy/get",
-            "nonce-replay-1",
-            &[],
-        );
-
-        let first = trust_policy_get(State(state.clone()), headers.clone())
-            .await
-            .expect("first request should pass")
-            .0;
-        assert!(matches!(
-            first.policy.profile,
-            edgerun_types::SyncTrustProfile::Balanced
-        ));
-
-        let second = trust_policy_get(State(state.clone()), headers)
-            .await
-            .expect_err("replayed nonce should fail");
-        assert_eq!(second.0, StatusCode::UNAUTHORIZED);
-        assert!(second.1.contains("replay"));
-    }
-
-    #[tokio::test]
-    async fn trust_policy_set_rejects_tampered_body_with_same_signature() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let signed_body = serde_json::to_vec(&TrustPolicySetRequest {
-            profile: "strict".to_string(),
-        })
-        .expect("serialize signed payload");
-        let tampered_body = serde_json::to_vec(&TrustPolicySetRequest {
-            profile: "monitor".to_string(),
-        })
-        .expect("serialize tampered payload");
-        let headers = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "POST",
-            "/v1/trust/policy/set",
-            "nonce-tamper-1",
-            &signed_body,
-        );
-
-        let err = trust_policy_set(State(state.clone()), headers, Bytes::from(tampered_body))
-            .await
-            .expect_err("tampered body should be rejected");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-        assert!(err.1.contains("invalid signature"));
-    }
-
-    #[tokio::test]
-    async fn session_create_requires_bootstrap_token_when_configured() {
-        let mut state = test_state();
-        state.policy_session_bootstrap_token = Some("bootstrap-secret".to_string());
-
-        let err = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect_err("missing bootstrap token must fail");
-        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "x-edgerun-bootstrap-token",
-            HeaderValue::from_static("bootstrap-secret"),
-        );
-        let issued = session_create(
-            State(state.clone()),
-            headers,
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("bootstrap token should allow session")
-        .0;
-        assert!(!issued.token.is_empty());
-        assert!(!issued.session_key.is_empty());
-    }
-
-    #[tokio::test]
-    async fn session_rotate_replaces_and_revokes_old_token() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let headers_rotate = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "POST",
-            "/v1/session/rotate",
-            "nonce-rotate-1",
-            &[],
-        );
-        let rotated = session_rotate(
-            State(state.clone()),
-            headers_rotate,
-            Json(SessionRotateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("rotate must succeed")
-        .0;
-        assert_ne!(issued.token, rotated.token);
-        assert_ne!(issued.session_key, rotated.session_key);
-
-        let old_headers = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/trust/policy/get",
-            "nonce-old-1",
-            &[],
-        );
-        let old_err = trust_policy_get(State(state.clone()), old_headers)
-            .await
-            .expect_err("old session must be revoked");
-        assert_eq!(old_err.0, StatusCode::UNAUTHORIZED);
-
-        let new_headers = signed_policy_headers(
-            &rotated.token,
-            &rotated.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/trust/policy/get",
-            "nonce-new-1",
-            &[],
-        );
-        let _ = trust_policy_get(State(state.clone()), new_headers)
-            .await
-            .expect("new session must work");
-    }
-
-    #[tokio::test]
-    async fn session_invalidate_revokes_token() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let headers_invalidate = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "POST",
-            "/v1/session/invalidate",
-            "nonce-invalidate-1",
-            &[],
-        );
-        let resp = session_invalidate(
-            State(state.clone()),
-            headers_invalidate,
-            Json(SessionInvalidateRequest { token: None }),
-        )
-        .await
-        .expect("invalidate must succeed")
-        .0;
-        assert!(resp.ok);
-
-        let old_headers = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/trust/policy/get",
-            "nonce-after-invalidate",
-            &[],
-        );
-        let old_err = trust_policy_get(State(state.clone()), old_headers)
-            .await
-            .expect_err("invalidated session must fail");
-        assert_eq!(old_err.0, StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn attestation_policy_set_and_get_with_signed_session_headers() {
-        let mut state = test_state();
-        state.require_policy_session = true;
-
-        let issued = session_create(
-            State(state.clone()),
-            HeaderMap::new(),
-            Json(SessionCreateRequest {
-                bound_origin: Some("https://app.example".to_string()),
-            }),
-        )
-        .await
-        .expect("session create must succeed")
-        .0;
-
-        let set_body = serde_json::to_vec(&AttestationPolicySetRequest {
-            required: true,
-            max_age_secs: 120,
-            allowed_measurements: vec!["M1".to_string(), "m1".to_string()],
-        })
-        .expect("serialize attestation policy payload");
-        let headers_set = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "POST",
-            "/v1/attestation/policy/set",
-            "nonce-att-set-1",
-            &set_body,
-        );
-        let set_resp =
-            attestation_policy_set(State(state.clone()), headers_set, Bytes::from(set_body))
-                .await
-                .expect("set must succeed")
-                .0;
-        assert!(set_resp.policy.required);
-        assert_eq!(set_resp.policy.max_age_secs, 120);
-        assert_eq!(set_resp.policy.allowed_measurements, vec!["m1".to_string()]);
-
-        let headers_get = signed_policy_headers(
-            &issued.token,
-            &issued.session_key,
-            "https://app.example",
-            "GET",
-            "/v1/attestation/policy/get",
-            "nonce-att-get-1",
-            &[],
-        );
-        let get_resp = attestation_policy_get(State(state.clone()), headers_get)
-            .await
-            .expect("get must succeed")
-            .0;
-        assert!(get_resp.policy.required);
-        assert_eq!(get_resp.policy.max_age_secs, 120);
-        assert_eq!(get_resp.policy.allowed_measurements, vec!["m1".to_string()]);
-    }
-
-    #[test]
-    fn result_attestation_claim_policy_is_enforced() {
-        let state = test_state();
-        let now = now_unix_seconds();
-
-        let payload = WorkerResultReport {
-            idempotency_key: "claim-1".to_string(),
-            worker_pubkey: "11111111111111111111111111111111".to_string(),
-            job_id: "00".repeat(32),
-            bundle_hash: "11".repeat(32),
-            output_hash: "22".repeat(32),
-            output_len: 1,
-            attestation_sig: None,
-            attestation_claim: None,
-            signature: None,
-        };
-
-        {
-            let mut p = state.attestation_policy.lock().expect("lock poisoned");
-            *p = edgerun_types::AttestationPolicy {
-                required: true,
-                max_age_secs: 300,
-                allowed_measurements: vec!["tee-good".to_string()],
-            };
-        }
-        let missing_claim = verify_result_attestation(&state, &payload).expect("verify");
-        assert!(!missing_claim);
-
-        let mut bad_measurement = payload.clone();
-        bad_measurement.attestation_claim = Some(edgerun_types::AttestationClaim {
-            measurement: "tee-bad".to_string(),
-            issued_at_unix_s: now.saturating_sub(5),
-            expires_at_unix_s: now.saturating_add(30),
-            nonce: None,
-            format: Some("stub".to_string()),
-            evidence: None,
-        });
-        let bad = verify_result_attestation(&state, &bad_measurement).expect("verify");
-        assert!(!bad);
-
-        let mut good = payload.clone();
-        good.attestation_claim = Some(edgerun_types::AttestationClaim {
-            measurement: "tee-good".to_string(),
-            issued_at_unix_s: now.saturating_sub(5),
-            expires_at_unix_s: now.saturating_add(30),
-            nonce: None,
-            format: Some("stub".to_string()),
-            evidence: None,
-        });
-        let ok = verify_result_attestation(&state, &good).expect("verify");
-        assert!(ok);
-    }
-
-    fn signed_policy_headers(
-        token: &str,
-        session_key: &str,
-        origin: &str,
-        method: &str,
-        path: &str,
-        nonce: &str,
-        body: &[u8],
-    ) -> HeaderMap {
-        type HmacSha256 = Hmac<Sha256>;
-
-        let ts = now_unix_seconds().to_string();
-        let body_hash = {
-            let mut hasher = Sha256::new();
-            hasher.update(body);
-            URL_SAFE_NO_PAD.encode(hasher.finalize())
-        };
-        let canonical = format!("{method}|{path}|{ts}|{nonce}|{body_hash}");
-        let sig = {
-            let mut mac = HmacSha256::new_from_slice(session_key.as_bytes()).expect("hmac key");
-            mac.update(canonical.as_bytes());
-            URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
-        };
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "authorization",
-            HeaderValue::from_str(&format!("Bearer {token}")).expect("auth header"),
-        );
-        headers.insert(
-            "origin",
-            HeaderValue::from_str(origin).expect("origin header"),
-        );
-        headers.insert("x-hwv-ts", HeaderValue::from_str(&ts).expect("ts header"));
-        headers.insert(
-            "x-hwv-nonce",
-            HeaderValue::from_str(nonce).expect("nonce header"),
-        );
-        headers.insert(
-            "x-hwv-sig",
-            HeaderValue::from_str(&sig).expect("sig header"),
-        );
-        headers
-    }
-
-    #[tokio::test]
-    async fn route_registration_flow_challenge_register_resolve_owner_heartbeat() {
-        let state = test_state();
-        let device_id = "device-abc".to_string();
-        let owner_signing = SigningKey::from_bytes(&[7_u8; 32]);
-        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
-
-        let Ok(Json(challenge)) = route_challenge(
-            State(state.clone()),
-            Json(RouteChallengeRequest {
-                device_id: device_id.clone(),
-            }),
-        )
-        .await
-        else {
-            panic!("route challenge should succeed");
-        };
-        assert!(!challenge.nonce.is_empty());
-        assert!(challenge.expires_at_unix_s > now_unix_seconds());
-
-        let reachable_urls = vec!["http://127.0.0.1:8091".to_string()];
-        let signed_at = now_unix_seconds();
-        let message = route_register_signing_message(
-            &owner_pubkey,
-            &device_id,
-            &reachable_urls,
-            &challenge.nonce,
-            signed_at,
-        );
-        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
-
-        let Ok(Json(registered)) = route_register(
-            State(state.clone()),
-            Json(RouteRegisterRequest {
-                device_id: device_id.clone(),
-                owner_pubkey: owner_pubkey.clone(),
-                reachable_urls: reachable_urls.clone(),
-                capabilities: vec!["terminal-ws".to_string()],
-                relay_session_id: None,
-                ttl_secs: Some(60),
-                challenge_nonce: challenge.nonce.clone(),
-                signed_at_unix_s: signed_at,
-                signature,
-            }),
-        )
-        .await
-        else {
-            panic!("route registration should succeed");
-        };
-        assert!(registered.ok);
-        assert_eq!(registered.device_id, device_id);
-        assert!(!registered.heartbeat_token.is_empty());
-
-        let resolved_resp = route_resolve(
-            State(state.clone()),
-            HeaderMap::new(),
-            Path(device_id.clone()),
-        )
-        .await;
-        assert_eq!(resolved_resp.status(), StatusCode::OK);
-        let resolved = serde_json::from_slice::<RouteResolveResponse>(
-            &to_bytes(resolved_resp.into_body(), usize::MAX)
-                .await
-                .expect("route resolve body"),
-        )
-        .expect("route resolve json");
-        assert!(resolved.ok);
-        assert!(resolved.found);
-        let resolved_entry = resolved.route.expect("route entry");
-        assert_eq!(resolved_entry.device_id, device_id);
-        assert_eq!(resolved_entry.owner_pubkey, owner_pubkey);
-        assert_eq!(resolved_entry.reachable_urls, reachable_urls);
-
-        let owner_resp = route_owner_resolve(
-            State(state.clone()),
-            HeaderMap::new(),
-            Path(owner_pubkey.clone()),
-        )
-        .await;
-        assert_eq!(owner_resp.status(), StatusCode::OK);
-        let owner_routes = serde_json::from_slice::<OwnerRoutesResponse>(
-            &to_bytes(owner_resp.into_body(), usize::MAX)
-                .await
-                .expect("owner resolve body"),
-        )
-        .expect("owner resolve json");
-        assert!(owner_routes.ok);
-        assert_eq!(owner_routes.owner_pubkey, owner_pubkey);
-        assert_eq!(owner_routes.devices.len(), 1);
-        assert_eq!(owner_routes.devices[0].device_id, device_id);
-
-        let Ok(Json(heartbeat)) = route_heartbeat(
-            State(state.clone()),
-            Json(RouteHeartbeatRequest {
-                device_id: device_id.clone(),
-                token: registered.heartbeat_token,
-                ttl_secs: Some(90),
-            }),
-        )
-        .await
-        else {
-            panic!("route heartbeat should succeed");
-        };
-        assert!(heartbeat.ok);
-        assert_eq!(heartbeat.device_id, device_id);
-        assert!(heartbeat.expires_at_unix_s > now_unix_seconds());
-    }
-
-    #[tokio::test]
-    async fn route_registration_shared_state_works_across_scheduler_instances() {
-        let shared_path = std::env::temp_dir().join(format!(
-            "edgerun-route-shared-{}-{}.json",
-            std::process::id(),
-            now_unix_seconds()
-        ));
-        let _ = std::fs::remove_file(&shared_path);
-
-        let mut state_a = test_state();
-        state_a.route_shared_state_path = shared_path.clone();
-        let mut state_b = test_state();
-        state_b.route_shared_state_path = shared_path.clone();
-
-        let device_id = "device-cross-instance".to_string();
-        let owner_signing = SigningKey::from_bytes(&[9_u8; 32]);
-        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
-
-        // Challenge on A
-        let Ok(Json(challenge)) = route_challenge(
-            State(state_a.clone()),
-            Json(RouteChallengeRequest {
-                device_id: device_id.clone(),
-            }),
-        )
-        .await
-        else {
-            panic!("route challenge should succeed");
-        };
-        flush_route_state_if_dirty(&state_a).expect("flush route state A after challenge");
-        sync_route_state_from_shared_file(&state_b)
-            .expect("sync route state into B after challenge");
-
-        // Register on B using challenge from A
-        let reachable_urls = vec!["http://127.0.0.1:9001".to_string()];
-        let signed_at = now_unix_seconds();
-        let message = route_register_signing_message(
-            &owner_pubkey,
-            &device_id,
-            &reachable_urls,
-            &challenge.nonce,
-            signed_at,
-        );
-        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
-        let Ok(Json(registered)) = route_register(
-            State(state_b.clone()),
-            Json(RouteRegisterRequest {
-                device_id: device_id.clone(),
-                owner_pubkey: owner_pubkey.clone(),
-                reachable_urls: reachable_urls.clone(),
-                capabilities: vec!["terminal-ws".to_string()],
-                relay_session_id: None,
-                ttl_secs: Some(60),
-                challenge_nonce: challenge.nonce,
-                signed_at_unix_s: signed_at,
-                signature,
-            }),
-        )
-        .await
-        else {
-            panic!("route register should succeed");
-        };
-        flush_route_state_if_dirty(&state_b).expect("flush route state B after register");
-        sync_route_state_from_shared_file(&state_a)
-            .expect("sync route state into A after register");
-
-        // Resolve on A should see route created on B.
-        let resolved_resp = route_resolve(
-            State(state_a.clone()),
-            HeaderMap::new(),
-            Path(device_id.clone()),
-        )
-        .await;
-        assert_eq!(resolved_resp.status(), StatusCode::OK);
-        let resolved = serde_json::from_slice::<RouteResolveResponse>(
-            &to_bytes(resolved_resp.into_body(), usize::MAX)
-                .await
-                .expect("route resolve body"),
-        )
-        .expect("route resolve json");
-        assert!(resolved.ok && resolved.found);
-        assert_eq!(
-            resolved
-                .route
-                .as_ref()
-                .map(|r| r.reachable_urls.clone())
-                .unwrap_or_default(),
-            reachable_urls
-        );
-
-        // Heartbeat on A should accept token issued on B.
-        let Ok(Json(hb)) = route_heartbeat(
-            State(state_a.clone()),
-            Json(RouteHeartbeatRequest {
-                device_id: device_id.clone(),
-                token: registered.heartbeat_token,
-                ttl_secs: Some(90),
-            }),
-        )
-        .await
-        else {
-            panic!("cross-instance heartbeat should succeed");
-        };
-        assert!(hb.ok);
-        flush_route_state_if_dirty(&state_a).expect("flush route state A after heartbeat");
-        sync_route_state_from_shared_file(&state_b)
-            .expect("sync route state into B after heartbeat");
-
-        // Owner lookup on B should include route.
-        let owner_resp =
-            route_owner_resolve(State(state_b), HeaderMap::new(), Path(owner_pubkey)).await;
-        assert_eq!(owner_resp.status(), StatusCode::OK);
-        let owner_routes = serde_json::from_slice::<OwnerRoutesResponse>(
-            &to_bytes(owner_resp.into_body(), usize::MAX)
-                .await
-                .expect("owner resolve body"),
-        )
-        .expect("owner resolve json");
-        assert_eq!(owner_routes.devices.len(), 1);
-        assert_eq!(owner_routes.devices[0].device_id, device_id);
-
-        let _ = std::fs::remove_file(shared_path);
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct RouteChallengeHttpResponse {
-        nonce: String,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct RouteResolveHttpResponse {
-        found: bool,
-        route: Option<RouteResolveHttpEntry>,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct RouteResolveHttpEntry {
-        reachable_urls: Vec<String>,
-    }
-
-    #[tokio::test]
-    async fn route_resolution_enables_real_service_to_service_connectivity() {
-        let state = test_state();
-        let scheduler_app = Router::new()
-            .route("/v1/route/challenge", post(route_challenge))
-            .route("/v1/route/register", post(route_register))
-            .route("/v1/route/resolve/{device_id}", get(route_resolve))
-            .with_state(state);
-        let scheduler_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind scheduler listener");
-        let scheduler_addr = scheduler_listener
-            .local_addr()
-            .expect("scheduler local addr");
-        let scheduler_task = tokio::spawn(async move {
-            axum::serve(scheduler_listener, scheduler_app)
-                .await
-                .expect("scheduler serve");
-        });
-
-        let service_b_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .expect("bind service B listener");
-        let service_b_addr = service_b_listener
-            .local_addr()
-            .expect("service B local addr");
-        let service_b_task = tokio::spawn(async move {
-            let (mut socket, _) = service_b_listener.accept().await.expect("accept service B");
-            let mut buf = [0_u8; 32];
-            let n = socket.read(&mut buf).await.expect("read from service A");
-            assert_eq!(&buf[..n], b"ping-from-service-a");
-            socket
-                .write_all(b"pong-from-service-b")
-                .await
-                .expect("write to service A");
-        });
-
-        let scheduler_base = format!("http://{scheduler_addr}");
-        let client = reqwest::Client::new();
-        let owner_signing = SigningKey::from_bytes(&[11_u8; 32]);
-        let owner_pubkey = URL_SAFE_NO_PAD.encode(owner_signing.verifying_key().to_bytes());
-        let service_b_device_id = "service-b".to_string();
-        let service_b_reachable_url = format!("http://{}", service_b_addr);
-
-        let challenge = client
-            .post(format!("{scheduler_base}/v1/route/challenge"))
-            .json(&serde_json::json!({ "device_id": service_b_device_id }))
-            .send()
-            .await
-            .expect("request challenge")
-            .error_for_status()
-            .expect("challenge status")
-            .json::<RouteChallengeHttpResponse>()
-            .await
-            .expect("parse challenge response");
-
-        let signed_at = now_unix_seconds();
-        let message = route_register_signing_message(
-            &owner_pubkey,
-            &service_b_device_id,
-            std::slice::from_ref(&service_b_reachable_url),
-            &challenge.nonce,
-            signed_at,
-        );
-        let signature = URL_SAFE_NO_PAD.encode(owner_signing.sign(message.as_bytes()).to_bytes());
-
-        client
-            .post(format!("{scheduler_base}/v1/route/register"))
-            .json(&serde_json::json!({
-                "device_id": service_b_device_id,
-                "owner_pubkey": owner_pubkey,
-                "reachable_urls": [service_b_reachable_url],
-                "challenge_nonce": challenge.nonce,
-                "signed_at_unix_s": signed_at,
-                "signature": signature,
-                "ttl_secs": 90
-            }))
-            .send()
-            .await
-            .expect("request register")
-            .error_for_status()
-            .expect("register status");
-
-        let resolved = client
-            .get(format!(
-                "{scheduler_base}/v1/route/resolve/{service_b_device_id}"
-            ))
-            .send()
-            .await
-            .expect("request resolve")
-            .error_for_status()
-            .expect("resolve status")
-            .json::<RouteResolveHttpResponse>()
-            .await
-            .expect("parse resolve response");
-
-        assert!(resolved.found);
-        let target_url = resolved
-            .route
-            .and_then(|entry| entry.reachable_urls.into_iter().next())
-            .expect("resolved reachable URL");
-        let target = reqwest::Url::parse(&target_url).expect("valid reachable URL");
-        let host = target.host_str().expect("target host");
-        let port = target.port_or_known_default().expect("target port");
-
-        let mut stream = tokio::net::TcpStream::connect((host, port))
-            .await
-            .expect("service A connects to service B via resolved route");
-        stream
-            .write_all(b"ping-from-service-a")
-            .await
-            .expect("service A writes ping");
-        let mut reply = [0_u8; 32];
-        let n = stream
-            .read(&mut reply)
-            .await
-            .expect("service A reads response");
-        assert_eq!(&reply[..n], b"pong-from-service-b");
-
-        service_b_task.await.expect("service B task");
-        scheduler_task.abort();
-        let _ = scheduler_task.await;
     }
 }

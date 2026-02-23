@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 mod bundle;
+#[cfg(feature = "gha-runner-backend")]
+mod gha_runner;
 mod validate;
 
 use anyhow::{anyhow, Result};
@@ -9,6 +11,11 @@ use wasmi::{
 };
 
 pub use bundle::decode_bundle_from_canonical_bytes;
+#[cfg(feature = "gha-runner-backend")]
+pub use gha_runner::{
+    ActionsJobLease, ActionsJobResult, ActionsJobSpec, ActionsJobState, ControlPlane,
+    ExecutionDisposition, JobExecutor, JobTickOutcome, NoopJobExecutor, RunnerBackend,
+};
 pub use validate::validate_wasm_module;
 
 #[derive(Debug, Clone)]

@@ -8,6 +8,7 @@ license = "Apache-2.0"
 [features]
 default = []
 cli = ["dep:clap", "dep:tokio", "dep:serde_json", "dep:wat"]
+gha-runner-backend = []
 
 [dependencies]
 anyhow.workspace = true

@@ -314,19 +314,14 @@ impl StorageLogSink {
         let meta = event.metadata();
         let mut fields = JsonFieldVisitor::default();
         event.record(&mut fields);
-
-        let payload = serde_json::json!({
-            "ts_unix_ms": now_unix_ms(),
-            "service": self.service_name,
-            "level": meta.level().as_str(),
-            "target": meta.target(),
-            "name": meta.name(),
-            "fields": fields.values,
-        });
-        let payload_bytes = match serde_json::to_vec(&payload) {
-            Ok(v) => v,
-            Err(_) => return,
-        };
+        let payload_bytes = encode_log_payload(
+            now_unix_ms(),
+            self.service_name,
+            meta.level().as_str(),
+            meta.target(),
+            meta.name(),
+            &fields.values,
+        );
 
         let storage_event =
             StorageEvent::new(self.stream_id.clone(), self.actor_id.clone(), payload_bytes);
@@ -337,6 +332,48 @@ impl StorageLogSink {
             eprintln!("edgerun-observability: storage append failed: {err}");
         }
     }
+}
+
+fn encode_log_payload(
+    ts_unix_ms: u128,
+    service: &str,
+    level: &str,
+    target: &str,
+    name: &str,
+    fields: &BTreeMap<String, String>,
+) -> Vec<u8> {
+    let mut out = String::new();
+    out.push_str("v=1\n");
+    out.push_str("ts_unix_ms=");
+    out.push_str(&ts_unix_ms.to_string());
+    out.push('\n');
+    out.push_str("service=");
+    out.push_str(&escape_value(service));
+    out.push('\n');
+    out.push_str("level=");
+    out.push_str(&escape_value(level));
+    out.push('\n');
+    out.push_str("target=");
+    out.push_str(&escape_value(target));
+    out.push('\n');
+    out.push_str("name=");
+    out.push_str(&escape_value(name));
+    out.push('\n');
+    for (key, value) in fields {
+        out.push_str("field.");
+        out.push_str(&escape_value(key));
+        out.push('=');
+        out.push_str(&escape_value(value));
+        out.push('\n');
+    }
+    out.into_bytes()
+}
+
+fn escape_value(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('=', "\\=")
 }
 
 fn stream_id_for_service(service_name: &str) -> StreamId {

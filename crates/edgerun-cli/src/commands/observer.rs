@@ -9,7 +9,7 @@ use anyhow::{anyhow, Context, Result};
 use edgerun_storage::durability::DurabilityLevel;
 use edgerun_storage::event::{ActorId, Event as StorageEvent, StreamId};
 use edgerun_storage::StorageEngine;
-use serde_json::Value;
+use json::JsonValue;
 
 use crate::{ObserveCommand, ObserveDurability};
 
@@ -40,15 +40,13 @@ pub(crate) fn run_observer_command(_root: &Path, command: ObserveCommand) -> Res
                 prev_event_hash,
             )?;
             sink.append(&job_id, &actor, &envelope, to_durability(durability))?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "ok": true,
-                    "job_id": job_id,
-                    "event_id": envelope["event_id"],
-                    "event_hash": envelope["event_hash"],
-                }))?
-            );
+            let out = json::object! {
+                ok: true,
+                job_id: job_id,
+                event_id: envelope["event_id"].clone(),
+                event_hash: envelope["event_hash"].clone(),
+            };
+            println!("{}", out.pretty(2));
             Ok(())
         }
         ObserveCommand::IngestStdio {
@@ -66,7 +64,7 @@ pub(crate) fn run_observer_command(_root: &Path, command: ObserveCommand) -> Res
             let mut count = 0u64;
             for line in stdin.lock().lines() {
                 let line = line.context("failed to read stdin line")?;
-                let payload = serde_json::json!({ "line": line });
+                let payload = json::object! { line: line };
                 let envelope = build_event_envelope(
                     &job_id,
                     &run_id,
@@ -76,19 +74,20 @@ pub(crate) fn run_observer_command(_root: &Path, command: ObserveCommand) -> Res
                     prev_hash.clone(),
                 )?;
                 prev_hash = envelope
-                    .get("event_hash")
-                    .and_then(Value::as_str)
+                    ["event_hash"]
+                    .as_str()
                     .map(ToString::to_string);
                 sink.append(&job_id, &actor, &envelope, to_durability(durability))?;
                 count = count.saturating_add(1);
             }
             println!(
                 "{}",
-                serde_json::to_string_pretty(&serde_json::json!({
-                    "ok": true,
-                    "job_id": job_id,
-                    "events_written": count
-                }))?
+                json::object! {
+                    ok: true,
+                    job_id: job_id,
+                    events_written: count
+                }
+                .pretty(2)
             );
             Ok(())
         }
@@ -111,30 +110,30 @@ impl ObserverSink {
         &mut self,
         job_id: &str,
         actor: &str,
-        envelope: &Value,
+        envelope: &JsonValue,
         durability: DurabilityLevel,
     ) -> Result<()> {
-        let payload = serde_json::to_vec(envelope)?;
+        let payload = envelope.dump().into_bytes();
         let event = StorageEvent::new(stream_id_for_job(job_id), actor_id_for_actor(actor), payload);
         self.session.append_with_durability(&event, durability)?;
         Ok(())
     }
 }
 
-fn load_payload(payload_json: Option<String>, payload_file: Option<PathBuf>) -> Result<Value> {
+fn load_payload(payload_json: Option<String>, payload_file: Option<PathBuf>) -> Result<JsonValue> {
     match (payload_json, payload_file) {
         (Some(raw), None) => {
-            let value: Value = serde_json::from_str(&raw).context("invalid --payload-json")?;
+            let value: JsonValue = json::parse(&raw).context("invalid --payload-json")?;
             Ok(value)
         }
         (None, Some(path)) => {
             let raw = fs::read_to_string(&path)
                 .with_context(|| format!("failed to read payload file {}", path.display()))?;
-            let value: Value = serde_json::from_str(&raw)
+            let value: JsonValue = json::parse(&raw)
                 .with_context(|| format!("invalid JSON in {}", path.display()))?;
             Ok(value)
         }
-        (None, None) => Ok(serde_json::json!({})),
+        (None, None) => Ok(json::object! {}),
         (Some(_), Some(_)) => Err(anyhow!(
             "use either --payload-json or --payload-file, not both"
         )),
@@ -146,9 +145,9 @@ fn build_event_envelope(
     run_id: &str,
     actor: &str,
     event_type: &str,
-    payload: Value,
+    payload: JsonValue,
     prev_event_hash: Option<String>,
-) -> Result<Value> {
+) -> Result<JsonValue> {
     let ts_unix_ms = now_unix_ms();
     let event_id = format!(
         "{}-{}-{}",
@@ -156,19 +155,19 @@ fn build_event_envelope(
         std::process::id(),
         EVENT_COUNTER.fetch_add(1, Ordering::Relaxed)
     );
-    let mut base = serde_json::json!({
-        "event_id": event_id,
-        "job_id": job_id,
-        "run_id": run_id,
-        "ts_unix_ms": ts_unix_ms,
-        "actor": actor,
-        "event_type": event_type,
-        "payload": payload,
-        "prev_event_hash": prev_event_hash,
-    });
-    let canonical = serde_json::to_vec(&base)?;
+    let mut base = json::object! {
+        event_id: event_id,
+        job_id: job_id,
+        run_id: run_id,
+        ts_unix_ms: ts_unix_ms,
+        actor: actor,
+        event_type: event_type,
+        payload: payload,
+        prev_event_hash: prev_event_hash,
+    };
+    let canonical = base.dump().into_bytes();
     let hash = blake3::hash(&canonical);
-    base["event_hash"] = Value::String(hash.to_hex().to_string());
+    base["event_hash"] = hash.to_hex().to_string().into();
     Ok(base)
 }
 
@@ -195,9 +194,9 @@ fn to_durability(value: ObserveDurability) -> DurabilityLevel {
     }
 }
 
-fn now_unix_ms() -> u128 {
+fn now_unix_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis())
+        .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }

@@ -58,6 +58,15 @@ struct DeviceHandshakeRequest {
 }
 
 #[derive(Debug, Serialize)]
+struct DeviceHandshakeResponse {
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    handshake: Option<edgerun_hwvault_primitives::hardware::DeviceHandshake>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct RouteRegisterRequest {
     device_id: String,
     owner_pubkey: String,
@@ -154,17 +163,18 @@ fn kill_all_sessions(sessions: &mut HashMap<u32, PtySession>) {
 }
 
 fn parse_exit_session_id(msg: &Message) -> Option<u32> {
-    let Message::Text(text) = msg else {
+    const PTY_FRAME_CONTROL_RESP: u8 = 0x7f;
+    let Message::Binary(bytes) = msg else {
         return None;
     };
-    let value = serde_json::from_str::<serde_json::Value>(text).ok()?;
-    if value.get("type")?.as_str()? != "exit" {
+    if bytes.first().copied() != Some(PTY_FRAME_CONTROL_RESP) {
         return None;
     }
-    value
-        .get("id")?
-        .as_u64()
-        .and_then(|id| u32::try_from(id).ok())
+    let decoded = bincode::deserialize::<ShellResponse>(&bytes[1..]).ok()?;
+    match decoded {
+        ShellResponse::Exit { id, .. } => Some(id),
+        _ => None,
+    }
 }
 
 #[tokio::main]
@@ -268,16 +278,18 @@ async fn device_handshake(
     challenges.retain(|_, exp| *exp > now);
 
     let Some(exp) = challenges.remove(req.nonce_b64url.trim()) else {
-        return Json(serde_json::json!({
-            "ok": false,
-            "error": "unknown or expired nonce"
-        }));
+        return Json(DeviceHandshakeResponse {
+            ok: false,
+            handshake: None,
+            error: Some("unknown or expired nonce".to_string()),
+        });
     };
     if exp <= now {
-        return Json(serde_json::json!({
-            "ok": false,
-            "error": "nonce expired"
-        }));
+        return Json(DeviceHandshakeResponse {
+            ok: false,
+            handshake: None,
+            error: Some("nonce expired".to_string()),
+        });
     }
     drop(challenges);
 
@@ -285,14 +297,16 @@ async fn device_handshake(
         .device
         .build_handshake(req.owner_pubkey.trim(), req.nonce_b64url.trim(), now)
     {
-        Ok(handshake) => Json(serde_json::json!({
-            "ok": true,
-            "handshake": handshake
-        })),
-        Err(err) => Json(serde_json::json!({
-            "ok": false,
-            "error": err.to_string()
-        })),
+        Ok(handshake) => Json(DeviceHandshakeResponse {
+            ok: true,
+            handshake: Some(handshake),
+            error: None,
+        }),
+        Err(err) => Json(DeviceHandshakeResponse {
+            ok: false,
+            handshake: None,
+            error: Some(err.to_string()),
+        }),
     }
 }
 
@@ -306,6 +320,7 @@ async fn ws_mux_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
 
 async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
     const PTY_FRAME_STDIN: u8 = 1;
+    const PTY_FRAME_CONTROL_REQ: u8 = 0x7e;
     let mut authed = false;
     let (out_tx, mut out_rx) = mpsc::unbounded_channel::<Message>();
     let mut sessions: HashMap<u32, PtySession> = HashMap::new();
@@ -332,21 +347,18 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                             let _ = writer.write_all(&data[5..]);
                             let _ = writer.flush();
                         }
+                        continue;
                     }
-                    continue;
-                }
-                if let Message::Text(text) = msg {
-                    let req: ShellRequest = match serde_json::from_str(&text) {
+                    if data.first().copied() != Some(PTY_FRAME_CONTROL_REQ) {
+                        continue;
+                    }
+                    let req: ShellRequest = match bincode::deserialize(&data[1..]) {
                         Ok(value) => value,
                         Err(err) => {
-                            let _ = out_tx.send(Message::Text(
-                                serde_json::to_string(&ShellResponse::Error {
-                                    id: None,
-                                    error: format!("invalid request: {err}")
-                                })
-                                .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
-                                .into()
-                            ));
+                            send_mux_response(&out_tx, &ShellResponse::Error {
+                                id: None,
+                                error: format!("invalid request: {err}"),
+                            });
                             continue;
                         }
                     };
@@ -355,53 +367,33 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                             if let Some(expected) = token.as_deref() {
                                 if expected == provided {
                                     authed = true;
-                                    let _ = out_tx.send(Message::Text(
-                                        serde_json::to_string(&ShellResponse::AuthOk)
-                                            .unwrap_or_else(|_| "{\"type\":\"auth_ok\"}".to_string())
-                                            .into()
-                                    ));
+                                    send_mux_response(&out_tx, &ShellResponse::AuthOk);
                                 } else {
-                                    let _ = out_tx.send(Message::Text(
-                                        serde_json::to_string(&ShellResponse::AuthError {
-                                            error: "invalid token".to_string()
-                                        })
-                                        .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
-                                        .into()
-                                    ));
+                                    send_mux_response(&out_tx, &ShellResponse::AuthError {
+                                        error: "invalid token".to_string(),
+                                    });
                                     break;
                                 }
                             } else {
-                                let _ = out_tx.send(Message::Text(
-                                    serde_json::to_string(&ShellResponse::AuthError {
-                                        error: "mux token is not configured".to_string()
-                                    })
-                                    .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
-                                        .into()
-                                ));
+                                send_mux_response(&out_tx, &ShellResponse::AuthError {
+                                    error: "mux token is not configured".to_string(),
+                                });
                                 break;
                             }
                         }
                         ShellRequest::Spawn { id, cmd, args, cwd, env, cols, rows } => {
                             if !authed {
-                                let _ = out_tx.send(Message::Text(
-                                    serde_json::to_string(&ShellResponse::AuthError {
-                                        error: "missing auth".to_string()
-                                    })
-                                    .unwrap_or_else(|_| "{\"type\":\"auth_error\"}".to_string())
-                                    .into()
-                                ));
+                                send_mux_response(&out_tx, &ShellResponse::AuthError {
+                                    error: "missing auth".to_string(),
+                                });
                                 continue;
                             }
                             let session_id = if let Some(id) = id {
                                 if sessions.contains_key(&id) {
-                                    let _ = out_tx.send(Message::Text(
-                                        serde_json::to_string(&ShellResponse::Error {
-                                            id: Some(id),
-                                            error: "session id already exists".to_string()
-                                        })
-                                        .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
-                                        .into()
-                                    ));
+                                    send_mux_response(&out_tx, &ShellResponse::Error {
+                                        id: Some(id),
+                                        error: "session id already exists".to_string(),
+                                    });
                                     continue;
                                 }
                                 id
@@ -422,21 +414,19 @@ async fn handle_mux_socket(mut socket: WebSocket, token: Option<String>) {
                             ) {
                                 Ok((session, pid)) => {
                                     sessions.insert(session_id, session);
-                                    let _ = out_tx.send(Message::Text(
-                                        serde_json::to_string(&ShellResponse::Spawned { id: session_id, pid })
-                                            .unwrap_or_else(|_| "{\"type\":\"spawned\"}".to_string())
-                                            .into()
-                                    ));
+                                    send_mux_response(
+                                        &out_tx,
+                                        &ShellResponse::Spawned {
+                                            id: session_id,
+                                            pid,
+                                        },
+                                    );
                                 }
                                 Err(err) => {
-                                    let _ = out_tx.send(Message::Text(
-                                        serde_json::to_string(&ShellResponse::Error {
-                                            id: Some(session_id),
-                                            error: err.to_string()
-                                        })
-                                        .unwrap_or_else(|_| "{\"type\":\"error\"}".to_string())
-                                        .into()
-                                    ));
+                                    send_mux_response(&out_tx, &ShellResponse::Error {
+                                        id: Some(session_id),
+                                        error: err.to_string(),
+                                    });
                                 }
                             }
                         }
@@ -658,11 +648,7 @@ fn spawn_pty_session(
                 code: status.exit_code(),
                 signal: None,
             };
-            let _ = exit_tx.send(Message::Text(
-                serde_json::to_string(&resp)
-                    .unwrap_or_else(|_| "{\"type\":\"exit\"}".to_string())
-                    .into(),
-            ));
+            send_mux_response(&exit_tx, &resp);
         }
     });
 
@@ -683,6 +669,16 @@ fn encode_pty_frame(kind: u8, id: u32, payload: &[u8]) -> Vec<u8> {
     frame.extend_from_slice(&id.to_be_bytes());
     frame.extend_from_slice(payload);
     frame
+}
+
+fn send_mux_response(out_tx: &mpsc::UnboundedSender<Message>, response: &ShellResponse) {
+    const PTY_FRAME_CONTROL_RESP: u8 = 0x7f;
+    if let Ok(payload) = bincode::serialize(response) {
+        let mut frame = Vec::with_capacity(1 + payload.len());
+        frame.push(PTY_FRAME_CONTROL_RESP);
+        frame.extend_from_slice(&payload);
+        let _ = out_tx.send(Message::Binary(frame.into()));
+    }
 }
 
 fn now_unix_s() -> u64 {

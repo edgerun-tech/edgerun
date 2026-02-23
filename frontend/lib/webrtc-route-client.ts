@@ -27,7 +27,8 @@ type SignalInboundMessage = {
   candidate?: string
   sdp_mid?: string
   sdp_mline_index?: number
-  metadata?: unknown
+  metadata?: string
+  error?: string
 }
 
 type SignalOutboundMessage = {
@@ -38,7 +39,7 @@ type SignalOutboundMessage = {
   candidate?: string
   sdp_mid?: string
   sdp_mline_index?: number
-  metadata?: unknown
+  metadata?: string
 }
 
 export const DEFAULT_ROUTE_CONTROL_BASE = 'https://api.edgerun.tech'
@@ -194,6 +195,66 @@ function rememberControlBase(controlBase: string): void {
   const normalized = normalizeControlBase(controlBase)
   if (!normalized) return
   window.localStorage.setItem(CONTROL_BASE_STORAGE_KEY, normalized)
+}
+
+function encodeB64Url(input: string): string {
+  if (!input) return ''
+  const bytes = new TextEncoder().encode(input)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function decodeB64Url(input: string): string {
+  if (!input) return ''
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64 + '='.repeat((4 - (base64.length % 4 || 4)) % 4)
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  return new TextDecoder().decode(bytes)
+}
+
+function encodeSignalOutbound(message: SignalOutboundMessage): string {
+  const mline = typeof message.sdp_mline_index === 'number' ? String(message.sdp_mline_index) : ''
+  return [
+    encodeB64Url(message.to_device_id || ''),
+    encodeB64Url(message.to_owner_pubkey || ''),
+    encodeB64Url(message.kind || ''),
+    encodeB64Url(message.sdp || ''),
+    encodeB64Url(message.candidate || ''),
+    encodeB64Url(message.sdp_mid || ''),
+    encodeB64Url(mline),
+    encodeB64Url(message.metadata || '')
+  ].join('|')
+}
+
+function decodeSignalInbound(frame: string): SignalInboundMessage | null {
+  const parts = frame.split('|')
+  if (parts.length !== 8) return null
+  try {
+    const from_device_id = decodeB64Url(parts[0] || '')
+    const kind = decodeB64Url(parts[1] || '')
+    const sdp = decodeB64Url(parts[2] || '')
+    const candidate = decodeB64Url(parts[3] || '')
+    const sdp_mid = decodeB64Url(parts[4] || '')
+    const mlineRaw = decodeB64Url(parts[5] || '')
+    const metadata = decodeB64Url(parts[6] || '')
+    const error = decodeB64Url(parts[7] || '')
+    const parsedMline = mlineRaw ? Number.parseInt(mlineRaw, 10) : NaN
+    return {
+      from_device_id,
+      kind,
+      sdp: sdp || undefined,
+      candidate: candidate || undefined,
+      sdp_mid: sdp_mid || undefined,
+      sdp_mline_index: Number.isFinite(parsedMline) ? parsedMline : undefined,
+      metadata: metadata || undefined,
+      error: error || undefined
+    }
+  } catch {
+    return null
+  }
 }
 
 let cachedControlStatus: RouteControlCachedStatus | null = null
@@ -408,19 +469,16 @@ export class WebRtcSignalClient {
     })
     this.ws.addEventListener('message', (event) => {
       if (typeof event.data !== 'string') return
-      try {
-        const payload = JSON.parse(event.data) as SignalInboundMessage
-        this.onMessage?.(payload)
-      } catch {
-        // ignore malformed signaling payloads
-      }
+      const payload = decodeSignalInbound(event.data)
+      if (!payload) return
+      this.onMessage?.(payload)
     })
   }
 
   send(message: SignalOutboundMessage): void {
     if (this.ws.readyState !== WebSocket.OPEN) return
     try {
-      this.ws.send(JSON.stringify(message))
+      this.ws.send(encodeSignalOutbound(message))
     } catch {
       // ignore transient closed-state sends
     }

@@ -74,10 +74,6 @@ impl HistoryMenu {
             max_visible_rows: 0,
             bookmarks: vec![
                 MenuEntry {
-                    label: "Edit hyprland.conf".to_string(),
-                    command: "${EDITOR:-nvim} ~/.config/hypr/hyprland.conf".to_string(),
-                },
-                MenuEntry {
                     label: "Edit waybar config".to_string(),
                     command: "${EDITOR:-nvim} ~/.config/waybar/config.jsonc".to_string(),
                 },

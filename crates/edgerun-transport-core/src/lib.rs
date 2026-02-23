@@ -176,7 +176,7 @@ pub fn result_signing_message(payload: &WorkerResultReport) -> String {
     let attestation_claim = payload
         .attestation_claim
         .as_ref()
-        .and_then(|c| serde_json::to_string(c).ok())
+        .map(canonical_attestation_claim)
         .unwrap_or_default();
     format!(
         "result|{}|{}|{}|{}|{}|{}|{}",
@@ -187,6 +187,18 @@ pub fn result_signing_message(payload: &WorkerResultReport) -> String {
         payload.output_len,
         attestation_sig,
         attestation_claim
+    )
+}
+
+fn canonical_attestation_claim(claim: &edgerun_types::AttestationClaim) -> String {
+    format!(
+        "measurement={};issued_at_unix_s={};expires_at_unix_s={};nonce={};format={};evidence={}",
+        claim.measurement,
+        claim.issued_at_unix_s,
+        claim.expires_at_unix_s,
+        claim.nonce.as_deref().unwrap_or_default(),
+        claim.format.as_deref().unwrap_or_default(),
+        claim.evidence.as_deref().unwrap_or_default()
     )
 }
 
