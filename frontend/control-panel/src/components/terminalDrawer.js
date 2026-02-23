@@ -20,6 +20,16 @@ function defaultTermTab(index, baseUrl) {
   };
 }
 
+function normalizeTabTitles(tabs) {
+  return tabs.map((tab, i) => {
+    const expected = `Terminal ${i + 1}`;
+    const title = String(tab.title || '').trim();
+    if (!/^Terminal \d+$/.test(title)) return tab;
+    if (title === expected) return tab;
+    return { ...tab, title: expected };
+  });
+}
+
 function normalizeState(raw) {
   const base = raw || {};
   const tabs = Array.isArray(base.tabs) && base.tabs.length > 0
@@ -32,14 +42,15 @@ function normalizeState(raw) {
           : [{ id: termId(), baseUrl: String(base.baseUrl || '/term/') }],
       }))
     : [defaultTermTab(0, String(base.baseUrl || '/term/'))];
+  const normalizedTabs = normalizeTabTitles(tabs);
 
-  const activeTabId = tabs.some((t) => t.id === base.activeTabId) ? base.activeTabId : tabs[0].id;
+  const activeTabId = normalizedTabs.some((t) => t.id === base.activeTabId) ? base.activeTabId : normalizedTabs[0].id;
 
   return {
     open: !!base.open,
     heightRatio: Math.min(TERM_MAX_RATIO, Math.max(TERM_MIN_RATIO, Number(base.heightRatio) || TERM_DEFAULT_RATIO)),
     baseUrl: String(base.baseUrl || '/term/'),
-    tabs,
+    tabs: normalizedTabs,
     activeTabId,
   };
 }
@@ -149,11 +160,12 @@ export function createTerminalDrawer() {
 
     for (const tab of state.tabs) ensureRuntime(tab, state);
 
-    for (const tab of state.tabs) {
+    for (let i = 0; i < state.tabs.length; i += 1) {
+      const tab = state.tabs[i];
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `term-tab${tab.id === state.activeTabId ? ' active' : ''}`;
-      btn.textContent = tab.title;
+      btn.textContent = `Terminal ${i + 1}`;
       btn.onclick = () => update((draft) => {
         draft.activeTabId = tab.id;
         return draft;

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,6 +39,8 @@ use edgerun_types::control_plane::{
     WorkerResultReport,
 };
 use fs2::FileExt;
+use futures_util::{SinkExt, StreamExt};
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcProgramAccountsConfig;
@@ -52,6 +55,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use tokio::sync::mpsc;
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message as TungsteniteMessage};
 
 #[derive(Clone)]
 struct AppState {
@@ -99,7 +103,7 @@ struct AppState {
     trust_policy_path: PathBuf,
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
     attestation_policy_path: PathBuf,
-    route_shared_state_path: Option<PathBuf>,
+    route_shared_state_path: PathBuf,
     route_flush_state: Arc<Mutex<SnapshotFlushState>>,
     route_sync_min_interval_secs: u64,
     housekeeping_interval_secs: u64,
@@ -398,6 +402,12 @@ struct OwnerRoutesResponse {
     devices: Vec<DeviceRouteEntry>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RouteRelayWsQuery {
+    #[serde(default)]
+    device_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RouteHeartbeatToken {
     device_id: String,
@@ -492,6 +502,7 @@ struct PostJobArgs {
 }
 
 const INSTRUCTION_PRICE_QUANTUM: u128 = 1_000_000_000;
+static STATE_SNAPSHOT_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -502,13 +513,15 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from(".edgerun-scheduler-data"));
     std::fs::create_dir_all(data_dir.join("bundles"))?;
     let route_shared_state_path = std::env::var("EDGERUN_SCHEDULER_ROUTE_STATE_PATH")
-        .ok()
-        .map(PathBuf::from);
-    if let Some(path) = route_shared_state_path.as_ref() {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| data_dir.join("route-state.json"));
+    if let Some(parent) = route_shared_state_path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
+    tracing::info!(
+        path = %route_shared_state_path.display(),
+        "route-state persistence enabled"
+    );
 
     let persisted = load_state(&data_dir)?;
     let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
@@ -563,10 +576,7 @@ async fn main() -> Result<()> {
     let policy_session_state_path = data_dir.join("policy-session-state.json");
     let loaded_policy_session_state =
         load_policy_session_state(&policy_session_state_path).unwrap_or_default();
-    let loaded_route_state = route_shared_state_path
-        .as_ref()
-        .and_then(|path| load_route_state(path).ok())
-        .unwrap_or_default();
+    let loaded_route_state = load_route_state(&route_shared_state_path).unwrap_or_default();
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -672,6 +682,7 @@ async fn main() -> Result<()> {
         .route("/v1/route/register", post(route_register))
         .route("/v1/route/heartbeat", post(route_heartbeat))
         .route("/v1/route/resolve/{device_id}", get(route_resolve))
+        .route("/v1/route/ws", get(route_terminal_ws))
         .route("/v1/route/owner/{owner_pubkey}", get(route_owner_resolve))
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
@@ -729,9 +740,7 @@ fn with_route_maps_mut<R>(
         let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
         f(&mut routes, &mut challenges, &mut tokens)?
     };
-    if state.route_shared_state_path.is_some() {
-        schedule_route_state_flush(state).map_err(internal_err)?;
-    }
+    schedule_route_state_flush(state).map_err(internal_err)?;
     Ok(out)
 }
 
@@ -961,6 +970,166 @@ async fn route_owner_resolve(
     let mut response = Json(resolve_owner_routes_for_owner(&state, &owner_pubkey)).into_response();
     apply_cors_headers(&mut response, &headers);
     response
+}
+
+async fn route_terminal_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Query(query): Query<RouteRelayWsQuery>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| route_terminal_ws_socket(state, query.device_id, socket))
+}
+
+async fn route_terminal_ws_socket(state: AppState, device_id: String, mut socket: WebSocket) {
+    let device_id = device_id.trim().to_string();
+    if device_id.is_empty() {
+        let _ = socket
+            .send(Message::Text(
+                r#"{"ok":false,"error":"device_id is required"}"#.to_string().into(),
+            ))
+            .await;
+        let _ = socket.close().await;
+        return;
+    }
+
+    let route_urls = resolve_route_for_device(&state, &device_id)
+        .route
+        .and_then(|entry| {
+            let candidates = entry
+                .reachable_urls
+                .into_iter()
+                .filter_map(|url| terminal_ws_url(&url))
+                .collect::<Vec<_>>();
+            if candidates.is_empty() {
+                None
+            } else {
+                Some(candidates)
+            }
+        });
+    let Some(urls) = route_urls else {
+        let _ = socket
+            .send(Message::Text(
+                r#"{"ok":false,"error":"route has no reachable terminal websocket"}"#
+                    .to_string()
+                    .into(),
+            ))
+            .await;
+        let _ = socket.close().await;
+        return;
+    };
+
+    for terminal_ws_url in urls {
+        let terminal_socket = match connect_async(terminal_ws_url.as_str()).await {
+            Ok(connected) => connected.0,
+            Err(err) => {
+                tracing::warn!(
+                    device_id = %device_id,
+                    terminal_ws_url = %terminal_ws_url,
+                    error = %err,
+                    "route relay failed to connect terminal websocket"
+                );
+                continue;
+            }
+        };
+
+        let (mut browser_tx, mut browser_rx) = socket.split();
+        let (mut terminal_tx, mut terminal_rx) = terminal_socket.split();
+        let browser_to_terminal = async {
+            while let Some(message) = browser_rx.next().await {
+                let Ok(message) = message else {
+                    break;
+                };
+                match message {
+                    Message::Close(_) => {
+                        break;
+                    }
+                    _ => {}
+                }
+                let Some(outbound) = browser_to_terminal_message(message) else {
+                    continue;
+                };
+                if terminal_tx.send(outbound).await.is_err() {
+                    break;
+                }
+            }
+        };
+
+        let terminal_to_browser = async {
+            while let Some(message) = terminal_rx.next().await {
+                let Ok(message) = message else {
+                    break;
+                };
+                match message {
+                    TungsteniteMessage::Text(payload) => {
+                        if browser_tx
+                            .send(Message::Text(payload.to_string().into()))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    TungsteniteMessage::Binary(payload) => {
+                        if browser_tx.send(Message::Binary(payload)).await.is_err() {
+                            break;
+                        }
+                    }
+                    TungsteniteMessage::Close(_) => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        };
+
+        tokio::select! {
+            _ = browser_to_terminal => {}
+            _ = terminal_to_browser => {}
+        }
+
+        let _ = browser_tx.send(Message::Close(None)).await;
+        let _ = terminal_tx.send(TungsteniteMessage::Close(None)).await;
+        return;
+    }
+
+    let _ = socket
+        .send(Message::Text(
+            r#"{"ok":false,"error":"route has no reachable terminal websocket"}"#
+                .to_string()
+                .into(),
+        ))
+        .await;
+    let _ = socket.close().await;
+}
+
+fn terminal_ws_url(reachable_url: &str) -> Option<String> {
+    let mut parsed = Url::parse(reachable_url).ok()?;
+    match parsed.scheme() {
+        "http" => parsed.set_scheme("ws").ok()?,
+        "https" => parsed.set_scheme("wss").ok()?,
+        _ => return None,
+    }
+    let path = parsed.path().trim_end_matches('/');
+    let terminal_path = if path.is_empty() || path == "/" {
+        "/ws".to_string()
+    } else if path.ends_with("/ws") || path.ends_with("/ws-mux") {
+        path.to_string()
+    } else {
+        format!("{path}/ws")
+    };
+    parsed.set_path(&terminal_path);
+    parsed.set_fragment(None);
+    Some(parsed.to_string())
+}
+
+fn browser_to_terminal_message(message: Message) -> Option<TungsteniteMessage> {
+    match message {
+        Message::Text(payload) => Some(TungsteniteMessage::Text(payload.to_string().into())),
+        Message::Binary(payload) => Some(TungsteniteMessage::Binary(payload)),
+        Message::Ping(payload) => Some(TungsteniteMessage::Ping(payload)),
+        Message::Pong(payload) => Some(TungsteniteMessage::Pong(payload)),
+        Message::Close(_) => None,
+    }
 }
 
 async fn webrtc_signal_ws(
@@ -2935,9 +3104,12 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
     };
     let bytes = serde_json::to_vec_pretty(&snapshot)?;
     let final_path = state.data_dir.join("state.json");
+    // Snapshot writes can run concurrently from heartbeat/poll handlers.
+    // Use a unique temp name per write attempt to avoid rename races.
+    let tmp_seq = STATE_SNAPSHOT_TMP_SEQ.fetch_add(1, Ordering::Relaxed);
     let tmp_path = state
         .data_dir
-        .join(format!("state.json.tmp-{}", std::process::id()));
+        .join(format!("state.json.tmp-{}-{tmp_seq}", std::process::id()));
     std::fs::write(&tmp_path, &bytes)?;
     if let Err(err) = std::fs::rename(&tmp_path, &final_path) {
         let _ = std::fs::remove_file(&tmp_path);
@@ -4583,9 +4755,6 @@ fn save_route_state(path: &std::path::Path, state: &PersistedRouteState) -> Resu
 }
 
 fn schedule_route_state_flush(state: &AppState) -> Result<()> {
-    let Some(_path) = state.route_shared_state_path.as_ref() else {
-        return Ok(());
-    };
     let now = now_unix_seconds();
     let min_interval = state.route_sync_min_interval_secs;
     let should_write = {
@@ -4600,9 +4769,6 @@ fn schedule_route_state_flush(state: &AppState) -> Result<()> {
 }
 
 fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
-    let Some(path) = state.route_shared_state_path.as_ref() else {
-        return Ok(());
-    };
     let should_write = {
         let gate = state.route_flush_state.lock().expect("lock poisoned");
         gate.dirty
@@ -4628,10 +4794,15 @@ fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
         .write(true)
         .create(true)
         .truncate(false)
-        .open(path)
-        .with_context(|| format!("failed to open route shared lock file {}", path.display()))?;
+        .open(&state.route_shared_state_path)
+        .with_context(|| {
+            format!(
+                "failed to open route shared lock file {}",
+                state.route_shared_state_path.display()
+            )
+        })?;
     lock_file.lock_exclusive()?;
-    let save_result = save_route_state(path, &snapshot);
+    let save_result = save_route_state(&state.route_shared_state_path, &snapshot);
     let _ = lock_file.unlock();
     save_result?;
     let now = now_unix_seconds();
@@ -4642,16 +4813,13 @@ fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
 }
 
 fn sync_route_state_from_shared_file(state: &AppState) -> Result<()> {
-    let Some(path) = state.route_shared_state_path.as_ref() else {
-        return Ok(());
-    };
     {
         let gate = state.route_flush_state.lock().expect("lock poisoned");
         if gate.dirty {
             return Ok(());
         }
     }
-    let loaded = load_route_state(path)?;
+    let loaded = load_route_state(&state.route_shared_state_path)?;
     {
         let mut routes = state.device_routes.lock().expect("lock poisoned");
         let mut challenges = state.route_challenges.lock().expect("lock poisoned");
@@ -5024,7 +5192,7 @@ mod tests {
             trust_policy_path: data_dir.join("trust-policy.json"),
             attestation_policy: Arc::new(Mutex::new(edgerun_types::AttestationPolicy::default())),
             attestation_policy_path: data_dir.join("attestation-policy.json"),
-            route_shared_state_path: None,
+            route_shared_state_path: data_dir.join("route-state.json"),
             route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
             route_sync_min_interval_secs: 2,
             housekeeping_interval_secs: 5,
@@ -7084,9 +7252,9 @@ mod tests {
         let _ = std::fs::remove_file(&shared_path);
 
         let mut state_a = test_state();
-        state_a.route_shared_state_path = Some(shared_path.clone());
+        state_a.route_shared_state_path = shared_path.clone();
         let mut state_b = test_state();
-        state_b.route_shared_state_path = Some(shared_path.clone());
+        state_b.route_shared_state_path = shared_path.clone();
 
         let device_id = "device-cross-instance".to_string();
         let owner_signing = SigningKey::from_bytes(&[9_u8; 32]);

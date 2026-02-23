@@ -60,11 +60,9 @@ const EMPTY_STATS: BrowserWorkerStats = {
 const BROWSER_RUNTIME_WORKER_ASSET = '/assets/browser-worker-runtime.worker.js'
 
 function defaultSchedulerUrl(): string {
-  if (typeof window === 'undefined') return 'http://127.0.0.1:8090'
+  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
   const injected = String((window as any).__EDGERUN_API_BASE || '').trim()
   if (injected) return injected
-  const host = window.location.hostname
-  if (host === '127.0.0.1' || host === 'localhost') return 'http://127.0.0.1:8090'
   return 'https://api.edgerun.tech'
 }
 

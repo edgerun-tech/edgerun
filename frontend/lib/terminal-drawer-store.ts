@@ -82,6 +82,16 @@ function defaultTab(index: number): TerminalTab {
   }
 }
 
+function normalizeTabTitles(tabs: TerminalTab[]): TerminalTab[] {
+  return tabs.map((tab, idx) => {
+    const expected = `Terminal ${idx + 1}`
+    const isDefaultTitle = /^Terminal \d+$/.test(tab.title.trim())
+    if (!isDefaultTitle) return tab
+    if (tab.title === expected) return tab
+    return { ...tab, title: expected }
+  })
+}
+
 function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawerState {
   const base = raw ?? {}
   const tabs = Array.isArray(base.tabs) && base.tabs.length > 0
@@ -102,8 +112,11 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
       }
     })
     : [defaultTab(0)]
+  const normalizedTabs = normalizeTabTitles(tabs)
 
-  const activeTabId = tabs.some((tab) => tab.id === base.activeTabId) ? String(base.activeTabId) : tabs[0]!.id
+  const activeTabId = normalizedTabs.some((tab) => tab.id === base.activeTabId)
+    ? String(base.activeTabId)
+    : normalizedTabs[0]!.id
   const heightCandidate = typeof base.heightRatio === 'number' ? base.heightRatio : Number(base.heightRatio)
   const heightRatio = Number.isFinite(heightCandidate)
     ? Math.max(TERM_MIN_RATIO, Math.min(TERM_MAX_RATIO, heightCandidate))
@@ -133,7 +146,7 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
     : []
 
   const knownPaneIds = new Set<string>()
-  for (const tab of tabs) {
+  for (const tab of normalizedTabs) {
     for (const pane of tab.panes) knownPaneIds.add(pane.id)
   }
   const paneTransport: Record<string, PaneTransport> = {}
@@ -145,7 +158,7 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
       }
     }
   }
-  for (const tab of tabs) {
+  for (const tab of normalizedTabs) {
     for (const pane of tab.panes) {
       if (!paneTransport[pane.id]) paneTransport[pane.id] = 'unknown'
     }
@@ -154,7 +167,7 @@ function normalizeState(raw: Partial<TerminalDrawerState> | null): TerminalDrawe
   return {
     open: Boolean(base.open),
     heightRatio,
-    tabs,
+    tabs: normalizedTabs,
     activeTabId,
     devices,
     paneTransport

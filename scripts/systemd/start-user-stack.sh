@@ -10,7 +10,26 @@ if ! [[ "${WORKER_COUNT}" =~ ^[0-9]+$ ]] || [[ "${WORKER_COUNT}" -lt 1 ]]; then
   exit 1
 fi
 
+enable_user_linger() {
+  if ! command -v loginctl >/dev/null 2>&1; then
+    echo "WARN: loginctl unavailable; boot-start cannot be verified automatically."
+    return 0
+  fi
+
+  if [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" == "yes" ]]; then
+    return 0
+  fi
+
+  echo "Enabling user lingering so services continue across reboot..."
+  if ! loginctl enable-linger "$USER"; then
+    echo "ERR: failed to enable user lingering for $USER."
+    echo "Manual fix: sudo loginctl enable-linger \"$USER\""
+    exit 1
+  fi
+}
+
 "${ROOT_DIR}/scripts/systemd/install-user-services.sh"
+enable_user_linger
 
 mkdir -p "${HOME}/.config/edgerun/workers"
 for i in $(seq 1 "${WORKER_COUNT}"); do

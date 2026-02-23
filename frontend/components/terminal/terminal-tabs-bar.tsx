@@ -9,6 +9,7 @@ type Props = {
 
 export function TerminalTabsBar(props: Props) {
   const tabs = () => props.controller
+  const displayTitle = (index: number): string => `Terminal ${index + 1}`
   const transportLabel = () => {
     const mode = tabs().activeTransport()
     if (mode === 'mux') return 'MUX'
@@ -24,19 +25,19 @@ export function TerminalTabsBar(props: Props) {
   return (
     <div class="flex items-center gap-2 border-b border-border/70 px-3 py-2">
       <div class="flex flex-1 items-center gap-1 overflow-x-auto">
-        <For each={tabs().state().tabs}>{(tab) => (
+        <For each={tabs().state().tabs}>{(tab, index) => (
           <div class={`relative inline-flex items-center rounded-md border ${tab.id === tabs().state().activeTabId ? 'border-primary/70 bg-primary/20 text-foreground' : 'border-border/70 bg-card/60 text-muted-foreground hover:text-foreground'}`}>
             <button
               type="button"
               class="px-2 py-1 text-xs"
               onClick={() => terminalDrawerActions.setActiveTab(tab.id)}
             >
-              {tab.title}
+              {displayTitle(index())}
             </button>
             <button
               type="button"
               class="px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-              aria-label={`Tab options for ${tab.title}`}
+              aria-label={`Tab options for ${displayTitle(index())}`}
               data-tab-menu-trigger
               onClick={(event) => {
                 event.stopPropagation()
@@ -49,7 +50,7 @@ export function TerminalTabsBar(props: Props) {
               <button
                 type="button"
                 class="px-1.5 py-1 text-xs text-muted-foreground hover:text-foreground"
-                aria-label={`Close ${tab.title}`}
+                aria-label={`Close ${displayTitle(index())}`}
                 onClick={(event) => {
                   event.stopPropagation()
                   terminalDrawerActions.closeTab(tab.id)

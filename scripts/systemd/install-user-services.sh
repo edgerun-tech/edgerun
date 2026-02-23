@@ -23,12 +23,34 @@ sed \
   > "${SYSTEMD_USER_DIR}/edgerun-worker@.service"
 chmod 0644 "${SYSTEMD_USER_DIR}/edgerun-worker@.service"
 
+sed \
+  -e "s|__ROOT_DIR__|${ROOT_DIR}|g" \
+  -e "s|__HOME__|${HOME}|g" \
+  "${ROOT_DIR}/scripts/systemd/user/edgerun-term-server.service" \
+  > "${SYSTEMD_USER_DIR}/edgerun-term-server.service"
+chmod 0644 "${SYSTEMD_USER_DIR}/edgerun-term-server.service"
+
+sed \
+  -e "s|__ROOT_DIR__|${ROOT_DIR}|g" \
+  -e "s|__HOME__|${HOME}|g" \
+  "${ROOT_DIR}/scripts/systemd/user/edgerun-cloudflared-term.service" \
+  > "${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
+chmod 0644 "${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
+
 if [[ ! -f "${EDGERUN_CFG_DIR}/scheduler.env" ]]; then
   cp "${ROOT_DIR}/scripts/systemd/env/scheduler.env.example" "${EDGERUN_CFG_DIR}/scheduler.env"
 fi
 
 if [[ ! -f "${EDGERUN_CFG_DIR}/worker-common.env" ]]; then
   cp "${ROOT_DIR}/scripts/systemd/env/worker-common.env.example" "${EDGERUN_CFG_DIR}/worker-common.env"
+fi
+
+if [[ ! -f "${EDGERUN_CFG_DIR}/term-server.env" ]]; then
+  cp "${ROOT_DIR}/scripts/systemd/env/term-server.env.example" "${EDGERUN_CFG_DIR}/term-server.env"
+fi
+
+if [[ ! -f "${EDGERUN_CFG_DIR}/cloudflared-term.env" ]]; then
+  cp "${ROOT_DIR}/scripts/systemd/env/cloudflared-term.env.example" "${EDGERUN_CFG_DIR}/cloudflared-term.env"
 fi
 
 for i in 1 2 3; do
@@ -44,6 +66,8 @@ systemctl --user daemon-reload
 echo "Installed user services:"
 echo "  ${SYSTEMD_USER_DIR}/edgerun-scheduler.service"
 echo "  ${SYSTEMD_USER_DIR}/edgerun-worker@.service"
+echo "  ${SYSTEMD_USER_DIR}/edgerun-term-server.service"
+echo "  ${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
 echo
 echo "Config directory:"
 echo "  ${EDGERUN_CFG_DIR}"
@@ -51,3 +75,4 @@ echo
 echo "Next:"
 echo "  systemctl --user enable --now edgerun-scheduler.service"
 echo "  systemctl --user enable --now edgerun-worker@1.service edgerun-worker@2.service edgerun-worker@3.service"
+echo "  systemctl --user enable --now edgerun-term-server.service edgerun-cloudflared-term.service"

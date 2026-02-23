@@ -50,15 +50,14 @@ function normalizeBase(value: string): string {
 }
 
 function configuredApiBase(): string {
-  if (typeof window === 'undefined') return ''
+  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
   const explicit = normalizeBase(String((window as any).__EDGERUN_API_BASE || ''))
   if (explicit) return explicit
-  if (window.location.hostname === 'www.edgerun.tech') return 'https://api.edgerun.tech'
-  return ''
+  return 'https://api.edgerun.tech'
 }
 
 function localControlBaseCandidates(): string[] {
-  if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
+  if (typeof window === 'undefined') return []
   const { protocol, hostname, port } = window.location
   if (!LOCALHOST_NAMES.has(hostname)) return []
   const scheme = protocol === 'https:' ? 'https:' : 'http:'
@@ -70,7 +69,7 @@ function localControlBaseCandidates(): string[] {
 }
 
 function getControlBaseCandidates(): string[] {
-  if (typeof window === 'undefined') return ['http://127.0.0.1:8090', 'http://127.0.0.1:8080']
+  if (typeof window === 'undefined') return ['https://api.edgerun.tech']
   const fromStorage = normalizeBase(window.localStorage.getItem(CONTROL_BASE_STORAGE_KEY) || '')
   const configured = configuredApiBase()
   const origin = normalizeBase(window.location.origin)
@@ -95,7 +94,7 @@ export function parseRouteDeviceId(target: string): string | null {
 }
 
 export function getRouteControlBase(): string {
-  if (typeof window === 'undefined') return 'http://127.0.0.1:8090'
+  if (typeof window === 'undefined') return 'https://api.edgerun.tech'
   const candidates = getControlBaseCandidates()
   return candidates[0] || normalizeBase(window.location.origin)
 }
@@ -168,6 +167,20 @@ export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: strin
     }
   }
   return []
+}
+
+export function routeRelayWsUrl(controlBase: string, deviceId: string): string | null {
+  const base = controlBase.trim().replace(/\/+$/, '')
+  const target = deviceId.trim()
+  if (!base || !target) return null
+  try {
+    const url = new URL('/v1/route/ws', `${base}/`)
+    url.searchParams.set('device_id', target)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  } catch {
+    return null
+  }
 }
 
 function getControlClient(controlBase: string): SchedulerControlWsClient {
