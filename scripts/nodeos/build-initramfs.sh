@@ -92,6 +92,8 @@ add_tool_with_libs "tpm2_nvreadpublic"
 add_tool_with_libs "tpm2_nvdefine"
 add_tool_with_libs "tpm2_nvread"
 add_tool_with_libs "tpm2_nvwrite"
+add_tool_with_libs "agave-validator"
+add_tool_with_libs "solana-keygen"
 
 if [[ -s "$tmp_libs" ]]; then
   sort -u "$tmp_libs" | while IFS= read -r lib; do

@@ -23,8 +23,10 @@ const DEFAULT_API_BASE: &str = "https://api.edgerun.tech";
 const DEFAULT_RPC_URL: &str = "http://127.0.0.1:8899";
 const DEFAULT_VALIDATOR_WS_URL: &str = "ws://127.0.0.1:8900";
 const DEFAULT_VALIDATOR_LEDGER_DIR: &str = "/run/edgerun/solana-ledger";
-const DEFAULT_VALIDATOR_BIN: &str = "solana-test-validator";
-const VALIDATOR_PID_FILE: &str = "/run/edgerun/solana-test-validator.pid";
+const DEFAULT_VALIDATOR_BIN: &str = "agave-validator";
+const DEFAULT_VALIDATOR_KEYGEN_BIN: &str = "solana-keygen";
+const DEFAULT_VALIDATOR_IDENTITY_PATH: &str = "/run/edgerun/validator-identity.json";
+const VALIDATOR_PID_FILE: &str = "/run/edgerun/agave-validator.pid";
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
 
 #[derive(Parser, Debug)]
@@ -37,8 +39,6 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     Configure {
-        #[arg(long, default_value = DEFAULT_API_BASE)]
-        api_base: String,
         #[arg(long, default_value = DEFAULT_RPC_URL)]
         rpc_url: String,
         #[arg(long, default_value_t = 15)]
@@ -50,8 +50,6 @@ enum Commands {
     },
     Identity,
     Register {
-        #[arg(long, default_value = DEFAULT_API_BASE)]
-        api_base: String,
         #[arg(long)]
         owner_pubkey: String,
     },
@@ -122,16 +120,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Run) {
         Commands::Configure {
-            api_base,
             rpc_url,
             heartbeat_secs,
-        } => cmd_configure(&api_base, &rpc_url, heartbeat_secs),
+        } => cmd_configure(&rpc_url, heartbeat_secs),
         Commands::Bond { owner_pubkey } => cmd_bond(&owner_pubkey),
         Commands::Identity => cmd_identity(),
-        Commands::Register {
-            api_base,
-            owner_pubkey,
-        } => cmd_register(&api_base, &owner_pubkey).await,
+        Commands::Register { owner_pubkey } => cmd_register(&owner_pubkey).await,
         Commands::Run => cmd_run().await,
     }
 }
@@ -225,7 +219,7 @@ fn save_config(cfg: &ManagerConfig) -> Result<()> {
     Ok(())
 }
 
-fn cmd_configure(api_base: &str, rpc_url: &str, heartbeat_secs: u64) -> Result<()> {
+fn cmd_configure(_rpc_url: &str, heartbeat_secs: u64) -> Result<()> {
     if !tpm_nv_available() {
         return Err(anyhow!("TPM NV storage unavailable"));
     }
@@ -240,8 +234,8 @@ fn cmd_configure(api_base: &str, rpc_url: &str, heartbeat_secs: u64) -> Result<(
         }
     }
     let cfg = ManagerConfig {
-        api_base: api_base.trim_end_matches('/').to_string(),
-        rpc_url: rpc_url.to_string(),
+        api_base: DEFAULT_API_BASE.to_string(),
+        rpc_url: DEFAULT_RPC_URL.to_string(),
         validator_ws_url: DEFAULT_VALIDATOR_WS_URL.to_string(),
         validator_ledger_dir: DEFAULT_VALIDATOR_LEDGER_DIR.to_string(),
         heartbeat_secs,
@@ -274,12 +268,12 @@ fn cmd_bond(owner_pubkey: &str) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_register(api_base: &str, owner_pubkey: &str) -> Result<()> {
+async fn cmd_register(owner_pubkey: &str) -> Result<()> {
     let signer = load_tpm_signer()?;
     let client = Client::new();
     register_device(
         &client,
-        api_base.trim_end_matches('/'),
+        DEFAULT_API_BASE,
         &signer.public_key_b64url,
         owner_pubkey,
     )
@@ -287,9 +281,7 @@ async fn cmd_register(api_base: &str, owner_pubkey: &str) -> Result<()> {
 
     let registration_link = format!(
         "{}/register?device={}&owner={}",
-        api_base.trim_end_matches('/'),
-        signer.public_key_b64url,
-        owner_pubkey
+        DEFAULT_API_BASE, signer.public_key_b64url, owner_pubkey
     );
     println!("status=registered");
     println!("device_pubkey_b64url={}", signer.public_key_b64url);
@@ -322,9 +314,7 @@ async fn cmd_run() -> Result<()> {
     if cfg.heartbeat_secs == 0 {
         cfg.heartbeat_secs = 15;
     }
-    if cfg.rpc_url.is_empty() {
-        cfg.rpc_url = DEFAULT_RPC_URL.to_string();
-    }
+    cfg.rpc_url = DEFAULT_RPC_URL.to_string();
     if cfg.validator_ws_url.is_empty() {
         cfg.validator_ws_url = DEFAULT_VALIDATOR_WS_URL.to_string();
     }
@@ -509,10 +499,7 @@ async fn bootstrap_api_state(
 }
 
 async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Result<()> {
-    cfg.rpc_url = cfg.rpc_url.trim().to_string();
-    if cfg.rpc_url.is_empty() {
-        cfg.rpc_url = DEFAULT_RPC_URL.to_string();
-    }
+    cfg.rpc_url = DEFAULT_RPC_URL.to_string();
 
     if validator_healthy(client, &cfg.rpc_url).await {
         return Ok(());
@@ -538,20 +525,26 @@ async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Res
     fs::create_dir_all("/run/edgerun").context("failed to create /run/edgerun")?;
     fs::create_dir_all(&cfg.validator_ledger_dir)
         .with_context(|| format!("failed to create {}", cfg.validator_ledger_dir))?;
+    ensure_validator_identity(DEFAULT_VALIDATOR_IDENTITY_PATH)?;
+    ensure_validator_ledger_initialized(&cfg.validator_ledger_dir)?;
 
     let mut log_file = fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/run/edgerun/solana-test-validator.log")
+        .open("/run/edgerun/agave-validator.log")
         .context("failed to open validator log file")?;
-    writeln!(log_file, "=== starting solana-test-validator ===").ok();
+    writeln!(log_file, "=== starting agave-validator ===").ok();
     let log_file_err = log_file
         .try_clone()
         .context("failed to clone validator log fd")?;
 
     let mut child = Command::new(DEFAULT_VALIDATOR_BIN)
+        .arg("--identity")
+        .arg(DEFAULT_VALIDATOR_IDENTITY_PATH)
         .arg("--ledger")
         .arg(&cfg.validator_ledger_dir)
+        .arg("--rpc-bind-address")
+        .arg("127.0.0.1")
         .arg("--rpc-port")
         .arg(rpc_port.to_string())
         .arg("--dynamic-port-range")
@@ -559,10 +552,12 @@ async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Res
         .arg("--bind-address")
         .arg("127.0.0.1")
         .arg("--no-voting")
+        .arg("--private-rpc")
+        .arg("--full-rpc-api")
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err))
         .spawn()
-        .context("failed to spawn solana-test-validator")?;
+        .context("failed to spawn agave-validator")?;
 
     let pid = child.id();
     fs::write(VALIDATOR_PID_FILE, pid.to_string()).context("failed to write validator pid file")?;
@@ -573,6 +568,44 @@ async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Res
 
     wait_for_validator(client, &cfg.rpc_url, Duration::from_secs(45)).await?;
     println!("status=validator-started pid={pid} rpc_url={}", cfg.rpc_url);
+    Ok(())
+}
+
+fn ensure_validator_identity(identity_path: &str) -> Result<()> {
+    if Path::new(identity_path).exists() {
+        return Ok(());
+    }
+    let rc = Command::new(DEFAULT_VALIDATOR_KEYGEN_BIN)
+        .arg("new")
+        .arg("--no-bip39-passphrase")
+        .arg("--silent")
+        .arg("--force")
+        .arg("--outfile")
+        .arg(identity_path)
+        .status()
+        .context("failed to launch solana-keygen")?;
+    if !rc.success() {
+        return Err(anyhow!(
+            "solana-keygen failed creating validator identity: {rc}"
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_validator_ledger_initialized(ledger_dir: &str) -> Result<()> {
+    let genesis = Path::new(ledger_dir).join("genesis.bin");
+    if genesis.exists() {
+        return Ok(());
+    }
+    let rc = Command::new(DEFAULT_VALIDATOR_BIN)
+        .arg("--ledger")
+        .arg(ledger_dir)
+        .arg("init")
+        .status()
+        .context("failed to launch agave-validator init")?;
+    if !rc.success() {
+        return Err(anyhow!("agave-validator init failed with status {rc}"));
+    }
     Ok(())
 }
 
@@ -600,7 +633,7 @@ async fn validator_healthy(client: &Client, rpc_url: &str) -> bool {
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
-        "method": "getHealth",
+        "method": "getVersion",
     });
     match client.post(rpc_url).json(&payload).send().await {
         Ok(resp) => resp.status() == StatusCode::OK,

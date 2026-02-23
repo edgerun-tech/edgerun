@@ -13,7 +13,6 @@ signed_uki="$out_dir/edgerun-node.signed.efi"
 cert_pem="${EDGERUN_SB_CERT_PEM:-$out_dir/secureboot/edgerun-secureboot-db-cert.pem}"
 pkcs11_uri="${EDGERUN_SB_PKCS11_URI:-}"
 stub="${UKI_STUB:-/usr/lib/systemd/boot/efi/linuxx64.efi.stub}"
-api_base="${EDGERUN_API_BASE:-https://api.edgerun.tech}"
 owner_pubkey="${EDGERUN_OWNER_PUBKEY:-}"
 
 for cmd in ukify sbsign sbverify sha256sum mkdir grep; do
@@ -59,7 +58,7 @@ fi
 
 mkdir -p "$out_dir"
 
-locked_cmdline="console=ttyS0,115200 loglevel=3 edgerun.locked_cmdline=1 api_base=${api_base}"
+locked_cmdline="console=ttyS0,115200 loglevel=3 edgerun.locked_cmdline=1 api_base=https://api.edgerun.tech"
 if [[ -n "$owner_pubkey" ]]; then
   locked_cmdline="$locked_cmdline owner_pubkey=${owner_pubkey}"
 fi
