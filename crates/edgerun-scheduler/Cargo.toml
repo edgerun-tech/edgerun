@@ -24,8 +24,3 @@ edgerun-types = { path = "../../crates/edgerun-types" }
 edgerun-transport-core = { path = "../../crates/edgerun-transport-core" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
 fs2 = "0.4"
-
-[dev-dependencies]
-hmac = "0.12"
-sha2 = "0.10"
-reqwest.workspace = true
