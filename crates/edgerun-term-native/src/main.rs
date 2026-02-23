@@ -60,6 +60,7 @@ use crate::linking::{
     detect_link_ranges, detect_link_text_at_cell, looks_like_url, open_link, open_path,
     parse_path_candidate, resolve_existing_path,
 };
+use crate::platform::{load_kitty_primary_font, resolve_window_size, spawn_font_loader};
 use crate::state::{
     AutocompleteEngine, SettingsState, load_settings_state, next_log_level, next_render_mode,
     parse_log_level, parse_render_mode, persist_settings_state,
