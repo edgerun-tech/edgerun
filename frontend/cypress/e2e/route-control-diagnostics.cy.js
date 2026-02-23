@@ -9,6 +9,7 @@ describe('route control diagnostics', () => {
     })
 
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+    cy.get('[data-testid="route-debug-rail"]').should('be.visible')
     cy.get('[data-testid="route-debug-scheduler"]', { timeout: 12000 }).should('contain.text', 'scheduler')
     cy.get('[data-testid="route-debug-scheduler"]').should('have.attr', 'title').and('include', 'overlay signal')
     cy.get('[data-testid="route-debug-control-ws"]').should('contain.text', 'ws')
