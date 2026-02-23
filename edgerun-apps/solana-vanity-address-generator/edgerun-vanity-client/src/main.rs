@@ -87,8 +87,7 @@ struct JobQuorum {
     winning_output_hash: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "status", rename_all = "snake_case")]
+#[derive(Debug)]
 enum FinalOutcome {
     Found {
         jobs_submitted: u64,
@@ -385,9 +384,46 @@ async fn poll_winner_hash(
 }
 
 fn print_outcome(outcome: &FinalOutcome) -> Result<()> {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(outcome).context("serialize result")?
-    );
+    let value = match outcome {
+        FinalOutcome::Found {
+            jobs_submitted,
+            escrow_spent_lamports,
+            job_id,
+            counter,
+            address,
+            pubkey_hex,
+            keypair_hex,
+        } => json::object! {
+            status: "found",
+            jobs_submitted: *jobs_submitted,
+            escrow_spent_lamports: *escrow_spent_lamports,
+            job_id: job_id.as_str(),
+            counter: *counter,
+            address: address.as_str(),
+            pubkey_hex: pubkey_hex.as_str(),
+            keypair_hex: keypair_hex.as_str(),
+        },
+        FinalOutcome::ExhaustedRange {
+            jobs_submitted,
+            escrow_spent_lamports,
+            next_counter,
+        } => json::object! {
+            status: "exhausted_range",
+            jobs_submitted: *jobs_submitted,
+            escrow_spent_lamports: *escrow_spent_lamports,
+            next_counter: *next_counter,
+        },
+        FinalOutcome::ExhaustedEscrow {
+            jobs_submitted,
+            escrow_spent_lamports,
+            next_counter,
+        } => json::object! {
+            status: "exhausted_escrow",
+            jobs_submitted: *jobs_submitted,
+            escrow_spent_lamports: *escrow_spent_lamports,
+            next_counter: *next_counter,
+        },
+    };
+    println!("{}", json::stringify_pretty(value, 2));
     Ok(())
 }
