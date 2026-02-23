@@ -20,6 +20,15 @@ This repository must be operated with production-grade discipline. Work is accep
   4. A short evidence report (exact commands + pass/fail)
 - If a check cannot run, state the blocker explicitly and provide the exact reproduction command.
 
+## Spec-First Change Governance
+- Before implementing any non-trivial behavior change, first create/update a written design/spec document in-repo that states:
+  1. Goal and non-goals
+  2. Security/constraint requirements
+  3. Acceptance criteria
+  4. Rollout/rollback notes (if applicable)
+- Commit this spec/documentation before or alongside implementation as a clearly separated history step so git history preserves intent before code.
+- Implementation work must explicitly reference the agreed spec and report alignment (or deliberate deviations) in the final evidence.
+
 ## Testing Requirements (Provable Results)
 - Minimum validation for frontend changes:
   - `cd frontend && bun run check`

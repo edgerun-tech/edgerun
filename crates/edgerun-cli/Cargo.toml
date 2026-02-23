@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+blake3.workspace = true
 clap.workspace = true
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
@@ -23,4 +24,5 @@ tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 url = "2.5"
 toml = "0.8"
 tower-http = { workspace = true, features = ["cors"] }
+edgerun-storage = { path = "../edgerun-storage" }
 edgerun-types = { path = "../edgerun-types" }
