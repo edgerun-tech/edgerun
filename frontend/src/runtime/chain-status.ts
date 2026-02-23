@@ -122,8 +122,6 @@ async function loadChainData(): Promise<void> {
 
   const requestToken = ++chainDataRequestToken
   chainDataLoading = true
-  setField('cluster', cfg.cluster || 'unknown')
-  setField('rpcUrl', cfg.rpcUrl || 'unknown')
 
   try {
     const [slot, blockHeight, epochInfo, perf, supply] = await Promise.all([
@@ -138,6 +136,9 @@ async function loadChainData(): Promise<void> {
       rpcCall<{ value: { total: number } }>(cfg.rpcUrl, 'getSupply', [])
     ])
 
+    if (requestToken !== chainDataRequestToken) return
+    setField('cluster', cfg.cluster || 'unknown')
+    setField('rpcUrl', cfg.rpcUrl || 'unknown')
     if (requestToken !== chainDataRequestToken) return
     setField('slot', formatInt(slot))
     setField('blockHeight', formatInt(blockHeight))
@@ -197,21 +198,23 @@ async function loadDeploymentStatus(): Promise<void> {
   const cfg = readRuntimeRpcConfig()
   const cluster = cfg.cluster || 'unknown'
   const rpcUrl = cfg.rpcUrl || ''
+  const requestToken = ++deploymentStatusRequestToken
   const configuredCount = getConfiguredProgramCount(cluster)
   const badgePrefix = cluster === 'localnet' ? 'Live on Localnet' : `Cluster: ${cluster}`
 
   if (!configuredCount) {
+    if (requestToken !== deploymentStatusRequestToken) return
     setText('[data-deployment-badge]', `${badgePrefix} (No deployment)`)
     setText('[data-deployment-detail]', `No program IDs configured for ${cluster} yet.`)
     return
   }
   if (!rpcUrl) {
+    if (requestToken !== deploymentStatusRequestToken) return
     setText('[data-deployment-badge]', `${badgePrefix} (RPC unavailable)`)
     setText('[data-deployment-detail]', `Configured program IDs: ${configuredCount}. Live verification requires RPC connectivity.`)
     return
   }
 
-  const requestToken = ++deploymentStatusRequestToken
   deploymentStatusLoading = true
   try {
     const ids = getConfiguredProgramIds(cluster)
