@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::env;
 use std::fs;
-use std::io::{BufRead, Read, Write};
-#[cfg(unix)]
-use std::os::unix::net::UnixStream;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use log::warn;
 use portable_pty::CommandBuilder;
 use term_core::render::GlyphCache;
 use winit::dpi::PhysicalSize;
@@ -19,11 +16,8 @@ use winit::window::Window;
 
 use crate::AppEvent;
 
-pub(crate) fn resolve_window_size(
-    window: &Window
-) -> PhysicalSize<u32> {
-    let window_size = window.inner_size();
-    window_size
+pub(crate) fn resolve_window_size(window: &Window) -> PhysicalSize<u32> {
+    window.inner_size()
 }
 
 pub(crate) fn default_shell() -> CommandBuilder {
