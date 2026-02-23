@@ -17,8 +17,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "ws-schema:check": "bun scripts/check-control-panel-ws-schema.mjs",
-    "test:e2e": "bun run e2e:run && bun run e2e:compose",
-    "e2e:run": "sh -c 'set -e; test -f ../out/frontend/site/index.html || { echo \"Missing build output: ../out/frontend/site/index.html\"; echo \"Run: bun run build\"; exit 1; }; bunx --bun serve ../out/frontend/site -p 4173 --no-port-switching >/tmp/edgerun-frontend-serve.log 2>&1 & SERVER_PID=$!; trap \"kill $SERVER_PID\" EXIT; sleep 1; bunx --bun cypress run --config-file cypress.config.ts --browser electron --spec \"cypress/e2e/**/*.cy.{js,ts},!cypress/e2e/terminal-compose-stack.cy.js\"'",
+    "test:e2e": "bun run e2e:run",
+    "e2e:run": "bash ../scripts/e2e-frontend-all.sh",
+    "e2e:core": "bash ../scripts/e2e-frontend-core.sh",
     "check": "bun run typecheck && bun run lint && bun run style-guide:check && bun run ws-schema:check",
     "style-guide:check": "bun scripts/enforce-style-guide.mjs",
     "e2e:compose": "bash ../scripts/e2e-local-terminal.sh"

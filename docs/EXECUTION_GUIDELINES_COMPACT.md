@@ -78,10 +78,10 @@ Frontend:
 cd frontend && bun install
 cd frontend && bun run check
 cd frontend && bun run build
-cd frontend && bun run test:e2e
+cd frontend && bun run e2e:run
 ```
 
-Compose terminal stack E2E:
+Compose terminal stack E2E only:
 ```bash
 cd frontend && bun run e2e:compose
 ```

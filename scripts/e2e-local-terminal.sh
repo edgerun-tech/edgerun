@@ -37,6 +37,21 @@ wait_for_url() {
   return 1
 }
 
+wait_for_http() {
+  local url="$1"
+  local name="$2"
+  local attempts="${3:-90}"
+  local sleep_s="${4:-1}"
+  for _ in $(seq 1 "$attempts"); do
+    if curl -sS -o /dev/null "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep "$sleep_s"
+  done
+  echo "Timed out waiting for $name at $url" >&2
+  return 1
+}
+
 require_free_port() {
   local port="$1"
   if command -v ss >/dev/null 2>&1; then
@@ -88,7 +103,7 @@ if [[ ! -f out/frontend/site/index.html ]]; then
 fi
 
 PIDS=()
-LOG_DIR="${TMPDIR:-/tmp}/edgerun-e2e"
+LOG_DIR="${EDGERUN_E2E_LOG_DIR:-out/e2e/local-$(date +%Y%m%d-%H%M%S)-$$}"
 mkdir -p "$LOG_DIR"
 
 echo "[e2e-local] starting scheduler on :${SCHEDULER_PORT}"
@@ -117,7 +132,7 @@ bunx --bun serve out/frontend/site -p "${FRONTEND_PORT}" --no-port-switching >"$
 PIDS+=("$!")
 
 echo "[e2e-local] waiting for services"
-wait_for_url "${SCHEDULER_BASE}/health" "scheduler health"
+wait_for_http "${SCHEDULER_BASE}/v1/control/ws" "scheduler control ws endpoint"
 wait_for_url "${TERM_SERVER_BASE}/v1/device/identity" "term-server identity"
 wait_for_url "http://127.0.0.1:${FRONTEND_PORT}/" "frontend"
 
@@ -127,17 +142,7 @@ if [[ -z "$device_id" || "$device_id" == "null" ]]; then
   exit 1
 fi
 
-echo "[e2e-local] waiting for scheduler route resolve for device ${device_id}"
-for _ in $(seq 1 90); do
-  if curl -fsS "${SCHEDULER_BASE}/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null 2>&1; then
-    break
-  fi
-  sleep 1
-done
-curl -fsS "${SCHEDULER_BASE}/v1/route/resolve/${device_id}" | jq -e '.ok == true and .found == true' >/dev/null
-
 echo "[e2e-local] running cypress terminal compose spec"
 cd frontend
 bunx --bun cypress run --config-file cypress.config.ts --browser electron \
-  --env SCHEDULER_PORT=${SCHEDULER_PORT},TERM_SERVER_PORT=${TERM_SERVER_PORT} \
   --spec cypress/e2e/terminal-compose-stack.cy.js

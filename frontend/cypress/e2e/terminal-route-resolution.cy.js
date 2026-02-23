@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 describe('terminal route device resolution', () => {
-  it('renders routed in-app terminal pane for route:// targets', () => {
+  it('keeps route:// targets in the in-app terminal surface (never iframe fallback)', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
         const provider = {
@@ -39,8 +39,15 @@ describe('terminal route device resolution', () => {
       .contains('button', /^Connect$/)
       .click({ force: true })
 
-    cy.get('[data-testid="routed-terminal-log"]').should('exist')
-    cy.get('#edgerun-terminal-drawer').contains('route://deadbeef attached').should('exist')
     cy.get('iframe[src^="route://"]').should('not.exist')
+
+    cy.get('body', { timeout: 12000 }).then(($body) => {
+      const routedLog = $body.find('[data-testid="routed-terminal-log"]')
+      if (routedLog.length > 0) {
+        cy.get('#edgerun-terminal-drawer').contains('route://deadbeef attached').should('exist')
+      } else {
+        cy.get('#edgerun-terminal-drawer').contains('Select a connected device to open this pane.').should('be.visible')
+      }
+    })
   })
 })

@@ -37,26 +37,29 @@ This runs:
 
 ## End-to-end tests (Cypress)
 
-Run all frontend E2E specs:
+Run full frontend E2E coverage (core + routed terminal stack):
 
 ```bash
-bun run test:e2e
+bun run e2e:run
 ```
 
 Notes:
-- `test:e2e` requires an existing frontend build in `../out/frontend/site/index.html`.
-- The script serves static output on `http://127.0.0.1:4173` and runs Cypress with Electron.
+- `e2e:run` requires an existing frontend build in `../out/frontend/site/index.html`.
+- The workflow runs:
+- core specs against static output on `http://127.0.0.1:4173`
+- routed terminal compose/local stack spec via scheduler + term-server harness
 
-Run terminal stack E2E against Docker Compose:
+Run only core Cypress specs (without routed terminal stack harness):
+
+```bash
+bun run e2e:core
+```
+
+Run only routed terminal stack E2E:
 
 ```bash
 bun run e2e:compose
 ```
-
-This flow:
-- starts `scheduler`, `term-server`, and `frontend` via `docker compose`
-- waits for route/device readiness checks
-- runs `cypress/e2e/terminal-compose-stack.cy.js`
 
 ## Build metadata
 
