@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0-only
+syntax = "proto3";
+
+package edgerun.timeline.v1;
+
+enum TimelineActorTypeV1 {
+  TIMELINE_ACTOR_TYPE_UNSPECIFIED = 0;
+  TIMELINE_ACTOR_TYPE_USER = 1;
+  TIMELINE_ACTOR_TYPE_AGENT = 2;
+  TIMELINE_ACTOR_TYPE_SYSTEM = 3;
+}
+
+enum TimelineEventTypeV1 {
+  TIMELINE_EVENT_TYPE_UNSPECIFIED = 0;
+  TIMELINE_EVENT_TYPE_INTERACTION_USER_INPUT = 1;
+  TIMELINE_EVENT_TYPE_INTERACTION_AGENT_OUTPUT = 2;
+  TIMELINE_EVENT_TYPE_FS_PATCH_APPLIED = 3;
+  TIMELINE_EVENT_TYPE_JOB_OPENED = 4;
+  TIMELINE_EVENT_TYPE_JOB_PROGRESS = 5;
+  TIMELINE_EVENT_TYPE_JOB_BLOCKED = 6;
+  TIMELINE_EVENT_TYPE_JOB_COMPLETED = 7;
+  TIMELINE_EVENT_TYPE_JOB_FAILED = 8;
+}
+
+message TimelineEventEnvelopeV1 {
+  uint32 schema_version = 1;
+  string event_id = 2;
+  uint64 seq = 3;
+  uint64 ts_unix_ms = 4;
+  string run_id = 5;
+  string job_id = 6;
+  string session_id = 7;
+  TimelineActorTypeV1 actor_type = 8;
+  string actor_id = 9;
+  TimelineEventTypeV1 event_type = 10;
+  string payload_type = 11;
+  bytes payload = 12;
+  bytes payload_hash_blake3 = 13;
+  bytes prev_event_hash = 14;
+  bytes event_hash = 15;
+}
+
+message InteractionPayloadV1 {
+  string text = 1;
+}

@@ -1,0 +1,13 @@
+---
+export const prerender = false;
+import MainLayout from "../../layouts/MainLayout.astro"
+import CallApp from "../../components/CallApp"
+---
+
+<MainLayout title="Call - Browser OS" description="Video call">
+  <div class="fixed inset-0 bg-black">
+    <div class="h-full">
+      <CallApp client:load />
+    </div>
+  </div>
+</MainLayout>

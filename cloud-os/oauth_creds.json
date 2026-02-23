@@ -1,0 +1,11 @@
+{
+  "qwen": {
+    "client_id": "your-qwen-client-id",
+    "client_secret": "your-qwen-client-secret",
+    "auth_uri": "https://portal.qwen.ai/oauth/authorize",
+    "token_uri": "https://portal.qwen.ai/oauth/token",
+    "redirect_uri": "http://localhost:4321/api/qwen/callback",
+    "resource_url": "portal.qwen.ai",
+    "scopes": ["model:invoke"]
+  }
+}

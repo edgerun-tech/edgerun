@@ -19,6 +19,7 @@ pub mod replication;
 pub mod seal_policy;
 pub mod segment;
 pub mod sharding;
+pub mod timeline;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

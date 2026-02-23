@@ -1,0 +1,74 @@
+---
+import '@/styles/app.css';
+
+const { title, description } = Astro.props;
+
+const siteUrl = 'https://cloud-os.kensservices.workers.dev';
+const siteName = 'CloudOS';
+const defaultTitle = 'CloudOS - Unified Cloud Operating System';
+const defaultDescription = 'A unified cloud operating system to manage servers, deployments, domains, and infrastructure across Cloudflare, Vercel, Hetzner, and more.';
+
+const pageTitle = title ? `${title} | ${siteName}` : defaultTitle;
+const pageDescription = description || defaultDescription;
+---
+
+<html lang="en" class="dark bg-gray-950">
+	<head>
+		<meta charset="utf-8" />
+		
+		<!-- Primary Meta Tags -->
+		<title>{pageTitle}</title>
+		<meta name="title" content={pageTitle} />
+		<meta name="description" content={pageDescription} />
+		<meta name="keywords" content="cloud OS, cloud management, server management, devops, cloudflare, vercel, hetzner, cloud dashboard, infrastructure management, deployment, DNS management, MCP, AI assistant" />
+		<meta name="author" content="Ken" />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={siteUrl} />
+		
+		<!-- Favicon -->
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" sizes="any" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+		<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+		
+		<!-- Viewport -->
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		
+		<!-- PWA -->
+		<link rel="manifest" href="/manifest.json" />
+		<meta name="theme-color" content="#2563eb" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<meta name="apple-mobile-web-app-title" content="CloudOS" />
+
+		<!-- Open Graph / Facebook -->
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={siteUrl} />
+		<meta property="og:title" content={pageTitle} />
+		<meta property="og:description" content={pageDescription} />
+		<meta property="og:site_name" content={siteName} />
+		<meta property="og:image" content={`${siteUrl}/og-image.png`} />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:locale" content="en_US" />
+
+		<!-- Twitter -->
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:url" content={siteUrl} />
+		<meta name="twitter:title" content={pageTitle} />
+		<meta name="twitter:description" content={pageDescription} />
+		<meta name="twitter:image" content={`${siteUrl}/og-image.png`} />
+		<meta name="twitter:creator" content="@ken" />
+
+		<!-- Performance -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="dns-prefetch" href="https://api.cloudflare.com" />
+		<link rel="dns-prefetch" href="https://api.vercel.com" />
+	</head>
+	<body class="min-h-screen bg-cover bg-center bg-no-repeat bg-fixed text-white relative" style="background-image: url('/wallpaper.png')">
+		<div class="fixed inset-0 bg-black/40"></div>
+		<slot />
+	</body>
+</html>
