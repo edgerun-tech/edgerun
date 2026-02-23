@@ -92,7 +92,8 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
                 device_id: peer_id.to_string(),
             }),
         };
-        let encoded = bincode::serialize(&request).map_err(|e| TransportError::Protocol(e.to_string()))?;
+        let encoded =
+            bincode::serialize(&request).map_err(|e| TransportError::Protocol(e.to_string()))?;
         socket
             .send(Message::Binary(encoded.into()))
             .await
@@ -118,9 +119,9 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
                     .unwrap_or_else(|| format!("scheduler route resolve failed{status}"));
                 return Err(TransportError::Protocol(err));
             }
-            let data = response
-                .data
-                .ok_or_else(|| TransportError::Protocol("missing route resolve payload".to_string()))?;
+            let data = response.data.ok_or_else(|| {
+                TransportError::Protocol("missing route resolve payload".to_string())
+            })?;
             let ControlWsResponsePayload::RouteResolve(resolved) = data else {
                 return Err(TransportError::Protocol(
                     "unexpected route resolve response payload".to_string(),

@@ -12,7 +12,10 @@ use anyhow::Context;
 use axum::{
     Router,
     body::Bytes,
-    extract::{State, ws::{Message, WebSocket, WebSocketUpgrade}},
+    extract::{
+        State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+    },
     http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
@@ -244,10 +247,13 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn device_identity(State(state): State<AppState>) -> impl IntoResponse {
-    json_response(StatusCode::OK, device_identity_json(&DeviceIdentityResponse {
-        backend: format!("{:?}", state.device.backend).to_lowercase(),
-        device_pubkey_b64url: state.device.public_key_b64url.clone(),
-    }))
+    json_response(
+        StatusCode::OK,
+        device_identity_json(&DeviceIdentityResponse {
+            backend: format!("{:?}", state.device.backend).to_lowercase(),
+            device_pubkey_b64url: state.device.public_key_b64url.clone(),
+        }),
+    )
 }
 
 async fn device_challenge(State(state): State<AppState>) -> impl IntoResponse {
@@ -259,27 +265,27 @@ async fn device_challenge(State(state): State<AppState>) -> impl IntoResponse {
     guard.retain(|_, exp| *exp > now);
     guard.insert(nonce.clone(), expires_at);
 
-    json_response(StatusCode::OK, device_challenge_json(&DeviceChallengeResponse {
-        nonce_b64url: nonce,
-        expires_at_unix_s: expires_at,
-    }))
+    json_response(
+        StatusCode::OK,
+        device_challenge_json(&DeviceChallengeResponse {
+            nonce_b64url: nonce,
+            expires_at_unix_s: expires_at,
+        }),
+    )
 }
 
-async fn device_handshake(
-    State(state): State<AppState>,
-    body: Bytes,
-) -> impl IntoResponse {
+async fn device_handshake(State(state): State<AppState>, body: Bytes) -> impl IntoResponse {
     let req = match parse_device_handshake_request(&body) {
         Ok(value) => value,
         Err(err) => {
-                return json_response(
-                    StatusCode::BAD_REQUEST,
-                    device_handshake_json(&DeviceHandshakeResponse {
-                        ok: false,
-                        handshake: None,
-                        error: Some(err),
-                    }),
-                );
+            return json_response(
+                StatusCode::BAD_REQUEST,
+                device_handshake_json(&DeviceHandshakeResponse {
+                    ok: false,
+                    handshake: None,
+                    error: Some(err),
+                }),
+            );
         }
     };
     let now = now_unix_s();
@@ -1003,7 +1009,12 @@ fn take_u32(bytes: &[u8], cur: &mut usize) -> anyhow::Result<u32> {
     if bytes.len().saturating_sub(*cur) < 4 {
         anyhow::bail!("unexpected eof");
     }
-    let value = u32::from_be_bytes([bytes[*cur], bytes[*cur + 1], bytes[*cur + 2], bytes[*cur + 3]]);
+    let value = u32::from_be_bytes([
+        bytes[*cur],
+        bytes[*cur + 1],
+        bytes[*cur + 2],
+        bytes[*cur + 3],
+    ]);
     *cur += 4;
     Ok(value)
 }
@@ -1161,23 +1172,21 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     .send()
                     .await
                 {
-                    Ok(resp) if resp.status().is_success() => {
-                        match resp.text().await {
-                            Ok(text) => match parse_route_challenge_response(&text) {
-                                Ok(value) => value,
-                                Err(err) => {
-                                    warn!(error = %err, "route announcer challenge parse error");
-                                    sleep(Duration::from_secs(10)).await;
-                                    continue;
-                                }
-                            },
+                    Ok(resp) if resp.status().is_success() => match resp.text().await {
+                        Ok(text) => match parse_route_challenge_response(&text) {
+                            Ok(value) => value,
                             Err(err) => {
-                                warn!(error = %err, "route announcer challenge body read error");
+                                warn!(error = %err, "route announcer challenge parse error");
                                 sleep(Duration::from_secs(10)).await;
                                 continue;
                             }
+                        },
+                        Err(err) => {
+                            warn!(error = %err, "route announcer challenge body read error");
+                            sleep(Duration::from_secs(10)).await;
+                            continue;
                         }
-                    }
+                    },
                     Ok(resp) => {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
@@ -1226,25 +1235,23 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     .send()
                     .await
                 {
-                    Ok(resp) if resp.status().is_success() => {
-                        match resp.text().await {
-                            Ok(text) => match parse_route_register_response(&text) {
-                                Ok(value) => {
-                                    if value.ok {
-                                        heartbeat_token = Some(value.heartbeat_token);
-                                    } else {
-                                        heartbeat_token = None;
-                                    }
+                    Ok(resp) if resp.status().is_success() => match resp.text().await {
+                        Ok(text) => match parse_route_register_response(&text) {
+                            Ok(value) => {
+                                if value.ok {
+                                    heartbeat_token = Some(value.heartbeat_token);
+                                } else {
+                                    heartbeat_token = None;
                                 }
-                                Err(err) => {
-                                    warn!(error = %err, "route announcer register parse error");
-                                }
-                            },
-                            Err(err) => {
-                                warn!(error = %err, "route announcer register body read error");
                             }
+                            Err(err) => {
+                                warn!(error = %err, "route announcer register parse error");
+                            }
+                        },
+                        Err(err) => {
+                            warn!(error = %err, "route announcer register body read error");
                         }
-                    }
+                    },
                     Ok(resp) => {
                         let status = resp.status();
                         let body = resp.text().await.unwrap_or_default();
@@ -1307,10 +1314,7 @@ fn route_register_request_json(value: &RouteRegisterRequest) -> String {
 
 fn parse_route_challenge_response(body: &str) -> Result<RouteChallengeResponse, String> {
     let parsed = json::parse(body).map_err(|err| format!("invalid json: {err}"))?;
-    let nonce = parsed["nonce"]
-        .as_str()
-        .ok_or("missing nonce")?
-        .to_string();
+    let nonce = parsed["nonce"].as_str().ok_or("missing nonce")?.to_string();
     let expires_at_unix_s = parsed["expires_at_unix_s"]
         .as_u64()
         .ok_or("missing expires_at_unix_s")?;

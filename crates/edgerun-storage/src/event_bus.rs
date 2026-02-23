@@ -15,10 +15,8 @@ pub mod proto {
 }
 
 pub use proto::{
-    BusEventEnvelope, BusPhaseV1, BusStatusV1, EventBusPolicyV1, PolicyRuleV1,
-    HaltEventV1,
-    PolicyUpdateDeniedEventV1,
-    PolicyUpdateRequestV1, PolicyUpdatedEventV1, ResumeFromV1,
+    BusEventEnvelope, BusPhaseV1, BusStatusV1, EventBusPolicyV1, HaltEventV1, PolicyRuleV1,
+    PolicyUpdateDeniedEventV1, PolicyUpdateRequestV1, PolicyUpdatedEventV1, ResumeFromV1,
 };
 
 static EVENT_BUS_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -136,9 +134,8 @@ impl StorageBackedEventBus {
     }
 
     fn decode_message<T: Message + Default>(bytes: &[u8], name: &str) -> Result<T, StorageError> {
-        T::decode(bytes).map_err(|e| {
-            StorageError::InvalidSealPolicy(format!("invalid protobuf {name}: {e}"))
-        })
+        T::decode(bytes)
+            .map_err(|e| StorageError::InvalidSealPolicy(format!("invalid protobuf {name}: {e}")))
     }
 
     fn append_raw_event(&mut self, envelope: &BusEventEnvelope) -> Result<u64, StorageError> {
@@ -173,7 +170,8 @@ impl StorageBackedEventBus {
     fn policy_allows(policy: &EventBusPolicyV1, envelope: &BusEventEnvelope) -> bool {
         policy.rules.iter().any(|rule| {
             let publisher_match = rule.publisher == "*" || rule.publisher == envelope.publisher;
-            let payload_match = rule.payload_type == "*" || rule.payload_type == envelope.payload_type;
+            let payload_match =
+                rule.payload_type == "*" || rule.payload_type == envelope.payload_type;
             publisher_match && payload_match
         })
     }
@@ -251,8 +249,10 @@ impl StorageBackedEventBus {
             .or_insert(envelope.nonce);
 
         if envelope.payload_type == POLICY_UPDATED {
-            let updated =
-                Self::decode_message::<PolicyUpdatedEventV1>(&envelope.payload, "policy_updated payload")?;
+            let updated = Self::decode_message::<PolicyUpdatedEventV1>(
+                &envelope.payload,
+                "policy_updated payload",
+            )?;
             let Some(policy) = updated.policy else {
                 return Err(StorageError::InvalidSealPolicy(
                     "policy_updated payload missing policy".to_string(),
@@ -263,7 +263,8 @@ impl StorageBackedEventBus {
                 state.phase = BusPhaseV1::Running;
             }
         } else if envelope.payload_type == HALT_EVENT {
-            let halt = Self::decode_message::<HaltEventV1>(&envelope.payload, "halt_event payload")?;
+            let halt =
+                Self::decode_message::<HaltEventV1>(&envelope.payload, "halt_event payload")?;
             if halt.schema_version != 1 {
                 return Err(StorageError::InvalidSealPolicy(format!(
                     "invalid halt_event schema_version: expected 1, got {}",
@@ -396,7 +397,11 @@ impl EventBus for StorageBackedEventBus {
                         reason: err.to_string(),
                     }
                     .encode_to_vec();
-                    Self::build_internal_outcome_event(internal_nonce, POLICY_UPDATE_DENIED, payload)
+                    Self::build_internal_outcome_event(
+                        internal_nonce,
+                        POLICY_UPDATE_DENIED,
+                        payload,
+                    )
                 }
             };
             let outcome_offset = self.append_raw_event(&outcome)?;
@@ -416,10 +421,8 @@ impl EventBus for StorageBackedEventBus {
                     "resume_from rejected: event bus is not halted".to_string(),
                 ));
             }
-            let resume = Self::decode_message::<ResumeFromV1>(
-                &envelope.payload,
-                "resume_from payload",
-            )?;
+            let resume =
+                Self::decode_message::<ResumeFromV1>(&envelope.payload, "resume_from payload")?;
             if resume.schema_version != 1 {
                 return Err(StorageError::InvalidSealPolicy(format!(
                     "invalid resume_from schema_version: expected 1, got {}",
@@ -507,11 +510,7 @@ impl EventBus for StorageBackedEventBus {
             reconstructed = self.reconstruct_state()?;
             &reconstructed
         };
-        let policy_version = state
-            .active_policy
-            .as_ref()
-            .map(|p| p.version)
-            .unwrap_or(0);
+        let policy_version = state.active_policy.as_ref().map(|p| p.version).unwrap_or(0);
         Ok(BusStatusV1 {
             schema_version: 1,
             phase: state.phase as i32,
@@ -615,18 +614,14 @@ mod tests {
         let _ = bus.publish(&ev).expect("publish allowed event");
 
         let queried = bus.query(50, 0, BusQueryFilter::default()).expect("query");
-        assert!(
-            queried
-                .events
-                .iter()
-                .any(|e| e.envelope.payload_type == POLICY_UPDATED)
-        );
-        assert!(
-            queried
-                .events
-                .iter()
-                .any(|e| e.envelope.payload_type == "job_created")
-        );
+        assert!(queried
+            .events
+            .iter()
+            .any(|e| e.envelope.payload_type == POLICY_UPDATED));
+        assert!(queried
+            .events
+            .iter()
+            .any(|e| e.envelope.payload_type == "job_created"));
     }
 
     #[test]
@@ -722,8 +717,12 @@ mod tests {
 
         let mut ev2 = ev1.clone();
         ev2.payload = b"{\"job_id\":\"j2\"}".to_vec();
-        let err = bus.publish(&ev2).expect_err("must reject conflicting duplicate id");
-        assert!(err.to_string().contains("duplicate event_id with conflicting envelope"));
+        let err = bus
+            .publish(&ev2)
+            .expect_err("must reject conflicting duplicate id");
+        assert!(err
+            .to_string()
+            .contains("duplicate event_id with conflicting envelope"));
     }
 
     #[test]

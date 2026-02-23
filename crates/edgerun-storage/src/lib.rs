@@ -14,8 +14,8 @@ pub mod key_management;
 pub mod lsm_index;
 pub mod manifest;
 pub mod materialized_state;
-pub mod os;
 pub mod optimized_writer;
+pub mod os;
 pub mod replication;
 pub mod seal_policy;
 pub mod segment;
@@ -462,7 +462,10 @@ impl EngineAppendSession {
 
     /// Update chain progress from an RPC reader callback without coupling this
     /// crate to any specific chain/RPC client implementation.
-    pub fn refresh_chain_progress_from_rpc_read<F>(&mut self, read_rpc: F) -> Result<(), StorageError>
+    pub fn refresh_chain_progress_from_rpc_read<F>(
+        &mut self,
+        read_rpc: F,
+    ) -> Result<(), StorageError>
     where
         F: FnOnce() -> Result<Option<seal_policy::ChainProgress>, StorageError>,
     {
@@ -1104,11 +1107,7 @@ mod tests {
             signature: "sig-1".to_string(),
         })?;
         let payload = b"kind=roundtrip;n=1".to_vec();
-        let event = event::Event::new(
-            event::StreamId::new(),
-            event::ActorId::new(),
-            payload,
-        );
+        let event = event::Event::new(event::StreamId::new(), event::ActorId::new(), payload);
         let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
 
         session.apply_signed_chain_progress_event(&SignedChainProgressEvent {
@@ -1138,7 +1137,10 @@ mod tests {
             },
         )?;
         assert_eq!(queried.events.len(), 1);
-        assert_eq!(queried.events[0].event.payload, b"kind=roundtrip;n=1".to_vec());
+        assert_eq!(
+            queried.events[0].event.payload,
+            b"kind=roundtrip;n=1".to_vec()
+        );
         Ok(())
     }
 

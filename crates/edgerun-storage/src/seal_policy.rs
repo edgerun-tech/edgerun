@@ -169,11 +169,12 @@ impl SealController {
         chain_now: Option<ChainProgress>,
         state: ActiveSegmentState,
     ) -> Result<SealDecision, StorageError> {
-        self.decide_chain_if_possible(chain_now, state).ok_or_else(|| {
-            StorageError::InvalidSealPolicy(
-                "chain_strict mode requires chain clock and opened_chain state".to_string(),
-            )
-        })
+        self.decide_chain_if_possible(chain_now, state)
+            .ok_or_else(|| {
+                StorageError::InvalidSealPolicy(
+                    "chain_strict mode requires chain clock and opened_chain state".to_string(),
+                )
+            })
     }
 
     fn decide_chain_if_possible(
@@ -284,10 +285,7 @@ mod tests {
                 ActiveSegmentState {
                     opened_at_unix_ms: 0,
                     last_append_unix_ms: 999_999,
-                    opened_chain: Some(ChainProgress {
-                        slot: 10,
-                        epoch: 1,
-                    }),
+                    opened_chain: Some(ChainProgress { slot: 10, epoch: 1 }),
                 },
             )
             .unwrap();
@@ -313,9 +311,8 @@ mod tests {
                 },
             )
             .unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("chain_strict mode requires chain clock")
-        );
+        assert!(err
+            .to_string()
+            .contains("chain_strict mode requires chain clock"));
     }
 }

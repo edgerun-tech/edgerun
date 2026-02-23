@@ -119,8 +119,8 @@ export function Nav() {
 
   return (
     <nav class="border-b border-border bg-background/95 backdrop-blur sticky top-0 z-50">
-      <div class="mx-auto h-16 max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex h-full items-center justify-between gap-3">
+      <div class="h-16 w-full px-4 sm:px-6 lg:px-8">
+        <div class="grid h-full grid-cols-[auto_1fr_auto] items-center gap-3">
           <a href="/" class="flex items-center gap-2">
             <img src="/brand/edgerun-mark.svg" alt="Edgerun mark" width="32" height="32" />
             <span class="text-xl font-bold">Edgerun</span>
@@ -134,56 +134,13 @@ export function Nav() {
             )}</For>
           </div>
 
-          <div class="flex items-center gap-2">
-            <div class="hidden items-center gap-3 rounded-md border border-border/80 bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground sm:flex">
-              <span data-testid="route-debug-nodes">
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${totalNodes() > 0 && onlineNodes() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
-                <span class="font-mono">
-                  {totalNodes() === 0 ? 'nodes: none' : `nodes ${onlineNodes()}/${totalNodes()}`}
-                </span>
-              </span>
-              <span data-testid="route-debug-workers">
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${activeWorkers() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
-                <span class="font-mono">
-                  workers {activeWorkers()}
-                </span>
-              </span>
-            </div>
-            <div class="mt-1 hidden flex-wrap items-center gap-2 rounded-md border border-border/80 bg-muted/20 px-2 py-1 text-[10px] text-muted-foreground sm:flex">
-              <span data-testid="route-debug-scheduler" title={schedulerStatus()}>
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <span class="font-mono">
-                  {schedulerReachable() ? 'scheduler online' : 'scheduler offline'}
-                </span>
-              </span>
-              <span
-                data-testid="route-debug-control-ws"
-                class={`font-mono ${schedulerWsReachable() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                ws {schedulerWsReachable() ? 'ok' : 'down'}
-              </span>
-              <span
-                data-testid="route-debug-overlay-ws"
-                class={`font-mono ${routeSignalConnected() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                overlay-ws {routeSignalConnected() ? 'on' : 'off'}
-              </span>
-              <span data-testid="route-debug-overlay-summary" class="font-mono">
-                overlay {routePeers()} peers / {routeEntries()} routes
-              </span>
-              <span
-                data-testid="route-debug-route-advert"
-                class={`font-mono ${routeAdvertised() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                route-advert {routeAdvertised() ? `active (${routeAdvertAgeMs()}ms)` : 'idle'}
-              </span>
-            </div>
+          <div class="flex items-center justify-end gap-2">
             <div class="flex items-center gap-1.5 rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[10px] text-muted-foreground sm:hidden">
               <span class="font-mono">{onlineNodes()}/{totalNodes()}</span>
               <span class="text-muted-foreground">•</span>
               <span class="font-mono">{activeWorkers()}</span>
             </div>
-            <div class="sm:hidden mt-1 rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+            <div class="rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[9px] text-muted-foreground sm:hidden">
               <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
               <span class="font-mono" title={schedulerStatus()}>
                 {schedulerReachable() ? 'sched ok' : 'sched off'}
@@ -228,6 +185,55 @@ export function Nav() {
             <PersonalizationMenu />
             <a href="/dashboard/" class="hidden sm:inline-flex"><Button variant="outline" size="sm">Dashboard</Button></a>
             <div class="hidden sm:block"><WalletButton /></div>
+          </div>
+        </div>
+      </div>
+      <div class="hidden border-t border-border/70 sm:block">
+        <div class="w-full px-4 py-2 sm:px-6 lg:px-8">
+          <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <div class="flex items-center gap-3 rounded-md border border-border/80 bg-muted/20 px-2 py-1">
+              <span data-testid="route-debug-nodes">
+                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${totalNodes() > 0 && onlineNodes() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
+                <span class="font-mono">
+                  {totalNodes() === 0 ? 'nodes: none' : `nodes ${onlineNodes()}/${totalNodes()}`}
+                </span>
+              </span>
+              <span data-testid="route-debug-workers">
+                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${activeWorkers() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
+                <span class="font-mono">
+                  workers {activeWorkers()}
+                </span>
+              </span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 rounded-md border border-border/80 bg-muted/20 px-2 py-1 text-[10px]">
+              <span data-testid="route-debug-scheduler" title={schedulerStatus()}>
+                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                <span class="font-mono">
+                  {schedulerReachable() ? 'scheduler online' : 'scheduler offline'}
+                </span>
+              </span>
+              <span
+                data-testid="route-debug-control-ws"
+                class={`font-mono ${schedulerWsReachable() ? 'text-emerald-400' : 'text-muted-foreground'}`}
+              >
+                ws {schedulerWsReachable() ? 'ok' : 'down'}
+              </span>
+              <span
+                data-testid="route-debug-overlay-ws"
+                class={`font-mono ${routeSignalConnected() ? 'text-emerald-400' : 'text-muted-foreground'}`}
+              >
+                overlay-ws {routeSignalConnected() ? 'on' : 'off'}
+              </span>
+              <span data-testid="route-debug-overlay-summary" class="font-mono">
+                overlay {routePeers()} peers / {routeEntries()} routes
+              </span>
+              <span
+                data-testid="route-debug-route-advert"
+                class={`font-mono ${routeAdvertised() ? 'text-emerald-400' : 'text-muted-foreground'}`}
+              >
+                route-advert {routeAdvertised() ? `active (${routeAdvertAgeMs()}ms)` : 'idle'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

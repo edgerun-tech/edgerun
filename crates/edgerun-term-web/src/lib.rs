@@ -72,10 +72,22 @@ mod wasm {
     #[derive(Debug)]
     enum ShellResponse {
         AuthOk,
-        AuthError { error: String },
-        Spawned { id: u32, pid: Option<u32> },
-        Exit { id: u32, code: u32, signal: Option<String> },
-        Error { id: Option<u32>, error: String },
+        AuthError {
+            error: String,
+        },
+        Spawned {
+            id: u32,
+            pid: Option<u32>,
+        },
+        Exit {
+            id: u32,
+            code: u32,
+            signal: Option<String>,
+        },
+        Error {
+            id: Option<u32>,
+            error: String,
+        },
     }
 
     #[cfg(feature = "webgpu")]
@@ -533,8 +545,8 @@ mod wasm {
                     put_str(&mut out, cmd)?;
                 }
                 if let Some(args) = args {
-                    let count =
-                        u16::try_from(args.len()).map_err(|_| JsValue::from_str("too many args"))?;
+                    let count = u16::try_from(args.len())
+                        .map_err(|_| JsValue::from_str("too many args"))?;
                     out.extend_from_slice(&count.to_be_bytes());
                     for value in args {
                         put_str(&mut out, value)?;
@@ -644,7 +656,12 @@ mod wasm {
         if bytes.len().saturating_sub(*cur) < 4 {
             return Err(JsValue::from_str("unexpected eof"));
         }
-        let value = u32::from_be_bytes([bytes[*cur], bytes[*cur + 1], bytes[*cur + 2], bytes[*cur + 3]]);
+        let value = u32::from_be_bytes([
+            bytes[*cur],
+            bytes[*cur + 1],
+            bytes[*cur + 2],
+            bytes[*cur + 3],
+        ]);
         *cur += 4;
         Ok(value)
     }

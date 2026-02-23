@@ -6,18 +6,19 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use edgerun_types::Limits;
 use edgerun_types::control_plane::{
     ControlWsRequestPayload, JobCreateRequest, JobStatusResponse, ReplayArtifactPayload,
     WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
+use edgerun_types::Limits;
 use tokio::process::Command;
 use tokio::time::sleep;
 
 use crate::integration_helpers::{
     control_ws_request, create_assigned_job, create_assigned_job_with_abi, create_temp_dir,
     fetch_job_status, kill_child, pick_free_port, submit_worker_failure, submit_worker_replay,
-    submit_worker_result, wait_for_failure_phase, wait_for_health, wait_for_runtime_execute_failure,
+    submit_worker_result, wait_for_failure_phase, wait_for_health,
+    wait_for_runtime_execute_failure,
 };
 use crate::process_helpers::run_program_sync;
 use crate::{ensure, integration_flag_env, load_app_config};
@@ -87,7 +88,8 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
         &sched_url,
         ControlWsRequestPayload::JobCreate(create_request),
     )
-    .await? {
+    .await?
+    {
         edgerun_types::control_plane::ControlWsResponsePayload::JobCreate(v) => v,
         other => anyhow::bail!("unexpected payload for job.create: {other:?}"),
     };
@@ -257,7 +259,11 @@ pub(crate) async fn run_integration_scheduler_api(root: &Path) -> Result<()> {
     ensure(failures.len() == 2, "expected 2 failures")?;
     ensure(replays.len() == 2, "expected 2 replay artifacts")?;
     ensure(
-        reports.last().map(|x| x.output_hash.as_str()).unwrap_or_default() == output_hash_3,
+        reports
+            .last()
+            .map(|x| x.output_hash.as_str())
+            .unwrap_or_default()
+            == output_hash_3,
         "expected newest result output_hash=o3",
     )?;
     ensure(
@@ -352,7 +358,8 @@ pub(crate) async fn run_integration_e2e_lifecycle(root: &Path) -> Result<()> {
         &sched_url,
         ControlWsRequestPayload::JobCreate(create_request),
     )
-    .await? {
+    .await?
+    {
         edgerun_types::control_plane::ControlWsResponsePayload::JobCreate(v) => v,
         other => anyhow::bail!("unexpected payload for job.create: {other:?}"),
     };

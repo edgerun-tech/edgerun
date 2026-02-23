@@ -2,7 +2,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use edgerun_storage::event_bus::{BusQueryFilter, EventBus, StorageBackedEventBus};
 
 use crate::EventBusCommand;

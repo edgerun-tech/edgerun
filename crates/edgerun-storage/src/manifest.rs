@@ -3,7 +3,7 @@ use prost::Message;
 use std::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{StorageError, event::HlcTimestamp};
+use crate::{event::HlcTimestamp, StorageError};
 
 pub type ManifestError = StorageError;
 
@@ -144,13 +144,16 @@ impl Manifest {
                     max_hlc: segment.max_hlc.map(to_proto_hlc),
                 })
                 .collect(),
-            active_segment: self.active_segment.as_ref().map(|segment| proto::SealedSegmentV1 {
-                segment_id: segment.segment_id.to_vec(),
-                offset: segment.offset,
-                size: segment.size,
-                min_hlc: segment.min_hlc.map(to_proto_hlc),
-                max_hlc: segment.max_hlc.map(to_proto_hlc),
-            }),
+            active_segment: self
+                .active_segment
+                .as_ref()
+                .map(|segment| proto::SealedSegmentV1 {
+                    segment_id: segment.segment_id.to_vec(),
+                    offset: segment.offset,
+                    size: segment.size,
+                    min_hlc: segment.min_hlc.map(to_proto_hlc),
+                    max_hlc: segment.max_hlc.map(to_proto_hlc),
+                }),
             index_roots: Some(proto::IndexRootsV1 {
                 event_hash_index: self
                     .index_roots
@@ -173,25 +176,22 @@ impl Manifest {
                     .map(|v| v.to_vec())
                     .unwrap_or_default(),
             }),
-            last_checkpoint: self
-                .last_checkpoint
-                .as_ref()
-                .map(|checkpoint| proto::ManifestCheckpointV1 {
+            last_checkpoint: self.last_checkpoint.as_ref().map(|checkpoint| {
+                proto::ManifestCheckpointV1 {
                     segment_id: checkpoint.segment_id.to_vec(),
                     offset: checkpoint.offset,
                     hlc: Some(to_proto_hlc(checkpoint.hlc)),
-                }),
+                }
+            }),
             compaction_watermark: self.compaction_watermark,
             manifest_crc: self.manifest_crc,
         }
     }
 
     fn from_proto(proto: proto::ManifestV1) -> Result<Self, ManifestError> {
-        let uuid_bytes: [u8; 16] = proto
-            .store_uuid
-            .as_slice()
-            .try_into()
-            .map_err(|_| StorageError::InvalidData("manifest.store_uuid must be 16 bytes".to_string()))?;
+        let uuid_bytes: [u8; 16] = proto.store_uuid.as_slice().try_into().map_err(|_| {
+            StorageError::InvalidData("manifest.store_uuid must be 16 bytes".to_string())
+        })?;
         let store_uuid = Uuid::from_bytes(uuid_bytes);
         let sealed_segments = proto
             .sealed_segments
@@ -210,14 +210,13 @@ impl Manifest {
         };
         let last_checkpoint = match proto.last_checkpoint {
             Some(checkpoint) => {
-                let segment_id = bytes_to_32_required(&checkpoint.segment_id, "last_checkpoint.segment_id")?;
-                let hlc = from_proto_hlc(
-                    checkpoint.hlc.ok_or_else(|| {
-                        StorageError::InvalidData(
-                            "manifest.last_checkpoint.hlc is required".to_string(),
-                        )
-                    })?,
-                );
+                let segment_id =
+                    bytes_to_32_required(&checkpoint.segment_id, "last_checkpoint.segment_id")?;
+                let hlc = from_proto_hlc(checkpoint.hlc.ok_or_else(|| {
+                    StorageError::InvalidData(
+                        "manifest.last_checkpoint.hlc is required".to_string(),
+                    )
+                })?);
                 Some(Checkpoint {
                     segment_id,
                     offset: checkpoint.offset,

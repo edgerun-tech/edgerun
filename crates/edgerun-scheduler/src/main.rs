@@ -25,7 +25,9 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
 use edgerun_storage::durability::DurabilityLevel;
-use edgerun_storage::event::{ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId};
+use edgerun_storage::event::{
+    ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
+};
 use edgerun_storage::event_bus::{
     BusPhaseV1, BusQueryFilter, EventBus, EventBusPolicyV1, PolicyRuleV1, PolicyUpdateRequestV1,
     StorageBackedEventBus,
@@ -39,13 +41,13 @@ use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
     BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
     ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, JobCreateRequest,
-    JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse,
-    QueuedAssignment, RouteOwnerRequest, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
+    JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse, QueuedAssignment,
+    RouteOwnerRequest, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
     RouteResolveResponse as CpRouteResolveResponse, SlashWorkerArtifact, SubmissionAck,
-    WorkerAssignmentsRequest, WorkerFailureReport,
-    WorkerReplayArtifactReport, WorkerResultReport,
+    WorkerAssignmentsRequest, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
 use fs2::FileExt;
+use prost::Message as ProstCodec;
 use serde::{Deserialize, Serialize};
 use solana_client::rpc_client::RpcClient;
 use solana_client::rpc_config::RpcProgramAccountsConfig;
@@ -60,7 +62,6 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use tokio::sync::mpsc;
-use prost::Message as ProstCodec;
 
 #[derive(Clone)]
 struct AppState {
@@ -260,7 +261,6 @@ struct WebRtcSignalServerMessage {
     metadata: Option<String>,
 }
 
-
 struct PostJobArgs {
     client: Pubkey,
     job_id: [u8; 32],
@@ -360,10 +360,8 @@ implement cryptographic verification for scheduler signed chain progress events 
         &data_dir,
         hex::encode(policy_signing_key.verifying_key().to_bytes()),
     );
-    let chain_event_bus_sink = init_chain_event_bus_sink(
-        &data_dir,
-        persisted.latest_chain_progress_bus_nonce,
-    )?;
+    let chain_event_bus_sink =
+        init_chain_event_bus_sink(&data_dir, persisted.latest_chain_progress_bus_nonce)?;
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -593,15 +591,10 @@ fn control_ok_response(
     }
 }
 
-async fn handle_control_client_message(
-    state: &AppState,
-    bytes: &[u8],
-) -> ControlWsServerMessage {
+async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> ControlWsServerMessage {
     let parsed = bincode::deserialize::<ControlWsClientMessage>(bytes);
     let msg = match parsed {
-        Ok(message) if !message.request_id.trim().is_empty() => {
-            message
-        }
+        Ok(message) if !message.request_id.trim().is_empty() => message,
         _ => {
             return control_error_response(
                 String::new(),
@@ -627,7 +620,10 @@ async fn handle_control_client_message(
                 )
             } else {
                 let status = get_job_status_inner(state, job_id);
-                control_ok_response(request_id, ControlWsResponsePayload::JobStatus(Box::new(status)))
+                control_ok_response(
+                    request_id,
+                    ControlWsResponsePayload::JobStatus(Box::new(status)),
+                )
             }
         }
         ControlWsRequestPayload::RouteResolve(RouteResolveRequest { device_id }) => {
@@ -693,10 +689,14 @@ async fn handle_control_client_message(
                 )
             }
         }
-        ControlWsRequestPayload::WorkerHeartbeat(payload) => match worker_heartbeat_inner(state, payload) {
-            Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerHeartbeat(ok)),
-            Err((status, err)) => control_error_response(request_id, status, err),
-        },
+        ControlWsRequestPayload::WorkerHeartbeat(payload) => {
+            match worker_heartbeat_inner(state, payload) {
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::WorkerHeartbeat(ok))
+                }
+                Err((status, err)) => control_error_response(request_id, status, err),
+            }
+        }
         ControlWsRequestPayload::WorkerAssignments(WorkerAssignmentsRequest { worker_pubkey }) => {
             let worker_pubkey = worker_pubkey.trim().to_string();
             if worker_pubkey.is_empty() {
@@ -707,29 +707,32 @@ async fn handle_control_client_message(
                 )
             } else {
                 match worker_assignments_inner(state, &worker_pubkey) {
-                    Ok(ok) => {
-                        control_ok_response(
-                            request_id,
-                            ControlWsResponsePayload::WorkerAssignments(Box::new(ok)),
-                        )
-                    }
+                    Ok(ok) => control_ok_response(
+                        request_id,
+                        ControlWsResponsePayload::WorkerAssignments(Box::new(ok)),
+                    ),
                     Err((status, err)) => control_error_response(request_id, status, err),
                 }
             }
         }
-        ControlWsRequestPayload::WorkerResult(payload) => match worker_result_inner(state, payload) {
+        ControlWsRequestPayload::WorkerResult(payload) => match worker_result_inner(state, payload)
+        {
             Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerResult(ok)),
             Err((status, err)) => control_error_response(request_id, status, err),
         },
         ControlWsRequestPayload::WorkerFailure(payload) => {
             match worker_failure_inner(state, payload) {
-                Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerFailure(ok)),
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::WorkerFailure(ok))
+                }
                 Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
         ControlWsRequestPayload::WorkerReplay(payload) => {
             match worker_replay_artifact_inner(state, payload) {
-                Ok(ok) => control_ok_response(request_id, ControlWsResponsePayload::WorkerReplay(ok)),
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::WorkerReplay(ok))
+                }
                 Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
@@ -896,7 +899,10 @@ async fn handle_signal_client_message(
         Err(_) => return Err("failed to resolve route targets for owner".to_string()),
     };
     if target_device_ids.is_empty() {
-        return Err(format!("no routed devices found for owner: {}", to_owner_pubkey));
+        return Err(format!(
+            "no routed devices found for owner: {}",
+            to_owner_pubkey
+        ));
     }
 
     let peers = state.signal_peers.lock().await;
@@ -972,7 +978,8 @@ fn encode_signal_error(from_device_id: &str, error: &str) -> String {
 
 fn decode_signal_client_message(text: &str) -> Result<WebRtcSignalClientMessage, String> {
     let mut parts = text.split('|');
-    let fields: [Cow<'_, str>; 8] = std::array::from_fn(|_| Cow::Borrowed(parts.next().unwrap_or("")));
+    let fields: [Cow<'_, str>; 8] =
+        std::array::from_fn(|_| Cow::Borrowed(parts.next().unwrap_or("")));
     if parts.next().is_some() {
         return Err("invalid signaling frame format".to_string());
     }
@@ -1007,7 +1014,11 @@ fn decode_signal_client_message(text: &str) -> Result<WebRtcSignalClientMessage,
         } else {
             Some(candidate)
         },
-        sdp_mid: if sdp_mid.is_empty() { None } else { Some(sdp_mid) },
+        sdp_mid: if sdp_mid.is_empty() {
+            None
+        } else {
+            Some(sdp_mid)
+        },
         sdp_mline_index: parsed_mline,
         metadata: if metadata.is_empty() {
             None
@@ -1689,10 +1700,7 @@ fn fixed_storage_actor_id(seed: &str) -> StorageActorId {
     StorageActorId::from_bytes(out)
 }
 
-fn query_max_nonce_for_publisher(
-    bus: &mut StorageBackedEventBus,
-    publisher: &str,
-) -> Result<u64> {
+fn query_max_nonce_for_publisher(bus: &mut StorageBackedEventBus, publisher: &str) -> Result<u64> {
     let mut cursor = 0_u64;
     let mut max_nonce = 0_u64;
     loop {
@@ -1822,7 +1830,11 @@ implement verification before enabling this mode"
         signature: signature_hex,
     };
     let payload = bincode::serialize(&event_payload).context("serialize chain progress event")?;
-    let event = StorageEvent::new(sink.stream_id.clone(), sink.actor_id.clone(), payload.clone());
+    let event = StorageEvent::new(
+        sink.stream_id.clone(),
+        sink.actor_id.clone(),
+        payload.clone(),
+    );
     sink.session
         .append_with_durability(&event, DurabilityLevel::AckDurable)
         .context("append chain progress event to storage")?;

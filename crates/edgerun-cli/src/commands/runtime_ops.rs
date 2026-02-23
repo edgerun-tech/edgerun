@@ -195,18 +195,12 @@ pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
         provider.has_key("organization"),
         "missing provider.organization",
     )?;
-    ensure(
-        provider.has_key("reviewer"),
-        "missing provider.reviewer",
-    )?;
+    ensure(provider.has_key("reviewer"), "missing provider.reviewer")?;
 
     let sign_off = &doc["sign_off"];
     ensure(sign_off.is_object(), "sign_off must be an object")?;
     for key in ["date", "approved", "notes"] {
-        ensure(
-            sign_off.has_key(key),
-            &format!("missing sign_off.{key}"),
-        )?;
+        ensure(sign_off.has_key(key), &format!("missing sign_off.{key}"))?;
     }
 
     let findings = &doc["findings"];
@@ -218,7 +212,10 @@ pub(crate) fn validate_external_security_review(path: &Path) -> Result<()> {
             &format!("finding[{i}] must be an object"),
         )?;
         for key in ["id", "title", "severity", "status", "owner", "notes"] {
-            ensure(finding.has_key(key), &format!("finding[{i}] missing key: {key}"))?;
+            ensure(
+                finding.has_key(key),
+                &format!("finding[{i}] missing key: {key}"),
+            )?;
         }
         let severity = finding["severity"].as_str().unwrap_or_default();
         let finding_status = finding["status"].as_str().unwrap_or_default();
