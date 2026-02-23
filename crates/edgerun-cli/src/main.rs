@@ -22,6 +22,7 @@ use crate::commands::integration::{
     run_integration_abi_rollover, run_integration_e2e_lifecycle, run_integration_policy_rotation,
     run_integration_scheduler_api,
 };
+use crate::integration_helpers::pick_free_port;
 use crate::commands::observer::run_observer_command;
 use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
@@ -838,6 +839,66 @@ fn run_verify_sync(root: &Path) -> Result<()> {
     run_program_anchor_verify_sync(root)
 }
 
+struct AnchorTomlRestoreGuard {
+    path: std::path::PathBuf,
+    original: String,
+}
+
+impl Drop for AnchorTomlRestoreGuard {
+    fn drop(&mut self) {
+        let _ = fs::write(&self.path, &self.original);
+    }
+}
+
+fn prepare_anchor_config_for_cli(program_root: &Path) -> Result<Option<AnchorTomlRestoreGuard>> {
+    let anchor_toml = program_root.join("Anchor.toml");
+    if !anchor_toml.is_file() {
+        return Ok(None);
+    }
+
+    let original = fs::read_to_string(&anchor_toml)
+        .with_context(|| format!("failed to read {}", anchor_toml.display()))?;
+    let mut changed = false;
+    let mut sanitized = String::new();
+    for line in original.lines() {
+        if line.trim().starts_with("package_manager")
+            && line.contains("\"bun\"")
+            && line.contains('=')
+        {
+            changed = true;
+            continue;
+        }
+        sanitized.push_str(line);
+        sanitized.push('\n');
+    }
+
+    if !sanitized.contains("[test.validator]") {
+        let rpc_port = pick_free_port()?;
+        let faucet_port = pick_free_port()?;
+        let gossip_port = pick_free_port()?;
+        if !sanitized.ends_with('\n') {
+            sanitized.push('\n');
+        }
+        sanitized.push_str("\n[test.validator]\n");
+        sanitized.push_str(&format!("rpc_port = {rpc_port}\n"));
+        sanitized.push_str(&format!("faucet_port = {faucet_port}\n"));
+        sanitized.push_str(&format!("gossip_port = {gossip_port}\n"));
+        changed = true;
+    }
+
+    if !changed {
+        return Ok(None);
+    }
+
+    fs::write(&anchor_toml, sanitized)
+        .with_context(|| format!("failed to write {}", anchor_toml.display()))?;
+
+    Ok(Some(AnchorTomlRestoreGuard {
+        path: anchor_toml,
+        original,
+    }))
+}
+
 fn run_program_anchor_verify_sync(root: &Path) -> Result<()> {
     let program_root = root.join("program");
     let env = program_tool_env(&program_root);
@@ -877,6 +938,7 @@ fn run_program_anchor_verify_sync(root: &Path) -> Result<()> {
         || any_file_newer(&source_dir, &idl_path)?;
     if needs_idl {
         fs::create_dir_all(idl_path.parent().unwrap_or(&program_root))?;
+        let _anchor_guard = prepare_anchor_config_for_cli(&program_root)?;
         run_program_sync_with_env(
             "Build Program IDL",
             "anchor",
@@ -901,6 +963,7 @@ fn run_program_anchor_verify_sync(root: &Path) -> Result<()> {
             .with_context(|| format!("failed to symlink {}", idl_alias.display()))?;
     }
 
+    let _anchor_guard = prepare_anchor_config_for_cli(&program_root)?;
     run_program_sync_with_env(
         "Anchor test --skip-build",
         "anchor",
