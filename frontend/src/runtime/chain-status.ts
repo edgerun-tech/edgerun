@@ -219,6 +219,11 @@ function hasChainWidgets(): boolean {
   return Boolean(document.querySelector('[data-chain-field], [data-deployment-badge], [data-deployment-detail]'))
 }
 
+function markChainStatusStale(): void {
+  chainDataLastUpdateMs = 0
+  deploymentStatusLastUpdateMs = 0
+}
+
 export async function initChainStatusWidgets(): Promise<void> {
   if (!hasChainWidgets()) return
 
@@ -226,6 +231,7 @@ export async function initChainStatusWidgets(): Promise<void> {
     initialized = true
     window.addEventListener(RPC_CONFIG_EVENT, () => {
       resetRpcBindings()
+      markChainStatusStale()
       void loadChainData()
       void loadDeploymentStatus()
       void bindRpcStreams()
