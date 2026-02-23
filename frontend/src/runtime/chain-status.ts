@@ -13,6 +13,8 @@ let rpcLeaseUrl = ''
 let slotUnsubscribe: null | (() => void) = null
 let treasuryUnsubscribe: null | (() => void) = null
 let periodicRefreshTimer: number | null = null
+let chainDataRequestToken = 0
+let deploymentStatusRequestToken = 0
 const CHAIN_DATA_REFRESH_DEBOUNCE_MS = 2500
 
 function setField(name: string, value: string): void {
@@ -118,6 +120,7 @@ async function loadChainData(): Promise<void> {
   const cfg = readRuntimeRpcConfig()
   if (!cfg?.rpcUrl) return
 
+  const requestToken = ++chainDataRequestToken
   chainDataLoading = true
   setField('cluster', cfg.cluster || 'unknown')
   setField('rpcUrl', cfg.rpcUrl || 'unknown')
@@ -135,12 +138,14 @@ async function loadChainData(): Promise<void> {
       rpcCall<{ value: { total: number } }>(cfg.rpcUrl, 'getSupply', [])
     ])
 
+    if (requestToken !== chainDataRequestToken) return
     setField('slot', formatInt(slot))
     setField('blockHeight', formatInt(blockHeight))
     setField('epoch', formatInt(epochInfo.epoch))
     setField('supplySol', formatSol(supply.value.total))
 
     const sample = perf[0]
+    if (requestToken !== chainDataRequestToken) return
     if (sample && sample.samplePeriodSecs > 0) {
       setField('tps', (sample.numTransactions / sample.samplePeriodSecs).toFixed(2))
     } else {
@@ -149,21 +154,29 @@ async function loadChainData(): Promise<void> {
 
     if (cfg.treasuryAccount) {
       const balance = await rpcCall<{ value: number }>(cfg.rpcUrl, 'getBalance', [cfg.treasuryAccount, { commitment: 'confirmed' }])
-      setField('treasurySol', formatSol(balance.value))
+      if (requestToken === chainDataRequestToken) {
+        setField('treasurySol', formatSol(balance.value))
+      }
     } else {
-      setField('treasurySol', 'not configured')
+      if (requestToken === chainDataRequestToken) {
+        setField('treasurySol', 'not configured')
+      }
     }
   } catch {
-    const fallback = 'rpc unavailable'
-    setField('slot', fallback)
-    setField('blockHeight', fallback)
-    setField('epoch', fallback)
-    setField('tps', fallback)
-    setField('supplySol', fallback)
-    setField('treasurySol', fallback)
+    if (requestToken === chainDataRequestToken) {
+      const fallback = 'rpc unavailable'
+      setField('slot', fallback)
+      setField('blockHeight', fallback)
+      setField('epoch', fallback)
+      setField('tps', fallback)
+      setField('supplySol', fallback)
+      setField('treasurySol', fallback)
+    }
   } finally {
-    chainDataLoading = false
-    chainDataLastUpdateMs = Date.now()
+    if (requestToken === chainDataRequestToken) {
+      chainDataLoading = false
+      chainDataLastUpdateMs = Date.now()
+    }
   }
 }
 
@@ -198,20 +211,27 @@ async function loadDeploymentStatus(): Promise<void> {
     return
   }
 
+  const requestToken = ++deploymentStatusRequestToken
   deploymentStatusLoading = true
   try {
     const ids = getConfiguredProgramIds(cluster)
     const checks = await Promise.all(ids.map((id: string) => isExecutableProgram(rpcUrl, id)))
     const liveCount = checks.filter(Boolean).length
     const isLive = liveCount > 0
-    setText('[data-deployment-badge]', isLive ? `${badgePrefix} (${liveCount}/${configuredCount} live)` : `${badgePrefix} (Not deployed)`)
-    setText('[data-deployment-detail]', `Program deployments verified on ${cluster} via RPC: ${liveCount} of ${configuredCount} configured IDs.`)
+    if (requestToken === deploymentStatusRequestToken) {
+      setText('[data-deployment-badge]', isLive ? `${badgePrefix} (${liveCount}/${configuredCount} live)` : `${badgePrefix} (Not deployed)`)
+      setText('[data-deployment-detail]', `Program deployments verified on ${cluster} via RPC: ${liveCount} of ${configuredCount} configured IDs.`)
+    }
   } catch {
-    setText('[data-deployment-badge]', `${badgePrefix} (Verification unavailable)`)
-    setText('[data-deployment-detail]', `Configured program IDs: ${configuredCount}. Could not verify deployments against current RPC endpoint.`)
+    if (requestToken === deploymentStatusRequestToken) {
+      setText('[data-deployment-badge]', `${badgePrefix} (Verification unavailable)`)
+      setText('[data-deployment-detail]', `Configured program IDs: ${configuredCount}. Could not verify deployments against current RPC endpoint.`)
+    }
   } finally {
-    deploymentStatusLoading = false
-    deploymentStatusLastUpdateMs = Date.now()
+    if (requestToken === deploymentStatusRequestToken) {
+      deploymentStatusLoading = false
+      deploymentStatusLastUpdateMs = Date.now()
+    }
   }
 }
 
@@ -222,6 +242,10 @@ function hasChainWidgets(): boolean {
 function markChainStatusStale(): void {
   chainDataLastUpdateMs = 0
   deploymentStatusLastUpdateMs = 0
+  chainDataRequestToken += 1
+  deploymentStatusRequestToken += 1
+  chainDataLoading = false
+  deploymentStatusLoading = false
 }
 
 export async function initChainStatusWidgets(): Promise<void> {
