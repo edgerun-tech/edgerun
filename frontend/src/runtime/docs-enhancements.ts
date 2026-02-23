@@ -34,6 +34,8 @@ function setCopyIcon(button: HTMLButtonElement, mode: 'copy' | 'copied'): void {
 }
 
 function renderDocsSearchMessage(container: HTMLElement, message: string): void {
+  if (!container.hasAttribute('role')) container.setAttribute('role', 'status')
+  if (!container.hasAttribute('aria-live')) container.setAttribute('aria-live', 'polite')
   container.innerHTML = `<p class="rounded border border-border bg-muted/20 px-2 py-1 text-muted-foreground">${message}</p>`
 }
 
@@ -76,6 +78,8 @@ async function initDocsSearch(): Promise<void> {
   root.setAttribute('aria-busy', 'true')
   input.disabled = true
   input.placeholder = 'Search by keyword...'
+  if (!results.hasAttribute('role')) results.setAttribute('role', 'status')
+  if (!results.hasAttribute('aria-live')) results.setAttribute('aria-live', 'polite')
   renderDocsSearchMessage(results, 'Type at least 2 characters.')
 
   let index = docsSearchIndexCache.get(version) ?? null
