@@ -115,14 +115,14 @@ describe('run job orchestration UX', () => {
 
     cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
     cy.get('[data-testid="run-step-inputs"]').should('be.visible')
-    cy.get('[aria-label="Scheduler URL"]').clear().type('http://127.0.0.1:8090')
+    cy.get('[aria-label="Scheduler URL"]').clear().type('https://api.edgerun.tech')
     cy.get('[aria-label="Allow worker seed exposure"]').check({ force: true })
 
     openReviewStep()
     cy.contains('button', 'Submit Job').click({ force: true })
 
-    cy.get('[data-testid="submit-success"]').should('be.visible')
-    cy.get('[data-testid="submit-success"]').contains('Submission Accepted').should('be.visible')
-    cy.get('[data-testid="submit-success"]').contains('Receipt:').should('be.visible')
+    cy.get('[data-testid="submit-success"]:visible').should('exist')
+    cy.get('[data-testid="submit-success"]:visible').contains('Submission Accepted').should('be.visible')
+    cy.get('[data-testid="submit-success"]:visible').contains('Receipt:').should('be.visible')
   })
 })

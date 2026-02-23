@@ -134,13 +134,17 @@ export function useTerminalDrawerController(): TerminalDrawerController {
       return
     }
 
-    const supervisor = getWebRtcPeerSupervisor()
     terminalDrawerActions.connectActiveTabToDevice(device.id)
-    await supervisor.connectToDevice(routeDeviceId).catch(() => {
-      // keep probing through existing route table
-    })
-    const routedOnline = await probeDeviceOnline(device.baseUrl, 2200).catch(() => false)
-    terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
+    try {
+      const supervisor = getWebRtcPeerSupervisor()
+      await supervisor.connectToDevice(routeDeviceId).catch(() => {
+        // keep probing through existing route table
+      })
+      const routedOnline = await probeDeviceOnline(device.baseUrl, 2200).catch(() => false)
+      terminalDrawerActions.markDeviceStatus(device.id, routedOnline ? 'online' : 'offline')
+    } catch {
+      terminalDrawerActions.markDeviceStatus(device.id, 'offline')
+    }
   }
 
   const importOwnerDevicesForOwner = async (owner: string): Promise<number> => {
