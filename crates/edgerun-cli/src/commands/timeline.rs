@@ -6,6 +6,7 @@ use anyhow::{Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use edgerun_storage::timeline::{
     InteractionPayloadV1, StorageBackedTimeline, TimelineActorTypeV1, TimelineEventTypeV1,
+    TimelineQueryFilter,
 };
 use prost::Message;
 
@@ -53,10 +54,26 @@ pub(crate) fn run_timeline_command(_root: &Path, command: TimelineCommand) -> Re
             limit,
             cursor_offset,
             kind,
+            run_id,
+            job_id,
+            session_id,
+            actor_id,
+            payload_type,
         } => {
             let data_dir = data_dir.unwrap_or_else(|| PathBuf::from("out/timeline"));
             let mut timeline = StorageBackedTimeline::open_reader(data_dir, &segment)?;
-            let result = timeline.query(limit, cursor_offset, kind.map(map_kind))?;
+            let result = timeline.query(
+                limit,
+                cursor_offset,
+                TimelineQueryFilter {
+                    event_type: kind.map(map_kind),
+                    run_id,
+                    job_id,
+                    session_id,
+                    actor_id,
+                    payload_type,
+                },
+            )?;
             println!("events_count={}", result.events.len());
             for row in result.events {
                 let mut text = String::new();
@@ -89,6 +106,21 @@ pub(crate) fn run_timeline_command(_root: &Path, command: TimelineCommand) -> Re
             } else {
                 println!("next_cursor_offset=");
             }
+            Ok(())
+        }
+        TimelineCommand::Status { data_dir, segment } => {
+            let data_dir = data_dir.unwrap_or_else(|| PathBuf::from("out/timeline"));
+            let timeline = StorageBackedTimeline::open_reader(data_dir, &segment)?;
+            let status = timeline.status()?;
+            println!("ok=true");
+            println!("schema_version={}", status.schema_version);
+            println!("events_total={}", status.events_total);
+            println!("unique_run_ids={}", status.unique_run_ids);
+            println!("unique_job_ids={}", status.unique_job_ids);
+            println!("unique_session_ids={}", status.unique_session_ids);
+            println!("last_event_id={}", status.last_event_id);
+            println!("last_seq={}", status.last_seq);
+            println!("last_ts_unix_ms={}", status.last_ts_unix_ms);
             Ok(())
         }
     }

@@ -12,10 +12,6 @@ import {
   terminalDrawerActions
 } from '../lib/terminal-drawer-store'
 import { getWebRtcPeerSupervisor, initWebRtcPeerSupervisor } from '../lib/webrtc-peer-supervisor'
-import {
-  getRouteControlBaseSelection,
-  type RouteControlSource
-} from '../lib/webrtc-route-client'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 const navLinks = [
@@ -35,8 +31,6 @@ export function Nav() {
   const [totalNodes, setTotalNodes] = createSignal(0)
   const [activeWorkers, setActiveWorkers] = createSignal(0)
   const [walletConnected, setWalletConnected] = createSignal(readWalletSession().connected)
-  const [schedulerBase, setSchedulerBase] = createSignal('')
-  const [schedulerSource, setSchedulerSource] = createSignal<RouteControlSource>('default')
   const [schedulerReachable, setSchedulerReachable] = createSignal(false)
   const [schedulerWsReachable, setSchedulerWsReachable] = createSignal(false)
   const [routeSignalConnected, setRouteSignalConnected] = createSignal(false)
@@ -55,14 +49,6 @@ export function Nav() {
         device.status === 'online' && device.baseUrl.trim().toLowerCase().startsWith('route://')
       )).length
     )
-  }
-
-  const routeSourceLabel = (source: RouteControlSource): string => {
-    if (source === 'configured') return 'cfg'
-    if (source === 'storage') return 'store'
-    if (source === 'local') return 'local'
-    if (source === 'origin') return 'orig'
-    return 'def'
   }
 
   const refreshOverlayStatus = (): boolean => {
@@ -88,9 +74,6 @@ export function Nav() {
   }
 
   const refreshRouteDebug = () => {
-    const selection = getRouteControlBaseSelection()
-    setSchedulerBase(selection.selected)
-    setSchedulerSource(selection.source)
     const signalConnected = refreshOverlayStatus()
     setSchedulerWsReachable(signalConnected)
     setSchedulerReachable(signalConnected)
@@ -167,10 +150,10 @@ export function Nav() {
               </span>
             </div>
             <div class="mt-1 hidden flex-wrap items-center gap-2 rounded-md border border-border/80 bg-muted/20 px-2 py-1 text-[10px] text-muted-foreground sm:flex">
-              <span data-testid="route-debug-scheduler" title={`${schedulerStatus()} · ${schedulerBase()}`}>
+              <span data-testid="route-debug-scheduler" title={schedulerStatus()}>
                 <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 <span class="font-mono">
-                  {schedulerReachable() ? 'scheduler online' : 'scheduler offline'}{schedulerSource() ? ` (${routeSourceLabel(schedulerSource())})` : ''}
+                  {schedulerReachable() ? 'scheduler online' : 'scheduler offline'}
                 </span>
               </span>
               <span
@@ -202,7 +185,7 @@ export function Nav() {
             </div>
             <div class="sm:hidden mt-1 rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[9px] text-muted-foreground">
               <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span class="font-mono" title={schedulerBase()}>
+              <span class="font-mono" title={schedulerStatus()}>
                 {schedulerReachable() ? 'sched ok' : 'sched off'}
               </span>
               <span class="mx-1">•</span>
