@@ -6,12 +6,10 @@ use std::path::PathBuf;
 
 use arboard::Clipboard;
 use dirs::config_dir;
-use serde::{Deserialize, Serialize};
 use term_ui::debug::DebugRenderMode;
 use term_ui::widgets::settings::SettingsPanel;
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[derive(Clone)]
 pub(crate) struct SettingsState {
     pub(crate) scrollback_enabled: bool,
     pub(crate) show_fps: bool,
@@ -58,8 +56,25 @@ fn settings_state_path() -> Option<PathBuf> {
 
 pub(crate) fn load_settings_state() -> Option<SettingsState> {
     let path = settings_state_path()?;
-    let bytes = fs::read(path).ok()?;
-    serde_json::from_slice::<SettingsState>(&bytes).ok()
+    let text = fs::read_to_string(path).ok()?;
+    let parsed = json::parse(&text).ok()?;
+    let mut state = SettingsState::default();
+    if let Some(value) = parsed["scrollback_enabled"].as_bool() {
+        state.scrollback_enabled = value;
+    }
+    if let Some(value) = parsed["show_fps"].as_bool() {
+        state.show_fps = value;
+    }
+    if let Some(value) = parsed["show_copy_notice"].as_bool() {
+        state.show_copy_notice = value;
+    }
+    if let Some(value) = parsed["render_mode"].as_str() {
+        state.render_mode = value.to_string();
+    }
+    if let Some(value) = parsed["log_level"].as_str() {
+        state.log_level = value.to_string();
+    }
+    Some(state)
 }
 
 pub(crate) fn persist_settings_state(state: SettingsState) {
@@ -67,9 +82,17 @@ pub(crate) fn persist_settings_state(state: SettingsState) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        if let Ok(bytes) = serde_json::to_vec_pretty(&state) {
-            let _ = fs::write(&path, bytes);
-        }
+        let payload = json::stringify_pretty(
+            json::object! {
+                scrollback_enabled: state.scrollback_enabled,
+                show_fps: state.show_fps,
+                show_copy_notice: state.show_copy_notice,
+                render_mode: state.render_mode.as_str(),
+                log_level: state.log_level.as_str(),
+            },
+            2,
+        );
+        let _ = fs::write(&path, payload);
     }
 }
 
@@ -112,7 +135,7 @@ pub(crate) fn next_log_level(current: &str) -> &'static str {
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Default)]
 struct LearnedStore {
     counts: HashMap<String, u32>,
     path: Option<PathBuf>,
@@ -122,9 +145,15 @@ impl LearnedStore {
     fn load() -> Self {
         let path = autocomplete_store_path();
         if let Some(p) = path.clone()
-            && let Ok(bytes) = fs::read(&p)
-            && let Ok(counts) = serde_json::from_slice::<HashMap<String, u32>>(&bytes)
+            && let Ok(text) = fs::read_to_string(&p)
+            && let Ok(parsed) = json::parse(&text)
         {
+            let mut counts = HashMap::new();
+            for (key, value) in parsed.entries() {
+                if let Some(v) = value.as_u32() {
+                    counts.insert(key.to_string(), v);
+                }
+            }
             return Self { counts, path };
         }
         Self {
@@ -148,9 +177,11 @@ impl LearnedStore {
             if let Some(parent) = path.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            if let Ok(json) = serde_json::to_string_pretty(&self.counts) {
-                let _ = fs::write(path, json);
+            let mut payload = json::JsonValue::new_object();
+            for (k, v) in &self.counts {
+                let _ = payload.insert(k.as_str(), *v);
             }
+            let _ = fs::write(path, json::stringify_pretty(payload, 2));
         }
     }
 }

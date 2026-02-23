@@ -2500,8 +2500,8 @@ static HELP_STATE_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
 
 fn load_help_visible_flag() -> Option<bool> {
     let path = help_state_path()?;
-    let bytes = fs::read(path).ok()?;
-    serde_json::from_slice::<bool>(&bytes).ok()
+    let text = fs::read_to_string(path).ok()?;
+    json::parse(&text).ok()?.as_bool()
 }
 
 fn persist_help_visible_flag(flag: bool) {
@@ -2509,9 +2509,7 @@ fn persist_help_visible_flag(flag: bool) {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        if let Ok(bytes) = serde_json::to_vec(&flag) {
-            let _ = fs::write(&path, bytes);
-        }
+        let _ = fs::write(&path, if flag { "true" } else { "false" });
     }
 }
 
