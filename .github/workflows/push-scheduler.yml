@@ -1,4 +1,5 @@
 name: Push Scheduler
+run-name: "Push Scheduler • ${{ inputs.ref || github.ref_name }} • #${{ github.run_number }}"
 
 on:
   workflow_dispatch:
@@ -63,3 +64,17 @@ jobs:
           SCHEDULER_SERVICES: ${{ inputs.services }}
           SCHEDULER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: cargo run -p edgerun-cli -- --root . ci --job push-scheduler
+
+      - name: Publish scheduler push summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Push Scheduler Summary"
+            echo ""
+            echo "- ref: \`${{ inputs.ref }}\`"
+            echo "- remote root: \`${{ inputs.remote_root }}\`"
+            echo "- build on remote: \`${{ inputs.build_on_remote }}\`"
+            echo "- restart services: \`${{ inputs.restart_services }}\`"
+            echo "- systemd scope: \`${{ inputs.systemd_scope }}\`"
+            echo "- dry run: \`${{ inputs.dry_run }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

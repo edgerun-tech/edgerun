@@ -1,4 +1,5 @@
 name: CI
+run-name: "CI • ${{ github.ref_name }} • #${{ github.run_number }}"
 
 on:
   pull_request:
@@ -58,6 +59,17 @@ jobs:
             ci:
               - '.github/workflows/ci.yml'
               - 'scripts/check-workflow-drift.sh'
+
+      - name: Publish detected scope summary
+        run: |
+          {
+            echo "## CI Scope Detection"
+            echo ""
+            echo "- frontend: \`${{ steps.filter.outputs.frontend }}\`"
+            echo "- rust: \`${{ steps.filter.outputs.rust }}\`"
+            echo "- runtime: \`${{ steps.filter.outputs.runtime }}\`"
+            echo "- ci: \`${{ steps.filter.outputs.ci }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   frontend-gates:
     name: Frontend Production Gates
@@ -533,3 +545,44 @@ jobs:
 
       - name: Program localnet tests
         run: cargo run -p edgerun-cli -- test program
+
+  ci-summary:
+    name: CI Summary
+    if: ${{ always() }}
+    needs:
+      - changes
+      - frontend-gates
+      - build-timing-main
+      - rust-checks
+      - coverage
+      - integration
+      - runtime-determinism
+      - runtime-calibration
+      - runtime-slo
+      - runtime-fuzz-sanity
+      - runtime-ub-safety
+      - runtime-security
+      - program-localnet
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish CI run summary
+        run: |
+          {
+            echo "## CI Run Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Detect Changed Scopes | ${{ needs.changes.result }} |"
+            echo "| Frontend Production Gates | ${{ needs.frontend-gates.result }} |"
+            echo "| Build Timing (Main) | ${{ needs.build-timing-main.result }} |"
+            echo "| Rust Checks | ${{ needs.rust-checks.result }} |"
+            echo "| Coverage (llvm-cov) | ${{ needs.coverage.result }} |"
+            echo "| Integration | ${{ needs.integration.result }} |"
+            echo "| Runtime Determinism | ${{ needs.runtime-determinism.result }} |"
+            echo "| Runtime Fuel Calibration | ${{ needs.runtime-calibration.result }} |"
+            echo "| Runtime SLO Smoke | ${{ needs.runtime-slo.result }} |"
+            echo "| Runtime Fuzz Sanity | ${{ needs.runtime-fuzz-sanity.result }} |"
+            echo "| Runtime UB Safety | ${{ needs.runtime-ub-safety.result }} |"
+            echo "| Runtime Security Gates | ${{ needs.runtime-security.result }} |"
+            echo "| Program Localnet | ${{ needs.program-localnet.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

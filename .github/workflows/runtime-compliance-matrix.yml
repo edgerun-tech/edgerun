@@ -1,4 +1,5 @@
 name: Runtime Compliance Matrix
+run-name: "Runtime Compliance • ${{ github.ref_name }} • #${{ github.run_number }}"
 
 on:
   schedule:
@@ -68,6 +69,16 @@ jobs:
           name: runtime-compliance-${{ runner.os }}-${{ runner.arch }}
           path: /tmp/edgerun-runtime-compliance
 
+      - name: Publish determinism matrix summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Determinism Matrix Summary (${{ matrix.os }})"
+            echo ""
+            echo "- replay artifact dir: \`/tmp/edgerun-runtime-compliance\`"
+            echo "- uploaded artifact: \`runtime-compliance-${{ runner.os }}-${{ runner.arch }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   extended-fuzz-campaign:
     name: Extended Fuzz Campaign
     runs-on: ubuntu-24.04
@@ -111,3 +122,32 @@ jobs:
           path: |
             crates/edgerun-runtime/fuzz/corpus
             crates/edgerun-runtime/fuzz/artifacts
+
+      - name: Publish fuzz campaign summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Extended Fuzz Campaign Summary"
+            echo ""
+            echo "- uploaded artifact: \`runtime-fuzz-corpus-${{ runner.os }}-${{ runner.arch }}\`"
+            echo "- working directory: \`crates/edgerun-runtime/fuzz\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  runtime-compliance-summary:
+    name: Runtime Compliance Summary
+    if: ${{ always() }}
+    needs:
+      - determinism-matrix
+      - extended-fuzz-campaign
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish workflow outcome summary
+        run: |
+          {
+            echo "## Runtime Compliance Workflow Summary"
+            echo ""
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "| Determinism Matrix | ${{ needs.determinism-matrix.result }} |"
+            echo "| Extended Fuzz Campaign | ${{ needs.extended-fuzz-campaign.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,5 @@
 name: Wiki Sync
+run-name: "Wiki Sync • #${{ github.run_number }}"
 
 on:
   workflow_run:
@@ -75,3 +76,14 @@ jobs:
             git commit -m "Update wiki docs from build ${GITHUB_RUN_NUMBER}"
             git push
           fi
+
+      - name: Publish wiki sync summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Wiki Sync Summary"
+            echo ""
+            echo "- trigger: \`${{ github.event_name }}\`"
+            echo "- workflow run conclusion gate: \`${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.workflow_run.conclusion }}\`"
+            echo "- wiki output source: \`out/frontend/wiki/main/\`"
+          } >> "$GITHUB_STEP_SUMMARY"

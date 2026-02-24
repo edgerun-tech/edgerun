@@ -1,4 +1,5 @@
 name: Frontend Release
+run-name: "Frontend Release • ${{ github.ref_name }} • #${{ github.run_number }}"
 
 on:
   push:
@@ -78,3 +79,15 @@ jobs:
         with:
           files: release-assets/*
           generate_release_notes: true
+
+      - name: Publish frontend release summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Frontend Release Summary"
+            echo ""
+            echo "- version: \`${{ steps.meta.outputs.version }}\`"
+            echo "- build number: \`${{ steps.meta.outputs.build_number }}\`"
+            echo "- tags sample: \`${{ steps.meta.outputs.versions }}\`"
+            echo "- release assets dir: \`release-assets/\`"
+          } >> "$GITHUB_STEP_SUMMARY"
