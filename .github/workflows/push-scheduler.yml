@@ -1,0 +1,65 @@
+name: Push Scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy
+        required: false
+        default: main
+      remote_root:
+        description: Remote repository path
+        required: false
+        default: /root/src/edgerun
+      build_on_remote:
+        description: Build binaries on remote host (1 or 0)
+        required: false
+        default: '1'
+      restart_services:
+        description: Restart scheduler stack services after sync (1 or 0)
+        required: false
+        default: '1'
+      systemd_scope:
+        description: systemd scope for service restarts
+        required: false
+        default: user
+      services:
+        description: Space-separated services to restart
+        required: false
+        default: edgerun-scheduler.service edgerun-worker@1.service edgerun-term-server.service
+      dry_run:
+        description: Validate inputs only
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  push:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install deploy runtime deps
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends openssh-client sshpass curl ca-certificates
+
+      - name: Push to scheduler host
+        env:
+          SCHEDULER_HOST: ${{ secrets.EDGERUN_SCHEDULER_HOST }}
+          SCHEDULER_USER: ${{ secrets.EDGERUN_SCHEDULER_USER }}
+          SCHEDULER_PASSWORD: ${{ secrets.EDGERUN_SCHEDULER_PASSWORD }}
+          SCHEDULER_PORT: ${{ secrets.EDGERUN_SCHEDULER_PORT }}
+          SCHEDULER_SSH_KEY_FILE: ${{ secrets.EDGERUN_SCHEDULER_SSH_KEY_FILE }}
+          SCHEDULER_REMOTE_ROOT: ${{ inputs.remote_root }}
+          SCHEDULER_BUILD_ON_REMOTE: ${{ inputs.build_on_remote }}
+          SCHEDULER_RESTART_SERVICES: ${{ inputs.restart_services }}
+          SCHEDULER_SYSTEMD_SCOPE: ${{ inputs.systemd_scope }}
+          SCHEDULER_SERVICES: ${{ inputs.services }}
+          SCHEDULER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: cargo run -p edgerun-cli -- --root . ci --job push-scheduler

@@ -36,6 +36,7 @@ workflow_files=(
   "program/Anchor.toml"
   ".github/workflows/ci.yml"
   ".github/workflows/frontend-release.yml"
+  ".github/workflows/push-scheduler.yml"
   ".github/workflows/wiki-sync.yml"
 )
 

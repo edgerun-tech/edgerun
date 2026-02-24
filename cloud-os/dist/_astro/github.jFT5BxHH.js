@@ -1,1 +1,0 @@
-import{c as r}from"./web.CTOVB8SF.js";const[e,i]=r(null);function u(){return e}function c(t,n){i({path:t,content:n})}function l(t){const n=e();n&&i({...n,content:t})}export{u as currentFile,c as openGitHubFile,l as updateFileContent};

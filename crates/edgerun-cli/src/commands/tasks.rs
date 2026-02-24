@@ -37,6 +37,7 @@ pub(crate) async fn run_interactive(root: &Path) -> Result<()> {
         ("storage-perf-gate", "Storage perf gate"),
         ("storage-sweep", "Storage mixed RW sweep"),
         ("storage-ci-smoke", "Storage CI smoke"),
+        ("push-scheduler", "Push code + restart scheduler stack"),
         ("dev", "Run local dev check (make check)"),
         ("all", "Run broad default workflow"),
     ];
@@ -216,6 +217,16 @@ fn run_native_task_sync(root: &Path, task: &str) -> Result<bool> {
         }
         "dev" => {
             run_rust_checks_sync(root)?;
+            Ok(true)
+        }
+        "push-scheduler" => {
+            run_program_sync(
+                "Push scheduler",
+                "bash",
+                &["scripts/push-scheduler.sh"],
+                root,
+                false,
+            )?;
             Ok(true)
         }
         "install" => {

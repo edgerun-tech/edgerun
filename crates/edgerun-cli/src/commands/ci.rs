@@ -147,6 +147,13 @@ pub async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bo
         "runtime-security" => validate_external_security_review(
             &root.join("crates/edgerun-runtime/SECURITY_FINDINGS.json"),
         ),
+        "push-scheduler" => run_program_sync_owned(
+            "Push scheduler",
+            "bash",
+            &["scripts/push-scheduler.sh".to_string()],
+            root,
+            false,
+        ),
         other => Err(anyhow!("unsupported ci job in native mode: {other}")),
     }
 }

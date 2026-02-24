@@ -1,4 +1,0 @@
-import{g as n,i as r,r as p,t as o,d as m}from"./web.CTOVB8SF.js";import{openGitHubFile as u}from"./github.jFT5BxHH.js";import{o as c}from"./windows.DqodbEGz.js";import"./preload-helper.BlTxHScW.js";var d=o('<div class="h-full w-full bg-[#151515] text-neutral-100 p-3"><h2 class="text-sm font-semibold mb-3">GitHub Browser</h2><p class="text-xs text-neutral-400 mb-3">Select a file to open it in Editor.</p><div class=space-y-2>'),b=o('<button type=button class="w-full text-left rounded border border-neutral-800 px-2 py-1 hover:bg-neutral-800">');const h=[{path:"README.md",content:`# Sample Repo
-
-This is a sample file.`},{path:"src/main.ts",content:`export const hello = () => "hello";
-`}];function g(){return(()=>{var l=n(d),s=l.firstChild,a=s.nextSibling,i=a.nextSibling;return r(i,()=>h.map(t=>(()=>{var e=n(b);return e.$$click=()=>{u(t.path,t.content),c("editor")},r(e,()=>t.path),p(),e})())),l})()}m(["click"]);export{g as default};
