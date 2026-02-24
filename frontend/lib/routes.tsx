@@ -8,6 +8,7 @@ import TokenPage from '../app/token/page'
 import RunPage from '../app/run/page'
 import WorkersPage from '../app/workers/page'
 import DashboardPage from '../app/dashboard/page'
+import DevicesPage from '../app/devices/page'
 import BlogPage from '../app/blog/page'
 import BlogPostPage from '../app/blog/[slug]/page'
 import JobDetailsPage from '../app/job/[id]/page'
@@ -67,6 +68,14 @@ const staticRoutes: SiteRoute[] = [
     chromeTitle: 'Dashboard',
     description: 'Operational views and on-chain truth.',
     component: DashboardPage
+  },
+  {
+    path: '/devices/',
+    outputPath: 'devices/index.html',
+    pageTitle: 'Devices',
+    chromeTitle: 'Devices',
+    description: 'High-density fleet device operations dashboard.',
+    component: DevicesPage
   },
   {
     path: '/docs/',

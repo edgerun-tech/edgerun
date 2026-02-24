@@ -18,6 +18,7 @@ const navLinks = [
   { href: '/', label: 'Home' },
   { href: '/run/', label: 'Run Job' },
   { href: '/workers/', label: 'Workers' },
+  { href: '/devices/', label: 'Devices' },
   { href: '/token/', label: 'Economics' },
   { href: '/docs/', label: 'Docs' },
   { href: '/blog/', label: 'Blog' }

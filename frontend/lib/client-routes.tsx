@@ -35,6 +35,10 @@ const staticRoutes: ClientRouteMap = {
     chromeTitle: 'Dashboard',
     load: () => import('../app/dashboard/page')
   },
+  '/devices/': {
+    chromeTitle: 'Devices',
+    load: () => import('../app/devices/page')
+  },
   '/docs/': {
     chromeTitle: 'Docs',
     load: () => import('../app/docs/page')
