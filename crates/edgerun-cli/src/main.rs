@@ -225,7 +225,7 @@ enum TailscaleCommand {
     Bridge {
         #[arg(long, default_value = "127.0.0.1:49201")]
         listen: SocketAddr,
-        #[arg(long, default_value_t = 8080)]
+        #[arg(long, default_value_t = 5577)]
         term_port: u16,
         #[arg(long, default_value_t = false)]
         include_offline: bool,

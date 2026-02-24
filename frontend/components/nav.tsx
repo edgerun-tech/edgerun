@@ -8,10 +8,8 @@ import {
   ensureTerminalDrawerStore,
   getTerminalDrawerState,
   subscribeTerminalDrawer,
-  type TerminalDrawerState,
   terminalDrawerActions
 } from '../lib/terminal-drawer-store'
-import { getWebRtcPeerSupervisor, initWebRtcPeerSupervisor } from '../lib/webrtc-peer-supervisor'
 import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 const navLinks = [
@@ -25,136 +23,24 @@ const navLinks = [
 ]
 
 export function Nav() {
-  const ROUTE_ADVERT_STALE_MS = 15000
   const [mobileOpen, setMobileOpen] = createSignal(false)
   const [terminalOpen, setTerminalOpen] = createSignal(getTerminalDrawerState().open)
-  const [onlineNodes, setOnlineNodes] = createSignal(0)
-  const [totalNodes, setTotalNodes] = createSignal(0)
-  const [activeWorkers, setActiveWorkers] = createSignal(0)
   const [walletConnected, setWalletConnected] = createSignal(readWalletSession().connected)
-  const [schedulerReachable, setSchedulerReachable] = createSignal(false)
-  const [schedulerWsReachable, setSchedulerWsReachable] = createSignal(false)
-  const [routeSignalConnected, setRouteSignalConnected] = createSignal(false)
-  const [schedulerStatus, setSchedulerStatus] = createSignal<string>('')
-  const [routePeers, setRoutePeers] = createSignal(0)
-  const [routeEntries, setRouteEntries] = createSignal(0)
-  const [routeAdvertised, setRouteAdvertised] = createSignal(false)
-  const [routeAdvertAgeMs, setRouteAdvertAgeMs] = createSignal(0)
   ensureTerminalDrawerStore()
 
-  type OverlayCounts = {
-    controlSignalConnected: boolean
-    directPeers: number
-    routeEntries: number
-  }
-
-  const snapshotOverlayCounts = (): OverlayCounts => {
-    try {
-      const status = getWebRtcPeerSupervisor().getStatus()
-      return {
-        controlSignalConnected: status.controlSignalConnected,
-        directPeers: status.directPeers,
-        routeEntries: status.routeEntries
-      }
-    } catch {
-      return {
-        controlSignalConnected: false,
-        directPeers: 0,
-        routeEntries: 0
-      }
-    }
-  }
-
-  const refreshNodeCounts = (state: TerminalDrawerState, overlay: OverlayCounts) => {
-    const drawerOnline = state.devices.filter((device) => device.status === 'online').length
-    const drawerTotal = state.devices.length
-    const drawerWorkers = state.devices.filter((device) => (
-      device.status === 'online' && device.baseUrl.trim().toLowerCase().startsWith('route://')
-    )).length
-
-    const overlayPeers = overlay.directPeers
-    const overlayRoutes = overlay.routeEntries
-    const overlayOnline = Math.max(overlayPeers, overlayRoutes > 0 ? 1 : 0)
-    const overlayTotal = Math.max(overlayPeers, overlayRoutes)
-
-    setOnlineNodes(Math.max(drawerOnline, overlayOnline))
-    setTotalNodes(Math.max(drawerTotal, overlayTotal))
-    setActiveWorkers(Math.max(drawerWorkers, overlayPeers))
-  }
-
-  const refreshOverlayStatus = (): OverlayCounts => {
-    try {
-      const status = getWebRtcPeerSupervisor().getStatus()
-      setRoutePeers(status.directPeers)
-      setRouteEntries(status.routeEntries)
-      setRouteSignalConnected(status.controlSignalConnected)
-      const latestAdvert = Math.max(status.lastAdvertBroadcastAt, status.lastRouteAdvertReceivedAt, 0)
-      const advertAge = latestAdvert > 0 ? Date.now() - latestAdvert : null
-      const advertFresh = advertAge !== null ? advertAge < ROUTE_ADVERT_STALE_MS : false
-      setRouteAdvertAgeMs(advertAge ?? 0)
-      setRouteAdvertised(advertFresh && (status.directPeers > 0 || status.controlSignalConnected))
-      return {
-        controlSignalConnected: status.controlSignalConnected,
-        directPeers: status.directPeers,
-        routeEntries: status.routeEntries
-      }
-    } catch {
-      setRoutePeers(0)
-      setRouteEntries(0)
-      setRouteSignalConnected(false)
-      setRouteAdvertised(false)
-      setRouteAdvertAgeMs(0)
-      return {
-        controlSignalConnected: false,
-        directPeers: 0,
-        routeEntries: 0
-      }
-    }
-  }
-
-  const refreshRouteDebug = () => {
-    const overlay = refreshOverlayStatus()
-    refreshNodeCounts(getTerminalDrawerState(), overlay)
-    setSchedulerWsReachable(overlay.controlSignalConnected)
-    setSchedulerReachable(overlay.controlSignalConnected)
-    if (overlay.controlSignalConnected) {
-      setSchedulerReachable(true)
-      setSchedulerWsReachable(true)
-      setSchedulerStatus('scheduler online · overlay signal active')
-      return
-    }
-    setSchedulerStatus('scheduler offline · waiting for overlay signal')
-  }
-
   onMount(() => {
-    try {
-      initWebRtcPeerSupervisor()
-    } catch {
-      setRouteSignalConnected(false)
-      setRoutePeers(0)
-      setRouteEntries(0)
-      setRouteAdvertised(false)
-    }
-    refreshRouteDebug()
-    const currentState = getTerminalDrawerState()
-    setTerminalOpen(currentState.open)
-    refreshNodeCounts(currentState, snapshotOverlayCounts())
+    setTerminalOpen(getTerminalDrawerState().open)
     const unsubscribe = subscribeTerminalDrawer((next) => {
-      refreshNodeCounts(next, snapshotOverlayCounts())
       setTerminalOpen(next.open)
     })
     const onWalletSession = (event: Event) => {
       const custom = event as CustomEvent<WalletSessionState>
       setWalletConnected(Boolean(custom.detail?.connected))
     }
-    const routeDebugInterval = window.setInterval(() => {
-      refreshRouteDebug()
-    }, 5000)
     window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
     onCleanup(() => {
       unsubscribe()
       window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
-      window.clearInterval(routeDebugInterval)
     })
   })
 
@@ -176,24 +62,6 @@ export function Nav() {
           </div>
 
           <div class="flex items-center justify-end gap-2">
-            <div class="flex items-center gap-1.5 rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[10px] text-muted-foreground sm:hidden">
-              <span class="font-mono">{onlineNodes()}/{totalNodes()}</span>
-              <span class="text-muted-foreground">•</span>
-              <span class="font-mono">{activeWorkers()}</span>
-            </div>
-            <div class="rounded-md border border-border/80 bg-muted/20 px-1.5 py-0.5 text-[9px] text-muted-foreground sm:hidden">
-              <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-              <span class="font-mono" title={schedulerStatus()}>
-                {schedulerReachable() ? 'sched ok' : 'sched off'}
-              </span>
-              <span class="mx-1">•</span>
-              <span>{routePeers()}p/{routeEntries()}r</span>
-              <span class="mx-1">•</span>
-              <span class={`font-mono ${routeSignalConnected() ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                {routeSignalConnected() ? 'sig on' : 'sig off'}
-              </span>
-              <span>{routeAdvertised() ? `advert ok (${routeAdvertAgeMs()}ms)` : 'advert idle'}</span>
-            </div>
             <Button
               variant="outline"
               size="sm"
@@ -226,55 +94,6 @@ export function Nav() {
             <PersonalizationMenu />
             <a href="/dashboard/" class="hidden sm:inline-flex"><Button variant="outline" size="sm">Dashboard</Button></a>
             <div class="hidden sm:block"><WalletButton /></div>
-          </div>
-        </div>
-      </div>
-      <div data-testid="route-debug-rail" class="hidden border-t border-border/70 sm:block">
-        <div class="w-full px-4 py-2 sm:px-6 lg:px-8">
-          <div class="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <div class="flex items-center gap-3 rounded-md border border-border/80 bg-muted/20 px-2 py-1">
-              <span data-testid="route-debug-nodes">
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${totalNodes() > 0 && onlineNodes() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
-                <span class="font-mono">
-                  {totalNodes() === 0 ? 'nodes: none' : `nodes ${onlineNodes()}/${totalNodes()}`}
-                </span>
-              </span>
-              <span data-testid="route-debug-workers">
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${activeWorkers() > 0 ? 'bg-emerald-500' : 'bg-border'}`} />
-                <span class="font-mono">
-                  workers {activeWorkers()}
-                </span>
-              </span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2 rounded-md border border-border/80 bg-muted/20 px-2 py-1 text-[10px]">
-              <span data-testid="route-debug-scheduler" title={schedulerStatus()}>
-                <span class={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${schedulerReachable() ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                <span class="font-mono">
-                  {schedulerReachable() ? 'scheduler online' : 'scheduler offline'}
-                </span>
-              </span>
-              <span
-                data-testid="route-debug-control-ws"
-                class={`font-mono ${schedulerWsReachable() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                ws {schedulerWsReachable() ? 'ok' : 'down'}
-              </span>
-              <span
-                data-testid="route-debug-overlay-ws"
-                class={`font-mono ${routeSignalConnected() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                overlay-ws {routeSignalConnected() ? 'on' : 'off'}
-              </span>
-              <span data-testid="route-debug-overlay-summary" class="font-mono">
-                overlay {routePeers()} peers / {routeEntries()} routes
-              </span>
-              <span
-                data-testid="route-debug-route-advert"
-                class={`font-mono ${routeAdvertised() ? 'text-emerald-400' : 'text-muted-foreground'}`}
-              >
-                route-advert {routeAdvertised() ? `active (${routeAdvertAgeMs()}ms)` : 'idle'}
-              </span>
-            </div>
           </div>
         </div>
       </div>

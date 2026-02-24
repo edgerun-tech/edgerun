@@ -106,11 +106,19 @@ describe('run job orchestration UX', () => {
     cy.contains('button', 'Submit Job').click({ force: true })
 
     cy.get('[data-testid="submit-error"]').should('be.visible')
-    cy.get('[data-testid="submit-error"]').contains('Scheduler unreachable at http://127.0.0.1:9999').should('be.visible')
+    cy.get('[data-testid="submit-error"]').contains('Submission failed: control ws connection failed').should('be.visible')
   })
 
   it('shows happy path success receipt when submission contract is valid', () => {
-    cy.visit('/run/')
+    cy.visit('/run/', {
+      onBeforeLoad(win) {
+        win.__EDGERUN_CONTROL_WS_MOCK__ = ({ op, payload }) => {
+          expect(op).to.eq('job.create')
+          expect(payload).to.have.property('runtime_id')
+          return { job_id: 'job-cypress-live-001' }
+        }
+      }
+    })
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
 
     cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
@@ -123,6 +131,7 @@ describe('run job orchestration UX', () => {
 
     cy.get('[data-testid="submit-success"]:visible').should('exist')
     cy.get('[data-testid="submit-success"]:visible').contains('Submission Accepted').should('be.visible')
+    cy.get('[data-testid="submit-success"]:visible').contains('job-cypress-live-001').should('be.visible')
     cy.get('[data-testid="submit-success"]:visible').contains('Receipt:').should('be.visible')
   })
 })

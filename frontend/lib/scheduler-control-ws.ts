@@ -13,6 +13,20 @@ type PendingRequest = {
   timeoutId: number
 }
 
+type ControlWsMockRequest = {
+  controlBase: string
+  clientId: string
+  requestId: string
+  op: string
+  payload: unknown
+}
+
+type ControlWsMockResponder = (request: ControlWsMockRequest) => Promise<unknown> | unknown
+
+declare global {
+  var __EDGERUN_CONTROL_WS_MOCK__: ControlWsMockResponder | undefined
+}
+
 function toControlWsUrl(controlBase: string, clientId: string): string {
   const base = controlBase.trim().replace(/\/+$/, '')
   const url = new URL('/v1/control/ws', `${base}/`)
@@ -41,6 +55,20 @@ export class SchedulerControlWsClient {
 
   async request<T>(op: string, payload: unknown, timeoutMs = 6000): Promise<T> {
     if (!this.controlBase) throw new Error('control base is required')
+    const mock = this.resolveMock()
+    if (mock) {
+      const requestId = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`
+      const mocked = await Promise.resolve(
+        mock({
+          controlBase: this.controlBase,
+          clientId: this.clientId,
+          requestId,
+          op,
+          payload
+        })
+      )
+      return mocked as T
+    }
     const socket = await this.ensureSocket()
     const requestId = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`
     const body = JSON.stringify({
@@ -143,5 +171,11 @@ export class SchedulerControlWsClient {
     } finally {
       this.connectPromise = null
     }
+  }
+
+  private resolveMock(): ControlWsMockResponder | null {
+    const candidate = (globalThis as { __EDGERUN_CONTROL_WS_MOCK__?: unknown }).__EDGERUN_CONTROL_WS_MOCK__
+    if (typeof candidate !== 'function') return null
+    return candidate as ControlWsMockResponder
   }
 }

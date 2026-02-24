@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableRow } from '../../components/ui/table
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
 import { clearJobTabStatus, publishJobTabStatus } from '../../lib/tab-job-status'
+import { SchedulerControlWsClient } from '../../lib/scheduler-control-ws'
 import { DEFAULT_ROUTE_CONTROL_BASE, getRouteControlBase } from '../../lib/webrtc-route-client'
 
 type PresetApp = {
@@ -40,6 +41,25 @@ type VanitySearchSpace = {
   endCounter: string
   chunkAttempts: string
   workerCount: string
+}
+
+type JobCreateLimits = {
+  max_memory_bytes: number
+  max_instructions: number
+}
+
+type JobCreatePayload = {
+  runtime_id: string
+  wasm_base64: string
+  input_base64: string
+  abi_version: number
+  limits: JobCreateLimits
+  escrow_lamports: number
+}
+
+type JobCreateResponse = {
+  job_id?: string
+  bundle_hash?: string
 }
 
 const PRESET_APPS: PresetApp[] = [
@@ -82,6 +102,13 @@ const PRESET_APPS: PresetApp[] = [
 ]
 
 const DEFAULT_PRESET = PRESET_APPS[0]!
+const DEFAULT_WASM_BASE64 = 'AA=='
+const DEFAULT_JOB_ABI_VERSION = 2
+const DEFAULT_JOB_ESCROW_LAMPORTS = 100
+const DEFAULT_JOB_LIMITS: JobCreateLimits = {
+  max_memory_bytes: 1_048_576,
+  max_instructions: 10_000
+}
 const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   prefix: 'So1',
   startCounter: '0',
@@ -103,7 +130,9 @@ export default function RunPage() {
   const [schedulerUrl, setSchedulerUrl] = createSignal(getRouteControlBase())
   const [customModuleName, setCustomModuleName] = createSignal('')
   const [customWasmFileName, setCustomWasmFileName] = createSignal('')
+  const [customWasmBase64, setCustomWasmBase64] = createSignal('')
   const [inputFileName, setInputFileName] = createSignal('')
+  const [inputFileBase64, setInputFileBase64] = createSignal('')
   const [vanitySearchSpace, setVanitySearchSpace] = createSignal<VanitySearchSpace>(DEFAULT_VANITY_SEARCH_SPACE)
   const [allowSeedExposure, setAllowSeedExposure] = createSignal(true)
   const [submitStatus, setSubmitStatus] = createSignal<SubmissionStatus>('idle')
@@ -189,13 +218,49 @@ export default function RunPage() {
     setActiveStep('step-2')
   }
 
-  const isKnownLocalScheduler = (urlText: string) => {
-    try {
-      const parsed = new URL(urlText)
-      const host = parsed.host
-      return host === 'api.edgerun.tech'
-    } catch {
-      return false
+  const encodeUtf8Base64 = (value: string) => {
+    const bytes = new TextEncoder().encode(value)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!)
+    return btoa(binary)
+  }
+
+  const encodeArrayBufferBase64 = (buffer: ArrayBuffer) => {
+    const bytes = new Uint8Array(buffer)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!)
+    return btoa(binary)
+  }
+
+  const inputPayloadText = () => {
+    if (inputMode() === 'json') return inputJson()
+    if (inputMode() === 'file') return ''
+    if (!isVanityApp()) return inputJson()
+    const spec = vanitySearchSpace()
+    return JSON.stringify({
+      prefix: spec.prefix,
+      startCounter: Number(spec.startCounter),
+      endCounter: Number(spec.endCounter),
+      chunkAttempts: Number(spec.chunkAttempts),
+      workerCount: Number(spec.workerCount),
+      allowSeedExposure: allowSeedExposure()
+    })
+  }
+
+  const buildJobCreatePayload = (): JobCreatePayload => {
+    const wasmPayload = submissionMode() === 'custom' ? customWasmBase64().trim() : DEFAULT_WASM_BASE64
+    if (!wasmPayload) throw new Error('WASM payload is required before submission.')
+    const inputBase64 = inputMode() === 'file' ? inputFileBase64().trim() : encodeUtf8Base64(inputPayloadText())
+    if (inputMode() === 'file' && !inputBase64) {
+      throw new Error('Input file payload could not be read; re-select the input file and retry.')
+    }
+    return {
+      runtime_id: runtimeId().trim(),
+      wasm_base64: wasmPayload,
+      input_base64: inputBase64,
+      abi_version: DEFAULT_JOB_ABI_VERSION,
+      limits: DEFAULT_JOB_LIMITS,
+      escrow_lamports: DEFAULT_JOB_ESCROW_LAMPORTS
     }
   }
 
@@ -277,20 +342,25 @@ export default function RunPage() {
     }
 
     setSubmitStatus('pending')
-    setSubmitMessage('Submitting job envelope to scheduler...')
+    const schedulerBase = schedulerUrl().trim()
+    const control = new SchedulerControlWsClient(schedulerBase, 'run-job')
+    setSubmitMessage(`Submitting job.create to ${schedulerBase} ...`)
 
-    await new Promise((resolve) => setTimeout(resolve, 650))
-
-    if (!isKnownLocalScheduler(schedulerUrl().trim())) {
+    try {
+      const payload = buildJobCreatePayload()
+      const response = await control.request<JobCreateResponse>('job.create', payload, 12000)
+      const receiptId = String(response.job_id || response.bundle_hash || '').trim()
+      if (!receiptId) throw new Error('scheduler returned no job_id')
+      setLastReceiptId(receiptId)
+      setSubmitStatus('success')
+      setSubmitMessage('Job submitted to scheduler control plane.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
       setSubmitStatus('error')
-      setSubmitMessage(`Scheduler unreachable at ${schedulerUrl().trim()}. Use https://api.edgerun.tech.`)
-      return
+      setSubmitMessage(`Submission failed: ${message}`)
+    } finally {
+      control.close()
     }
-
-    const receiptId = `demo-${Date.now().toString(36)}`
-    setLastReceiptId(receiptId)
-    setSubmitStatus('success')
-    setSubmitMessage('Job accepted. Track receipt and move to /job/:id for execution status.')
   }
 
   return (
@@ -304,7 +374,7 @@ export default function RunPage() {
             <Button onClick={applyRecommendedDemo}>Use Recommended Demo</Button>
             <a href="/docs/getting-started/quick-start/"><Button variant="outline">Open Get Started Guide</Button></a>
             <Button variant="outline" disabled>
-              Live Submission
+              Scheduler WS Submission
               <GeneratingIndicator class="ml-2 text-[10px]" />
             </Button>
           </>
@@ -399,7 +469,23 @@ export default function RunPage() {
                     </div>
                     <div class="space-y-1">
                       <Label for="custom-wasm">WASM Module</Label>
-                      <Input id="custom-wasm" aria-label="Custom WASM Module" type="file" accept=".wasm" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setCustomWasmFileName(event.currentTarget.files?.[0]?.name ?? '')} />
+                      <Input
+                        id="custom-wasm"
+                        aria-label="Custom WASM Module"
+                        type="file"
+                        accept=".wasm"
+                        onChange={(event: Event & { currentTarget: HTMLInputElement }) => {
+                          const file = event.currentTarget.files?.[0] || null
+                          setCustomWasmFileName(file?.name ?? '')
+                          if (!file) {
+                            setCustomWasmBase64('')
+                            return
+                          }
+                          void file.arrayBuffer()
+                            .then((buffer) => setCustomWasmBase64(encodeArrayBufferBase64(buffer)))
+                            .catch(() => setCustomWasmBase64(''))
+                        }}
+                      />
                     </div>
                     <p class="text-xs text-muted-foreground">Upload a deterministic WASM artifact and define expected output shape in step 3 before submitting.</p>
                   </div>
@@ -540,7 +626,22 @@ export default function RunPage() {
 
                   <div classList={{ hidden: inputMode() !== 'file' }} class="space-y-1" data-testid="file-input-panel">
                     <Label for="input-file">Input Data File</Label>
-                    <Input id="input-file" aria-label="Input Data File" type="file" onChange={(event: Event & { currentTarget: HTMLInputElement }) => setInputFileName(event.currentTarget.files?.[0]?.name ?? '')} />
+                    <Input
+                      id="input-file"
+                      aria-label="Input Data File"
+                      type="file"
+                      onChange={(event: Event & { currentTarget: HTMLInputElement }) => {
+                        const file = event.currentTarget.files?.[0] || null
+                        setInputFileName(file?.name ?? '')
+                        if (!file) {
+                          setInputFileBase64('')
+                          return
+                        }
+                        void file.arrayBuffer()
+                          .then((buffer) => setInputFileBase64(encodeArrayBufferBase64(buffer)))
+                          .catch(() => setInputFileBase64(''))
+                      }}
+                    />
                   </div>
 
                   <div class="flex items-center justify-between">

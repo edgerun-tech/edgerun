@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 describe('route control diagnostics', () => {
-  it('shows configured control base source and overlay/scheduler status in nav', () => {
+  it('does not render removed route diagnostics blocks in nav', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
         win.__EDGERUN_API_BASE = 'https://api.edgerun.tech'
@@ -9,20 +9,19 @@ describe('route control diagnostics', () => {
     })
 
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
-    cy.get('[data-testid="route-debug-rail"]').should('be.visible')
-    cy.get('[data-testid="route-debug-scheduler"]', { timeout: 12000 }).should('contain.text', 'scheduler')
-    cy.get('[data-testid="route-debug-scheduler"]').should('have.attr', 'title').and('include', 'overlay signal')
-    cy.get('[data-testid="route-debug-control-ws"]').should('contain.text', 'ws')
-    cy.get('[data-testid="route-debug-overlay-ws"]').should('contain.text', 'overlay-ws')
-    cy.get('[data-testid="route-debug-overlay-summary"]').should('contain.text', 'overlay')
-    cy.get('[data-testid="route-debug-route-advert"]').should('contain.text', 'route-advert')
+    cy.get('[data-testid="route-debug-rail"]').should('not.exist')
+    cy.get('[data-testid="route-debug-scheduler"]').should('not.exist')
+    cy.get('[data-testid="route-debug-control-ws"]').should('not.exist')
+    cy.get('[data-testid="route-debug-overlay-ws"]').should('not.exist')
+    cy.get('[data-testid="route-debug-overlay-summary"]').should('not.exist')
+    cy.get('[data-testid="route-debug-route-advert"]').should('not.exist')
     cy.get('link[data-edgerun-dynamic-favicon]')
       .should('have.attr', 'type', 'image/svg+xml')
       .invoke('attr', 'href')
       .should('match', /^data:image\/svg\+xml,/)
   })
 
-  it('falls back away from configured source when configured API base is invalid', () => {
+  it('keeps nav functional when configured API base is invalid', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
         win.__EDGERUN_API_BASE = 'nota://url'
@@ -31,12 +30,7 @@ describe('route control diagnostics', () => {
     })
 
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
-    cy.get('[data-testid="route-debug-scheduler"]', { timeout: 12000 }).invoke('text').then((value) => {
-      expect(value).to.match(/scheduler (online|offline)/)
-    })
-    cy.get('[data-testid="route-debug-control-ws"]').invoke('text').should((value) => {
-      const normalized = String(value).trim()
-      expect(normalized === 'ws ok' || normalized === 'ws down').to.eq(true)
-    })
+    cy.get('a[data-nav-link]').contains('Run Job').should('be.visible')
+    cy.get('[aria-label="Open terminal drawer"], [aria-label="Connect wallet to use terminal drawer"]').should('exist')
   })
 })
