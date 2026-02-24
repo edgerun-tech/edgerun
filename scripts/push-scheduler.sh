@@ -67,19 +67,28 @@ echo "[push-scheduler] checking remote SSH connectivity"
 run_ssh "hostname; uname -sr"
 
 echo "[push-scheduler] syncing repository to ${SSH_TARGET}:${SCHEDULER_REMOTE_ROOT}"
-# Stream a curated archive over SSH to avoid exposing credentials in RSYNC_RSH.
-tar \
-  --exclude-vcs \
-  --exclude='out' \
-  --exclude='target' \
-  --exclude='**/target' \
-  --exclude='**/node_modules' \
-  --exclude='**/dist' \
-  --exclude='**/.next' \
-  --exclude='**/.turbo' \
-  --exclude='**/.cache' \
-  -czf - . \
-  | run_ssh "mkdir -p '${SCHEDULER_REMOTE_ROOT}' && tar -xzf - -C '${SCHEDULER_REMOTE_ROOT}'"
+# Prefer git-indexed file selection to avoid syncing local build artifacts
+# (e.g. target/node_modules) and nested repo working trees.
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git ls-files -z --cached --others --exclude-standard \
+    | tar --null -T - -czf - \
+    | run_ssh "mkdir -p '${SCHEDULER_REMOTE_ROOT}' && tar -xzf - -C '${SCHEDULER_REMOTE_ROOT}'"
+else
+  # Fallback when git metadata is unavailable.
+  tar \
+    --exclude-vcs \
+    --exclude='out' \
+    --exclude='target' \
+    --exclude='**/target' \
+    --exclude='program/target-local' \
+    --exclude='**/node_modules' \
+    --exclude='**/dist' \
+    --exclude='**/.next' \
+    --exclude='**/.turbo' \
+    --exclude='**/.cache' \
+    -czf - . \
+    | run_ssh "mkdir -p '${SCHEDULER_REMOTE_ROOT}' && tar -xzf - -C '${SCHEDULER_REMOTE_ROOT}'"
+fi
 
 echo "[push-scheduler] running remote build/restart"
 run_ssh \
