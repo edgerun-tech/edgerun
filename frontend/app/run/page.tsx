@@ -578,6 +578,7 @@ export default function RunPage() {
                   <div class="space-y-1">
                     <Label for="scheduler-url">Scheduler URL</Label>
                     <Input id="scheduler-url" aria-label="Scheduler URL" value={schedulerUrl()} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setSchedulerUrl(event.currentTarget.value)} />
+                    <p class="text-xs text-muted-foreground">Use the route-control/scheduler base URL you trust for this run. Invalid or unreachable endpoints will be rejected before submit completes.</p>
                   </div>
 
                   <div class="flex items-center gap-2">
@@ -590,6 +591,21 @@ export default function RunPage() {
                       Mode Safety
                     </Button>
                   </div>
+
+                  <Alert data-testid="economic-guardrails">
+                    <AlertTitle>Economic Guardrails Applied</AlertTitle>
+                    <AlertDescription>
+                      Default escrow uses deterministic scheduler baseline math and is currently
+                      {' '}
+                      <span class="font-mono">{formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports</span>
+                      {' '}
+                      ({formatSol(DEFAULT_JOB_ESCROW_LAMPORTS)} SOL). See
+                      {' '}
+                      <a href="/token/" class="underline underline-offset-2">/token/</a>
+                      {' '}
+                      for full model details.
+                    </AlertDescription>
+                  </Alert>
 
                   <Separator />
 
@@ -741,7 +757,7 @@ export default function RunPage() {
                     </AlertDescription>
                   </Alert>
 
-                  <div class="space-y-2" data-testid="submission-feedback">
+                  <div class="space-y-2" data-testid="submission-feedback" aria-live="polite">
                     <Alert hidden={submitStatus() !== 'pending'}>
                       <AlertTitle>Submitting</AlertTitle>
                       <AlertDescription>{submitMessage()}</AlertDescription>
@@ -782,8 +798,8 @@ export default function RunPage() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Cost + Runtime Estimate</CardTitle>
-                  <CardDescription>Preview based on selected profile.</CardDescription>
+                  <CardTitle>Deterministic Cost + Runtime Estimate</CardTitle>
+                  <CardDescription>Preview using current baseline formulas before the network validates final policy.</CardDescription>
                 </CardHeader>
                 <CardContent class="space-y-3 text-sm">
                   <Table>
@@ -832,6 +848,11 @@ export default function RunPage() {
                   </Table>
                   <p class="text-xs text-muted-foreground">
                     Estimates follow scheduler/program baseline formulas and are shown to reduce surprise rejections.
+                  </p>
+                  <p class="text-xs text-muted-foreground">
+                    For complete tier and settlement math, open
+                    {' '}
+                    <a href="/token/" class="underline underline-offset-2">SOL Economics</a>.
                   </p>
                 </CardContent>
               </Card>

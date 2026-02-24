@@ -36,6 +36,8 @@ describe('run job orchestration UX', () => {
     cy.contains('button', 'Continue to Configure App').click({ force: true })
     cy.get('[data-testid="run-step-inputs"]').should('be.visible')
     cy.contains('h4', 'Platform Job Envelope').should('be.visible')
+    cy.get('[data-testid="economic-guardrails"]').should('contain.text', 'Economic Guardrails Applied')
+    cy.get('[data-testid="economic-guardrails"]').should('contain.text', 'lamports')
     cy.contains('h4', 'App Configuration: Solana Vanity Address Generator').should('be.visible')
     cy.get('[data-testid="vanity-app-fields"]').should('be.visible')
 
