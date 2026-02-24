@@ -19,8 +19,50 @@ env:
   SCCACHE_GHA_VERSION: "v1"
 
 jobs:
+  changes:
+    name: Detect Changed Scopes
+    runs-on: ubuntu-24.04
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      rust: ${{ steps.filter.outputs.rust }}
+      runtime: ${{ steps.filter.outputs.runtime }}
+      ci: ${{ steps.filter.outputs.ci }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/frontend-release.yml'
+              - '.github/workflows/wiki-sync.yml'
+              - 'scripts/e2e-frontend-all.sh'
+              - 'scripts/e2e-frontend-core.sh'
+            rust:
+              - '**/*.rs'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'crates/**'
+              - 'edgerun/Cargo.toml'
+              - 'edgerun/Cargo.lock'
+              - 'edgerun/crates/**'
+            runtime:
+              - 'crates/edgerun-runtime/**'
+              - 'crates/edgerun-runtime-web/**'
+            ci:
+              - '.github/workflows/ci.yml'
+              - 'scripts/check-workflow-drift.sh'
+
   frontend-gates:
     name: Frontend Production Gates
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.frontend == 'true' || needs.changes.outputs.ci == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -90,6 +132,8 @@ jobs:
 
   rust-checks:
     name: Rust Checks
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.rust == 'true' || needs.changes.outputs.ci == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -211,6 +255,8 @@ jobs:
 
   runtime-determinism:
     name: Runtime Determinism (${{ matrix.os }})
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.ci == 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -247,6 +293,8 @@ jobs:
 
   runtime-calibration:
     name: Runtime Fuel Calibration
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.ci == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -280,6 +328,8 @@ jobs:
 
   runtime-slo:
     name: Runtime SLO Smoke
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.runtime == 'true' || needs.changes.outputs.ci == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
