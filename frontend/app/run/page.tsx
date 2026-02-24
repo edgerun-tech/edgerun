@@ -18,6 +18,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { clearJobTabStatus, publishJobTabStatus } from '../../lib/tab-job-status'
 import { SchedulerControlWsClient } from '../../lib/scheduler-control-ws'
 import { DEFAULT_ROUTE_CONTROL_BASE, getRouteControlBase } from '../../lib/webrtc-route-client'
+import {
+  RUN_DEFAULT_ESCROW_FLOOR_LAMPORTS,
+  SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS,
+  SCHEDULER_DEFAULT_LAMPORTS_PER_BILLION_INSTRUCTIONS,
+  SCHEDULER_DEFAULT_REDUNDANCY_MULTIPLIER,
+  requiredInstructionEscrowLamports
+} from '../../lib/economics'
 
 type PresetApp = {
   id: string
@@ -104,11 +111,19 @@ const PRESET_APPS: PresetApp[] = [
 const DEFAULT_PRESET = PRESET_APPS[0]!
 const DEFAULT_WASM_BASE64 = 'AA=='
 const DEFAULT_JOB_ABI_VERSION = 2
-const DEFAULT_JOB_ESCROW_LAMPORTS = 100
 const DEFAULT_JOB_LIMITS: JobCreateLimits = {
   max_memory_bytes: 1_048_576,
   max_instructions: 10_000
 }
+const DEFAULT_JOB_ESCROW_LAMPORTS = Math.max(
+  RUN_DEFAULT_ESCROW_FLOOR_LAMPORTS,
+  requiredInstructionEscrowLamports(
+    DEFAULT_JOB_LIMITS.max_instructions,
+    SCHEDULER_DEFAULT_LAMPORTS_PER_BILLION_INSTRUCTIONS,
+    SCHEDULER_DEFAULT_REDUNDANCY_MULTIPLIER,
+    SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS
+  )
+)
 const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   prefix: 'So1',
   startCounter: '0',

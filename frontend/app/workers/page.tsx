@@ -2,7 +2,6 @@
 import { Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
-import { GeneratingIndicator } from '../../components/ui/generating-indicator'
 import { PageHero } from '../../components/layout/page-hero'
 import { PageShell } from '../../components/layout/page-shell'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../components/ui/accordion'
@@ -136,10 +135,7 @@ export default function WorkersPage() {
         actions={
           <>
             <a href={docsSchedulerApiHref('main')}><Button variant="outline">Read Worker Endpoints</Button></a>
-            <Button disabled>
-              Fleet Health Console
-              <GeneratingIndicator class="ml-2 text-[10px]" />
-            </Button>
+            <a href="/devices/"><Button>Open Fleet Console</Button></a>
           </>
         }
       />
@@ -165,7 +161,7 @@ export default function WorkersPage() {
           </AccordionItem>
           <AccordionItem value="settle">
             <AccordionTrigger value="settle">Settle on Solana</AccordionTrigger>
-            <AccordionContent value="settle">Payouts and penalties follow on-chain settlement paths. Advanced fleet tooling panels are still generating.</AccordionContent>
+            <AccordionContent value="settle">Payouts and penalties follow on-chain settlement paths with deterministic escrow, quorum, and lock constraints.</AccordionContent>
           </AccordionItem>
         </Accordion>
 
@@ -357,11 +353,13 @@ export default function WorkersPage() {
         <div class="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Leaderboard</CardTitle>
-              <CardDescription>Ranked performance table and fee competitiveness index.</CardDescription>
+              <CardTitle>Leaderboard Source</CardTitle>
+              <CardDescription>Ranking is exposed from scheduler telemetry and should not be synthesized in this client.</CardDescription>
             </CardHeader>
             <CardContent>
-              <GeneratingIndicator class="text-sm" />
+              <p class="text-sm text-muted-foreground">
+                Live ranking is unavailable when scheduler telemetry is offline. Use `/devices/` for current fleet state and queue health.
+              </p>
             </CardContent>
           </Card>
         </div>

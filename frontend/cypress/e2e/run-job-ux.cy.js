@@ -116,6 +116,8 @@ describe('run job orchestration UX', () => {
         win.__EDGERUN_CONTROL_WS_MOCK__ = ({ op, payload }) => {
           expect(op).to.eq('job.create')
           expect(payload).to.have.property('runtime_id')
+          expect(payload).to.have.property('escrow_lamports')
+          expect(payload.escrow_lamports).to.be.at.least(1_000_000)
           return { job_id: 'job-cypress-live-001' }
         }
       }
