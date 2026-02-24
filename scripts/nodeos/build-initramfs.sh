@@ -88,6 +88,8 @@ stage_dir "/tmp"
 stage_dir "/etc/ssl/certs"
 stage_dir "/etc/edgerun/secureboot"
 stage_dir "/usr/bin"
+ln -sfn usr/lib "$stage_root/lib"
+ln -sfn usr/lib64 "$stage_root/lib64"
 cp -f "$manager_staged" "$stage_root/init"
 chmod 755 "$stage_root/init"
 

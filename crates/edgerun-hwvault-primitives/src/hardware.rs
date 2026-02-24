@@ -360,6 +360,20 @@ fn tpm_available() -> bool {
         && command_exists("tpm2_nvread")
 }
 
+fn tpm_tcti_value() -> &'static str {
+    if Path::new("/dev/tpmrm0").exists() {
+        "device:/dev/tpmrm0"
+    } else {
+        "device:/dev/tpm0"
+    }
+}
+
+fn tpm2_command(bin: &str) -> Command {
+    let mut cmd = Command::new(bin);
+    cmd.env("TPM2TOOLS_TCTI", tpm_tcti_value());
+    cmd
+}
+
 fn command_exists(name: &str) -> bool {
     if name.contains('/') {
         return Path::new(name).is_file();
@@ -389,14 +403,14 @@ fn tpm_unseal_seed(nv_index: u32) -> Result<[u8; 32], HardwareError> {
 
 fn ensure_nv_index_defined(nv_index: u32, nv_size: usize) -> Result<(), HardwareError> {
     let index_arg = format!("0x{nv_index:08x}");
-    let exists = Command::new("tpm2_nvreadpublic")
+    let exists = tpm2_command("tpm2_nvreadpublic")
         .arg(&index_arg)
         .output()
         .map_err(|e| HardwareError::TpmCommand(format!("nvreadpublic spawn failed: {e}")))?;
     if exists.status.success() {
         return Ok(());
     }
-    let define = Command::new("tpm2_nvdefine")
+    let define = tpm2_command("tpm2_nvdefine")
         .args([
             &index_arg,
             "-C",
@@ -421,7 +435,7 @@ fn write_nv_blob(nv_index: u32, data: &[u8]) -> Result<(), HardwareError> {
     let index_arg = format!("0x{nv_index:08x}");
     let tmp_path = std::env::temp_dir().join(format!("edgerun-nvwrite-{nv_index}.bin"));
     fs::write(&tmp_path, data).map_err(|e| HardwareError::Io(e.to_string()))?;
-    let write = Command::new("tpm2_nvwrite")
+    let write = tpm2_command("tpm2_nvwrite")
         .args([&index_arg, "-C", "o", "-i"])
         .arg(&tmp_path)
         .output()
@@ -439,7 +453,7 @@ fn write_nv_blob(nv_index: u32, data: &[u8]) -> Result<(), HardwareError> {
 fn read_nv_blob(nv_index: u32, nv_size: usize) -> Result<Vec<u8>, HardwareError> {
     let index_arg = format!("0x{nv_index:08x}");
     let tmp_path = std::env::temp_dir().join(format!("edgerun-nvread-{nv_index}.bin"));
-    let read = Command::new("tpm2_nvread")
+    let read = tpm2_command("tpm2_nvread")
         .args([&index_arg, "-C", "o", "-s", &nv_size.to_string(), "-o"])
         .arg(&tmp_path)
         .output()
