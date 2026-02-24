@@ -241,6 +241,7 @@ export function TerminalDemo() {
                 value={input()}
                 onInput={(e) => setInput(e.currentTarget.value)}
                 placeholder="help"
+                aria-label="Demo terminal command input"
                 disabled={running()}
               />
             </form>

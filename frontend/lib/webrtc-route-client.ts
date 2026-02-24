@@ -448,7 +448,11 @@ function getControlClient(controlBase: string): SchedulerControlWsClient {
 }
 
 export class WebRtcSignalClient {
-  private readonly ws: WebSocket
+  private readonly wsUrl: string
+  private ws: WebSocket | null = null
+  private closed = false
+  private reconnectTimer: number | null = null
+  private reconnectAttempts = 0
 
   onMessage?: (message: SignalInboundMessage) => void
   onClose?: () => void
@@ -461,13 +465,28 @@ export class WebRtcSignalClient {
     url.searchParams.set('device_id', deviceId)
     const wsProto = url.protocol === 'https:' ? 'wss:' : 'ws:'
     url.protocol = wsProto
-    this.ws = new WebSocket(url.toString())
-    this.ws.addEventListener('open', () => this.onOpen?.())
-    this.ws.addEventListener('close', () => this.onClose?.())
-    this.ws.addEventListener('error', () => {
-      // no-op: existing handlers manage retry and fallback behavior
+    this.wsUrl = url.toString()
+    this.connect()
+  }
+
+  private connect(): void {
+    if (this.closed) return
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
+    const ws = new WebSocket(this.wsUrl)
+    this.ws = ws
+    ws.addEventListener('open', () => {
+      this.reconnectAttempts = 0
+      this.onOpen?.()
     })
-    this.ws.addEventListener('message', (event) => {
+    ws.addEventListener('close', () => {
+      if (this.ws === ws) this.ws = null
+      this.onClose?.()
+      this.scheduleReconnect()
+    })
+    ws.addEventListener('error', () => {
+      // no-op: close handler drives reconnect behavior
+    })
+    ws.addEventListener('message', (event) => {
       if (typeof event.data !== 'string') return
       const payload = decodeSignalInbound(event.data)
       if (!payload) return
@@ -475,8 +494,19 @@ export class WebRtcSignalClient {
     })
   }
 
+  private scheduleReconnect(): void {
+    if (this.closed) return
+    if (this.reconnectTimer !== null) return
+    const delay = Math.min(10_000, 600 * (1 << Math.min(this.reconnectAttempts, 4)))
+    this.reconnectAttempts += 1
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null
+      this.connect()
+    }, delay)
+  }
+
   send(message: SignalOutboundMessage): void {
-    if (this.ws.readyState !== WebSocket.OPEN) return
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     try {
       this.ws.send(encodeSignalOutbound(message))
     } catch {
@@ -485,6 +515,18 @@ export class WebRtcSignalClient {
   }
 
   close(): void {
-    this.ws.close()
+    this.closed = true
+    if (this.reconnectTimer !== null) {
+      window.clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    if (this.ws) {
+      try {
+        this.ws.close()
+      } catch {
+        // ignore close errors
+      }
+      this.ws = null
+    }
   }
 }

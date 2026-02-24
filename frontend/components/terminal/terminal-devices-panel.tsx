@@ -43,6 +43,7 @@ export function TerminalDevicesPanel(props: Props) {
           type="text"
           value={devices().ownerPubkeyInput()}
           placeholder="Owner pubkey override (optional)"
+          aria-label="Owner pubkey override"
           class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
           onInput={(ev) => devices().setOwnerPubkeyInput(ev.currentTarget.value)}
         />
@@ -64,6 +65,7 @@ export function TerminalDevicesPanel(props: Props) {
           type="text"
           value={devices().deviceNameInput()}
           placeholder="Device name"
+          aria-label="Device name"
           class="h-8 w-full rounded-md border border-border bg-background/80 px-2 text-xs text-foreground"
           onInput={(ev) => devices().setDeviceNameInput(ev.currentTarget.value)}
         />
@@ -71,6 +73,7 @@ export function TerminalDevicesPanel(props: Props) {
           type="text"
           value={devices().deviceUrlInput()}
           placeholder="route://device-id"
+          aria-label="Device route URL"
           class="h-8 w-full rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
           onInput={(ev) => devices().setDeviceUrlInput(ev.currentTarget.value)}
         />

@@ -87,9 +87,11 @@ stage_dir "/run"
 stage_dir "/tmp"
 stage_dir "/etc/ssl/certs"
 stage_dir "/etc/edgerun/secureboot"
+stage_dir "/bin"
 stage_dir "/usr/bin"
 ln -sfn usr/lib "$stage_root/lib"
 ln -sfn usr/lib64 "$stage_root/lib64"
+ln -sfn ../usr/bin/bash "$stage_root/bin/sh"
 cp -f "$manager_staged" "$stage_root/init"
 chmod 755 "$stage_root/init"
 
@@ -126,6 +128,9 @@ add_tool_with_libs "tpm2_nvwrite"
 add_tool_with_libs "agave-validator"
 add_tool_with_libs "solana-keygen"
 add_tool_with_libs "efi-updatevar"
+add_tool_with_libs "mount"
+add_tool_with_libs "bash"
+add_tool_with_libs "busybox"
 add_tool_with_libs "crun"
 
 if [[ -s "$tmp_libs" ]]; then
@@ -151,6 +156,24 @@ if [[ -f "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" ]]; then
     "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem" \
     "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" \
     644
+fi
+
+if [[ -f "$out_dir/secureboot/edgerun-secureboot-db-cert.der" ]]; then
+  add_file_line \
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der" \
+    "$out_dir/secureboot/edgerun-secureboot-db-cert.der" \
+    644
+fi
+
+if command -v cert-to-efi-sig-list >/dev/null 2>&1 && [[ -f "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" ]]; then
+  sb_tmp_dir="$(mktemp -d "$out_dir/.sb-esl.XXXXXX")"
+  trap 'rm -rf "$sb_tmp_dir"' EXIT
+  sb_owner_guid="f3e4a490-8f2d-4f2a-8a0e-5b77c2b8b401"
+  for var in PK KEK db; do
+    esl_path="$sb_tmp_dir/${var}.esl"
+    cert-to-efi-sig-list -g "$sb_owner_guid" "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" "$esl_path"
+    add_file_line "/etc/edgerun/secureboot/${var}.esl" "$esl_path" 644
+  done
 fi
 
 mv "$tmp_spec" "$spec_path"

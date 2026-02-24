@@ -17,7 +17,7 @@ function cardHtml(meta, data) {
     <div>state: ${data.state}</div>
     <div>runs: ${data.runs}</div>
     <div>exit: ${data.last_exit ?? '-'}</div>
-    <button data-run="${data.task}">Run</button>
+    <button type="button" data-run="${data.task}">Run</button>
     <pre>${(data.last_output || '').slice(-2000)}</pre>
   </div>`;
 }

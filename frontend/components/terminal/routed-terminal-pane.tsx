@@ -52,7 +52,6 @@ export function RoutedTerminalPane(props: Props) {
   const [connected, setConnected] = createSignal(false)
   const [draft, setDraft] = createSignal('')
   const [lines, setLines] = createSignal<string[]>([])
-  let directSocket: WebSocket | null = null
   let refreshInFlight = false
   let nextRefreshAllowedAt = 0
   let openPending = false
@@ -75,16 +74,6 @@ export function RoutedTerminalPane(props: Props) {
 
   function setClearBuffer(): void {
     setLines([])
-  }
-
-  function closeDirectSocket(): void {
-    if (!directSocket) return
-    try {
-      directSocket.close()
-    } catch {
-      // ignore socket close errors
-    }
-    directSocket = null
   }
 
   function sendOpen(cols = 120, rows = 36): boolean {
@@ -121,13 +110,6 @@ export function RoutedTerminalPane(props: Props) {
     refreshInFlight = true
     nextRefreshAllowedAt = now + REFRESH_COOLDOWN_MS
     try {
-      if (directSocket && (directSocket.readyState === WebSocket.OPEN || directSocket.readyState === WebSocket.CONNECTING)) {
-        const open = directSocket.readyState === WebSocket.OPEN
-        markConnected(open)
-        return
-      }
-
-      closeDirectSocket()
       const supervisor = getWebRtcPeerSupervisor()
       await supervisor.connectToDevice(routeDeviceId).catch(() => {
         // keep probing with existing route table
@@ -154,17 +136,7 @@ export function RoutedTerminalPane(props: Props) {
   function submitDraft(): void {
     const text = draft()
     if (!text.trim()) return
-    let sent = false
-    if (directSocket && directSocket.readyState === WebSocket.OPEN) {
-      try {
-        directSocket.send(`${text}\n`)
-        sent = true
-      } catch {
-        sent = false
-      }
-    } else {
-      sent = sendInput(`${text}\n`)
-    }
+    const sent = sendInput(`${text}\n`)
     append(`[${nowLabel()}] > ${text}`)
     if (!sent) append(`[${nowLabel()}] transport send failed`)
     setDraft('')
@@ -224,12 +196,8 @@ export function RoutedTerminalPane(props: Props) {
     onCleanup(() => {
       window.clearInterval(intervalId)
       window.removeEventListener(ROUTED_MESSAGE_EVENT, onRoutedMessage as EventListener)
-      if (directSocket) {
-        closeDirectSocket()
-      } else {
-        markConnected(false)
-        sendClose()
-      }
+      markConnected(false)
+      sendClose()
     })
   })
 
@@ -247,6 +215,7 @@ export function RoutedTerminalPane(props: Props) {
       <div class="flex items-center gap-2 border-t border-border/70 p-2">
         <input
           class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background/80 px-2 font-mono text-xs text-foreground"
+          aria-label="Terminal command input"
           placeholder={connected() ? 'Type command (help, date, whoami, echo ...)' : 'Waiting for route...'}
           value={draft()}
           onInput={(event) => setDraft(event.currentTarget.value)}
