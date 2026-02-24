@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
-import { GeneratingIndicator } from '../../components/ui/generating-indicator'
 import { PageHero } from '../../components/layout/page-hero'
 import { PageShell } from '../../components/layout/page-shell'
 import { blogPosts, formatShortDate } from '../../lib/content'
@@ -24,16 +23,18 @@ export default function BlogPage() {
                 <CardTitle>{featured?.title || 'Introducing Edgerun'}</CardTitle>
                 <CardDescription>{featured?.excerpt || 'Deterministic compute on Solana with verifiable settlement.'}</CardDescription>
               </CardHeader>
-              <CardContent><p class="text-sm text-muted-foreground">{featured ? `${formatShortDate(featured.publishedAt)} • ${featured.readingTime} min read` : 'Generating'}</p></CardContent>
+              <CardContent><p class="text-sm text-muted-foreground">{featured ? `${formatShortDate(featured.publishedAt)} • ${featured.readingTime} min read` : 'Published soon'}</p></CardContent>
             </Card>
           </a>
           <Card>
             <CardHeader>
-              <CardTitle>Worker Operations</CardTitle>
-              <CardDescription>Operational guidance for worker registration and stake-aware behavior.</CardDescription>
+              <CardTitle>Start Here</CardTitle>
+              <CardDescription>If you are new, read why Edgerun exists before diving into endpoints and runtime knobs.</CardDescription>
             </CardHeader>
             <CardContent>
-              <GeneratingIndicator class="text-sm" />
+              <a href={featured ? `/blog/${featured.slug}/` : '/blog/'} class="text-sm text-primary hover:underline">
+                Read: Why Edgerun Exists
+              </a>
             </CardContent>
           </Card>
         </div>

@@ -6,6 +6,10 @@ export type BlogPost = {
   publishedAt: string
   readingTime: number
   tags: string[]
+  sections: Array<{
+    heading: string
+    paragraphs: string[]
+  }>
   author: {
     name: string
     role: string
@@ -51,10 +55,48 @@ export const blogPosts: BlogPost[] = [
   {
     slug: 'introducing-edgerun',
     title: 'Introducing Edgerun',
-    excerpt: 'Deterministic compute on Solana with stake-backed verification and practical developer workflows.',
+    excerpt: 'Why Edgerun exists: reliable compute with visible economics, verifiable execution, and fewer surprises.',
     publishedAt: '2026-02-18T12:00:00Z',
-    readingTime: 8,
-    tags: ['Protocol', 'Launch', 'Solana'],
+    readingTime: 9,
+    tags: ['Why Edgerun', 'Protocol', 'Solana'],
+    sections: [
+      {
+        heading: 'The Problem',
+        paragraphs: [
+          'Most distributed compute demos look impressive until they hit production constraints: unknown pricing, unclear failure behavior, and weak guarantees about what actually executed.',
+          'Teams lose time because they cannot answer basic operational questions quickly: what will this run cost, who executed it, what happens on disagreement, and where is the settlement evidence.'
+        ]
+      },
+      {
+        heading: 'Why This Project Exists',
+        paragraphs: [
+          'Edgerun exists to make those answers explicit before and after execution. Pricing is deterministic from declared limits. Quorum and committee behavior are visible. Settlement paths are inspectable.',
+          'The goal is not to promise magic throughput. The goal is dependable compute with verifiable outcomes and economic guardrails that are understandable to operators.'
+        ]
+      },
+      {
+        heading: 'Design Principles',
+        paragraphs: [
+          'Truth over theater: if a backend capability is unavailable, the UI should say so rather than fabricate green states.',
+          'Determinism over guesswork: users should pre-calculate minimum escrow from limits before submit.',
+          'Traceability over black boxes: every job should produce a receipt, status progression, and downloadable execution snapshot.'
+        ]
+      },
+      {
+        heading: 'What This Means For Users',
+        paragraphs: [
+          'Developers can submit a job with clear cost expectations, monitor quorum progress, and review the exact execution record without leaving the product.',
+          'Operators can reason about failure modes using the same surfaces that show successful runs, reducing production surprises.'
+        ]
+      },
+      {
+        heading: 'Where We Are Going',
+        paragraphs: [
+          'Near-term work focuses on fully integrated browser payment/signing flow and richer result artifact retrieval for completed jobs.',
+          'Longer term, the same principles stay fixed: deterministic economics, transparent execution, and operationally honest interfaces.'
+        ]
+      }
+    ],
     author: {
       name: 'Edgerun Core Team',
       role: 'Protocol Engineering',

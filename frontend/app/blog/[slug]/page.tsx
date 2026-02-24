@@ -14,11 +14,19 @@ type BlogPostPageProps = {
 export default function BlogPostPage(props: BlogPostPageProps) {
   const fallbackPost = {
     slug: 'post',
-    title: 'Post',
-    excerpt: 'Generating content.',
+    title: 'Why Edgerun Exists',
+    excerpt: 'Dependable compute needs visible economics and verifiable execution.',
     publishedAt: new Date().toISOString(),
-    readingTime: 1,
-    tags: ['Generating'],
+    readingTime: 4,
+    tags: ['Why Edgerun'],
+    sections: [
+      {
+        heading: 'Purpose',
+        paragraphs: [
+          'Edgerun focuses on deterministic execution and settlement visibility so operators can trust production runs.'
+        ]
+      }
+    ],
     author: { name: 'Edgerun', role: 'Team' }
   }
   const slug = untrack(() => props.slug)
@@ -34,7 +42,7 @@ export default function BlogPostPage(props: BlogPostPageProps) {
         actions={<a href="/blog/" class="text-sm text-primary hover:underline">Back to Blog</a>}
       />
 
-      <section class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+      <section class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8" data-testid="blog-article">
         <div class="mb-6 flex flex-wrap gap-2">
           <For each={post.tags}>{(tag) => <Badge variant="secondary">{tag}</Badge>}</For>
         </div>
@@ -43,10 +51,17 @@ export default function BlogPostPage(props: BlogPostPageProps) {
           <p>{formatShortDate(post.publishedAt)} • {post.readingTime} min read</p>
         </div>
         <Separator class="my-6" />
-        <article class="space-y-4 text-muted-foreground leading-relaxed">
-          <p>Edgerun starts with a practical onboarding path: deterministic payload execution and verifiable settlement on Solana.</p>
-          <p>The Get Started workflow is intentionally simple but complete. It demonstrates client orchestration, worker execution, consensus output, and settlement evidence in one loop.</p>
-          <p>From there, teams can expand into broader workloads while keeping the same reliability properties and economic guarantees.</p>
+        <article class="space-y-8 text-muted-foreground leading-relaxed">
+          <For each={post.sections}>{(section) => (
+            <section>
+              <h2 class="mb-3 text-xl font-semibold text-foreground">{section.heading}</h2>
+              <div class="space-y-3">
+                <For each={section.paragraphs}>{(paragraph) => (
+                  <p>{paragraph}</p>
+                )}</For>
+              </div>
+            </section>
+          )}</For>
         </article>
       </section>
 

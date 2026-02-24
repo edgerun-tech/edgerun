@@ -75,8 +75,20 @@ function readVersionedFile(ref: string, relativePath: string): string | null {
   }
 }
 
-function pageDocument(title: string, description: string, bodyHtml: string): string {
+function canonicalPathFromOutput(relativeOutputPath: string): string {
+  const normalized = `/${relativeOutputPath.replace(/\\/g, '/').replace(/^\/+/, '')}`
+  if (normalized === '/index.html') return '/'
+  if (normalized.endsWith('/index.html')) {
+    return `${normalized.slice(0, -'index.html'.length)}`
+  }
+  return normalized
+}
+
+function pageDocument(title: string, description: string, bodyHtml: string, relativeOutputPath: string): string {
   const marker = renderToString(() => `solid-ssr:${buildNumber}`)
+  const canonicalPath = canonicalPathFromOutput(relativeOutputPath)
+  const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${canonicalPath}`
+  const ogType = canonicalPath.startsWith('/blog/') && canonicalPath !== '/blog/' ? 'article' : 'website'
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -84,6 +96,15 @@ function pageDocument(title: string, description: string, bodyHtml: string): str
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(title)} | Edgerun</title>
     <meta name="description" content="${escapeHtml(description)}" />
+    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <meta property="og:site_name" content="Edgerun" />
+    <meta property="og:type" content="${ogType}" />
+    <meta property="og:title" content="${escapeHtml(title)} | Edgerun" />
+    <meta property="og:description" content="${escapeHtml(description)}" />
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(title)} | Edgerun" />
+    <meta name="twitter:description" content="${escapeHtml(description)}" />
     <meta name="theme-color" content="#000000" />
     <link rel="stylesheet" href="/fonts/fonts.css" />
     <link rel="stylesheet" href="/assets/styles.css" />
@@ -107,7 +128,7 @@ function pageDocument(title: string, description: string, bodyHtml: string): str
 function writePage(relativePath: string, title: string, description: string, bodyHtml: string): void {
   const out = path.join(distRoot, relativePath)
   mkdirSync(path.dirname(out), { recursive: true })
-  writeFileSync(out, pageDocument(title, description, bodyHtml), 'utf8')
+  writeFileSync(out, pageDocument(title, description, bodyHtml, relativePath), 'utf8')
 }
 
 function writeComponentPage(relativePath: string, title: string, description: string, component: any): void {
