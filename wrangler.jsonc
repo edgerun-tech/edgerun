@@ -8,8 +8,8 @@
   "kv_namespaces": [
     {
       "binding": "EMAIL_SIGNUPS",
-      "id": "__EMAIL_SIGNUPS_NAMESPACE_ID__",
-      "preview_id": "__EMAIL_SIGNUPS_PREVIEW_ID__"
+      "id": "f8717d13ad904cd2a867fc94d89ad0e5",
+      "preview_id": "7772695de2ec4bd9ac6fc6a1997a2361"
     }
   ]
 }
