@@ -364,7 +364,7 @@ async fn main() -> Result<()> {
     );
 
     let persisted = load_state(&data_dir)?;
-    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
+    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", true);
 
     let chain = match init_chain_context() {
         Ok(ctx) => {
@@ -379,12 +379,12 @@ async fn main() -> Result<()> {
         Err(err) => {
             if require_chain {
                 anyhow::bail!(
-                    "chain context required but unavailable (set EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT=false to allow placeholder mode): {err}"
+                    "chain context required but unavailable: {err}"
                 );
             } else {
                 tracing::warn!(
                     error = %err,
-                    "chain context unavailable; post_job_tx will be placeholder"
+                    "chain context unavailable; chain-backed operations will fail"
                 );
                 None
             }
@@ -2124,42 +2124,34 @@ fn job_create_inner(
         tracing::warn!(error = %err, "failed to append policy audit event");
     }
 
-    let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
-        let runtime_proof = match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
-            Ok(proof) => proof,
-            Err(err) => {
-                tracing::warn!(error = %err, "failed to build runtime allowlist proof");
-                return Ok(JobCreateResponse {
-                    job_id: bundle_hash_hex.clone(),
-                    bundle_hash: bundle_hash_hex.clone(),
-                    bundle_url: format!("{}/bundle/{bundle_hash_hex}", state.public_base_url),
-                    post_job_tx: "UNAVAILABLE_BUILD_FAILED".to_string(),
-                    post_job_sig: None,
-                    assign_workers_tx: assign_workers_tx.clone(),
-                    assign_workers_sig,
-                });
-            }
-        };
-        let tx_args = PostJobArgs {
-            client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
-            job_id: bundle_hash,
-            bundle_hash,
-            runtime_id,
-            runtime_proof,
-            max_memory_bytes: payload.limits.max_memory_bytes,
-            max_instructions: payload.limits.max_instructions,
-            escrow_lamports: payload.escrow_lamports,
-        };
-        match build_post_job_tx_base64(chain, tx_args) {
-            Ok(v) => v,
-            Err(err) => {
-                tracing::warn!(error = %err, "failed to build chain post_job tx");
-                ("UNAVAILABLE_BUILD_FAILED".to_string(), None)
-            }
-        }
-    } else {
-        ("UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(), None)
+    let chain = state.chain.as_ref().ok_or_else(|| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "chain context unavailable; cannot build post_job transaction".to_string(),
+        )
+    })?;
+    let runtime_proof = build_runtime_allowlist_proof_for_chain(chain, runtime_id).map_err(|err| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("failed to build runtime allowlist proof: {err}"),
+        )
+    })?;
+    let tx_args = PostJobArgs {
+        client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
+        job_id: bundle_hash,
+        bundle_hash,
+        runtime_id,
+        runtime_proof,
+        max_memory_bytes: payload.limits.max_memory_bytes,
+        max_instructions: payload.limits.max_instructions,
+        escrow_lamports: payload.escrow_lamports,
     };
+    let (post_job_tx, post_job_sig) = build_post_job_tx_base64(chain, tx_args).map_err(|err| {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("failed to build chain post_job transaction: {err}"),
+        )
+    })?;
 
     Ok(JobCreateResponse {
         // Job identity is bundle-hash keyed at MVP scaffold level.
@@ -3234,26 +3226,30 @@ fn recompute_job_quorum(state: &AppState, job_id: &str) -> Result<bool> {
     drop(job_quorum);
 
     if should_trigger_finalize {
-        let (finalize_tx, finalize_sig, finalize_submitted) = build_finalize_trigger_payload(
-            state,
-            job_id,
-            &winning_hash,
-            &committee_workers,
-            &winners,
-        );
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        if let Some(quorum_state) = job_quorum.get_mut(job_id) {
-            quorum_state.finalize_triggered = true;
-            quorum_state.finalize_tx = Some(finalize_tx);
-            quorum_state.finalize_sig = finalize_sig;
-            quorum_state.finalize_submitted = finalize_submitted;
-            if slash_artifacts_enabled {
-                quorum_state.slash_artifacts = build_slash_worker_artifacts(
-                    state,
-                    job_id,
-                    &winning_hash,
-                    &committee_workers,
-                    &filtered_reports,
+        match build_finalize_trigger_payload(state, job_id, &committee_workers, &winners) {
+            Ok((finalize_tx, finalize_sig, finalize_submitted)) => {
+                let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+                if let Some(quorum_state) = job_quorum.get_mut(job_id) {
+                    quorum_state.finalize_triggered = true;
+                    quorum_state.finalize_tx = Some(finalize_tx);
+                    quorum_state.finalize_sig = finalize_sig;
+                    quorum_state.finalize_submitted = finalize_submitted;
+                    if slash_artifacts_enabled {
+                        quorum_state.slash_artifacts = build_slash_worker_artifacts(
+                            state,
+                            job_id,
+                            &winning_hash,
+                            &committee_workers,
+                            &filtered_reports,
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    job_id = %job_id,
+                    "quorum reached but finalize artifact unavailable"
                 );
             }
         }
@@ -3360,52 +3356,39 @@ fn build_slash_worker_artifacts(
     }
 
     let Some(chain) = state.chain.as_ref() else {
-        return candidate_workers
-            .into_iter()
-            .map(|worker_pubkey| SlashWorkerArtifact {
-                worker_pubkey,
-                tx: "UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(),
-                sig: None,
-                submitted: false,
-            })
-            .collect();
+        tracing::warn!(job_id = %job_id_hex, "skipping slash artifacts: no chain context");
+        return Vec::new();
     };
     let Ok(job_id) = parse_hex32(job_id_hex) else {
-        return candidate_workers
-            .into_iter()
-            .map(|worker_pubkey| SlashWorkerArtifact {
-                worker_pubkey,
-                tx: "UNAVAILABLE_INVALID_JOB_ID".to_string(),
-                sig: None,
-                submitted: false,
-            })
-            .collect();
+        tracing::warn!(job_id = %job_id_hex, "skipping slash artifacts: invalid job id");
+        return Vec::new();
     };
 
     candidate_workers
         .into_iter()
-        .map(|worker_pubkey| {
+        .filter_map(|worker_pubkey| {
             let Some(worker) = worker_pubkey.parse::<Pubkey>().ok() else {
-                return SlashWorkerArtifact {
-                    worker_pubkey,
-                    tx: "UNAVAILABLE_INVALID_WORKER_PUBKEY".to_string(),
-                    sig: None,
-                    submitted: false,
-                };
+                tracing::warn!(
+                    worker_pubkey = %worker_pubkey,
+                    "skipping slash artifact: invalid worker pubkey"
+                );
+                return None;
             };
             match build_slash_worker_tx_base64(chain, job_id, worker, state.chain_auto_submit) {
-                Ok((tx, sig, submitted)) => SlashWorkerArtifact {
+                Ok((tx, sig, submitted)) => Some(SlashWorkerArtifact {
                     worker_pubkey,
                     tx,
                     sig,
                     submitted,
-                },
-                Err(_) => SlashWorkerArtifact {
-                    worker_pubkey,
-                    tx: "UNAVAILABLE_SLASH_BUILD_FAILED".to_string(),
-                    sig: None,
-                    submitted: false,
-                },
+                }),
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        worker_pubkey = %worker_pubkey,
+                        "skipping slash artifact: tx build failed"
+                    );
+                    None
+                }
             }
         })
         .collect()
@@ -3414,46 +3397,17 @@ fn build_slash_worker_artifacts(
 fn build_finalize_trigger_payload_inner(
     state: &AppState,
     job_id_hex: &str,
-    winning_output_hash: &str,
     committee_workers: &[String],
     winning_workers: &[String],
-) -> (String, Option<String>, bool) {
-    if let Some(chain) = state.chain.as_ref() {
-        if let Ok(job_id) = parse_hex32(job_id_hex) {
-            if let Some((committee, winners)) =
-                parse_finalize_accounts(committee_workers, winning_workers)
-            {
-                match build_finalize_job_tx_base64(
-                    chain,
-                    job_id,
-                    committee,
-                    winners,
-                    state.chain_auto_submit,
-                ) {
-                    Ok((tx, sig, submitted)) => return (tx, sig, submitted),
-                    Err(err) => {
-                        tracing::warn!(
-                            error = %err,
-                            job_id = %job_id_hex,
-                            "failed to build finalize tx"
-                        )
-                    }
-                }
-            } else {
-                tracing::warn!(
-                    job_id = %job_id_hex,
-                    "unable to derive finalize account metas from committee/winner pubkeys"
-                );
-            }
-        } else {
-            tracing::warn!(job_id = %job_id_hex, "invalid job id hex for finalize tx build");
-        }
-    }
-    (
-        format!("UNAVAILABLE_FINALIZE_{winning_output_hash}"),
-        None,
-        false,
-    )
+) -> Result<(String, Option<String>, bool)> {
+    let chain = state
+        .chain
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("chain context unavailable"))?;
+    let job_id = parse_hex32(job_id_hex)?;
+    let (committee, winners) = parse_finalize_accounts(committee_workers, winning_workers)
+        .ok_or_else(|| anyhow::anyhow!("unable to derive finalize account metas"))?;
+    build_finalize_job_tx_base64(chain, job_id, committee, winners, state.chain_auto_submit)
 }
 
 fn parse_finalize_accounts(
@@ -3500,11 +3454,7 @@ fn build_assign_workers_artifact(
             .unwrap_or_default()
     };
     if committee_workers.len() != 3 {
-        return Ok((
-            Some("UNAVAILABLE_ASSIGN_COMMITTEE_NOT_FIXED3".to_string()),
-            None,
-            false,
-        ));
+        anyhow::bail!("committee workers must contain exactly 3 entries");
     }
     let workers = [
         committee_workers[0]
@@ -3569,7 +3519,7 @@ fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
         let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
         if let Some(quorum_state) = job_quorum.get_mut(&job_id) {
             quorum_state.cancel_triggered = true;
-            quorum_state.cancel_tx = Some(cancel_tx);
+            quorum_state.cancel_tx = cancel_tx;
             quorum_state.cancel_sig = cancel_sig;
             quorum_state.cancel_submitted = cancel_submitted;
         }
@@ -3582,9 +3532,9 @@ fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
 fn build_cancel_expired_artifact(
     state: &AppState,
     job_id_hex: &str,
-) -> Result<(String, Option<String>, bool)> {
+) -> Result<(Option<String>, Option<String>, bool)> {
     let Some(chain) = state.chain.as_ref() else {
-        return Ok(("UNAVAILABLE_NO_CHAIN_CONTEXT".to_string(), None, false));
+        anyhow::bail!("chain context unavailable");
     };
     let job_id = parse_hex32(job_id_hex)?;
     let committee_workers = {
@@ -3602,7 +3552,7 @@ fn build_cancel_expired_artifact(
         committee,
         state.chain_auto_submit,
     )?;
-    Ok((tx, sig, submitted))
+    Ok((Some(tx), sig, submitted))
 }
 
 const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
@@ -4184,14 +4134,12 @@ fn onchain_status_label(status: u8) -> &'static str {
 fn build_finalize_trigger_payload(
     state: &AppState,
     job_id_hex: &str,
-    winning_output_hash: &str,
     committee_workers: &[String],
     winning_workers: &[String],
-) -> (String, Option<String>, bool) {
+) -> Result<(String, Option<String>, bool)> {
     build_finalize_trigger_payload_inner(
         state,
         job_id_hex,
-        winning_output_hash,
         committee_workers,
         winning_workers,
     )
@@ -4349,7 +4297,7 @@ fn verify_result_attestation(
     state: &AppState,
     payload: &WorkerResultReport,
 ) -> Result<bool, (StatusCode, String)> {
-    if !verify_attestation_claim_stub(state, payload.attestation_claim.as_ref()) {
+    if !verify_attestation_claim_policy(state, payload.attestation_claim.as_ref()) {
         return Ok(false);
     }
 
@@ -4700,7 +4648,7 @@ fn now_unix_millis() -> u64 {
         .unwrap_or(0)
 }
 
-fn verify_attestation_claim_stub(
+fn verify_attestation_claim_policy(
     state: &AppState,
     claim: Option<&edgerun_types::AttestationClaim>,
 ) -> bool {

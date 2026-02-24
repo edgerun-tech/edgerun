@@ -175,28 +175,11 @@ impl MaterializedStateIndex {
 
                 // Replay tail if needed
                 if tail_length > 0 && tail_length <= self.config.max_tail_length {
-                    let mut final_value = value.clone();
-
-                    // Apply tail events
-                    self.replay_tail(&mut final_value, stream_id.clone(), tail_start, tail_end);
-
-                    // Update metrics
-                    {
-                        let mut metrics = self.metrics.write().unwrap();
-                        metrics.tail_replay_count += 1;
-                        metrics.tail_replay_events += tail_length as u64;
-                    }
-
-                    // Cache the result
-                    self.cache_result(
-                        key_vec,
-                        stream_id,
-                        final_value.clone(),
-                        tail_start,
-                        tail_length,
-                    );
-
-                    return Some(final_value);
+                    // Tail replay is intentionally not applied until event-level merge logic exists.
+                    // Returning the snapshot value here would serve stale data.
+                    let mut metrics = self.metrics.write().unwrap();
+                    metrics.cache_misses += 1;
+                    return None;
                 } else if tail_length == 0 {
                     // No tail to replay, cache and return
                     self.cache_result(key_vec, stream_id, value.clone(), tail_start, 0);
@@ -285,16 +268,6 @@ impl MaterializedStateIndex {
             hits: metrics.cache_hits,
             misses: metrics.cache_misses,
         }
-    }
-
-    /// Replay tail events on a value.
-    fn replay_tail(&self, _value: &mut [u8], _stream_id: StreamId, _start: u64, _end: u64) {
-        // This would read events from the log and apply them
-        // For now, it's a placeholder
-        // In production, this would:
-        // 1. Read events [start, end) from stream
-        // 2. Apply each event to the value
-        // 3. Handle conflicts/merges
     }
 
     /// Cache a read result.

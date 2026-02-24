@@ -19,20 +19,6 @@ export function HeroSection() {
             <a href="/run/"><Button size="lg">Run a Job</Button></a>
             <a href="/workers/"><Button size="lg" variant="outline">Become a Worker</Button></a>
           </div>
-          <div class="grid max-w-2xl grid-cols-3 gap-8 pt-10 mx-auto">
-            <div class="space-y-2">
-              <p class="text-3xl font-bold md:text-4xl">99.9%</p>
-              <p class="text-sm text-muted-foreground">Consensus Rate</p>
-            </div>
-            <div class="space-y-2">
-              <p class="text-3xl font-bold md:text-4xl">&lt;150ms</p>
-              <p class="text-sm text-muted-foreground">Avg Settlement</p>
-            </div>
-            <div class="space-y-2">
-              <p class="text-3xl font-bold md:text-4xl">2.5M+</p>
-              <p class="text-sm text-muted-foreground">Jobs Executed</p>
-            </div>
-          </div>
         </div>
       </div>
     </section>

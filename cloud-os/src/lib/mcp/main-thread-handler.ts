@@ -144,11 +144,9 @@ export class MCPMainThreadHandler {
         }
       } catch {}
 
-      // Final fallback: mock data
-      const mockFiles = this.getMockFiles(path);
-      this.sendResponse('files:response', {
+      this.sendResponse('files:error', {
         requestId,
-        files: mockFiles,
+        error: 'No filesystem backend available for list_files',
       });
     } catch (error) {
       console.error('[MCPMainThread] list_files error:', error);
@@ -200,13 +198,9 @@ export class MCPMainThreadHandler {
         }
       } catch {}
 
-      // Final fallback: mock content
-      const mockContent = this.getMockFileContent(path);
-      addRecentFile(path);
-      this.sendResponse('file:response', {
+      this.sendResponse('file:error', {
         requestId,
-        content: mockContent,
-        path,
+        error: `No filesystem backend available to read ${path}`,
       });
     } catch (error) {
       console.error('[MCPMainThread] read_file error:', error);
@@ -260,11 +254,9 @@ export class MCPMainThreadHandler {
         }
       } catch {}
 
-      // Final fallback: mock search
-      const mockResults = this.getMockSearchResults(query, path, limit);
-      this.sendResponse('search:response', {
+      this.sendResponse('search:error', {
         requestId,
-        results: mockResults,
+        error: `No filesystem backend available for search_files (path=${path}, type=${type}, limit=${limit})`,
       });
     } catch (error) {
       console.error('[MCPMainThread] search_files error:', error);
@@ -339,26 +331,9 @@ export class MCPMainThreadHandler {
     const { source = 'local', project, limit = 50, level } = params;
 
     try {
-      // Try to get logs from appropriate source
-      let logs: any[] = [];
-
-      if (source === 'cloudflare' && project) {
-        // Would call Cloudflare API
-        logs = this.getMockLogs('cloudflare', limit);
-      } else if (source === 'vercel' && project) {
-        // Would call Vercel API
-        logs = this.getMockLogs('vercel', limit);
-      } else {
-        // Local/browser logs
-        logs = this.getMockLogs('local', limit);
-      }
-
-      // Filter by level if specified
-      const filteredLogs = level ? logs.filter(l => l.level === level) : logs;
-
-      this.sendResponse('logs:response', {
+      this.sendResponse('logs:error', {
         requestId,
-        logs: filteredLogs,
+        error: `No log provider configured (source=${source}, project=${project || 'n/a'}, limit=${limit}, level=${level || 'n/a'})`,
       });
     } catch (error) {
       console.error('[MCPMainThread] get_logs error:', error);
@@ -398,12 +373,12 @@ export class MCPMainThreadHandler {
   private async handleTerminalStatus(params: any, requestId: string): Promise<void> {
     // Return browser capabilities
     const status = {
-      connected: true,
+      connected: false,
       mode: /Chrome/.test(navigator.userAgent || '') && /Google/.test(navigator.vendor || '') 
         ? 'webcontainer-available' 
-        : 'mock',
+        : 'unavailable',
       browser: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
-      capabilities: ['execute', 'list_files', 'read_file', 'write_file', 'npm', 'git'],
+      capabilities: ['execute', 'list_files', 'read_file', 'write_file', 'npm', 'git', 'search_files'],
     };
 
     this.sendResponse('terminal:status:response', {
@@ -474,99 +449,6 @@ export class MCPMainThreadHandler {
     if (typeof window === 'undefined') return;
 
     window.postMessage({ type, ...data }, '*');
-  }
-
-  // Mock data generators for demo/fallback
-  private getMockFiles(path: string): any[] {
-    const mockFiles = [
-      { name: 'package.json', path: '/package.json', type: 'file', size: 2048, modified: new Date().toISOString() },
-      { name: 'README.md', path: '/README.md', type: 'file', size: 4096, modified: new Date().toISOString() },
-      { name: 'src', path: '/src', type: 'directory', modified: new Date().toISOString() },
-      { name: 'index.ts', path: '/src/index.ts', type: 'file', size: 1024, modified: new Date().toISOString() },
-      { name: 'utils.ts', path: '/src/utils.ts', type: 'file', size: 2048, modified: new Date().toISOString() },
-      { name: 'components', path: '/src/components', type: 'directory', modified: new Date().toISOString() },
-      { name: 'App.tsx', path: '/src/components/App.tsx', type: 'file', size: 3072, modified: new Date().toISOString() },
-      { name: 'tsconfig.json', path: '/tsconfig.json', type: 'file', size: 512, modified: new Date().toISOString() },
-    ];
-
-    if (path === '/') {
-      return mockFiles.filter(f => !f.path.includes('/src/'));
-    }
-    if (path.includes('/src')) {
-      return mockFiles.filter(f => f.path.includes('/src'));
-    }
-    return mockFiles;
-  }
-
-  private getMockFileContent(path: string): string {
-    const contents: Record<string, string> = {
-      '/package.json': JSON.stringify({
-        name: 'browser-os',
-        version: '1.0.0',
-        scripts: {
-          dev: 'astro dev',
-          build: 'astro build',
-        },
-      }, null, 2),
-      '/README.md': `# Browser OS
-
-A web-based desktop environment with MCP integration.
-
-## Features
-- Window management
-- MCP tools
-- AI intent processing
-`,
-      '/src/index.ts': `import { app } from './app';
-app.mount('#app');
-`,
-      '/tsconfig.json': JSON.stringify({
-        compilerOptions: {
-          target: 'ES2020',
-          module: 'ESNext',
-        },
-      }, null, 2),
-    };
-
-    return contents[path] || `// Content of ${path}\n// File not found in mock data`;
-  }
-
-  private getMockSearchResults(query: string, path: string, limit: number): any[] {
-    const allFiles = [
-      { name: 'package.json', path: '/package.json', type: 'file', match: 'name' },
-      { name: 'README.md', path: '/README.md', type: 'file', match: 'name' },
-      { name: 'index.ts', path: '/src/index.ts', type: 'file', match: 'name' },
-      { name: 'utils.ts', path: '/src/utils.ts', type: 'file', match: 'name' },
-      { name: 'App.tsx', path: '/src/components/App.tsx', type: 'file', match: 'name' },
-      { name: 'Editor.tsx', path: '/src/components/Editor.tsx', type: 'file', match: 'name' },
-      { name: 'Terminal.tsx', path: '/src/components/Terminal.tsx', type: 'file', match: 'name' },
-    ];
-
-    const queryLower = query.toLowerCase();
-    return allFiles
-      .filter(f => f.name.toLowerCase().includes(queryLower) || f.path.toLowerCase().includes(queryLower))
-      .slice(0, limit);
-  }
-
-  private getMockLogs(source: string, limit: number): any[] {
-    const levels = ['info', 'warn', 'error', 'debug'] as const;
-    const messages = [
-      'Application started',
-      'Processing request',
-      'Cache hit for key',
-      'Database connection established',
-      'User authenticated',
-      'Rate limit exceeded',
-      'Memory usage: 45%',
-      'Request completed in 123ms',
-    ];
-
-    return Array.from({ length: limit }, (_, i) => ({
-      timestamp: new Date(Date.now() - i * 60000).toISOString(),
-      level: levels[i % levels.length],
-      message: messages[i % messages.length],
-      source,
-    }));
   }
 
   // Register a custom handler

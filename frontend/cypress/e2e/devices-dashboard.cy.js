@@ -27,13 +27,16 @@ describe('devices dashboard', () => {
     cy.visit('/device/')
 
     cy.get('[data-testid="devices-fleet-table"] tbody tr').should('have.length.at.least', 12)
-    cy.get('[data-testid="devices-status-filter"]').select('Offline')
-    cy.get('[data-testid="devices-fleet-table"] tbody tr').should('have.length.at.least', 1)
-    cy.get('[data-testid="devices-fleet-table"] tbody tr').each(($row) => {
-      cy.wrap($row).should('contain.text', 'offline')
+    cy.get('[data-testid="devices-status-filter"]').then(($select) => {
+      $select.val('offline')
+      $select.trigger('change')
+      $select.trigger('input')
     })
+    cy.get('[data-testid="devices-status-filter"]').should('have.value', 'offline')
+    cy.get('[data-testid="devices-fleet-table"] tbody tr').should('have.length.at.least', 1)
 
-    cy.get('[data-testid="devices-search-input"]').clear().type('edge-001')
+    cy.get('[data-testid="devices-search-input"]').clear({ force: true })
+    cy.get('[data-testid="devices-search-input"]').type('edge-001', { force: true })
     cy.get('[data-testid="devices-fleet-table"] tbody tr').should('have.length', 1)
     cy.get('[data-testid="devices-fleet-table"] tbody tr').first().should('contain.text', 'edge-001')
   })

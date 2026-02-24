@@ -1,32 +1,14 @@
 /**
  * Frontend-Only Terminal
- * Uses WebContainers API for Node.js in browser, with mock fallback
+ * Uses WebContainers API for Node.js in browser
  */
 
 import { MCPServerBase, setupWorkerServer } from './base';
 
-// Mock file system for demo
-const mockFileSystem: Record<string, string> = {
-  '/home/package.json': JSON.stringify({ name: 'demo-app', version: '1.0.0' }, null, 2),
-  '/home/index.js': 'console.log("Hello from browser!");\n',
-  '/home/README.md': '# Demo App\n\nRunning in browser with WebContainers!\n',
-  '/home/src/app.js': 'export const app = { name: "demo" };\n',
-};
-
-// Mock command responses
-const mockCommands: Record<string, string> = {
-  'help': 'Available commands: help, ls, pwd, echo, cat, node, npm, git, clear, whoami, date, uname',
-  'whoami': 'browser-user',
-  'pwd': '/home',
-  'uname -a': 'WebContainer 1.0.0 browser x86_64',
-  'node --version': 'v20.10.0',
-  'npm --version': '10.2.0',
-  'git --version': 'git version 2.40.0 (webcontainer)',
-};
-
 class FrontendTerminalServer extends MCPServerBase {
   private webContainer: any = null;
   private connected = false;
+  private unavailableReason = 'WebContainer runtime is unavailable';
 
   constructor() {
     super('frontend-terminal', '1.0.0');
@@ -34,12 +16,17 @@ class FrontendTerminalServer extends MCPServerBase {
 
   async initializeWebContainer(): Promise<boolean> {
     // Check if WebContainers are supported (Chrome/Edge only)
-    if (typeof navigator === 'undefined') return false;
+    if (typeof navigator === 'undefined') {
+      this.connected = false;
+      this.unavailableReason = 'WebContainer requires a browser environment';
+      return false;
+    }
     
     const isChrome = /Chrome/.test(navigator.userAgent) && /Google/.test(navigator.vendor);
     if (!isChrome) {
-      console.log('[Terminal] WebContainers not supported, using mock mode');
-      this.connected = true; // Mock mode is always "connected"
+      this.connected = false;
+      this.unavailableReason = 'WebContainer requires Chrome/Chromium';
+      console.warn('[Terminal] WebContainers not supported in this browser');
       return false;
     }
 
@@ -52,9 +39,17 @@ class FrontendTerminalServer extends MCPServerBase {
       return true;
     } catch (error) {
       console.warn('[Terminal] Failed to boot WebContainer:', error);
-      this.connected = true; // Fall back to mock mode
+      this.connected = false;
+      this.unavailableReason = `Failed to boot WebContainer: ${error instanceof Error ? error.message : String(error)}`;
       return false;
     }
+  }
+
+  private unavailable(tool: string) {
+    return {
+      content: [{ type: 'text', text: `${tool} unavailable: ${this.unavailableReason}` }],
+      isError: true,
+    };
   }
 
   setupHandlers(): void {
@@ -92,9 +87,8 @@ class FrontendTerminalServer extends MCPServerBase {
 
         if (this.webContainer) {
           return await this.executeWebContainerCommand(fullCommand, args.cwd);
-        } else {
-          return this.executeMockCommand(fullCommand);
         }
+        return this.unavailable('terminal_execute');
       }
     );
 
@@ -111,11 +105,12 @@ class FrontendTerminalServer extends MCPServerBase {
       async () => {
         const status = {
           connected: this.connected,
-          mode: this.webContainer ? 'webcontainer' : 'mock',
+          mode: this.webContainer ? 'webcontainer' : 'unavailable',
           browser: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
           capabilities: this.webContainer 
             ? ['node', 'npm', 'git', 'shell', 'filesystem']
-            : ['mock-commands'],
+            : [],
+          reason: this.webContainer ? undefined : this.unavailableReason,
         };
 
         return {
@@ -159,19 +154,8 @@ class FrontendTerminalServer extends MCPServerBase {
               isError: true,
             };
           }
-        } else {
-          // Mock file listing
-          const files = Object.keys(mockFileSystem)
-            .filter(p => p.startsWith(args.path || '/home'))
-            .map(p => p.split('/').pop() || p);
-          
-          return {
-            content: [{
-              type: 'text',
-              text: files.join('\n') || 'Directory empty',
-            }],
-          };
         }
+        return this.unavailable('terminal_list_files');
       }
     );
 
@@ -204,16 +188,8 @@ class FrontendTerminalServer extends MCPServerBase {
               isError: true,
             };
           }
-        } else {
-          const content = mockFileSystem[args.path];
-          if (content) {
-            return { content: [{ type: 'text', text: content }] };
-          }
-          return {
-            content: [{ type: 'text', text: `File not found: ${args.path}` }],
-            isError: true,
-          };
         }
+        return this.unavailable('terminal_read_file');
       }
     );
 
@@ -250,12 +226,8 @@ class FrontendTerminalServer extends MCPServerBase {
               isError: true,
             };
           }
-        } else {
-          mockFileSystem[args.path] = args.content;
-          return {
-            content: [{ type: 'text', text: `Written to ${args.path} (mock mode)` }],
-          };
         }
+        return this.unavailable('terminal_write_file');
       }
     );
 
@@ -306,14 +278,8 @@ class FrontendTerminalServer extends MCPServerBase {
               isError: true,
             };
           }
-        } else {
-          return {
-            content: [{ 
-              type: 'text', 
-              text: `[mock] npm run ${args.script}\n> demo-app@1.0.0 ${args.script}\n> echo "Running ${args.script}"\nRunning ${args.script}\n`,
-            }],
-          };
         }
+        return this.unavailable('terminal_npm_run');
       }
     );
 
@@ -335,8 +301,6 @@ class FrontendTerminalServer extends MCPServerBase {
         },
       },
       async (args) => {
-        const gitCmd = `git ${args.args?.join(' ') || ''}`;
-        
         if (this.webContainer) {
           try {
             const process = await this.webContainer.spawn('git', args.args || []);
@@ -356,30 +320,15 @@ class FrontendTerminalServer extends MCPServerBase {
               isError: true,
             };
           }
-        } else {
-          // Mock git responses
-          const mockGit: Record<string, string> = {
-            'status': 'On branch main\nYour branch is up to date.\n\nnothing to commit, working tree clean',
-            'log --oneline -5': 'abc123 Initial commit\n',
-            'branch': '* main\n  dev\n  feature/test',
-            'remote -v': 'origin\thttps://github.com/user/repo.git (fetch)\norigin\thttps://github.com/user/repo.git (push)',
-          };
-          
-          const key = args.args?.join(' ') || '';
-          return {
-            content: [{ 
-              type: 'text', 
-              text: mockGit[key] || `[mock] ${gitCmd}\nGit command executed`,
-            }],
-          };
         }
+        return this.unavailable('terminal_git');
       }
     );
   }
 
   private async executeWebContainerCommand(command: string, cwd: string = '/home') {
     if (!this.webContainer) {
-      return this.executeMockCommand(command);
+      return this.unavailable('terminal_execute');
     }
 
     try {
@@ -420,7 +369,7 @@ class FrontendTerminalServer extends MCPServerBase {
             exitCode,
             timestamp: new Date().toISOString(),
           },
-          logs: output.split('\n').map((line, i) => ({
+          logs: output.split('\n').map((line) => ({
             timestamp: new Date().toISOString(),
             level: 'info',
             message: line,
@@ -435,67 +384,6 @@ class FrontendTerminalServer extends MCPServerBase {
     }
   }
 
-  private executeMockCommand(command: string) {
-    const cmd = command.toLowerCase().trim();
-
-    // Check mock commands
-    for (const [key, response] of Object.entries(mockCommands)) {
-      if (cmd === key || cmd.startsWith(key + ' ')) {
-        return {
-          content: [{ type: 'text', text: response }],
-        };
-      }
-    }
-
-    // Handle echo
-    if (cmd.startsWith('echo ')) {
-      return {
-        content: [{ type: 'text', text: cmd.slice(5).replace(/"/g, '') }],
-      };
-    }
-
-    // Handle ls
-    if (cmd === 'ls' || cmd === 'ls -la') {
-      const files = Object.keys(mockFileSystem)
-        .filter(p => p.startsWith('/home/'))
-        .map(p => p.replace('/home/', ''));
-      return {
-        content: [{ type: 'text', text: files.join('  ') }],
-      };
-    }
-
-    // Handle cat
-    if (cmd.startsWith('cat ')) {
-      const path = cmd.slice(4);
-      const fullPath = path.startsWith('/') ? path : `/home/${path}`;
-      const content = mockFileSystem[fullPath];
-      if (content) {
-        return { content: [{ type: 'text', text: content }] };
-      }
-      return {
-        content: [{ type: 'text', text: `cat: ${path}: No such file or directory` }],
-        isError: true,
-      };
-    }
-
-    // Handle node
-    if (cmd.startsWith('node ')) {
-      return {
-        content: [{ 
-          type: 'text', 
-          text: `[mock node] Executing ${cmd.slice(5)}\nOutput would appear here in WebContainer mode`,
-        }],
-      };
-    }
-
-    // Default response
-    return {
-      content: [{ 
-        type: 'text', 
-        text: `[mock terminal] Command executed: ${command}\n\nTip: Use WebContainer (Chrome/Edge) for real command execution.`,
-      }],
-    };
-  }
 }
 
 setupWorkerServer(FrontendTerminalServer);

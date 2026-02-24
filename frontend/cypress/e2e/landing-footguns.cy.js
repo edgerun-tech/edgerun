@@ -23,4 +23,13 @@ describe('landing footgun regressions', () => {
     cy.contains('button', 'run demo').click({ force: true })
     cy.get('#address-terminal-root', { timeout: 20000 }).should('not.contain.text', 'keypair_hex')
   })
+
+  it('does not render unverifiable hardcoded KPI claims in hero', () => {
+    cy.visit('/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.contains('Consensus Rate').should('not.exist')
+    cy.contains('Avg Settlement').should('not.exist')
+    cy.contains('Jobs Executed').should('not.exist')
+  })
 })

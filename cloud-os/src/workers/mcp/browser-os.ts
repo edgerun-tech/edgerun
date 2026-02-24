@@ -208,6 +208,15 @@ class BrowserOSServer extends MCPServerBase {
                   text: JSON.stringify(event.data.files, null, 2),
                 }],
               });
+            } else if (event.data?.type === 'files:error' && event.data?.requestId === requestId) {
+              self.removeEventListener('message', handler);
+              resolve({
+                content: [{
+                  type: 'text',
+                  text: event.data.error || 'Failed to list files',
+                }],
+                isError: true,
+              });
             }
           };
 
@@ -260,6 +269,15 @@ class BrowserOSServer extends MCPServerBase {
                   type: 'text',
                   text: event.data.content || 'File not found',
                 }],
+              });
+            } else if (event.data?.type === 'file:error' && event.data?.requestId === requestId) {
+              self.removeEventListener('message', handler);
+              resolve({
+                content: [{
+                  type: 'text',
+                  text: event.data.error || 'Failed to read file',
+                }],
+                isError: true,
               });
             }
           };
@@ -381,6 +399,15 @@ class BrowserOSServer extends MCPServerBase {
                   items: results,
                 },
               });
+            } else if (event.data?.type === 'search:error' && event.data?.requestId === requestId) {
+              self.removeEventListener('message', handler);
+              resolve({
+                content: [{
+                  type: 'text',
+                  text: event.data.error || 'Search failed',
+                }],
+                isError: true,
+              });
             }
           };
 
@@ -466,6 +493,15 @@ class BrowserOSServer extends MCPServerBase {
                   },
                   logs: logs,
                 },
+              });
+            } else if (event.data?.type === 'logs:error' && event.data?.requestId === requestId) {
+              self.removeEventListener('message', handler);
+              resolve({
+                content: [{
+                  type: 'text',
+                  text: event.data.error || 'Failed to retrieve logs',
+                }],
+                isError: true,
               });
             }
           };
