@@ -263,7 +263,9 @@ pub struct RouteRegisterRequest {
     pub reachable_urls: Vec<String>,
     #[serde(default)]
     pub capabilities: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    // Keep explicit field position for bincode control-ws framing.
+    // Skipping this field when None misaligns following fields for non-self-describing formats.
+    #[serde(default)]
     pub relay_session_id: Option<String>,
     pub ttl_secs: u64,
     pub challenge_nonce: String,
@@ -421,4 +423,40 @@ pub fn assignment_policy_message(assignment: &QueuedAssignment) -> String {
         assignment.policy_valid_after_unix_s,
         assignment.policy_valid_until_unix_s
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn control_ws_route_register_roundtrip_with_none_relay_session_id() {
+        let msg = ControlWsClientMessage {
+            request_id: "term-route-2".to_string(),
+            payload: ControlWsRequestPayload::RouteRegister(RouteRegisterRequest {
+                device_id: "device-1".to_string(),
+                owner_pubkey: "owner-1".to_string(),
+                reachable_urls: vec![
+                    "http://127.0.0.1:5577".to_string(),
+                    "http://172.245.67.49:5577".to_string(),
+                ],
+                capabilities: vec!["terminal-ws".to_string(), "webrtc-datachannel".to_string()],
+                relay_session_id: None,
+                ttl_secs: 90,
+                challenge_nonce: "nonce-1".to_string(),
+                signed_at_unix_s: 1_700_000_000,
+                signature: "sig-1".to_string(),
+            }),
+        };
+        let encoded = bincode::serialize(&msg).expect("serialize");
+        let decoded: ControlWsClientMessage = bincode::deserialize(&encoded).expect("deserialize");
+        match decoded.payload {
+            ControlWsRequestPayload::RouteRegister(payload) => {
+                assert_eq!(payload.ttl_secs, 90);
+                assert_eq!(payload.relay_session_id, None);
+                assert_eq!(payload.reachable_urls.len(), 2);
+            }
+            other => panic!("unexpected payload variant: {other:?}"),
+        }
+    }
 }

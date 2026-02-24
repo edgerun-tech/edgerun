@@ -2237,6 +2237,7 @@ dependencies = [
 name = "edgerun-types"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "ciborium",
  "serde",
  "thiserror 2.0.18",

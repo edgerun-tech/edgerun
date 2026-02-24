@@ -14,6 +14,7 @@ Implement an enforced, durable ingestion path for scheduler control-plane events
 - Worker submissions and route registration/heartbeat flows must not bypass scheduler verification paths.
 - Signature verification requirements for existing worker flows remain unchanged.
 - Component communication should remain scheduler-mediated: components publish presence/route state to scheduler, and consumers resolve/connect via scheduler APIs.
+- Control websocket frames use bincode; optional fields in control-plane structs must not rely on skipped serialization in a way that changes field order for non-self-describing formats.
 
 ## Design
 1. Extend scheduler event-bus policy to allow explicit control-plane payload types beyond chain progress.
@@ -23,6 +24,7 @@ Implement an enforced, durable ingestion path for scheduler control-plane events
 - When disabled, scheduler logs warnings and continues.
 4. Restore route announcer compatibility by extending scheduler control websocket request/response variants for route challenge/register/heartbeat (single dial path).
 5. Wire worker and route-control handlers through ingestion helper before state mutation so accepted state transitions are durably recorded.
+6. Preserve stable bincode wire compatibility for control websocket payloads (no field elision that shifts subsequent fields).
 
 ## Acceptance Criteria
 1. Scheduler ingests worker heartbeat/result/failure/replay and route challenge/register/heartbeat events to storage-backed event bus.
@@ -30,6 +32,7 @@ Implement an enforced, durable ingestion path for scheduler control-plane events
 3. Enforcement mode blocks acceptance of relevant events when ingestion fails.
 4. Term-server route announcer succeeds via scheduler control websocket route challenge/register/heartbeat requests.
 5. Worker communication with scheduler control websocket remains functional.
+6. Route registration payloads with `relay_session_id = None` decode correctly over control websocket bincode transport.
 
 ## Rollout / Rollback
 - Rollout:

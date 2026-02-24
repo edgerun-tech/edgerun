@@ -9,3 +9,6 @@ license.workspace = true
 ciborium.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+bincode.workspace = true
