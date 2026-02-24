@@ -154,16 +154,6 @@ const DEFAULT_JOB_ESCROW_LAMPORTS = Math.max(
     SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS
   )
 )
-const DEFAULT_ESCROW_TIER = committeeTierForEscrow(DEFAULT_JOB_ESCROW_LAMPORTS)
-const DEFAULT_REQUIRED_LOCK_LAMPORTS = requiredLockForJobLamports(
-  DEFAULT_JOB_ESCROW_LAMPORTS,
-  DEFAULT_ESCROW_TIER.committeeSize
-)
-const DEFAULT_PAYOUT = computeFinalizePayouts(
-  DEFAULT_JOB_ESCROW_LAMPORTS,
-  PROGRAM_DEFAULT_PROTOCOL_FEE_BPS,
-  DEFAULT_ESCROW_TIER.quorum
-)
 const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   prefix: 'So1',
   startCounter: '0',
@@ -182,6 +172,9 @@ export default function RunPage() {
   const [jobName, setJobName] = createSignal(DEFAULT_PRESET.defaultJobName)
   const [runtimeId, setRuntimeId] = createSignal(DEFAULT_PRESET.defaultRuntimeId)
   const [inputJson, setInputJson] = createSignal(DEFAULT_PRESET.defaultInputJson)
+  const [maxMemoryBytesInput, setMaxMemoryBytesInput] = createSignal(String(DEFAULT_JOB_LIMITS.max_memory_bytes))
+  const [maxInstructionsInput, setMaxInstructionsInput] = createSignal(String(DEFAULT_JOB_LIMITS.max_instructions))
+  const [escrowLamportsInput, setEscrowLamportsInput] = createSignal(String(DEFAULT_JOB_ESCROW_LAMPORTS))
   const [schedulerUrl, setSchedulerUrl] = createSignal(getRouteControlBase())
   const [customModuleName, setCustomModuleName] = createSignal('')
   const [customWasmFileName, setCustomWasmFileName] = createSignal('')
@@ -242,6 +235,19 @@ export default function RunPage() {
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
   const isVanityApp = createMemo(() => selectedPresetId() === 'vanity-generator')
+  const maxMemoryBytes = createMemo(() => parseNonNegativeInt(maxMemoryBytesInput(), DEFAULT_JOB_LIMITS.max_memory_bytes))
+  const maxInstructions = createMemo(() => parseNonNegativeInt(maxInstructionsInput(), DEFAULT_JOB_LIMITS.max_instructions))
+  const deterministicMinEscrowLamports = createMemo(() => requiredInstructionEscrowLamports(
+    maxInstructions(),
+    SCHEDULER_DEFAULT_LAMPORTS_PER_BILLION_INSTRUCTIONS,
+    SCHEDULER_DEFAULT_REDUNDANCY_MULTIPLIER,
+    SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS
+  ))
+  const recommendedEscrowLamports = createMemo(() => Math.max(RUN_DEFAULT_ESCROW_FLOOR_LAMPORTS, deterministicMinEscrowLamports()))
+  const selectedEscrowLamports = createMemo(() => parseNonNegativeInt(escrowLamportsInput(), recommendedEscrowLamports()))
+  const selectedEscrowTier = createMemo(() => committeeTierForEscrow(selectedEscrowLamports()))
+  const selectedRequiredLockLamports = createMemo(() => requiredLockForJobLamports(selectedEscrowLamports(), selectedEscrowTier().committeeSize))
+  const selectedPayout = createMemo(() => computeFinalizePayouts(selectedEscrowLamports(), PROGRAM_DEFAULT_PROTOCOL_FEE_BPS, selectedEscrowTier().quorum))
   const trackedJobId = createMemo(() => lastReceiptId().trim())
   const reportCount = createMemo(() => jobStatus()?.reports?.length ?? 0)
   const failureCount = createMemo(() => jobStatus()?.failures?.length ?? 0)
@@ -275,6 +281,9 @@ export default function RunPage() {
     onPresetChange('vanity-generator')
     setSubmissionMode('preset')
     setExecutionMode('distributed-insecure')
+    setMaxMemoryBytesInput(String(DEFAULT_JOB_LIMITS.max_memory_bytes))
+    setMaxInstructionsInput(String(DEFAULT_JOB_LIMITS.max_instructions))
+    setEscrowLamportsInput(String(DEFAULT_JOB_ESCROW_LAMPORTS))
     setSchedulerUrl(DEFAULT_ROUTE_CONTROL_BASE)
     setAllowSeedExposure(true)
     setActiveStep('step-2')
@@ -321,8 +330,11 @@ export default function RunPage() {
       wasm_base64: wasmPayload,
       input_base64: inputBase64,
       abi_version: DEFAULT_JOB_ABI_VERSION,
-      limits: DEFAULT_JOB_LIMITS,
-      escrow_lamports: DEFAULT_JOB_ESCROW_LAMPORTS
+      limits: {
+        max_memory_bytes: maxMemoryBytes(),
+        max_instructions: maxInstructions()
+      },
+      escrow_lamports: selectedEscrowLamports()
     }
   }
 
@@ -335,6 +347,16 @@ export default function RunPage() {
 
     if (!/^[0-9a-fA-F]{64}$/.test(runtimeId().trim())) {
       errors.push('Runtime ID must be a 64-character hex string.')
+    }
+
+    if (maxMemoryBytes() <= 0) {
+      errors.push('Max memory bytes must be greater than 0.')
+    }
+    if (maxInstructions() <= 0) {
+      errors.push('Max instructions must be greater than 0.')
+    }
+    if (selectedEscrowLamports() < deterministicMinEscrowLamports()) {
+      errors.push(`Escrow must be at least deterministic minimum (${formatLamports(deterministicMinEscrowLamports())} lamports).`)
     }
 
     try {
@@ -627,6 +649,59 @@ export default function RunPage() {
                     </div>
                   </div>
 
+                  <div class="grid gap-4 md:grid-cols-3">
+                    <div class="space-y-1">
+                      <Label for="max-memory-bytes">Max Memory (bytes)</Label>
+                      <Input
+                        id="max-memory-bytes"
+                        aria-label="Max Memory Bytes"
+                        type="number"
+                        min="1"
+                        value={maxMemoryBytesInput()}
+                        onInput={(event: Event & { currentTarget: HTMLInputElement }) => setMaxMemoryBytesInput(event.currentTarget.value)}
+                      />
+                    </div>
+                    <div class="space-y-1">
+                      <Label for="max-instructions">Max Instructions</Label>
+                      <Input
+                        id="max-instructions"
+                        aria-label="Max Instructions"
+                        type="number"
+                        min="1"
+                        value={maxInstructionsInput()}
+                        onInput={(event: Event & { currentTarget: HTMLInputElement }) => setMaxInstructionsInput(event.currentTarget.value)}
+                      />
+                    </div>
+                    <div class="space-y-1">
+                      <Label for="escrow-lamports">Escrow (lamports)</Label>
+                      <Input
+                        id="escrow-lamports"
+                        aria-label="Escrow Lamports"
+                        type="number"
+                        min="0"
+                        value={escrowLamportsInput()}
+                        onInput={(event: Event & { currentTarget: HTMLInputElement }) => setEscrowLamportsInput(event.currentTarget.value)}
+                      />
+                    </div>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEscrowLamportsInput(String(recommendedEscrowLamports()))}
+                    >
+                      Use Recommended Escrow
+                    </Button>
+                    <p class="text-xs text-muted-foreground">
+                      Deterministic minimum for current compute envelope:
+                      {' '}
+                      <span class="font-mono" data-testid="calc-min-escrow">{formatLamports(deterministicMinEscrowLamports())}</span>
+                      {' '}
+                      lamports ({formatSol(deterministicMinEscrowLamports())} SOL)
+                    </p>
+                  </div>
+
                   <div class="space-y-1">
                     <Label for="execution-mode">Execution Mode</Label>
                     <Select
@@ -660,11 +735,11 @@ export default function RunPage() {
                   <Alert data-testid="economic-guardrails">
                     <AlertTitle>Economic Guardrails Applied</AlertTitle>
                     <AlertDescription>
-                      Default escrow uses deterministic scheduler baseline math and is currently
+                      Escrow is pre-calculated from your compute limits and scheduler baseline pricing. Recommended escrow is
                       {' '}
-                      <span class="font-mono">{formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports</span>
+                      <span class="font-mono">{formatLamports(recommendedEscrowLamports())} lamports</span>
                       {' '}
-                      ({formatSol(DEFAULT_JOB_ESCROW_LAMPORTS)} SOL). See
+                      ({formatSol(recommendedEscrowLamports())} SOL). See
                       {' '}
                       <a href="/token/" class="underline underline-offset-2">/token/</a>
                       {' '}
@@ -923,32 +998,36 @@ export default function RunPage() {
                         <TableCell class="text-right font-mono">~12s</TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell class="text-muted-foreground">Deterministic Min Escrow</TableCell>
-                        <TableCell class="text-right font-mono" data-testid="estimate-min-escrow">{formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports</TableCell>
+                        <TableCell class="text-muted-foreground">Max Instructions</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-max-instructions">{formatLamports(maxInstructions())}</TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell class="text-muted-foreground">Default Escrow</TableCell>
+                        <TableCell class="text-muted-foreground">Deterministic Min Escrow</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-min-escrow">{formatLamports(deterministicMinEscrowLamports())} lamports</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Selected Escrow</TableCell>
                         <TableCell class="text-right font-mono" data-testid="estimate-default-escrow">
-                          {formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports ({formatSol(DEFAULT_JOB_ESCROW_LAMPORTS)} SOL)
+                          {formatLamports(selectedEscrowLamports())} lamports ({formatSol(selectedEscrowLamports())} SOL)
                         </TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell class="text-muted-foreground">Committee / Quorum</TableCell>
                         <TableCell class="text-right font-mono" data-testid="estimate-committee-quorum">
-                          {DEFAULT_ESCROW_TIER.committeeSize} / {DEFAULT_ESCROW_TIER.quorum}
+                          {selectedEscrowTier().committeeSize} / {selectedEscrowTier().quorum}
                         </TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell class="text-muted-foreground">Required Lock / Worker</TableCell>
-                        <TableCell class="text-right font-mono" data-testid="estimate-required-lock">{formatLamports(DEFAULT_REQUIRED_LOCK_LAMPORTS)} lamports</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-required-lock">{formatLamports(selectedRequiredLockLamports())} lamports</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell class="text-muted-foreground">Protocol Fee (1%)</TableCell>
-                        <TableCell class="text-right font-mono" data-testid="estimate-protocol-fee">{formatLamports(DEFAULT_PAYOUT.protocolFeeLamports)} lamports</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-protocol-fee">{formatLamports(selectedPayout().protocolFeeLamports)} lamports</TableCell>
                       </TableRow>
                       <TableRow>
                         <TableCell class="text-muted-foreground">Payout Each (Quorum Winners)</TableCell>
-                        <TableCell class="text-right font-mono" data-testid="estimate-payout-each">{formatLamports(DEFAULT_PAYOUT.payoutEachLamports)} lamports</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-payout-each">{formatLamports(selectedPayout().payoutEachLamports)} lamports</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -987,6 +1066,12 @@ export default function RunPage() {
       </Dialog>
     </PageShell>
   )
+}
+
+function parseNonNegativeInt(value: string, fallback: number): number {
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback
+  return parsed
 }
 
 function formatLamports(value: number): string {

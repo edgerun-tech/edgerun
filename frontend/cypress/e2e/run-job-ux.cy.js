@@ -101,6 +101,22 @@ describe('run job orchestration UX', () => {
     cy.get('[data-testid="validation-errors"]').contains('Distributed mode requires explicit worker seed exposure acknowledgement.').should('be.visible')
   })
 
+  it('blocks submit when escrow is below deterministic minimum', () => {
+    cy.visit('/run/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.get('button[role="tab"]').contains('2. Define Inputs').click({ force: true })
+    cy.get('[data-testid="run-step-inputs"]').should('be.visible')
+    cy.get('[aria-label="Escrow Lamports"]').clear().type('1')
+    cy.get('[aria-label="Allow worker seed exposure"]').check({ force: true })
+
+    openReviewStep()
+    cy.contains('button', 'Submit Job').click({ force: true })
+
+    cy.get('[data-testid="validation-errors"]').should('be.visible')
+    cy.get('[data-testid="validation-errors"]').contains('Escrow must be at least deterministic minimum').should('be.visible')
+  })
+
   it('shows scheduler submission error for unreachable scheduler URL', () => {
     cy.visit('/run/')
     cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
