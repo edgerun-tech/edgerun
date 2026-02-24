@@ -24,7 +24,6 @@ const footerLinks = {
   ],
   community: [
     { href: siteLinks.community.github, label: 'GitHub' },
-    { href: siteLinks.community.x, label: 'X / Twitter' },
     { href: siteLinks.community.discord, label: 'Discord' }
   ]
 }
