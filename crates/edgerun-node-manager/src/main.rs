@@ -34,7 +34,8 @@ const WORKER_RUNTIME_MARKER_FILE: &str = "/run/edgerun/worker-runtime.ready";
 const DEFAULT_WORKER_MAX_CONCURRENCY: u32 = 2;
 const DEFAULT_WORKER_MEM_BYTES: u64 = 2_147_483_648;
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
-const EDGE_SECUREBOOT_CERT_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
+const EDGE_SECUREBOOT_CERT_DER_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
+const EDGE_SECUREBOOT_CERT_PEM_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
 const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
 
 #[derive(Parser, Debug)]
@@ -186,6 +187,8 @@ fn bootstrap_pid1_runtime() {
     let _ = mount_fs("proc", "/proc", "proc");
     let _ = mount_fs("sysfs", "/sys", "sysfs");
     let _ = mount_fs("devtmpfs", "/dev", "devtmpfs");
+    let _ = fs::create_dir_all("/sys/firmware/efi/efivars");
+    let _ = mount_fs("efivarfs", "/sys/firmware/efi/efivars", "efivarfs");
     let _ = mount_fs("tmpfs", "/run", "tmpfs");
 }
 
@@ -519,28 +522,39 @@ fn read_efi_bool_var(var_prefix: &str) -> Result<Option<bool>> {
 }
 
 fn auto_import_secure_boot_keys() -> Result<()> {
+    let cert_path = if Path::new(EDGE_SECUREBOOT_CERT_DER_PATH).exists() {
+        EDGE_SECUREBOOT_CERT_DER_PATH
+    } else {
+        EDGE_SECUREBOOT_CERT_PEM_PATH
+    };
     if !Path::new(EFI_UPDATEVAR_BIN).exists() {
         return Err(anyhow!(
             "SetupMode detected but efi-updatevar is unavailable at {EFI_UPDATEVAR_BIN}"
         ));
     }
-    if !Path::new(EDGE_SECUREBOOT_CERT_PATH).exists() {
+    if !Path::new(cert_path).exists() {
         return Err(anyhow!(
-            "SetupMode detected but EdgeRun cert is missing at {EDGE_SECUREBOOT_CERT_PATH}"
+            "SetupMode detected but EdgeRun cert is missing at {cert_path}"
         ));
     }
 
     for var in ["db", "KEK", "PK"] {
-        let status = Command::new(EFI_UPDATEVAR_BIN)
-            .arg("-e")
-            .arg("-c")
-            .arg(EDGE_SECUREBOOT_CERT_PATH)
+        let esl_path = format!("/etc/edgerun/secureboot/{var}.esl");
+        let mut command = Command::new(EFI_UPDATEVAR_BIN);
+        if Path::new(&esl_path).exists() {
+            command.arg("-f").arg(&esl_path);
+        } else {
+            command.arg("-e").arg("-c").arg(cert_path);
+        }
+        let output = command
             .arg(var)
-            .status()
+            .output()
             .with_context(|| format!("failed to execute efi-updatevar for {var}"))?;
-        if !status.success() {
+        if !output.status.success() {
             return Err(anyhow!(
-                "efi-updatevar failed for {var} with status {status}"
+                "efi-updatevar failed for {var} with status {} stderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
             ));
         }
     }
