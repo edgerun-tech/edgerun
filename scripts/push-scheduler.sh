@@ -17,6 +17,7 @@ SCHEDULER_SYSTEMD_SCOPE="${SCHEDULER_SYSTEMD_SCOPE:-user}"
 SCHEDULER_SERVICES="${SCHEDULER_SERVICES:-edgerun-scheduler.service edgerun-worker@1.service edgerun-term-server.service}"
 SCHEDULER_HEALTH_URL="${SCHEDULER_HEALTH_URL:-http://127.0.0.1:5566/health}"
 SCHEDULER_DRY_RUN="${SCHEDULER_DRY_RUN:-0}"
+SCHEDULER_MIN_FREE_MB="${SCHEDULER_MIN_FREE_MB:-256}"
 
 if [[ -z "${SCHEDULER_HOST}" ]]; then
   echo "SCHEDULER_HOST is required" >&2
@@ -65,6 +66,20 @@ fi
 
 echo "[push-scheduler] checking remote SSH connectivity"
 run_ssh "hostname; uname -sr"
+
+echo "[push-scheduler] checking remote free space"
+remote_free_mb="$(
+  run_ssh "mkdir -p '${SCHEDULER_REMOTE_ROOT}' && df -Pm '${SCHEDULER_REMOTE_ROOT}' | awk 'NR==2 {print \$4}'"
+)"
+if [[ -z "${remote_free_mb}" || ! "${remote_free_mb}" =~ ^[0-9]+$ ]]; then
+  echo "failed to determine remote free space at ${SCHEDULER_REMOTE_ROOT}" >&2
+  exit 1
+fi
+if (( remote_free_mb < SCHEDULER_MIN_FREE_MB )); then
+  echo "insufficient remote free space: ${remote_free_mb}MB available, need at least ${SCHEDULER_MIN_FREE_MB}MB" >&2
+  echo "free space on ${SSH_TARGET} and retry (or lower SCHEDULER_MIN_FREE_MB if intentional)" >&2
+  exit 1
+fi
 
 echo "[push-scheduler] syncing repository to ${SSH_TARGET}:${SCHEDULER_REMOTE_ROOT}"
 tar \
