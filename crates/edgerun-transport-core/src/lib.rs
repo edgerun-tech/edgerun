@@ -4,7 +4,8 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use bytes::Bytes;
 use edgerun_types::control_plane::{
-    HeartbeatRequest, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
+    HeartbeatRequest, WorkerAssignmentsRequest, WorkerFailureReport, WorkerReplayArtifactReport,
+    WorkerResultReport,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -168,6 +169,13 @@ pub fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
     format!(
         "heartbeat|{}|{}|{}|{}|{}",
         payload.worker_pubkey, runtime_ids, payload.version, max_concurrent, mem_bytes
+    )
+}
+
+pub fn assignments_signing_message(payload: &WorkerAssignmentsRequest) -> String {
+    format!(
+        "assignments|{}|{}",
+        payload.worker_pubkey, payload.signed_at_unix_s
     )
 }
 

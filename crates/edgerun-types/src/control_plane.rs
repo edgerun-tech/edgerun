@@ -275,6 +275,10 @@ pub struct OwnerRoutesResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerAssignmentsRequest {
     pub worker_pubkey: String,
+    #[serde(default)]
+    pub signed_at_unix_s: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

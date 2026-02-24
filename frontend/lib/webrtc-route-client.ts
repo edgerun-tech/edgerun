@@ -404,35 +404,51 @@ export async function resolveDeviceRoute(controlBase: string, deviceId: string):
   }
 }
 
+function routeControlBasesForResolution(preferredControlBase?: string): string[] {
+  const selection = getRouteControlBaseSelection()
+  const out: string[] = []
+  const preferred = normalizeControlBase(preferredControlBase || '')
+  if (preferred) out.push(preferred)
+  for (const candidate of selection.candidates) {
+    const normalized = normalizeControlBase(candidate.base || '')
+    if (normalized) out.push(normalized)
+  }
+  out.push(DEFAULT_ROUTE_CONTROL_BASE)
+  return [...new Set(out.map((base) => normalizeControlBase(base)).filter(Boolean))]
+}
+
 export async function resolveTerminalBaseUrl(input: string, controlBase?: string): Promise<string> {
   const target = input.trim()
   if (!target) return ''
   const routeDeviceId = parseRouteDeviceId(target)
   if (!routeDeviceId) return target
-  const base = normalizeControlBase(controlBase || getRouteControlBase())
-  if (!base) return ''
-  const resolved = await resolveDeviceRoute(base, routeDeviceId)
-  if (resolved) {
-    rememberControlBase(base)
-    return resolved
+  const bases = routeControlBasesForResolution(controlBase || getRouteControlBase())
+  for (const base of bases) {
+    const resolved = await resolveDeviceRoute(base, routeDeviceId)
+    if (resolved) {
+      rememberControlBase(base)
+      return resolved
+    }
   }
   return ''
 }
 
 export async function resolveOwnerRoutes(controlBase: string, ownerPubkey: string): Promise<RouteEntry[]> {
-  const base = normalizeControlBase(controlBase || getRouteControlBase())
   const trimmedOwner = ownerPubkey.trim()
-  if (!trimmedOwner || !base) return []
-  try {
-    const body = await getControlClient(base).request<OwnerRoutesResponse>(
-      'route.owner',
-      { owner_pubkey: trimmedOwner }
-    )
-    if (!body.ok) return []
-    rememberControlBase(base)
-    return Array.isArray(body.devices) ? body.devices : []
-  } catch {
-    // Explicit user action failed on the WS control channel.
+  if (!trimmedOwner) return []
+  const bases = routeControlBasesForResolution(controlBase || getRouteControlBase())
+  for (const base of bases) {
+    try {
+      const body = await getControlClient(base).request<OwnerRoutesResponse>(
+        'route.owner',
+        { owner_pubkey: trimmedOwner }
+      )
+      if (!body.ok) continue
+      rememberControlBase(base)
+      return Array.isArray(body.devices) ? body.devices : []
+    } catch {
+      // Explicit user action failed on this WS control channel; try next candidate.
+    }
   }
   return []
 }
