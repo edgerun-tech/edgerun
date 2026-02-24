@@ -350,6 +350,15 @@ var BrowserOSServer = class extends MCPServerBase {
                   text: JSON.stringify(event.data.files, null, 2)
                 }]
               });
+            } else if (event.data?.type === "files:error" && event.data?.requestId === requestId) {
+              self.removeEventListener("message", handler);
+              resolve({
+                content: [{
+                  type: "text",
+                  text: event.data.error || "Failed to list files"
+                }],
+                isError: true
+              });
             }
           };
           self.addEventListener("message", handler);
@@ -397,6 +406,15 @@ var BrowserOSServer = class extends MCPServerBase {
                   type: "text",
                   text: event.data.content || "File not found"
                 }]
+              });
+            } else if (event.data?.type === "file:error" && event.data?.requestId === requestId) {
+              self.removeEventListener("message", handler);
+              resolve({
+                content: [{
+                  type: "text",
+                  text: event.data.error || "Failed to read file"
+                }],
+                isError: true
               });
             }
           };
@@ -510,6 +528,15 @@ var BrowserOSServer = class extends MCPServerBase {
                   items: results
                 }
               });
+            } else if (event.data?.type === "search:error" && event.data?.requestId === requestId) {
+              self.removeEventListener("message", handler);
+              resolve({
+                content: [{
+                  type: "text",
+                  text: event.data.error || "Search failed"
+                }],
+                isError: true
+              });
             }
           };
           self.addEventListener("message", handler);
@@ -589,6 +616,15 @@ var BrowserOSServer = class extends MCPServerBase {
                   },
                   logs
                 }
+              });
+            } else if (event.data?.type === "logs:error" && event.data?.requestId === requestId) {
+              self.removeEventListener("message", handler);
+              resolve({
+                content: [{
+                  type: "text",
+                  text: event.data.error || "Failed to retrieve logs"
+                }],
+                isError: true
               });
             }
           };

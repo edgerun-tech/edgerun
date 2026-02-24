@@ -2,6 +2,7 @@
 import { readRuntimeRpcConfig, RPC_CONFIG_EVENT } from '../../lib/solana-config'
 import { getConfiguredProgramCount, getConfiguredProgramIds } from '../../lib/solana-deployments'
 import { acquireSolanaRpcWsClient, type SolanaRpcWsLease } from '../../lib/solana-rpc-ws'
+import { getRouteControlBase, probeRouteControlStatus } from '../../lib/webrtc-route-client'
 
 let initialized = false
 let chainDataLoading = false
@@ -17,6 +18,8 @@ const deploymentProgramLive = new Map<string, boolean>()
 let periodicRefreshTimer: number | null = null
 let chainDataRequestToken = 0
 let deploymentStatusRequestToken = 0
+let controlStatusLastUpdateMs = 0
+let controlStatusLoading = false
 const CHAIN_DATA_REFRESH_DEBOUNCE_MS = 2500
 
 function setField(name: string, value: string): void {
@@ -27,6 +30,11 @@ function setField(name: string, value: string): void {
 function setText(selector: string, value: string): void {
   const el = document.querySelector<HTMLElement>(selector)
   if (el) el.textContent = value
+}
+
+function setControlField(name: string, value: string): void {
+  const els = document.querySelectorAll<HTMLElement>(`[data-control-field="${name}"]`)
+  for (const el of els) el.textContent = value
 }
 
 function formatInt(value: number): string {
@@ -167,6 +175,7 @@ async function bindRpcStreams(): Promise<void> {
   if (periodicRefreshTimer === null) {
     periodicRefreshTimer = window.setInterval(() => {
       void loadChainData()
+      void loadControlPlaneStatus()
     }, 20_000)
   }
 }
@@ -302,8 +311,36 @@ async function loadDeploymentStatus(): Promise<void> {
   }
 }
 
+async function loadControlPlaneStatus(): Promise<void> {
+  if (controlStatusLoading) return
+  const now = Date.now()
+  if (now - controlStatusLastUpdateMs < CHAIN_DATA_REFRESH_DEBOUNCE_MS) return
+  if (!document.querySelector('[data-control-field]')) return
+
+  controlStatusLoading = true
+  try {
+    const controlBase = getRouteControlBase()
+    setControlField('controlBase', controlBase || 'unknown')
+    const status = await probeRouteControlStatus(controlBase)
+    setControlField('controlWs', status.controlWsReachable ? 'reachable' : 'unreachable')
+    setControlField(
+      'controlWsLatency',
+      typeof status.controlWsLatencyMs === 'number' ? `${status.controlWsLatencyMs} ms` : 'n/a'
+    )
+    setControlField('controlCheckedAt', new Date(status.checkedAt).toLocaleTimeString('en-US', { hour12: false }))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'probe failed'
+    setControlField('controlWs', `error: ${message}`)
+    setControlField('controlWsLatency', 'n/a')
+    setControlField('controlCheckedAt', 'n/a')
+  } finally {
+    controlStatusLoading = false
+    controlStatusLastUpdateMs = Date.now()
+  }
+}
+
 function hasChainWidgets(): boolean {
-  return Boolean(document.querySelector('[data-chain-field], [data-deployment-badge], [data-deployment-detail]'))
+  return Boolean(document.querySelector('[data-chain-field], [data-deployment-badge], [data-deployment-detail], [data-control-field]'))
 }
 
 function markChainStatusStale(): void {
@@ -325,10 +362,11 @@ export async function initChainStatusWidgets(): Promise<void> {
       markChainStatusStale()
       void loadChainData()
       void loadDeploymentStatus()
+      void loadControlPlaneStatus()
       void bindRpcStreams()
     })
   }
 
   await bindRpcStreams()
-  await Promise.all([loadChainData(), loadDeploymentStatus()])
+  await Promise.all([loadChainData(), loadDeploymentStatus(), loadControlPlaneStatus()])
 }

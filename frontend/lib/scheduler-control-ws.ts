@@ -42,6 +42,10 @@ function randomClientSuffix(): string {
   return `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`
 }
 
+function isCypressRuntime(): boolean {
+  return Boolean((globalThis as { Cypress?: unknown }).Cypress)
+}
+
 export class SchedulerControlWsClient {
   private readonly controlBase: string
   private readonly clientId: string
@@ -175,6 +179,7 @@ export class SchedulerControlWsClient {
   }
 
   private resolveMock(): ControlWsMockResponder | null {
+    if (!isCypressRuntime()) return null
     const scope = globalThis as {
       __EDGERUN_CONTROL_WS_MOCK__?: unknown
       __EDGERUN_CONTROL_WS_MOCK_ENABLED__?: unknown

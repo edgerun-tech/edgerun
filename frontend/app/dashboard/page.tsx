@@ -44,6 +44,18 @@ export default function DashboardPage() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Card class="mt-4 border-0" data-testid="dashboard-control-plane-card">
+          <CardHeader>
+            <CardTitle>Control Plane Connectivity</CardTitle>
+          </CardHeader>
+          <CardContent class="grid gap-2 text-sm md:grid-cols-2">
+            <p>Control Base: <span class="font-mono" data-control-field="controlBase">loading...</span></p>
+            <p>Control WS: <span class="font-mono" data-control-field="controlWs">loading...</span></p>
+            <p>Latency: <span class="font-mono" data-control-field="controlWsLatency">loading...</span></p>
+            <p>Last Check: <span class="font-mono" data-control-field="controlCheckedAt">loading...</span></p>
+          </CardContent>
+        </Card>
       </section>
     </PageShell>
   )

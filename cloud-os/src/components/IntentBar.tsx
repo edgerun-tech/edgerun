@@ -306,20 +306,9 @@ export default function IntentBar() {
 
   const performFilter = async (type: string, searchTerm: string) => {
     setIsFiltering(true);
-    setError(null);
-
-    try {
-      const mockResults = [
-        { id: 1, type, name: `${searchTerm} - Result 1`, path: `/${type}/${searchTerm}-1`, modified: new Date() },
-        { id: 2, type, name: `${searchTerm} - Result 2`, path: `/${type}/${searchTerm}-2`, modified: new Date() },
-        { id: 3, type, name: `${searchTerm} - Result 3`, path: `/${type}/${searchTerm}-3`, modified: new Date() },
-      ];
-      setFilterResults(mockResults);
-    } catch (e) {
-      setError('Filter operation failed');
-    } finally {
-      setIsFiltering(false);
-    }
+    setFilterResults([]);
+    setError(`Filter backend unavailable for mode "${type}" and query "${searchTerm}"`);
+    setIsFiltering(false);
   };
 
   const runCodexCli = async (rawPrompt: string) => {
