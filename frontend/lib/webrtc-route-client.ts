@@ -67,6 +67,32 @@ type RouteControlCachedStatus = {
   controlWsLatencyMs: number | null
 }
 
+type RouteControlProbeMockResult = {
+  base?: string
+  source?: RouteControlSource
+  checkedAt?: number
+  httpReachable?: boolean
+  httpStatus?: number | null
+  httpLatencyMs?: number | null
+  controlWsReachable?: boolean
+  controlWsLatencyMs?: number | null
+  error?: string
+}
+
+type RouteControlProbeMock = (input: {
+  base: string
+  source: RouteControlSource
+}) => Promise<RouteControlProbeMockResult> | RouteControlProbeMockResult
+
+declare global {
+  var __EDGERUN_ROUTE_CONTROL_PROBE_MOCK__: RouteControlProbeMock | undefined
+  var __EDGERUN_ROUTE_CONTROL_PROBE_MOCK_ENABLED__: boolean | undefined
+}
+
+function isCypressRuntime(): boolean {
+  return Boolean((globalThis as { Cypress?: unknown }).Cypress)
+}
+
 export type RouteControlSelection = {
   candidates: RouteControlCandidate[]
   selected: string
@@ -313,6 +339,27 @@ export async function probeRouteControlStatus(
     controlWsReachable: false,
     controlWsLatencyMs: null,
     error: ''
+  }
+  if (isCypressRuntime()) {
+    const scope = globalThis as {
+      __EDGERUN_ROUTE_CONTROL_PROBE_MOCK__?: unknown
+      __EDGERUN_ROUTE_CONTROL_PROBE_MOCK_ENABLED__?: unknown
+    }
+    if (scope.__EDGERUN_ROUTE_CONTROL_PROBE_MOCK_ENABLED__ === true && typeof scope.__EDGERUN_ROUTE_CONTROL_PROBE_MOCK__ === 'function') {
+      const mock = scope.__EDGERUN_ROUTE_CONTROL_PROBE_MOCK__ as RouteControlProbeMock
+      const mocked = await Promise.resolve(mock({ base, source }))
+      return {
+        base: String(mocked.base || base),
+        source: (mocked.source || source) as RouteControlSource,
+        checkedAt: Number(mocked.checkedAt || Date.now()),
+        httpReachable: Boolean(mocked.httpReachable),
+        httpStatus: mocked.httpStatus ?? null,
+        httpLatencyMs: mocked.httpLatencyMs ?? null,
+        controlWsReachable: Boolean(mocked.controlWsReachable),
+        controlWsLatencyMs: mocked.controlWsLatencyMs ?? null,
+        error: String(mocked.error || '')
+      }
+    }
   }
   if (overrideRequested && !overridden) {
     out.error = 'invalid control base override'

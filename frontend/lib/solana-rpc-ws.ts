@@ -25,6 +25,12 @@ type SubscriptionAck = {
   localId: string
 }
 
+type SolanaRpcHttpMock = (input: {
+  httpUrl: string
+  method: string
+  params: unknown[]
+}) => Promise<unknown> | unknown
+
 export type SolanaRpcWsLease = {
   client: SolanaRpcWsClient
   release: () => void
@@ -35,6 +41,15 @@ const RECONNECT_MS = 1_200
 const WS_CLOSE_NORMAL = 1000
 const DEFAULT_WS_URL = 'wss://api.devnet.solana.com'
 const DEFAULT_HTTP_URL = 'https://api.devnet.solana.com'
+
+declare global {
+  var __EDGERUN_SOLANA_RPC_HTTP_MOCK__: SolanaRpcHttpMock | undefined
+  var __EDGERUN_SOLANA_RPC_HTTP_MOCK_ENABLED__: boolean | undefined
+}
+
+function isCypressRuntime(): boolean {
+  return Boolean((globalThis as { Cypress?: unknown }).Cypress)
+}
 
 function toWsUrl(rpcUrl: string): string {
   try {
@@ -248,6 +263,17 @@ export class SolanaRpcWsClient {
   }
 
   private async requestOverHttp<T>(method: string, params: unknown[] = []): Promise<T> {
+    if (isCypressRuntime()) {
+      const scope = globalThis as {
+        __EDGERUN_SOLANA_RPC_HTTP_MOCK__?: unknown
+        __EDGERUN_SOLANA_RPC_HTTP_MOCK_ENABLED__?: unknown
+      }
+      if (scope.__EDGERUN_SOLANA_RPC_HTTP_MOCK_ENABLED__ === true && typeof scope.__EDGERUN_SOLANA_RPC_HTTP_MOCK__ === 'function') {
+        const mock = scope.__EDGERUN_SOLANA_RPC_HTTP_MOCK__ as SolanaRpcHttpMock
+        return await Promise.resolve(mock({ httpUrl: this.httpUrl, method, params })) as T
+      }
+    }
+
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
     try {
