@@ -73,6 +73,13 @@ describe('run job orchestration UX', () => {
       cy.contains('h3', 'Output').should('be.visible')
       cy.contains('h3', 'What Will Happen').should('be.visible')
     })
+    cy.get('[data-testid="estimate-min-escrow"]').should('contain.text', 'lamports')
+    cy.get('[data-testid="estimate-default-escrow"]').should('contain.text', 'SOL')
+    cy.get('[data-testid="estimate-committee-quorum"]').invoke('text').should('match', /\d+\s*\/\s*\d+/)
+    cy.get('[data-testid="estimate-required-lock"]').should('contain.text', 'lamports')
+    cy.get('[data-testid="estimate-protocol-fee"]').should('contain.text', 'lamports')
+    cy.get('[data-testid="estimate-payout-each"]').should('contain.text', 'lamports')
+    cy.contains('Est. Fee').should('not.exist')
   })
 
   it('shows validation errors when required safety acknowledgement is missing', () => {

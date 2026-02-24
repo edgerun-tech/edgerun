@@ -19,10 +19,15 @@ import { clearJobTabStatus, publishJobTabStatus } from '../../lib/tab-job-status
 import { SchedulerControlWsClient } from '../../lib/scheduler-control-ws'
 import { DEFAULT_ROUTE_CONTROL_BASE, getRouteControlBase } from '../../lib/webrtc-route-client'
 import {
+  PROGRAM_DEFAULT_PROTOCOL_FEE_BPS,
   RUN_DEFAULT_ESCROW_FLOOR_LAMPORTS,
   SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS,
   SCHEDULER_DEFAULT_LAMPORTS_PER_BILLION_INSTRUCTIONS,
   SCHEDULER_DEFAULT_REDUNDANCY_MULTIPLIER,
+  committeeTierForEscrow,
+  computeFinalizePayouts,
+  lamportsToSol,
+  requiredLockForJobLamports,
   requiredInstructionEscrowLamports
 } from '../../lib/economics'
 
@@ -123,6 +128,16 @@ const DEFAULT_JOB_ESCROW_LAMPORTS = Math.max(
     SCHEDULER_DEFAULT_REDUNDANCY_MULTIPLIER,
     SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS
   )
+)
+const DEFAULT_ESCROW_TIER = committeeTierForEscrow(DEFAULT_JOB_ESCROW_LAMPORTS)
+const DEFAULT_REQUIRED_LOCK_LAMPORTS = requiredLockForJobLamports(
+  DEFAULT_JOB_ESCROW_LAMPORTS,
+  DEFAULT_ESCROW_TIER.committeeSize
+)
+const DEFAULT_PAYOUT = computeFinalizePayouts(
+  DEFAULT_JOB_ESCROW_LAMPORTS,
+  PROGRAM_DEFAULT_PROTOCOL_FEE_BPS,
+  DEFAULT_ESCROW_TIER.quorum
 )
 const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
   prefix: 'So1',
@@ -388,10 +403,7 @@ export default function RunPage() {
           <>
             <Button onClick={applyRecommendedDemo}>Use Recommended Demo</Button>
             <a href="/docs/getting-started/quick-start/"><Button variant="outline">Open Get Started Guide</Button></a>
-            <Button variant="outline" disabled>
-              Scheduler WS Submission
-              <GeneratingIndicator class="ml-2 text-[10px]" />
-            </Button>
+            <a href="/token/"><Button variant="outline">Open Economics Model</Button></a>
           </>
         }
       />
@@ -761,8 +773,8 @@ export default function RunPage() {
                   <div class="flex items-center gap-2">
                     <Button type="button" variant="outline" onClick={() => setActiveStep('step-2')}>Back</Button>
                     <Button type="button" disabled={submitStatus() === 'pending'} class="flex-1" onClick={() => void handleSubmit()}>
-                      Submit Job
-                      <GeneratingIndicator class="ml-2 text-xs" />
+                      {submitStatus() === 'pending' ? 'Submitting Job' : 'Submit Job'}
+                      {submitStatus() === 'pending' ? <GeneratingIndicator class="ml-2 text-xs" /> : null}
                     </Button>
                   </div>
                 </CardContent>
@@ -789,12 +801,38 @@ export default function RunPage() {
                         <TableCell class="text-right font-mono">~12s</TableCell>
                       </TableRow>
                       <TableRow>
-                        <TableCell class="text-muted-foreground">Est. Fee</TableCell>
-                        <TableCell class="text-right font-mono">Generating</TableCell>
+                        <TableCell class="text-muted-foreground">Deterministic Min Escrow</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-min-escrow">{formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Default Escrow</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-default-escrow">
+                          {formatLamports(DEFAULT_JOB_ESCROW_LAMPORTS)} lamports ({formatSol(DEFAULT_JOB_ESCROW_LAMPORTS)} SOL)
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Committee / Quorum</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-committee-quorum">
+                          {DEFAULT_ESCROW_TIER.committeeSize} / {DEFAULT_ESCROW_TIER.quorum}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Required Lock / Worker</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-required-lock">{formatLamports(DEFAULT_REQUIRED_LOCK_LAMPORTS)} lamports</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Protocol Fee (1%)</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-protocol-fee">{formatLamports(DEFAULT_PAYOUT.protocolFeeLamports)} lamports</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell class="text-muted-foreground">Payout Each (Quorum Winners)</TableCell>
+                        <TableCell class="text-right font-mono" data-testid="estimate-payout-each">{formatLamports(DEFAULT_PAYOUT.payoutEachLamports)} lamports</TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
-                  <GeneratingIndicator class="text-xs" />
+                  <p class="text-xs text-muted-foreground">
+                    Estimates follow scheduler/program baseline formulas and are shown to reduce surprise rejections.
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -822,4 +860,12 @@ export default function RunPage() {
       </Dialog>
     </PageShell>
   )
+}
+
+function formatLamports(value: number): string {
+  return value.toLocaleString('en-US')
+}
+
+function formatSol(lamports: number): string {
+  return lamportsToSol(lamports).toLocaleString('en-US', { maximumFractionDigits: 6 })
 }
