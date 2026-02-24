@@ -19,6 +19,51 @@ env:
   SCCACHE_GHA_VERSION: "v1"
 
 jobs:
+  frontend-gates:
+    name: Frontend Production Gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.9
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            frontend/node_modules
+          key: bun-frontend-${{ runner.os }}-${{ hashFiles('frontend/bun.lock') }}
+          restore-keys: |
+            bun-frontend-${{ runner.os }}-
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Frontend static quality gates
+        run: bun run check
+        working-directory: frontend
+
+      - name: Frontend validated production build
+        env:
+          EDGERUN_VERSION: ci-${{ github.sha }}
+          EDGERUN_VERSIONS: ci
+          EDGERUN_BUILD_NUMBER: ci-${{ github.run_number }}-${{ github.sha }}
+          EDGERUN_SITE_URL: https://www.edgerun.tech
+          EDGERUN_SITE_DOMAIN: www.edgerun.tech
+          EDGERUN_API_URL: https://api.edgerun.tech
+          SOLANA_CLUSTER: devnet
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          EDGERUN_TREASURY_ACCOUNT: ""
+        run: bun run build:prod
+        working-directory: frontend
+
   build-timing-main:
     name: Build Timing (Main)
     if: ${{ github.event_name == 'workflow_dispatch' }}

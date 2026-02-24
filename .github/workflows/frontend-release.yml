@@ -47,7 +47,11 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: frontend
 
-      - name: Build
+      - name: Frontend static quality gates
+        run: bun run check
+        working-directory: frontend
+
+      - name: Build (validated production)
         env:
           EDGERUN_VERSION: ${{ steps.meta.outputs.version }}
           EDGERUN_VERSIONS: ${{ steps.meta.outputs.versions }}
@@ -55,7 +59,10 @@ jobs:
           EDGERUN_SITE_URL: https://www.edgerun.tech
           EDGERUN_SITE_DOMAIN: www.edgerun.tech
           EDGERUN_API_URL: https://api.edgerun.tech
-        run: bun run build
+          SOLANA_CLUSTER: devnet
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          EDGERUN_TREASURY_ACCOUNT: ""
+        run: bun run build:prod
         working-directory: frontend
 
       - name: Archive artifacts

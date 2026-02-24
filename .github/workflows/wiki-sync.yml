@@ -34,7 +34,13 @@ jobs:
           restore-keys: |
             bun-frontend-${{ runner.os }}-
 
-      - name: Build wiki docs
+      - name: Frontend static quality gates
+        run: |
+          bun install --frozen-lockfile
+          bun run check
+        working-directory: frontend
+
+      - name: Build wiki docs (validated production)
         env:
           EDGERUN_VERSION: main
           EDGERUN_VERSIONS: main
@@ -42,9 +48,11 @@ jobs:
           EDGERUN_SITE_URL: https://www.edgerun.tech
           EDGERUN_SITE_DOMAIN: www.edgerun.tech
           EDGERUN_API_URL: https://api.edgerun.tech
+          SOLANA_CLUSTER: devnet
+          SOLANA_RPC_URL: https://api.devnet.solana.com
+          EDGERUN_TREASURY_ACCOUNT: ""
         run: |
-          bun install --frozen-lockfile
-          bun run build
+          bun run build:prod
         working-directory: frontend
 
       - name: Push wiki
