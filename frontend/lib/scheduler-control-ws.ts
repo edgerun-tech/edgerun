@@ -25,6 +25,7 @@ type ControlWsMockResponder = (request: ControlWsMockRequest) => Promise<unknown
 
 declare global {
   var __EDGERUN_CONTROL_WS_MOCK__: ControlWsMockResponder | undefined
+  var __EDGERUN_CONTROL_WS_MOCK_ENABLED__: boolean | undefined
 }
 
 function toControlWsUrl(controlBase: string, clientId: string): string {
@@ -174,7 +175,12 @@ export class SchedulerControlWsClient {
   }
 
   private resolveMock(): ControlWsMockResponder | null {
-    const candidate = (globalThis as { __EDGERUN_CONTROL_WS_MOCK__?: unknown }).__EDGERUN_CONTROL_WS_MOCK__
+    const scope = globalThis as {
+      __EDGERUN_CONTROL_WS_MOCK__?: unknown
+      __EDGERUN_CONTROL_WS_MOCK_ENABLED__?: unknown
+    }
+    if (scope.__EDGERUN_CONTROL_WS_MOCK_ENABLED__ !== true) return null
+    const candidate = scope.__EDGERUN_CONTROL_WS_MOCK__
     if (typeof candidate !== 'function') return null
     return candidate as ControlWsMockResponder
   }

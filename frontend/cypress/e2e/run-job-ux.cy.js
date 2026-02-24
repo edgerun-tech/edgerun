@@ -112,6 +112,7 @@ describe('run job orchestration UX', () => {
   it('shows happy path success receipt when submission contract is valid', () => {
     cy.visit('/run/', {
       onBeforeLoad(win) {
+        win.__EDGERUN_CONTROL_WS_MOCK_ENABLED__ = true
         win.__EDGERUN_CONTROL_WS_MOCK__ = ({ op, payload }) => {
           expect(op).to.eq('job.create')
           expect(payload).to.have.property('runtime_id')
