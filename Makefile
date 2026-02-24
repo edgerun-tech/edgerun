@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -63,6 +63,9 @@ actions-local-runtime-dry-run:
 
 nodeos-initramfs:
 	./scripts/nodeos/build-initramfs.sh
+
+nodeos-kernel-check:
+	./scripts/nodeos/verify-kernel-config.sh /usr/lib/modules/$$(uname -r)/build/.config
 
 nodeos-yubikey-cert:
 	./scripts/nodeos/create-yubikey-secureboot-cert.sh

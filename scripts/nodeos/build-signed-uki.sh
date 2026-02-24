@@ -14,6 +14,11 @@ cert_pem="${EDGERUN_SB_CERT_PEM:-$out_dir/secureboot/edgerun-secureboot-db-cert.
 pkcs11_uri="${EDGERUN_SB_PKCS11_URI:-}"
 stub="${UKI_STUB:-/usr/lib/systemd/boot/efi/linuxx64.efi.stub}"
 owner_pubkey="${EDGERUN_OWNER_PUBKEY:-}"
+kernel_config_default="/usr/lib/modules/$(uname -r)/build/.config"
+kernel_config="${KERNEL_CONFIG:-}"
+if [[ -z "$kernel_config" && -r "$kernel_config_default" ]]; then
+  kernel_config="$kernel_config_default"
+fi
 
 for cmd in ukify sbsign sbverify sha256sum mkdir grep; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
@@ -21,6 +26,8 @@ for cmd in ukify sbsign sbverify sha256sum mkdir grep; do
     exit 1
   fi
 done
+
+"$repo_root/scripts/nodeos/verify-kernel-config.sh" "$kernel_config"
 
 if [[ -z "$kernel_image" ]]; then
   echo "KERNEL_IMAGE must be set to a built kernel image (e.g., bzImage)" >&2

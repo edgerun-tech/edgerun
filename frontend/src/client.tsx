@@ -103,113 +103,49 @@ function computeSiteChromeStatus(): SiteChromeStatus {
   }
 }
 
-function initBrandFaviconAsset(): void {
-  if (brandFaviconImage || typeof Image === 'undefined') return
-  brandFaviconImage = new Image()
-  brandFaviconImage.src = '/icon-192.png'
+function faviconEmoji(kind: SiteChromeStatus['kind'], frame: number): string {
+  if (kind === 'running') return frame % 2 === 0 ? '🚀' : '⚙️'
+  if (kind === 'success') return '✅'
+  if (kind === 'warning') return '⚠️'
+  if (kind === 'error') return '❌'
+  return '🔌'
 }
 
-function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath()
-  ctx.moveTo(x + r, y)
-  ctx.arcTo(x + w, y, x + w, y + h, r)
-  ctx.arcTo(x + w, y + h, x, y + h, r)
-  ctx.arcTo(x, y + h, x, y, r)
-  ctx.arcTo(x, y, x + w, y, r)
-  ctx.closePath()
+function escapeSvgText(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
 }
 
-function faviconBadgeColor(kind: SiteChromeStatus['kind']): string {
-  if (kind === 'running') return '#3b82f6'
-  if (kind === 'success') return '#22c55e'
-  if (kind === 'error') return '#dc2626'
-  if (kind === 'warning') return '#f59e0b'
-  return '#64748b'
-}
-
-function faviconPng(status: SiteChromeStatus, frame: number): string {
-  const canvas = document.createElement('canvas')
-  canvas.width = 64
-  canvas.height = 64
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return ''
-
-  drawRoundRect(ctx, 0, 0, 64, 64, 14)
-  ctx.fillStyle = '#05070d'
-  ctx.fill()
-
-  drawRoundRect(ctx, 5, 5, 54, 54, 11)
-  ctx.save()
-  ctx.clip()
-  if (brandFaviconImage?.complete && brandFaviconImage.naturalWidth > 0) {
-    ctx.imageSmoothingEnabled = true
-    ctx.drawImage(brandFaviconImage, 5, 5, 54, 54)
-  } else {
-    const grad = ctx.createLinearGradient(8, 8, 56, 56)
-    grad.addColorStop(0, '#0f172a')
-    grad.addColorStop(1, '#111827')
-    ctx.fillStyle = grad
-    ctx.fillRect(5, 5, 54, 54)
-    ctx.strokeStyle = '#d4d4d8'
-    ctx.lineWidth = 4
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.moveTo(20, 18)
-    ctx.lineTo(44, 18)
-    ctx.moveTo(20, 32)
-    ctx.lineTo(40, 32)
-    ctx.moveTo(20, 46)
-    ctx.lineTo(44, 46)
-    ctx.stroke()
-  }
-  ctx.restore()
-
-  if (status.kind === 'running') {
-    const progress = Math.max(0, Math.min(100, status.progressPercent ?? 0))
-    const extra = status.pulse ? (frame % 2 === 0 ? 0 : 0.18) : 0
-    const end = (-Math.PI / 2) + ((Math.PI * 2) * (progress / 100 + extra))
-    ctx.strokeStyle = '#60a5fa'
-    ctx.lineWidth = 4
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.arc(32, 32, 28, -Math.PI / 2, end)
-    ctx.stroke()
-  }
-
-  const badge = faviconBadgeColor(status.kind)
-  const badgeRadius = status.pulse ? (frame % 2 === 0 ? 7.5 : 8.5) : 8
-  ctx.beginPath()
-  ctx.arc(50, 50, badgeRadius + 2, 0, Math.PI * 2)
-  ctx.fillStyle = '#05070d'
-  ctx.fill()
-  ctx.beginPath()
-  ctx.arc(50, 50, badgeRadius, 0, Math.PI * 2)
-  ctx.fillStyle = badge
-  ctx.fill()
-
-  return canvas.toDataURL('image/png')
+function faviconSvgDataUrl(status: SiteChromeStatus, frame: number): string {
+  const emoji = escapeSvgText(faviconEmoji(status.kind, frame))
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#05070d"/><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="44" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, EmojiOne Color, sans-serif">${emoji}</text></svg>`
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`
 }
 
 function updateFavicon(status: SiteChromeStatus): void {
   if (typeof document === 'undefined') return
-  initBrandFaviconAsset()
   let link = document.querySelector<HTMLLinkElement>('link[data-edgerun-dynamic-favicon]')
   if (!link) {
     link = document.createElement('link')
     link.setAttribute('rel', 'icon')
-    link.setAttribute('type', 'image/png')
+    link.setAttribute('type', 'image/svg+xml')
     link.setAttribute('data-edgerun-dynamic-favicon', '1')
     document.head.appendChild(link)
   }
-  const png = faviconPng(status, faviconFrame)
-  if (png) link.setAttribute('href', png)
+  const svgDataUrl = faviconSvgDataUrl(status, faviconFrame)
+  if (svgDataUrl) link.setAttribute('href', svgDataUrl)
 }
 
 function renderSiteChrome(): void {
   const status = computeSiteChromeStatus()
   document.title = titleFlashOverride || status.title
   updateFavicon(status)
-  if (status.pulse) {
+  const allowFaviconAnimation = typeof window !== 'undefined' && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (status.pulse && allowFaviconAnimation) {
     if (faviconAnimationTimer === null) {
       faviconAnimationTimer = window.setInterval(() => {
         faviconFrame = (faviconFrame + 1) % 4
@@ -281,7 +217,6 @@ let walletSessionState: WalletSessionState = readWalletSession()
 let terminalDrawerState: TerminalDrawerState = getTerminalDrawerState()
 let faviconAnimationTimer: number | null = null
 let faviconFrame = 0
-let brandFaviconImage: HTMLImageElement | null = null
 let currentRouteTitle = 'Home'
 let jobTabStatus: JobTabStatus | null = null
 let titleFlashOverride = ''
