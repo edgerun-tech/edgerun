@@ -34,8 +34,8 @@ use edgerun_storage::event_bus::{
 };
 use edgerun_storage::StorageEngine;
 use edgerun_transport_core::{
-    failure_signing_message, heartbeat_signing_message, replay_signing_message,
-    result_signing_message,
+    assignments_signing_message, failure_signing_message, heartbeat_signing_message,
+    replay_signing_message, result_signing_message,
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
@@ -86,6 +86,10 @@ struct AppState {
     committee_size: usize,
     quorum: usize,
     heartbeat_ttl_secs: u64,
+    assignments_signature_max_age_secs: u64,
+    require_assignments_signatures: bool,
+    max_assignments_per_worker: usize,
+    max_assignments_total: usize,
     require_worker_signatures: bool,
     require_result_attestation: bool,
     quorum_requires_attestation: bool,
@@ -394,6 +398,19 @@ implement cryptographic verification for scheduler signed chain progress events 
         committee_size: 3,
         quorum: 2,
         heartbeat_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_HEARTBEAT_TTL_SECS", 15),
+        assignments_signature_max_age_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_ASSIGNMENTS_SIGNATURE_MAX_AGE_SECS",
+            60,
+        ),
+        require_assignments_signatures: read_env_bool(
+            "EDGERUN_SCHEDULER_REQUIRE_ASSIGNMENTS_SIGNATURES",
+            true,
+        ),
+        max_assignments_per_worker: read_env_usize(
+            "EDGERUN_SCHEDULER_MAX_ASSIGNMENTS_PER_WORKER",
+            256,
+        ),
+        max_assignments_total: read_env_usize("EDGERUN_SCHEDULER_MAX_ASSIGNMENTS_TOTAL", 20000),
         require_worker_signatures: read_env_bool(
             "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES",
             false,
@@ -697,8 +714,8 @@ async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> Contro
                 Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
-        ControlWsRequestPayload::WorkerAssignments(WorkerAssignmentsRequest { worker_pubkey }) => {
-            let worker_pubkey = worker_pubkey.trim().to_string();
+        ControlWsRequestPayload::WorkerAssignments(payload) => {
+            let worker_pubkey = payload.worker_pubkey.trim().to_string();
             if worker_pubkey.is_empty() {
                 control_error_response(
                     request_id,
@@ -706,7 +723,7 @@ async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> Contro
                     "worker_pubkey is required".to_string(),
                 )
             } else {
-                match worker_assignments_inner(state, &worker_pubkey) {
+                match worker_assignments_inner(state, payload) {
                     Ok(ok) => control_ok_response(
                         request_id,
                         ControlWsResponsePayload::WorkerAssignments(Box::new(ok)),
@@ -1090,11 +1107,18 @@ fn worker_heartbeat_inner(
 
 fn worker_assignments_inner(
     state: &AppState,
-    worker_pubkey: &str,
+    payload: WorkerAssignmentsRequest,
 ) -> Result<AssignmentsResponse, (StatusCode, String)> {
+    if !verify_worker_assignments_request(state, &payload)? {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid worker assignment signature".to_string(),
+        ));
+    }
+    let worker_pubkey = payload.worker_pubkey;
     tracing::info!(worker = %worker_pubkey, "assignment poll");
     let mut assignments = state.assignments.lock().expect("lock poisoned");
-    let jobs = assignments.remove(worker_pubkey).unwrap_or_default();
+    let jobs = assignments.remove(&worker_pubkey).unwrap_or_default();
     drop(assignments);
 
     schedule_state_snapshot(state).map_err(internal_err)?;
@@ -1491,15 +1515,7 @@ fn job_create_inner(
         queued.push((worker_pubkey.clone(), assignment));
     }
 
-    {
-        let mut assignments = state.assignments.lock().expect("lock poisoned");
-        for (worker_pubkey, assignment) in queued {
-            assignments
-                .entry(worker_pubkey)
-                .or_default()
-                .push(assignment);
-        }
-    }
+    enqueue_assignments_with_limits(state, queued)?;
     {
         let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
         job_quorum.insert(
@@ -2443,6 +2459,62 @@ fn prune_expired_workers(state: &AppState) {
     registry.retain(|_, entry| entry.last_heartbeat_unix_s >= cutoff);
 }
 
+fn enqueue_assignments_with_limits(
+    state: &AppState,
+    queued: Vec<(String, QueuedAssignment)>,
+) -> Result<(), (StatusCode, String)> {
+    let mut per_worker_incoming: HashMap<String, usize> = HashMap::new();
+    for (worker_pubkey, _) in &queued {
+        *per_worker_incoming.entry(worker_pubkey.clone()).or_insert(0) += 1;
+    }
+    let incoming_total = queued.len();
+
+    let mut assignments = state.assignments.lock().expect("lock poisoned");
+    let mut pending_total = 0usize;
+    for (worker_pubkey, jobs) in assignments.iter() {
+        pending_total = pending_total.saturating_add(jobs.len());
+        let incoming = per_worker_incoming.get(worker_pubkey).copied().unwrap_or(0);
+        if jobs.len().saturating_add(incoming) > state.max_assignments_per_worker {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!(
+                    "worker backlog limit reached for {} (limit {})",
+                    worker_pubkey, state.max_assignments_per_worker
+                ),
+            ));
+        }
+    }
+    for (worker_pubkey, incoming) in &per_worker_incoming {
+        if !assignments.contains_key(worker_pubkey) && *incoming > state.max_assignments_per_worker
+        {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!(
+                    "worker backlog limit reached for {} (limit {})",
+                    worker_pubkey, state.max_assignments_per_worker
+                ),
+            ));
+        }
+    }
+    if pending_total.saturating_add(incoming_total) > state.max_assignments_total {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!(
+                "scheduler assignment backlog limit reached (pending {}, incoming {}, limit {})",
+                pending_total, incoming_total, state.max_assignments_total
+            ),
+        ));
+    }
+
+    for (worker_pubkey, assignment) in queued {
+        assignments
+            .entry(worker_pubkey)
+            .or_default()
+            .push(assignment);
+    }
+    Ok(())
+}
+
 fn select_committee_workers(
     state: &AppState,
     runtime_id: &str,
@@ -2452,7 +2524,7 @@ fn select_committee_workers(
     let now = now_unix_seconds();
     let cutoff = now.saturating_sub(state.heartbeat_ttl_secs);
     let registry = state.worker_registry.lock().expect("lock poisoned");
-    let mut eligible = registry
+    let workers = registry
         .values()
         .filter(|entry| {
             entry.last_heartbeat_unix_s >= cutoff
@@ -2461,20 +2533,38 @@ fn select_committee_workers(
                     .iter()
                     .any(|candidate| candidate.eq_ignore_ascii_case(runtime_id))
         })
-        .map(|entry| entry.worker_pubkey.clone())
+        .map(|entry| {
+            (
+                entry.worker_pubkey.clone(),
+                entry.max_concurrent.unwrap_or(1).max(1),
+            )
+        })
         .collect::<Vec<_>>();
     drop(registry);
+    let assignments = state.assignments.lock().expect("lock poisoned");
+
+    let mut eligible = workers
+        .into_iter()
+        .map(|(worker_pubkey, max_concurrent)| {
+            let pending = assignments
+                .get(&worker_pubkey)
+                .map(|jobs| jobs.len() as u128)
+                .unwrap_or(0);
+            let capacity = u128::from(max_concurrent.max(1));
+            let load_ppm = pending.saturating_mul(1_000_000).saturating_div(capacity);
+            let hash_score = hash(format!("{seed}|{runtime_id}|{worker_pubkey}").as_bytes());
+            (worker_pubkey, load_ppm, hash_score)
+        })
+        .collect::<Vec<_>>();
+    drop(assignments);
 
     eligible.sort_by(|a, b| {
-        let a_score = hash(format!("{seed}|{runtime_id}|{a}").as_bytes());
-        let b_score = hash(format!("{seed}|{runtime_id}|{b}").as_bytes());
-        a_score
-            .to_bytes()
-            .cmp(&b_score.to_bytes())
-            .then_with(|| a.cmp(b))
+        a.1.cmp(&b.1)
+            .then_with(|| a.2.to_bytes().cmp(&b.2.to_bytes()))
+            .then_with(|| a.0.cmp(&b.0))
     });
     eligible.truncate(committee_size.max(1));
-    eligible
+    eligible.into_iter().map(|(worker_pubkey, _, _)| worker_pubkey).collect()
 }
 
 fn is_assigned_worker(state: &AppState, job_id: &str, worker_pubkey: &str) -> bool {
@@ -3234,14 +3324,9 @@ fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result
             sign_assignment_policy(&state.policy_signing_key, &assignment);
         queued.push((worker_pubkey.clone(), assignment));
     }
-    {
-        let mut assignments = state.assignments.lock().expect("lock poisoned");
-        for (worker_pubkey, assignment) in queued {
-            assignments
-                .entry(worker_pubkey)
-                .or_default()
-                .push(assignment);
-        }
+    if let Err((_, err)) = enqueue_assignments_with_limits(state, queued) {
+        tracing::warn!(job_id = %job_id_hex, error = %err, "skipping discovered posted job due to assignment backlog limits");
+        return Ok(false);
     }
     {
         let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
@@ -3640,6 +3725,39 @@ fn verify_worker_message_signature(
     let signature = Signature::from_bytes(&sig_arr);
     let digest = edgerun_crypto::blake3_256(message.as_bytes());
     Ok(edgerun_crypto::verify(&worker_vk, &digest, &signature))
+}
+
+fn verify_worker_assignments_request(
+    state: &AppState,
+    payload: &WorkerAssignmentsRequest,
+) -> Result<bool, (StatusCode, String)> {
+    if payload.worker_pubkey.trim().is_empty() {
+        return Ok(false);
+    }
+    let now = now_unix_seconds();
+    if payload.signed_at_unix_s == 0 {
+        return Ok(!state.require_assignments_signatures);
+    }
+    if payload.signed_at_unix_s > now.saturating_add(5) {
+        return Ok(false);
+    }
+    let age = now.saturating_sub(payload.signed_at_unix_s);
+    if age > state.assignments_signature_max_age_secs {
+        return Ok(false);
+    }
+    let require_sig = state.require_assignments_signatures;
+    if !verify_worker_message_signature(
+        state,
+        &payload.worker_pubkey,
+        payload.signature.as_deref(),
+        &assignments_signing_message(payload),
+    )? {
+        return Ok(false);
+    }
+    if require_sig && payload.signature.as_deref().unwrap_or_default().is_empty() {
+        return Ok(false);
+    }
+    Ok(true)
 }
 
 fn verify_result_attestation(

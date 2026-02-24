@@ -9,8 +9,8 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use edgerun_transport_core::{
-    failure_signing_message, heartbeat_signing_message, replay_signing_message,
-    result_signing_message,
+    assignments_signing_message, failure_signing_message, heartbeat_signing_message,
+    replay_signing_message, result_signing_message,
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
@@ -408,11 +408,15 @@ async fn send_heartbeat(cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
 }
 
 async fn poll_assignments(cfg: &WorkerConfig) -> Result<AssignmentsResponse> {
+    let mut payload = WorkerAssignmentsRequest {
+        worker_pubkey: cfg.worker_pubkey.clone(),
+        signed_at_unix_s: now_unix_seconds(),
+        signature: None,
+    };
+    payload.signature = sign_worker_payload(cfg, assignments_signing_message(&payload));
     let response = control_ws_request(
         cfg,
-        ControlWsRequestPayload::WorkerAssignments(WorkerAssignmentsRequest {
-            worker_pubkey: cfg.worker_pubkey.clone(),
-        }),
+        ControlWsRequestPayload::WorkerAssignments(payload),
     )
     .await
     .context("assignments request failed")?;
