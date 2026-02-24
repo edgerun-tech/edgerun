@@ -25,3 +25,4 @@ edgerun-transport-core = { path = "../../crates/edgerun-transport-core" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
 fs2 = "0.4"
 prost = "0.13"
+tower-http = { workspace = true, features = ["cors"] }

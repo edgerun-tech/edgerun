@@ -3,7 +3,7 @@
  * Unified interface for commands, clock, weather, file upload, and resource filtering
  */
 
-import { createSignal, createEffect, Show, For, onMount, onCleanup } from 'solid-js';
+import { createSignal, createEffect, Show, For, onMount, onCleanup, createRoot } from 'solid-js';
 import { Motion } from 'solid-motionone';
 import {
   TbOutlineCommand,
@@ -55,42 +55,105 @@ function cn(...classes: ClassValue[]) {
   return twMerge(clsx(classes));
 }
 
-// Global state
-const [query, setQuery] = createSignal('');
-const [plan, setPlan] = createSignal<ExecutionPlan | null>(null);
-const [loading, setLoading] = createSignal(false);
-const [executing, setExecuting] = createSignal(false);
-const [error, setError] = createSignal<string | null>(null);
-const [mode, setMode] = createSignal<'intent' | 'shell' | 'files' | 'email' | 'logs' | 'cloud'>('intent');
-const [listening, setListening] = createSignal(false);
-const [uploadedFiles, setUploadedFiles] = createSignal<File[]>([]);
-const [filterResults, setFilterResults] = createSignal<any[]>([]);
-const [isFiltering, setIsFiltering] = createSignal(false);
+const intentBarState = createRoot(() => {
+  const [query, setQuery] = createSignal('')
+  const [plan, setPlan] = createSignal<ExecutionPlan | null>(null)
+  const [loading, setLoading] = createSignal(false)
+  const [executing, setExecuting] = createSignal(false)
+  const [error, setError] = createSignal<string | null>(null)
+  const [mode, setMode] = createSignal<'intent' | 'shell' | 'files' | 'email' | 'logs' | 'cloud'>('intent')
+  const [listening, setListening] = createSignal(false)
+  const [uploadedFiles, setUploadedFiles] = createSignal<File[]>([])
+  const [filterResults, setFilterResults] = createSignal<any[]>([])
+  const [isFiltering, setIsFiltering] = createSignal(false)
+  const [showHistory, setShowHistory] = createSignal(false)
+  const [results, setResults] = createSignal(getAllResults())
+  const [pinnedResults, setPinnedResults] = createSignal(getPinnedResults())
+  const [currentTime, setCurrentTime] = createSignal(new Date())
+  const [weather, setWeather] = createSignal({
+    temp: 31,
+    condition: 'sunny' as 'sunny' | 'cloudy' | 'rainy' | 'stormy',
+    humidity: 78,
+    windSpeed: 12,
+    location: 'Pattaya, Thailand',
+    feelsLike: 38,
+    forecast: [
+      { day: 'Mon', temp: 32, condition: 'sunny' as const },
+      { day: 'Tue', temp: 33, condition: 'cloudy' as const },
+      { day: 'Wed', temp: 30, condition: 'rainy' as const },
+      { day: 'Thu', temp: 31, condition: 'rainy' as const },
+      { day: 'Fri', temp: 32, condition: 'cloudy' as const },
+      { day: 'Sat', temp: 34, condition: 'sunny' as const },
+      { day: 'Sun', temp: 33, condition: 'sunny' as const }
+    ]
+  })
 
-// Result history state
-const [showHistory, setShowHistory] = createSignal(false);
-const [results, setResults] = createSignal(getAllResults());
-const [pinnedResults, setPinnedResults] = createSignal(getPinnedResults());
+  return {
+    query,
+    setQuery,
+    plan,
+    setPlan,
+    loading,
+    setLoading,
+    executing,
+    setExecuting,
+    error,
+    setError,
+    mode,
+    setMode,
+    listening,
+    setListening,
+    uploadedFiles,
+    setUploadedFiles,
+    filterResults,
+    setFilterResults,
+    isFiltering,
+    setIsFiltering,
+    showHistory,
+    setShowHistory,
+    results,
+    setResults,
+    pinnedResults,
+    setPinnedResults,
+    currentTime,
+    setCurrentTime,
+    weather,
+    setWeather
+  }
+})
 
-// Time and Weather state
-const [currentTime, setCurrentTime] = createSignal(new Date());
-const [weather, setWeather] = createSignal({
-  temp: 31,
-  condition: 'sunny' as 'sunny' | 'cloudy' | 'rainy' | 'stormy',
-  humidity: 78,
-  windSpeed: 12,
-  location: 'Pattaya, Thailand',
-  feelsLike: 38,
-  forecast: [
-    { day: 'Mon', temp: 32, condition: 'sunny' as const },
-    { day: 'Tue', temp: 33, condition: 'cloudy' as const },
-    { day: 'Wed', temp: 30, condition: 'rainy' as const },
-    { day: 'Thu', temp: 31, condition: 'rainy' as const },
-    { day: 'Fri', temp: 32, condition: 'cloudy' as const },
-    { day: 'Sat', temp: 34, condition: 'sunny' as const },
-    { day: 'Sun', temp: 33, condition: 'sunny' as const },
-  ]
-});
+const {
+  query,
+  setQuery,
+  plan,
+  setPlan,
+  loading,
+  setLoading,
+  executing,
+  setExecuting,
+  error,
+  setError,
+  mode,
+  setMode,
+  listening,
+  setListening,
+  uploadedFiles,
+  setUploadedFiles,
+  filterResults,
+  setFilterResults,
+  isFiltering,
+  setIsFiltering,
+  showHistory,
+  setShowHistory,
+  results,
+  setResults,
+  pinnedResults,
+  setPinnedResults,
+  currentTime,
+  setCurrentTime,
+  weather,
+  setWeather
+} = intentBarState;
 
 // Speech recognition
 let recognition: any | null = null;

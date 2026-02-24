@@ -16,7 +16,7 @@ use axum::{
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     extract::Query,
     extract::State,
-    http::StatusCode,
+    http::{header, HeaderValue, Method, StatusCode},
     response::IntoResponse,
     routing::get,
     Router,
@@ -62,6 +62,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use tokio::sync::mpsc;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Clone)]
 struct AppState {
@@ -461,9 +462,18 @@ implement cryptographic verification for scheduler signed chain progress events 
     enforce_history_retention(&state);
 
     let housekeeping_state = state.clone();
+    let cors = CorsLayer::new()
+        .allow_origin([
+            HeaderValue::from_static("https://www.edgerun.tech"),
+            HeaderValue::from_static("https://edgerun.tech"),
+        ])
+        .allow_methods([Method::GET, Method::OPTIONS])
+        .allow_headers(Any)
+        .expose_headers([header::CONTENT_TYPE]);
     let app = Router::new()
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
+        .layer(cors)
         .with_state(state);
     tokio::spawn(async move {
         housekeeping_loop(housekeeping_state).await;

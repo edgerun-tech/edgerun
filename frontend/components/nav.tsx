@@ -74,8 +74,7 @@ export function Nav() {
 
     const overlayPeers = overlay.directPeers
     const overlayRoutes = overlay.routeEntries
-    const overlayConnected = overlay.controlSignalConnected
-    const overlayOnline = overlayConnected ? Math.max(overlayPeers, overlayRoutes > 0 ? 1 : 0) : 0
+    const overlayOnline = Math.max(overlayPeers, overlayRoutes > 0 ? 1 : 0)
     const overlayTotal = Math.max(overlayPeers, overlayRoutes)
 
     setOnlineNodes(Math.max(drawerOnline, overlayOnline))

@@ -2048,6 +2048,7 @@ dependencies = [
  "solana-client",
  "solana-sdk",
  "tokio",
+ "tower-http",
  "tracing",
 ]
 
