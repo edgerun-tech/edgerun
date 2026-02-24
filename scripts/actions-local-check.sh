@@ -13,6 +13,7 @@ WORKFLOWS=(
   "dependency-review.yml:pull_request"
   "docker-images.yml:push"
   "frontend-release.yml:push"
+  "pipeline-health.yml:workflow_dispatch"
   "push-scheduler.yml:workflow_dispatch"
   "release.yml:push"
   "runtime-compliance-matrix.yml:workflow_dispatch"

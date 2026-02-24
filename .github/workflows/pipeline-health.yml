@@ -1,0 +1,75 @@
+name: Pipeline Health
+run-name: "Pipeline Health • ${{ github.event.workflow_run.name || 'manual' }} • #${{ github.run_number }}"
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Release
+      - Frontend Release
+      - Push Scheduler
+      - Runtime Provenance
+      - Runtime Compliance Matrix
+      - Wiki Sync
+      - Dependency Review
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  summary:
+    name: Publish Pipeline Health Summary
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Build workflow health payload
+        run: |
+          mkdir -p /tmp/pipeline-health
+          EVENT_NAME="${{ github.event_name }}"
+          WORKFLOW_NAME="${{ github.event.workflow_run.name || 'manual-dispatch' }}"
+          CONCLUSION="${{ github.event.workflow_run.conclusion || 'n/a' }}"
+          HEAD_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          RUN_ID="${{ github.event.workflow_run.id || github.run_id }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${RUN_ID}"
+
+          cat > /tmp/pipeline-health/pipeline-health.json <<JSON
+          {
+            "trigger_event": "${EVENT_NAME}",
+            "source_workflow": "${WORKFLOW_NAME}",
+            "source_conclusion": "${CONCLUSION}",
+            "source_run_id": "${RUN_ID}",
+            "source_run_url": "${RUN_URL}",
+            "head_sha": "${HEAD_SHA}",
+            "pipeline_health_run_id": "${{ github.run_id }}",
+            "pipeline_health_run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          }
+          JSON
+
+      - name: Publish pipeline health summary
+        run: |
+          SOURCE_RUN_ID="${{ github.event.workflow_run.id || github.run_id }}"
+          SOURCE_RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${SOURCE_RUN_ID}"
+          {
+            echo "## Pipeline Health"
+            echo ""
+            echo "- trigger event: \`${{ github.event_name }}\`"
+            echo "- source workflow: \`${{ github.event.workflow_run.name || 'manual-dispatch' }}\`"
+            echo "- source conclusion: \`${{ github.event.workflow_run.conclusion || 'n/a' }}\`"
+            echo "- source run: [${SOURCE_RUN_ID}](${SOURCE_RUN_URL})"
+            echo "- source commit: \`${{ github.event.workflow_run.head_sha || github.sha }}\`"
+            echo ""
+            echo "## Visibility Signals"
+            echo ""
+            echo "- CI machine-readable artifacts should include: \`nextest-junit.xml\`, \`coverage-summary.json\`, \`lcov.info\`"
+            echo "- Release/deploy summaries include trace context (ref, commit, hash/target metadata)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload pipeline health artifact
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-health-${{ github.run_id }}
+          path: /tmp/pipeline-health/pipeline-health.json

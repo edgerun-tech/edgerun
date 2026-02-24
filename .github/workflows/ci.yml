@@ -189,10 +189,19 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Workspace tests (nextest)
-        run: cargo nextest run --workspace
+        run: |
+          mkdir -p /tmp/edgerun-ci-artifacts
+          cargo nextest run --workspace --junit-xml /tmp/edgerun-ci-artifacts/nextest-junit.xml
 
       - name: Matrix validation references check
         run: cargo run -p edgerun-cli -- --root . ci --job matrix-check
+
+      - name: Upload rust test report artifacts
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-test-reports-${{ runner.os }}-${{ runner.arch }}
+          path: /tmp/edgerun-ci-artifacts/nextest-junit.xml
 
   coverage:
     name: Coverage (llvm-cov)
@@ -227,13 +236,21 @@ jobs:
             --summary-only \
             --lcov \
             --output-path /tmp/edgerun-coverage/lcov.info
+          cargo llvm-cov \
+            --workspace \
+            --all-targets \
+            --summary-only \
+            --json \
+            --output-path /tmp/edgerun-coverage/coverage-summary.json
 
       - name: Upload coverage artifact
         if: ${{ env.ACT != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: workspace-coverage-${{ runner.os }}-${{ runner.arch }}
-          path: /tmp/edgerun-coverage/lcov.info
+          path: |
+            /tmp/edgerun-coverage/lcov.info
+            /tmp/edgerun-coverage/coverage-summary.json
 
   integration:
     name: Integration
@@ -570,6 +587,10 @@ jobs:
           {
             echo "## CI Run Summary"
             echo ""
+            echo "- run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- ref: \`${{ github.ref_name }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
+            echo ""
             echo "| Job | Result |"
             echo "| --- | --- |"
             echo "| Detect Changed Scopes | ${{ needs.changes.result }} |"
@@ -585,4 +606,10 @@ jobs:
             echo "| Runtime UB Safety | ${{ needs.runtime-ub-safety.result }} |"
             echo "| Runtime Security Gates | ${{ needs.runtime-security.result }} |"
             echo "| Program Localnet | ${{ needs.program-localnet.result }} |"
+            echo ""
+            echo "## Artifacts (Machine Readable)"
+            echo ""
+            echo "- rust test reports artifact: \`rust-test-reports-\${runner.os}-\${runner.arch}\` (contains \`nextest-junit.xml\`)"
+            echo "- coverage artifact: \`workspace-coverage-\${runner.os}-\${runner.arch}\` (contains \`lcov.info\` + \`coverage-summary.json\`)"
+            echo "- runtime quality artifacts: \`replay-corpus-*\`, \`fuel-calibration-*\`, \`slo-smoke-*\`"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -81,6 +81,7 @@ jobs:
         run: |
           mkdir -p release-assets
           find release-downloads -type f -exec cp {} release-assets/ \;
+          sha256sum release-assets/* > release-assets/SHA256SUMS
           ls -la release-assets
 
       - name: Publish release
@@ -97,7 +98,13 @@ jobs:
             echo "## Release Summary"
             echo ""
             echo "- ref: \`${{ github.ref_name }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
             echo "- build-cli result: \`${{ needs.build-cli.result }}\`"
             echo "- publish mode: \`${{ startsWith(github.ref, 'refs/tags/v') && 'tag release attempted' || 'skipped (non-tag run)' }}\`"
             echo "- artifacts path: \`release-assets/\`"
+            if [[ -f release-assets/SHA256SUMS ]]; then
+              echo ""
+              echo "### Artifact Hashes"
+              sed -n '1,20p' release-assets/SHA256SUMS
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

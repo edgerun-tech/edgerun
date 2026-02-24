@@ -35,8 +35,13 @@ workflow_files=(
   "program/package.json"
   "program/Anchor.toml"
   ".github/workflows/ci.yml"
+  ".github/workflows/dependency-review.yml"
   ".github/workflows/frontend-release.yml"
+  ".github/workflows/pipeline-health.yml"
   ".github/workflows/push-scheduler.yml"
+  ".github/workflows/release.yml"
+  ".github/workflows/runtime-compliance-matrix.yml"
+  ".github/workflows/runtime-provenance.yml"
   ".github/workflows/wiki-sync.yml"
 )
 

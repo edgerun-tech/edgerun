@@ -68,13 +68,16 @@ jobs:
       - name: Publish scheduler push summary
         if: ${{ always() }}
         run: |
+          RESOLVED_SHA="$(git rev-parse HEAD)"
           {
             echo "## Push Scheduler Summary"
             echo ""
             echo "- ref: \`${{ inputs.ref }}\`"
+            echo "- resolved commit: \`${RESOLVED_SHA}\`"
             echo "- remote root: \`${{ inputs.remote_root }}\`"
             echo "- build on remote: \`${{ inputs.build_on_remote }}\`"
             echo "- restart services: \`${{ inputs.restart_services }}\`"
             echo "- systemd scope: \`${{ inputs.systemd_scope }}\`"
+            echo "- services: \`${{ inputs.services }}\`"
             echo "- dry run: \`${{ inputs.dry_run }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

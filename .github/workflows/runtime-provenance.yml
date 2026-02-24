@@ -60,6 +60,10 @@ jobs:
             echo "## Runtime Provenance Summary"
             echo ""
             echo "- ref: \`${{ github.ref_name }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
             echo "- artifact: \`edgerun-runtime-release-${{ github.sha }}\`"
             echo "- subject path: \`/tmp/edgerun-runtime-release/edgerun-runtime\`"
+            if [[ -f /tmp/edgerun-runtime-release/SHA256SUMS ]]; then
+              echo "- sha256: \`$(awk '{print $1}' /tmp/edgerun-runtime-release/SHA256SUMS)\`"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

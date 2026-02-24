@@ -84,6 +84,7 @@ jobs:
             echo "## Wiki Sync Summary"
             echo ""
             echo "- trigger: \`${{ github.event_name }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
             echo "- workflow run conclusion gate: \`${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.workflow_run.conclusion }}\`"
             echo "- wiki output source: \`out/frontend/wiki/main/\`"
           } >> "$GITHUB_STEP_SUMMARY"
