@@ -24,6 +24,23 @@ Build output:
 - `../out/frontend/tmp/` temporary build artifacts
 - `../out/frontend/generated/` generated auxiliary snapshots
 
+## Production build
+
+Use the strict production path in CI/release pipelines:
+
+```bash
+EDGERUN_VERSION=0.2.0 \
+EDGERUN_BUILD_NUMBER=0.2.0-1 \
+EDGERUN_SITE_URL=https://www.edgerun.tech \
+EDGERUN_SITE_DOMAIN=www.edgerun.tech \
+SOLANA_CLUSTER=mainnet-beta \
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
+EDGERUN_TREASURY_ACCOUNT=<treasury-pubkey> \
+bun run build:prod
+```
+
+`build:prod` validates release-critical env/config before generating artifacts. It fails when required values are missing or invalid.
+
 ## Quality checks
 
 ```bash

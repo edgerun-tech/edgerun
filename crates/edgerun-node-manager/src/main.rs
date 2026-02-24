@@ -147,7 +147,20 @@ struct BootPolicy {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
+    if let Err(err) = run_main().await {
+        eprintln!("Error: {err:#}");
+        if std::process::id() == 1 {
+            eprintln!("pid1 entering hold loop after fatal startup error");
+            loop {
+                std::thread::sleep(Duration::from_secs(60));
+            }
+        }
+        std::process::exit(1);
+    }
+}
+
+async fn run_main() -> Result<()> {
     bootstrap_pid1_runtime();
     let cli = Cli::parse();
     match cli.command.unwrap_or(Commands::Run) {
@@ -166,6 +179,7 @@ fn bootstrap_pid1_runtime() {
     if std::process::id() != 1 {
         return;
     }
+    std::env::set_var("PATH", "/usr/bin:/usr/sbin:/bin:/sbin");
     for dir in ["/proc", "/sys", "/dev", "/run"] {
         let _ = fs::create_dir_all(dir);
     }
@@ -201,6 +215,7 @@ fn mount_fs(source: &str, target: &str, fstype: &str) -> Result<()> {
 }
 
 fn load_tpm_signer() -> Result<DeviceSigner> {
+    wait_for_tpm_ready();
     let signer = load_or_create_device_signer(SECURITY_MODE)
         .context("failed to initialize TPM-backed device signer")?;
     if signer.backend != HardwareBackend::Tpm {
@@ -210,6 +225,19 @@ fn load_tpm_signer() -> Result<DeviceSigner> {
         ));
     }
     Ok(signer)
+}
+
+fn wait_for_tpm_ready() {
+    if tpm_nv_available() {
+        return;
+    }
+    // Early PID1 startup can race TPM char device creation in initramfs boot.
+    for _ in 0..120 {
+        std::thread::sleep(Duration::from_millis(250));
+        if tpm_nv_available() {
+            return;
+        }
+    }
 }
 
 fn cmd_identity() -> Result<()> {
