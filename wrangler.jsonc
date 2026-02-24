@@ -1,7 +1,15 @@
 {
   "name": "edgerun-www",
-  "compatibility_date": "2026-02-23",
+  "main": "worker/site.mjs",
+  "compatibility_date": "2026-02-24",
   "assets": {
     "directory": "out/frontend/site"
-  }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "EMAIL_SIGNUPS",
+      "id": "__EMAIL_SIGNUPS_NAMESPACE_ID__",
+      "preview_id": "__EMAIL_SIGNUPS_PREVIEW_ID__"
+    }
+  ]
 }

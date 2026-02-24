@@ -4,6 +4,7 @@
   - Wrangler config: `wrangler.jsonc`
   - Worker name: `edgerun-www`
   - Assets directory: `out/frontend/site`
+  - KV binding: `EMAIL_SIGNUPS` (required for `/api/lead` email capture)
   - Deploy command: `bun run deploy:site`
 
 - Cloud OS frontend (`cloud-os/` Astro output):
