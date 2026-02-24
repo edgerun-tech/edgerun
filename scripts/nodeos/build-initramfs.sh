@@ -52,7 +52,8 @@ check_static "$manager_staged"
 
 tmp_spec="$(mktemp "$out_dir/.initramfs.XXXXXX.list")"
 tmp_libs="$(mktemp "$out_dir/.initramfs.libs.XXXXXX")"
-trap 'rm -f "$tmp_spec" "$tmp_libs"' EXIT
+sb_tmp_dir=""
+trap 'rm -f "$tmp_spec" "$tmp_libs"; if [[ -n "$sb_tmp_dir" ]]; then rm -rf "$sb_tmp_dir"; fi' EXIT
 
 cat >"$tmp_spec" <<EOF_SPEC
 # SPDX-License-Identifier: Apache-2.0
@@ -167,7 +168,6 @@ fi
 
 if command -v cert-to-efi-sig-list >/dev/null 2>&1 && [[ -f "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" ]]; then
   sb_tmp_dir="$(mktemp -d "$out_dir/.sb-esl.XXXXXX")"
-  trap 'rm -rf "$sb_tmp_dir"' EXIT
   sb_owner_guid="f3e4a490-8f2d-4f2a-8a0e-5b77c2b8b401"
   for var in PK KEK db; do
     esl_path="$sb_tmp_dir/${var}.esl"
