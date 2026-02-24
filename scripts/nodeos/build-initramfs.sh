@@ -5,14 +5,16 @@ set -euo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 out_dir="${1:-$repo_root/out/nodeos}"
 spec_path="${2:-$out_dir/initramfs.list}"
+initrd_path="${3:-$out_dir/initramfs-edgerun.cpio.gz}"
 cargo_target_dir="${CARGO_TARGET_DIR:-$repo_root/out/target}"
 rust_target="x86_64-unknown-linux-musl"
 profile="release"
-bin_name="edgerun-node-manager"
-built_bin="$cargo_target_dir/$rust_target/$profile/$bin_name"
-staged_bin="$out_dir/$bin_name"
+manager_bin_name="edgerun-node-manager"
+manager_built="$cargo_target_dir/$rust_target/$profile/$manager_bin_name"
+manager_staged="$out_dir/$manager_bin_name"
+stage_root="$out_dir/initrd-root"
 
-for cmd in cargo rustup strip ldd awk sort uniq dirname mkdir cp file sha256sum; do
+for cmd in cargo rustup strip ldd awk sort uniq dirname mkdir cp file sha256sum cpio gzip chmod find rm; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "required command not found: $cmd" >&2
     exit 1
@@ -20,6 +22,8 @@ for cmd in cargo rustup strip ldd awk sort uniq dirname mkdir cp file sha256sum;
 done
 
 mkdir -p "$out_dir"
+rm -rf "$stage_root"
+mkdir -p "$stage_root"
 
 if ! rustup target list --installed | grep -q "^${rust_target}$"; then
   rustup target add "$rust_target"
@@ -29,18 +33,22 @@ fi
 CC_x86_64_unknown_linux_musl="${CC_x86_64_unknown_linux_musl:-musl-gcc}" \
 RUSTFLAGS="${RUSTFLAGS:-} -C target-feature=+crt-static" \
 CARGO_TARGET_DIR="$cargo_target_dir" \
-cargo build -p "$bin_name" --profile "$profile" --target "$rust_target"
+cargo build -p "$manager_bin_name" --profile "$profile" --target "$rust_target"
 
-cp -f "$built_bin" "$staged_bin"
-strip --strip-unneeded "$staged_bin"
+cp -f "$manager_built" "$manager_staged"
+strip --strip-unneeded "$manager_staged"
 
-if ldd "$staged_bin" 2>&1 | grep -Eq "not a dynamic executable|statically linked"; then
-  :
-else
-  echo "binary is not fully static: $staged_bin" >&2
-  ldd "$staged_bin" >&2 || true
+check_static() {
+  local bin="$1"
+  if ldd "$bin" 2>&1 | grep -Eq "not a dynamic executable|statically linked"; then
+    return 0
+  fi
+  echo "binary is not fully static: $bin" >&2
+  ldd "$bin" >&2 || true
   exit 1
-fi
+}
+
+check_static "$manager_staged"
 
 tmp_spec="$(mktemp "$out_dir/.initramfs.XXXXXX.list")"
 tmp_libs="$(mktemp "$out_dir/.initramfs.libs.XXXXXX")"
@@ -60,10 +68,28 @@ dir /tmp 1777 0 0
 dir /etc 755 0 0
 dir /etc/ssl 755 0 0
 dir /etc/ssl/certs 755 0 0
+dir /etc/edgerun 755 0 0
+dir /etc/edgerun/secureboot 755 0 0
 dir /usr 755 0 0
 dir /usr/bin 755 0 0
-file /init $staged_bin 755 0 0
+file /init $manager_staged 755 0 0
 EOF_SPEC
+
+stage_dir() {
+  local path="$1"
+  mkdir -p "$stage_root$path"
+}
+
+stage_dir "/dev"
+stage_dir "/proc"
+stage_dir "/sys"
+stage_dir "/run"
+stage_dir "/tmp"
+stage_dir "/etc/ssl/certs"
+stage_dir "/etc/edgerun/secureboot"
+stage_dir "/usr/bin"
+cp -f "$manager_staged" "$stage_root/init"
+chmod 755 "$stage_root/init"
 
 add_file_line() {
   local dst="$1"
@@ -71,6 +97,9 @@ add_file_line() {
   local mode="$3"
   if [[ -f "$src" ]]; then
     echo "file $dst $src $mode 0 0" >>"$tmp_spec"
+    mkdir -p "$(dirname "$stage_root$dst")"
+    cp -f "$src" "$stage_root$dst"
+    chmod "$mode" "$stage_root$dst" || true
   fi
 }
 
@@ -94,6 +123,8 @@ add_tool_with_libs "tpm2_nvread"
 add_tool_with_libs "tpm2_nvwrite"
 add_tool_with_libs "agave-validator"
 add_tool_with_libs "solana-keygen"
+add_tool_with_libs "efi-updatevar"
+add_tool_with_libs "crun"
 
 if [[ -s "$tmp_libs" ]]; then
   sort -u "$tmp_libs" | while IFS= read -r lib; do
@@ -103,13 +134,33 @@ if [[ -s "$tmp_libs" ]]; then
   done
 fi
 
+# tpm2-tools loads TCTI backends via dlopen; these do not appear in ldd output.
+for tcti_lib in /usr/lib/libtss2-tcti-*.so*; do
+  [[ -e "$tcti_lib" ]] || continue
+  add_file_line "$tcti_lib" "$tcti_lib" 755
+done
+
 if [[ -f /etc/ssl/certs/ca-certificates.crt ]]; then
   add_file_line "/etc/ssl/certs/ca-certificates.crt" "/etc/ssl/certs/ca-certificates.crt" 644
 fi
 
+if [[ -f "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" ]]; then
+  add_file_line \
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem" \
+    "$out_dir/secureboot/edgerun-secureboot-db-cert.pem" \
+    644
+fi
+
 mv "$tmp_spec" "$spec_path"
 
+(
+  cd "$stage_root"
+  find . -print0 | cpio --null -ov --format=newc | gzip -9 > "$initrd_path"
+)
+
 echo "initramfs_spec=$spec_path"
-echo "manager_binary=$staged_bin"
-echo "manager_binary_file_type=$(file -b "$staged_bin")"
-echo "manager_sha256=$(sha256sum "$staged_bin" | awk '{print $1}')"
+echo "initramfs_image=$initrd_path"
+echo "manager_binary=$manager_staged"
+echo "manager_binary_file_type=$(file -b "$manager_staged")"
+echo "manager_sha256=$(sha256sum "$manager_staged" | awk '{print $1}')"
+echo "initrd_sha256=$(sha256sum "$initrd_path" | awk '{print $1}')"

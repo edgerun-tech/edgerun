@@ -120,8 +120,13 @@ pub fn load_or_create_device_signer(
     }
 
     if tpm_available() {
-        if let Ok(signer) = create_tpm_signer(&record_path, DEFAULT_TPM_NV_INDEX) {
-            return Ok(signer);
+        match create_tpm_signer(&record_path, DEFAULT_TPM_NV_INDEX) {
+            Ok(signer) => return Ok(signer),
+            Err(err) => {
+                if mode == HardwareSecurityMode::TpmRequired {
+                    return Err(err);
+                }
+            }
         }
     }
 
@@ -356,12 +361,18 @@ fn tpm_available() -> bool {
 }
 
 fn command_exists(name: &str) -> bool {
-    Command::new("sh")
-        .arg("-lc")
-        .arg(format!("command -v {name} >/dev/null 2>&1"))
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    if name.contains('/') {
+        return Path::new(name).is_file();
+    }
+
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+
+    std::env::split_paths(&path).any(|dir| {
+        let candidate = dir.join(name);
+        candidate.is_file()
+    })
 }
 
 fn tpm_seal_seed(nv_index: u32, seed: &[u8; 32]) -> Result<(), HardwareError> {

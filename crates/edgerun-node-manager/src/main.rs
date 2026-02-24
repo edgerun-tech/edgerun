@@ -27,7 +27,15 @@ const DEFAULT_VALIDATOR_BIN: &str = "agave-validator";
 const DEFAULT_VALIDATOR_KEYGEN_BIN: &str = "solana-keygen";
 const DEFAULT_VALIDATOR_IDENTITY_PATH: &str = "/run/edgerun/validator-identity.json";
 const VALIDATOR_PID_FILE: &str = "/run/edgerun/agave-validator.pid";
+const DEFAULT_WORKER_BIN: &str = "/usr/bin/edgerun-worker";
+const DEFAULT_CRUN_BIN: &str = "/usr/bin/crun";
+const WORKER_PID_FILE: &str = "/run/edgerun/edgerun-worker.pid";
+const WORKER_RUNTIME_MARKER_FILE: &str = "/run/edgerun/worker-runtime.ready";
+const DEFAULT_WORKER_MAX_CONCURRENCY: u32 = 2;
+const DEFAULT_WORKER_MEM_BYTES: u64 = 2_147_483_648;
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
+const EDGE_SECUREBOOT_CERT_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
+const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-node-manager", about = "EdgeRun TPM node manager")]
@@ -74,6 +82,17 @@ struct ApiResponse {
     error: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct RuntimeImageResponse {
+    ok: bool,
+    #[serde(default)]
+    image_tag: Option<String>,
+    #[serde(default)]
+    image_ref: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 struct BondRequest<'a> {
     owner_pubkey: &'a str,
@@ -96,12 +115,25 @@ struct NodeHeartbeatRequest<'a> {
     pid1: bool,
 }
 
+#[derive(Debug, Serialize)]
+struct RuntimeImageRequest<'a> {
+    owner_pubkey: &'a str,
+    device_pubkey_b64url: &'a str,
+    rpc_url: &'a str,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ManagerConfig {
     api_base: String,
     rpc_url: String,
     validator_ws_url: String,
     validator_ledger_dir: String,
+    worker_max_concurrency: u32,
+    worker_mem_bytes: u64,
+    #[serde(default)]
+    runtime_image_ref: Option<String>,
+    #[serde(default)]
+    runtime_image_pulled: bool,
     heartbeat_secs: u64,
     bonded: bool,
     stake_initialized: bool,
@@ -238,6 +270,10 @@ fn cmd_configure(_rpc_url: &str, heartbeat_secs: u64) -> Result<()> {
         rpc_url: DEFAULT_RPC_URL.to_string(),
         validator_ws_url: DEFAULT_VALIDATOR_WS_URL.to_string(),
         validator_ledger_dir: DEFAULT_VALIDATOR_LEDGER_DIR.to_string(),
+        worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
+        worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
+        runtime_image_ref: None,
+        runtime_image_pulled: false,
         heartbeat_secs,
         bonded: false,
         stake_initialized: false,
@@ -304,6 +340,10 @@ async fn cmd_run() -> Result<()> {
         rpc_url: DEFAULT_RPC_URL.to_string(),
         validator_ws_url: DEFAULT_VALIDATOR_WS_URL.to_string(),
         validator_ledger_dir: DEFAULT_VALIDATOR_LEDGER_DIR.to_string(),
+        worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
+        worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
+        runtime_image_ref: None,
+        runtime_image_pulled: false,
         heartbeat_secs: 15,
         bonded: false,
         stake_initialized: false,
@@ -321,10 +361,18 @@ async fn cmd_run() -> Result<()> {
     if cfg.validator_ledger_dir.is_empty() {
         cfg.validator_ledger_dir = DEFAULT_VALIDATOR_LEDGER_DIR.to_string();
     }
+    if cfg.worker_max_concurrency == 0 {
+        cfg.worker_max_concurrency = DEFAULT_WORKER_MAX_CONCURRENCY;
+    }
+    if cfg.worker_mem_bytes == 0 {
+        cfg.worker_mem_bytes = DEFAULT_WORKER_MEM_BYTES;
+    }
 
     let client = Client::new();
     ensure_local_validator(&client, &mut cfg).await?;
     bootstrap_api_state(&client, &signer, &mut cfg, boot_policy.as_ref()).await?;
+    ensure_runtime_image_ready(&client, &mut cfg, &signer.public_key_b64url).await?;
+    ensure_worker_running(&cfg, &signer.public_key_b64url)?;
     save_config(&cfg)?;
 
     println!("manager=starting");
@@ -333,10 +381,30 @@ async fn cmd_run() -> Result<()> {
     println!("api_base={}", cfg.api_base);
     println!("rpc_url={}", cfg.rpc_url);
     println!("validator_ws_url={}", cfg.validator_ws_url);
+    println!("worker_max_concurrency={}", cfg.worker_max_concurrency);
+    println!("worker_mem_bytes={}", cfg.worker_mem_bytes);
+    if let Some(image_ref) = cfg.runtime_image_ref.as_deref() {
+        println!("runtime_image_ref={image_ref}");
+    }
 
     loop {
         if let Err(err) = ensure_local_validator(&client, &mut cfg).await {
             eprintln!("validator_error={err}");
+        }
+        if !cfg.runtime_image_pulled {
+            match ensure_runtime_image_ready(&client, &mut cfg, &signer.public_key_b64url).await {
+                Ok(()) => {
+                    let _ = save_config(&cfg);
+                }
+                Err(err) => {
+                    eprintln!("runtime_image_error={err}");
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+            }
+        }
+        if let Err(err) = ensure_worker_running(&cfg, &signer.public_key_b64url) {
+            eprintln!("worker_error={err}");
         }
         if let Err(err) = send_heartbeat(&client, &cfg, &signer.public_key_b64url).await {
             eprintln!("heartbeat_error={err}");
@@ -346,6 +414,13 @@ async fn cmd_run() -> Result<()> {
 }
 
 fn enforce_boot_policy() -> Result<BootPolicy> {
+    if setup_mode_enabled()? {
+        auto_import_secure_boot_keys()?;
+        return Err(anyhow!(
+            "UEFI SetupMode detected; EdgeRun Secure Boot keys were enrolled, reboot required"
+        ));
+    }
+
     if !secure_boot_enabled()? {
         return Err(anyhow!("secure boot is disabled; refusing PID 1 startup"));
     }
@@ -384,6 +459,15 @@ fn enforce_boot_policy() -> Result<BootPolicy> {
 }
 
 fn secure_boot_enabled() -> Result<bool> {
+    read_efi_bool_var("SecureBoot")
+        .and_then(|v| v.ok_or_else(|| anyhow!("SecureBoot efivar not found")))
+}
+
+fn setup_mode_enabled() -> Result<bool> {
+    Ok(read_efi_bool_var("SetupMode")?.unwrap_or(false))
+}
+
+fn read_efi_bool_var(var_prefix: &str) -> Result<Option<bool>> {
     let efivars = Path::new("/sys/firmware/efi/efivars");
     if !efivars.exists() {
         return Err(anyhow!("efivars path missing: {}", efivars.display()));
@@ -393,17 +477,46 @@ fn secure_boot_enabled() -> Result<bool> {
         let entry = entry.context("failed to read efivars entry")?;
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.starts_with("SecureBoot-") {
+        if !name.starts_with(&format!("{var_prefix}-")) {
             continue;
         }
-        let data = fs::read(entry.path()).context("failed to read SecureBoot efivar")?;
+        let data = fs::read(entry.path())
+            .with_context(|| format!("failed to read {var_prefix} efivar"))?;
         if data.len() < 5 {
-            return Err(anyhow!("invalid SecureBoot efivar payload"));
+            return Err(anyhow!("invalid {var_prefix} efivar payload"));
         }
-        return Ok(data[4] == 1);
+        return Ok(Some(data[4] == 1));
+    }
+    Ok(None)
+}
+
+fn auto_import_secure_boot_keys() -> Result<()> {
+    if !Path::new(EFI_UPDATEVAR_BIN).exists() {
+        return Err(anyhow!(
+            "SetupMode detected but efi-updatevar is unavailable at {EFI_UPDATEVAR_BIN}"
+        ));
+    }
+    if !Path::new(EDGE_SECUREBOOT_CERT_PATH).exists() {
+        return Err(anyhow!(
+            "SetupMode detected but EdgeRun cert is missing at {EDGE_SECUREBOOT_CERT_PATH}"
+        ));
     }
 
-    Err(anyhow!("SecureBoot efivar not found"))
+    for var in ["db", "KEK", "PK"] {
+        let status = Command::new(EFI_UPDATEVAR_BIN)
+            .arg("-e")
+            .arg("-c")
+            .arg(EDGE_SECUREBOOT_CERT_PATH)
+            .arg(var)
+            .status()
+            .with_context(|| format!("failed to execute efi-updatevar for {var}"))?;
+        if !status.success() {
+            return Err(anyhow!(
+                "efi-updatevar failed for {var} with status {status}"
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn cmdline_arg(cmdline: &str, key: &str) -> Option<String> {
@@ -458,6 +571,12 @@ async fn bootstrap_api_state(
         cfg.owner_pubkey = Some(owner_pubkey);
         cfg.bonded = true;
         println!("status=bonded");
+        println!(
+            "onboarding_url={}/register?device={}&owner={}",
+            cfg.api_base,
+            signer.public_key_b64url,
+            cfg.owner_pubkey.as_deref().unwrap_or_default()
+        );
     }
 
     let owner_pubkey = cfg
@@ -614,8 +733,68 @@ fn read_validator_pid() -> Option<u32> {
     raw.trim().parse::<u32>().ok()
 }
 
+fn read_worker_pid() -> Option<u32> {
+    let raw = fs::read_to_string(WORKER_PID_FILE).ok()?;
+    raw.trim().parse::<u32>().ok()
+}
+
 fn pid_alive(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
+}
+
+fn ensure_worker_running(cfg: &ManagerConfig, worker_pubkey: &str) -> Result<()> {
+    if !Path::new(DEFAULT_WORKER_BIN).exists() {
+        if Path::new(DEFAULT_CRUN_BIN).exists() {
+            if !Path::new(WORKER_RUNTIME_MARKER_FILE).exists() {
+                fs::write(WORKER_RUNTIME_MARKER_FILE, "crun-ready\n")
+                    .context("failed to write worker runtime marker")?;
+                println!("status=worker-runtime=crun-ready");
+            }
+            return Ok(());
+        }
+        return Err(anyhow!(
+            "worker runtime missing: expected {} or {}",
+            DEFAULT_WORKER_BIN,
+            DEFAULT_CRUN_BIN
+        ));
+    }
+
+    if let Some(pid) = read_worker_pid() {
+        if pid_alive(pid) {
+            return Ok(());
+        }
+    }
+
+    fs::create_dir_all("/run/edgerun").context("failed to create /run/edgerun")?;
+    let mut log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("/run/edgerun/edgerun-worker.log")
+        .context("failed to open worker log file")?;
+    writeln!(log_file, "=== starting edgerun-worker ===").ok();
+    let log_file_err = log_file
+        .try_clone()
+        .context("failed to clone worker log fd")?;
+
+    let child = Command::new(DEFAULT_WORKER_BIN)
+        .env("EDGERUN_WORKER_PUBKEY", worker_pubkey)
+        .env("EDGERUN_SCHEDULER_URL", &cfg.api_base)
+        .env(
+            "EDGERUN_WORKER_MAX_CONCURRENT",
+            cfg.worker_max_concurrency.to_string(),
+        )
+        .env("EDGERUN_WORKER_MEM_BYTES", cfg.worker_mem_bytes.to_string())
+        .env("EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED", "false")
+        .env("EDGERUN_CHAIN_RPC_URL", &cfg.rpc_url)
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_file_err))
+        .spawn()
+        .context("failed to spawn edgerun-worker")?;
+
+    let pid = child.id();
+    fs::write(WORKER_PID_FILE, pid.to_string()).context("failed to write worker pid file")?;
+    println!("status=worker-started pid={pid} pubkey={worker_pubkey}");
+    Ok(())
 }
 
 async fn wait_for_validator(client: &Client, rpc_url: &str, timeout: Duration) -> Result<()> {
@@ -690,6 +869,118 @@ async fn register_device(
     println!("device_pubkey_b64url={device_pubkey_b64url}");
     println!("owner_pubkey={owner_pubkey}");
     Ok(())
+}
+
+async fn ensure_runtime_image_ready(
+    client: &Client,
+    cfg: &mut ManagerConfig,
+    device_pubkey_b64url: &str,
+) -> Result<()> {
+    if cfg.runtime_image_pulled {
+        return Ok(());
+    }
+    let owner_pubkey = cfg
+        .owner_pubkey
+        .as_deref()
+        .ok_or_else(|| anyhow!("owner_pubkey missing for runtime image request"))?;
+    let image_ref =
+        request_runtime_image_ref(client, cfg, owner_pubkey, device_pubkey_b64url).await?;
+    pull_runtime_image(&image_ref)?;
+    cfg.runtime_image_ref = Some(image_ref.clone());
+    cfg.runtime_image_pulled = true;
+    println!("status=runtime-image-ready image_ref={image_ref}");
+    Ok(())
+}
+
+async fn request_runtime_image_ref(
+    client: &Client,
+    cfg: &ManagerConfig,
+    owner_pubkey: &str,
+    device_pubkey_b64url: &str,
+) -> Result<String> {
+    let payload = RuntimeImageRequest {
+        owner_pubkey,
+        device_pubkey_b64url,
+        rpc_url: &cfg.rpc_url,
+    };
+    let candidate_paths = ["/v1/node/runtime/image-tag", "/v1/node/image-tag"];
+    for path in candidate_paths {
+        let url = format!("{}{}", cfg.api_base, path);
+        let resp = client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .with_context(|| format!("runtime image request failed: {url}"))?;
+        if !resp.status().is_success() {
+            continue;
+        }
+        let data: RuntimeImageResponse = resp
+            .json()
+            .await
+            .with_context(|| format!("invalid runtime image response from {url}"))?;
+        if !data.ok {
+            if let Some(err) = data.error {
+                eprintln!("runtime_image_api_error={err}");
+            }
+            continue;
+        }
+        if let Some(image_ref) = data.image_ref.filter(|s| !s.trim().is_empty()) {
+            println!("runtime_image_ref_requested={image_ref}");
+            return Ok(image_ref);
+        }
+        if let Some(tag) = data.image_tag.filter(|s| !s.trim().is_empty()) {
+            let image_ref = format!("ghcr.io/edgerun/worker:{tag}");
+            println!("runtime_image_tag_requested={tag}");
+            return Ok(image_ref);
+        }
+    }
+    Err(anyhow!(
+        "runtime image tag endpoint unavailable or returned no image reference"
+    ))
+}
+
+fn pull_runtime_image(image_ref: &str) -> Result<()> {
+    let runners: &[(&str, &[&str])] = &[
+        ("nerdctl", &["pull"]),
+        ("ctr", &["images", "pull"]),
+        ("podman", &["pull"]),
+        ("docker", &["pull"]),
+        ("skopeo", &["copy", "--insecure-policy"]),
+    ];
+
+    for (bin, args) in runners {
+        if !command_in_path(bin) {
+            continue;
+        }
+        let status = if *bin == "skopeo" {
+            Command::new(bin)
+                .args(*args)
+                .arg(format!("docker://{image_ref}"))
+                .arg(format!("containers-storage:{image_ref}"))
+                .status()
+        } else {
+            Command::new(bin).args(*args).arg(image_ref).status()
+        }
+        .with_context(|| format!("failed launching image pull via {bin}"))?;
+        if status.success() {
+            println!("runtime_image_pull_via={bin}");
+            return Ok(());
+        }
+    }
+
+    Err(anyhow!(
+        "no supported image pull tool succeeded (tried nerdctl/ctr/podman/docker/skopeo)"
+    ))
+}
+
+fn command_in_path(cmd: &str) -> bool {
+    Command::new("sh")
+        .arg("-lc")
+        .arg(format!("command -v {cmd} >/dev/null 2>&1"))
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 async fn send_heartbeat(

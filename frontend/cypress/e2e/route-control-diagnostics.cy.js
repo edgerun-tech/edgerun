@@ -16,6 +16,10 @@ describe('route control diagnostics', () => {
     cy.get('[data-testid="route-debug-overlay-ws"]').should('contain.text', 'overlay-ws')
     cy.get('[data-testid="route-debug-overlay-summary"]').should('contain.text', 'overlay')
     cy.get('[data-testid="route-debug-route-advert"]').should('contain.text', 'route-advert')
+    cy.get('link[data-edgerun-dynamic-favicon]')
+      .should('have.attr', 'type', 'image/svg+xml')
+      .invoke('attr', 'href')
+      .should('match', /^data:image\/svg\+xml,/)
   })
 
   it('falls back away from configured source when configured API base is invalid', () => {
