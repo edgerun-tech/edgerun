@@ -259,11 +259,107 @@ export default function IntentBar() {
     }
   };
 
+  const runCodexCli = async (rawPrompt: string) => {
+    const prompt = rawPrompt.trim();
+    if (!prompt) {
+      setError('Usage: /codex <prompt>');
+      return;
+    }
+
+    const startedAt = Date.now();
+    const response = await fetch('/api/codex/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        cwd: context.currentRepo || undefined,
+      }),
+    });
+
+    const payload = await response.json();
+    if (!response.ok || payload?.error) {
+      throw new Error(payload?.error || 'Codex CLI request failed');
+    }
+
+    const logs = [
+      {
+        level: 'info',
+        source: 'codex-cli',
+        message: `Prompt: ${prompt}`,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        level: payload.ok ? 'info' : 'error',
+        source: 'codex-cli',
+        message: `Exit ${payload.exitCode} in ${payload.durationMs}ms`,
+        timestamp: new Date().toISOString(),
+      },
+      ...(payload.finalText
+        ? [{
+            level: 'info',
+            source: 'assistant',
+            message: payload.finalText,
+            timestamp: new Date().toISOString(),
+          }]
+        : []),
+      ...(payload.stderr
+        ? payload.stderr.split('\n').filter(Boolean).map((line: string) => ({
+            level: 'error',
+            source: 'stderr',
+            message: line,
+            timestamp: new Date().toISOString(),
+          }))
+        : []),
+      ...(payload.stdout
+        ? payload.stdout.split('\n').filter(Boolean).slice(-80).map((line: string) => ({
+            level: 'debug',
+            source: 'stdout',
+            message: line,
+            timestamp: new Date().toISOString(),
+          }))
+        : []),
+    ];
+
+    const toolResponse: ToolResponse = {
+      success: Boolean(payload.ok),
+      data: logs,
+      error: payload.ok ? undefined : payload.stderr || `Exit ${payload.exitCode}`,
+      ui: {
+        viewType: 'log-viewer',
+        title: 'Codex CLI',
+        description: 'Command output from /codex execution',
+        metadata: {
+          source: 'codex-cli',
+          itemCount: logs.length,
+          duration: `${Date.now() - startedAt}ms`,
+          exitCode: payload.exitCode,
+          cwd: payload.cwd,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    };
+
+    addResult({
+      query: `/codex ${prompt}`,
+      response: toolResponse,
+    });
+    setResults(getAllResults());
+    setPinnedResults(getPinnedResults());
+    setQuery('');
+    setPlan(null);
+    addRecentCommand(`/codex ${prompt}`);
+  };
+
   const processQuery = async (q: string) => {
     setLoading(true);
     setError(null);
 
     try {
+      if (q.trim().toLowerCase().startsWith('/codex ')) {
+        await runCodexCli(q.trim().slice('/codex '.length));
+        return;
+      }
+
       const appCtx: AppContext = {
         currentRepo: context.currentRepo,
         currentBranch: context.currentBranch,
