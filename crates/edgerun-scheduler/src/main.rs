@@ -24,6 +24,7 @@ use axum::{
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
+use edgerun_hwvault_primitives::hardware::random_token_b64url;
 use edgerun_storage::durability::DurabilityLevel;
 use edgerun_storage::event::{
     ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
@@ -35,14 +36,16 @@ use edgerun_storage::event_bus::{
 use edgerun_storage::StorageEngine;
 use edgerun_transport_core::{
     assignments_signing_message, failure_signing_message, heartbeat_signing_message,
-    replay_signing_message, result_signing_message,
+    replay_signing_message, result_signing_message, route_register_signing_message,
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
     BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
     ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, JobCreateRequest,
     JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse, QueuedAssignment,
-    RouteOwnerRequest, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
+    RouteChallengeRequest, RouteChallengeResponse, RouteHeartbeatRequest, RouteHeartbeatResponse,
+    RouteOwnerRequest, RouteRegisterRequest, RouteRegisterResponse,
+    RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
     RouteResolveResponse as CpRouteResolveResponse, SlashWorkerArtifact, SubmissionAck,
     WorkerAssignmentsRequest, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
@@ -106,6 +109,8 @@ struct AppState {
     route_flush_state: Arc<Mutex<SnapshotFlushState>>,
     route_sync_min_interval_secs: u64,
     housekeeping_interval_secs: u64,
+    route_signature_max_age_secs: u64,
+    route_challenge_ttl_secs: u64,
     device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
     route_challenges: Arc<Mutex<HashMap<String, u64>>>,
     route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
@@ -114,6 +119,7 @@ struct AppState {
     chain_event_bus_sink: Arc<Mutex<Option<ChainEventBusSink>>>,
     latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
     require_chain_progress_signature_verification: bool,
+    enforce_event_ingestion: bool,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -220,6 +226,64 @@ struct OwnerRoutesResponse {
 struct RouteHeartbeatToken {
     device_id: String,
     expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerHeartbeatIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: HeartbeatRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerAssignmentsPollIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: WorkerAssignmentsRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerResultIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: WorkerResultReport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerFailureIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: WorkerFailureReport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkerReplayIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: WorkerReplayArtifactReport,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RouteChallengeIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    device_id: String,
+    nonce: String,
+    expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RouteRegisterIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: RouteRegisterRequest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RouteHeartbeatIngestEvent {
+    schema_version: u32,
+    observed_at_unix_ms: u64,
+    payload: RouteHeartbeatRequest,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -447,6 +511,12 @@ implement cryptographic verification for scheduler signed chain progress events 
         .max(1),
         housekeeping_interval_secs: read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5)
             .max(1),
+        route_signature_max_age_secs: read_env_u64(
+            "EDGERUN_SCHEDULER_ROUTE_SIGNATURE_MAX_AGE_SECS",
+            300,
+        ),
+        route_challenge_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_ROUTE_CHALLENGE_TTL_SECS", 120)
+            .max(30),
         device_routes: Arc::new(Mutex::new(loaded_route_state.device_routes)),
         route_challenges: Arc::new(Mutex::new(loaded_route_state.route_challenges)),
         route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
@@ -457,8 +527,20 @@ implement cryptographic verification for scheduler signed chain progress events 
             persisted.latest_chain_progress_event_id.clone(),
         )),
         require_chain_progress_signature_verification,
+        enforce_event_ingestion: read_env_bool("EDGERUN_SCHEDULER_ENFORCE_EVENT_INGESTION", true),
         chain,
     };
+    if state.enforce_event_ingestion
+        && state
+            .chain_event_bus_sink
+            .lock()
+            .expect("lock poisoned")
+            .is_none()
+    {
+        anyhow::bail!(
+            "EDGERUN_SCHEDULER_ENFORCE_EVENT_INGESTION=true but scheduler event bus sink is unavailable"
+        );
+    }
     enforce_history_retention(&state);
 
     let housekeeping_state = state.clone();
@@ -651,6 +733,30 @@ async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> Contro
                     request_id,
                     ControlWsResponsePayload::JobStatus(Box::new(status)),
                 )
+            }
+        }
+        ControlWsRequestPayload::RouteChallenge(payload) => {
+            match route_challenge_inner(state, payload) {
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::RouteChallenge(ok))
+                }
+                Err((status, err)) => control_error_response(request_id, status, err),
+            }
+        }
+        ControlWsRequestPayload::RouteRegister(payload) => {
+            match route_register_inner(state, payload) {
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::RouteRegister(ok))
+                }
+                Err((status, err)) => control_error_response(request_id, status, err),
+            }
+        }
+        ControlWsRequestPayload::RouteHeartbeat(payload) => {
+            match route_heartbeat_inner(state, payload) {
+                Ok(ok) => {
+                    control_ok_response(request_id, ControlWsResponsePayload::RouteHeartbeat(ok))
+                }
+                Err((status, err)) => control_error_response(request_id, status, err),
             }
         }
         ControlWsRequestPayload::RouteResolve(RouteResolveRequest { device_id }) => {
@@ -1059,6 +1165,400 @@ fn prune_expired_routes(routes: &mut HashMap<String, DeviceRouteEntry>, now: u64
     routes.retain(|_, route| route.expires_at_unix_s > now);
 }
 
+const INGEST_SCHEMA_VERSION: u32 = 1;
+const EVENT_PUBLISHER_SCHEDULER: &str = "scheduler";
+const EVENT_SIGNATURE_SCHEDULER_INGEST: &str = "scheduler-control-plane";
+const EVENT_POLICY_ID_SCHEDULER_CONTROL_PLANE: &str = "scheduler-control-plane-v1";
+const EVENT_TYPE_WORKER_HEARTBEAT: &str = "worker_heartbeat";
+const EVENT_TYPE_WORKER_ASSIGNMENTS_POLL: &str = "worker_assignments_poll";
+const EVENT_TYPE_WORKER_RESULT: &str = "worker_result";
+const EVENT_TYPE_WORKER_FAILURE: &str = "worker_failure";
+const EVENT_TYPE_WORKER_REPLAY: &str = "worker_replay";
+const EVENT_TYPE_ROUTE_CHALLENGE: &str = "route_challenge";
+const EVENT_TYPE_ROUTE_REGISTER: &str = "route_register";
+const EVENT_TYPE_ROUTE_HEARTBEAT: &str = "route_heartbeat";
+
+fn ingest_scheduler_event<T: Serialize>(
+    state: &AppState,
+    payload_type: &str,
+    payload: &T,
+) -> Result<(), (StatusCode, String)> {
+    let encoded = bincode::serialize(payload).map_err(internal_err)?;
+    let mut guard = state.chain_event_bus_sink.lock().expect("lock poisoned");
+    let Some(bus_sink) = guard.as_mut() else {
+        if state.enforce_event_ingestion {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "scheduler event ingestion sink is unavailable".to_string(),
+            ));
+        }
+        tracing::warn!(
+            payload_type,
+            "skipping control-plane event ingestion because event bus sink is unavailable"
+        );
+        return Ok(());
+    };
+    let envelope = StorageBackedEventBus::build_envelope(
+        bus_sink.next_nonce,
+        EVENT_PUBLISHER_SCHEDULER.to_string(),
+        EVENT_SIGNATURE_SCHEDULER_INGEST.to_string(),
+        EVENT_POLICY_ID_SCHEDULER_CONTROL_PLANE.to_string(),
+        vec!["*".to_string()],
+        payload_type.to_string(),
+        encoded,
+    );
+    match bus_sink.bus.publish(&envelope) {
+        Ok(_) => {
+            bus_sink.next_nonce = bus_sink.next_nonce.saturating_add(1);
+            Ok(())
+        }
+        Err(err) => {
+            if state.enforce_event_ingestion {
+                Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("failed to ingest event '{payload_type}': {err}"),
+                ))
+            } else {
+                tracing::warn!(
+                    payload_type,
+                    error = %err,
+                    "control-plane event ingestion failed (continuing because enforcement is disabled)"
+                );
+                Ok(())
+            }
+        }
+    }
+}
+
+fn parse_route_owner_verifying_key(
+    owner_pubkey: &str,
+) -> Result<VerifyingKey, (StatusCode, String)> {
+    let trimmed = owner_pubkey.trim();
+    if trimmed.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey is required".to_string(),
+        ));
+    }
+    if let Ok(pubkey) = trimmed.parse::<Pubkey>() {
+        return VerifyingKey::from_bytes(&pubkey.to_bytes()).map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid owner_pubkey bytes".to_string(),
+            )
+        });
+    }
+    let bytes = URL_SAFE_NO_PAD.decode(trimmed.as_bytes()).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey must be base58 or base64url".to_string(),
+        )
+    })?;
+    let arr: [u8; 32] = bytes.try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey must decode to 32 bytes".to_string(),
+        )
+    })?;
+    VerifyingKey::from_bytes(&arr).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid owner_pubkey bytes".to_string(),
+        )
+    })
+}
+
+fn parse_signature_b64url(signature: &str) -> Result<Signature, (StatusCode, String)> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(signature.trim().as_bytes())
+        .map_err(|_| {
+            (
+                StatusCode::BAD_REQUEST,
+                "invalid signature encoding".to_string(),
+            )
+        })?;
+    let arr: [u8; 64] = bytes.try_into().map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "signature must decode to 64 bytes".to_string(),
+        )
+    })?;
+    Ok(Signature::from_bytes(&arr))
+}
+
+fn route_challenge_inner(
+    state: &AppState,
+    payload: RouteChallengeRequest,
+) -> Result<RouteChallengeResponse, (StatusCode, String)> {
+    let device_id = payload.device_id.trim().to_string();
+    if device_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
+    }
+    let now = now_unix_seconds();
+    let nonce = random_token_b64url(24);
+    let expires_at_unix_s = now.saturating_add(state.route_challenge_ttl_secs);
+    let ingest_event = RouteChallengeIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        device_id,
+        nonce: nonce.clone(),
+        expires_at_unix_s,
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_CHALLENGE, &ingest_event)?;
+    with_route_maps_mut(state, |_, challenges, tokens| {
+        challenges.retain(|_, exp| *exp > now);
+        tokens.retain(|_, token| token.expires_at_unix_s > now);
+        challenges.insert(nonce.clone(), expires_at_unix_s);
+        Ok(())
+    })?;
+    Ok(RouteChallengeResponse {
+        nonce,
+        expires_at_unix_s,
+    })
+}
+
+fn route_register_inner(
+    state: &AppState,
+    payload: RouteRegisterRequest,
+) -> Result<RouteRegisterResponse, (StatusCode, String)> {
+    let device_id = payload.device_id.trim().to_string();
+    if device_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
+    }
+    let owner_pubkey = payload.owner_pubkey.trim().to_string();
+    if owner_pubkey.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "owner_pubkey is required".to_string(),
+        ));
+    }
+    let challenge_nonce = payload.challenge_nonce.trim().to_string();
+    if challenge_nonce.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "challenge_nonce is required".to_string(),
+        ));
+    }
+    let signature = payload.signature.trim().to_string();
+    if signature.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "signature is required".to_string()));
+    }
+    let reachable_urls = payload
+        .reachable_urls
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    if reachable_urls.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "reachable_urls must not be empty".to_string(),
+        ));
+    }
+    let capabilities = payload
+        .capabilities
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let relay_session_id = payload
+        .relay_session_id
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string);
+
+    let now = now_unix_seconds();
+    if payload.signed_at_unix_s == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "signed_at_unix_s is required".to_string(),
+        ));
+    }
+    if payload.signed_at_unix_s > now.saturating_add(state.route_signature_max_age_secs) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "route signature timestamp is too far in the future".to_string(),
+        ));
+    }
+    let age = now.saturating_sub(payload.signed_at_unix_s);
+    if age > state.route_signature_max_age_secs {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "route signature is too old".to_string(),
+        ));
+    }
+
+    let challenge_valid = {
+        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
+        challenges.retain(|_, exp| *exp > now);
+        challenges
+            .get(&challenge_nonce)
+            .copied()
+            .map(|exp| exp > now)
+            .unwrap_or(false)
+    };
+    if !challenge_valid {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "unknown or expired challenge_nonce".to_string(),
+        ));
+    }
+
+    let verifier = parse_route_owner_verifying_key(&owner_pubkey)?;
+    let parsed_signature = parse_signature_b64url(&signature)?;
+    let signing_message = route_register_signing_message(
+        &owner_pubkey,
+        &device_id,
+        &reachable_urls,
+        &challenge_nonce,
+        payload.signed_at_unix_s,
+    );
+    if !edgerun_crypto::verify(&verifier, signing_message.as_bytes(), &parsed_signature) {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "invalid route register signature".to_string(),
+        ));
+    }
+
+    let ttl_secs = payload.ttl_secs.clamp(30, 300);
+    let mut normalized_payload = payload.clone();
+    normalized_payload.device_id = device_id.clone();
+    normalized_payload.owner_pubkey = owner_pubkey.clone();
+    normalized_payload.challenge_nonce = challenge_nonce.clone();
+    normalized_payload.reachable_urls = reachable_urls.clone();
+    normalized_payload.capabilities = capabilities.clone();
+    normalized_payload.relay_session_id = relay_session_id.clone();
+    normalized_payload.ttl_secs = ttl_secs;
+    normalized_payload.signature = signature.clone();
+    let ingest_event = RouteRegisterIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: normalized_payload,
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_REGISTER, &ingest_event)?;
+
+    let heartbeat_token = random_token_b64url(32);
+    with_route_maps_mut(state, |routes, challenges, tokens| {
+        challenges.retain(|_, exp| *exp > now);
+        let Some(expiry) = challenges.remove(&challenge_nonce) else {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "unknown or expired challenge_nonce".to_string(),
+            ));
+        };
+        if expiry <= now {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "unknown or expired challenge_nonce".to_string(),
+            ));
+        }
+        let expires_at = now.saturating_add(ttl_secs);
+        routes.insert(
+            device_id.clone(),
+            DeviceRouteEntry {
+                device_id: device_id.clone(),
+                owner_pubkey,
+                reachable_urls,
+                capabilities,
+                relay_session_id,
+                online: true,
+                last_seen_unix_s: now,
+                expires_at_unix_s: expires_at,
+                updated_at_unix_s: now,
+            },
+        );
+        tokens.insert(
+            heartbeat_token.clone(),
+            RouteHeartbeatToken {
+                device_id,
+                expires_at_unix_s: expires_at,
+            },
+        );
+        Ok(())
+    })?;
+    Ok(RouteRegisterResponse {
+        ok: true,
+        heartbeat_token,
+    })
+}
+
+fn route_heartbeat_inner(
+    state: &AppState,
+    payload: RouteHeartbeatRequest,
+) -> Result<RouteHeartbeatResponse, (StatusCode, String)> {
+    let device_id = payload.device_id.trim().to_string();
+    if device_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
+    }
+    let token = payload.token.trim().to_string();
+    if token.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "token is required".to_string()));
+    }
+    let ttl_secs = payload.ttl_secs.clamp(30, 300);
+    let now = now_unix_seconds();
+    {
+        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
+        tokens.retain(|_, item| item.expires_at_unix_s > now);
+        let Some(stored) = tokens.get(&token) else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "unknown or expired heartbeat token".to_string(),
+            ));
+        };
+        if stored.device_id != device_id {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "heartbeat token does not match device_id".to_string(),
+            ));
+        }
+    }
+
+    let ingest_event = RouteHeartbeatIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: RouteHeartbeatRequest {
+            device_id: device_id.clone(),
+            token: token.clone(),
+            ttl_secs,
+        },
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_HEARTBEAT, &ingest_event)?;
+
+    with_route_maps_mut(state, |routes, _, tokens| {
+        tokens.retain(|_, item| item.expires_at_unix_s > now);
+        let Some(stored) = tokens.get_mut(&token) else {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "unknown or expired heartbeat token".to_string(),
+            ));
+        };
+        if stored.device_id != device_id {
+            return Err((
+                StatusCode::FORBIDDEN,
+                "heartbeat token does not match device_id".to_string(),
+            ));
+        }
+        let expires_at = now.saturating_add(ttl_secs);
+        stored.expires_at_unix_s = expires_at;
+        let route = routes.get_mut(&device_id).ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                "route not found for device".to_string(),
+            )
+        })?;
+        route.online = true;
+        route.last_seen_unix_s = now;
+        route.expires_at_unix_s = expires_at;
+        route.updated_at_unix_s = now;
+        Ok(())
+    })?;
+
+    Ok(RouteHeartbeatResponse { ok: true })
+}
+
 fn worker_heartbeat_inner(
     state: &AppState,
     payload: HeartbeatRequest,
@@ -1081,6 +1581,12 @@ fn worker_heartbeat_inner(
         version = %payload.version,
         "received worker heartbeat"
     );
+    let ingest_event = WorkerHeartbeatIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: payload.clone(),
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_WORKER_HEARTBEAT, &ingest_event)?;
     let now = now_unix_seconds();
     let (max_concurrent, mem_bytes) = payload
         .capacity
@@ -1125,6 +1631,12 @@ fn worker_assignments_inner(
             "invalid worker assignment signature".to_string(),
         ));
     }
+    let ingest_event = WorkerAssignmentsPollIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: payload.clone(),
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_WORKER_ASSIGNMENTS_POLL, &ingest_event)?;
     let worker_pubkey = payload.worker_pubkey;
     tracing::info!(worker = %worker_pubkey, "assignment poll");
     let mut assignments = state.assignments.lock().expect("lock poisoned");
@@ -1176,6 +1688,12 @@ fn worker_result_inner(
         output_len = payload.output_len,
         "worker result received"
     );
+    let ingest_event = WorkerResultIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: payload.clone(),
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_WORKER_RESULT, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut results = state.results.lock().expect("lock poisoned");
@@ -1236,6 +1754,12 @@ fn worker_failure_inner(
         error_code = %payload.error_code,
         "worker failure received"
     );
+    let ingest_event = WorkerFailureIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: payload.clone(),
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_WORKER_FAILURE, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut failures = state.failures.lock().expect("lock poisoned");
@@ -1302,6 +1826,12 @@ fn worker_replay_artifact_inner(
         error_code = ?payload.artifact.error_code,
         "worker replay artifact received"
     );
+    let ingest_event = WorkerReplayIngestEvent {
+        schema_version: INGEST_SCHEMA_VERSION,
+        observed_at_unix_ms: now_unix_millis(),
+        payload: payload.clone(),
+    };
+    ingest_scheduler_event(state, EVENT_TYPE_WORKER_REPLAY, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut replay_artifacts = state.replay_artifacts.lock().expect("lock poisoned");
@@ -1751,25 +2281,65 @@ fn query_max_nonce_for_publisher(bus: &mut StorageBackedEventBus, publisher: &st
     Ok(max_nonce)
 }
 
+const SCHEDULER_EVENT_BUS_POLICY_VERSION: u32 = 2;
+
+fn scheduler_event_bus_rules() -> Vec<PolicyRuleV1> {
+    vec![
+        PolicyRuleV1 {
+            publisher: "*".to_string(),
+            payload_type: "policy_update_request".to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: "chain_progress".to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_WORKER_HEARTBEAT.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_WORKER_ASSIGNMENTS_POLL.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_WORKER_RESULT.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_WORKER_FAILURE.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_WORKER_REPLAY.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_ROUTE_CHALLENGE.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_ROUTE_REGISTER.to_string(),
+        },
+        PolicyRuleV1 {
+            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
+            payload_type: EVENT_TYPE_ROUTE_HEARTBEAT.to_string(),
+        },
+    ]
+}
+
 fn ensure_chain_progress_policy(bus: &mut StorageBackedEventBus, next_nonce: u64) -> Result<u64> {
     let status = bus.status()?;
-    if status.phase == BusPhaseV1::Running as i32 {
+    if status.phase == BusPhaseV1::Running as i32
+        && status.policy_version >= SCHEDULER_EVENT_BUS_POLICY_VERSION
+    {
         return Ok(next_nonce);
     }
     let policy_req = PolicyUpdateRequestV1 {
         schema_version: 1,
         policy: Some(EventBusPolicyV1 {
-            version: 1,
-            rules: vec![
-                PolicyRuleV1 {
-                    publisher: "*".to_string(),
-                    payload_type: "policy_update_request".to_string(),
-                },
-                PolicyRuleV1 {
-                    publisher: "scheduler".to_string(),
-                    payload_type: "chain_progress".to_string(),
-                },
-            ],
+            version: SCHEDULER_EVENT_BUS_POLICY_VERSION,
+            rules: scheduler_event_bus_rules(),
         }),
     };
     let envelope = StorageBackedEventBus::build_envelope(
@@ -2475,7 +3045,9 @@ fn enqueue_assignments_with_limits(
 ) -> Result<(), (StatusCode, String)> {
     let mut per_worker_incoming: HashMap<String, usize> = HashMap::new();
     for (worker_pubkey, _) in &queued {
-        *per_worker_incoming.entry(worker_pubkey.clone()).or_insert(0) += 1;
+        *per_worker_incoming
+            .entry(worker_pubkey.clone())
+            .or_insert(0) += 1;
     }
     let incoming_total = queued.len();
 
@@ -2574,7 +3146,10 @@ fn select_committee_workers(
             .then_with(|| a.0.cmp(&b.0))
     });
     eligible.truncate(committee_size.max(1));
-    eligible.into_iter().map(|(worker_pubkey, _, _)| worker_pubkey).collect()
+    eligible
+        .into_iter()
+        .map(|(worker_pubkey, _, _)| worker_pubkey)
+        .collect()
 }
 
 fn is_assigned_worker(state: &AppState, job_id: &str, worker_pubkey: &str) -> bool {

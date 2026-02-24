@@ -9,14 +9,18 @@ license.workspace = true
 anyhow = "1"
 axum = { workspace = true, features = ["ws"] }
 base64.workspace = true
+bincode.workspace = true
 bs58 = "0.5"
 ed25519-dalek.workspace = true
 edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
 edgerun-observability = { path = "../edgerun-observability" }
 edgerun-transport-core = { path = "../edgerun-transport-core" }
+edgerun-types = { path = "../edgerun-types" }
+futures-util = "0.3"
 json = "0.12"
 portable-pty = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tower-http = { workspace = true, features = ["fs"] }

@@ -246,6 +246,50 @@ pub struct RouteOwnerRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteChallengeRequest {
+    pub device_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteChallengeResponse {
+    pub nonce: String,
+    pub expires_at_unix_s: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteRegisterRequest {
+    pub device_id: String,
+    pub owner_pubkey: String,
+    pub reachable_urls: Vec<String>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_session_id: Option<String>,
+    pub ttl_secs: u64,
+    pub challenge_nonce: String,
+    pub signed_at_unix_s: u64,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteRegisterResponse {
+    pub ok: bool,
+    pub heartbeat_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteHeartbeatRequest {
+    pub device_id: String,
+    pub token: String,
+    pub ttl_secs: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteHeartbeatResponse {
+    pub ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteResolveEntry {
     pub device_id: String,
     pub owner_pubkey: String,
@@ -304,6 +348,9 @@ pub struct SubmissionAck {
 pub enum ControlWsRequestPayload {
     JobCreate(JobCreateRequest),
     JobStatus(JobStatusRequest),
+    RouteChallenge(RouteChallengeRequest),
+    RouteRegister(RouteRegisterRequest),
+    RouteHeartbeat(RouteHeartbeatRequest),
     RouteResolve(RouteResolveRequest),
     RouteOwner(RouteOwnerRequest),
     WorkerHeartbeat(HeartbeatRequest),
@@ -324,6 +371,9 @@ pub struct ControlWsClientMessage {
 pub enum ControlWsResponsePayload {
     JobCreate(JobCreateResponse),
     JobStatus(Box<JobStatusResponse>),
+    RouteChallenge(RouteChallengeResponse),
+    RouteRegister(RouteRegisterResponse),
+    RouteHeartbeat(RouteHeartbeatResponse),
     RouteResolve(RouteResolveResponse),
     RouteOwner(Box<OwnerRoutesResponse>),
     WorkerHeartbeat(HeartbeatResponse),

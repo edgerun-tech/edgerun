@@ -5,6 +5,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -27,9 +28,17 @@ use edgerun_hwvault_primitives::hardware::{
     DeviceSigner, HardwareSecurityMode, load_or_create_device_signer, random_token_b64url,
 };
 use edgerun_transport_core::route_register_signing_message;
+use edgerun_types::control_plane::{
+    ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
+    ControlWsServerMessage, RouteChallengeRequest as CpRouteChallengeRequest,
+    RouteHeartbeatRequest as CpRouteHeartbeatRequest,
+    RouteRegisterRequest as CpRouteRegisterRequest,
+};
+use futures_util::{SinkExt, StreamExt};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use tokio::sync::{Mutex, mpsc};
-use tokio::time::{Duration, sleep};
+use tokio::time::{Duration, sleep, timeout};
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
 
@@ -48,6 +57,9 @@ struct DeviceIdentityResponse {
 
 type RouteSigner = Arc<dyn Fn(&[u8]) -> String + Send + Sync>;
 
+static CONTROL_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
+const CONTROL_WS_TIMEOUT: Duration = Duration::from_secs(8);
+
 #[derive(Debug)]
 struct DeviceChallengeResponse {
     nonce_b64url: String,
@@ -65,43 +77,6 @@ struct DeviceHandshakeResponse {
     ok: bool,
     handshake: Option<edgerun_hwvault_primitives::hardware::DeviceHandshake>,
     error: Option<String>,
-}
-
-#[derive(Debug)]
-struct RouteRegisterRequest {
-    device_id: String,
-    owner_pubkey: String,
-    reachable_urls: Vec<String>,
-    capabilities: Vec<String>,
-    relay_session_id: Option<String>,
-    ttl_secs: u64,
-    challenge_nonce: String,
-    signed_at_unix_s: u64,
-    signature: String,
-}
-
-#[derive(Debug)]
-struct RouteChallengeRequest {
-    device_id: String,
-}
-
-#[derive(Debug)]
-struct RouteChallengeResponse {
-    nonce: String,
-    expires_at_unix_s: u64,
-}
-
-#[derive(Debug)]
-struct RouteRegisterResponse {
-    ok: bool,
-    heartbeat_token: String,
-}
-
-#[derive(Debug)]
-struct RouteHeartbeatRequest {
-    device_id: String,
-    token: String,
-    ttl_secs: u64,
 }
 
 #[derive(Debug)]
@@ -1129,73 +1104,58 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
     };
 
     tokio::spawn(async move {
-        let client = reqwest::Client::new();
         let mut heartbeat_token: Option<String> = None;
+        let client_id = format!("term-server-route-{device_id}");
         loop {
             if let Some(token) = heartbeat_token.as_ref() {
-                let hb = RouteHeartbeatRequest {
+                let hb = CpRouteHeartbeatRequest {
                     device_id: device_id.clone(),
                     token: token.clone(),
                     ttl_secs: 90,
                 };
-                let hb_url = format!("{control_base}/v1/route/heartbeat");
-                match client
-                    .post(hb_url)
-                    .header("content-type", "application/json")
-                    .body(route_heartbeat_request_json(&hb))
-                    .send()
-                    .await
+                match scheduler_control_ws_request(
+                    &control_base,
+                    &client_id,
+                    ControlWsRequestPayload::RouteHeartbeat(hb),
+                )
+                .await
                 {
-                    Ok(resp) if resp.status().is_success() => {}
-                    Ok(resp) => {
-                        let status = resp.status();
-                        let body = resp.text().await.unwrap_or_default();
-                        warn!(%status, %body, "route announcer heartbeat failed");
+                    Ok(ControlWsResponsePayload::RouteHeartbeat(resp)) if resp.ok => {}
+                    Ok(other) => {
+                        warn!(
+                            ?other,
+                            "route announcer heartbeat returned unexpected response"
+                        );
                         heartbeat_token = None;
                     }
                     Err(err) => {
-                        warn!(error = %err, "route announcer heartbeat error");
+                        warn!(error = %err, "route announcer heartbeat request failed");
                         heartbeat_token = None;
                     }
                 }
             }
 
             if heartbeat_token.is_none() {
-                let challenge_url = format!("{control_base}/v1/route/challenge");
-                let challenge_req = RouteChallengeRequest {
-                    device_id: device_id.clone(),
-                };
-                let challenge = match client
-                    .post(challenge_url)
-                    .header("content-type", "application/json")
-                    .body(route_challenge_request_json(&challenge_req))
-                    .send()
-                    .await
+                let challenge = match scheduler_control_ws_request(
+                    &control_base,
+                    &client_id,
+                    ControlWsRequestPayload::RouteChallenge(CpRouteChallengeRequest {
+                        device_id: device_id.clone(),
+                    }),
+                )
+                .await
                 {
-                    Ok(resp) if resp.status().is_success() => match resp.text().await {
-                        Ok(text) => match parse_route_challenge_response(&text) {
-                            Ok(value) => value,
-                            Err(err) => {
-                                warn!(error = %err, "route announcer challenge parse error");
-                                sleep(Duration::from_secs(10)).await;
-                                continue;
-                            }
-                        },
-                        Err(err) => {
-                            warn!(error = %err, "route announcer challenge body read error");
-                            sleep(Duration::from_secs(10)).await;
-                            continue;
-                        }
-                    },
-                    Ok(resp) => {
-                        let status = resp.status();
-                        let body = resp.text().await.unwrap_or_default();
-                        warn!(%status, %body, "route announcer challenge failed");
+                    Ok(ControlWsResponsePayload::RouteChallenge(value)) => value,
+                    Ok(other) => {
+                        warn!(
+                            ?other,
+                            "route announcer challenge returned unexpected response"
+                        );
                         sleep(Duration::from_secs(10)).await;
                         continue;
                     }
                     Err(err) => {
-                        warn!(error = %err, "route announcer challenge error");
+                        warn!(error = %err, "route announcer challenge request failed");
                         sleep(Duration::from_secs(10)).await;
                         continue;
                     }
@@ -1215,8 +1175,7 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     signed_at,
                 );
                 let signature = sign_route_payload(signing_message.as_bytes());
-
-                let payload = RouteRegisterRequest {
+                let payload = CpRouteRegisterRequest {
                     device_id: device_id.clone(),
                     owner_pubkey: owner_pubkey.clone(),
                     reachable_urls,
@@ -1227,38 +1186,28 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     signed_at_unix_s: signed_at,
                     signature,
                 };
-                let url = format!("{control_base}/v1/route/register");
-                match client
-                    .post(url)
-                    .header("content-type", "application/json")
-                    .body(route_register_request_json(&payload))
-                    .send()
-                    .await
+                match scheduler_control_ws_request(
+                    &control_base,
+                    &client_id,
+                    ControlWsRequestPayload::RouteRegister(payload),
+                )
+                .await
                 {
-                    Ok(resp) if resp.status().is_success() => match resp.text().await {
-                        Ok(text) => match parse_route_register_response(&text) {
-                            Ok(value) => {
-                                if value.ok {
-                                    heartbeat_token = Some(value.heartbeat_token);
-                                } else {
-                                    heartbeat_token = None;
-                                }
-                            }
-                            Err(err) => {
-                                warn!(error = %err, "route announcer register parse error");
-                            }
-                        },
-                        Err(err) => {
-                            warn!(error = %err, "route announcer register body read error");
+                    Ok(ControlWsResponsePayload::RouteRegister(resp)) => {
+                        if resp.ok {
+                            heartbeat_token = Some(resp.heartbeat_token);
+                        } else {
+                            heartbeat_token = None;
                         }
-                    },
-                    Ok(resp) => {
-                        let status = resp.status();
-                        let body = resp.text().await.unwrap_or_default();
-                        warn!(%status, %body, "route announcer register failed");
+                    }
+                    Ok(other) => {
+                        warn!(
+                            ?other,
+                            "route announcer register returned unexpected response"
+                        );
                     }
                     Err(err) => {
-                        warn!(error = %err, "route announcer register error");
+                        warn!(error = %err, "route announcer register request failed");
                     }
                 }
             }
@@ -1267,74 +1216,84 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
     });
 }
 
-fn route_challenge_request_json(value: &RouteChallengeRequest) -> String {
-    format!("{{\"device_id\":{}}}", json_string(&value.device_id))
+fn next_control_request_id() -> String {
+    let seq = CONTROL_REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
+    format!("term-route-{seq}")
 }
 
-fn route_heartbeat_request_json(value: &RouteHeartbeatRequest) -> String {
-    format!(
-        "{{\"device_id\":{},\"token\":{},\"ttl_secs\":{}}}",
-        json_string(&value.device_id),
-        json_string(&value.token),
-        value.ttl_secs
+fn scheduler_control_ws_url(control_base: &str, client_id: &str) -> anyhow::Result<String> {
+    let mut url = reqwest::Url::parse(control_base)
+        .with_context(|| format!("invalid route control base URL: {control_base}"))?;
+    let scheme = match url.scheme() {
+        "http" => "ws".to_string(),
+        "https" => "wss".to_string(),
+        "ws" | "wss" => url.scheme().to_string(),
+        other => anyhow::bail!("unsupported route control URL scheme: {other}"),
+    };
+    url.set_scheme(&scheme)
+        .map_err(|_| anyhow::anyhow!("failed to set websocket scheme"))?;
+    url.set_path("/v1/control/ws");
+    url.set_query(None);
+    url.query_pairs_mut().append_pair("client_id", client_id);
+    Ok(url.to_string())
+}
+
+async fn scheduler_control_ws_request(
+    control_base: &str,
+    client_id: &str,
+    payload: ControlWsRequestPayload,
+) -> anyhow::Result<ControlWsResponsePayload> {
+    let ws_url = scheduler_control_ws_url(control_base, client_id)?;
+    let (mut socket, _response) =
+        timeout(CONTROL_WS_TIMEOUT, tokio_tungstenite::connect_async(ws_url))
+            .await
+            .context("scheduler control ws connect timed out")?
+            .context("scheduler control ws connect failed")?;
+
+    let request_id = next_control_request_id();
+    let request = ControlWsClientMessage {
+        request_id: request_id.clone(),
+        payload,
+    };
+    let bytes = bincode::serialize(&request).context("encode control ws request failed")?;
+    timeout(
+        CONTROL_WS_TIMEOUT,
+        socket.send(WsMessage::Binary(bytes.into())),
     )
-}
+    .await
+    .context("scheduler control ws send timed out")?
+    .context("scheduler control ws send failed")?;
 
-fn route_register_request_json(value: &RouteRegisterRequest) -> String {
-    let reachable_urls = value
-        .reachable_urls
-        .iter()
-        .map(|item| json_string(item))
-        .collect::<Vec<_>>()
-        .join(",");
-    let capabilities = value
-        .capabilities
-        .iter()
-        .map(|item| json_string(item))
-        .collect::<Vec<_>>()
-        .join(",");
-    let relay_session_id = value
-        .relay_session_id
-        .as_ref()
-        .map(|item| json_string(item))
-        .unwrap_or_else(|| "null".to_string());
-    format!(
-        "{{\"device_id\":{},\"owner_pubkey\":{},\"reachable_urls\":[{}],\"capabilities\":[{}],\"relay_session_id\":{},\"ttl_secs\":{},\"challenge_nonce\":{},\"signed_at_unix_s\":{},\"signature\":{}}}",
-        json_string(&value.device_id),
-        json_string(&value.owner_pubkey),
-        reachable_urls,
-        capabilities,
-        relay_session_id,
-        value.ttl_secs,
-        json_string(&value.challenge_nonce),
-        value.signed_at_unix_s,
-        json_string(&value.signature)
-    )
-}
-
-fn parse_route_challenge_response(body: &str) -> Result<RouteChallengeResponse, String> {
-    let parsed = json::parse(body).map_err(|err| format!("invalid json: {err}"))?;
-    let nonce = parsed["nonce"].as_str().ok_or("missing nonce")?.to_string();
-    let expires_at_unix_s = parsed["expires_at_unix_s"]
-        .as_u64()
-        .ok_or("missing expires_at_unix_s")?;
-    Ok(RouteChallengeResponse {
-        nonce,
-        expires_at_unix_s,
-    })
-}
-
-fn parse_route_register_response(body: &str) -> Result<RouteRegisterResponse, String> {
-    let parsed = json::parse(body).map_err(|err| format!("invalid json: {err}"))?;
-    let ok = parsed["ok"].as_bool().ok_or("missing ok")?;
-    let heartbeat_token = parsed["heartbeat_token"]
-        .as_str()
-        .unwrap_or_default()
-        .to_string();
-    Ok(RouteRegisterResponse {
-        ok,
-        heartbeat_token,
-    })
+    loop {
+        let frame = timeout(CONTROL_WS_TIMEOUT, socket.next())
+            .await
+            .context("scheduler control ws receive timed out")?;
+        let Some(frame) = frame else {
+            anyhow::bail!("scheduler closed control ws before response");
+        };
+        let frame = frame.context("scheduler control ws frame error")?;
+        let WsMessage::Binary(bytes) = frame else {
+            continue;
+        };
+        let message: ControlWsServerMessage =
+            bincode::deserialize(&bytes).context("decode control ws response failed")?;
+        if message.request_id != request_id {
+            continue;
+        }
+        if !message.ok {
+            let status = message
+                .status
+                .map(|value| format!(" ({value})"))
+                .unwrap_or_default();
+            let err = message
+                .error
+                .unwrap_or_else(|| format!("scheduler control ws request failed{status}"));
+            anyhow::bail!("{err}");
+        }
+        return message
+            .data
+            .ok_or_else(|| anyhow::anyhow!("scheduler control ws response missing payload"));
+    }
 }
 
 fn parse_owner_signing_key_from_env() -> Option<SigningKey> {
