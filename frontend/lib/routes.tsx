@@ -78,6 +78,14 @@ const staticRoutes: SiteRoute[] = [
     component: DevicesPage
   },
   {
+    path: '/device/',
+    outputPath: 'device/index.html',
+    pageTitle: 'Device',
+    chromeTitle: 'Devices',
+    description: 'Alias route for fleet devices dashboard.',
+    component: DevicesPage
+  },
+  {
     path: '/docs/',
     outputPath: 'docs/index.html',
     pageTitle: 'Documentation',

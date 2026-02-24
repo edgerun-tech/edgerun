@@ -42,17 +42,48 @@ export function Nav() {
   const [routeAdvertAgeMs, setRouteAdvertAgeMs] = createSignal(0)
   ensureTerminalDrawerStore()
 
-  const refreshNodeCounts = (state: TerminalDrawerState) => {
-    setOnlineNodes(state.devices.filter((device) => device.status === 'online').length)
-    setTotalNodes(state.devices.length)
-    setActiveWorkers(
-      state.devices.filter((device) => (
-        device.status === 'online' && device.baseUrl.trim().toLowerCase().startsWith('route://')
-      )).length
-    )
+  type OverlayCounts = {
+    controlSignalConnected: boolean
+    directPeers: number
+    routeEntries: number
   }
 
-  const refreshOverlayStatus = (): boolean => {
+  const snapshotOverlayCounts = (): OverlayCounts => {
+    try {
+      const status = getWebRtcPeerSupervisor().getStatus()
+      return {
+        controlSignalConnected: status.controlSignalConnected,
+        directPeers: status.directPeers,
+        routeEntries: status.routeEntries
+      }
+    } catch {
+      return {
+        controlSignalConnected: false,
+        directPeers: 0,
+        routeEntries: 0
+      }
+    }
+  }
+
+  const refreshNodeCounts = (state: TerminalDrawerState, overlay: OverlayCounts) => {
+    const drawerOnline = state.devices.filter((device) => device.status === 'online').length
+    const drawerTotal = state.devices.length
+    const drawerWorkers = state.devices.filter((device) => (
+      device.status === 'online' && device.baseUrl.trim().toLowerCase().startsWith('route://')
+    )).length
+
+    const overlayPeers = overlay.directPeers
+    const overlayRoutes = overlay.routeEntries
+    const overlayConnected = overlay.controlSignalConnected
+    const overlayOnline = overlayConnected ? Math.max(overlayPeers, overlayRoutes > 0 ? 1 : 0) : 0
+    const overlayTotal = Math.max(overlayPeers, overlayRoutes)
+
+    setOnlineNodes(Math.max(drawerOnline, overlayOnline))
+    setTotalNodes(Math.max(drawerTotal, overlayTotal))
+    setActiveWorkers(Math.max(drawerWorkers, overlayPeers))
+  }
+
+  const refreshOverlayStatus = (): OverlayCounts => {
     try {
       const status = getWebRtcPeerSupervisor().getStatus()
       setRoutePeers(status.directPeers)
@@ -63,22 +94,31 @@ export function Nav() {
       const advertFresh = advertAge !== null ? advertAge < ROUTE_ADVERT_STALE_MS : false
       setRouteAdvertAgeMs(advertAge ?? 0)
       setRouteAdvertised(advertFresh && (status.directPeers > 0 || status.controlSignalConnected))
-      return status.controlSignalConnected
+      return {
+        controlSignalConnected: status.controlSignalConnected,
+        directPeers: status.directPeers,
+        routeEntries: status.routeEntries
+      }
     } catch {
       setRoutePeers(0)
       setRouteEntries(0)
       setRouteSignalConnected(false)
       setRouteAdvertised(false)
       setRouteAdvertAgeMs(0)
-      return false
+      return {
+        controlSignalConnected: false,
+        directPeers: 0,
+        routeEntries: 0
+      }
     }
   }
 
   const refreshRouteDebug = () => {
-    const signalConnected = refreshOverlayStatus()
-    setSchedulerWsReachable(signalConnected)
-    setSchedulerReachable(signalConnected)
-    if (signalConnected) {
+    const overlay = refreshOverlayStatus()
+    refreshNodeCounts(getTerminalDrawerState(), overlay)
+    setSchedulerWsReachable(overlay.controlSignalConnected)
+    setSchedulerReachable(overlay.controlSignalConnected)
+    if (overlay.controlSignalConnected) {
       setSchedulerReachable(true)
       setSchedulerWsReachable(true)
       setSchedulerStatus('scheduler online · overlay signal active')
@@ -96,11 +136,12 @@ export function Nav() {
       setRouteEntries(0)
       setRouteAdvertised(false)
     }
-    refreshNodeCounts(getTerminalDrawerState())
     refreshRouteDebug()
-    setTerminalOpen(getTerminalDrawerState().open)
+    const currentState = getTerminalDrawerState()
+    setTerminalOpen(currentState.open)
+    refreshNodeCounts(currentState, snapshotOverlayCounts())
     const unsubscribe = subscribeTerminalDrawer((next) => {
-      refreshNodeCounts(next)
+      refreshNodeCounts(next, snapshotOverlayCounts())
       setTerminalOpen(next.open)
     })
     const onWalletSession = (event: Event) => {

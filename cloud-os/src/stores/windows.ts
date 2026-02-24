@@ -278,11 +278,26 @@ const componentRegistry: Record<string, () => Promise<{ default: Component }>> =
   activity: () => import('../components/ActivityFeed'),
   integrations: () => import('../components/IntegrationsPanel'),
   // Placeholders for truly missing components - using lazy component factories
-  prompt: () => import('../components/Placeholder').then(m => ({ default: () => m.Placeholder('Prompt Library') })),
-  products: () => import('../components/Placeholder').then(m => ({ default: () => m.Placeholder('Products') })),
-  components: () => import('../components/Placeholder').then(m => ({ default: () => m.Placeholder('Component Library') })),
-  changelog: () => import('../components/Placeholder').then(m => ({ default: () => m.Placeholder('Changelog') })),
-  theme: () => import('../components/Placeholder').then(m => ({ default: () => m.Placeholder('Theme Settings') })),
+  prompt: () =>
+    import('../components/Placeholder').then((m) => ({
+      default: () => m.Placeholder({ feature: 'Prompt Library' }),
+    })),
+  products: () =>
+    import('../components/Placeholder').then((m) => ({
+      default: () => m.Placeholder({ feature: 'Products' }),
+    })),
+  components: () =>
+    import('../components/Placeholder').then((m) => ({
+      default: () => m.Placeholder({ feature: 'Component Library' }),
+    })),
+  changelog: () =>
+    import('../components/Placeholder').then((m) => ({
+      default: () => m.Placeholder({ feature: 'Changelog' }),
+    })),
+  theme: () =>
+    import('../components/Placeholder').then((m) => ({
+      default: () => m.Placeholder({ feature: 'Theme Settings' }),
+    })),
 };
 
 // Auto-register windows from config
