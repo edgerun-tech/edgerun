@@ -16,8 +16,8 @@ export function HeroSection() {
             Cluster availability is derived from deployed on-chain program IDs.
           </p>
           <div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <a href="/docs/getting-started/quick-start/"><Button size="lg">Open Get Started Guide</Button></a>
-            <a href="/docs/"><Button size="lg" variant="outline">Read Documentation</Button></a>
+            <a href="/run/"><Button size="lg">Run a Job</Button></a>
+            <a href="/workers/"><Button size="lg" variant="outline">Become a Worker</Button></a>
           </div>
           <div class="grid max-w-2xl grid-cols-3 gap-8 pt-10 mx-auto">
             <div class="space-y-2">

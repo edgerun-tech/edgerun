@@ -11,7 +11,7 @@ const DEFAULT_DEMO_COMMAND =
   'address local --seed-hex 0707070707070707070707070707070707070707070707070707070707070707 --prefix So --start 0 --end 50000'
 
 type SearchOutcome =
-  | { kind: 'found'; counter: number; address: string; pubkeyHex: string; keypairHex: string; attempts: number; durationMs: number }
+  | { kind: 'found'; counter: number; address: string; pubkeyHex: string; attempts: number; durationMs: number }
   | { kind: 'not_found'; attempts: number; durationMs: number }
 
 function bytesToHex(bytes: Uint8Array): string {
@@ -39,7 +39,7 @@ function encodeCounterLE(counter: number): Uint8Array {
   return out
 }
 
-async function derive(seed: Uint8Array, counter: number): Promise<{ pubkey: Uint8Array; address: string; keypair: Uint8Array }> {
+async function derive(seed: Uint8Array, counter: number): Promise<{ pubkey: Uint8Array; address: string }> {
   const preimage = new Uint8Array(DOMAIN_TAG.length + seed.length + 8)
   preimage.set(DOMAIN_TAG, 0)
   preimage.set(seed, DOMAIN_TAG.length)
@@ -47,10 +47,7 @@ async function derive(seed: Uint8Array, counter: number): Promise<{ pubkey: Uint
   const digest = sha512(preimage)
   const privateKey = digest.slice(0, 32)
   const pubkey = await ed25519.getPublicKeyAsync(privateKey)
-  const keypair = new Uint8Array(64)
-  keypair.set(privateKey, 0)
-  keypair.set(pubkey, 32)
-  return { pubkey, address: bs58.encode(pubkey), keypair }
+  return { pubkey, address: bs58.encode(pubkey) }
 }
 
 async function searchLocal(
@@ -71,7 +68,6 @@ async function searchLocal(
         counter,
         address: kp.address,
         pubkeyHex: bytesToHex(kp.pubkey),
-        keypairHex: bytesToHex(kp.keypair),
         attempts,
         durationMs: performance.now() - started
       }
@@ -167,7 +163,6 @@ export function TerminalDemo() {
               counter: result.counter,
               address: result.address,
               pubkey_hex: result.pubkeyHex,
-              keypair_hex: result.keypairHex,
               attempts: result.attempts,
               duration_ms: Math.round(result.durationMs)
             },

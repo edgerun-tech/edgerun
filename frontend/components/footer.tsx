@@ -2,6 +2,7 @@
 import { For } from 'solid-js'
 import { FooterLeadForm } from './footer-lead-form'
 import { siteLinks } from '../lib/site-links'
+import { docsApiReferenceHref, docsQuickStartHref } from '../lib/docs-links'
 
 const footerLinks = {
   product: [
@@ -11,8 +12,8 @@ const footerLinks = {
     { href: '/docs/', label: 'Documentation' }
   ],
   resources: [
-    { href: '/docs/', label: 'Getting Started' },
-    { href: '/docs/', label: 'API Reference' },
+    { href: docsQuickStartHref(), label: 'Getting Started' },
+    { href: docsApiReferenceHref('main'), label: 'API Reference' },
     { href: '/blog/', label: 'Blog' },
     { href: '/style-guide/', label: 'Style Guide' }
   ],

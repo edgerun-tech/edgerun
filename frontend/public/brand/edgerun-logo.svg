@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 170" fill="none">
   <rect width="720" height="170" fill="#ffffff"/>
-  <g transform="translate(30 35)">
-    <path d="M50 8 L86 26 L50 44 L14 26 Z
-M14 38 L50 56 L86 38 L86 52 L50 70 L14 52 Z
-M14 64 L50 82 L86 64 L86 78 L50 96 L14 78 Z" fill="#171717"/>
+  <g transform="translate(32 37) scale(0.5)">
+    <path d="M96 24 L168 48 L96 72 L24 48 Z
+M24 72 L96 96 L168 72 L168 96 L96 120 L24 96 Z
+M24 120 L96 144 L168 120 L168 144 L96 168 L24 144 Z" fill="#171717"/>
   </g>
   <text x="170" y="112"
     fill="#171717"

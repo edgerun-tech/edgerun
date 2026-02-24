@@ -20,14 +20,14 @@ const neutralMarkFg = '#808080'
 mkdirSync(brandDir, { recursive: true })
 
 const markPath = `
-M50 8 L86 26 L50 44 L14 26 Z
-M14 38 L50 56 L86 38 L86 52 L50 70 L14 52 Z
-M14 64 L50 82 L86 64 L86 78 L50 96 L14 78 Z
+M96 24 L168 48 L96 72 L24 48 Z
+M24 72 L96 96 L168 72 L168 96 L96 120 L24 96 Z
+M24 120 L96 144 L168 120 L168 144 L96 168 L24 144 Z
 `.trim()
 
 function markSvg(fg, bg = 'none') {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  ${bg === 'none' ? '' : `<rect width="100" height="100" rx="16" fill="${bg}" />`}
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
+  ${bg === 'none' ? '' : `<rect width="192" height="192" rx="32" fill="${bg}" />`}
   <path d="${markPath}" fill="${fg}" />
 </svg>
 `
@@ -35,7 +35,7 @@ function markSvg(fg, bg = 'none') {
 
 const logoHorizontalSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 170" fill="none">
   <rect width="720" height="170" fill="${lightBg}"/>
-  <g transform="translate(30 35)">
+  <g transform="translate(32 37) scale(0.5)">
     <path d="${markPath}" fill="${lightFg}"/>
   </g>
   <text x="170" y="112"
@@ -49,7 +49,7 @@ const logoHorizontalSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 
 const logoHorizontalDarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 170" fill="none">
   <rect width="720" height="170" fill="${darkBg}"/>
-  <g transform="translate(30 35)">
+  <g transform="translate(32 37) scale(0.5)">
     <path d="${markPath}" fill="${darkFg}"/>
   </g>
   <text x="170" y="112"
@@ -95,11 +95,13 @@ const iconAdaptiveSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10
     }
   </style>
   <rect class="bg" width="100" height="100" rx="16"/>
-  <path class="fg" d="${markPath}" />
+  <g transform="scale(0.5208333333)">
+    <path class="fg" d="${markPath}" />
+  </g>
 </svg>
 `
 
-writeFileSync(path.join(brandDir, 'edgerun-mark.svg'), markSvg(neutralMarkFg))
+writeFileSync(path.join(brandDir, 'edgerun-mark.svg'), markSvg(lightFg))
 writeFileSync(path.join(brandDir, 'edgerun-mark-light.svg'), markSvg(lightFg, lightBg))
 writeFileSync(path.join(brandDir, 'edgerun-mark-dark.svg'), markSvg(darkFg, darkBg))
 writeFileSync(path.join(brandDir, 'edgerun-wordmark.svg'), wordmarkSvg)
