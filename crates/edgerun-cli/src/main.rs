@@ -286,6 +286,30 @@ enum ObserveCommand {
         #[arg(value_enum, long, default_value_t = ObserveDurability::Local)]
         durability: ObserveDurability,
     },
+    IngestGitChanges {
+        #[arg(long)]
+        job_id: String,
+        #[arg(long)]
+        run_id: String,
+        #[arg(long)]
+        actor: String,
+        #[arg(long, default_value = "fs.changed")]
+        event_type: String,
+        #[arg(long, default_value = "HEAD")]
+        base_ref: String,
+        #[arg(long)]
+        repo_root: Option<PathBuf>,
+        #[arg(long, default_value_t = false)]
+        include_untracked: bool,
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
+        #[arg(long, default_value = "long-jobs.seg")]
+        segment: String,
+        #[arg(value_enum, long, default_value_t = ObserveDurability::Local)]
+        durability: ObserveDurability,
+    },
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
