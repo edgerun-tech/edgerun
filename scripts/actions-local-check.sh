@@ -7,18 +7,21 @@ if ! command -v act >/dev/null 2>&1; then
   exit 1
 fi
 
+STRICT_MISSING=0
+if [[ "${1:-}" == "--strict-missing" ]]; then
+  STRICT_MISSING=1
+fi
+
 WORKFLOWS=(
   "ci.yml:push"
-  "codeql.yml:push"
   "dependency-review.yml:pull_request"
-  "docker-images.yml:push"
   "frontend-release.yml:push"
   "pipeline-health.yml:workflow_dispatch"
   "push-scheduler.yml:workflow_dispatch"
   "release.yml:push"
   "runtime-compliance-matrix.yml:workflow_dispatch"
   "runtime-provenance.yml:push"
-  "site-pages.yml:push"
+  "workflow-hygiene.yml:workflow_dispatch"
   "wiki-sync.yml:workflow_dispatch"
 )
 
@@ -41,7 +44,12 @@ for entry in "${WORKFLOWS[@]}"; do
   IFS=':' read -r workflow event <<<"$entry"
   wf_path=".github/workflows/${workflow}"
   if [[ ! -f "${wf_path}" ]]; then
-    echo "SKIP ${workflow} (missing ${wf_path})"
+    if [[ "${STRICT_MISSING}" -eq 1 ]]; then
+      echo "FAIL ${workflow} (missing ${wf_path})"
+      FAILED=1
+    else
+      echo "SKIP ${workflow} (missing ${wf_path})"
+    fi
     continue
   fi
 

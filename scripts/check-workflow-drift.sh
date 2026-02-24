@@ -27,6 +27,9 @@ workflow_files=(
   "cloud-os/scripts/deploy.sh"
   "scripts/verify-cloudflare-targets.sh"
   "scripts/actions-local-check.sh"
+  "scripts/check-required-checks.sh"
+  "scripts/check-workflow-references.sh"
+  "scripts/check-actions-local-workflow-list.sh"
   "scripts/actions-local-run.sh"
   "scripts/e2e-compose-terminal.sh"
   "scripts/e2e-local-terminal.sh"
@@ -43,6 +46,8 @@ workflow_files=(
   ".github/workflows/runtime-compliance-matrix.yml"
   ".github/workflows/runtime-provenance.yml"
   ".github/workflows/wiki-sync.yml"
+  ".github/workflows/workflow-hygiene.yml"
+  ".github/required-checks.txt"
 )
 
 check_pattern "package manager commands" "\\b(npm|pnpm|yarn|npx)\\b" "${workflow_files[@]}"

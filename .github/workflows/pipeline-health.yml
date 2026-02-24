@@ -12,6 +12,7 @@ on:
       - Runtime Compliance Matrix
       - Wiki Sync
       - Dependency Review
+      - Workflow Hygiene
     types:
       - completed
   workflow_dispatch:

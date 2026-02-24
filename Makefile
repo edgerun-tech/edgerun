@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -24,6 +24,12 @@ verify:
 
 drift:
 	./scripts/check-workflow-drift.sh
+
+workflow-refs-check:
+	./scripts/check-workflow-references.sh
+
+required-checks-check:
+	./scripts/check-required-checks.sh
 
 cloudflare-targets-check:
 	./scripts/verify-cloudflare-targets.sh

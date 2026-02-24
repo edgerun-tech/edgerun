@@ -3,7 +3,7 @@ run-name: "Wiki Sync • #${{ github.run_number }}"
 
 on:
   workflow_run:
-    workflows: ["Site Deploy"]
+    workflows: ["Frontend Release"]
     types: [completed]
   workflow_dispatch:
 
@@ -77,6 +77,27 @@ jobs:
             git push
           fi
 
+      - name: Wiki route smoke check
+        id: wiki_smoke
+        run: |
+          URLS=("https://www.edgerun.tech/" "https://www.edgerun.tech/docs")
+          failed=0
+          printf "| URL | HTTP | Result |\n| --- | --- | --- |\n" > /tmp/wiki-smoke-table.md
+          for url in "${URLS[@]}"; do
+            code="$(curl -L -sS -o /tmp/wiki-smoke-body -w "%{http_code}" --max-time 20 "${url}" || true)"
+            if [[ "${code}" =~ ^[23] ]]; then
+              printf "| %s | %s | pass |\n" "${url}" "${code}" >> /tmp/wiki-smoke-table.md
+            else
+              printf "| %s | %s | fail |\n" "${url}" "${code:-000}" >> /tmp/wiki-smoke-table.md
+              failed=1
+            fi
+          done
+          if [[ "${failed}" -eq 0 ]]; then
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish wiki sync summary
         if: ${{ always() }}
         run: |
@@ -87,4 +108,9 @@ jobs:
             echo "- commit: \`${{ github.sha }}\`"
             echo "- workflow run conclusion gate: \`${{ github.event_name == 'workflow_dispatch' && 'manual' || github.event.workflow_run.conclusion }}\`"
             echo "- wiki output source: \`out/frontend/wiki/main/\`"
+            echo "- wiki route smoke: \`${{ steps.wiki_smoke.outputs.result || 'n/a' }}\`"
+            if [[ -f /tmp/wiki-smoke-table.md ]]; then
+              echo ""
+              cat /tmp/wiki-smoke-table.md
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

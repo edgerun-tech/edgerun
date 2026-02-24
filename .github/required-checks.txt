@@ -1,0 +1,4 @@
+# workflow_file:job_id:required_check_name
+.github/workflows/ci.yml:ci-summary:CI / CI Summary
+.github/workflows/dependency-review.yml:dependency-review:Dependency Review / dependency-review
+.github/workflows/pipeline-health.yml:summary:Pipeline Health / Publish Pipeline Health Summary
