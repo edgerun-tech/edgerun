@@ -2045,6 +2045,7 @@ dependencies = [
  "hex",
  "prost",
  "serde",
+ "serde_json",
  "solana-client",
  "solana-sdk",
  "tokio",

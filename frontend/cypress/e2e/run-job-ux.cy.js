@@ -123,11 +123,26 @@ describe('run job orchestration UX', () => {
       onBeforeLoad(win) {
         win.__EDGERUN_CONTROL_WS_MOCK_ENABLED__ = true
         win.__EDGERUN_CONTROL_WS_MOCK__ = ({ op, payload }) => {
-          expect(op).to.eq('job.create')
-          expect(payload).to.have.property('runtime_id')
-          expect(payload).to.have.property('escrow_lamports')
-          expect(payload.escrow_lamports).to.be.at.least(1_000_000)
-          return { job_id: 'job-cypress-live-001' }
+          if (op === 'job.create') {
+            expect(payload).to.have.property('runtime_id')
+            expect(payload).to.have.property('escrow_lamports')
+            expect(payload.escrow_lamports).to.be.at.least(1_000_000)
+            return { job_id: 'job-cypress-live-001' }
+          }
+          if (op === 'job.status') {
+            expect(payload).to.deep.equal({ job_id: 'job-cypress-live-001' })
+            return {
+              job_id: 'job-cypress-live-001',
+              reports: [{ worker_pubkey: 'worker-a', output_hash: 'abc123', output_len: 16 }],
+              failures: [],
+              quorum: {
+                quorum_reached: true,
+                onchain_status: 'finalized',
+                winning_output_hash: 'abc123'
+              }
+            }
+          }
+          throw new Error(`unexpected_op_${op}`)
         }
       }
     })
@@ -145,5 +160,9 @@ describe('run job orchestration UX', () => {
     cy.get('[data-testid="submit-success"]:visible').contains('Submission Accepted').should('be.visible')
     cy.get('[data-testid="submit-success"]:visible').contains('job-cypress-live-001').should('be.visible')
     cy.get('[data-testid="submit-success"]:visible').contains('Receipt:').should('be.visible')
+    cy.get('[data-testid="job-tracker-card"]').should('be.visible')
+    cy.get('[data-testid="tracker-report-count"]').should('contain.text', '1')
+    cy.get('[data-testid="tracker-quorum"]').should('contain.text', 'reached')
+    cy.get('[data-testid="tracker-onchain-status"]').should('contain.text', 'finalized')
   })
 })

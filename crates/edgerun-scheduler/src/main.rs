@@ -308,6 +308,25 @@ struct ControlWsConnectQuery {
 }
 
 #[derive(Debug, Deserialize)]
+struct JsonControlWsClientMessage {
+    request_id: String,
+    op: String,
+    payload: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonControlWsServerMessage {
+    request_id: String,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<u16>,
+}
+
+#[derive(Debug, Deserialize)]
 struct WebRtcSignalClientMessage {
     to_device_id: String,
     to_owner_pubkey: String,
@@ -653,12 +672,23 @@ async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSo
     loop {
         match socket.recv().await {
             Some(Ok(Message::Binary(bytes))) => {
-                let response = handle_control_client_message(&state, &bytes).await;
+                let response = handle_control_client_binary_message(&state, &bytes).await;
                 if socket
                     .send(Message::Binary(encode_control_message(&response).into()))
                     .await
                     .is_err()
                 {
+                    break;
+                }
+            }
+            Some(Ok(Message::Text(text))) => {
+                let response = handle_control_client_text_message(&state, &text).await;
+                let payload =
+                    serde_json::to_string(&response).unwrap_or_else(|_| {
+                        "{\"request_id\":\"\",\"ok\":false,\"error\":\"encode error\",\"status\":500}"
+                            .to_string()
+                    });
+                if socket.send(Message::Text(payload.into())).await.is_err() {
                     break;
                 }
             }
@@ -700,7 +730,10 @@ fn control_ok_response(
     }
 }
 
-async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> ControlWsServerMessage {
+async fn handle_control_client_binary_message(
+    state: &AppState,
+    bytes: &[u8],
+) -> ControlWsServerMessage {
     let parsed = bincode::deserialize::<ControlWsClientMessage>(bytes);
     let msg = match parsed {
         Ok(message) if !message.request_id.trim().is_empty() => message,
@@ -713,6 +746,131 @@ async fn handle_control_client_message(state: &AppState, bytes: &[u8]) -> Contro
         }
     };
 
+    handle_control_request_payload(state, msg).await
+}
+
+async fn handle_control_client_text_message(
+    state: &AppState,
+    text: &str,
+) -> JsonControlWsServerMessage {
+    let msg = match decode_json_control_request(text) {
+        Ok(msg) => msg,
+        Err((status, error)) => {
+            return JsonControlWsServerMessage {
+                request_id: String::new(),
+                ok: false,
+                data: None,
+                error: Some(error),
+                status: Some(status.as_u16()),
+            }
+        }
+    };
+    let response = handle_control_request_payload(state, msg).await;
+    control_response_to_json(response)
+}
+
+fn decode_json_control_request(
+    text: &str,
+) -> Result<ControlWsClientMessage, (StatusCode, String)> {
+    let parsed = serde_json::from_str::<JsonControlWsClientMessage>(text)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid json control message".to_string()))?;
+    let request_id = parsed.request_id.trim().to_string();
+    if request_id.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "request_id is required".to_string()));
+    }
+    let op = parsed.op.trim().to_ascii_lowercase();
+    let payload = parsed.payload;
+    let mapped = match op.as_str() {
+        "job.create" => ControlWsRequestPayload::JobCreate(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for job.create".to_string()))?,
+        ),
+        "job.status" => ControlWsRequestPayload::JobStatus(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for job.status".to_string()))?,
+        ),
+        "route.challenge" => ControlWsRequestPayload::RouteChallenge(
+            serde_json::from_value(payload).map_err(|_| {
+                (StatusCode::BAD_REQUEST, "invalid payload for route.challenge".to_string())
+            })?,
+        ),
+        "route.register" => ControlWsRequestPayload::RouteRegister(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.register".to_string()))?,
+        ),
+        "route.heartbeat" => ControlWsRequestPayload::RouteHeartbeat(
+            serde_json::from_value(payload).map_err(|_| {
+                (StatusCode::BAD_REQUEST, "invalid payload for route.heartbeat".to_string())
+            })?,
+        ),
+        "route.resolve" => ControlWsRequestPayload::RouteResolve(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.resolve".to_string()))?,
+        ),
+        "route.owner" => ControlWsRequestPayload::RouteOwner(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.owner".to_string()))?,
+        ),
+        "worker.heartbeat" => ControlWsRequestPayload::WorkerHeartbeat(
+            serde_json::from_value(payload).map_err(|_| {
+                (StatusCode::BAD_REQUEST, "invalid payload for worker.heartbeat".to_string())
+            })?,
+        ),
+        "worker.assignments" => ControlWsRequestPayload::WorkerAssignments(
+            serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for worker.assignments".to_string(),
+                )
+            })?,
+        ),
+        "worker.result" => ControlWsRequestPayload::WorkerResult(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for worker.result".to_string()))?,
+        ),
+        "worker.failure" => ControlWsRequestPayload::WorkerFailure(
+            serde_json::from_value(payload).map_err(|_| {
+                (StatusCode::BAD_REQUEST, "invalid payload for worker.failure".to_string())
+            })?,
+        ),
+        "worker.replay" => ControlWsRequestPayload::WorkerReplay(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for worker.replay".to_string()))?,
+        ),
+        "bundle.get" => ControlWsRequestPayload::BundleGet(
+            serde_json::from_value(payload)
+                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for bundle.get".to_string()))?,
+        ),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("unsupported op '{}'", parsed.op.trim()),
+            ))
+        }
+    };
+    Ok(ControlWsClientMessage {
+        request_id,
+        payload: mapped,
+    })
+}
+
+fn control_response_to_json(response: ControlWsServerMessage) -> JsonControlWsServerMessage {
+    let data = response
+        .data
+        .and_then(|payload| serde_json::to_value(payload).ok());
+    JsonControlWsServerMessage {
+        request_id: response.request_id,
+        ok: response.ok,
+        data,
+        error: response.error,
+        status: response.status,
+    }
+}
+
+async fn handle_control_request_payload(
+    state: &AppState,
+    msg: ControlWsClientMessage,
+) -> ControlWsServerMessage {
     let request_id = msg.request_id.trim().to_string();
     match msg.payload {
         ControlWsRequestPayload::JobCreate(payload) => match job_create_inner(state, payload) {

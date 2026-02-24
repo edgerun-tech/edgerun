@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { For, createEffect, createMemo, createSignal, onCleanup } from 'solid-js'
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
@@ -72,6 +72,31 @@ type JobCreatePayload = {
 type JobCreateResponse = {
   job_id?: string
   bundle_hash?: string
+}
+
+type JobStatusResponse = {
+  job_id?: string
+  reports?: Array<{
+    worker_pubkey?: string
+    output_hash?: string
+    output_len?: number
+  }>
+  failures?: Array<{
+    worker_pubkey?: string
+    phase?: string
+    error_code?: string
+    error_message?: string
+  }>
+  quorum?: {
+    quorum_reached?: boolean
+    committee_workers?: string[]
+    winning_workers?: string[]
+    winning_output_hash?: string | null
+    finalize_triggered?: boolean
+    finalize_submitted?: boolean
+    finalize_sig?: string | null
+    onchain_status?: string | null
+  } | null
 }
 
 const PRESET_APPS: PresetApp[] = [
@@ -169,6 +194,9 @@ export default function RunPage() {
   const [submitMessage, setSubmitMessage] = createSignal('')
   const [validationErrors, setValidationErrors] = createSignal<string[]>([])
   const [lastReceiptId, setLastReceiptId] = createSignal('')
+  const [jobStatus, setJobStatus] = createSignal<JobStatusResponse | null>(null)
+  const [jobStatusError, setJobStatusError] = createSignal('')
+  const [jobStatusLoading, setJobStatusLoading] = createSignal(false)
 
   createEffect(() => {
     const status = submitStatus()
@@ -214,6 +242,10 @@ export default function RunPage() {
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
   const isVanityApp = createMemo(() => selectedPresetId() === 'vanity-generator')
+  const trackedJobId = createMemo(() => lastReceiptId().trim())
+  const reportCount = createMemo(() => jobStatus()?.reports?.length ?? 0)
+  const failureCount = createMemo(() => jobStatus()?.failures?.length ?? 0)
+  const quorumReached = createMemo(() => jobStatus()?.quorum?.quorum_reached === true)
   const appInputSummary = createMemo(() => {
     if (isVanityApp()) {
       const spec = vanitySearchSpace()
@@ -362,6 +394,8 @@ export default function RunPage() {
     setSubmitStatus('idle')
     setSubmitMessage('')
     setValidationErrors([])
+    setJobStatus(null)
+    setJobStatusError('')
 
     const errors = validateBeforeSubmit()
     if (errors.length > 0) {
@@ -384,6 +418,7 @@ export default function RunPage() {
       setLastReceiptId(receiptId)
       setSubmitStatus('success')
       setSubmitMessage('Job submitted to scheduler control plane.')
+      void refreshJobStatus(receiptId, schedulerBase)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setSubmitStatus('error')
@@ -392,6 +427,36 @@ export default function RunPage() {
       control.close()
     }
   }
+
+  const refreshJobStatus = async (jobId: string, schedulerBase: string) => {
+    const normalized = jobId.trim()
+    if (!normalized) return
+    const normalizedBase = schedulerBase.trim()
+    if (!normalizedBase) return
+    const control = new SchedulerControlWsClient(normalizedBase, 'run-job-status')
+    setJobStatusLoading(true)
+    try {
+      const next = await control.request<JobStatusResponse>('job.status', { job_id: normalized }, 12000)
+      setJobStatus(next)
+      setJobStatusError('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setJobStatusError(`status unavailable: ${message}`)
+    } finally {
+      setJobStatusLoading(false)
+      control.close()
+    }
+  }
+
+  createEffect(() => {
+    const jobId = trackedJobId()
+    const schedulerBase = schedulerUrl().trim()
+    if (!jobId) return
+    const timer = window.setInterval(() => {
+      void refreshJobStatus(jobId, schedulerBase)
+    }, 2500)
+    onCleanup(() => window.clearInterval(timer))
+  })
 
   return (
     <PageShell>
@@ -786,6 +851,47 @@ export default function RunPage() {
                     </Alert>
                   </div>
 
+                  <Card data-testid="job-tracker-card">
+                    <CardHeader>
+                      <CardTitle class="text-base">Execution Tracker</CardTitle>
+                      <CardDescription>Live status from scheduler `job.status` for receipt <span class="font-mono">{trackedJobId() || 'n/a'}</span>.</CardDescription>
+                    </CardHeader>
+                    <CardContent class="space-y-3 text-sm">
+                      <div class="grid gap-3 md:grid-cols-2">
+                        <p>Reports: <span class="font-mono" data-testid="tracker-report-count">{reportCount()}</span></p>
+                        <p>Failures: <span class="font-mono" data-testid="tracker-failure-count">{failureCount()}</span></p>
+                        <p>Quorum: <span class="font-mono" data-testid="tracker-quorum">{quorumReached() ? 'reached' : 'pending'}</span></p>
+                        <p>On-chain: <span class="font-mono" data-testid="tracker-onchain-status">{jobStatus()?.quorum?.onchain_status || 'n/a'}</span></p>
+                      </div>
+                      <Show when={jobStatus()?.quorum?.winning_output_hash}>
+                        <p>Winning output hash: <span class="font-mono break-all" data-testid="tracker-winning-hash">{jobStatus()?.quorum?.winning_output_hash}</span></p>
+                      </Show>
+                      <Show when={jobStatusError()}>
+                        <p class="text-xs text-muted-foreground" data-testid="tracker-status-error">{jobStatusError()}</p>
+                      </Show>
+                      <div class="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void refreshJobStatus(trackedJobId(), schedulerUrl())}
+                          disabled={!trackedJobId() || jobStatusLoading()}
+                        >
+                          {jobStatusLoading() ? 'Refreshing' : 'Refresh Status'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!trackedJobId()}
+                          onClick={() => downloadJobStatusSnapshot(trackedJobId(), jobStatus())}
+                        >
+                          Download Execution Snapshot
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
                   <div class="flex items-center gap-2">
                     <Button type="button" variant="outline" onClick={() => setActiveStep('step-2')}>Back</Button>
                     <Button type="button" disabled={submitStatus() === 'pending'} class="flex-1" onClick={() => void handleSubmit()}>
@@ -889,4 +995,25 @@ function formatLamports(value: number): string {
 
 function formatSol(lamports: number): string {
   return lamportsToSol(lamports).toLocaleString('en-US', { maximumFractionDigits: 6 })
+}
+
+function downloadJobStatusSnapshot(jobId: string, status: JobStatusResponse | null): void {
+  const normalized = jobId.trim()
+  if (!normalized) return
+  const payload = JSON.stringify(
+    {
+      job_id: normalized,
+      exported_at: new Date().toISOString(),
+      status: status || {}
+    },
+    null,
+    2
+  )
+  const blob = new Blob([payload], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = `edgerun-job-${normalized}-status.json`
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
