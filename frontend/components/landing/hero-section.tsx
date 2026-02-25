@@ -19,6 +19,33 @@ export function HeroSection() {
             <a href="/run/"><Button size="lg">Run a Job</Button></a>
             <a href="/workers/"><Button size="lg" variant="outline">Become a Worker</Button></a>
           </div>
+          <div
+            class="mx-auto mt-8 w-full max-w-4xl rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background p-4 md:p-6"
+            data-testid="hero-chain-snapshot"
+          >
+            <div class="mb-4 flex items-center justify-between gap-2">
+              <p class="text-left text-sm font-semibold text-foreground">Live Chain Snapshot</p>
+              <p class="text-left text-xs text-muted-foreground">Derived from active RPC session</p>
+            </div>
+            <div class="grid gap-3 text-left sm:grid-cols-2 lg:grid-cols-4">
+              <div class="rounded-xl border border-border/70 bg-background/80 p-3">
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">Cluster</p>
+                <p class="mt-1 font-mono text-sm" data-chain-field="cluster">loading...</p>
+              </div>
+              <div class="rounded-xl border border-border/70 bg-background/80 p-3">
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">Slot</p>
+                <p class="mt-1 font-mono text-sm" data-chain-field="slot">loading...</p>
+              </div>
+              <div class="rounded-xl border border-border/70 bg-background/80 p-3">
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">TPS</p>
+                <p class="mt-1 font-mono text-sm" data-chain-field="tps">loading...</p>
+              </div>
+              <div class="rounded-xl border border-border/70 bg-background/80 p-3">
+                <p class="text-xs uppercase tracking-wide text-muted-foreground">Block Height</p>
+                <p class="mt-1 font-mono text-sm" data-chain-field="blockHeight">loading...</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

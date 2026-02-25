@@ -32,4 +32,17 @@ describe('landing footgun regressions', () => {
     cy.contains('Avg Settlement').should('not.exist')
     cy.contains('Jobs Executed').should('not.exist')
   })
+
+  it('renders hero chain snapshot fields wired to chain runtime bindings', () => {
+    cy.visit('/')
+    cy.window().its('__EDGERUN_HYDRATED').should('eq', true)
+
+    cy.get('[data-testid="hero-chain-snapshot"]').within(() => {
+      cy.contains('Live Chain Snapshot')
+      cy.get('[data-chain-field="cluster"]').should('exist')
+      cy.get('[data-chain-field="slot"]').should('exist')
+      cy.get('[data-chain-field="tps"]').should('exist')
+      cy.get('[data-chain-field="blockHeight"]').should('exist')
+    })
+  })
 })
