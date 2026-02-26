@@ -4,9 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use libp2p::futures::StreamExt;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{
-    gossipsub, identify, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder,
-};
+use libp2p::{gossipsub, identify, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
@@ -121,8 +119,9 @@ pub async fn spawn_event_bus_from_env(role: &str) -> Result<Option<P2pEventBusHa
         )
         .context("failed to configure libp2p tcp transport")?
         .with_behaviour(|key| {
-            let identify_cfg = identify::Config::new("/edgerun/p2p/1.0.0".to_string(), key.public())
-                .with_agent_version(config.node_name.clone());
+            let identify_cfg =
+                identify::Config::new("/edgerun/p2p/1.0.0".to_string(), key.public())
+                    .with_agent_version(config.node_name.clone());
             let gossipsub = gossipsub::Behaviour::new(
                 gossipsub::MessageAuthenticity::Signed(local_key),
                 gossipsub_cfg,
@@ -220,7 +219,9 @@ pub async fn spawn_event_bus_from_env(role: &str) -> Result<Option<P2pEventBusHa
 }
 
 pub async fn spawn_from_env(role: &str) -> Result<Option<tokio::task::JoinHandle<()>>> {
-    Ok(spawn_event_bus_from_env(role).await?.map(|runtime| runtime.task))
+    Ok(spawn_event_bus_from_env(role)
+        .await?
+        .map(|runtime| runtime.task))
 }
 
 fn keypair_from_seed_hex(seed_hex: Option<&str>) -> Result<identity::Keypair> {

@@ -361,12 +361,9 @@ async fn poll_assignments(cfg: &WorkerConfig) -> Result<AssignmentsResponse> {
         signature: None,
     };
     payload.signature = sign_worker_payload(cfg, assignments_signing_message(&payload));
-    let response = control_ws_request(
-        cfg,
-        ControlWsRequestPayload::WorkerAssignments(payload),
-    )
-    .await
-    .context("assignments request failed")?;
+    let response = control_ws_request(cfg, ControlWsRequestPayload::WorkerAssignments(payload))
+        .await
+        .context("assignments request failed")?;
     match response {
         ControlWsResponsePayload::WorkerAssignments(v) => Ok(*v),
         other => anyhow::bail!(
