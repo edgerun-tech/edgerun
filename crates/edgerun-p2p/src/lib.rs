@@ -281,6 +281,9 @@ fn parse_multiaddr_list(raw: &str, var_name: &str) -> Result<Vec<Multiaddr>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::TcpListener;
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Duration;
 
     #[test]
     fn parse_multiaddr_list_ok() {
@@ -300,5 +303,105 @@ mod tests {
         let k1 = keypair_from_seed_hex(Some("deadbeef")).expect("k1");
         let k2 = keypair_from_seed_hex(Some("deadbeef")).expect("k2");
         assert_eq!(k1.public().to_peer_id(), k2.public().to_peer_id());
+    }
+
+    #[test]
+    fn gossipsub_message_flows_between_bootstrapped_peers() {
+        let lock = env_lock().lock().expect("env lock");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+
+        runtime.block_on(async {
+            let port_a = free_tcp_port();
+            let port_b = free_tcp_port();
+            let addr_a = format!("/ip4/127.0.0.1/tcp/{port_a}");
+            let addr_b = format!("/ip4/127.0.0.1/tcp/{port_b}");
+            let topic = "edgerun-p2p-test-topic";
+            let payload = b"hello-edgerun-p2p".to_vec();
+
+            let _env_a = EnvGuard::set(&[
+                (ENV_ENABLED, "true"),
+                (ENV_LISTEN_ADDRS, &addr_a),
+                (ENV_BOOTSTRAP_PEERS, ""),
+                (
+                    ENV_KEY_SEED_HEX,
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+                (ENV_EVENT_BUS_TOPIC, topic),
+            ]);
+            let mut a = spawn_event_bus_from_env("scheduler")
+                .await
+                .expect("spawn a")
+                .expect("a enabled");
+
+            let _env_b = EnvGuard::set(&[
+                (ENV_ENABLED, "true"),
+                (ENV_LISTEN_ADDRS, &addr_b),
+                (ENV_BOOTSTRAP_PEERS, &addr_a),
+                (
+                    ENV_KEY_SEED_HEX,
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ),
+                (ENV_EVENT_BUS_TOPIC, topic),
+            ]);
+            let b = spawn_event_bus_from_env("worker")
+                .await
+                .expect("spawn b")
+                .expect("b enabled");
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            b.publish_tx.send(payload.clone()).expect("publish");
+
+            let received = tokio::time::timeout(Duration::from_secs(10), a.inbound_rx.recv())
+                .await
+                .expect("timeout waiting for message")
+                .expect("received message");
+            assert_eq!(received, payload);
+
+            a.task.abort();
+            b.task.abort();
+        });
+
+        drop(lock);
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    fn free_tcp_port() -> u16 {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind ephemeral");
+        listener.local_addr().expect("local addr").port()
+    }
+
+    struct EnvGuard {
+        previous: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvGuard {
+        fn set(vars: &[(&'static str, &str)]) -> Self {
+            let previous = vars
+                .iter()
+                .map(|(k, _)| (*k, std::env::var(k).ok()))
+                .collect::<Vec<_>>();
+            for (k, v) in vars {
+                std::env::set_var(k, v);
+            }
+            Self { previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (k, old) in self.previous.drain(..).rev() {
+                match old {
+                    Some(v) => std::env::set_var(k, v),
+                    None => std::env::remove_var(k),
+                }
+            }
+        }
     }
 }

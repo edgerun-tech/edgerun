@@ -2180,24 +2180,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-snapshotter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "clap",
- "edgerun-runtime-proto",
- "edgerun-storage",
- "prost 0.13.5",
- "serde",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "edgerun-storage"
 version = "0.1.0"
 dependencies = [
