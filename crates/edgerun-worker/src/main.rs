@@ -153,6 +153,7 @@ async fn main() -> Result<()> {
         flush_batch: cfg.retry_flush_batch.max(1),
     };
     let mut last_policy_refresh = Instant::now();
+    let mut policy_refresh_enabled = true;
 
     tracing::info!(
         worker = %cfg.worker_pubkey,
@@ -162,9 +163,17 @@ async fn main() -> Result<()> {
 
     let mut next_poll_ms = 2000;
     loop {
-        if last_policy_refresh.elapsed() >= cfg.policy_refresh_interval {
+        if policy_refresh_enabled && last_policy_refresh.elapsed() >= cfg.policy_refresh_interval {
             if let Err(err) = refresh_policy_verifiers(&client, &cfg).await {
-                tracing::warn!(error = %err, "policy verifier refresh failed");
+                if should_disable_policy_refresh(&err) {
+                    policy_refresh_enabled = false;
+                    tracing::warn!(
+                        error = %err,
+                        "policy info endpoint unavailable; disabling periodic policy verifier refresh"
+                    );
+                } else {
+                    tracing::warn!(error = %err, "policy verifier refresh failed");
+                }
             }
             last_policy_refresh = Instant::now();
         }
@@ -457,6 +466,11 @@ async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) 
         );
     }
     Ok(())
+}
+
+fn should_disable_policy_refresh(err: &anyhow::Error) -> bool {
+    err.chain()
+        .any(|cause| cause.to_string().contains("policy info failed with status 404"))
 }
 
 async fn fetch_policy_info(
@@ -1759,5 +1773,17 @@ mod tests {
             .any(|v| v.key_id == "rotated-key" && v.version == 2));
 
         handle.abort();
+    }
+
+    #[test]
+    fn policy_refresh_disables_only_on_missing_policy_endpoint() {
+        let missing = anyhow::anyhow!("policy info failed with status 404 Not Found");
+        assert!(should_disable_policy_refresh(&missing));
+
+        let unauthorized = anyhow::anyhow!("policy info failed with status 401 Unauthorized");
+        assert!(!should_disable_policy_refresh(&unauthorized));
+
+        let transport = anyhow::anyhow!("policy info request failed");
+        assert!(!should_disable_policy_refresh(&transport));
     }
 }
