@@ -1031,13 +1031,28 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
     let owner_pubkey_from_signing_key = owner_signing_key
         .as_ref()
         .map(|sk| bs58::encode(sk.verifying_key().to_bytes()).into_string());
-    let configured_owner_pubkey = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
+    let configured_owner_pubkey_from_env = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
         .ok()
         .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .or(owner_pubkey_from_signing_key)
+        .filter(|v| !v.is_empty());
+    let configured_owner_pubkey = configured_owner_pubkey_from_env
+        .clone()
+        .or_else(|| owner_pubkey_from_signing_key.clone())
         .unwrap_or_else(|| device.public_key_b64url.clone());
     let mut owner_pubkey = configured_owner_pubkey.clone();
+    if let (Some(configured), Some(from_signing_key)) = (
+        configured_owner_pubkey_from_env.as_ref(),
+        owner_pubkey_from_signing_key.as_ref(),
+    ) {
+        if configured != from_signing_key {
+            warn!(
+                configured_owner_pubkey = %configured,
+                signing_key_owner_pubkey = %from_signing_key,
+                "EDGERUN_ROUTE_OWNER_PUBKEY does not match EDGERUN_ROUTE_OWNER_SECRET_KEY_B58; using signing key pubkey for route registration"
+            );
+            owner_pubkey = from_signing_key.clone();
+        }
+    }
     if owner_signing_key.is_none() && owner_pubkey != device.public_key_b64url {
         warn!(
             configured_owner_pubkey = %configured_owner_pubkey,

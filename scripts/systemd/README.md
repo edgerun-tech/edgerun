@@ -194,3 +194,45 @@ Run WASM smoke under the EdgeRun runtime class:
 ```bash
 ./scripts/containerd-runtime-wasm-smoke.sh
 ```
+
+## System Core Services (Always-On Scheduler/Term/STUN Node)
+
+For a minimal headless host that should keep control-plane routing online 24/7, install:
+
+- `edgerun-scheduler.service`
+- `edgerun-term-server.service`
+- `coturn.service` (STUN-only baseline)
+- `edgerun-healthcheck.timer` + `edgerun-healthcheck.service`
+
+Install on a Debian-like host:
+
+```bash
+sudo PUBLIC_IP=172.245.67.49 ./scripts/systemd/install-system-core-services.sh
+```
+
+Important environment knobs:
+
+- `INSTALL_BINARIES=0` to skip local cargo build/install.
+- `INSTALL_PACKAGES=0` to skip apt package installation.
+- `ENABLE_SERVICES=0` to install files without starting/enabling services.
+- `FORCE_OVERWRITE_ENV=1` to regenerate `/etc/edgerun/{scheduler,term-server}.env`.
+- `EDGERUN_ROOT=/opt/edgerun` and `EDGERUN_ETC_DIR=/etc/edgerun` to change install paths.
+
+Generated configs and units:
+
+- `/etc/edgerun/scheduler.env`
+- `/etc/edgerun/term-server.env`
+- `/etc/systemd/system/edgerun-scheduler.service`
+- `/etc/systemd/system/edgerun-term-server.service`
+- `/etc/turnserver.conf`
+- `/etc/systemd/system/coturn.service.d/10-liveness.conf`
+- `/usr/local/bin/edgerun-healthcheck.sh`
+- `/etc/systemd/system/edgerun-healthcheck.service`
+- `/etc/systemd/system/edgerun-healthcheck.timer`
+
+Post-install checks:
+
+```bash
+systemctl --no-pager --full status edgerun-scheduler edgerun-term-server coturn edgerun-healthcheck.timer
+/usr/local/bin/edgerun-healthcheck.sh
+```

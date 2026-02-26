@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Edgerun Scheduler
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=edgerun
+Group=edgerun
+WorkingDirectory=/opt/edgerun
+EnvironmentFile=-/etc/edgerun/scheduler.env
+ExecStart=/opt/edgerun/out/target/release/edgerun-scheduler
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/edgerun/scheduler /var/lib/edgerun/workers /etc/edgerun
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

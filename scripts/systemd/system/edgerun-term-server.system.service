@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Edgerun Terminal Server
+After=network-online.target edgerun-scheduler.service
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=20
+
+[Service]
+Type=simple
+User=edgerun
+Group=edgerun
+WorkingDirectory=/opt/edgerun
+Environment=HOME=/var/lib/edgerun/term-server
+EnvironmentFile=-/etc/edgerun/term-server.env
+ExecStart=/opt/edgerun/out/target/release/edgerun-term-server
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/edgerun/term-server /var/lib/edgerun/scheduler /var/lib/edgerun/workers /etc/edgerun
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Edgerun Core Healthcheck
+After=network-online.target edgerun-scheduler.service edgerun-term-server.service coturn.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/edgerun-healthcheck.sh
