@@ -5,7 +5,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use edgerun_runtime_proto::wire::{
+    LabelPairV1, SnapshotKindV1, SnapshotStateEntryV1, SnapshotStateMapV1,
+};
 use edgerun_runtime_proto::SnapshotMaterializedEvent;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,16 +316,91 @@ fn load_state_map(path: &Path) -> Result<BTreeMap<String, Snapshot>, Snapshotter
     if raw.is_empty() {
         return Ok(BTreeMap::new());
     }
-    serde_json::from_slice(&raw).map_err(|e| SnapshotterError::Serde(e.to_string()))
+    let decoded = SnapshotStateMapV1::decode(raw.as_slice())
+        .map_err(|e| SnapshotterError::Serde(format!("decode snapshot state: {e}")))?;
+    if decoded.schema_version != 1 {
+        return Err(SnapshotterError::Serde(format!(
+            "unsupported snapshot state schema_version: {}",
+            decoded.schema_version
+        )));
+    }
+
+    let mut out = BTreeMap::new();
+    for item in decoded.items {
+        let kind = from_wire_snapshot_kind(item.kind).ok_or_else(|| {
+            SnapshotterError::Serde(format!("invalid snapshot kind: {}", item.kind))
+        })?;
+        let labels = item
+            .labels
+            .into_iter()
+            .map(|pair| (pair.key, pair.value))
+            .collect();
+        out.insert(
+            item.key.clone(),
+            Snapshot {
+                key: item.key,
+                parent: if item.parent.is_empty() {
+                    None
+                } else {
+                    Some(item.parent)
+                },
+                kind,
+                labels,
+                size_bytes: item.size_bytes,
+                inode_count: item.inode_count,
+                mount_root: item.mount_root,
+            },
+        );
+    }
+    Ok(out)
 }
 
 fn save_state_map(path: &Path, map: &BTreeMap<String, Snapshot>) -> Result<(), SnapshotterError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| SnapshotterError::Io(e.to_string()))?;
     }
-    let bytes =
-        serde_json::to_vec_pretty(map).map_err(|e| SnapshotterError::Serde(e.to_string()))?;
+    let mut state = SnapshotStateMapV1 {
+        schema_version: 1,
+        items: Vec::with_capacity(map.len()),
+    };
+    for snapshot in map.values() {
+        let labels = snapshot
+            .labels
+            .iter()
+            .map(|(key, value)| LabelPairV1 {
+                key: key.clone(),
+                value: value.clone(),
+            })
+            .collect();
+        state.items.push(SnapshotStateEntryV1 {
+            key: snapshot.key.clone(),
+            parent: snapshot.parent.clone().unwrap_or_default(),
+            kind: to_wire_snapshot_kind(&snapshot.kind),
+            labels,
+            size_bytes: snapshot.size_bytes,
+            inode_count: snapshot.inode_count,
+            mount_root: snapshot.mount_root.clone(),
+        });
+    }
+    let bytes = state.encode_to_vec();
     fs::write(path, bytes).map_err(|e| SnapshotterError::Io(e.to_string()))
+}
+
+fn to_wire_snapshot_kind(kind: &SnapshotKind) -> i32 {
+    match kind {
+        SnapshotKind::Active => SnapshotKindV1::Active as i32,
+        SnapshotKind::View => SnapshotKindV1::View as i32,
+        SnapshotKind::Committed => SnapshotKindV1::Committed as i32,
+    }
+}
+
+fn from_wire_snapshot_kind(kind: i32) -> Option<SnapshotKind> {
+    match SnapshotKindV1::try_from(kind).ok()? {
+        SnapshotKindV1::Active => Some(SnapshotKind::Active),
+        SnapshotKindV1::View => Some(SnapshotKind::View),
+        SnapshotKindV1::Committed => Some(SnapshotKind::Committed),
+        SnapshotKindV1::Unspecified => None,
+    }
 }
 
 fn ensure_mount_root(path: &Path) -> Result<(), SnapshotterError> {
