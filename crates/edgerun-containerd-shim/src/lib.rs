@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use edgerun_runtime_proto::wire::TaskServiceOpV1;
 use edgerun_runtime_proto::{RuntimeTaskEvent, RuntimeTaskEventKind};
+use oci_spec::runtime::{RootBuilder, Spec};
 
 const CRUN_STATE_ROOT: &str = "/run/edgerun-shim/crun";
 
@@ -327,23 +328,12 @@ impl ShimTaskService {
                     .tasks
                     .get(&key)
                     .ok_or_else(|| LifecycleError::TaskNotFound(key.clone()))?;
-                if task.backend == TaskBackend::Crun {
-                    if let Some(state) = read_crun_state(task_id)? {
-                        return Ok(TaskApiResponse {
-                            state: Some(map_crun_status_to_state(&state.status)),
-                            pid: state.pid,
-                            exit_code: state.exit_code,
-                            pending: matches!(state.status.as_str(), "running" | "created"),
-                            message: format!("state:{}", state.status),
-                            runtime_name: task.runtime_name.clone(),
-                        });
-                    }
-                }
+                let pending = task.lifecycle.state() != TaskLifecycleState::Exited;
                 Ok(TaskApiResponse {
                     state: Some(task.lifecycle.state()),
                     pid: task.pid,
                     exit_code: task.exit_code,
-                    pending: false,
+                    pending,
                     message: "state".to_string(),
                     runtime_name: task.runtime_name.clone(),
                 })
@@ -430,60 +420,6 @@ impl ShimTaskService {
                     .get_mut(&key)
                     .ok_or_else(|| LifecycleError::TaskNotFound(key.clone()))?;
 
-                if task.backend == TaskBackend::Crun {
-                    if let Some(state) = read_crun_state(task_id)? {
-                        if matches!(state.status.as_str(), "running" | "created") {
-                            let output = crun_command().arg("wait").arg(task_id).output().map_err(
-                                |err| LifecycleError::RuntimeStartFailed(err.to_string()),
-                            )?;
-                            if !output.status.success() {
-                                let stderr =
-                                    String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
-                                let should_fallback = stderr.contains("unknown command")
-                                    || stderr.contains("does not exist")
-                                    || stderr.contains("not found");
-                                if !should_fallback {
-                                    return Err(LifecycleError::RuntimeStartFailed(format!(
-                                        "crun wait returned non-zero task_id={task_id} stderr={}",
-                                        String::from_utf8_lossy(&output.stderr)
-                                    )));
-                                }
-                            } else {
-                                let raw =
-                                    String::from_utf8_lossy(&output.stdout).trim().to_string();
-                                let parsed_exit =
-                                    raw.parse::<u32>().ok().or(state.exit_code).or(Some(0));
-                                if task.lifecycle.state() == TaskLifecycleState::Running {
-                                    let _ = task.lifecycle.transition(TaskCommand::Exit);
-                                }
-                                task.exit_code = parsed_exit;
-                                return Ok(TaskApiResponse {
-                                    state: Some(TaskLifecycleState::Exited),
-                                    pid: state.pid.or(task.pid),
-                                    exit_code: task.exit_code,
-                                    pending: false,
-                                    message: "completed".to_string(),
-                                    runtime_name: task.runtime_name.clone(),
-                                });
-                            }
-                        }
-                        if matches!(state.status.as_str(), "stopped" | "exited") {
-                            if task.lifecycle.state() == TaskLifecycleState::Running {
-                                let _ = task.lifecycle.transition(TaskCommand::Exit);
-                            }
-                            task.exit_code = state.exit_code.or(task.exit_code).or(Some(0));
-                            return Ok(TaskApiResponse {
-                                state: Some(TaskLifecycleState::Exited),
-                                pid: state.pid.or(task.pid),
-                                exit_code: task.exit_code,
-                                pending: false,
-                                message: "completed".to_string(),
-                                runtime_name: task.runtime_name.clone(),
-                            });
-                        }
-                    }
-                }
-
                 let mut pending = task.lifecycle.state() != TaskLifecycleState::Exited;
                 if let Some(child) = task.child.as_mut() {
                     match child.try_wait() {
@@ -556,31 +492,21 @@ fn native_edgerun_command(bundle_path: &str, task_id: &str) -> Result<Command, L
     Ok(command)
 }
 
-fn read_bundle_config(bundle_path: &str) -> Result<serde_json::Value, LifecycleError> {
+fn read_bundle_config(bundle_path: &str) -> Result<Spec, LifecycleError> {
     let config_path = Path::new(bundle_path).join("config.json");
-    let raw = fs::read(&config_path).map_err(|err| {
-        LifecycleError::RuntimeConfigFailed(format!("read {}: {err}", config_path.display()))
-    })?;
-    serde_json::from_slice(&raw).map_err(|err| {
+    Spec::load(&config_path).map_err(|err| {
         LifecycleError::RuntimeConfigFailed(format!("parse {}: {err}", config_path.display()))
     })
 }
 
-fn resolve_native_bundle_path(
-    bundle_path: &str,
-    config: &serde_json::Value,
-) -> Result<String, LifecycleError> {
+fn resolve_native_bundle_path(bundle_path: &str, config: &Spec) -> Result<String, LifecycleError> {
     let annotation_keys = [
         "io.edgerun.bundle.path",
         "io.edgerun.wasm.bundle",
         "io.edgerun.runtime.bundle",
     ];
     for key in annotation_keys {
-        let Some(value) = config
-            .get("annotations")
-            .and_then(|v| v.get(key))
-            .and_then(|v| v.as_str())
-        else {
+        let Some(value) = config.annotations().as_ref().and_then(|v| v.get(key)) else {
             continue;
         };
         let trimmed = value.trim();
@@ -593,16 +519,10 @@ fn resolve_native_bundle_path(
         }
     }
 
-    let process_args = config
-        .get("process")
-        .and_then(|v| v.get("args"))
-        .and_then(|v| v.as_array());
-    if let Some(args) = process_args {
+    if let Some(args) = config.process().as_ref().and_then(|v| v.args().as_ref()) {
         let mut prev_is_bundle = false;
-        for item in args {
-            let Some(arg) = item.as_str() else {
-                continue;
-            };
+        for arg in args {
+            let arg = arg.as_str();
             if prev_is_bundle {
                 let candidate = absolutize_bundle_path(bundle_path, arg);
                 if Path::new(&candidate).exists() {
@@ -633,11 +553,12 @@ fn resolve_native_bundle_path(
     ))
 }
 
-fn resolve_native_output_path(task_id: &str, config: &serde_json::Value) -> String {
+fn resolve_native_output_path(task_id: &str, config: &Spec) -> String {
     if let Some(value) = config
-        .get("annotations")
+        .annotations()
+        .as_ref()
         .and_then(|v| v.get("io.edgerun.output.path"))
-        .and_then(|v| v.as_str())
+        .map(|v| v.as_str())
         .map(str::trim)
         .filter(|v| !v.is_empty())
     {
@@ -659,66 +580,6 @@ fn absolutize_bundle_path(bundle_path: &str, candidate: &str) -> String {
 
 fn task_key(namespace: &str, task_id: &str) -> String {
     format!("{namespace}/{task_id}")
-}
-
-#[derive(Debug)]
-struct CrunStateSnapshot {
-    status: String,
-    pid: Option<u32>,
-    exit_code: Option<u32>,
-}
-
-fn read_crun_state(task_id: &str) -> Result<Option<CrunStateSnapshot>, LifecycleError> {
-    let output = crun_command()
-        .arg("state")
-        .arg(task_id)
-        .output()
-        .map_err(|err| LifecycleError::RuntimeConfigFailed(format!("crun state: {err}")))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
-        if stderr.contains("does not exist")
-            || stderr.contains("not found")
-            || stderr.contains("no such file")
-            || stderr.contains("unknown container")
-        {
-            return Ok(None);
-        }
-        return Err(LifecycleError::RuntimeConfigFailed(format!(
-            "crun state non-zero task_id={task_id} stderr={}",
-            String::from_utf8_lossy(&output.stderr)
-        )));
-    }
-    let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).map_err(|err| {
-        LifecycleError::RuntimeConfigFailed(format!("parse crun state json: {err}"))
-    })?;
-    let status = parsed
-        .get("status")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .to_ascii_lowercase();
-    let pid = parsed
-        .get("pid")
-        .and_then(|v| v.as_u64())
-        .and_then(|v| u32::try_from(v).ok());
-    let exit_code = parsed
-        .get("exitCode")
-        .or_else(|| parsed.get("exit_code"))
-        .and_then(|v| v.as_u64())
-        .and_then(|v| u32::try_from(v).ok());
-    Ok(Some(CrunStateSnapshot {
-        status,
-        pid,
-        exit_code,
-    }))
-}
-
-fn map_crun_status_to_state(status: &str) -> TaskLifecycleState {
-    match status {
-        "running" => TaskLifecycleState::Running,
-        "created" => TaskLifecycleState::Created,
-        "stopped" | "exited" => TaskLifecycleState::Exited,
-        _ => TaskLifecycleState::Created,
-    }
 }
 
 fn crun_command() -> Command {
@@ -815,31 +676,16 @@ fn patch_bundle_rootfs_config(
     readonly: bool,
 ) -> Result<(), LifecycleError> {
     let config_path = Path::new(bundle_path).join("config.json");
-    let raw = fs::read(&config_path).map_err(|err| {
-        LifecycleError::RuntimeConfigFailed(format!("read {}: {err}", config_path.display()))
-    })?;
-    let mut parsed: serde_json::Value = serde_json::from_slice(&raw).map_err(|err| {
+    let mut parsed = Spec::load(&config_path).map_err(|err| {
         LifecycleError::RuntimeConfigFailed(format!("parse {}: {err}", config_path.display()))
     })?;
-    let root = parsed
-        .as_object_mut()
-        .ok_or_else(|| {
-            LifecycleError::RuntimeConfigFailed("config root must be object".to_string())
-        })?
-        .entry("root")
-        .or_insert_with(|| serde_json::json!({}));
-    let root_obj = root.as_object_mut().ok_or_else(|| {
-        LifecycleError::RuntimeConfigFailed("config.root must be object".to_string())
-    })?;
-    root_obj.insert(
-        "path".to_string(),
-        serde_json::Value::String(rootfs_source.to_string()),
-    );
-    root_obj.insert("readonly".to_string(), serde_json::Value::Bool(readonly));
-    let bytes = serde_json::to_vec_pretty(&parsed).map_err(|err| {
-        LifecycleError::RuntimeConfigFailed(format!("encode {}: {err}", config_path.display()))
-    })?;
-    fs::write(&config_path, bytes).map_err(|err| {
+    let root = RootBuilder::default()
+        .path(rootfs_source)
+        .readonly(readonly)
+        .build()
+        .map_err(|err| LifecycleError::RuntimeConfigFailed(format!("build config.root: {err}")))?;
+    parsed.set_root(Some(root));
+    parsed.save(&config_path).map_err(|err| {
         LifecycleError::RuntimeConfigFailed(format!("write {}: {err}", config_path.display()))
     })?;
     Ok(())

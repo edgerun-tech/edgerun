@@ -9,13 +9,13 @@ license.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
 async-trait = "0.1"
 prost = "0.13"
+oci-spec = "0.7.1"
 containerd-shim-protos = { version = "0.10", features = ["async"] }
 containerd-shim = { version = "0.10", features = ["async"] }
 edgerun-runtime-proto = { path = "../edgerun-runtime-proto" }

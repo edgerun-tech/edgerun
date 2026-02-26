@@ -2099,9 +2099,9 @@ dependencies = [
  "containerd-shim-protos",
  "edgerun-runtime-proto",
  "edgerun-storage",
+ "oci-spec",
  "prost 0.13.5",
  "serde",
- "serde_json",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -2218,7 +2218,6 @@ version = "0.1.0"
 dependencies = [
  "prost 0.13.5",
  "serde",
- "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -2271,7 +2270,6 @@ dependencies = [
  "edgerun-storage",
  "prost 0.13.5",
  "serde",
- "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
