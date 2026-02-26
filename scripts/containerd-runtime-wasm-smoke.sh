@@ -5,18 +5,31 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 NAMESPACE="${NAMESPACE:-default}"
 IMAGE="${IMAGE:-docker.io/library/debian:bookworm-slim}"
-RUNTIME_BIN="${RUNTIME_BIN:-/var/cache/build/rust/target/release/edgerun-runtime}"
+RUNTIME_BIN="${RUNTIME_BIN:-}"
 RUNTIME_CLASS="${RUNTIME_CLASS:-io.containerd.edgerun.v1}"
 RUNS="${RUNS:-1}"
 ID="${ID:-edgerun-wasm-smoke-$(date +%s)-$$-${RANDOM}}"
 ARTIFACT_PATH="${ARTIFACT_PATH:-/tmp/er-artifact.json}"
 SNAPSHOTTER="${SNAPSHOTTER:-}"
 
-if [[ ! -x "${RUNTIME_BIN}" ]]; then
+if [[ -z "${RUNTIME_BIN}" ]]; then
+  for candidate in \
+    "${ROOT_DIR}/out/target/release/edgerun-runtime" \
+    "/usr/bin/edgerun-runtime" \
+    "${ROOT_DIR}/target/release/edgerun-runtime"; do
+    if [[ -x "${candidate}" ]]; then
+      RUNTIME_BIN="${candidate}"
+      break
+    fi
+  done
+fi
+
+if [[ -z "${RUNTIME_BIN}" || ! -x "${RUNTIME_BIN}" ]]; then
   (
     cd "${ROOT_DIR}"
-    cargo build --release -p edgerun-runtime --features cli
+    CARGO_TARGET_DIR="${ROOT_DIR}/out/target" cargo build --release -p edgerun-runtime --features cli
   )
+  RUNTIME_BIN="${ROOT_DIR}/out/target/release/edgerun-runtime"
 fi
 
 sudo ctr --namespace "${NAMESPACE}" image pull "${IMAGE}" >/dev/null 2>&1 || true
