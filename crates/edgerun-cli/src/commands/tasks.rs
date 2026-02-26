@@ -14,9 +14,8 @@ use crate::commands::runtime_ops::{
 use crate::commands::storage::run_storage_command;
 use crate::{
     load_app_config, run_build_runtime_web_sync, run_clean_artifacts_sync, run_doctor_sync,
-    run_matrix_validation_check_sync, run_program_anchor_build_sync, run_program_local_tests_sync,
-    run_program_sync, run_rust_checks_sync, run_setup_sync, run_spdx_check_sync, run_verify_sync,
-    StorageCommand,
+    run_matrix_validation_check_sync, run_program_sync, run_rust_checks_sync, run_setup_sync,
+    run_spdx_check_sync, run_verify_sync, StorageCommand,
 };
 
 pub(crate) async fn run_interactive(root: &Path) -> Result<()> {
@@ -186,10 +185,6 @@ fn run_native_task_sync(root: &Path, task: &str) -> Result<bool> {
             )?;
             Ok(true)
         }
-        "build-program" => {
-            run_program_anchor_build_sync(root)?;
-            Ok(true)
-        }
         "test-workspace" => {
             run_program_sync(
                 "Test Workspace",
@@ -208,10 +203,6 @@ fn run_native_task_sync(root: &Path, task: &str) -> Result<bool> {
                 root,
                 false,
             )?;
-            Ok(true)
-        }
-        "test-program" => {
-            run_program_local_tests_sync(root)?;
             Ok(true)
         }
         "dev" => {

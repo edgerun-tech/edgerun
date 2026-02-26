@@ -1,0 +1,4 @@
+@term_outage path /v1/device/* /v1/term/* /v1/shell/* /ws*
+handle @term_outage {
+  respond "term server unavailable (simulated)" 503
+}

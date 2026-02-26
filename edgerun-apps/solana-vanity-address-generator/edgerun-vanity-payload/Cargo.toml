@@ -12,6 +12,3 @@ crate-type = ["cdylib", "rlib"]
 bs58 = "0.5"
 ed25519-dalek.workspace = true
 sha2 = "0.10"
-
-[dev-dependencies]
-solana-sdk.workspace = true

@@ -14,8 +14,7 @@ tokio.workspace = true
 tracing.workspace = true
 serde.workspace = true
 bincode.workspace = true
-solana-client.workspace = true
-solana-sdk.workspace = true
+solana-sdk = "2.3"
 ed25519-dalek.workspace = true
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }

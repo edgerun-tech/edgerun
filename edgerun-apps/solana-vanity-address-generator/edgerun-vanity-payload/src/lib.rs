@@ -309,7 +309,6 @@ fn read_request() -> Result<SearchRequest, SearchError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use solana_sdk::signature::{Keypair, Signer};
 
     fn sample_seed() -> [u8; 32] {
         [7_u8; 32]
@@ -335,11 +334,10 @@ mod tests {
     }
 
     #[test]
-    fn derived_keypair_is_valid_for_solana() {
+    fn derived_keypair_matches_ed25519_public_key() {
         let kp = derive_keypair(sample_seed(), 123456);
-        let solana_kp =
-            Keypair::try_from(&kp.keypair_bytes[..]).expect("valid solana keypair bytes");
-        assert_eq!(solana_kp.pubkey().to_bytes(), kp.public_key);
+        let signing = SigningKey::from_bytes(&kp.seed);
+        assert_eq!(signing.verifying_key().to_bytes(), kp.public_key);
     }
 
     #[test]

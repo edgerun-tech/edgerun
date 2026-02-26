@@ -1,0 +1,11 @@
+{
+  auto_https off
+  admin 0.0.0.0:2019
+}
+
+:9000 {
+  route {
+    import /etc/caddy/routes/scenario.caddy
+    import /etc/caddy/routes/base.caddy
+  }
+}

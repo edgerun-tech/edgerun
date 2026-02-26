@@ -24,16 +24,6 @@ use hmac::{Hmac, Mac};
 use reqwest::Url;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use solana_client::rpc_client::RpcClient;
-use solana_sdk::{
-    hash::hash,
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer},
-    sysvar,
-    transaction::Transaction,
-};
-use solana_system_interface::program as system_program;
 use tokio::time::timeout;
 use tokio_tungstenite::tungstenite::Message;
 
@@ -45,7 +35,6 @@ struct WorkerConfig {
     version: String,
     capacity: WorkerCapacity,
     worker_signing_key: Option<SigningKey>,
-    chain_submit: Option<ChainSubmitConfig>,
     policy_verifiers: Arc<RwLock<Vec<PolicyVerifier>>>,
     policy_session: Arc<Mutex<PolicySessionState>>,
     policy_clock_skew_secs: u64,
@@ -54,13 +43,6 @@ struct WorkerConfig {
     retry_base_ms: u64,
     retry_max_ms: u64,
     retry_flush_batch: usize,
-}
-
-#[derive(Debug)]
-struct ChainSubmitConfig {
-    rpc_url: String,
-    program_id: Pubkey,
-    wallet: Keypair,
 }
 
 #[derive(Debug, Clone)]
@@ -212,7 +194,7 @@ async fn main() -> Result<()> {
 }
 
 fn load_config() -> WorkerConfig {
-    let mut worker_pubkey =
+    let worker_pubkey =
         std::env::var("EDGERUN_WORKER_PUBKEY").unwrap_or_else(|_| "worker-demo-1".to_string());
     let scheduler_base_url = std::env::var("EDGERUN_SCHEDULER_URL")
         .unwrap_or_else(|_| "https://api.edgerun.tech".to_string());
@@ -250,18 +232,6 @@ fn load_config() -> WorkerConfig {
             tracing::warn!(error = %err, "invalid EDGERUN_WORKER_SIGNING_KEY_HEX; disabling worker request signatures");
             None
         });
-    let chain_submit = load_chain_submit_config();
-    if let Some(chain_cfg) = chain_submit.as_ref() {
-        let chain_worker = chain_cfg.wallet.pubkey().to_string();
-        if worker_pubkey != chain_worker {
-            tracing::warn!(
-                configured_worker_pubkey = %worker_pubkey,
-                chain_wallet_pubkey = %chain_worker,
-                "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED requires worker_pubkey to match chain wallet; overriding"
-            );
-            worker_pubkey = chain_worker;
-        }
-    }
     let policy_verify_pubkey_hex = std::env::var("EDGERUN_WORKER_POLICY_VERIFY_KEY_HEX")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -345,7 +315,6 @@ fn load_config() -> WorkerConfig {
         version,
         capacity,
         worker_signing_key,
-        chain_submit,
         policy_verifiers: Arc::new(RwLock::new(policy_verifiers)),
         policy_session: Arc::new(Mutex::new(PolicySessionState {
             token: None,
@@ -362,43 +331,6 @@ fn load_config() -> WorkerConfig {
         retry_max_ms,
         retry_flush_batch,
     }
-}
-
-fn load_chain_submit_config() -> Option<ChainSubmitConfig> {
-    if !read_env_bool("EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED", false) {
-        return None;
-    }
-
-    let rpc_url = std::env::var("EDGERUN_CHAIN_RPC_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8899".to_string());
-    let program_id = std::env::var("EDGERUN_CHAIN_PROGRAM_ID")
-        .ok()
-        .and_then(|v| v.parse::<Pubkey>().ok());
-    let wallet_path = std::env::var("EDGERUN_CHAIN_WALLET")
-        .unwrap_or_else(|_| "program/.solana/id.json".to_string());
-
-    let Some(program_id) = program_id else {
-        tracing::warn!(
-            "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED=true but EDGERUN_CHAIN_PROGRAM_ID is missing/invalid"
-        );
-        return None;
-    };
-    let wallet = match read_keypair_file(&wallet_path) {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(
-                error = %err,
-                "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED=true but failed to read EDGERUN_CHAIN_WALLET"
-            );
-            return None;
-        }
-    };
-
-    Some(ChainSubmitConfig {
-        rpc_url,
-        program_id,
-        wallet,
-    })
 }
 
 async fn send_heartbeat(cfg: &WorkerConfig) -> Result<HeartbeatResponse> {
@@ -853,27 +785,6 @@ async fn process_assignment(
         attestation_claim: None,
         signature: None,
     };
-    if let Some(chain_cfg) = cfg.chain_submit.as_ref() {
-        match build_and_send_submit_result_tx(
-            chain_cfg,
-            &result.job_id,
-            report.bundle_hash,
-            report.output_hash,
-            report.runtime_id,
-        ) {
-            Ok((tx_sig, attestation_sig_b64)) => {
-                result.attestation_sig = Some(attestation_sig_b64);
-                tracing::info!(job_id = %result.job_id, tx_sig = %tx_sig, "submitted on-chain result tx");
-            }
-            Err(err) => {
-                tracing::warn!(
-                    error = %err,
-                    job_id = %result.job_id,
-                    "failed to build/send on-chain submit_result tx"
-                );
-            }
-        }
-    }
     result.signature = sign_worker_payload(cfg, result_signing_message(&result));
 
     if !submit_with_retry(
@@ -1243,103 +1154,6 @@ fn sign_worker_payload(cfg: &WorkerConfig, message: String) -> Option<String> {
     Some(base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()))
 }
 
-fn build_and_send_submit_result_tx(
-    cfg: &ChainSubmitConfig,
-    job_id_hex: &str,
-    bundle_hash: [u8; 32],
-    output_hash: [u8; 32],
-    runtime_id: [u8; 32],
-) -> Result<(String, String)> {
-    let job_id = parse_hex32(job_id_hex).context("job_id must be 32-byte hex")?;
-    let worker = cfg.wallet.pubkey();
-    let attestation_message = build_result_digest(&job_id, &bundle_hash, &output_hash, &runtime_id);
-    let attestation_signature = {
-        let sig = cfg.wallet.sign_message(&attestation_message);
-        let mut out = [0_u8; 64];
-        out.copy_from_slice(sig.as_ref());
-        out
-    };
-    let worker_bytes = worker.to_bytes();
-    let attestation_sig_b64 =
-        base64::engine::general_purpose::STANDARD.encode(attestation_signature);
-
-    let verify_ix = solana_sdk::ed25519_instruction::new_ed25519_instruction_with_signature(
-        &attestation_message,
-        &attestation_signature,
-        &worker_bytes,
-    );
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &cfg.program_id);
-    let (job_result_pda, _) =
-        Pubkey::find_program_address(&[b"job_result", &job_id, worker.as_ref()], &cfg.program_id);
-
-    let submit_ix = Instruction {
-        program_id: cfg.program_id,
-        accounts: vec![
-            AccountMeta::new(worker, true),
-            AccountMeta::new_readonly(job_pda, false),
-            AccountMeta::new(job_result_pda, false),
-            AccountMeta::new_readonly(sysvar::instructions::id(), false),
-            AccountMeta::new_readonly(system_program::id(), false),
-        ],
-        data: encode_submit_result_data(output_hash, attestation_signature),
-    };
-
-    let rpc = RpcClient::new(cfg.rpc_url.clone());
-    let blockhash = rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[verify_ix, submit_ix],
-        Some(&worker),
-        &[&cfg.wallet],
-        blockhash,
-    );
-    let signature = rpc
-        .send_and_confirm_transaction(&tx)
-        .context("failed to send submit_result transaction")?;
-    Ok((signature.to_string(), attestation_sig_b64))
-}
-
-fn build_result_digest(
-    job_id: &[u8; 32],
-    bundle_hash: &[u8; 32],
-    output_hash: &[u8; 32],
-    runtime_id: &[u8; 32],
-) -> [u8; 32] {
-    let mut preimage = [0_u8; 128];
-    preimage[0..32].copy_from_slice(job_id);
-    preimage[32..64].copy_from_slice(bundle_hash);
-    preimage[64..96].copy_from_slice(output_hash);
-    preimage[96..128].copy_from_slice(runtime_id);
-    edgerun_crypto::blake3_256(&preimage)
-}
-
-fn encode_submit_result_data(output_hash: [u8; 32], attestation_sig: [u8; 64]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32 + 64);
-    data.extend_from_slice(&anchor_discriminator("submit_result"));
-    data.extend_from_slice(&output_hash);
-    data.extend_from_slice(&attestation_sig);
-    data
-}
-
-fn anchor_discriminator(ix_name: &str) -> [u8; 8] {
-    let preimage = format!("global:{ix_name}");
-    let h = hash(preimage.as_bytes());
-    let mut out = [0_u8; 8];
-    out.copy_from_slice(&h.to_bytes()[..8]);
-    out
-}
-
-fn parse_hex32(value: &str) -> Result<[u8; 32]> {
-    let bytes = hex::decode(value).context("value must be hex")?;
-    if bytes.len() != 32 {
-        anyhow::bail!("value must decode to 32 bytes");
-    }
-    let mut out = [0_u8; 32];
-    out.copy_from_slice(&bytes);
-    Ok(out)
-}
-
 fn default_policy_verify_pubkey_hex() -> String {
     let sk_bytes_vec = hex::decode(DEFAULT_POLICY_SIGNING_KEY_HEX)
         .expect("DEFAULT_POLICY_SIGNING_KEY_HEX must be valid hex");
@@ -1432,17 +1246,6 @@ fn now_unix_seconds() -> u64 {
         .unwrap_or(0)
 }
 
-fn read_env_bool(key: &str, default_value: bool) -> bool {
-    std::env::var(key)
-        .ok()
-        .and_then(|v| match v.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => Some(true),
-            "0" | "false" | "no" | "off" => Some(false),
-            _ => None,
-        })
-        .unwrap_or(default_value)
-}
-
 fn parse_runtime_id_hex(runtime_id: &str) -> Result<[u8; 32]> {
     let raw = runtime_id.trim();
     let hex_str = raw
@@ -1477,7 +1280,6 @@ mod tests {
                 mem_bytes: 1024,
             },
             worker_signing_key: None,
-            chain_submit: None,
             policy_verifiers: Arc::new(RwLock::new(vec![PolicyVerifier {
                 key_id: default_policy_key_id(),
                 version: default_policy_version(),

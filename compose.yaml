@@ -1,0 +1,66 @@
+services:
+  scheduler:
+    image: debian:bookworm-slim
+    command: ["/opt/edgerun/bin/edgerun-scheduler"]
+    environment:
+      EDGERUN_SCHEDULER_ADDR: "0.0.0.0:5566"
+      EDGERUN_SCHEDULER_BASE_URL: "http://caddy:9000"
+      EDGERUN_SCHEDULER_DATA_DIR: "/var/lib/edgerun/scheduler"
+      EDGERUN_P2P_ENABLED: "true"
+      EDGERUN_P2P_LISTEN_ADDRS: "/ip4/0.0.0.0/tcp/9100"
+      EDGERUN_P2P_BOOTSTRAP_PEERS: "/dns4/worker/tcp/9101"
+      EDGERUN_P2P_EVENT_BUS_TOPIC: "edgerun-event-bus-v1"
+    volumes:
+      - ./out/target/release:/opt/edgerun/bin:ro
+      - ./out/compose/scheduler-data:/var/lib/edgerun/scheduler
+    ports:
+      - "8090:5566"
+
+  term-server:
+    image: debian:bookworm-slim
+    command: ["/opt/edgerun/bin/edgerun-term-server"]
+    environment:
+      EDGERUN_TERM_SERVER_ADDR: "0.0.0.0:5577"
+      EDGERUN_ROUTE_CONTROL_BASE: "http://caddy:9000"
+      EDGERUN_TERM_PUBLIC_BASE_URL: "http://caddy:9000"
+      EDGERUN_ROUTE_REACHABLE_URLS: "http://caddy:9000"
+    volumes:
+      - ./out/target/release:/opt/edgerun/bin:ro
+    ports:
+      - "8081:5577"
+
+  worker:
+    image: debian:bookworm-slim
+    command: ["/opt/edgerun/bin/edgerun-worker"]
+    environment:
+      EDGERUN_WORKER_PUBKEY: "worker-compose-1"
+      EDGERUN_SCHEDULER_URL: "http://caddy:9000"
+      EDGERUN_WORKER_RUNTIME_IDS: "0000000000000000000000000000000000000000000000000000000000000000"
+      EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED: "false"
+      EDGERUN_P2P_ENABLED: "true"
+      EDGERUN_P2P_LISTEN_ADDRS: "/ip4/0.0.0.0/tcp/9101"
+      EDGERUN_P2P_BOOTSTRAP_PEERS: "/dns4/scheduler/tcp/9100"
+      EDGERUN_P2P_EVENT_BUS_TOPIC: "edgerun-event-bus-v1"
+    volumes:
+      - ./out/target/release:/opt/edgerun/bin:ro
+
+  frontend:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./out/frontend/site:/usr/share/nginx/html:ro
+    ports:
+      - "4173:80"
+
+  caddy:
+    image: caddy:2.8.4-alpine
+    depends_on:
+      - scheduler
+      - term-server
+      - worker
+      - frontend
+    ports:
+      - "9000:9000"
+      - "2019:2019"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/caddy/routes:/etc/caddy/routes

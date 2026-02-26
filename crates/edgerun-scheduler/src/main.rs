@@ -49,17 +49,9 @@ use edgerun_types::control_plane::{
 use fs2::FileExt;
 use prost::Message as ProstCodec;
 use serde::{Deserialize, Serialize};
-use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_config::RpcProgramAccountsConfig;
-use solana_client::rpc_filter::{Memcmp, RpcFilterType};
 use solana_sdk::{
-    commitment_config::CommitmentConfig,
     hash::hash,
-    instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer},
-    system_program,
-    transaction::Transaction,
 };
 use tokio::sync::mpsc;
 
@@ -96,7 +88,6 @@ struct AppState {
     enable_slash_artifacts: bool,
     require_client_signatures: bool,
     client_signature_max_age_secs: u64,
-    chain_auto_submit: bool,
     job_timeout_secs: u64,
     policy_audit_path: PathBuf,
     trust_policy: Arc<Mutex<edgerun_types::SyncTrustPolicy>>,
@@ -126,10 +117,8 @@ struct RetentionConfig {
 }
 
 struct ChainContext {
-    rpc_url: String,
-    rpc: RpcClient,
     program_id: Pubkey,
-    payer: Keypair,
+    payer_pubkey: Pubkey,
 }
 
 struct ChainProgressSink {
@@ -153,6 +142,74 @@ struct SchedulerSignedChainProgressEvent {
     observed_at_unix_ms: u64,
     signer: String,
     signature: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SolanaJobStatusEventV1 {
+    job_id: String,
+    status: u8,
+    #[serde(default)]
+    observed_slot: Option<u64>,
+    #[serde(default)]
+    deadline_slot: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PostJobIntentV1 {
+    schema_version: u32,
+    kind: String,
+    program_id: String,
+    payer_pubkey: String,
+    client: String,
+    job_id: [u8; 32],
+    bundle_hash: [u8; 32],
+    runtime_id: [u8; 32],
+    runtime_proof: Vec<[u8; 32]>,
+    max_memory_bytes: u32,
+    max_instructions: u64,
+    escrow_lamports: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FinalizeJobIntentV1 {
+    schema_version: u32,
+    kind: String,
+    program_id: String,
+    payer_pubkey: String,
+    job_id: [u8; 32],
+    committee: Vec<String>,
+    winners: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AssignWorkersIntentV1 {
+    schema_version: u32,
+    kind: String,
+    program_id: String,
+    payer_pubkey: String,
+    job_id: [u8; 32],
+    workers: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CancelExpiredJobIntentV1 {
+    schema_version: u32,
+    kind: String,
+    program_id: String,
+    payer_pubkey: String,
+    job_id: [u8; 32],
+    client: String,
+    committee: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SlashWorkerIntentV1 {
+    schema_version: u32,
+    kind: String,
+    program_id: String,
+    payer_pubkey: String,
+    job_id: [u8; 32],
+    worker: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -305,8 +362,7 @@ async fn main() -> Result<()> {
     let chain = match init_chain_context() {
         Ok(ctx) => {
             tracing::info!(
-                rpc = %ctx.rpc_url,
-                payer = %ctx.payer.pubkey(),
+                payer = %ctx.payer_pubkey,
                 program_id = %ctx.program_id,
                 "chain context initialized"
             );
@@ -453,7 +509,6 @@ implement cryptographic verification for scheduler signed chain progress events 
             "EDGERUN_SCHEDULER_CLIENT_SIGNATURE_MAX_AGE_SECS",
             300,
         ),
-        chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         policy_audit_path: data_dir.join("policy-audit.jsonl"),
         trust_policy: Arc::new(Mutex::new(trust_policy)),
@@ -513,6 +568,9 @@ implement cryptographic verification for scheduler signed chain progress events 
                         if envelope.publisher == "scheduler" && envelope.nonce >= bus_sink.next_nonce
                         {
                             bus_sink.next_nonce = envelope.nonce.saturating_add(1);
+                        }
+                        if let Err(err) = apply_solana_status_event(&p2p_ingest_state, &envelope) {
+                            tracing::warn!(error = %err, "failed to apply solana status event");
                         }
                     }
                     Err(err) => {
@@ -1655,7 +1713,7 @@ fn job_create_inner(
             }
         };
         let tx_args = PostJobArgs {
-            client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
+            client: parsed_client.unwrap_or(chain.payer_pubkey),
             job_id: bundle_hash,
             bundle_hash,
             runtime_id,
@@ -1713,25 +1771,22 @@ fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
 }
 
 fn init_chain_context() -> Result<ChainContext> {
-    let rpc_url = std::env::var("EDGERUN_CHAIN_RPC_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8899".to_string());
     let program_id_str = std::env::var("EDGERUN_CHAIN_PROGRAM_ID")
         .unwrap_or_else(|_| "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG".to_string());
-    let wallet_path = std::env::var("EDGERUN_CHAIN_WALLET")
-        .unwrap_or_else(|_| "program/.solana/id.json".to_string());
+    let payer_pubkey_str = std::env::var("EDGERUN_CHAIN_PAYER_PUBKEY")
+        .or_else(|_| std::env::var("EDGERUN_SCHEDULER_PAYER_PUBKEY"))
+        .unwrap_or_else(|_| "11111111111111111111111111111111".to_string());
 
     let program_id = program_id_str
         .parse::<Pubkey>()
         .context("invalid EDGERUN_CHAIN_PROGRAM_ID")?;
-    let payer = read_keypair_file(&wallet_path)
-        .map_err(|e| anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {wallet_path}: {e}"))?;
-    let rpc = RpcClient::new(rpc_url.clone());
+    let payer_pubkey = payer_pubkey_str
+        .parse::<Pubkey>()
+        .context("invalid EDGERUN_CHAIN_PAYER_PUBKEY")?;
 
     Ok(ChainContext {
-        rpc_url,
-        rpc,
         program_id,
-        payer,
+        payer_pubkey,
     })
 }
 
@@ -1850,15 +1905,8 @@ fn init_chain_event_bus_sink(
 }
 
 fn read_and_record_chain_progress(state: &AppState) -> Option<SchedulerSignedChainProgressEvent> {
-    let chain = state.chain.as_ref()?;
-    let epoch_info = match chain.rpc.get_epoch_info() {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(error = %err, "failed to read current chain epoch info");
-            return None;
-        }
-    };
-    match append_signed_chain_progress_event(state, epoch_info.absolute_slot, epoch_info.epoch) {
+    let slot = now_unix_seconds();
+    match append_signed_chain_progress_event(state, slot, 0) {
         Ok(ev) => Some(ev),
         Err(err) => {
             tracing::warn!(error = %err, "failed to append signed chain progress event");
@@ -1954,38 +2002,35 @@ fn build_post_job_tx_base64(
     chain: &ChainContext,
     args: PostJobArgs,
 ) -> Result<(String, Option<String>)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &args.job_id], &chain.program_id);
-
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(args.client, true),
-            AccountMeta::new_readonly(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new_readonly(system_program::id(), false),
-        ],
-        data: encode_post_job_data(args),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-
-    let mut tx = Transaction::new_with_payer(&[ix], Some(&chain.payer.pubkey()));
-    tx.partial_sign(&[&chain.payer], blockhash);
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    Ok((tx_b64, signature))
+    let payload = bincode::serialize(&PostJobIntentV1 {
+        schema_version: 1,
+        kind: "post_job".to_string(),
+        program_id: chain.program_id.to_string(),
+        payer_pubkey: chain.payer_pubkey.to_string(),
+        client: args.client.to_string(),
+        job_id: args.job_id,
+        bundle_hash: args.bundle_hash,
+        runtime_id: args.runtime_id,
+        runtime_proof: args.runtime_proof,
+        max_memory_bytes: args.max_memory_bytes,
+        max_instructions: args.max_instructions,
+        escrow_lamports: args.escrow_lamports,
+    })
+    .context("serialize post_job intent")?;
+    Ok((
+        format!(
+            "INTENT_V1:{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        ),
+        None,
+    ))
 }
 
 fn build_runtime_allowlist_proof_for_chain(
-    chain: &ChainContext,
+    _chain: &ChainContext,
     runtime_id: [u8; 32],
 ) -> Result<Vec<[u8; 32]>> {
-    let allowed_root = fetch_chain_allowed_runtime_root(chain)?;
+    let allowed_root = parse_allowed_runtime_root_from_env().unwrap_or([0_u8; 32]);
     if allowed_root == [0_u8; 32] {
         return Ok(Vec::new());
     }
@@ -2005,6 +2050,12 @@ fn build_runtime_allowlist_proof_for_chain(
     Ok(proof)
 }
 
+fn parse_allowed_runtime_root_from_env() -> Option<[u8; 32]> {
+    std::env::var("EDGERUN_ALLOWED_RUNTIME_ROOT")
+        .ok()
+        .and_then(|raw| parse_hex32(raw.trim()).ok())
+}
+
 fn load_allowed_runtime_ids_from_env() -> Result<Option<Vec<[u8; 32]>>> {
     let Some(raw) = std::env::var("EDGERUN_ALLOWED_RUNTIME_IDS").ok() else {
         return Ok(None);
@@ -2021,16 +2072,6 @@ fn load_allowed_runtime_ids_from_env() -> Result<Option<Vec<[u8; 32]>>> {
     leaves.sort();
     leaves.dedup();
     Ok(Some(leaves))
-}
-
-fn fetch_chain_allowed_runtime_root(chain: &ChainContext) -> Result<[u8; 32]> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let account = chain
-        .rpc
-        .get_account(&config_pda)
-        .context("failed to fetch config account")?;
-    parse_config_allowed_runtime_root(&account.data)
-        .ok_or_else(|| anyhow::anyhow!("unable to parse config.allowed_runtime_root"))
 }
 
 fn merkle_parent_sorted(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
@@ -2091,126 +2132,49 @@ fn build_finalize_job_tx_base64(
     job_id: [u8; 32],
     committee: [Pubkey; 3],
     winners: Vec<Pubkey>,
-    auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (output_availability_pda, _) =
-        Pubkey::find_program_address(&[b"output", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
-    let (job_result_0, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[0].as_ref()],
-        &chain.program_id,
-    );
-    let (job_result_1, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[1].as_ref()],
-        &chain.program_id,
-    );
-    let (job_result_2, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[2].as_ref()],
-        &chain.program_id,
-    );
-
-    let mut accounts = vec![
-        AccountMeta::new(chain.payer.pubkey(), true),
-        AccountMeta::new(config_pda, false),
-        AccountMeta::new(job_pda, false),
-        AccountMeta::new_readonly(output_availability_pda, false),
-        AccountMeta::new(worker_stake_0, false),
-        AccountMeta::new(worker_stake_1, false),
-        AccountMeta::new(worker_stake_2, false),
-        AccountMeta::new_readonly(job_result_0, false),
-        AccountMeta::new_readonly(job_result_1, false),
-        AccountMeta::new_readonly(job_result_2, false),
-    ];
-    for winner in winners {
-        accounts.push(AccountMeta::new(winner, false));
-    }
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts,
-        data: encode_finalize_job_data(),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send finalize_job transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
+    let payload = bincode::serialize(&FinalizeJobIntentV1 {
+        schema_version: 1,
+        kind: "finalize_job".to_string(),
+        program_id: chain.program_id.to_string(),
+        payer_pubkey: chain.payer_pubkey.to_string(),
+        job_id,
+        committee: committee.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        winners: winners.into_iter().map(|w| w.to_string()).collect::<Vec<_>>(),
+    })
+    .context("serialize finalize_job intent")?;
+    Ok((
+        format!(
+            "INTENT_V1:{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        ),
+        None,
+        false,
+    ))
 }
 
 fn build_assign_workers_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
     workers: [Pubkey; 3],
-    auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[2].as_ref()], &chain.program_id);
-
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(worker_stake_0, false),
-            AccountMeta::new(worker_stake_1, false),
-            AccountMeta::new(worker_stake_2, false),
-        ],
-        data: encode_assign_workers_data(workers),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send assign_workers transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
+    let payload = bincode::serialize(&AssignWorkersIntentV1 {
+        schema_version: 1,
+        kind: "assign_workers".to_string(),
+        program_id: chain.program_id.to_string(),
+        payer_pubkey: chain.payer_pubkey.to_string(),
+        job_id,
+        workers: workers.iter().map(ToString::to_string).collect::<Vec<_>>(),
+    })
+    .context("serialize assign_workers intent")?;
+    Ok((
+        format!(
+            "INTENT_V1:{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        ),
+        None,
+        false,
+    ))
 }
 
 fn build_cancel_expired_job_tx_base64(
@@ -2218,150 +2182,49 @@ fn build_cancel_expired_job_tx_base64(
     job_id: [u8; 32],
     client: Pubkey,
     committee: [Pubkey; 3],
-    auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new_readonly(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(client, false),
-            AccountMeta::new(worker_stake_0, false),
-            AccountMeta::new(worker_stake_1, false),
-            AccountMeta::new(worker_stake_2, false),
-        ],
-        data: encode_cancel_expired_job_data(),
-    };
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send cancel_expired_job transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
+    let payload = bincode::serialize(&CancelExpiredJobIntentV1 {
+        schema_version: 1,
+        kind: "cancel_expired_job".to_string(),
+        program_id: chain.program_id.to_string(),
+        payer_pubkey: chain.payer_pubkey.to_string(),
+        job_id,
+        client: client.to_string(),
+        committee: committee.iter().map(ToString::to_string).collect::<Vec<_>>(),
+    })
+    .context("serialize cancel_expired_job intent")?;
+    Ok((
+        format!(
+            "INTENT_V1:{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        ),
+        None,
+        false,
+    ))
 }
 
 fn build_slash_worker_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
     worker: Pubkey,
-    auto_submit: bool,
 ) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_pda, _) =
-        Pubkey::find_program_address(&[b"worker_stake", worker.as_ref()], &chain.program_id);
-    let (job_result_pda, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, worker.as_ref()],
-        &chain.program_id,
-    );
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(worker_stake_pda, false),
-            AccountMeta::new_readonly(job_result_pda, false),
-        ],
-        data: encode_slash_worker_data(),
-    };
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send slash_worker transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
-}
-
-fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
-    let mut data =
-        Vec::with_capacity(8 + 32 + 32 + 32 + 4 + (args.runtime_proof.len() * 32) + 4 + 8 + 8);
-    data.extend_from_slice(&anchor_discriminator("post_job"));
-    data.extend_from_slice(&args.job_id);
-    data.extend_from_slice(&args.bundle_hash);
-    data.extend_from_slice(&args.runtime_id);
-    data.extend_from_slice(&(args.runtime_proof.len() as u32).to_le_bytes());
-    for sibling in args.runtime_proof {
-        data.extend_from_slice(&sibling);
-    }
-    data.extend_from_slice(&args.max_memory_bytes.to_le_bytes());
-    data.extend_from_slice(&args.max_instructions.to_le_bytes());
-    data.extend_from_slice(&args.escrow_lamports.to_le_bytes());
-    data
-}
-
-fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32 * 3);
-    data.extend_from_slice(&anchor_discriminator("assign_workers"));
-    data.extend_from_slice(workers[0].as_ref());
-    data.extend_from_slice(workers[1].as_ref());
-    data.extend_from_slice(workers[2].as_ref());
-    data
-}
-
-fn encode_finalize_job_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("finalize_job"));
-    data
-}
-
-fn encode_cancel_expired_job_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("cancel_expired_job"));
-    data
-}
-
-fn encode_slash_worker_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("slash_worker"));
-    data
-}
-
-fn anchor_discriminator(ix_name: &str) -> [u8; 8] {
-    let preimage = format!("global:{ix_name}");
-    let h = hash(preimage.as_bytes());
-    let mut out = [0_u8; 8];
-    out.copy_from_slice(&h.to_bytes()[..8]);
-    out
+    let payload = bincode::serialize(&SlashWorkerIntentV1 {
+        schema_version: 1,
+        kind: "slash_worker".to_string(),
+        program_id: chain.program_id.to_string(),
+        payer_pubkey: chain.payer_pubkey.to_string(),
+        job_id,
+        worker: worker.to_string(),
+    })
+    .context("serialize slash_worker intent")?;
+    Ok((
+        format!(
+            "INTENT_V1:{}",
+            base64::engine::general_purpose::STANDARD.encode(payload)
+        ),
+        None,
+        false,
+    ))
 }
 
 fn bundle_path(state: &AppState, bundle_hash: &str) -> PathBuf {
@@ -2868,7 +2731,7 @@ fn build_slash_worker_artifacts(
                     submitted: false,
                 };
             };
-            match build_slash_worker_tx_base64(chain, job_id, worker, state.chain_auto_submit) {
+            match build_slash_worker_tx_base64(chain, job_id, worker) {
                 Ok((tx, sig, submitted)) => SlashWorkerArtifact {
                     worker_pubkey,
                     tx,
@@ -2903,7 +2766,6 @@ fn build_finalize_trigger_payload_inner(
                     job_id,
                     committee,
                     winners,
-                    state.chain_auto_submit,
                 ) {
                     Ok((tx, sig, submitted)) => return (tx, sig, submitted),
                     Err(err) => {
@@ -2992,8 +2854,7 @@ fn build_assign_workers_artifact(
             .parse::<Pubkey>()
             .context("committee worker pubkey invalid")?,
     ];
-    let (tx, sig, submitted) =
-        build_assign_workers_tx_base64(chain, job_id, workers, state.chain_auto_submit)?;
+    let (tx, sig, submitted) = build_assign_workers_tx_base64(chain, job_id, workers)?;
     Ok((Some(tx), sig, submitted))
 }
 
@@ -3073,576 +2934,10 @@ fn build_cancel_expired_artifact(
     let (tx, sig, submitted) = build_cancel_expired_job_tx_base64(
         chain,
         job_id,
-        chain.payer.pubkey(),
+        chain.payer_pubkey,
         committee,
-        state.chain_auto_submit,
     )?;
     Ok((tx, sig, submitted))
-}
-
-const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
-const GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR: usize = 96;
-const JOB_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 303;
-const JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
-const JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR: usize = 64;
-const JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR: usize = 72;
-const JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR: usize = 104;
-const JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR: usize = 136;
-const JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR: usize = 140;
-const JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR: usize = 148;
-const JOB_QUORUM_OFFSET_FROM_ANCHOR: usize = 149;
-const JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR: usize = 150;
-const JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR: usize = 158;
-const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
-const JOB_RESULT_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 168;
-const JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
-const JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR: usize = 32;
-const JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR: usize = 64;
-const JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR: usize = 96;
-const JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR: usize = 160;
-
-#[derive(Debug, Clone)]
-struct OnchainJobView {
-    job_id: [u8; 32],
-    bundle_hash: [u8; 32],
-    runtime_id: [u8; 32],
-    max_memory_bytes: u32,
-    max_instructions: u64,
-    escrow_lamports: u64,
-    committee_size: u8,
-    quorum: u8,
-    created_slot: u64,
-    deadline_slot: u64,
-    status: u8,
-}
-
-#[derive(Debug, Clone)]
-struct OnchainJobResultView {
-    job_id: [u8; 32],
-    worker: Pubkey,
-    output_hash: [u8; 32],
-    attestation_sig: [u8; 64],
-    submitted_slot: u64,
-}
-
-fn posted_job_rpc_filters() -> Vec<RpcFilterType> {
-    vec![
-        RpcFilterType::DataSize(JOB_ACCOUNT_MIN_LEN as u64),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            0,
-            anchor_account_discriminator("Job").to_vec(),
-        )),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR,
-            vec![0_u8], // Posted
-        )),
-    ]
-}
-
-fn job_result_rpc_filters() -> Vec<RpcFilterType> {
-    vec![
-        RpcFilterType::DataSize(JOB_RESULT_ACCOUNT_MIN_LEN as u64),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            0,
-            anchor_account_discriminator("JobResult").to_vec(),
-        )),
-    ]
-}
-
-fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let filters = posted_job_rpc_filters();
-    let accounts = chain
-        .rpc
-        .get_program_accounts_with_config(
-            &chain.program_id,
-            RpcProgramAccountsConfig {
-                filters: Some(filters),
-                ..RpcProgramAccountsConfig::default()
-            },
-        )
-        .context("failed to fetch program accounts for discovery")?;
-    if accounts.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed = false;
-    for (addr, account) in accounts {
-        let Some(view) = parse_onchain_job_view(&account.data) else {
-            continue;
-        };
-        if !is_valid_job_account_address(&chain.program_id, &addr, &view.job_id) {
-            continue;
-        }
-        if view.status != 0 {
-            continue;
-        }
-        if seed_discovered_posted_job(state, &view)? {
-            changed = true;
-        }
-    }
-
-    if changed {
-        schedule_state_snapshot(state)?;
-    }
-    Ok(())
-}
-
-fn sync_onchain_job_results(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let accounts = chain
-        .rpc
-        .get_program_accounts_with_config(
-            &chain.program_id,
-            RpcProgramAccountsConfig {
-                filters: Some(job_result_rpc_filters()),
-                ..RpcProgramAccountsConfig::default()
-            },
-        )
-        .context("failed to fetch program accounts for job-result sync")?;
-    if accounts.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed_jobs: HashSet<String> = HashSet::new();
-    for (_addr, account) in accounts {
-        let Some(view) = parse_onchain_job_result_view(&account.data) else {
-            continue;
-        };
-        if let Some(job_id_hex) = ingest_onchain_job_result_view(state, &view) {
-            tracing::info!(
-                job_id = %job_id_hex,
-                worker = %view.worker,
-                submitted_slot = view.submitted_slot,
-                "synced on-chain JobResult into scheduler report state"
-            );
-            changed_jobs.insert(job_id_hex);
-        }
-    }
-
-    if changed_jobs.is_empty() {
-        return Ok(());
-    }
-
-    for job_id in changed_jobs {
-        let _ = recompute_job_quorum(state, &job_id)?;
-    }
-    enforce_history_retention(state);
-    schedule_state_snapshot(state)?;
-    Ok(())
-}
-
-fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView) -> Option<String> {
-    let job_id_hex = hex::encode(view.job_id);
-    let (expected_bundle_hash, expected_runtime_id, is_assigned) = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        let entry = job_quorum.get(&job_id_hex)?;
-        let worker = view.worker.to_string();
-        let assigned = entry.committee_workers.iter().any(|w| w == &worker);
-        (
-            entry.expected_bundle_hash.clone(),
-            entry.expected_runtime_id.clone(),
-            assigned,
-        )
-    };
-    if !is_assigned {
-        return None;
-    }
-    if !verify_onchain_job_result_attestation(view, &expected_bundle_hash, &expected_runtime_id) {
-        return None;
-    }
-
-    let worker_pubkey = view.worker.to_string();
-    let output_hash_hex = hex::encode(view.output_hash);
-    let idem = scheduler_idempotency_key(
-        "onchain_result",
-        &worker_pubkey,
-        &job_id_hex,
-        "job_result_sync",
-        &output_hash_hex,
-        &expected_bundle_hash,
-    );
-    let mut results = state.results.lock().expect("lock poisoned");
-    let entries = results.entry(job_id_hex.clone()).or_default();
-    if entries.iter().any(|e| {
-        (e.idempotency_key == idem)
-            || (e.worker_pubkey == worker_pubkey && e.output_hash == output_hash_hex)
-    }) {
-        return None;
-    }
-    entries.push(WorkerResultReport {
-        idempotency_key: idem,
-        worker_pubkey,
-        job_id: job_id_hex.clone(),
-        bundle_hash: expected_bundle_hash,
-        output_hash: output_hash_hex,
-        output_len: 0,
-        attestation_sig: Some(
-            base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
-        ),
-        attestation_claim: None,
-        signature: None,
-    });
-    drop(results);
-    touch_job_last_update(state, &job_id_hex);
-    Some(job_id_hex)
-}
-
-fn verify_onchain_job_result_attestation(
-    view: &OnchainJobResultView,
-    expected_bundle_hash_hex: &str,
-    expected_runtime_id_hex: &str,
-) -> bool {
-    let worker_bytes = view.worker.to_bytes();
-    let Ok(worker_vk) = VerifyingKey::from_bytes(&worker_bytes) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&view.attestation_sig);
-    let Ok(bundle_hash) = parse_hex32(expected_bundle_hash_hex) else {
-        return false;
-    };
-    let Ok(runtime_id) = parse_hex32(expected_runtime_id_hex) else {
-        return false;
-    };
-    let message =
-        build_worker_result_digest(&view.job_id, &bundle_hash, &view.output_hash, &runtime_id);
-    edgerun_crypto::verify(&worker_vk, &message, &signature)
-}
-
-fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
-    let job_id_hex = hex::encode(view.job_id);
-    if view.committee_size != 3 || view.quorum != 2 {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            committee_size = view.committee_size,
-            quorum = view.quorum,
-            "skipping discovered posted job: unsupported committee/quorum for MVP policy"
-        );
-        return Ok(false);
-    }
-    let bundle_hash_hex = hex::encode(view.bundle_hash);
-    if !bundle_path(state, &bundle_hash_hex).exists() {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            bundle_hash = %bundle_hash_hex,
-            "skipping discovered posted job because bundle is unavailable in local store"
-        );
-        return Ok(false);
-    }
-    let already_tracked = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.contains_key(&job_id_hex)
-    };
-    if already_tracked {
-        return Ok(false);
-    }
-    let runtime_id_hex = hex::encode(view.runtime_id);
-    let committee_workers = select_committee_workers(
-        state,
-        &runtime_id_hex,
-        &job_id_hex,
-        usize::from(view.committee_size.max(1)),
-    );
-    let quorum_target = usize::from(view.quorum.max(1));
-    if committee_workers.len() < quorum_target {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            runtime_id = %runtime_id_hex,
-            have = committee_workers.len(),
-            need = quorum_target,
-            "skipping discovered posted job due to insufficient eligible workers"
-        );
-        return Ok(false);
-    }
-
-    let now = now_unix_seconds();
-    let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
-    for worker_pubkey in &committee_workers {
-        let mut assignment = QueuedAssignment {
-            job_id: job_id_hex.clone(),
-            bundle_hash: bundle_hash_hex.clone(),
-            bundle_url: format!("{}/bundle/{}", state.public_base_url, bundle_hash_hex),
-            runtime_id: runtime_id_hex.clone(),
-            abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
-            limits: edgerun_types::Limits {
-                max_memory_bytes: view.max_memory_bytes,
-                max_instructions: view.max_instructions,
-            },
-            escrow_lamports: view.escrow_lamports,
-            policy_signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
-            policy_signature: String::new(),
-            policy_key_id: state.policy_key_id.clone(),
-            policy_version: state.policy_version,
-            policy_valid_after_unix_s: now,
-            policy_valid_until_unix_s: now.saturating_add(state.policy_ttl_secs),
-        };
-        assignment.policy_signature =
-            sign_assignment_policy(&state.policy_signing_key, &assignment);
-        queued.push((worker_pubkey.clone(), assignment));
-    }
-    if let Err((_, err)) = enqueue_assignments_with_limits(state, queued) {
-        tracing::warn!(job_id = %job_id_hex, error = %err, "skipping discovered posted job due to assignment backlog limits");
-        return Ok(false);
-    }
-    {
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.insert(
-            job_id_hex.clone(),
-            JobQuorumState {
-                expected_bundle_hash: hex::encode(view.bundle_hash),
-                expected_runtime_id: runtime_id_hex.clone(),
-                committee_workers: committee_workers.clone(),
-                committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
-                quorum: quorum_target.min(u8::MAX as usize) as u8,
-                assign_tx: None,
-                assign_sig: None,
-                assign_submitted: false,
-                quorum_reached: false,
-                winning_output_hash: None,
-                winning_workers: Vec::new(),
-                finalize_triggered: false,
-                finalize_tx: None,
-                finalize_sig: None,
-                finalize_submitted: false,
-                cancel_triggered: false,
-                cancel_tx: None,
-                cancel_sig: None,
-                cancel_submitted: false,
-                onchain_status: Some("posted".to_string()),
-                onchain_last_observed_slot: None,
-                onchain_last_update_unix_s: Some(now),
-                onchain_deadline_slot: Some(view.deadline_slot),
-                slash_artifacts: Vec::new(),
-                created_at_unix_s: now,
-                quorum_reached_at_unix_s: None,
-            },
-        );
-    }
-    let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
-        build_assign_workers_artifact(state, &job_id_hex)?;
-    {
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        if let Some(quorum_state) = job_quorum.get_mut(&job_id_hex) {
-            quorum_state.assign_tx = assign_workers_tx;
-            quorum_state.assign_sig = assign_workers_sig;
-            quorum_state.assign_submitted = assign_workers_submitted;
-        }
-    }
-    touch_job_last_update(state, &job_id_hex);
-    tracing::info!(
-        job_id = %job_id_hex,
-        created_slot = view.created_slot,
-        deadline_slot = view.deadline_slot,
-        "discovered posted on-chain job and queued assignments"
-    );
-    Ok(true)
-}
-
-fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let job_ids = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.keys().cloned().collect::<Vec<_>>()
-    };
-    if job_ids.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed = false;
-    for job_id_hex in job_ids {
-        let Ok(job_id) = parse_hex32(&job_id_hex) else {
-            continue;
-        };
-        let (status, observed_slot) = match fetch_onchain_job_status(chain, job_id) {
-            Ok(Some(v)) => v,
-            Ok(None) => continue,
-            Err(err) => {
-                tracing::warn!(error = %err, job_id = %job_id_hex, "failed to fetch on-chain job account");
-                continue;
-            }
-        };
-
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        let Some(entry) = job_quorum.get_mut(&job_id_hex) else {
-            continue;
-        };
-        let status_label = onchain_status_label(status).to_string();
-        if entry.onchain_status.as_deref() != Some(status_label.as_str()) {
-            entry.onchain_status = Some(status_label);
-            changed = true;
-        }
-        if entry.onchain_last_observed_slot != Some(observed_slot) {
-            entry.onchain_last_observed_slot = Some(observed_slot);
-            changed = true;
-        }
-        entry.onchain_last_update_unix_s = Some(now_unix_seconds());
-
-        if status >= 1 && !entry.assign_submitted {
-            entry.assign_submitted = true;
-            changed = true;
-        }
-        if status == 2 && !entry.finalize_submitted {
-            entry.finalize_submitted = true;
-            entry.finalize_triggered = true;
-            changed = true;
-        }
-        if status == 3 && !entry.cancel_submitted {
-            entry.cancel_submitted = true;
-            entry.cancel_triggered = true;
-            changed = true;
-        }
-    }
-    if changed {
-        schedule_state_snapshot(state)?;
-    }
-    Ok(())
-}
-
-fn fetch_onchain_job_status(chain: &ChainContext, job_id: [u8; 32]) -> Result<Option<(u8, u64)>> {
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let resp = chain
-        .rpc
-        .get_account_with_commitment(&job_pda, CommitmentConfig::processed())
-        .context("rpc get_account_with_commitment failed")?;
-    let Some(account) = resp.value else {
-        return Ok(None);
-    };
-    let Some(status) = parse_onchain_job_status(&account.data) else {
-        return Ok(None);
-    };
-    Ok(Some((status, resp.context.slot)))
-}
-
-fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
-    let status_offset = ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR;
-    data.get(status_offset).copied()
-}
-
-fn parse_config_allowed_runtime_root(data: &[u8]) -> Option<[u8; 32]> {
-    if !has_anchor_account_discriminator(data, "GlobalConfig") {
-        return None;
-    }
-    read_fixed_32(data, GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR)
-}
-
-fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
-    if data.len() < JOB_ACCOUNT_MIN_LEN {
-        return None;
-    }
-    if !has_anchor_account_discriminator(data, "Job") {
-        return None;
-    }
-    let job_id = read_fixed_32(data, JOB_ID_OFFSET_FROM_ANCHOR)?;
-    let bundle_hash = read_fixed_32(data, JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR)?;
-    let runtime_id = read_fixed_32(data, JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR)?;
-    let escrow_lamports = read_u64_from_anchor(data, JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR)?;
-    let max_memory_bytes = read_u32_from_anchor(data, JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR)?;
-    let max_instructions = read_u64_from_anchor(data, JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR)?;
-    let committee_size = read_u8_from_anchor(data, JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR)?;
-    let quorum = read_u8_from_anchor(data, JOB_QUORUM_OFFSET_FROM_ANCHOR)?;
-    let created_slot = read_u64_from_anchor(data, JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR)?;
-    let deadline_slot = read_u64_from_anchor(data, JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR)?;
-    let status = read_u8_from_anchor(data, JOB_STATUS_OFFSET_FROM_ANCHOR)?;
-    if status > 4 || committee_size == 0 || quorum == 0 {
-        return None;
-    }
-    Some(OnchainJobView {
-        job_id,
-        bundle_hash,
-        runtime_id,
-        max_memory_bytes,
-        max_instructions,
-        escrow_lamports,
-        committee_size,
-        quorum,
-        created_slot,
-        deadline_slot,
-        status,
-    })
-}
-
-fn parse_onchain_job_result_view(data: &[u8]) -> Option<OnchainJobResultView> {
-    if data.len() < JOB_RESULT_ACCOUNT_MIN_LEN {
-        return None;
-    }
-    if !has_anchor_account_discriminator(data, "JobResult") {
-        return None;
-    }
-    let job_id = read_fixed_32(data, JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR)?;
-    let worker_bytes = read_fixed_32(data, JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR)?;
-    let worker = Pubkey::new_from_array(worker_bytes);
-    let output_hash = read_fixed_32(data, JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR)?;
-    let attestation_sig = read_fixed_64(data, JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR)?;
-    let submitted_slot = read_u64_from_anchor(data, JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR)?;
-    Some(OnchainJobResultView {
-        job_id,
-        worker,
-        output_hash,
-        attestation_sig,
-        submitted_slot,
-    })
-}
-
-fn has_anchor_account_discriminator(data: &[u8], account_name: &str) -> bool {
-    if data.len() < ANCHOR_DISCRIMINATOR_LEN {
-        return false;
-    }
-    let expected = anchor_account_discriminator(account_name);
-    data[..ANCHOR_DISCRIMINATOR_LEN] == expected
-}
-
-fn anchor_account_discriminator(account_name: &str) -> [u8; 8] {
-    let preimage = format!("account:{account_name}");
-    let h = hash(preimage.as_bytes());
-    let mut out = [0_u8; 8];
-    out.copy_from_slice(&h.to_bytes()[..8]);
-    out
-}
-
-fn is_valid_job_account_address(program_id: &Pubkey, addr: &Pubkey, job_id: &[u8; 32]) -> bool {
-    let (expected, _) = Pubkey::find_program_address(&[b"job", job_id], program_id);
-    expected == *addr
-}
-
-fn read_u8_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u8> {
-    data.get(ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor)
-        .copied()
-}
-
-fn read_u32_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u32> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let bytes = data.get(start..start + 4)?;
-    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-}
-
-fn read_u64_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u64> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let bytes = data.get(start..start + 8)?;
-    Some(u64::from_le_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-    ]))
-}
-
-fn read_fixed_32(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 32]> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let slice = data.get(start..start + 32)?;
-    let mut out = [0_u8; 32];
-    out.copy_from_slice(slice);
-    Some(out)
-}
-
-fn read_fixed_64(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 64]> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let slice = data.get(start..start + 64)?;
-    let mut out = [0_u8; 64];
-    out.copy_from_slice(slice);
-    Some(out)
 }
 
 fn onchain_status_label(status: u8) -> &'static str {
@@ -3654,6 +2949,58 @@ fn onchain_status_label(status: u8) -> &'static str {
         4 => "slashed",
         _ => "unknown",
     }
+}
+
+fn apply_solana_status_event(state: &AppState, envelope: &BusEventEnvelope) -> Result<()> {
+    let payload_type = envelope.payload_type.as_str();
+    if payload_type != "solana.job_status.v1" && payload_type != "solana_job_status_v1" {
+        return Ok(());
+    }
+    let event: SolanaJobStatusEventV1 =
+        bincode::deserialize(&envelope.payload).context("invalid solana job status event payload")?;
+    let mut changed = false;
+    {
+        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
+        let Some(entry) = job_quorum.get_mut(&event.job_id) else {
+            return Ok(());
+        };
+        let status_label = onchain_status_label(event.status).to_string();
+        if entry.onchain_status.as_deref() != Some(status_label.as_str()) {
+            entry.onchain_status = Some(status_label);
+            changed = true;
+        }
+        if entry.onchain_last_observed_slot != event.observed_slot {
+            entry.onchain_last_observed_slot = event.observed_slot;
+            changed = true;
+        }
+        if let Some(deadline_slot) = event.deadline_slot {
+            if entry.onchain_deadline_slot != Some(deadline_slot) {
+                entry.onchain_deadline_slot = Some(deadline_slot);
+                changed = true;
+            }
+        }
+        entry.onchain_last_update_unix_s = Some(now_unix_seconds());
+
+        if event.status >= 1 && !entry.assign_submitted {
+            entry.assign_submitted = true;
+            changed = true;
+        }
+        if event.status == 2 && !entry.finalize_submitted {
+            entry.finalize_submitted = true;
+            entry.finalize_triggered = true;
+            changed = true;
+        }
+        if event.status == 3 && !entry.cancel_submitted {
+            entry.cancel_submitted = true;
+            entry.cancel_triggered = true;
+            changed = true;
+        }
+    }
+    if changed {
+        touch_job_last_update(state, &event.job_id);
+        schedule_state_snapshot(state)?;
+    }
+    Ok(())
 }
 
 fn build_finalize_trigger_payload(
@@ -4139,17 +3486,8 @@ async fn housekeeping_loop(state: AppState) {
         if let Err(err) = sync_route_state_from_shared_file(&state) {
             tracing::warn!(error = %err, "housekeeping route-state sync failed");
         }
-        if let Err(err) = discover_posted_jobs_from_chain(&state) {
-            tracing::warn!(error = %err, "housekeeping posted-job discovery failed");
-        }
-        if let Err(err) = sync_onchain_job_results(&state) {
-            tracing::warn!(error = %err, "housekeeping on-chain result sync failed");
-        }
         if let Err(err) = evaluate_expired_jobs(&state) {
             tracing::warn!(error = %err, "housekeeping evaluate_expired_jobs failed");
-        }
-        if let Err(err) = reconcile_onchain_job_statuses(&state) {
-            tracing::warn!(error = %err, "housekeeping on-chain reconciliation failed");
         }
         if let Err(err) = flush_state_snapshot_if_dirty(&state) {
             tracing::warn!(error = %err, "housekeeping state snapshot flush failed");
@@ -4225,18 +3563,6 @@ fn persist_job_activity(state: &AppState, job_id: &str) -> Result<()> {
 
 fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {
     !incoming.is_empty() && existing == incoming
-}
-
-fn scheduler_idempotency_key(
-    kind: &str,
-    worker_pubkey: &str,
-    job_id: &str,
-    phase: &str,
-    discriminator: &str,
-    bundle_hash: &str,
-) -> String {
-    let raw = format!("{kind}|{worker_pubkey}|{job_id}|{phase}|{discriminator}|{bundle_hash}");
-    hex::encode(edgerun_crypto::blake3_256(raw.as_bytes()))
 }
 
 fn trim_vec<T>(items: &mut Vec<T>, max_len: usize) {

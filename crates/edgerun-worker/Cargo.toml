@@ -20,9 +20,6 @@ base64.workspace = true
 hmac = "0.12"
 sha2 = "0.10"
 ed25519-dalek.workspace = true
-solana-client.workspace = true
-solana-sdk.workspace = true
-solana-system-interface.workspace = true
 edgerun-runtime = { path = "../../crates/edgerun-runtime" }
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }

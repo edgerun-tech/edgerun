@@ -1,0 +1,13 @@
+@scheduler path /v1/control/* /v1/webrtc/* /v1/job/* /v1/bundle/* /v1/worker/* /v1/route/*
+handle @scheduler {
+  reverse_proxy scheduler:5566
+}
+
+@term path /v1/device/* /v1/term/* /v1/shell/* /ws*
+handle @term {
+  reverse_proxy term-server:5577
+}
+
+handle {
+  reverse_proxy frontend:80
+}

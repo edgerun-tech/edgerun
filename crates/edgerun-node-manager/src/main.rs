@@ -264,11 +264,11 @@ fn load_config() -> Result<ManagerConfig> {
         return Err(anyhow!("invalid TPM config length: {len}"));
     }
     let raw = &blob[4..4 + len];
-    serde_json::from_slice(raw).context("failed to parse manager config json from TPM")
+    bincode::deserialize(raw).context("failed to parse manager config from TPM")
 }
 
 fn save_config(cfg: &ManagerConfig) -> Result<()> {
-    let payload = serde_json::to_vec(cfg).context("failed to encode manager config")?;
+    let payload = bincode::serialize(cfg).context("failed to encode manager config")?;
     if payload.len() > (CONFIG_TPM_NV_SIZE - 4) {
         return Err(anyhow!(
             "config too large for TPM NV ({} > {})",
@@ -900,11 +900,17 @@ async fn wait_for_validator(client: &Client, rpc_url: &str, timeout: Duration) -
 }
 
 async fn validator_healthy(client: &Client, rpc_url: &str) -> bool {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getVersion",
-    });
+    #[derive(Serialize)]
+    struct JsonRpcRequest<'a> {
+        jsonrpc: &'a str,
+        id: u32,
+        method: &'a str,
+    }
+    let payload = JsonRpcRequest {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getVersion",
+    };
     match client.post(rpc_url).json(&payload).send().await {
         Ok(resp) => resp.status() == StatusCode::OK,
         Err(_) => false,
