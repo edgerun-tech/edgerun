@@ -6,12 +6,6 @@
   - Assets directory: `out/frontend/site`
   - Deploy command: `bun run deploy:site`
 
-- Cloud OS frontend (`cloud-os/` Astro output):
-  - Wrangler config: `cloud-os/wrangler.jsonc`
-  - Worker name: `cloud-os`
-  - Assets directory: `cloud-os/dist`
-  - Deploy command: `bun run deploy:cloud-os`
-
 ## Validation
 Run before deploy:
 

@@ -31,7 +31,8 @@ export function getDocsSources(repoRoot: string): DocsSource[] {
         .map((name) => ({
           sourcePath: path.join('docs', name),
           ...(name === 'ONBOARDING.mdx' ? { slug: 'address-generation-workflow', title: 'Address Generation Workflow' } : {}),
-          ...(name === 'ROUTED_TERMINAL_PROTOCOL_V2.mdx' ? { slug: 'routed-terminal-protocol-v2', title: 'Routed Terminal Protocol v2' } : {})
+          ...(name === 'ROUTED_TERMINAL_PROTOCOL_V2.mdx' ? { slug: 'routed-terminal-protocol-v2', title: 'Routed Terminal Protocol v2' } : {}),
+          ...(name === 'CLOUD_OS_DIRECTION.mdx' ? { slug: 'cloud-os-direction', title: 'CloudOS Direction' } : {})
         }))
     : []
 
