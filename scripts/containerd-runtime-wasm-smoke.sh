@@ -8,6 +8,7 @@ IMAGE="${IMAGE:-docker.io/library/debian:bookworm-slim}"
 RUNTIME_BIN="${RUNTIME_BIN:-}"
 RUNTIME_CLASS="${RUNTIME_CLASS:-io.containerd.edgerun.v1}"
 RUNS="${RUNS:-1}"
+RETRIES="${RETRIES:-10}"
 ID_BASE="${ID:-edgerun-wasm-smoke-$(date +%s)-$$-${RANDOM}}"
 ARTIFACT_PATH="${ARTIFACT_PATH:-/tmp/er-artifact.json}"
 SNAPSHOTTER="${SNAPSHOTTER:-}"
@@ -51,7 +52,7 @@ if [[ -n "${SNAPSHOTTER}" ]]; then
 fi
 
 success=0
-for attempt in 1 2 3; do
+for attempt in $(seq 1 "${RETRIES}"); do
   ID="${ID_BASE}-${attempt}"
   set +e
   raw_out="$(
@@ -83,7 +84,12 @@ for attempt in 1 2 3; do
   fi
 
   cleanup
-  if [[ ${attempt} -lt 3 ]]; then
+  if [[ ${attempt} -lt ${RETRIES} ]]; then
+    if [[ -z "${raw_out}" ]]; then
+      echo "WARN wasm-runtime-smoke empty ctr output; tailing logs for diagnostics" >&2
+      sudo tail -n 20 /tmp/containerd.log >&2 || true
+      sudo tail -n 20 /tmp/edgerun-shim-backend.log >&2 || true
+    fi
     echo "WARN wasm-runtime-smoke retry attempt=${attempt} id=${ID} exit=${rc}" >&2
     sleep 1
   fi
