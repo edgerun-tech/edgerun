@@ -1192,10 +1192,14 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     sleep(Duration::from_secs(10)).await;
                     continue;
                 }
+                let signable_urls = candidates
+                    .iter()
+                    .map(|candidate| candidate.uri.clone())
+                    .collect::<Vec<_>>();
                 let signing_message = route_register_signing_message(
                     &owner_pubkey,
                     &device_id,
-                    &advertised_urls,
+                    &signable_urls,
                     &challenge.nonce,
                     signed_at,
                 );
@@ -1205,14 +1209,14 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                     device_id = %device_id,
                     signed_at,
                     signing_message = %signing_message,
-                    advertised_urls = ?advertised_urls,
+                    signable_urls = ?signable_urls,
                     "route announcer signing route.register payload"
                 );
                 let payload = CpRouteRegisterRequest {
                     device_id: device_id.clone(),
                     owner_pubkey: owner_pubkey.clone(),
                     candidates,
-                    reachable_urls: advertised_urls,
+                    reachable_urls: signable_urls,
                     capabilities: vec!["terminal-ws".to_string(), "webrtc-datachannel".to_string()],
                     relay_session_id: None,
                     ttl_secs: 90,
