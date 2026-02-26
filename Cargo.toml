@@ -19,7 +19,6 @@ members = [
   "crates/edgerun-node-manager",
   "crates/edgerun-runtime-proto",
   "crates/edgerun-containerd-shim",
-  "crates/edgerun-snapshotter",
   "crates/edgerun-hwvault-primitives",
 ]
 exclude = ["program/programs/edgerun_program"]

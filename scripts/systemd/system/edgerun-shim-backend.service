@@ -2,8 +2,8 @@
 [Unit]
 Description=EdgeRun Shim Backend Daemon
 Documentation=https://github.com/edgerun/edgerun
-After=network-online.target edgerun-snapshotter.service
-Wants=network-online.target edgerun-snapshotter.service
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
