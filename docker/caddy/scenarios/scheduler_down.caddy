@@ -1,0 +1,4 @@
+@scheduler_outage path /v1/control/* /v1/webrtc/* /v1/job/* /v1/bundle/* /v1/worker/* /v1/route/*
+handle @scheduler_outage {
+  respond "scheduler unavailable (simulated)" 503
+}

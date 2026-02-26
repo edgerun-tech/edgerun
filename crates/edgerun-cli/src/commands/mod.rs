@@ -4,7 +4,6 @@ pub mod event_bus;
 pub mod execution;
 pub mod integration;
 pub mod observer;
-pub mod program;
 pub mod runtime_ops;
 pub mod storage;
 pub mod tailscale;

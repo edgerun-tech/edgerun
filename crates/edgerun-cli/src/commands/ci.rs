@@ -56,7 +56,6 @@ pub async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bo
             | "runtime-fuzz-sanity"
             | "runtime-ub-safety"
             | "runtime-security"
-            | "program-localnet"
     );
     if command_exists("act") && act_supported_job {
         let mut args = vec![
