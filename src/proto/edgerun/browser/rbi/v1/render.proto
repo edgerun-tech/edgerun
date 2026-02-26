@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package edgerun.browser.rbi.v1;
+
+enum MutationType {
+  MUTATION_TYPE_UNSPECIFIED = 0;
+  MUTATION_TYPE_INSERT = 1;
+  MUTATION_TYPE_REPLACE = 2;
+  MUTATION_TYPE_REMOVE = 3;
+  MUTATION_TYPE_SET_ATTR = 4;
+  MUTATION_TYPE_REMOVE_ATTR = 5;
+  MUTATION_TYPE_SET_TEXT = 6;
+}
+
+message DomMutation {
+  MutationType type = 1;
+  string node_id = 2;
+  string parent_id = 3;
+  uint32 index = 4;
+  string tag_name = 5;
+  string attribute_name = 6;
+  string attribute_value = 7;
+  string text_value = 8;
+  string html_fragment = 9;
+}
+
+message CssPatch {
+  string stylesheet_id = 1;
+  uint64 revision = 2;
+  string css_text = 3;
+}
+
+message ViewportState {
+  uint32 width = 1;
+  uint32 height = 2;
+  float device_scale_factor = 3;
+  double scroll_x = 4;
+  double scroll_y = 5;
+}
+
+message DocumentSnapshot {
+  string html = 1;
+  repeated CssPatch stylesheets = 2;
+}
+
+message RenderBatch {
+  string session_id = 1;
+  uint64 frame_seq = 2;
+  uint64 server_timestamp_ms = 3;
+  ViewportState viewport = 4;
+  repeated DomMutation mutations = 5;
+  repeated CssPatch css_patches = 6;
+  DocumentSnapshot full_snapshot = 7;
+}

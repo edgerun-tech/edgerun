@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package edgerun.browser.rbi.v1;
+
+import "edgerun/browser/rbi/v1/input.proto";
+import "edgerun/browser/rbi/v1/render.proto";
+import "edgerun/browser/rbi/v1/session.proto";
+
+message Ack {
+  string session_id = 1;
+  uint64 ack_seq = 2;
+}
+
+message ErrorFrame {
+  string session_id = 1;
+  string code = 2;
+  string message = 3;
+  uint64 failed_seq = 4;
+}
+
+message Ping {
+  uint64 nonce = 1;
+  uint64 timestamp_ms = 2;
+}
+
+message Pong {
+  uint64 nonce = 1;
+  uint64 timestamp_ms = 2;
+}
+
+message ClientFrame {
+  uint64 stream_seq = 1;
+  oneof payload {
+    SessionStartRequest session_start = 2;
+    SessionControl session_control = 3;
+    InputBatch input_batch = 4;
+    Ack ack = 5;
+    Ping ping = 6;
+  }
+}
+
+message ServerFrame {
+  uint64 stream_seq = 1;
+  oneof payload {
+    SessionStarted session_started = 2;
+    SessionEvent session_event = 3;
+    RenderBatch render_batch = 4;
+    ErrorFrame error = 5;
+    Ack ack = 6;
+    Pong pong = 7;
+  }
+}

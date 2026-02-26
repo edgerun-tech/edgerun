@@ -34,8 +34,10 @@ const WORKER_RUNTIME_MARKER_FILE: &str = "/run/edgerun/worker-runtime.ready";
 const DEFAULT_WORKER_MAX_CONCURRENCY: u32 = 2;
 const DEFAULT_WORKER_MEM_BYTES: u64 = 2_147_483_648;
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
-const EDGE_SECUREBOOT_CERT_DER_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
-const EDGE_SECUREBOOT_CERT_PEM_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
+const EDGE_SECUREBOOT_CERT_DER_PATH: &str =
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
+const EDGE_SECUREBOOT_CERT_PEM_PATH: &str =
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
 const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
 
 #[derive(Parser, Debug)]

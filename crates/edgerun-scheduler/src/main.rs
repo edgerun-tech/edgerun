@@ -397,9 +397,7 @@ async fn main() -> Result<()> {
         }
         Err(err) => {
             if require_chain {
-                anyhow::bail!(
-                    "chain context required but unavailable: {err}"
-                );
+                anyhow::bail!("chain context required but unavailable: {err}");
             } else {
                 tracing::warn!(
                     error = %err,
@@ -683,11 +681,10 @@ async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSo
             }
             Some(Ok(Message::Text(text))) => {
                 let response = handle_control_client_text_message(&state, &text).await;
-                let payload =
-                    serde_json::to_string(&response).unwrap_or_else(|_| {
-                        "{\"request_id\":\"\",\"ok\":false,\"error\":\"encode error\",\"status\":500}"
-                            .to_string()
-                    });
+                let payload = serde_json::to_string(&response).unwrap_or_else(|_| {
+                    "{\"request_id\":\"\",\"ok\":false,\"error\":\"encode error\",\"status\":500}"
+                        .to_string()
+                });
                 if socket.send(Message::Text(payload.into())).await.is_err() {
                     break;
                 }
@@ -769,51 +766,85 @@ async fn handle_control_client_text_message(
     control_response_to_json(response)
 }
 
-fn decode_json_control_request(
-    text: &str,
-) -> Result<ControlWsClientMessage, (StatusCode, String)> {
-    let parsed = serde_json::from_str::<JsonControlWsClientMessage>(text)
-        .map_err(|_| (StatusCode::BAD_REQUEST, "invalid json control message".to_string()))?;
+fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (StatusCode, String)> {
+    let parsed = serde_json::from_str::<JsonControlWsClientMessage>(text).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "invalid json control message".to_string(),
+        )
+    })?;
     let request_id = parsed.request_id.trim().to_string();
     if request_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "request_id is required".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "request_id is required".to_string(),
+        ));
     }
     let op = parsed.op.trim().to_ascii_lowercase();
     let payload = parsed.payload;
     let mapped = match op.as_str() {
-        "job.create" => ControlWsRequestPayload::JobCreate(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for job.create".to_string()))?,
-        ),
-        "job.status" => ControlWsRequestPayload::JobStatus(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for job.status".to_string()))?,
-        ),
+        "job.create" => {
+            ControlWsRequestPayload::JobCreate(serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for job.create".to_string(),
+                )
+            })?)
+        }
+        "job.status" => {
+            ControlWsRequestPayload::JobStatus(serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for job.status".to_string(),
+                )
+            })?)
+        }
         "route.challenge" => ControlWsRequestPayload::RouteChallenge(
             serde_json::from_value(payload).map_err(|_| {
-                (StatusCode::BAD_REQUEST, "invalid payload for route.challenge".to_string())
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for route.challenge".to_string(),
+                )
             })?,
         ),
         "route.register" => ControlWsRequestPayload::RouteRegister(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.register".to_string()))?,
+            serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for route.register".to_string(),
+                )
+            })?,
         ),
         "route.heartbeat" => ControlWsRequestPayload::RouteHeartbeat(
             serde_json::from_value(payload).map_err(|_| {
-                (StatusCode::BAD_REQUEST, "invalid payload for route.heartbeat".to_string())
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for route.heartbeat".to_string(),
+                )
             })?,
         ),
         "route.resolve" => ControlWsRequestPayload::RouteResolve(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.resolve".to_string()))?,
+            serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for route.resolve".to_string(),
+                )
+            })?,
         ),
-        "route.owner" => ControlWsRequestPayload::RouteOwner(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for route.owner".to_string()))?,
-        ),
+        "route.owner" => {
+            ControlWsRequestPayload::RouteOwner(serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for route.owner".to_string(),
+                )
+            })?)
+        }
         "worker.heartbeat" => ControlWsRequestPayload::WorkerHeartbeat(
             serde_json::from_value(payload).map_err(|_| {
-                (StatusCode::BAD_REQUEST, "invalid payload for worker.heartbeat".to_string())
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for worker.heartbeat".to_string(),
+                )
             })?,
         ),
         "worker.assignments" => ControlWsRequestPayload::WorkerAssignments(
@@ -825,22 +856,37 @@ fn decode_json_control_request(
             })?,
         ),
         "worker.result" => ControlWsRequestPayload::WorkerResult(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for worker.result".to_string()))?,
+            serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for worker.result".to_string(),
+                )
+            })?,
         ),
         "worker.failure" => ControlWsRequestPayload::WorkerFailure(
             serde_json::from_value(payload).map_err(|_| {
-                (StatusCode::BAD_REQUEST, "invalid payload for worker.failure".to_string())
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for worker.failure".to_string(),
+                )
             })?,
         ),
         "worker.replay" => ControlWsRequestPayload::WorkerReplay(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for worker.replay".to_string()))?,
+            serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for worker.replay".to_string(),
+                )
+            })?,
         ),
-        "bundle.get" => ControlWsRequestPayload::BundleGet(
-            serde_json::from_value(payload)
-                .map_err(|_| (StatusCode::BAD_REQUEST, "invalid payload for bundle.get".to_string()))?,
-        ),
+        "bundle.get" => {
+            ControlWsRequestPayload::BundleGet(serde_json::from_value(payload).map_err(|_| {
+                (
+                    StatusCode::BAD_REQUEST,
+                    "invalid payload for bundle.get".to_string(),
+                )
+            })?)
+        }
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -2288,12 +2334,13 @@ fn job_create_inner(
             "chain context unavailable; cannot build post_job transaction".to_string(),
         )
     })?;
-    let runtime_proof = build_runtime_allowlist_proof_for_chain(chain, runtime_id).map_err(|err| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            format!("failed to build runtime allowlist proof: {err}"),
-        )
-    })?;
+    let runtime_proof =
+        build_runtime_allowlist_proof_for_chain(chain, runtime_id).map_err(|err| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!("failed to build runtime allowlist proof: {err}"),
+            )
+        })?;
     let tx_args = PostJobArgs {
         client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
         job_id: bundle_hash,
@@ -4295,12 +4342,7 @@ fn build_finalize_trigger_payload(
     committee_workers: &[String],
     winning_workers: &[String],
 ) -> Result<(String, Option<String>, bool)> {
-    build_finalize_trigger_payload_inner(
-        state,
-        job_id_hex,
-        committee_workers,
-        winning_workers,
-    )
+    build_finalize_trigger_payload_inner(state, job_id_hex, committee_workers, winning_workers)
 }
 
 fn parse_hex32(value: &str) -> Result<[u8; 32]> {
