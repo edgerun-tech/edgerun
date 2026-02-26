@@ -343,6 +343,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Fuel calibration gate
+        env:
+          RUSTC_WRAPPER: ""
         run: |
           mkdir -p /tmp/edgerun-runtime-calibration
           cargo run -p edgerun-runtime --features cli -- calibrate-fuel \
