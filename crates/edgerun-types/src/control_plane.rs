@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{AttestationClaim, AttestationPolicy, Limits, SyncTrustPolicy, BUNDLE_ABI_CURRENT};
@@ -260,6 +262,10 @@ pub struct RouteChallengeResponse {
 pub struct RouteRegisterRequest {
     pub device_id: String,
     pub owner_pubkey: String,
+    #[serde(default)]
+    pub candidates: Vec<RouteCandidate>,
+    // Legacy fallback; retained for compatibility during candidates migration.
+    #[serde(default)]
     pub reachable_urls: Vec<String>,
     #[serde(default)]
     pub capabilities: Vec<String>,
@@ -271,6 +277,16 @@ pub struct RouteRegisterRequest {
     pub challenge_nonce: String,
     pub signed_at_unix_s: u64,
     pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteCandidate {
+    pub kind: String,
+    pub uri: String,
+    #[serde(default)]
+    pub priority: u16,
+    #[serde(default)]
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,6 +311,10 @@ pub struct RouteHeartbeatResponse {
 pub struct RouteResolveEntry {
     pub device_id: String,
     pub owner_pubkey: String,
+    #[serde(default)]
+    pub candidates: Vec<RouteCandidate>,
+    // Legacy fallback; retained for compatibility during candidates migration.
+    #[serde(default)]
     pub reachable_urls: Vec<String>,
     pub capabilities: Vec<String>,
     pub relay_session_id: Option<String>,
@@ -436,6 +456,12 @@ mod tests {
             payload: ControlWsRequestPayload::RouteRegister(RouteRegisterRequest {
                 device_id: "device-1".to_string(),
                 owner_pubkey: "owner-1".to_string(),
+                candidates: vec![RouteCandidate {
+                    kind: "websocket".to_string(),
+                    uri: "wss://node.example/ws".to_string(),
+                    priority: 10,
+                    metadata: BTreeMap::from([("region".to_string(), "sgp".to_string())]),
+                }],
                 reachable_urls: vec![
                     "http://127.0.0.1:5577".to_string(),
                     "http://172.245.67.49:5577".to_string(),
@@ -454,6 +480,7 @@ mod tests {
             ControlWsRequestPayload::RouteRegister(payload) => {
                 assert_eq!(payload.ttl_secs, 90);
                 assert_eq!(payload.relay_session_id, None);
+                assert_eq!(payload.candidates.len(), 1);
                 assert_eq!(payload.reachable_urls.len(), 2);
             }
             other => panic!("unexpected payload variant: {other:?}"),

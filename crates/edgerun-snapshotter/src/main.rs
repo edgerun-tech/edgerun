@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -327,7 +327,7 @@ fn run_rpc_once(workspace_id: String, state_file: PathBuf) -> Result<()> {
 fn handle_request(
     req: SnapshotRequestV1,
     workspace_id: &str,
-    state_file: &PathBuf,
+    state_file: &Path,
 ) -> SnapshotResponseV1 {
     if req.schema_version != 1 {
         return snap_response(false, "unsupported schema_version", None);
@@ -339,7 +339,7 @@ fn handle_request(
     }
 
     let snapshotter =
-        match PersistentSnapshotter::open(workspace_id.to_string(), state_file.clone()) {
+        match PersistentSnapshotter::open(workspace_id.to_string(), state_file.to_path_buf()) {
             Ok(s) => s,
             Err(err) => return snap_response(false, &err.to_string(), None),
         };

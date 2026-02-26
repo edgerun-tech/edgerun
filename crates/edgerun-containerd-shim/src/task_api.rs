@@ -52,6 +52,10 @@ impl ContainerdTaskClient {
                 stdin_path: None,
                 stdout_path: None,
                 stderr_path: None,
+                rootfs_source: None,
+                rootfs_readonly: None,
+                rootfs_type: None,
+                rootfs_options_csv: None,
             },
             TaskServiceOpV1::Start,
             None,
@@ -70,6 +74,10 @@ impl ContainerdTaskClient {
                 stdin_path: None,
                 stdout_path: None,
                 stderr_path: None,
+                rootfs_source: None,
+                rootfs_readonly: None,
+                rootfs_type: None,
+                rootfs_options_csv: None,
             },
             TaskServiceOpV1::State,
             None,
@@ -93,6 +101,10 @@ impl ContainerdTaskClient {
                 stdin_path: None,
                 stdout_path: None,
                 stderr_path: None,
+                rootfs_source: None,
+                rootfs_readonly: None,
+                rootfs_type: None,
+                rootfs_options_csv: None,
             },
             TaskServiceOpV1::Kill,
             signal,
@@ -111,6 +123,10 @@ impl ContainerdTaskClient {
                 stdin_path: None,
                 stdout_path: None,
                 stderr_path: None,
+                rootfs_source: None,
+                rootfs_readonly: None,
+                rootfs_type: None,
+                rootfs_options_csv: None,
             },
             TaskServiceOpV1::Delete,
             None,
@@ -129,6 +145,10 @@ impl ContainerdTaskClient {
                 stdin_path: None,
                 stdout_path: None,
                 stderr_path: None,
+                rootfs_source: None,
+                rootfs_readonly: None,
+                rootfs_type: None,
+                rootfs_options_csv: None,
             },
             TaskServiceOpV1::Wait,
             None,
@@ -172,6 +192,10 @@ pub fn build_task_api_request(
             stdin_path: req.stdin_path.clone().unwrap_or_default(),
             stdout_path: req.stdout_path.clone().unwrap_or_default(),
             stderr_path: req.stderr_path.clone().unwrap_or_default(),
+            rootfs_source: req.rootfs_source.clone().unwrap_or_default(),
+            rootfs_readonly: req.rootfs_readonly.unwrap_or(false),
+            rootfs_type: req.rootfs_type.clone().unwrap_or_default(),
+            rootfs_options_csv: req.rootfs_options_csv.clone().unwrap_or_default(),
         })),
     }
 }
@@ -257,6 +281,10 @@ mod tests {
                 stdin_path: Some("/tmp/demo-stdin".to_string()),
                 stdout_path: Some("/tmp/demo-stdout".to_string()),
                 stderr_path: Some("/tmp/demo-stderr".to_string()),
+                rootfs_source: Some("/tmp/demo-rootfs".to_string()),
+                rootfs_readonly: Some(true),
+                rootfs_type: Some("overlay".to_string()),
+                rootfs_options_csv: Some("lowerdir=/a,upperdir=/b,workdir=/c".to_string()),
             },
             TaskServiceOpV1::Start,
             None,
@@ -273,6 +301,10 @@ mod tests {
                 assert_eq!(v.stdin_path, "/tmp/demo-stdin");
                 assert_eq!(v.stdout_path, "/tmp/demo-stdout");
                 assert_eq!(v.stderr_path, "/tmp/demo-stderr");
+                assert_eq!(v.rootfs_source, "/tmp/demo-rootfs");
+                assert!(v.rootfs_readonly);
+                assert_eq!(v.rootfs_type, "overlay");
+                assert_eq!(v.rootfs_options_csv, "lowerdir=/a,upperdir=/b,workdir=/c");
             }
             _ => panic!("expected task_api op"),
         }

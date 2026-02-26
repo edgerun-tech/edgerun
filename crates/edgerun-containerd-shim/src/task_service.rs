@@ -18,6 +18,10 @@ pub struct TaskCreateRequest {
     pub stdin_path: Option<String>,
     pub stdout_path: Option<String>,
     pub stderr_path: Option<String>,
+    pub rootfs_source: Option<String>,
+    pub rootfs_readonly: Option<bool>,
+    pub rootfs_type: Option<String>,
+    pub rootfs_options_csv: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -282,6 +286,10 @@ mod tests {
                 stdin_path: Some("/tmp/stdin".to_string()),
                 stdout_path: Some("/tmp/stdout".to_string()),
                 stderr_path: Some("/tmp/stderr".to_string()),
+                rootfs_source: Some("/tmp/rootfs".to_string()),
+                rootfs_readonly: Some(true),
+                rootfs_type: Some("bind".to_string()),
+                rootfs_options_csv: Some("ro,rbind".to_string()),
             })
             .await
             .expect("create");

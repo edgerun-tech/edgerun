@@ -133,15 +133,7 @@ impl RoutingPolicy for PreferMuxedQuicPolicy {
         }
 
         let mut scored = candidates.to_vec();
-        scored.sort_by_key(|ep| {
-            let kind_score = match ep.kind {
-                TransportKind::Quic => 0_u8,
-                TransportKind::WebSocket if self.allow_ws_fallback => 1_u8,
-                TransportKind::WireGuard => 2_u8,
-                _ => 3_u8,
-            };
-            (kind_score, ep.priority)
-        });
+        scored.sort_by_key(endpoint_score_key);
 
         for endpoint in scored {
             if require_multiplexing && matches!(endpoint.kind, TransportKind::WireGuard) {
@@ -157,6 +149,59 @@ impl RoutingPolicy for PreferMuxedQuicPolicy {
             "no endpoint satisfies routing policy".to_string(),
         ))
     }
+}
+
+fn endpoint_score_key(endpoint: &TransportEndpoint) -> (u8, u8, u8, u16, u32) {
+    let kind_score = match endpoint.kind {
+        TransportKind::Quic => 0_u8,
+        TransportKind::WebSocket => 1_u8,
+        TransportKind::WireGuard => 2_u8,
+    };
+    let relay_penalty = if metadata_bool(endpoint, "relay") {
+        2_u8
+    } else if metadata_bool(endpoint, "direct") {
+        0_u8
+    } else {
+        1_u8
+    };
+    let nat_penalty = match endpoint
+        .metadata
+        .get("nat")
+        .map(|v| v.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("symmetric") => 2_u8,
+        Some("restricted") => 1_u8,
+        _ => 0_u8,
+    };
+    let rtt_ms = metadata_u32(endpoint, "rtt_ms").unwrap_or(2_000);
+    (
+        kind_score,
+        relay_penalty,
+        nat_penalty,
+        endpoint.priority,
+        rtt_ms,
+    )
+}
+
+fn metadata_bool(endpoint: &TransportEndpoint, key: &str) -> bool {
+    endpoint
+        .metadata
+        .get(key)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "y"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn metadata_u32(endpoint: &TransportEndpoint, key: &str) -> Option<u32> {
+    endpoint
+        .metadata
+        .get(key)
+        .and_then(|value| value.trim().parse::<u32>().ok())
 }
 
 pub fn heartbeat_signing_message(payload: &HeartbeatRequest) -> String {
@@ -262,5 +307,37 @@ mod tests {
             .choose_endpoint(&[ws.clone(), quic.clone()], true)
             .expect("route");
         assert_eq!(chosen.kind, TransportKind::Quic);
+    }
+
+    #[test]
+    fn routing_prefers_direct_over_relay_for_same_kind() {
+        let policy = PreferMuxedQuicPolicy::default();
+        let mut relay = TransportEndpoint::new(TransportKind::WebSocket, "wss://relay.example/ws");
+        relay
+            .metadata
+            .insert("relay".to_string(), "true".to_string());
+        let mut direct =
+            TransportEndpoint::new(TransportKind::WebSocket, "wss://direct.example/ws");
+        direct
+            .metadata
+            .insert("direct".to_string(), "true".to_string());
+
+        let chosen = policy
+            .choose_endpoint(&[relay, direct.clone()], true)
+            .expect("route");
+        assert_eq!(chosen.uri, direct.uri);
+    }
+
+    #[test]
+    fn routing_prefers_lower_rtt_with_same_kind_and_priority() {
+        let policy = PreferMuxedQuicPolicy::default();
+        let mut a = TransportEndpoint::new(TransportKind::Quic, "quic://a.example:4433");
+        a.metadata.insert("rtt_ms".to_string(), "120".to_string());
+        let mut b = TransportEndpoint::new(TransportKind::Quic, "quic://b.example:4433");
+        b.metadata.insert("rtt_ms".to_string(), "20".to_string());
+        let chosen = policy
+            .choose_endpoint(&[a, b.clone()], true)
+            .expect("route");
+        assert_eq!(chosen.uri, b.uri);
     }
 }

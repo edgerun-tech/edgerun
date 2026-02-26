@@ -153,6 +153,8 @@ pub struct PersistentSnapshotter {
     snapshots: Arc<Mutex<BTreeMap<String, Snapshot>>>,
 }
 
+const DEFAULT_SNAPSHOT_MOUNT_ROOT: &str = "/run/edgerun/snapshots";
+
 impl PersistentSnapshotter {
     pub fn open(
         workspace_id: impl Into<String>,
@@ -200,9 +202,20 @@ impl PersistentSnapshotter {
         &self.snapshots
     }
 
+    fn mount_root_base(&self) -> PathBuf {
+        self.state_file
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("snapshots")
+    }
+
     fn persist_locked(&self, map: &BTreeMap<String, Snapshot>) -> Result<(), SnapshotterError> {
         save_state_map(&self.state_file, map)
     }
+}
+
+fn snapshot_mount_root(base: &Path, key: &str) -> String {
+    base.join(key).to_string_lossy().into_owned()
 }
 
 fn run_prepare(
@@ -210,6 +223,7 @@ fn run_prepare(
     key: &str,
     parent: Option<&str>,
     labels: BTreeMap<String, String>,
+    mount_root_base: &Path,
 ) -> Result<Snapshot, SnapshotterError> {
     if map.contains_key(key) {
         return Err(SnapshotterError::AlreadyExists(key.to_string()));
@@ -226,7 +240,7 @@ fn run_prepare(
         labels,
         size_bytes: 0,
         inode_count: 0,
-        mount_root: format!("/run/edgerun/snapshots/{key}"),
+        mount_root: snapshot_mount_root(mount_root_base, key),
     };
     map.insert(key.to_string(), snapshot.clone());
     Ok(snapshot)
@@ -237,6 +251,7 @@ fn run_view(
     key: &str,
     parent: &str,
     labels: BTreeMap<String, String>,
+    mount_root_base: &Path,
 ) -> Result<Snapshot, SnapshotterError> {
     if map.contains_key(key) {
         return Err(SnapshotterError::AlreadyExists(key.to_string()));
@@ -251,7 +266,7 @@ fn run_view(
         labels,
         size_bytes: 0,
         inode_count: 0,
-        mount_root: format!("/run/edgerun/snapshots/{key}"),
+        mount_root: snapshot_mount_root(mount_root_base, key),
     };
     map.insert(key.to_string(), snapshot.clone());
     Ok(snapshot)
@@ -261,6 +276,7 @@ fn run_commit(
     map: &mut BTreeMap<String, Snapshot>,
     name: &str,
     key: &str,
+    mount_root_base: &Path,
 ) -> Result<Snapshot, SnapshotterError> {
     if map.contains_key(name) {
         return Err(SnapshotterError::AlreadyExists(name.to_string()));
@@ -281,7 +297,7 @@ fn run_commit(
         labels: current.labels.clone(),
         size_bytes: current.size_bytes,
         inode_count: current.inode_count,
-        mount_root: current.mount_root,
+        mount_root: snapshot_mount_root(mount_root_base, name),
     };
     map.remove(key);
     map.insert(name.to_string(), committed.clone());
@@ -308,6 +324,98 @@ fn save_state_map(path: &Path, map: &BTreeMap<String, Snapshot>) -> Result<(), S
     fs::write(path, bytes).map_err(|e| SnapshotterError::Io(e.to_string()))
 }
 
+fn ensure_mount_root(path: &Path) -> Result<(), SnapshotterError> {
+    fs::create_dir_all(path).map_err(|e| SnapshotterError::Io(e.to_string()))
+}
+
+fn copy_dir_tree(src: &Path, dst: &Path) -> Result<(), SnapshotterError> {
+    if !src.exists() {
+        return Ok(());
+    }
+    ensure_mount_root(dst)?;
+    for entry in fs::read_dir(src).map_err(|e| SnapshotterError::Io(e.to_string()))? {
+        let entry = entry.map_err(|e| SnapshotterError::Io(e.to_string()))?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|e| SnapshotterError::Io(e.to_string()))?;
+        if file_type.is_dir() {
+            copy_dir_tree(&src_path, &dst_path)?;
+            continue;
+        }
+        if file_type.is_file() {
+            if let Some(parent) = dst_path.parent() {
+                ensure_mount_root(parent)?;
+            }
+            fs::copy(&src_path, &dst_path).map_err(|e| SnapshotterError::Io(e.to_string()))?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<(), SnapshotterError> {
+    if path.exists() {
+        fs::remove_dir_all(path).map_err(|e| SnapshotterError::Io(e.to_string()))?;
+    }
+    Ok(())
+}
+
+fn move_dir_or_copy(src: &Path, dst: &Path) -> Result<(), SnapshotterError> {
+    if src == dst {
+        return Ok(());
+    }
+    if let Some(parent) = dst.parent() {
+        ensure_mount_root(parent)?;
+    }
+    remove_dir_if_exists(dst)?;
+    if src.exists() {
+        match fs::rename(src, dst) {
+            Ok(()) => return Ok(()),
+            Err(_) => {
+                copy_dir_tree(src, dst)?;
+                remove_dir_if_exists(src)?;
+                return Ok(());
+            }
+        }
+    }
+    ensure_mount_root(dst)
+}
+
+fn dir_usage(path: &Path) -> Result<SnapshotUsage, SnapshotterError> {
+    if !path.exists() {
+        return Ok(SnapshotUsage {
+            size_bytes: 0,
+            inode_count: 0,
+        });
+    }
+    let mut usage = SnapshotUsage {
+        size_bytes: 0,
+        inode_count: 0,
+    };
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        for entry in fs::read_dir(&current).map_err(|e| SnapshotterError::Io(e.to_string()))? {
+            let entry = entry.map_err(|e| SnapshotterError::Io(e.to_string()))?;
+            usage.inode_count += 1;
+            let file_type = entry
+                .file_type()
+                .map_err(|e| SnapshotterError::Io(e.to_string()))?;
+            if file_type.is_dir() {
+                stack.push(entry.path());
+                continue;
+            }
+            if file_type.is_file() {
+                let meta = entry
+                    .metadata()
+                    .map_err(|e| SnapshotterError::Io(e.to_string()))?;
+                usage.size_bytes = usage.size_bytes.saturating_add(meta.len());
+            }
+        }
+    }
+    Ok(usage)
+}
+
 fn snapshotter_impl_prepare(
     map_ref: &Arc<Mutex<BTreeMap<String, Snapshot>>>,
     key: &str,
@@ -315,7 +423,13 @@ fn snapshotter_impl_prepare(
     labels: BTreeMap<String, String>,
 ) -> Result<Snapshot, SnapshotterError> {
     let mut map = map_ref.lock().map_err(|_| SnapshotterError::LockPoisoned)?;
-    run_prepare(&mut map, key, parent, labels)
+    run_prepare(
+        &mut map,
+        key,
+        parent,
+        labels,
+        Path::new(DEFAULT_SNAPSHOT_MOUNT_ROOT),
+    )
 }
 
 fn snapshotter_impl_view(
@@ -325,7 +439,13 @@ fn snapshotter_impl_view(
     labels: BTreeMap<String, String>,
 ) -> Result<Snapshot, SnapshotterError> {
     let mut map = map_ref.lock().map_err(|_| SnapshotterError::LockPoisoned)?;
-    run_view(&mut map, key, parent, labels)
+    run_view(
+        &mut map,
+        key,
+        parent,
+        labels,
+        Path::new(DEFAULT_SNAPSHOT_MOUNT_ROOT),
+    )
 }
 
 fn snapshotter_impl_commit(
@@ -334,7 +454,7 @@ fn snapshotter_impl_commit(
     key: &str,
 ) -> Result<Snapshot, SnapshotterError> {
     let mut map = map_ref.lock().map_err(|_| SnapshotterError::LockPoisoned)?;
-    run_commit(&mut map, name, key)
+    run_commit(&mut map, name, key, Path::new(DEFAULT_SNAPSHOT_MOUNT_ROOT))
 }
 
 impl Snapshotter for InMemorySnapshotter {
@@ -464,7 +584,19 @@ impl Snapshotter for PersistentSnapshotter {
             .map()
             .lock()
             .map_err(|_| SnapshotterError::LockPoisoned)?;
-        let snapshot = run_prepare(&mut map, key, parent, labels)?;
+        let parent_mount = parent.and_then(|p| map.get(p).map(|s| s.mount_root.clone()));
+        let snapshot = run_prepare(&mut map, key, parent, labels, &self.mount_root_base())?;
+        let snapshot_root = PathBuf::from(&snapshot.mount_root);
+        if let Err(err) = (|| -> Result<(), SnapshotterError> {
+            ensure_mount_root(&snapshot_root)?;
+            if let Some(parent_root) = parent_mount {
+                copy_dir_tree(Path::new(&parent_root), &snapshot_root)?;
+            }
+            Ok(())
+        })() {
+            map.remove(key);
+            return Err(err);
+        }
         self.persist_locked(&map)?;
         Ok(snapshot)
     }
@@ -479,7 +611,20 @@ impl Snapshotter for PersistentSnapshotter {
             .map()
             .lock()
             .map_err(|_| SnapshotterError::LockPoisoned)?;
-        let snapshot = run_view(&mut map, key, parent, labels)?;
+        let parent_mount = map
+            .get(parent)
+            .map(|s| s.mount_root.clone())
+            .ok_or_else(|| SnapshotterError::NotFound(parent.to_string()))?;
+        let snapshot = run_view(&mut map, key, parent, labels, &self.mount_root_base())?;
+        let snapshot_root = PathBuf::from(&snapshot.mount_root);
+        if let Err(err) = (|| -> Result<(), SnapshotterError> {
+            ensure_mount_root(&snapshot_root)?;
+            copy_dir_tree(Path::new(&parent_mount), &snapshot_root)?;
+            Ok(())
+        })() {
+            map.remove(key);
+            return Err(err);
+        }
         self.persist_locked(&map)?;
         Ok(snapshot)
     }
@@ -489,7 +634,19 @@ impl Snapshotter for PersistentSnapshotter {
             .map()
             .lock()
             .map_err(|_| SnapshotterError::LockPoisoned)?;
-        let snapshot = run_commit(&mut map, name, key)?;
+        let previous = map
+            .get(key)
+            .cloned()
+            .ok_or_else(|| SnapshotterError::NotFound(key.to_string()))?;
+        let snapshot = run_commit(&mut map, name, key, &self.mount_root_base())?;
+        if let Err(err) = move_dir_or_copy(
+            Path::new(&previous.mount_root),
+            Path::new(&snapshot.mount_root),
+        ) {
+            map.remove(name);
+            map.insert(key.to_string(), previous);
+            return Err(err);
+        }
         self.persist_locked(&map)?;
         Ok(snapshot)
     }
@@ -510,9 +667,10 @@ impl Snapshotter for PersistentSnapshotter {
             .map()
             .lock()
             .map_err(|_| SnapshotterError::LockPoisoned)?;
-        if guard.remove(key).is_none() {
-            return Err(SnapshotterError::NotFound(key.to_string()));
-        }
+        let removed = guard
+            .remove(key)
+            .ok_or_else(|| SnapshotterError::NotFound(key.to_string()))?;
+        remove_dir_if_exists(Path::new(&removed.mount_root))?;
         self.persist_locked(&guard)
     }
 
@@ -553,9 +711,10 @@ impl Snapshotter for PersistentSnapshotter {
         let entry = guard
             .get(key)
             .ok_or_else(|| SnapshotterError::NotFound(key.to_string()))?;
+        let fs_usage = dir_usage(Path::new(&entry.mount_root))?;
         Ok(SnapshotUsage {
-            size_bytes: entry.size_bytes,
-            inode_count: entry.inode_count,
+            size_bytes: fs_usage.size_bytes.max(entry.size_bytes),
+            inode_count: fs_usage.inode_count.max(entry.inode_count),
         })
     }
 
@@ -583,7 +742,9 @@ impl Snapshotter for PersistentSnapshotter {
             })
             .collect();
         for key in &keys_to_drop {
-            guard.remove(key);
+            if let Some(removed) = guard.remove(key) {
+                remove_dir_if_exists(Path::new(&removed.mount_root))?;
+            }
         }
         self.persist_locked(&guard)?;
         Ok(keys_to_drop.len() as u64)
@@ -632,5 +793,25 @@ mod tests {
         let all = reopened.walk().expect("walk");
         assert_eq!(all.len(), 1);
         assert_eq!(all[0].key, "a-c");
+        assert!(all[0].mount_root.ends_with("/snapshots/a-c"));
+    }
+
+    #[test]
+    fn persistent_mount_root_materialized_and_usage_visible() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let state = tmp.path().join("snapshot-state.json");
+        let mounts_base = tmp.path().join("snapshots");
+        fs::create_dir_all(mounts_base.join("base")).expect("create base dir");
+        fs::write(mounts_base.join("base/hello.txt"), b"hello").expect("write base file");
+
+        let s = PersistentSnapshotter::open("workspace-p", state).expect("open persistent");
+        s.prepare("base", None, BTreeMap::new())
+            .expect("prepare base");
+        s.commit("base-c", "base").expect("commit base");
+        s.view("view-1", "base-c", BTreeMap::new())
+            .expect("view snapshot");
+        let usage = s.usage("view-1").expect("usage");
+        assert!(usage.size_bytes >= 5);
+        assert!(usage.inode_count >= 1);
     }
 }

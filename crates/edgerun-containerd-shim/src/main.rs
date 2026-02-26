@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -347,6 +347,10 @@ fn handle_request(req: ShimRequestV1, ctx: &ServerContext) -> ShimResponseV1 {
                         None,
                         None,
                         None,
+                        None,
+                        None,
+                        None,
+                        None,
                     ) {
                         Ok(resp) => shim_response_full(
                             true,
@@ -411,6 +415,10 @@ fn handle_request(req: ShimRequestV1, ctx: &ServerContext) -> ShimResponseV1 {
             stdin_path,
             stdout_path,
             stderr_path,
+            rootfs_source,
+            rootfs_readonly,
+            rootfs_type,
+            rootfs_options_csv,
         })) => {
             let op = TaskServiceOpV1::try_from(op).unwrap_or(TaskServiceOpV1::Unspecified);
             let service = ctx.task_service.lock();
@@ -449,6 +457,22 @@ fn handle_request(req: ShimRequestV1, ctx: &ServerContext) -> ShimResponseV1 {
                         None
                     } else {
                         Some(stderr_path.as_str())
+                    },
+                    if rootfs_source.is_empty() {
+                        None
+                    } else {
+                        Some(rootfs_source.as_str())
+                    },
+                    if rootfs_readonly { Some(true) } else { None },
+                    if rootfs_type.is_empty() {
+                        None
+                    } else {
+                        Some(rootfs_type.as_str())
+                    },
+                    if rootfs_options_csv.is_empty() {
+                        None
+                    } else {
+                        Some(rootfs_options_csv.as_str())
                     },
                 ) {
                     Ok(resp) => {
@@ -491,6 +515,7 @@ fn shim_response(
     shim_response_full(ok, message, offset, subject, state, false, None, None)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn shim_response_full(
     ok: bool,
     message: &str,
@@ -570,7 +595,7 @@ fn apply_task_command(
 }
 
 fn publish_runtime_event(
-    data_dir: &PathBuf,
+    data_dir: &Path,
     segment: &str,
     run_id: &str,
     job_id: &str,
@@ -578,7 +603,7 @@ fn publish_runtime_event(
     event: edgerun_runtime_proto::RuntimeTaskEvent,
     kind: RuntimeTaskEventKind,
 ) -> Result<u64> {
-    let mut timeline = StorageBackedTimeline::open_writer(data_dir.clone(), segment)
+    let mut timeline = StorageBackedTimeline::open_writer(data_dir.to_path_buf(), segment)
         .context("open timeline writer")?;
     let payload = RuntimeTaskEventV1 {
         schema_version: event.schema_version,

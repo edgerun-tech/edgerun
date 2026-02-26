@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError, TransportKind};
 use edgerun_types::control_plane::{
     ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
-    ControlWsServerMessage, RouteResolveRequest, RouteResolveResponse,
+    ControlWsServerMessage, RouteCandidate, RouteResolveRequest, RouteResolveResponse,
 };
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
@@ -144,12 +144,18 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
             )));
         };
 
-        let mut out = Vec::new();
-        for raw in route.reachable_urls {
-            let Some(kind) = kind_from_uri(&raw) else {
-                continue;
-            };
-            out.push(TransportEndpoint::new(kind, raw));
+        let mut out = route
+            .candidates
+            .iter()
+            .filter_map(transport_endpoint_from_candidate)
+            .collect::<Vec<_>>();
+        if out.is_empty() {
+            for raw in route.reachable_urls {
+                let Some(kind) = kind_from_uri(&raw) else {
+                    continue;
+                };
+                out.push(TransportEndpoint::new(kind, raw));
+            }
         }
         if out.is_empty() {
             return Err(TransportError::NoRoute(format!(
@@ -157,6 +163,36 @@ impl DiscoveryProvider for SchedulerRouteDiscovery {
             )));
         }
         Ok(out)
+    }
+}
+
+fn transport_endpoint_from_candidate(candidate: &RouteCandidate) -> Option<TransportEndpoint> {
+    let kind = kind_from_candidate(candidate)?;
+    let uri = candidate.uri.trim();
+    if uri.is_empty() {
+        return None;
+    }
+    let mut endpoint = TransportEndpoint::new(kind, uri.to_string());
+    endpoint.priority = candidate.priority;
+    endpoint.metadata = candidate.metadata.clone();
+    Some(endpoint)
+}
+
+fn kind_from_candidate(candidate: &RouteCandidate) -> Option<TransportKind> {
+    let normalized = candidate.kind.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "quic" if candidate.uri.starts_with("quic://") => Some(TransportKind::Quic),
+        "websocket"
+            if candidate.uri.starts_with("ws://") || candidate.uri.starts_with("wss://") =>
+        {
+            Some(TransportKind::WebSocket)
+        }
+        "wireguard"
+            if candidate.uri.starts_with("wg://") || candidate.uri.starts_with("wireguard://") =>
+        {
+            Some(TransportKind::WireGuard)
+        }
+        _ => kind_from_uri(&candidate.uri),
     }
 }
 

@@ -149,3 +149,48 @@ journalctl --user -u edgerun-worker@1.service -f
 journalctl --user -u edgerun-term-server.service -f
 journalctl --user -u edgerun-cloudflared-term.service -f
 ```
+
+## System Services (Containerd Runtime Path)
+
+For host-level containerd integration, install EdgeRun snapshotter + shim backend units:
+
+```bash
+sudo ./scripts/systemd/install-system-containerd-services.sh
+```
+
+Options:
+
+```bash
+sudo ENABLE_SERVICES=0 ./scripts/systemd/install-system-containerd-services.sh
+sudo RESTART_CONTAINERD=1 ./scripts/systemd/install-system-containerd-services.sh
+sudo INSTALL_BINARIES=0 ./scripts/systemd/install-system-containerd-services.sh
+```
+
+Installed system units:
+- `/etc/systemd/system/edgerun-snapshotter.service`
+- `/etc/systemd/system/edgerun-shim-backend.service`
+
+Binary layout for containerd compatibility:
+- backend daemon: `/usr/lib/edgerun/containerd-shim-edgerun-backend`
+- containerd shim entrypoints: `/usr/bin/containerd-shim-edgerun-v2` and `/usr/bin/containerd-shim-edgerun-v1` (compat alias to v2 binary)
+
+Status checks:
+
+```bash
+systemctl --no-pager --full status edgerun-snapshotter.service edgerun-shim-backend.service
+journalctl -u edgerun-snapshotter.service -f
+journalctl -u edgerun-shim-backend.service -f
+```
+
+Apply containerd runtime snippet + verify effective config:
+
+```bash
+sudo ./scripts/containerd/apply-edgerun-runtime-config.sh
+sudo RESTART_CONTAINERD=1 RUN_SMOKE=1 ./scripts/containerd/apply-edgerun-runtime-config.sh
+```
+
+Run WASM smoke under the EdgeRun runtime class:
+
+```bash
+./scripts/containerd-runtime-wasm-smoke.sh
+```

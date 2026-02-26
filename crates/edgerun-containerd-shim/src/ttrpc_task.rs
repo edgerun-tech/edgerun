@@ -69,6 +69,8 @@ impl<B: TaskApiBackend + 'static> Task for ContainerdTaskTtrpcService<B> {
     ) -> containerd_shim_protos::ttrpc::Result<CreateTaskResponse> {
         let namespace = namespace_from_ctx(ctx);
         let selected = runtime_selection_from_bundle(&req.bundle);
+        let (rootfs_source, rootfs_readonly, rootfs_type, rootfs_options_csv) =
+            primary_rootfs_from_create(&req);
         let out = self
             .inner
             .create(TaskCreateRequest {
@@ -80,6 +82,10 @@ impl<B: TaskApiBackend + 'static> Task for ContainerdTaskTtrpcService<B> {
                 stdin_path: Some(req.stdin.clone()),
                 stdout_path: Some(req.stdout.clone()),
                 stderr_path: Some(req.stderr.clone()),
+                rootfs_source,
+                rootfs_readonly,
+                rootfs_type,
+                rootfs_options_csv,
             })
             .await
             .map_err(to_ttrpc_error)?;
@@ -294,6 +300,25 @@ fn runtime_selection_from_bundle(bundle_path: &str) -> RuntimeSelection {
     }
 
     RuntimeSelection::default()
+}
+
+fn primary_rootfs_from_create(
+    req: &CreateTaskRequest,
+) -> (Option<String>, Option<bool>, Option<String>, Option<String>) {
+    let mount = req.rootfs.first();
+    let Some(mount) = mount else {
+        return (None, None, None, None);
+    };
+    if mount.source.trim().is_empty() && mount.type_.trim().is_empty() {
+        return (None, None, None, None);
+    }
+    let readonly = mount.options.iter().any(|v| v.eq_ignore_ascii_case("ro"));
+    (
+        Some(mount.source.clone()),
+        Some(readonly),
+        Some(mount.type_.clone()),
+        Some(mount.options.join(",")),
+    )
 }
 
 #[cfg(test)]

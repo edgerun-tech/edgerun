@@ -2,7 +2,7 @@
 #![allow(deprecated)]
 
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
@@ -43,9 +43,9 @@ use edgerun_types::control_plane::{
     BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
     ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, JobCreateRequest,
     JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse, QueuedAssignment,
-    RouteChallengeRequest, RouteChallengeResponse, RouteHeartbeatRequest, RouteHeartbeatResponse,
-    RouteOwnerRequest, RouteRegisterRequest, RouteRegisterResponse,
-    RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
+    RouteCandidate as CpRouteCandidate, RouteChallengeRequest, RouteChallengeResponse,
+    RouteHeartbeatRequest, RouteHeartbeatResponse, RouteOwnerRequest, RouteRegisterRequest,
+    RouteRegisterResponse, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
     RouteResolveResponse as CpRouteResolveResponse, SlashWorkerArtifact, SubmissionAck,
     WorkerAssignmentsRequest, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
 };
@@ -197,6 +197,9 @@ struct PersistedState {
 struct DeviceRouteEntry {
     device_id: String,
     owner_pubkey: String,
+    #[serde(default)]
+    candidates: Vec<CpRouteCandidate>,
+    #[serde(default)]
     reachable_urls: Vec<String>,
     #[serde(default)]
     capabilities: Vec<String>,
@@ -979,6 +982,7 @@ async fn handle_control_request_payload(
                     route: resolved.route.map(|entry| CpRouteEntry {
                         device_id: entry.device_id,
                         owner_pubkey: entry.owner_pubkey,
+                        candidates: entry.candidates,
                         reachable_urls: entry.reachable_urls,
                         capabilities: entry.capabilities,
                         relay_session_id: entry.relay_session_id,
@@ -1010,6 +1014,7 @@ async fn handle_control_request_payload(
                         .map(|entry| CpRouteEntry {
                             device_id: entry.device_id,
                             owner_pubkey: entry.owner_pubkey,
+                            candidates: entry.candidates,
                             reachable_urls: entry.reachable_urls,
                             capabilities: entry.capabilities,
                             relay_session_id: entry.relay_session_id,
@@ -1547,17 +1552,12 @@ fn route_register_inner(
     if signature.is_empty() {
         return Err((StatusCode::BAD_REQUEST, "signature is required".to_string()));
     }
-    let reachable_urls = payload
-        .reachable_urls
-        .iter()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-    if reachable_urls.is_empty() {
+    let (candidates, reachable_urls) =
+        normalize_route_candidates(&payload.candidates, &payload.reachable_urls);
+    if candidates.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            "reachable_urls must not be empty".to_string(),
+            "at least one valid transport candidate is required".to_string(),
         ));
     }
     let capabilities = payload
@@ -1620,7 +1620,16 @@ fn route_register_inner(
         &challenge_nonce,
         payload.signed_at_unix_s,
     );
+    let signing_digest = hash(signing_message.as_bytes());
     if !edgerun_crypto::verify(&verifier, signing_message.as_bytes(), &parsed_signature) {
+        tracing::warn!(
+            owner_pubkey = %owner_pubkey,
+            device_id = %device_id,
+            signed_at_unix_s = payload.signed_at_unix_s,
+            signing_digest = %hex::encode(signing_digest.to_bytes()),
+            reachable_urls = ?reachable_urls,
+            "route register signature verification failed"
+        );
         return Err((
             StatusCode::UNAUTHORIZED,
             "invalid route register signature".to_string(),
@@ -1632,6 +1641,7 @@ fn route_register_inner(
     normalized_payload.device_id = device_id.clone();
     normalized_payload.owner_pubkey = owner_pubkey.clone();
     normalized_payload.challenge_nonce = challenge_nonce.clone();
+    normalized_payload.candidates = candidates.clone();
     normalized_payload.reachable_urls = reachable_urls.clone();
     normalized_payload.capabilities = capabilities.clone();
     normalized_payload.relay_session_id = relay_session_id.clone();
@@ -1665,6 +1675,7 @@ fn route_register_inner(
             DeviceRouteEntry {
                 device_id: device_id.clone(),
                 owner_pubkey,
+                candidates,
                 reachable_urls,
                 capabilities,
                 relay_session_id,
@@ -1761,6 +1772,94 @@ fn route_heartbeat_inner(
     })?;
 
     Ok(RouteHeartbeatResponse { ok: true })
+}
+
+fn normalize_route_candidates(
+    candidates: &[CpRouteCandidate],
+    reachable_urls: &[String],
+) -> (Vec<CpRouteCandidate>, Vec<String>) {
+    let mut out = Vec::<CpRouteCandidate>::new();
+    let mut seen = HashSet::<String>::new();
+
+    for candidate in candidates {
+        let uri = candidate.uri.trim();
+        if uri.is_empty() {
+            continue;
+        }
+        let Some(kind) = normalize_candidate_kind(candidate.kind.as_str(), uri) else {
+            continue;
+        };
+        if !seen.insert(uri.to_string()) {
+            continue;
+        }
+        let metadata = candidate
+            .metadata
+            .iter()
+            .filter_map(|(k, v)| {
+                let key = k.trim();
+                let value = v.trim();
+                if key.is_empty() || value.is_empty() {
+                    None
+                } else {
+                    Some((key.to_string(), value.to_string()))
+                }
+            })
+            .collect::<BTreeMap<_, _>>();
+        out.push(CpRouteCandidate {
+            kind: kind.to_string(),
+            uri: uri.to_string(),
+            priority: candidate.priority,
+            metadata,
+        });
+    }
+
+    if out.is_empty() {
+        for raw in reachable_urls {
+            let uri = raw.trim();
+            if uri.is_empty() {
+                continue;
+            }
+            let Some(kind) = normalize_candidate_kind("", uri) else {
+                continue;
+            };
+            if !seen.insert(uri.to_string()) {
+                continue;
+            }
+            out.push(CpRouteCandidate {
+                kind: kind.to_string(),
+                uri: uri.to_string(),
+                priority: 100,
+                metadata: BTreeMap::new(),
+            });
+        }
+    }
+
+    let signable_urls = out.iter().map(|candidate| candidate.uri.clone()).collect();
+    (out, signable_urls)
+}
+
+fn normalize_candidate_kind<'a>(kind: &'a str, uri: &'a str) -> Option<&'static str> {
+    let normalized = kind.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "quic" if uri.starts_with("quic://") => return Some("quic"),
+        "websocket" if uri.starts_with("ws://") || uri.starts_with("wss://") => {
+            return Some("websocket");
+        }
+        "wireguard" if uri.starts_with("wg://") || uri.starts_with("wireguard://") => {
+            return Some("wireguard");
+        }
+        _ => {}
+    }
+    if uri.starts_with("quic://") {
+        return Some("quic");
+    }
+    if uri.starts_with("ws://") || uri.starts_with("wss://") {
+        return Some("websocket");
+    }
+    if uri.starts_with("wg://") || uri.starts_with("wireguard://") {
+        return Some("wireguard");
+    }
+    None
 }
 
 fn worker_heartbeat_inner(

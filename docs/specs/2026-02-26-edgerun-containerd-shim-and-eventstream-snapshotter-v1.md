@@ -15,7 +15,10 @@ Introduce an EdgeRun-native container runtime integration path in containerd wit
 - Add shim task-service skeleton (`ShimTaskTtrpcService`) exposing RPC-shaped methods (`create/start/state/kill/delete/wait`) delegating to the adapter.
 - Add containerd ttrpc task service implementation (`ContainerdTaskTtrpcService`) for `containerd.task.v2.Task` and registration helper (`register_task_ttrpc_service`).
 - Add persistent snapshot metadata state file support.
+- Materialize snapshot mount roots on disk for `prepare/view/commit/remove/cleanup` so returned mounts are backed by real filesystem paths.
 - Add snapshotter Unix socket `serve` endpoint for long-running control operations.
+- Add systemd unit templates + installer workflow for snapshotter + shim backend host services.
+- Add containerd config apply/verify script for runtime snippet import path.
 - Emit runtime and snapshot materialization events into `edgerun-storage` timeline.
 - Keep the rollout additive; no replacement of existing `crun`/`runc` runtime paths yet.
 - Provide selectable runtime classes in containerd config:
@@ -27,6 +30,7 @@ Introduce an EdgeRun-native container runtime integration path in containerd wit
 - Full containerd shim gRPC/ttrpc implementation.
   - Current status: task service methods (`Create/Start/State/Kill/Delete/Wait/Connect/Shutdown`) are implemented with containerd ttrpc trait bindings; broader shim lifecycle integration remains follow-up work.
 - Production-ready snapshotter daemon wiring into containerd plugin registration.
+- Full overlayfs lowerdir/upperdir/workdir layering semantics beyond V1 bind-backed materialization.
 - Full POSIX parity over event storage.
 
 ## Contracts
@@ -114,10 +118,14 @@ One-shot CLI parity:
 3. Snapshotter binary can emit materialized snapshot events into timeline.
 4. Snapshotter API surface includes all containerd-aligned lifecycle methods.
 5. Snapshotter state survives process restart via persistent state file.
-6. Runtime config template renders `crun` as default runtime and keeps `edgerun` as explicit opt-in runtime.
-7. Runtime matrix smoke script exists for `ctr` to validate both runtime classes:
+6. Snapshotter operations create/update/remove corresponding mount-root directories on disk and `usage` reflects on-disk content.
+7. Runtime config template renders `crun` as default runtime and keeps `edgerun` as explicit opt-in runtime.
+8. Runtime matrix smoke script exists for `ctr` to validate both runtime classes:
    - `io.containerd.runc.v2`
    - `io.containerd.edgerun.v1`
+9. System service install script exists to build/install binaries and install/enable host units for snapshotter + shim backend.
+10. Containerd config apply script exists to install snippet in `conf.d`, validate effective config, and optionally run runtime matrix smoke.
+11. Runtime WASM smoke script exists and validates `edgerun-runtime replay-corpus` inside a container started with `io.containerd.edgerun.v1`.
 
 ## Rollout
 

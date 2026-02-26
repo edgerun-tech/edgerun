@@ -163,6 +163,14 @@ pub struct TaskServiceRequestV1 {
     pub stdout_path: String,
     #[prost(string, tag = "10")]
     pub stderr_path: String,
+    #[prost(string, tag = "11")]
+    pub rootfs_source: String,
+    #[prost(bool, tag = "12")]
+    pub rootfs_readonly: bool,
+    #[prost(string, tag = "13")]
+    pub rootfs_type: String,
+    #[prost(string, tag = "14")]
+    pub rootfs_options_csv: String,
 }
 
 #[derive(Clone, PartialEq, Message)]

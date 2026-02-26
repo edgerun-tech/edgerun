@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::io::{Read, Write};
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -30,12 +30,14 @@ use edgerun_hwvault_primitives::hardware::{
 use edgerun_transport_core::route_register_signing_message;
 use edgerun_types::control_plane::{
     ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
-    ControlWsServerMessage, RouteChallengeRequest as CpRouteChallengeRequest,
+    ControlWsServerMessage, RouteCandidate as CpRouteCandidate,
+    RouteChallengeRequest as CpRouteChallengeRequest,
     RouteHeartbeatRequest as CpRouteHeartbeatRequest,
     RouteRegisterRequest as CpRouteRegisterRequest,
 };
 use futures_util::{SinkExt, StreamExt};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep, timeout};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
@@ -1062,6 +1064,11 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
     };
     let public_base_is_non_public =
         is_non_public_route_url(&public_base_url, "EDGERUN_TERM_PUBLIC_BASE_URL");
+    let stun_server = env::var("EDGERUN_ROUTE_STUN_SERVER")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| "172.245.67.49:3478".to_string());
 
     if public_base_is_non_public && !control_base_is_local {
         if public_base_was_set {
@@ -1077,8 +1084,10 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                 "EDGERUN_TERM_PUBLIC_BASE_URL was not provided; defaulted URL may not be externally reachable"
             );
         }
-        warn!("route announcer disabled to avoid publishing unreachable terminal endpoint");
-        return;
+        warn!(
+            stun_server = %stun_server,
+            "continuing route announcer with STUN reflexive endpoint discovery enabled"
+        );
     }
 
     if !reachable_urls.iter().any(|value| value == &public_base_url) {
@@ -1166,19 +1175,44 @@ fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
                 }
 
                 let signed_at = now_unix_s();
-                let reachable_urls = reachable_urls.clone();
+                let mut advertised_urls = reachable_urls.clone();
+                if let Some(stun_url) =
+                    discover_stun_public_route_url(&public_base_url, &stun_server).await
+                {
+                    if !advertised_urls.iter().any(|value| value == &stun_url) {
+                        advertised_urls.push(stun_url);
+                    }
+                }
+                let candidates = route_candidates_from_urls(&advertised_urls, &stun_server);
+                if candidates.is_empty() {
+                    warn!(
+                        control_base = %control_base,
+                        "route announcer could not derive any valid transport candidates"
+                    );
+                    sleep(Duration::from_secs(10)).await;
+                    continue;
+                }
                 let signing_message = route_register_signing_message(
                     &owner_pubkey,
                     &device_id,
-                    &reachable_urls,
+                    &advertised_urls,
                     &challenge.nonce,
                     signed_at,
                 );
                 let signature = sign_route_payload(signing_message.as_bytes());
+                info!(
+                    owner_pubkey = %owner_pubkey,
+                    device_id = %device_id,
+                    signed_at,
+                    signing_message = %signing_message,
+                    advertised_urls = ?advertised_urls,
+                    "route announcer signing route.register payload"
+                );
                 let payload = CpRouteRegisterRequest {
                     device_id: device_id.clone(),
                     owner_pubkey: owner_pubkey.clone(),
-                    reachable_urls,
+                    candidates,
+                    reachable_urls: advertised_urls,
                     capabilities: vec!["terminal-ws".to_string(), "webrtc-datachannel".to_string()],
                     relay_session_id: None,
                     ttl_secs: 90,
@@ -1296,6 +1330,208 @@ async fn scheduler_control_ws_request(
     }
 }
 
+fn route_candidates_from_urls(urls: &[String], stun_server: &str) -> Vec<CpRouteCandidate> {
+    urls.iter()
+        .filter_map(|uri| {
+            let kind = if uri.starts_with("quic://") {
+                "quic"
+            } else if uri.starts_with("ws://") || uri.starts_with("wss://") {
+                "websocket"
+            } else if uri.starts_with("wg://") || uri.starts_with("wireguard://") {
+                "wireguard"
+            } else {
+                return None;
+            };
+            let mut metadata = BTreeMap::new();
+            metadata.insert("relay".to_string(), "false".to_string());
+            metadata.insert("direct".to_string(), "true".to_string());
+            if uri.contains("://172.245.67.49") {
+                metadata.insert("source".to_string(), "stun".to_string());
+                metadata.insert("stun_server".to_string(), stun_server.to_string());
+            } else {
+                metadata.insert("source".to_string(), "static".to_string());
+            }
+            Some(CpRouteCandidate {
+                kind: kind.to_string(),
+                uri: uri.to_string(),
+                priority: 100,
+                metadata,
+            })
+        })
+        .collect()
+}
+
+async fn discover_stun_public_route_url(
+    public_base_url: &str,
+    stun_server: &str,
+) -> Option<String> {
+    let mut parsed = reqwest::Url::parse(public_base_url).ok()?;
+    let current_host = parsed.host_str()?;
+    if !is_non_public_host(current_host) {
+        return None;
+    }
+    let public_addr = stun_query_reflexive_addr(stun_server).await?;
+    if parsed
+        .set_host(Some(&public_addr.ip().to_string()))
+        .is_err()
+    {
+        return None;
+    }
+    let target_port = parsed.port().unwrap_or(public_addr.port());
+    if parsed.set_port(Some(target_port)).is_err() {
+        return None;
+    }
+    Some(parsed.to_string().trim_end_matches('/').to_string())
+}
+
+async fn stun_query_reflexive_addr(stun_server: &str) -> Option<SocketAddr> {
+    let server_addr = stun_server.parse::<SocketAddr>().ok()?;
+    let socket = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
+        .await
+        .ok()?;
+    let tx_id = build_stun_transaction_id();
+    let request = build_stun_binding_request(tx_id);
+    timeout(
+        Duration::from_secs(2),
+        socket.send_to(&request, server_addr),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    let mut buf = [0_u8; 1024];
+    let (n, _peer) = timeout(Duration::from_secs(2), socket.recv_from(&mut buf))
+        .await
+        .ok()?
+        .ok()?;
+    parse_stun_binding_response(&buf[..n], tx_id)
+}
+
+fn build_stun_transaction_id() -> [u8; 12] {
+    let seed = CONTROL_REQUEST_SEQ.fetch_add(1, Ordering::Relaxed)
+        ^ now_unix_s()
+        ^ now_unix_s().rotate_left(13);
+    let mut out = [0_u8; 12];
+    for (idx, byte) in out.iter_mut().enumerate() {
+        let shift = ((idx % 8) * 8) as u32;
+        *byte = ((seed.rotate_left((idx as u32) * 7) >> shift) & 0xff) as u8;
+    }
+    out
+}
+
+fn build_stun_binding_request(tx_id: [u8; 12]) -> [u8; 20] {
+    let mut req = [0_u8; 20];
+    req[0] = 0x00;
+    req[1] = 0x01;
+    req[2] = 0x00;
+    req[3] = 0x00;
+    req[4] = 0x21;
+    req[5] = 0x12;
+    req[6] = 0xA4;
+    req[7] = 0x42;
+    req[8..20].copy_from_slice(&tx_id);
+    req
+}
+
+fn parse_stun_binding_response(buf: &[u8], tx_id: [u8; 12]) -> Option<SocketAddr> {
+    if buf.len() < 20 {
+        return None;
+    }
+    if buf[0] != 0x01 || buf[1] != 0x01 {
+        return None;
+    }
+    if buf[4..8] != [0x21, 0x12, 0xA4, 0x42] {
+        return None;
+    }
+    if buf[8..20] != tx_id {
+        return None;
+    }
+    let body_len = u16::from_be_bytes([buf[2], buf[3]]) as usize;
+    if buf.len() < 20 + body_len {
+        return None;
+    }
+    let mut cursor = 20usize;
+    let body_end = 20 + body_len;
+    while cursor + 4 <= body_end {
+        let attr_type = u16::from_be_bytes([buf[cursor], buf[cursor + 1]]);
+        let attr_len = u16::from_be_bytes([buf[cursor + 2], buf[cursor + 3]]) as usize;
+        cursor += 4;
+        if cursor + attr_len > body_end {
+            return None;
+        }
+        let value = &buf[cursor..cursor + attr_len];
+        if attr_type == 0x0020 {
+            return parse_xor_mapped_address(value);
+        }
+        if attr_type == 0x0001 {
+            return parse_mapped_address(value);
+        }
+        let padded = (attr_len + 3) & !3;
+        cursor += padded;
+    }
+    None
+}
+
+fn parse_xor_mapped_address(value: &[u8]) -> Option<SocketAddr> {
+    if value.len() < 8 {
+        return None;
+    }
+    let family = value[1];
+    let xport = u16::from_be_bytes([value[2], value[3]]);
+    let port = xport ^ 0x2112;
+    match family {
+        0x01 => {
+            if value.len() < 8 {
+                return None;
+            }
+            let ip = Ipv4Addr::new(
+                value[4] ^ 0x21,
+                value[5] ^ 0x12,
+                value[6] ^ 0xA4,
+                value[7] ^ 0x42,
+            );
+            Some(SocketAddr::new(IpAddr::V4(ip), port))
+        }
+        0x02 => {
+            if value.len() < 20 {
+                return None;
+            }
+            let cookie = [0x21_u8, 0x12, 0xA4, 0x42];
+            let mut ip_bytes = [0_u8; 16];
+            for i in 0..16 {
+                ip_bytes[i] = value[4 + i] ^ cookie[i % 4];
+            }
+            Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_bytes)), port))
+        }
+        _ => None,
+    }
+}
+
+fn parse_mapped_address(value: &[u8]) -> Option<SocketAddr> {
+    if value.len() < 8 {
+        return None;
+    }
+    let family = value[1];
+    let port = u16::from_be_bytes([value[2], value[3]]);
+    match family {
+        0x01 => {
+            if value.len() < 8 {
+                return None;
+            }
+            let ip = Ipv4Addr::new(value[4], value[5], value[6], value[7]);
+            Some(SocketAddr::new(IpAddr::V4(ip), port))
+        }
+        0x02 => {
+            if value.len() < 20 {
+                return None;
+            }
+            let mut ip_bytes = [0_u8; 16];
+            ip_bytes.copy_from_slice(&value[4..20]);
+            Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_bytes)), port))
+        }
+        _ => None,
+    }
+}
+
 fn parse_owner_signing_key_from_env() -> Option<SigningKey> {
     let raw = env::var("EDGERUN_ROUTE_OWNER_SECRET_KEY_B58").ok()?;
     let encoded = raw.trim();
@@ -1379,6 +1615,10 @@ fn is_non_public_route_url(url: &str, env_name: &str) -> bool {
         return true;
     };
 
+    is_non_public_host(host)
+}
+
+fn is_non_public_host(host: &str) -> bool {
     let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
     if normalized_host.eq_ignore_ascii_case("localhost") || normalized_host == "::1" {
         return true;

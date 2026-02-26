@@ -22,6 +22,7 @@ members = [
   "crates/edgerun-term-server",
   "crates/edgerun-node-manager",
   "crates/edgerun-runtime-proto",
+  "crates/edgerun-rbi-gateway",
   "crates/edgerun-containerd-shim",
   "crates/edgerun-snapshotter",
   "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-payload",
