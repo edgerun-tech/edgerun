@@ -58,7 +58,7 @@ wasmparser = "0.239"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 bincode = "1.3"
 solana-client = "2.3"
-solana-sdk = "2.3"
+solana-sdk = "4.0"
 solana-system-interface = "1.0"
 wasmi = "2.0.0-beta.1"
 wat = "1"
