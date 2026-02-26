@@ -34,9 +34,12 @@ const WORKER_RUNTIME_MARKER_FILE: &str = "/run/edgerun/worker-runtime.ready";
 const DEFAULT_WORKER_MAX_CONCURRENCY: u32 = 2;
 const DEFAULT_WORKER_MEM_BYTES: u64 = 2_147_483_648;
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
+const SETUPMODE_CONTINUE_TOKEN: &str = "edgerun.setupmode_continue=1";
 const EDGE_SECUREBOOT_CERT_DER_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
 const EDGE_SECUREBOOT_CERT_PEM_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
 const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
+const MOUNT_BIN: &str = "/usr/bin/mount";
+const CHATTR_BIN: &str = "/usr/bin/chattr";
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-node-manager", about = "EdgeRun TPM node manager")]
@@ -445,18 +448,11 @@ async fn cmd_run() -> Result<()> {
 }
 
 fn enforce_boot_policy() -> Result<BootPolicy> {
-    if setup_mode_enabled()? {
-        auto_import_secure_boot_keys()?;
-        return Err(anyhow!(
-            "UEFI SetupMode detected; EdgeRun Secure Boot keys were enrolled, reboot required"
-        ));
-    }
-
-    if !secure_boot_enabled()? {
-        return Err(anyhow!("secure boot is disabled; refusing PID 1 startup"));
-    }
-
     let cmdline = fs::read_to_string("/proc/cmdline").context("failed to read /proc/cmdline")?;
+    let allow_setupmode_continue = cmdline
+        .split_ascii_whitespace()
+        .any(|p| p == SETUPMODE_CONTINUE_TOKEN);
+
     if !cmdline
         .split_ascii_whitespace()
         .any(|p| p == REQUIRED_CMDLINE_LOCK_TOKEN)
@@ -482,6 +478,28 @@ fn enforce_boot_policy() -> Result<BootPolicy> {
         return Err(anyhow!(
             "api_base must be locked to {DEFAULT_API_BASE}, got {api}"
         ));
+    }
+
+    if setup_mode_enabled()? {
+        match auto_import_secure_boot_keys() {
+            Ok(()) => {
+                if !allow_setupmode_continue {
+                    return Err(anyhow!(
+                        "UEFI SetupMode detected; EdgeRun Secure Boot keys were enrolled, reboot required"
+                    ));
+                }
+            }
+            Err(err) => {
+                if !allow_setupmode_continue {
+                    return Err(err);
+                }
+                eprintln!("warning=setupmode_enroll_failed err={err:#}");
+            }
+        }
+    }
+
+    if !allow_setupmode_continue && !secure_boot_enabled()? {
+        return Err(anyhow!("secure boot is disabled; refusing PID 1 startup"));
     }
 
     Ok(BootPolicy {
@@ -537,6 +555,7 @@ fn auto_import_secure_boot_keys() -> Result<()> {
             "SetupMode detected but EdgeRun cert is missing at {cert_path}"
         ));
     }
+    prepare_efivarfs_for_updates();
 
     for var in ["db", "KEK", "PK"] {
         let esl_path = format!("/etc/edgerun/secureboot/{var}.esl");
@@ -559,6 +578,30 @@ fn auto_import_secure_boot_keys() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn prepare_efivarfs_for_updates() {
+    let _ = Command::new(MOUNT_BIN)
+        .args(["-o", "remount,rw", "/sys/firmware/efi/efivars"])
+        .status();
+    if !Path::new(CHATTR_BIN).exists() {
+        return;
+    }
+    let efivars = Path::new("/sys/firmware/efi/efivars");
+    let Ok(entries) = fs::read_dir(efivars) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if !(name.starts_with("PK-") || name.starts_with("KEK-") || name.starts_with("db-")) {
+            continue;
+        }
+        let _ = Command::new(CHATTR_BIN)
+            .arg("-i")
+            .arg(entry.path())
+            .status();
+    }
 }
 
 fn cmdline_arg(cmdline: &str, key: &str) -> Option<String> {
@@ -687,7 +730,7 @@ async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Res
     fs::create_dir_all(&cfg.validator_ledger_dir)
         .with_context(|| format!("failed to create {}", cfg.validator_ledger_dir))?;
     ensure_validator_identity(DEFAULT_VALIDATOR_IDENTITY_PATH)?;
-    ensure_validator_ledger_initialized(&cfg.validator_ledger_dir)?;
+    ensure_validator_ledger_initialized(&cfg.validator_ledger_dir, DEFAULT_VALIDATOR_IDENTITY_PATH)?;
 
     let mut log_file = fs::OpenOptions::new()
         .create(true)
@@ -753,19 +796,25 @@ fn ensure_validator_identity(identity_path: &str) -> Result<()> {
     Ok(())
 }
 
-fn ensure_validator_ledger_initialized(ledger_dir: &str) -> Result<()> {
+fn ensure_validator_ledger_initialized(ledger_dir: &str, identity_path: &str) -> Result<()> {
     let genesis = Path::new(ledger_dir).join("genesis.bin");
     if genesis.exists() {
         return Ok(());
     }
-    let rc = Command::new(DEFAULT_VALIDATOR_BIN)
+    let output = Command::new(DEFAULT_VALIDATOR_BIN)
+        .arg("--identity")
+        .arg(identity_path)
         .arg("--ledger")
         .arg(ledger_dir)
         .arg("init")
-        .status()
+        .output()
         .context("failed to launch agave-validator init")?;
-    if !rc.success() {
-        return Err(anyhow!("agave-validator init failed with status {rc}"));
+    if !output.status.success() {
+        return Err(anyhow!(
+            "agave-validator init failed with status {} stderr: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
     Ok(())
 }
