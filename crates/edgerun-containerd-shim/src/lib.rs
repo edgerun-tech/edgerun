@@ -524,10 +524,18 @@ impl ShimTaskService {
 }
 
 fn select_backend(runtime_name: &str) -> TaskBackend {
-    match runtime_name.trim().to_ascii_lowercase().as_str() {
-        "edgerun" | "edgerun-wasi" | "wasi" | "wasm" => TaskBackend::NativeEdgerun,
-        _ => TaskBackend::Crun,
+    let normalized = runtime_name.trim().to_ascii_lowercase();
+    if normalized == "edgerun"
+        || normalized == "edgerun-wasi"
+        || normalized == "wasi"
+        || normalized == "wasm"
+        || normalized.contains("edgerun")
+        || normalized.contains("wasi")
+        || normalized.contains("wasm")
+    {
+        return TaskBackend::NativeEdgerun;
     }
+    TaskBackend::Crun
 }
 
 fn native_edgerun_command(bundle_path: &str, task_id: &str) -> Result<Command, LifecycleError> {
