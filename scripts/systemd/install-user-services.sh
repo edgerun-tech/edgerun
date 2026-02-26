@@ -178,11 +178,10 @@ validate_scheduler_env() {
 
   local scheduler_addr scheduler_base_url scheduler_data_dir
   local scheduler_require_chain scheduler_require_policy scheduler_require_sig scheduler_require_attestation scheduler_require_quorum
-  local chain_rpc_url chain_wallet chain_program_id route_state
+  local chain_rpc_url chain_wallet chain_program_id
   scheduler_addr="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_ADDR)" || fail "missing EDGERUN_SCHEDULER_ADDR"
   scheduler_base_url="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_BASE_URL)" || fail "missing EDGERUN_SCHEDULER_BASE_URL"
   scheduler_data_dir="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_DATA_DIR)" || fail "missing EDGERUN_SCHEDULER_DATA_DIR"
-  route_state="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_ROUTE_STATE_PATH)"
   scheduler_require_chain="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT"
   scheduler_require_policy="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION"
   scheduler_require_sig="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES"
@@ -194,21 +193,20 @@ validate_scheduler_env() {
 
   require_socket "EDGERUN_SCHEDULER_ADDR" "${scheduler_addr}"
   require_http_url "EDGERUN_SCHEDULER_BASE_URL" "${scheduler_base_url}"
-  require "${scheduler_data_dir}"
-  require "${route_state}"
+  require "EDGERUN_SCHEDULER_DATA_DIR" "${scheduler_data_dir}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT" "${scheduler_require_chain}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION" "${scheduler_require_policy}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES" "${scheduler_require_sig}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION" "${scheduler_require_attestation}"
   require_bool "EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION" "${scheduler_require_quorum}"
   require_http_url "EDGERUN_CHAIN_RPC_URL" "${chain_rpc_url}"
-  require "${chain_wallet}"
+  require "EDGERUN_SCHEDULER_CHAIN_WALLET" "${chain_wallet}"
   if [[ "${chain_wallet}" == /* ]]; then
     validate_file_exists_when_enabled "EDGERUN_CHAIN_WALLET" "${chain_wallet}"
   else
     fail "EDGERUN_CHAIN_WALLET must be an absolute path"
   fi
-  require "${chain_program_id}"
+  require "EDGERUN_SCHEDULER_CHAIN_PROGRAM_ID" "${chain_program_id}"
 }
 
 validate_worker_common_env() {
@@ -249,7 +247,7 @@ validate_worker_instance_env() {
   else
     require_base58_key "EDGERUN_WORKER_PUBKEY" "${worker_pubkey}"
   fi
-  require "${worker_version}"
+  require "EDGERUN_WORKER_VERSION" "${worker_version}"
 }
 
 validate_term_env() {
@@ -260,18 +258,16 @@ validate_term_env() {
   fi
   require_absent_tokens "${base_file}"
 
-  local hardware_mode term_addr term_public_base control_base
+  local hardware_mode term_addr term_public_base
   hardware_mode="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_HARDWARE_MODE)" || fail "missing EDGERUN_HARDWARE_MODE"
   term_addr="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_TERM_SERVER_ADDR)" || fail "missing EDGERUN_TERM_SERVER_ADDR"
   term_public_base="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_TERM_PUBLIC_BASE_URL)" || fail "missing EDGERUN_TERM_PUBLIC_BASE_URL"
-  control_base="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_ROUTE_CONTROL_BASE)" || fail "missing EDGERUN_ROUTE_CONTROL_BASE"
 
   if [[ "${hardware_mode}" != "allow-software" && "${hardware_mode}" != "required" ]]; then
     fail "EDGERUN_HARDWARE_MODE must be allow-software|required (got ${hardware_mode})"
   fi
   require_socket "EDGERUN_TERM_SERVER_ADDR" "${term_addr}"
   require_http_url "EDGERUN_TERM_PUBLIC_BASE_URL" "${term_public_base}"
-  require_http_url "EDGERUN_ROUTE_CONTROL_BASE" "${control_base}"
 }
 
 validate_cloudflared_term_env() {
@@ -290,7 +286,7 @@ validate_cloudflared_term_env() {
   if ! [[ "${tunnel_id}" =~ ^[0-9a-f-]{36}$ ]]; then
     fail "EDGERUN_TERM_TUNNEL_ID must be a valid UUID format (got ${tunnel_id})"
   fi
-  require "${tunnel_host}"
+  require "EDGERUN_CLOUDFLARED_TUNNEL_HOSTNAME" "${tunnel_host}"
   require_int "EDGERUN_TERM_SERVER_PORT" "${tunnel_port}" 1
 }
 

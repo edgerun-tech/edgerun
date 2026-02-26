@@ -110,7 +110,7 @@ systemctl --user enable --now "${worker_units[@]}"
 
 echo "Stack started with ${WORKER_COUNT} workers."
 echo "Health check:"
-echo "  curl -fsS http://127.0.0.1:5566/health"
+echo "  curl -sS -o /dev/null -w \"%{http_code}\\n\" \"http://127.0.0.1:5566/v1/control/ws?client_id=health\"   # expect 400 (non-WebSocket probe)"
 if [[ "${PROFILE}" == "local" ]]; then
   echo "  curl -fsS http://127.0.0.1:8899"
 fi
