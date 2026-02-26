@@ -22,3 +22,5 @@ node_modules/
 .edgerun-cli/
 .edgerun-replay-corpus/
 .edgerun-scheduler-data/
+.wrangler/
+/program/target-local/

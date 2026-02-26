@@ -7,18 +7,7 @@ if ! command -v act >/dev/null 2>&1; then
   exit 1
 fi
 
-WORKFLOWS=(
-  "ci.yml:push"
-  "codeql.yml:push"
-  "dependency-review.yml:pull_request"
-  "docker-images.yml:push"
-  "frontend-release.yml:push"
-  "release.yml:push"
-  "runtime-compliance-matrix.yml:workflow_dispatch"
-  "runtime-provenance.yml:push"
-  "site-pages.yml:push"
-  "wiki-sync.yml:workflow_dispatch"
-)
+WORKFLOWS=()
 
 ACT_TIMEOUT_SECONDS="${ACT_TIMEOUT_SECONDS:-300}"
 FAILED=0
@@ -57,6 +46,10 @@ for entry in "${WORKFLOWS[@]}"; do
     FAILED=1
   fi
 done
+
+if [[ "${#WORKFLOWS[@]}" -eq 0 ]]; then
+  echo "No workflows configured for local dry-run checks."
+fi
 
 if [[ "${FAILED}" -ne 0 ]]; then
   echo

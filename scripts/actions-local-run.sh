@@ -7,7 +7,7 @@ if ! command -v act >/dev/null 2>&1; then
   exit 1
 fi
 
-WORKFLOW="${ACT_WORKFLOW:-ci.yml}"
+WORKFLOW="${ACT_WORKFLOW:-}"
 EVENT="${ACT_EVENT:-pull_request}"
 JOB="${ACT_JOB:-}"
 DRY_RUN="${ACT_DRY_RUN:-0}"
@@ -19,7 +19,7 @@ usage() {
 Usage: scripts/actions-local-run.sh [options]
 
 Options:
-  --workflow <file>   Workflow filename under .github/workflows (default: ci.yml)
+  --workflow <file>   Workflow filename under .github/workflows (default: first available)
   --event <event>     Event name for act (default: pull_request)
   --job <job-id>      Optional specific job id
   --dry-run           Use act dry-run mode (-n)
@@ -50,7 +50,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --list)
-      ls -1 .github/workflows/*.yml
+      if compgen -G ".github/workflows/*.yml" >/dev/null; then
+        ls -1 .github/workflows/*.yml
+      else
+        echo "No workflow files found under .github/workflows/"
+      fi
       exit 0
       ;;
     -h|--help)
@@ -65,9 +69,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "${WORKFLOW}" ]]; then
+  if compgen -G ".github/workflows/*.yml" >/dev/null; then
+    WORKFLOW="$(basename "$(ls -1 .github/workflows/*.yml | head -n1)")"
+  else
+    echo "No workflow files exist under .github/workflows/." >&2
+    exit 1
+  fi
+fi
+
 WF_PATH=".github/workflows/${WORKFLOW}"
 if [[ ! -f "${WF_PATH}" ]]; then
   echo "Workflow not found: ${WF_PATH}" >&2
+  if compgen -G ".github/workflows/*.yml" >/dev/null; then
+    echo "Available workflows:" >&2
+    ls -1 .github/workflows/*.yml >&2
+  else
+    echo "No workflow files exist under .github/workflows/." >&2
+  fi
   exit 1
 fi
 
