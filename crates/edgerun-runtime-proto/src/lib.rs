@@ -3,6 +3,7 @@ pub mod wire;
 // SPDX-License-Identifier: Apache-2.0
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 pub const SUBJECT_PREFIX_RUNTIME_TASK: &str = "edgerun.runtime.task";
 pub const SUBJECT_PREFIX_RUNTIME_IO: &str = "edgerun.runtime.io";
@@ -112,7 +113,7 @@ pub struct FsIntentEvent {
     pub base_revision: String,
     pub actor_id: String,
     pub ts_unix_ms: u64,
-    pub metadata: serde_json::Value,
+    pub metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

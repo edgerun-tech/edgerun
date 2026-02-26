@@ -286,6 +286,32 @@ pub struct SnapshotUsageV1 {
 }
 
 #[derive(Clone, PartialEq, Message)]
+pub struct SnapshotStateEntryV1 {
+    #[prost(string, tag = "1")]
+    pub key: String,
+    #[prost(string, tag = "2")]
+    pub parent: String,
+    #[prost(enumeration = "SnapshotKindV1", tag = "3")]
+    pub kind: i32,
+    #[prost(message, repeated, tag = "4")]
+    pub labels: Vec<LabelPairV1>,
+    #[prost(uint64, tag = "5")]
+    pub size_bytes: u64,
+    #[prost(uint64, tag = "6")]
+    pub inode_count: u64,
+    #[prost(string, tag = "7")]
+    pub mount_root: String,
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct SnapshotStateMapV1 {
+    #[prost(uint32, tag = "1")]
+    pub schema_version: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub items: Vec<SnapshotStateEntryV1>,
+}
+
+#[derive(Clone, PartialEq, Message)]
 pub struct RemoveResultV1 {
     #[prost(string, tag = "1")]
     pub key: String,

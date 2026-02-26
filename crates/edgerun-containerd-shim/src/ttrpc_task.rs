@@ -12,7 +12,7 @@ use containerd_shim_protos::api::{
 };
 use containerd_shim_protos::shim_async::{create_task, Task};
 use containerd_shim_protos::ttrpc::asynchronous::{Server, Service, TtrpcContext};
-use serde_json::Value;
+use oci_spec::runtime::Spec;
 
 use crate::{
     ShimTaskTtrpcService, TaskApiBackend, TaskCreateRequest, TaskDeleteRequest, TaskKillRequest,
@@ -256,15 +256,11 @@ fn runtime_selection_from_bundle(bundle_path: &str) -> RuntimeSelection {
         return RuntimeSelection::default();
     }
     let config_path = Path::new(bundle_path).join("config.json");
-    let raw = match std::fs::read(&config_path) {
+    let parsed = match Spec::load(&config_path) {
         Ok(v) => v,
         Err(_) => return RuntimeSelection::default(),
     };
-    let parsed: Value = match serde_json::from_slice(&raw) {
-        Ok(v) => v,
-        Err(_) => return RuntimeSelection::default(),
-    };
-    let annotations = match parsed.get("annotations").and_then(|v| v.as_object()) {
+    let annotations = match parsed.annotations().as_ref() {
         Some(v) => v,
         None => return RuntimeSelection::default(),
     };
@@ -274,7 +270,7 @@ fn runtime_selection_from_bundle(bundle_path: &str) -> RuntimeSelection {
         "io.edgerun.runtime",
         "io.edgerun.executor",
     ] {
-        let Some(raw_value) = annotations.get(key).and_then(|v| v.as_str()) else {
+        let Some(raw_value) = annotations.get(key) else {
             continue;
         };
         let value = raw_value.trim().to_ascii_lowercase();
