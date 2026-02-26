@@ -59,7 +59,7 @@ actions-local-dry-run:
 	./scripts/actions-local-run.sh --dry-run
 
 actions-local-runtime-dry-run:
-	./scripts/actions-local-run.sh --workflow ci.yml --event pull_request --job runtime-slo --dry-run
+	./scripts/actions-local-check.sh
 
 nodeos-initramfs:
 	./scripts/nodeos/build-initramfs.sh

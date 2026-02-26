@@ -1,6 +1,7 @@
 .anchor
 .DS_Store
 target
+target-local
 **/*.rs.bk
 node_modules
 test-ledger

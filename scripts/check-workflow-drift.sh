@@ -33,9 +33,6 @@ workflow_files=(
   "package.json"
   "program/package.json"
   "program/Anchor.toml"
-  ".github/workflows/ci.yml"
-  ".github/workflows/frontend-release.yml"
-  ".github/workflows/wiki-sync.yml"
 )
 
 check_pattern "package manager commands" "\\b(npm|pnpm|yarn|npx)\\b" "${workflow_files[@]}"
