@@ -46,16 +46,11 @@ jobs:
       - name: Install runtime dependencies
         run: |
           set -euo pipefail
-          if ! command -v containerd >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends containerd
-          fi
-          if ! command -v crun >/dev/null 2>&1 || ! command -v protoc >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends crun protobuf-compiler
-          fi
+          command -v containerd >/dev/null 2>&1 || (echo "containerd is required on runner host" >&2; exit 1)
+          command -v crun >/dev/null 2>&1 || (echo "crun is required on runner host" >&2; exit 1)
+          command -v protoc >/dev/null 2>&1 || (echo "protobuf-compiler (protoc) is required on runner host" >&2; exit 1)
 
-      - name: Build and install EdgeRun runtime binaries
+      - name: Build EdgeRun runtime binaries (rootless)
         run: |
           set -euo pipefail
           export CARGO_TARGET_DIR=out/target
@@ -64,24 +59,20 @@ jobs:
             -p edgerun-snapshotter \
             -p edgerun-runtime \
             --features edgerun-runtime/cli
-          SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v1"
-          if [[ ! -x "${SHIM_BACKEND_BIN}" ]]; then
-            SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2"
-          fi
-          sudo install -Dm0755 "${SHIM_BACKEND_BIN}" /usr/lib/edgerun/containerd-shim-edgerun-backend
-          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v2
-          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v1
-          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-snapshotterd" /usr/bin/edgerun-snapshotterd
-          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-runtime" /usr/bin/edgerun-runtime
 
       - name: Run extended soak
         run: |
           set -euo pipefail
+          CARGO_TARGET_DIR=out/target
+          RUNTIME_BIN_DIR="$PWD/out/runtime-bin"
+          mkdir -p "${RUNTIME_BIN_DIR}" out/containerd-runtime/soak-nightly
+          install -m0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" "${RUNTIME_BIN_DIR}/containerd-shim-edgerun-v2"
+          ln -sf "${RUNTIME_BIN_DIR}/containerd-shim-edgerun-v2" "${RUNTIME_BIN_DIR}/containerd-shim-edgerun-v1"
+
           if [[ "${ACT:-}" == "true" ]]; then
             export SNAPSHOTTER=native
           fi
-          mkdir -p out/containerd-runtime/soak-nightly
-          sudo containerd >/tmp/containerd.log 2>&1 &
+          sudo env PATH="${RUNTIME_BIN_DIR}:${PATH}" containerd >/tmp/containerd.log 2>&1 &
           CONTAINERD_PID=$!
           trap 'sudo kill ${CONTAINERD_PID} >/dev/null 2>&1 || true; sudo pkill -f "containerd-shim-edgerun-backend serve" >/dev/null 2>&1 || true' EXIT
 
@@ -93,7 +84,7 @@ jobs:
           done
           sudo ctr version >/dev/null
 
-          sudo /usr/lib/edgerun/containerd-shim-edgerun-backend serve \
+          sudo env EDGERUN_WASI_EXECUTOR_BIN="$PWD/out/target/release/edgerun-runtime" "$PWD/out/target/release/containerd-shim-edgerun-v1" serve \
             --socket-path /run/edgerun-shim/edgerun.sock \
             --data-dir /var/lib/edgerun \
             --segment runtime.timeline \
