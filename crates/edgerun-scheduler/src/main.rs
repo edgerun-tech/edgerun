@@ -120,6 +120,7 @@ struct AppState {
     latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
     require_chain_progress_signature_verification: bool,
     enforce_event_ingestion: bool,
+    require_chain_context: bool,
     chain: Option<Arc<ChainContext>>,
 }
 
@@ -548,6 +549,7 @@ implement cryptographic verification for scheduler signed chain progress events 
         )),
         require_chain_progress_signature_verification,
         enforce_event_ingestion: read_env_bool("EDGERUN_SCHEDULER_ENFORCE_EVENT_INGESTION", true),
+        require_chain_context: require_chain,
         chain,
     };
     if state.enforce_event_ingestion
@@ -2427,35 +2429,51 @@ fn job_create_inner(
         tracing::warn!(error = %err, "failed to append policy audit event");
     }
 
-    let chain = state.chain.as_ref().ok_or_else(|| {
-        (
+    let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
+        match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
+            Ok(runtime_proof) => {
+                let tx_args = PostJobArgs {
+                    client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
+                    job_id: bundle_hash,
+                    bundle_hash,
+                    runtime_id,
+                    runtime_proof,
+                    max_memory_bytes: payload.limits.max_memory_bytes,
+                    max_instructions: payload.limits.max_instructions,
+                    escrow_lamports: payload.escrow_lamports,
+                };
+                build_post_job_tx_base64(chain, tx_args).map_err(|err| {
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        format!("failed to build chain post_job transaction: {err}"),
+                    )
+                })?
+            }
+            Err(err) if !state.require_chain_context => {
+                tracing::warn!(
+                    error = %err,
+                    "chain proof unavailable in chain-optional mode; returning empty post_job artifacts"
+                );
+                (String::new(), None)
+            }
+            Err(err) => {
+                return Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    format!("failed to build runtime allowlist proof: {err}"),
+                ));
+            }
+        }
+    } else if state.require_chain_context {
+        return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             "chain context unavailable; cannot build post_job transaction".to_string(),
-        )
-    })?;
-    let runtime_proof =
-        build_runtime_allowlist_proof_for_chain(chain, runtime_id).map_err(|err| {
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!("failed to build runtime allowlist proof: {err}"),
-            )
-        })?;
-    let tx_args = PostJobArgs {
-        client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
-        job_id: bundle_hash,
-        bundle_hash,
-        runtime_id,
-        runtime_proof,
-        max_memory_bytes: payload.limits.max_memory_bytes,
-        max_instructions: payload.limits.max_instructions,
-        escrow_lamports: payload.escrow_lamports,
+        ));
+    } else {
+        tracing::warn!(
+            "chain context unavailable in chain-optional mode; returning empty post_job artifacts"
+        );
+        (String::new(), None)
     };
-    let (post_job_tx, post_job_sig) = build_post_job_tx_base64(chain, tx_args).map_err(|err| {
-        (
-            StatusCode::SERVICE_UNAVAILABLE,
-            format!("failed to build chain post_job transaction: {err}"),
-        )
-    })?;
 
     Ok(JobCreateResponse {
         // Job identity is bundle-hash keyed at MVP scaffold level.
@@ -3758,7 +3776,12 @@ fn build_assign_workers_artifact(
             .unwrap_or_default()
     };
     if committee_workers.len() != 3 {
-        anyhow::bail!("committee workers must contain exactly 3 entries");
+        tracing::warn!(
+            job_id = %job_id_hex,
+            committee_len = committee_workers.len(),
+            "skipping assign_workers artifact build: expected exactly 3 committee workers"
+        );
+        return Ok((None, None, false));
     }
     let workers = [
         committee_workers[0]

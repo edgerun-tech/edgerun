@@ -597,7 +597,16 @@ async fn spawn_scheduler(
     log_path: &Path,
     envs: &[(&str, String)],
 ) -> Result<tokio::process::Child> {
-    spawn_cargo_bin(root, log_path, "edgerun-scheduler", envs).await
+    let mut merged_envs: Vec<(&str, String)> = vec![(
+        "EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT",
+        "false".to_string(),
+    )];
+    merged_envs.push((
+        "EDGERUN_SCHEDULER_REQUIRE_ASSIGNMENTS_SIGNATURES",
+        "false".to_string(),
+    ));
+    merged_envs.extend(envs.iter().map(|(k, v)| (*k, v.clone())));
+    spawn_cargo_bin(root, log_path, "edgerun-scheduler", &merged_envs).await
 }
 
 async fn spawn_worker(
