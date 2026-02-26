@@ -27,7 +27,6 @@ workflow_files=(
   "scripts/verify-cloudflare-targets.sh"
   "scripts/actions-local-check.sh"
   "scripts/actions-local-run.sh"
-  "scripts/e2e-compose-terminal.sh"
   "scripts/e2e-local-terminal.sh"
   "frontend/package.json"
   "package.json"
