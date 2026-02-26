@@ -29,11 +29,11 @@ use edgerun_storage::event::{
     ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
 };
 use edgerun_storage::event_bus::{
-    BusPhaseV1, BusQueryFilter, EventBus, EventBusPolicyV1, PolicyRuleV1, PolicyUpdateRequestV1,
-    StorageBackedEventBus,
+    BusEventEnvelope, BusPhaseV1, BusQueryFilter, EventBus, EventBusPolicyV1, PolicyRuleV1,
+    PolicyUpdateRequestV1, StorageBackedEventBus,
 };
 use edgerun_storage::StorageEngine;
-use edgerun_transport_core::{
+use edgerun_control_signing::{
     assignments_signing_message, failure_signing_message, heartbeat_signing_message,
     replay_signing_message, result_signing_message,
 };
@@ -111,6 +111,7 @@ struct AppState {
     signal_peers: Arc<tokio::sync::Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
     chain_progress_sink: Arc<Mutex<Option<ChainProgressSink>>>,
     chain_event_bus_sink: Arc<Mutex<Option<ChainEventBusSink>>>,
+    p2p_event_bus_tx: Option<mpsc::UnboundedSender<Vec<u8>>>,
     latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
     require_chain_progress_signature_verification: bool,
     chain: Option<Arc<ChainContext>>,
@@ -330,6 +331,9 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:5566".to_string())
         .parse()
         .context("invalid EDGERUN_SCHEDULER_ADDR")?;
+    let _p2p_runtime = edgerun_p2p::spawn_from_env("scheduler")
+        .await
+        .context("failed to initialize scheduler p2p runtime")?;
     let configured_committee_size = read_env_usize("EDGERUN_SCHEDULER_COMMITTEE_SIZE", 3);
     if configured_committee_size != 3 {
         tracing::warn!(
@@ -366,6 +370,23 @@ implement cryptographic verification for scheduler signed chain progress events 
     );
     let chain_event_bus_sink =
         init_chain_event_bus_sink(&data_dir, persisted.latest_chain_progress_bus_nonce)?;
+    let p2p_runtime = edgerun_p2p::spawn_event_bus_from_env("scheduler")
+        .await
+        .context("failed to initialize scheduler p2p event bus runtime")?;
+    let mut p2p_event_bus_inbound_rx = None;
+    let mut _p2p_event_bus_task = None;
+    let p2p_event_bus_tx = if let Some(runtime) = p2p_runtime {
+        let edgerun_p2p::P2pEventBusHandle {
+            publish_tx,
+            inbound_rx,
+            task,
+        } = runtime;
+        p2p_event_bus_inbound_rx = Some(inbound_rx);
+        _p2p_event_bus_task = Some(task);
+        Some(publish_tx)
+    } else {
+        None
+    };
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -452,6 +473,7 @@ implement cryptographic verification for scheduler signed chain progress events 
         signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         chain_progress_sink: Arc::new(Mutex::new(chain_progress_sink)),
         chain_event_bus_sink: Arc::new(Mutex::new(chain_event_bus_sink)),
+        p2p_event_bus_tx,
         latest_chain_progress_event_id: Arc::new(Mutex::new(
             persisted.latest_chain_progress_event_id.clone(),
         )),
@@ -464,10 +486,42 @@ implement cryptographic verification for scheduler signed chain progress events 
     let app = Router::new()
         .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
-        .with_state(state);
+        .with_state(state.clone());
     tokio::spawn(async move {
         housekeeping_loop(housekeeping_state).await;
     });
+    if let Some(mut inbound_rx) = p2p_event_bus_inbound_rx {
+        let p2p_ingest_state = state.clone();
+        tokio::spawn(async move {
+            while let Some(frame) = inbound_rx.recv().await {
+                let envelope = match BusEventEnvelope::decode(frame.as_slice()) {
+                    Ok(v) => v,
+                    Err(err) => {
+                        tracing::warn!(error = %err, "invalid p2p event bus envelope");
+                        continue;
+                    }
+                };
+                let mut guard = p2p_ingest_state
+                    .chain_event_bus_sink
+                    .lock()
+                    .expect("lock poisoned");
+                let Some(bus_sink) = guard.as_mut() else {
+                    continue;
+                };
+                match bus_sink.bus.publish(&envelope) {
+                    Ok(_) => {
+                        if envelope.publisher == "scheduler" && envelope.nonce >= bus_sink.next_nonce
+                        {
+                            bus_sink.next_nonce = envelope.nonce.saturating_add(1);
+                        }
+                    }
+                    Err(err) => {
+                        tracing::debug!(error = %err, "ignored p2p event bus envelope");
+                    }
+                }
+            }
+        });
+    }
     tracing::info!(%addr, "scheduler listening");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -1875,6 +1929,12 @@ implement verification before enabling this mode"
         match bus_sink.bus.publish(&envelope) {
             Ok(_) => {
                 bus_sink.next_nonce = bus_sink.next_nonce.saturating_add(1);
+                if let Some(tx) = state.p2p_event_bus_tx.as_ref() {
+                    let payload = ProstCodec::encode_to_vec(&envelope);
+                    if tx.send(payload).is_err() {
+                        tracing::warn!("failed to forward event bus envelope to p2p topic");
+                    }
+                }
                 latest_chain_event_id = envelope.event_id;
             }
             Err(err) => {

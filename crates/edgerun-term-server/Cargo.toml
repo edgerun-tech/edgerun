@@ -13,7 +13,7 @@ bs58 = "0.5"
 ed25519-dalek.workspace = true
 edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
 edgerun-observability = { path = "../edgerun-observability" }
-edgerun-transport-core = { path = "../edgerun-transport-core" }
+edgerun-control-signing = { path = "../edgerun-control-signing" }
 json = "0.12"
 portable-pty = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
