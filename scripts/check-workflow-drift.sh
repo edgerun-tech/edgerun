@@ -24,14 +24,13 @@ check_pattern() {
 
 workflow_files=(
   "Makefile"
-  "cloud-os/scripts/deploy.sh"
   "scripts/verify-cloudflare-targets.sh"
   "scripts/actions-local-check.sh"
   "scripts/actions-local-run.sh"
   "scripts/e2e-compose-terminal.sh"
   "scripts/e2e-local-terminal.sh"
   "frontend/package.json"
-  "cloud-os/package.json"
+  "package.json"
   "program/package.json"
   "program/Anchor.toml"
   ".github/workflows/ci.yml"
@@ -42,7 +41,7 @@ workflow_files=(
 check_pattern "package manager commands" "\\b(npm|pnpm|yarn|npx)\\b" "${workflow_files[@]}"
 check_pattern "anchor package manager" '^package_manager\\s*=\\s*"npm"$' "program/Anchor.toml"
 
-if rg -n --color=never "wrangler deploy" "cloud-os/package.json" "cloud-os/scripts/deploy.sh" | rg -v -- "--config"; then
+if rg -n --color=never "wrangler deploy" "scripts/deploy-frontends.sh" | rg -v -- "--config"; then
   echo "[drift] FAIL (wrangler deploy pinning): found wrangler deploy without --config"
   failures=$((failures + 1))
 else

@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=EdgeRun Snapshotter Daemon
+Documentation=https://github.com/edgerun/edgerun
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=edgerun-snapshotter
+RuntimeDirectoryMode=0755
+StateDirectory=edgerun/snapshotter
+StateDirectoryMode=0755
+ExecStart=/usr/bin/edgerun-snapshotterd serve --workspace-id edgerun --state-file /var/lib/edgerun/snapshotter/state.json --socket-path /run/edgerun-snapshotter/edgerun-snapshotter.sock
+Restart=always
+RestartSec=1
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/edgerun-snapshotter /var/lib/edgerun
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target

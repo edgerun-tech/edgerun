@@ -12,6 +12,7 @@ const footerLinks = {
   ],
   resources: [
     { href: '/docs/', label: 'Getting Started' },
+    { href: '/vision/', label: 'Direction' },
     { href: '/docs/', label: 'API Reference' },
     { href: '/blog/', label: 'Blog' },
     { href: '/style-guide/', label: 'Style Guide' }

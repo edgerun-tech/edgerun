@@ -15,6 +15,7 @@ import PrivacyPage from '../app/legal/privacy/page'
 import TermsPage from '../app/legal/terms/page'
 import SlaPage from '../app/legal/sla/page'
 import StyleGuidePage from '../app/style-guide/page'
+import VisionPage from '../app/vision/page'
 import { blogPosts, jobs } from './content'
 import { normalizeRoutePath } from './route-path'
 
@@ -99,6 +100,14 @@ const staticRoutes: SiteRoute[] = [
     chromeTitle: 'Style Guide',
     description: 'Design tokens and usage guide.',
     component: StyleGuidePage
+  },
+  {
+    path: '/vision/',
+    outputPath: 'vision/index.html',
+    pageTitle: 'CloudOS Direction',
+    chromeTitle: 'Direction',
+    description: 'CloudOS product direction preserved in canonical frontend.',
+    component: VisionPage
   },
   {
     path: '/legal/privacy/',

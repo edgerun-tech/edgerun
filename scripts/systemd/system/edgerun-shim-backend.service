@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=EdgeRun Shim Backend Daemon
+Documentation=https://github.com/edgerun/edgerun
+After=network-online.target edgerun-snapshotter.service
+Wants=network-online.target edgerun-snapshotter.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=edgerun-shim
+RuntimeDirectoryMode=0755
+StateDirectory=edgerun
+StateDirectoryMode=0755
+ExecStart=/usr/lib/edgerun/containerd-shim-edgerun-backend serve --socket-path /run/edgerun-shim/edgerun.sock --data-dir /var/lib/edgerun --segment runtime.timeline --run-id runtime-run --job-id runtime-job --session-id runtime-session
+Restart=always
+RestartSec=1
+Delegate=yes
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=no
+ReadWritePaths=/run/edgerun-shim /run/containerd /var/lib/containerd /var/lib/edgerun
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
