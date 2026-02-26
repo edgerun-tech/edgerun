@@ -4,21 +4,34 @@ set -euo pipefail
 IMAGE="${1:-docker.io/library/alpine:3.20}"
 NAMESPACE="${NAMESPACE:-default}"
 ALLOW_FAIL="${ALLOW_FAIL:-0}"
+SNAPSHOTTER="${SNAPSHOTTER:-}"
+CRUN_BIN="${CRUN_BIN:-/usr/bin/crun}"
 
 if ! command -v ctr >/dev/null 2>&1; then
   echo "error: ctr not found"
   exit 2
 fi
 
+sudo ctr -n "${NAMESPACE}" image pull "${IMAGE}" >/dev/null 2>&1 || true
+
 run_case() {
   local runtime="$1"
   local name="$2"
-  local id="edgerun-smoke-${name}-$(date +%s)"
+  local id="edgerun-smoke-${name}-$(date +%s)-$$-${RANDOM}"
   local status=0
   local output=""
+  local snapshotter_args=()
+  local runtime_args=(--runtime "${runtime}")
+
+  if [[ -n "${SNAPSHOTTER}" ]]; then
+    snapshotter_args=(--snapshotter "${SNAPSHOTTER}")
+  fi
+  if [[ "${runtime}" == "io.containerd.runc.v2" ]] && [[ -x "${CRUN_BIN}" ]]; then
+    runtime_args+=(--runc-binary "${CRUN_BIN}")
+  fi
 
   set +e
-  output="$(sudo ctr -n "${NAMESPACE}" run --rm --runtime "${runtime}" "${IMAGE}" "${id}" /bin/sh -lc "echo runtime=${name} ok" 2>&1)"
+  output="$(sudo ctr -n "${NAMESPACE}" run --rm "${snapshotter_args[@]}" "${runtime_args[@]}" "${IMAGE}" "${id}" /bin/sh -lc "echo runtime=${name} ok" 2>&1)"
   status=$?
   set -e
 

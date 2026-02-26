@@ -1,0 +1,132 @@
+name: Containerd Runtime Smoke
+run-name: "Containerd Runtime Smoke • ${{ github.ref_name }} • #${{ github.run_number }}"
+
+on:
+  pull_request:
+    paths:
+      - "crates/edgerun-containerd-shim/**"
+      - "crates/edgerun-runtime-proto/**"
+      - "crates/edgerun-snapshotter/**"
+      - "scripts/containerd-runtime-matrix-smoke.sh"
+      - "scripts/containerd-runtime-wasm-smoke.sh"
+      - "scripts/containerd-runtime-soak.sh"
+      - "scripts/containerd/**"
+      - "scripts/systemd/**"
+      - ".github/workflows/containerd-runtime-smoke.yml"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: containerd-runtime-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: containerd + shim backend smoke
+    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
+    timeout-minutes: 45
+    env:
+      NAMESPACE: default
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        if: ${{ env.ACT != 'true' }}
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust
+        if: ${{ env.ACT != 'true' }}
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          if ! command -v containerd >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends containerd
+          fi
+          if ! command -v crun >/dev/null 2>&1 || ! command -v protoc >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends crun protobuf-compiler
+          fi
+
+      - name: Build and install EdgeRun runtime binaries
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR=out/target
+          cargo build --locked --release \
+            -p edgerun-containerd-shim \
+            -p edgerun-snapshotter \
+            -p edgerun-runtime \
+            --features edgerun-runtime/cli
+          SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v1"
+          if [[ ! -x "${SHIM_BACKEND_BIN}" ]]; then
+            SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2"
+          fi
+          sudo install -Dm0755 "${SHIM_BACKEND_BIN}" /usr/lib/edgerun/containerd-shim-edgerun-backend
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v2
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v1
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-snapshotterd" /usr/bin/edgerun-snapshotterd
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-runtime" /usr/bin/edgerun-runtime
+
+      - name: Run runtime smoke + soak
+        run: |
+          set -euo pipefail
+          if [[ "${ACT:-}" == "true" ]]; then
+            export SNAPSHOTTER=native
+          fi
+          mkdir -p out/containerd-runtime
+          sudo containerd >/tmp/containerd.log 2>&1 &
+          CONTAINERD_PID=$!
+          trap 'sudo kill ${CONTAINERD_PID} >/dev/null 2>&1 || true; sudo pkill -f "containerd-shim-edgerun-backend serve" >/dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if sudo ctr version >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          sudo ctr version >/dev/null
+
+          sudo /usr/lib/edgerun/containerd-shim-edgerun-backend serve \
+            --socket-path /run/edgerun-shim/edgerun.sock \
+            --data-dir /var/lib/edgerun \
+            --segment runtime.timeline \
+            --run-id runtime-run \
+            --job-id runtime-job \
+            --session-id runtime-session >/tmp/edgerun-shim-backend.log 2>&1 &
+
+          for _ in $(seq 1 30); do
+            if [[ -S /run/edgerun-shim/edgerun.sock ]]; then
+              break
+            fi
+            sleep 1
+          done
+          test -S /run/edgerun-shim/edgerun.sock
+
+          ./scripts/containerd-runtime-matrix-smoke.sh
+          ./scripts/containerd-runtime-wasm-smoke.sh
+          ROUNDS=10 ARTIFACT_DIR=out/containerd-runtime/soak ./scripts/containerd-runtime-soak.sh
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p out/containerd-runtime
+          sudo cp /tmp/containerd.log out/containerd-runtime/containerd.log || true
+          sudo cp /tmp/edgerun-shim-backend.log out/containerd-runtime/edgerun-shim-backend.log || true
+          sudo chown -R "$(id -u):$(id -g)" out/containerd-runtime || true
+
+      - name: Upload containerd runtime artifacts
+        if: ${{ env.ACT != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: containerd-runtime-${{ runner.os }}-${{ runner.arch }}
+          path: out/containerd-runtime

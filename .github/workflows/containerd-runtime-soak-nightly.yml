@@ -1,0 +1,128 @@
+name: Containerd Runtime Soak Nightly
+run-name: "Containerd Runtime Soak • ${{ github.ref_name }} • #${{ github.run_number }}"
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Soak rounds"
+        required: false
+        default: "100"
+      image:
+        description: "Container image"
+        required: false
+        default: "docker.io/library/alpine:3.20"
+
+concurrency:
+  group: containerd-runtime-soak-nightly
+  cancel-in-progress: false
+
+jobs:
+  soak:
+    name: containerd runtime soak
+    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
+    timeout-minutes: 120
+    env:
+      NAMESPACE: default
+      ROUNDS: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.rounds || '100' }}
+      IMAGE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.image || 'docker.io/library/alpine:3.20' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        if: ${{ env.ACT != 'true' }}
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust
+        if: ${{ env.ACT != 'true' }}
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install runtime dependencies
+        run: |
+          set -euo pipefail
+          if ! command -v containerd >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends containerd
+          fi
+          if ! command -v crun >/dev/null 2>&1 || ! command -v protoc >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends crun protobuf-compiler
+          fi
+
+      - name: Build and install EdgeRun runtime binaries
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR=out/target
+          cargo build --locked --release \
+            -p edgerun-containerd-shim \
+            -p edgerun-snapshotter \
+            -p edgerun-runtime \
+            --features edgerun-runtime/cli
+          SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v1"
+          if [[ ! -x "${SHIM_BACKEND_BIN}" ]]; then
+            SHIM_BACKEND_BIN="${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2"
+          fi
+          sudo install -Dm0755 "${SHIM_BACKEND_BIN}" /usr/lib/edgerun/containerd-shim-edgerun-backend
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v2
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v1
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-snapshotterd" /usr/bin/edgerun-snapshotterd
+          sudo install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-runtime" /usr/bin/edgerun-runtime
+
+      - name: Run extended soak
+        run: |
+          set -euo pipefail
+          if [[ "${ACT:-}" == "true" ]]; then
+            export SNAPSHOTTER=native
+          fi
+          mkdir -p out/containerd-runtime/soak-nightly
+          sudo containerd >/tmp/containerd.log 2>&1 &
+          CONTAINERD_PID=$!
+          trap 'sudo kill ${CONTAINERD_PID} >/dev/null 2>&1 || true; sudo pkill -f "containerd-shim-edgerun-backend serve" >/dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 30); do
+            if sudo ctr version >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          sudo ctr version >/dev/null
+
+          sudo /usr/lib/edgerun/containerd-shim-edgerun-backend serve \
+            --socket-path /run/edgerun-shim/edgerun.sock \
+            --data-dir /var/lib/edgerun \
+            --segment runtime.timeline \
+            --run-id runtime-run \
+            --job-id runtime-job \
+            --session-id runtime-session >/tmp/edgerun-shim-backend.log 2>&1 &
+
+          for _ in $(seq 1 30); do
+            if [[ -S /run/edgerun-shim/edgerun.sock ]]; then
+              break
+            fi
+            sleep 1
+          done
+          test -S /run/edgerun-shim/edgerun.sock
+
+          ./scripts/containerd-runtime-matrix-smoke.sh "${IMAGE}"
+          ROUNDS="${ROUNDS}" ARTIFACT_DIR=out/containerd-runtime/soak-nightly ./scripts/containerd-runtime-soak.sh "${IMAGE}"
+
+      - name: Collect logs
+        if: always()
+        run: |
+          mkdir -p out/containerd-runtime/soak-nightly
+          sudo cp /tmp/containerd.log out/containerd-runtime/soak-nightly/containerd.log || true
+          sudo cp /tmp/edgerun-shim-backend.log out/containerd-runtime/soak-nightly/edgerun-shim-backend.log || true
+          sudo chown -R "$(id -u):$(id -g)" out/containerd-runtime || true
+
+      - name: Upload soak artifacts
+        if: always() && env.ACT != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: containerd-runtime-soak-${{ github.run_id }}
+          path: out/containerd-runtime/soak-nightly
