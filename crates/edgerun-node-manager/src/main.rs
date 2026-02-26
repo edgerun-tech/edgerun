@@ -35,8 +35,10 @@ const DEFAULT_WORKER_MAX_CONCURRENCY: u32 = 2;
 const DEFAULT_WORKER_MEM_BYTES: u64 = 2_147_483_648;
 const REQUIRED_CMDLINE_LOCK_TOKEN: &str = "edgerun.locked_cmdline=1";
 const SETUPMODE_CONTINUE_TOKEN: &str = "edgerun.setupmode_continue=1";
-const EDGE_SECUREBOOT_CERT_DER_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
-const EDGE_SECUREBOOT_CERT_PEM_PATH: &str = "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
+const EDGE_SECUREBOOT_CERT_DER_PATH: &str =
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.der";
+const EDGE_SECUREBOOT_CERT_PEM_PATH: &str =
+    "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
 const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
 const MOUNT_BIN: &str = "/usr/bin/mount";
 const CHATTR_BIN: &str = "/usr/bin/chattr";
@@ -730,7 +732,10 @@ async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Res
     fs::create_dir_all(&cfg.validator_ledger_dir)
         .with_context(|| format!("failed to create {}", cfg.validator_ledger_dir))?;
     ensure_validator_identity(DEFAULT_VALIDATOR_IDENTITY_PATH)?;
-    ensure_validator_ledger_initialized(&cfg.validator_ledger_dir, DEFAULT_VALIDATOR_IDENTITY_PATH)?;
+    ensure_validator_ledger_initialized(
+        &cfg.validator_ledger_dir,
+        DEFAULT_VALIDATOR_IDENTITY_PATH,
+    )?;
 
     let mut log_file = fs::OpenOptions::new()
         .create(true)

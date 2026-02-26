@@ -24,6 +24,10 @@ use axum::{
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
+use edgerun_control_signing::{
+    assignments_signing_message, failure_signing_message, heartbeat_signing_message,
+    replay_signing_message, result_signing_message,
+};
 use edgerun_storage::durability::DurabilityLevel;
 use edgerun_storage::event::{
     ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
@@ -33,10 +37,6 @@ use edgerun_storage::event_bus::{
     PolicyUpdateRequestV1, StorageBackedEventBus,
 };
 use edgerun_storage::StorageEngine;
-use edgerun_control_signing::{
-    assignments_signing_message, failure_signing_message, heartbeat_signing_message,
-    replay_signing_message, result_signing_message,
-};
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
     BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
@@ -49,10 +49,7 @@ use edgerun_types::control_plane::{
 use fs2::FileExt;
 use prost::Message as ProstCodec;
 use serde::{Deserialize, Serialize};
-use solana_sdk::{
-    hash::hash,
-    pubkey::Pubkey,
-};
+use solana_sdk::{hash::hash, pubkey::Pubkey};
 use tokio::sync::mpsc;
 
 #[derive(Clone)]
@@ -565,7 +562,8 @@ implement cryptographic verification for scheduler signed chain progress events 
                 };
                 match bus_sink.bus.publish(&envelope) {
                     Ok(_) => {
-                        if envelope.publisher == "scheduler" && envelope.nonce >= bus_sink.next_nonce
+                        if envelope.publisher == "scheduler"
+                            && envelope.nonce >= bus_sink.next_nonce
                         {
                             bus_sink.next_nonce = envelope.nonce.saturating_add(1);
                         }
@@ -2139,8 +2137,14 @@ fn build_finalize_job_tx_base64(
         program_id: chain.program_id.to_string(),
         payer_pubkey: chain.payer_pubkey.to_string(),
         job_id,
-        committee: committee.iter().map(ToString::to_string).collect::<Vec<_>>(),
-        winners: winners.into_iter().map(|w| w.to_string()).collect::<Vec<_>>(),
+        committee: committee
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        winners: winners
+            .into_iter()
+            .map(|w| w.to_string())
+            .collect::<Vec<_>>(),
     })
     .context("serialize finalize_job intent")?;
     Ok((
@@ -2190,7 +2194,10 @@ fn build_cancel_expired_job_tx_base64(
         payer_pubkey: chain.payer_pubkey.to_string(),
         job_id,
         client: client.to_string(),
-        committee: committee.iter().map(ToString::to_string).collect::<Vec<_>>(),
+        committee: committee
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
     })
     .context("serialize cancel_expired_job intent")?;
     Ok((
@@ -2388,7 +2395,9 @@ fn enqueue_assignments_with_limits(
 ) -> Result<(), (StatusCode, String)> {
     let mut per_worker_incoming: HashMap<String, usize> = HashMap::new();
     for (worker_pubkey, _) in &queued {
-        *per_worker_incoming.entry(worker_pubkey.clone()).or_insert(0) += 1;
+        *per_worker_incoming
+            .entry(worker_pubkey.clone())
+            .or_insert(0) += 1;
     }
     let incoming_total = queued.len();
 
@@ -2487,7 +2496,10 @@ fn select_committee_workers(
             .then_with(|| a.0.cmp(&b.0))
     });
     eligible.truncate(committee_size.max(1));
-    eligible.into_iter().map(|(worker_pubkey, _, _)| worker_pubkey).collect()
+    eligible
+        .into_iter()
+        .map(|(worker_pubkey, _, _)| worker_pubkey)
+        .collect()
 }
 
 fn is_assigned_worker(state: &AppState, job_id: &str, worker_pubkey: &str) -> bool {
@@ -2761,12 +2773,7 @@ fn build_finalize_trigger_payload_inner(
             if let Some((committee, winners)) =
                 parse_finalize_accounts(committee_workers, winning_workers)
             {
-                match build_finalize_job_tx_base64(
-                    chain,
-                    job_id,
-                    committee,
-                    winners,
-                ) {
+                match build_finalize_job_tx_base64(chain, job_id, committee, winners) {
                     Ok((tx, sig, submitted)) => return (tx, sig, submitted),
                     Err(err) => {
                         tracing::warn!(
@@ -2931,12 +2938,8 @@ fn build_cancel_expired_artifact(
     };
     let committee = parse_committee_workers(&committee_workers)
         .ok_or_else(|| anyhow::anyhow!("invalid committee workers for cancel_expired_job"))?;
-    let (tx, sig, submitted) = build_cancel_expired_job_tx_base64(
-        chain,
-        job_id,
-        chain.payer_pubkey,
-        committee,
-    )?;
+    let (tx, sig, submitted) =
+        build_cancel_expired_job_tx_base64(chain, job_id, chain.payer_pubkey, committee)?;
     Ok((tx, sig, submitted))
 }
 
@@ -2956,8 +2959,8 @@ fn apply_solana_status_event(state: &AppState, envelope: &BusEventEnvelope) -> R
     if payload_type != "solana.job_status.v1" && payload_type != "solana_job_status_v1" {
         return Ok(());
     }
-    let event: SolanaJobStatusEventV1 =
-        bincode::deserialize(&envelope.payload).context("invalid solana job status event payload")?;
+    let event: SolanaJobStatusEventV1 = bincode::deserialize(&envelope.payload)
+        .context("invalid solana job status event payload")?;
     let mut changed = false;
     {
         let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
