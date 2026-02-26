@@ -22,7 +22,7 @@ env:
 jobs:
   changes:
     name: Detect Changed Scopes
-    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
+    runs-on: ubuntu-24.04
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -132,6 +132,9 @@ jobs:
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
 
       - name: Run timed build pipeline
         run: cargo run -p edgerun-cli -- --root . ci --job build-timing-main
@@ -580,7 +583,7 @@ jobs:
       - runtime-ub-safety
       - runtime-security
       - program-localnet
-    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
+    runs-on: ubuntu-24.04
     steps:
       - name: Publish CI run summary
         run: |
