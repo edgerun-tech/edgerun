@@ -861,7 +861,7 @@ mod tests {
     #[test]
     fn persistent_state_roundtrip() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let state = tmp.path().join("snapshot-state.json");
+        let state = tmp.path().join("snapshot-state.pb");
 
         let s = PersistentSnapshotter::open("workspace-p", state.clone()).expect("open persistent");
         s.prepare("a", None, BTreeMap::new()).expect("prepare");
@@ -878,7 +878,7 @@ mod tests {
     #[test]
     fn persistent_mount_root_materialized_and_usage_visible() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let state = tmp.path().join("snapshot-state.json");
+        let state = tmp.path().join("snapshot-state.pb");
         let mounts_base = tmp.path().join("snapshots");
         fs::create_dir_all(mounts_base.join("base")).expect("create base dir");
         fs::write(mounts_base.join("base/hello.txt"), b"hello").expect("write base file");
