@@ -23,10 +23,10 @@ use axum::{
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
+use edgerun_control_signing::route_register_signing_message;
 use edgerun_hwvault_primitives::hardware::{
     DeviceSigner, HardwareSecurityMode, load_or_create_device_signer, random_token_b64url,
 };
-use edgerun_transport_core::route_register_signing_message;
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use tokio::sync::{Mutex, mpsc};
 use tokio::time::{Duration, sleep};

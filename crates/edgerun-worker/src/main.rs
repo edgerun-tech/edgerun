@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-use edgerun_transport_core::{
+use edgerun_control_signing::{
     assignments_signing_message, failure_signing_message, heartbeat_signing_message,
     replay_signing_message, result_signing_message,
 };
@@ -142,6 +142,21 @@ async fn main() -> Result<()> {
     edgerun_observability::init_service("edgerun-worker")?;
 
     let cfg = load_config();
+    let p2p_runtime = edgerun_p2p::spawn_event_bus_from_env("worker")
+        .await
+        .context("failed to initialize worker p2p runtime")?;
+    if let Some(runtime) = p2p_runtime {
+        let edgerun_p2p::P2pEventBusHandle { inbound_rx, .. } = runtime;
+        let mut inbound_rx = inbound_rx;
+        tokio::spawn(async move {
+            while let Some(payload) = inbound_rx.recv().await {
+                tracing::info!(
+                    bytes = payload.len(),
+                    "worker received libp2p event bus message"
+                );
+            }
+        });
+    }
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()?;
