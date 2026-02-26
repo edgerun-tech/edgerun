@@ -12,7 +12,7 @@ use crate::{
         run_integration_policy_rotation, run_integration_scheduler_api,
     },
     commands::runtime_ops::{run_replay_corpus, validate_external_security_review},
-    load_app_config, run_build_runtime_web_sync, run_build_timing_sync, run_clean_artifacts_sync,
+    load_app_config, run_build_runtime_web_sync, run_clean_artifacts_sync,
     run_matrix_validation_check_sync, run_program_sync_owned, run_rust_checks_sync,
     run_spdx_check_sync, run_verify_sync,
 };
@@ -46,7 +46,6 @@ pub async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bo
     let act_supported_job = matches!(
         job_name.as_str(),
         "all"
-            | "build-timing-main"
             | "rust-checks"
             | "coverage"
             | "integration"
@@ -56,7 +55,6 @@ pub async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bo
             | "runtime-fuzz-sanity"
             | "runtime-ub-safety"
             | "runtime-security"
-            | "program-localnet"
     );
     if command_exists("act") && act_supported_job {
         let mut args = vec![
@@ -113,7 +111,6 @@ pub async fn run_ci(root: &Path, job: Option<String>, event: String, dry_run: bo
         "clean-artifacts" => run_clean_artifacts_sync(root),
         "build-runtime-web" => run_build_runtime_web_sync(root, true),
         "verify" => run_verify_sync(root),
-        "build-timing-main" => run_build_timing_sync(root),
         "rust-checks" => run_rust_checks_sync(root),
         "integration" => {
             run_future_with_timeout(
