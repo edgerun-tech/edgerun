@@ -20,7 +20,7 @@ env:
 jobs:
   runtime-provenance:
     name: Runtime Release Provenance
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
     timeout-minutes: 45
     steps:
       - name: Checkout
