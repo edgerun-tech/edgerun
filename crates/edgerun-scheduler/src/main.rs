@@ -315,7 +315,7 @@ struct ControlWsConnectQuery {
 struct JsonControlWsClientMessage {
     request_id: String,
     op: String,
-    payload: serde_json::Value,
+    payload: sonic_rs::Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -323,7 +323,7 @@ struct JsonControlWsServerMessage {
     request_id: String,
     ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<serde_json::Value>,
+    data: Option<sonic_rs::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -686,7 +686,7 @@ async fn control_ws_socket(state: AppState, client_id: String, mut socket: WebSo
             }
             Some(Ok(Message::Text(text))) => {
                 let response = handle_control_client_text_message(&state, &text).await;
-                let payload = serde_json::to_string(&response).unwrap_or_else(|_| {
+                let payload = sonic_rs::to_string(&response).unwrap_or_else(|_| {
                     "{\"request_id\":\"\",\"ok\":false,\"error\":\"encode error\",\"status\":500}"
                         .to_string()
                 });
@@ -772,7 +772,7 @@ async fn handle_control_client_text_message(
 }
 
 fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (StatusCode, String)> {
-    let parsed = serde_json::from_str::<JsonControlWsClientMessage>(text).map_err(|_| {
+    let parsed = sonic_rs::from_str::<JsonControlWsClientMessage>(text).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             "invalid json control message".to_string(),
@@ -789,7 +789,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
     let payload = parsed.payload;
     let mapped = match op.as_str() {
         "job.create" => {
-            ControlWsRequestPayload::JobCreate(serde_json::from_value(payload).map_err(|_| {
+            ControlWsRequestPayload::JobCreate(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for job.create".to_string(),
@@ -797,7 +797,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?)
         }
         "job.status" => {
-            ControlWsRequestPayload::JobStatus(serde_json::from_value(payload).map_err(|_| {
+            ControlWsRequestPayload::JobStatus(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for job.status".to_string(),
@@ -805,7 +805,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?)
         }
         "route.challenge" => ControlWsRequestPayload::RouteChallenge(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for route.challenge".to_string(),
@@ -813,7 +813,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "route.register" => ControlWsRequestPayload::RouteRegister(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for route.register".to_string(),
@@ -821,7 +821,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "route.heartbeat" => ControlWsRequestPayload::RouteHeartbeat(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for route.heartbeat".to_string(),
@@ -829,7 +829,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "route.resolve" => ControlWsRequestPayload::RouteResolve(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for route.resolve".to_string(),
@@ -837,7 +837,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "route.owner" => {
-            ControlWsRequestPayload::RouteOwner(serde_json::from_value(payload).map_err(|_| {
+            ControlWsRequestPayload::RouteOwner(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for route.owner".to_string(),
@@ -845,7 +845,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?)
         }
         "worker.heartbeat" => ControlWsRequestPayload::WorkerHeartbeat(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.heartbeat".to_string(),
@@ -853,7 +853,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "worker.assignments" => ControlWsRequestPayload::WorkerAssignments(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.assignments".to_string(),
@@ -861,7 +861,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "worker.result" => ControlWsRequestPayload::WorkerResult(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.result".to_string(),
@@ -869,7 +869,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "worker.failure" => ControlWsRequestPayload::WorkerFailure(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.failure".to_string(),
@@ -877,7 +877,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "worker.replay" => ControlWsRequestPayload::WorkerReplay(
-            serde_json::from_value(payload).map_err(|_| {
+            sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.replay".to_string(),
@@ -885,7 +885,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
             })?,
         ),
         "bundle.get" => {
-            ControlWsRequestPayload::BundleGet(serde_json::from_value(payload).map_err(|_| {
+            ControlWsRequestPayload::BundleGet(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for bundle.get".to_string(),
@@ -908,7 +908,7 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
 fn control_response_to_json(response: ControlWsServerMessage) -> JsonControlWsServerMessage {
     let data = response
         .data
-        .and_then(|payload| serde_json::to_value(payload).ok());
+        .and_then(|payload| sonic_rs::to_value(&payload).ok());
     JsonControlWsServerMessage {
         request_id: response.request_id,
         ok: response.ok,

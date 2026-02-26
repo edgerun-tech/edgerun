@@ -452,13 +452,15 @@ pub(crate) async fn run_integration_policy_rotation(root: &Path) -> Result<()> {
     .await?;
     wait_for_health(&client, &sched_url, &mut scheduler).await?;
 
-    let policy: edgerun_types::control_plane::PolicyInfoResponse = client
+    let policy_bytes = client
         .get(format!("{sched_url}/v1/policy/info"))
         .send()
         .await?
         .error_for_status()?
-        .json()
+        .bytes()
         .await?;
+    let policy: edgerun_types::control_plane::PolicyInfoResponse =
+        sonic_rs::from_slice(&policy_bytes)?;
     let key2_pub = policy.signer_pubkey;
 
     let mut worker_phase_a = spawn_worker(

@@ -12,8 +12,8 @@ use edgerun_hwvault_primitives::hardware::{
     load_or_create_device_signer, tpm_nv_available, tpm_nv_read_blob, tpm_nv_write_blob,
     DeviceSigner, HardwareBackend, HardwareSecurityMode,
 };
-use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
+use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::time::sleep;
 
 const SECURITY_MODE: HardwareSecurityMode = HardwareSecurityMode::TpmRequired;
@@ -263,11 +263,11 @@ fn load_config() -> Result<ManagerConfig> {
         return Err(anyhow!("invalid TPM config length: {len}"));
     }
     let raw = &blob[4..4 + len];
-    serde_json::from_slice(raw).context("failed to parse manager config json from TPM")
+    sonic_rs::from_slice(raw).context("failed to parse manager config json from TPM")
 }
 
 fn save_config(cfg: &ManagerConfig) -> Result<()> {
-    let payload = serde_json::to_vec(cfg).context("failed to encode manager config")?;
+    let payload = sonic_rs::to_vec(cfg).context("failed to encode manager config")?;
     if payload.len() > (CONFIG_TPM_NV_SIZE - 4) {
         return Err(anyhow!(
             "config too large for TPM NV ({} > {})",
@@ -853,12 +853,14 @@ async fn wait_for_validator(client: &Client, rpc_url: &str, timeout: Duration) -
 }
 
 async fn validator_healthy(client: &Client, rpc_url: &str) -> bool {
-    let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "getVersion",
-    });
-    match client.post(rpc_url).json(&payload).send().await {
+    let payload = br#"{"jsonrpc":"2.0","id":1,"method":"getVersion"}"#;
+    match client
+        .post(rpc_url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(payload.to_vec())
+        .send()
+        .await
+    {
         Ok(resp) => resp.status() == StatusCode::OK,
         Err(_) => false,
     }
@@ -875,32 +877,32 @@ async fn register_device(
     }
 
     let challenge_url = format!("{api_base}/v1/device/challenge");
-    let challenge: DeviceChallengeResponse = client
+    let challenge_resp = client
         .post(&challenge_url)
         .send()
         .await
         .with_context(|| format!("challenge request failed: {challenge_url}"))?
         .error_for_status()
-        .context("challenge endpoint returned error status")?
-        .json()
-        .await
-        .context("failed to decode challenge response")?;
+        .context("challenge endpoint returned error status")?;
+    let challenge: DeviceChallengeResponse =
+        parse_json_response(challenge_resp, "failed to decode challenge response").await?;
 
     let handshake_url = format!("{api_base}/v1/device/handshake");
-    let resp: ApiResponse = client
-        .post(&handshake_url)
-        .json(&DeviceHandshakeRequest {
+    let handshake_resp = post_json(
+        client,
+        &handshake_url,
+        &DeviceHandshakeRequest {
             owner_pubkey,
             nonce_b64url: &challenge.nonce_b64url,
-        })
-        .send()
+        },
+    )?
+    .send()
         .await
         .with_context(|| format!("handshake request failed: {handshake_url}"))?
         .error_for_status()
-        .context("handshake endpoint returned error status")?
-        .json()
-        .await
-        .context("failed to decode handshake response")?;
+        .context("handshake endpoint returned error status")?;
+    let resp: ApiResponse =
+        parse_json_response(handshake_resp, "failed to decode handshake response").await?;
 
     if !resp.ok {
         return Err(anyhow!(
@@ -950,19 +952,15 @@ async fn request_runtime_image_ref(
     let candidate_paths = ["/v1/node/runtime/image-tag", "/v1/node/image-tag"];
     for path in candidate_paths {
         let url = format!("{}{}", cfg.api_base, path);
-        let resp = client
-            .post(&url)
-            .json(&payload)
+        let resp = post_json(client, &url, &payload)?
             .send()
             .await
             .with_context(|| format!("runtime image request failed: {url}"))?;
         if !resp.status().is_success() {
             continue;
         }
-        let data: RuntimeImageResponse = resp
-            .json()
-            .await
-            .with_context(|| format!("invalid runtime image response from {url}"))?;
+        let data: RuntimeImageResponse =
+            parse_json_response(resp, &format!("invalid runtime image response from {url}")).await?;
         if !data.ok {
             if let Some(err) = data.error {
                 eprintln!("runtime_image_api_error={err}");
@@ -1038,16 +1036,18 @@ async fn send_heartbeat(
         .ok_or_else(|| anyhow!("owner_pubkey missing for heartbeat"))?;
 
     let url = format!("{}/v1/node/heartbeat", cfg.api_base);
-    let resp = client
-        .post(&url)
-        .json(&NodeHeartbeatRequest {
+    let resp = post_json(
+        client,
+        &url,
+        &NodeHeartbeatRequest {
             owner_pubkey,
             device_pubkey_b64url,
             rpc_url: &cfg.rpc_url,
             version: env!("CARGO_PKG_VERSION"),
             pid1: std::process::id() == 1,
-        })
-        .send()
+        },
+    )?
+    .send()
         .await
         .with_context(|| format!("heartbeat request failed: {url}"))?;
 
@@ -1060,17 +1060,14 @@ async fn send_heartbeat(
 }
 
 async fn call_ok_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> Result<()> {
-    let resp: ApiResponse = client
-        .post(url)
-        .json(payload)
+    let resp = post_json(client, url, payload)?
         .send()
         .await
         .with_context(|| format!("request failed: {url}"))?
         .error_for_status()
-        .with_context(|| format!("endpoint returned error status: {url}"))?
-        .json()
-        .await
-        .with_context(|| format!("failed to decode endpoint response: {url}"))?;
+        .with_context(|| format!("endpoint returned error status: {url}"))?;
+    let resp: ApiResponse =
+        parse_json_response(resp, &format!("failed to decode endpoint response: {url}")).await?;
 
     if !resp.ok {
         return Err(anyhow!(
@@ -1079,4 +1076,20 @@ async fn call_ok_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> 
         ));
     }
     Ok(())
+}
+
+fn post_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> Result<reqwest::RequestBuilder> {
+    let body = sonic_rs::to_vec(payload).context("failed to encode json request body")?;
+    Ok(client
+        .post(url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(body))
+}
+
+async fn parse_json_response<T: DeserializeOwned>(resp: reqwest::Response, context: &str) -> Result<T> {
+    let payload = resp
+        .bytes()
+        .await
+        .with_context(|| format!("{context}: failed to read response body"))?;
+    sonic_rs::from_slice(&payload).with_context(|| context.to_string())
 }

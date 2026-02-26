@@ -21,7 +21,7 @@ use edgerun_types::control_plane::{
 };
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
-use reqwest::Url;
+use reqwest::{header::CONTENT_TYPE, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use solana_client::rpc_client::RpcClient;
@@ -585,7 +585,10 @@ async fn establish_policy_session(client: &reqwest::Client, cfg: &WorkerConfig) 
     let payload = SessionCreateRequest {
         bound_origin: bound_origin.clone(),
     };
-    let mut req = client.post(url).json(&payload);
+    let mut req = client
+        .post(url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(sonic_rs::to_vec(&payload).context("encode session create payload")?);
     if let Some(token) = bootstrap_token {
         req = req.header("x-edgerun-bootstrap-token", token);
     }
@@ -595,9 +598,11 @@ async fn establish_policy_session(client: &reqwest::Client, cfg: &WorkerConfig) 
     if !status.is_success() {
         anyhow::bail!("session create failed with status {status}");
     }
-    let issued = resp
-        .json::<SessionCreateResponse>()
+    let payload = resp
+        .bytes()
         .await
+        .context("failed to read session create response")?;
+    let issued = sonic_rs::from_slice::<SessionCreateResponse>(&payload)
         .context("invalid session create response")?;
     let now = now_unix_seconds();
     let mut session = cfg.policy_session.lock().expect("lock poisoned");

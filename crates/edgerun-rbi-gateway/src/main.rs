@@ -8,8 +8,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
 use reqwest::Client;
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -40,6 +39,16 @@ struct HealthResponse {
 struct CdpVersionResponse {
     browser: Option<String>,
     protocol_version: Option<String>,
+    web_socket_debugger_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CdpVersionPayload {
+    #[serde(rename = "Browser")]
+    browser: Option<String>,
+    #[serde(rename = "Protocol-Version")]
+    protocol_version: Option<String>,
+    #[serde(rename = "webSocketDebuggerUrl")]
     web_socket_debugger_url: Option<String>,
 }
 
@@ -101,29 +110,21 @@ async fn cdp_version(
     })?;
 
     let response = CdpVersionResponse {
-        browser: value
-            .get("Browser")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned),
-        protocol_version: value
-            .get("Protocol-Version")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned),
-        web_socket_debugger_url: value
-            .get("webSocketDebuggerUrl")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned),
+        browser: value.browser,
+        protocol_version: value.protocol_version,
+        web_socket_debugger_url: value.web_socket_debugger_url,
     };
     Ok(Json(response))
 }
 
-async fn fetch_cdp_version(state: &AppState) -> Option<Value> {
+async fn fetch_cdp_version(state: &AppState) -> Option<CdpVersionPayload> {
     let url = format!("{}/json/version", state.cdp_base);
     let response = state.http.get(url).send().await.ok()?;
     if !response.status().is_success() {
         return None;
     }
-    response.json::<Value>().await.ok()
+    let payload = response.bytes().await.ok()?;
+    sonic_rs::from_slice::<CdpVersionPayload>(&payload).ok()
 }
 
 fn init_tracing() {
