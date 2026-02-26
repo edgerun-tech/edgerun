@@ -469,8 +469,11 @@ async fn refresh_policy_verifiers(client: &reqwest::Client, cfg: &WorkerConfig) 
 }
 
 fn should_disable_policy_refresh(err: &anyhow::Error) -> bool {
-    err.chain()
-        .any(|cause| cause.to_string().contains("policy info failed with status 404"))
+    err.chain().any(|cause| {
+        cause
+            .to_string()
+            .contains("policy info failed with status 404")
+    })
 }
 
 async fn fetch_policy_info(
