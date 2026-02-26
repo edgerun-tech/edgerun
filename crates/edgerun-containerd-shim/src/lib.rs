@@ -676,7 +676,11 @@ fn read_crun_state(task_id: &str) -> Result<Option<CrunStateSnapshot>, Lifecycle
         .map_err(|err| LifecycleError::RuntimeConfigFailed(format!("crun state: {err}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
-        if stderr.contains("does not exist") || stderr.contains("not found") {
+        if stderr.contains("does not exist")
+            || stderr.contains("not found")
+            || stderr.contains("no such file")
+            || stderr.contains("unknown container")
+        {
             return Ok(None);
         }
         return Err(LifecycleError::RuntimeConfigFailed(format!(
