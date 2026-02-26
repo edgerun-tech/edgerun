@@ -14,6 +14,13 @@ fi
 
 sudo ctr -n "${NAMESPACE}" image pull "${IMAGE}" >/dev/null 2>&1 || true
 
+cleanup_case() {
+  local id="$1"
+  sudo ctr -n "${NAMESPACE}" tasks kill --signal SIGKILL "${id}" >/dev/null 2>&1 || true
+  sudo ctr -n "${NAMESPACE}" tasks rm "${id}" >/dev/null 2>&1 || true
+  sudo ctr -n "${NAMESPACE}" containers rm "${id}" >/dev/null 2>&1 || true
+}
+
 run_case() {
   local runtime="$1"
   local name="$2"
@@ -47,6 +54,14 @@ run_case() {
     return 0
   fi
 
+  if grep -q "runtime=${name} ok" <<<"${output}" && grep -q "task must be stopped before deletion: running: failed precondition" <<<"${output}"; then
+    cleanup_case "${id}"
+    echo "PASS runtime=${runtime} image=${IMAGE} id=${id} (cleanup race tolerated)"
+    echo "${output}" | tail -n 2
+    return 0
+  fi
+
+  cleanup_case "${id}"
   echo "FAIL runtime=${runtime} image=${IMAGE} id=${id}"
   echo "${output}" | tail -n 20
   return 1
