@@ -2,37 +2,10 @@
 
 This folder wires `term.edgerun.tech` to local `edgerun-term-server`.
 
-## One-time DNS setup
+## Prerequisites
 
-```bash
-scripts/cloudflared/setup-term-tunnel-dns.sh
-```
-
-Defaults:
-- Tunnel ID: `c5fab4c7-c68e-411e-880b-c1da359a18e9`
-- Hostname: `term.edgerun.tech`
-
-Override with:
-- `EDGERUN_TERM_TUNNEL_ID`
-- `EDGERUN_TERM_TUNNEL_HOSTNAME`
-
-## Cloudflare Access (Zero Trust) setup
-
-Use an API token with Access app/policy write permissions:
-
-```bash
-export CF_ACCOUNT_ID=<cloudflare-account-id>
-export CF_API_TOKEN=<zero-trust-access-api-token>
-scripts/cloudflared/setup-term-access.sh
-```
-
-Optional knobs:
-- `EDGERUN_TERM_ACCESS_HOSTNAME` (default: `term.edgerun.tech`)
-- `EDGERUN_TERM_ACCESS_APP_NAME` (default: `edgerun-term`)
-- `EDGERUN_TERM_ACCESS_POLICY_NAME` (default: `allow-edgerun-term`)
-- `EDGERUN_TERM_ACCESS_ALLOW_DOMAIN` (default: `edgerun.tech`)
-- `EDGERUN_TERM_ACCESS_ALLOW_EMAIL` (if set, takes precedence over domain allow)
-- `EDGERUN_TERM_ACCESS_SESSION_DURATION` (default: `24h`)
+- A Cloudflare Tunnel and DNS route for `term.edgerun.tech` already configured.
+- Optional Cloudflare Access policy already configured if browser auth is required.
 
 ## Run term-server with route auto-registration
 
