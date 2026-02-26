@@ -6,7 +6,8 @@ use edgerun_vanity_payload::{
     decode_response, derive_keypair, encode_not_found, encode_request, execute_request,
     SearchRequest, SearchResponse,
 };
-use serde::{Deserialize, Serialize};
+use reqwest::header::CONTENT_TYPE;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::time::{sleep, Duration, Instant};
 
 #[derive(Debug, Parser)]
@@ -218,17 +219,17 @@ async fn main() -> Result<()> {
             assignment_worker_pubkey: cli.assignment_worker_pubkey.clone(),
         };
 
-        let create: JobCreateResponse = client
+        let create_resp = client
             .post(format!("{scheduler_url}/v1/job/create"))
-            .json(&create_body)
+            .header(CONTENT_TYPE, "application/json")
+            .body(sonic_rs::to_vec(&create_body).context("encode /v1/job/create request")?)
             .send()
             .await
             .context("scheduler /v1/job/create request failed")?
             .error_for_status()
-            .context("scheduler /v1/job/create returned error")?
-            .json()
-            .await
-            .context("invalid /v1/job/create response")?;
+            .context("scheduler /v1/job/create returned error")?;
+        let create: JobCreateResponse =
+            parse_json_response(create_resp, "invalid /v1/job/create response").await?;
 
         jobs_submitted += 1;
         escrow_spent += cli.escrow_per_job_lamports;
@@ -356,16 +357,15 @@ async fn poll_winner_hash(
 ) -> Result<String> {
     let deadline = Instant::now() + Duration::from_secs(timeout_secs.max(1));
     loop {
-        let status: JobStatusResponse = client
+        let status_resp = client
             .get(format!("{scheduler_url}/v1/job/{job_id}"))
             .send()
             .await
             .context("scheduler /v1/job/{job_id} request failed")?
             .error_for_status()
-            .context("scheduler /v1/job/{job_id} returned error")?
-            .json()
-            .await
-            .context("invalid /v1/job/{job_id} response")?;
+            .context("scheduler /v1/job/{job_id} returned error")?;
+        let status: JobStatusResponse =
+            parse_json_response(status_resp, "invalid /v1/job/{job_id} response").await?;
 
         if let Some(quorum) = status.quorum {
             if quorum.quorum_reached {
@@ -426,4 +426,12 @@ fn print_outcome(outcome: &FinalOutcome) -> Result<()> {
     };
     println!("{}", json::stringify_pretty(value, 2));
     Ok(())
+}
+
+async fn parse_json_response<T: DeserializeOwned>(resp: reqwest::Response, ctx: &str) -> Result<T> {
+    let bytes = resp
+        .bytes()
+        .await
+        .with_context(|| format!("{ctx}: failed to read response body"))?;
+    sonic_rs::from_slice(&bytes).with_context(|| ctx.to_string())
 }

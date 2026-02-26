@@ -14,6 +14,7 @@ json = "0.12"
 reqwest.workspace = true
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 serde.workspace = true
+sonic-rs.workspace = true
 tokio.workspace = true
 
 edgerun-crypto = { path = "../../../crates/edgerun-crypto" }

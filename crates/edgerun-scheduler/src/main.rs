@@ -52,20 +52,261 @@ use edgerun_types::control_plane::{
 use fs2::FileExt;
 use prost::Message as ProstCodec;
 use serde::{Deserialize, Serialize};
-use solana_client::rpc_client::RpcClient;
-use solana_client::rpc_config::RpcProgramAccountsConfig;
-use solana_client::rpc_filter::{Memcmp, RpcFilterType};
-use solana_sdk::{
-    commitment_config::CommitmentConfig,
-    hash::hash,
-    instruction::{AccountMeta, Instruction},
-    pubkey::Pubkey,
-    signature::{read_keypair_file, Keypair, Signer},
-    system_program,
-    transaction::Transaction,
-};
 use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+struct Pubkey([u8; 32]);
+
+impl Pubkey {
+    fn to_bytes(self) -> [u8; 32] {
+        self.0
+    }
+
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn new_from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    fn find_program_address(seeds: &[&[u8]], program_id: &Pubkey) -> (Pubkey, u8) {
+        let mut preimage = Vec::new();
+        preimage.extend_from_slice(program_id.as_ref());
+        for seed in seeds {
+            preimage.extend_from_slice(seed);
+        }
+        (Pubkey(edgerun_crypto::blake3_256(&preimage)), 255)
+    }
+}
+
+impl std::str::FromStr for Pubkey {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let bytes = bs58::decode(s.trim())
+            .into_vec()
+            .map_err(|_| anyhow::anyhow!("invalid base58 pubkey"))?;
+        let arr: [u8; 32] = bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("pubkey must decode to 32 bytes"))?;
+        Ok(Pubkey(arr))
+    }
+}
+
+impl std::fmt::Display for Pubkey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", bs58::encode(self.0).into_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct HashDigest([u8; 32]);
+
+impl HashDigest {
+    fn to_bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+fn hash(bytes: &[u8]) -> HashDigest {
+    HashDigest(edgerun_crypto::blake3_256(bytes))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Keypair {
+    pubkey: Pubkey,
+}
+
+impl Keypair {
+    fn pubkey(&self) -> Pubkey {
+        self.pubkey
+    }
+
+    fn sign_message(&self, message: &[u8]) -> SignatureBytes {
+        let mut out = [0_u8; 64];
+        let digest = edgerun_crypto::blake3_256(message);
+        out[..32].copy_from_slice(&digest);
+        out[32..].copy_from_slice(&digest);
+        SignatureBytes(out)
+    }
+}
+
+fn read_keypair_file(path: &str) -> Result<Keypair> {
+    anyhow::bail!("chain keypair loading unsupported in this build: {path}")
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct SignatureBytes([u8; 64]);
+
+impl AsRef<[u8]> for SignatureBytes {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct TxSignature([u8; 64]);
+
+impl std::fmt::Display for TxSignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+struct Blockhash([u8; 32]);
+
+#[derive(Debug, Clone)]
+struct RpcClient;
+
+impl RpcClient {
+    fn new(_rpc_url: String) -> Self {
+        Self
+    }
+
+    fn get_epoch_info(&self) -> Result<EpochInfo> {
+        anyhow::bail!("chain rpc unavailable in this build")
+    }
+
+    fn get_latest_blockhash(&self) -> Result<Blockhash> {
+        anyhow::bail!("chain rpc unavailable in this build")
+    }
+
+    fn send_and_confirm_transaction(&self, _tx: &Transaction) -> Result<TxSignature> {
+        anyhow::bail!("chain rpc unavailable in this build")
+    }
+
+    fn get_account(&self, _pubkey: &Pubkey) -> Result<AccountData> {
+        anyhow::bail!("chain rpc unavailable in this build")
+    }
+
+    fn get_program_accounts_with_config(
+        &self,
+        _program_id: &Pubkey,
+        _cfg: RpcProgramAccountsConfig,
+    ) -> Result<Vec<(Pubkey, AccountData)>> {
+        Ok(Vec::new())
+    }
+
+    fn get_account_with_commitment(
+        &self,
+        _pubkey: &Pubkey,
+        _commitment: CommitmentConfig,
+    ) -> Result<GetAccountWithCommitmentResponse> {
+        Ok(GetAccountWithCommitmentResponse {
+            value: None,
+            context: ResponseContext { slot: 0 },
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct EpochInfo {
+    absolute_slot: u64,
+    epoch: u64,
+}
+
+#[derive(Debug, Clone)]
+struct AccountData {
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct ResponseContext {
+    slot: u64,
+}
+
+#[derive(Debug, Clone)]
+struct GetAccountWithCommitmentResponse {
+    value: Option<AccountData>,
+    context: ResponseContext,
+}
+
+#[derive(Debug, Clone, Default)]
+struct RpcProgramAccountsConfig {
+    filters: Option<Vec<RpcFilterType>>,
+}
+
+#[derive(Debug, Clone)]
+enum RpcFilterType {
+    DataSize(u64),
+    Memcmp(Memcmp),
+}
+
+#[derive(Debug, Clone)]
+struct Memcmp;
+
+impl Memcmp {
+    fn new_raw_bytes(_offset: usize, _bytes: Vec<u8>) -> Self {
+        Self
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CommitmentConfig;
+
+impl CommitmentConfig {
+    fn processed() -> Self {
+        Self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AccountMeta;
+
+impl AccountMeta {
+    fn new(_pubkey: Pubkey, _is_signer: bool) -> Self {
+        Self
+    }
+
+    fn new_readonly(_pubkey: Pubkey, _is_signer: bool) -> Self {
+        Self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Instruction {
+    program_id: Pubkey,
+    accounts: Vec<AccountMeta>,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Transaction {
+    signatures: Vec<TxSignature>,
+}
+
+impl Transaction {
+    fn new_with_payer(_instructions: &[Instruction], _payer: Option<&Pubkey>) -> Self {
+        Self {
+            signatures: vec![TxSignature([0_u8; 64])],
+        }
+    }
+
+    fn partial_sign(&mut self, _signers: &[&Keypair], _blockhash: Blockhash) {}
+
+    fn new_signed_with_payer(
+        _instructions: &[Instruction],
+        _payer: Option<&Pubkey>,
+        _signers: &[&Keypair],
+        _blockhash: Blockhash,
+    ) -> Self {
+        Self {
+            signatures: vec![TxSignature([0_u8; 64])],
+        }
+    }
+}
+
+mod system_program {
+    use super::Pubkey;
+
+    pub fn id() -> Pubkey {
+        Pubkey([0_u8; 32])
+    }
+}
 
 #[derive(Clone)]
 struct AppState {
@@ -387,7 +628,7 @@ async fn main() -> Result<()> {
     );
 
     let persisted = load_state(&data_dir)?;
-    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", true);
+    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
 
     let chain = match init_chain_context() {
         Ok(ctx) => {
@@ -1451,8 +1692,8 @@ fn parse_route_owner_verifying_key(
             "owner_pubkey is required".to_string(),
         ));
     }
-    if let Ok(pubkey) = trimmed.parse::<Pubkey>() {
-        return VerifyingKey::from_bytes(&pubkey.to_bytes()).map_err(|_| {
+    if let Ok(pubkey_bytes) = parse_pubkey_bytes(trimmed) {
+        return VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| {
             (
                 StatusCode::BAD_REQUEST,
                 "invalid owner_pubkey bytes".to_string(),
@@ -1477,6 +1718,11 @@ fn parse_route_owner_verifying_key(
             "invalid owner_pubkey bytes".to_string(),
         )
     })
+}
+
+fn parse_pubkey_bytes(value: &str) -> Result<[u8; 32], ()> {
+    let decoded = bs58::decode(value.trim()).into_vec().map_err(|_| ())?;
+    decoded.as_slice().try_into().map_err(|_| ())
 }
 
 fn parse_signature_b64url(signature: &str) -> Result<Signature, (StatusCode, String)> {
@@ -2179,7 +2425,7 @@ fn job_create_inner(
     ) {
         (None, None, None) => None,
         (Some(client_pubkey), Some(client_signed_at_unix_s), Some(client_signature)) => {
-            let client = client_pubkey.parse::<Pubkey>().map_err(|_| {
+            let client = parse_pubkey_bytes(client_pubkey).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "client_pubkey must be base58 pubkey".to_string(),
@@ -2513,26 +2759,7 @@ fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
 }
 
 fn init_chain_context() -> Result<ChainContext> {
-    let rpc_url = std::env::var("EDGERUN_CHAIN_RPC_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:8899".to_string());
-    let program_id_str = std::env::var("EDGERUN_CHAIN_PROGRAM_ID")
-        .unwrap_or_else(|_| "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG".to_string());
-    let wallet_path = std::env::var("EDGERUN_CHAIN_WALLET")
-        .unwrap_or_else(|_| "program/.solana/id.json".to_string());
-
-    let program_id = program_id_str
-        .parse::<Pubkey>()
-        .context("invalid EDGERUN_CHAIN_PROGRAM_ID")?;
-    let payer = read_keypair_file(&wallet_path)
-        .map_err(|e| anyhow::anyhow!("failed to read EDGERUN_CHAIN_WALLET {wallet_path}: {e}"))?;
-    let rpc = RpcClient::new(rpc_url.clone());
-
-    Ok(ChainContext {
-        rpc_url,
-        rpc,
-        program_id,
-        payer,
-    })
+    anyhow::bail!("chain support is disabled in this build")
 }
 
 fn init_chain_progress_sink(data_dir: &FsPath, signer_pubkey: String) -> Option<ChainProgressSink> {
@@ -2557,14 +2784,14 @@ fn init_chain_progress_sink(data_dir: &FsPath, signer_pubkey: String) -> Option<
 }
 
 fn fixed_storage_stream_id(seed: &str) -> StorageStreamId {
-    let digest = hash(seed.as_bytes()).to_bytes();
+    let digest = edgerun_crypto::blake3_256(seed.as_bytes());
     let mut out = [0u8; 16];
     out.copy_from_slice(&digest[..16]);
     StorageStreamId::from_bytes(out)
 }
 
 fn fixed_storage_actor_id(seed: &str) -> StorageActorId {
-    let digest = hash(seed.as_bytes()).to_bytes();
+    let digest = edgerun_crypto::blake3_256(seed.as_bytes());
     let mut out = [0u8; 16];
     out.copy_from_slice(&digest[16..32]);
     StorageActorId::from_bytes(out)
@@ -3676,44 +3903,12 @@ fn build_slash_worker_artifacts(
     if candidate_workers.is_empty() {
         return Vec::new();
     }
-
-    let Some(chain) = state.chain.as_ref() else {
-        tracing::warn!(job_id = %job_id_hex, "skipping slash artifacts: no chain context");
-        return Vec::new();
-    };
-    let Ok(job_id) = parse_hex32(job_id_hex) else {
-        tracing::warn!(job_id = %job_id_hex, "skipping slash artifacts: invalid job id");
-        return Vec::new();
-    };
-
-    candidate_workers
-        .into_iter()
-        .filter_map(|worker_pubkey| {
-            let Some(worker) = worker_pubkey.parse::<Pubkey>().ok() else {
-                tracing::warn!(
-                    worker_pubkey = %worker_pubkey,
-                    "skipping slash artifact: invalid worker pubkey"
-                );
-                return None;
-            };
-            match build_slash_worker_tx_base64(chain, job_id, worker, state.chain_auto_submit) {
-                Ok((tx, sig, submitted)) => Some(SlashWorkerArtifact {
-                    worker_pubkey,
-                    tx,
-                    sig,
-                    submitted,
-                }),
-                Err(err) => {
-                    tracing::warn!(
-                        error = %err,
-                        worker_pubkey = %worker_pubkey,
-                        "skipping slash artifact: tx build failed"
-                    );
-                    None
-                }
-            }
-        })
-        .collect()
+    tracing::warn!(
+        job_id = %job_id_hex,
+        count = candidate_workers.len(),
+        "slash artifacts skipped: chain transaction support disabled in this build"
+    );
+    Vec::new()
 }
 
 fn build_finalize_trigger_payload_inner(
@@ -3722,81 +3917,16 @@ fn build_finalize_trigger_payload_inner(
     committee_workers: &[String],
     winning_workers: &[String],
 ) -> Result<(String, Option<String>, bool)> {
-    let chain = state
-        .chain
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("chain context unavailable"))?;
-    let job_id = parse_hex32(job_id_hex)?;
-    let (committee, winners) = parse_finalize_accounts(committee_workers, winning_workers)
-        .ok_or_else(|| anyhow::anyhow!("unable to derive finalize account metas"))?;
-    build_finalize_job_tx_base64(chain, job_id, committee, winners, state.chain_auto_submit)
-}
-
-fn parse_finalize_accounts(
-    committee_workers: &[String],
-    winning_workers: &[String],
-) -> Option<([Pubkey; 3], Vec<Pubkey>)> {
-    let committee = parse_committee_workers(committee_workers)?;
-    let committee_set: HashSet<Pubkey> = committee.iter().copied().collect();
-    let winners = winning_workers
-        .iter()
-        .filter_map(|worker| worker.parse::<Pubkey>().ok())
-        .filter(|worker| committee_set.contains(worker))
-        .collect::<Vec<_>>();
-    if winners.is_empty() {
-        return None;
-    }
-    Some((committee, winners))
-}
-
-fn parse_committee_workers(committee_workers: &[String]) -> Option<[Pubkey; 3]> {
-    if committee_workers.len() != 3 {
-        return None;
-    }
-    Some([
-        committee_workers.first()?.parse::<Pubkey>().ok()?,
-        committee_workers.get(1)?.parse::<Pubkey>().ok()?,
-        committee_workers.get(2)?.parse::<Pubkey>().ok()?,
-    ])
+    let _ = (state, job_id_hex, committee_workers, winning_workers);
+    anyhow::bail!("finalize transaction generation disabled: chain support removed")
 }
 
 fn build_assign_workers_artifact(
     state: &AppState,
     job_id_hex: &str,
 ) -> Result<(Option<String>, Option<String>, bool)> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok((None, None, false));
-    };
-    let job_id = parse_hex32(job_id_hex)?;
-    let committee_workers = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum
-            .get(job_id_hex)
-            .map(|q| q.committee_workers.clone())
-            .unwrap_or_default()
-    };
-    if committee_workers.len() != 3 {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            committee_len = committee_workers.len(),
-            "skipping assign_workers artifact build: expected exactly 3 committee workers"
-        );
-        return Ok((None, None, false));
-    }
-    let workers = [
-        committee_workers[0]
-            .parse::<Pubkey>()
-            .context("committee worker pubkey invalid")?,
-        committee_workers[1]
-            .parse::<Pubkey>()
-            .context("committee worker pubkey invalid")?,
-        committee_workers[2]
-            .parse::<Pubkey>()
-            .context("committee worker pubkey invalid")?,
-    ];
-    let (tx, sig, submitted) =
-        build_assign_workers_tx_base64(chain, job_id, workers, state.chain_auto_submit)?;
-    Ok((Some(tx), sig, submitted))
+    let _ = (state, job_id_hex);
+    Ok((None, None, false))
 }
 
 fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
@@ -4488,8 +4618,8 @@ fn client_job_create_signing_message(
     input: &[u8],
     signed_at_unix_s: u64,
 ) -> String {
-    let wasm_hash_hex = hex::encode(hash(wasm).to_bytes());
-    let input_hash_hex = hex::encode(hash(input).to_bytes());
+    let wasm_hash_hex = hex::encode(edgerun_crypto::blake3_256(wasm));
+    let input_hash_hex = hex::encode(edgerun_crypto::blake3_256(input));
     format!(
         "edgerun:job_create:v1|{}|{}|{}|{}|{}|{}|{}|{}",
         client_pubkey,
@@ -4504,12 +4634,11 @@ fn client_job_create_signing_message(
 }
 
 fn verify_client_message_signature(
-    client_pubkey: Pubkey,
+    client_pubkey: [u8; 32],
     signature_b64: &str,
     message: &str,
 ) -> Result<bool, (StatusCode, String)> {
-    let client_pk_bytes: [u8; 32] = client_pubkey.to_bytes();
-    let client_vk = VerifyingKey::from_bytes(&client_pk_bytes).map_err(|_| {
+    let client_vk = VerifyingKey::from_bytes(&client_pubkey).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             "invalid client pubkey bytes".to_string(),
@@ -4550,13 +4679,12 @@ fn verify_worker_message_signature(
         return Ok(true);
     };
 
-    let worker_key = worker_pubkey.parse::<Pubkey>().map_err(|_| {
+    let worker_pk_bytes = parse_pubkey_bytes(worker_pubkey).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             "worker_pubkey must be base58 pubkey".to_string(),
         )
     })?;
-    let worker_pk_bytes: [u8; 32] = worker_key.to_bytes();
     let worker_vk = VerifyingKey::from_bytes(&worker_pk_bytes).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
@@ -4629,13 +4757,12 @@ fn verify_result_attestation(
         }
         return Ok(true);
     };
-    let worker = payload.worker_pubkey.parse::<Pubkey>().map_err(|_| {
+    let worker_bytes = parse_pubkey_bytes(&payload.worker_pubkey).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,
             "worker_pubkey must be base58 pubkey".to_string(),
         )
     })?;
-    let worker_bytes = worker.to_bytes();
     let worker_vk = VerifyingKey::from_bytes(&worker_bytes).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,

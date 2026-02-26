@@ -15,9 +15,8 @@ tracing.workspace = true
 serde.workspace = true
 sonic-rs.workspace = true
 bincode.workspace = true
-solana-client.workspace = true
-solana-sdk.workspace = true
 ed25519-dalek.workspace = true
+bs58 = "0.5"
 edgerun-crypto = { path = "../../crates/edgerun-crypto" }
 edgerun-observability = { path = "../../crates/edgerun-observability" }
 edgerun-storage = { path = "../../crates/edgerun-storage" }
