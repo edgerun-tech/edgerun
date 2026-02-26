@@ -18,6 +18,16 @@ on:
       - main
     tags:
       - "v*"
+    paths:
+      - "crates/edgerun-containerd-shim/**"
+      - "crates/edgerun-runtime-proto/**"
+      - "crates/edgerun-snapshotter/**"
+      - "scripts/containerd-runtime-matrix-smoke.sh"
+      - "scripts/containerd-runtime-wasm-smoke.sh"
+      - "scripts/containerd-runtime-soak.sh"
+      - "scripts/containerd/**"
+      - "scripts/systemd/**"
+      - ".github/workflows/containerd-runtime-smoke.yml"
   workflow_dispatch:
 
 concurrency:
