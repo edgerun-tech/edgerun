@@ -36,6 +36,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build runtime release artifact
+        env:
+          RUSTC_WRAPPER: ""
         run: |
           mkdir -p /tmp/edgerun-runtime-release
           CARGO_TARGET_DIR=out/target cargo build --locked --release -p edgerun-runtime --features cli
