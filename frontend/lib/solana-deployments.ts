@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import deploymentsConfig from '../config/solana-deployments.json'
+import { solanaDeploymentsConfig } from '../config/solana-deployments'
 
 export type SolanaCluster = 'localnet' | 'devnet' | 'testnet' | 'mainnet-beta'
 
@@ -12,7 +12,7 @@ export type DeploymentsConfig = {
   programs: Record<string, ProgramDeploymentConfig>
 }
 
-const SOLANA_DEPLOYMENTS = deploymentsConfig as DeploymentsConfig
+const SOLANA_DEPLOYMENTS = solanaDeploymentsConfig as DeploymentsConfig
 
 export function getProgramIdForCluster(programKey: string, cluster: string): string {
   const entry = SOLANA_DEPLOYMENTS.programs[programKey]

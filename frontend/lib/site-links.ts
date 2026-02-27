@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import linksConfig from '../config/site-links.json'
+import { siteLinksConfig } from '../config/site-links'
 
 export type SiteLinks = {
   repository: string
@@ -10,4 +10,4 @@ export type SiteLinks = {
   }
 }
 
-export const siteLinks = linksConfig as SiteLinks
+export const siteLinks = siteLinksConfig as SiteLinks

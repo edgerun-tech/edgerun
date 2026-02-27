@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { createIndexedDbAdapter } from './state/indexeddb-adapter'
-import terminalDevicesConfig from '../config/terminal-devices.json'
+import { terminalDevicesConfig } from '../config/terminal-devices'
 
 const TERM_MIN_RATIO = 0.2
 const TERM_MAX_RATIO = 0.85
