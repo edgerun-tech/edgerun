@@ -17,5 +17,5 @@ url = "2"
 
 [dev-dependencies]
 base64 = "0.22"
-rcgen = "0.13"
+rcgen = "0.14"
 tokio.workspace = true
