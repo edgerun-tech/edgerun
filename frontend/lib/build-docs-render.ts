@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-import path from 'node:path'
-
 import MarkdownIt from 'markdown-it'
 import { evaluateSync } from '@mdx-js/mdx'
 
@@ -54,17 +52,8 @@ export function createDocsRenderer(shiki: HighlighterLike) {
   }
 
   function normalizeDocsTerminology(content: string, sourcePath: string): string {
-    let out = content
-      .replaceAll('edgerun-vanity-client', 'edgerun-address-client')
-      .replaceAll('edgerun-vanity-payload', 'edgerun-address-payload')
-      .replaceAll('edgerun_vanity_payload', 'edgerun_address_payload')
-      .replace(/\b[Vv]anity-address\b/g, 'address-prefix')
-      .replace(/\b[Vv]anity\b/g, 'address-prefix')
-
-    if (sourcePath.endsWith(path.join('docs', 'ONBOARDING.mdx'))) {
-      out = `> Legacy note: this workflow was previously called "vanity" address generation.\n\n${out}`
-    }
-    return out
+    if (!sourcePath) return content
+    return content
   }
 
   function renderMdxAst(node: MdxAstNode): string {

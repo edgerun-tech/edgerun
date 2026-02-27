@@ -7,7 +7,15 @@ import solid from 'eslint-plugin-solid'
 
 export default [
   {
-    ignores: ['node_modules/**', '.next/**', '../out/**', 'control-panel/**', 'public/wasm/**']
+    ignores: [
+      'node_modules/**',
+      '.next/**',
+      '../out/**',
+      'control-panel/**',
+      'public/wasm/**',
+      'intent-ui/**',
+      'public/intent-ui/**'
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

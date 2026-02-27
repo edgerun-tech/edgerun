@@ -19,7 +19,8 @@ const navLinks = [
   { href: '/devices/', label: 'Devices' },
   { href: '/token/', label: 'Economics' },
   { href: '/docs/', label: 'Docs' },
-  { href: '/blog/', label: 'Blog' }
+  { href: '/blog/', label: 'Blog' },
+  { href: '/intent/', label: 'Intent' }
 ]
 
 export function Nav() {

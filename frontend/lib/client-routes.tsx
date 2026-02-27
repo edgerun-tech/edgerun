@@ -59,6 +59,10 @@ const staticRoutes: ClientRouteMap = {
     chromeTitle: 'Style Guide',
     load: () => import('../app/style-guide/page')
   },
+  '/intent/': {
+    chromeTitle: 'Intent',
+    load: () => import('../app/intent/page')
+  },
   '/legal/privacy/': {
     chromeTitle: 'Privacy',
     load: () => import('../app/legal/privacy/page')

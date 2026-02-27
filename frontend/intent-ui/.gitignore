@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/certs/*.crt
+deploy/certs/*.key
+deploy/secrets/google_client_id.txt
+deploy/secrets/google_client_secret.txt
