@@ -24,7 +24,7 @@ describe('run job orchestration UX', () => {
 
     cy.get('[aria-label="Preset App"]').should('be.visible')
     cy.get('[data-testid="preset-mode-panel"]').should('be.visible')
-    cy.contains('Solana Vanity Address Generator').should('be.visible')
+    cy.contains('JSON Transform Module').should('be.visible')
 
     cy.get('[aria-label="Submission Mode"]').select('Upload Custom Module')
     cy.get('[data-testid="custom-mode-panel"]').should('be.visible')
@@ -38,8 +38,7 @@ describe('run job orchestration UX', () => {
     cy.contains('h4', 'Platform Job Envelope').should('be.visible')
     cy.get('[data-testid="economic-guardrails"]').should('contain.text', 'Economic Guardrails Applied')
     cy.get('[data-testid="economic-guardrails"]').should('contain.text', 'lamports')
-    cy.contains('h4', 'App Configuration: Solana Vanity Address Generator').should('be.visible')
-    cy.get('[data-testid="vanity-app-fields"]').should('be.visible')
+    cy.contains('h4', 'App Configuration: JSON Transform Module').should('be.visible')
 
     cy.get('button[role="tab"]').contains('1. Choose Module').click({ force: true })
     cy.get('[aria-label="Preset App"]').select('JSON Transform Module')
@@ -47,7 +46,6 @@ describe('run job orchestration UX', () => {
     cy.get('[data-testid="run-step-inputs"]').within(() => {
       cy.contains('h4', 'App Configuration: JSON Transform Module').should('be.visible')
     })
-    cy.get('[data-testid="vanity-app-fields"]').should('not.be.visible')
 
     cy.get('[aria-label="App Input Source"]').select('Raw JSON payload')
     cy.get('[data-testid="json-input-panel"]').should('be.visible')
@@ -55,13 +53,6 @@ describe('run job orchestration UX', () => {
 
     cy.get('[aria-label="App Input Source"]').select('Upload input file')
     cy.get('[data-testid="file-input-panel"]').should('be.visible')
-
-    cy.get('button[role="tab"]').contains('1. Choose Module').click({ force: true })
-    cy.get('[aria-label="Preset App"]').select('Solana Vanity Address Generator')
-    cy.contains('button', 'Continue to Configure App').click({ force: true })
-    cy.get('[aria-label="App Input Source"]').select('Predefined fields')
-    cy.get('[data-testid="predefined-input-panel"]').should('be.visible')
-    cy.get('[data-testid="vanity-app-fields"]').should('be.visible')
 
     cy.get('[data-testid="input-clarity-panel"]').within(() => {
       cy.contains('Input:').should('be.visible')

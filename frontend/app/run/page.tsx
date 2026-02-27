@@ -47,14 +47,6 @@ type PresetApp = {
 type SubmissionStatus = 'idle' | 'pending' | 'success' | 'error'
 type RunStep = 'step-1' | 'step-2' | 'step-3'
 
-type VanitySearchSpace = {
-  prefix: string
-  startCounter: string
-  endCounter: string
-  chunkAttempts: string
-  workerCount: string
-}
-
 type JobCreateLimits = {
   max_memory_bytes: number
   max_instructions: number
@@ -101,18 +93,6 @@ type JobStatusResponse = {
 
 const PRESET_APPS: PresetApp[] = [
   {
-    id: 'vanity-generator',
-    name: 'Solana Vanity Address Generator',
-    tagline: 'Best onboarding path: interactive and tangible output with predictable compute profile.',
-    inputLabel: 'Prefix and counter range (+ optional seed handling mode).',
-    outputLabel: 'Matching address, keypair artifact, and deterministic execution proof envelope.',
-    outcome: 'Workers execute deterministic counter chunks; scheduler returns consensus output and settlement evidence.',
-    defaultJobName: 'solana-vanity-address-search',
-    defaultRuntimeId: '0000000000000000000000000000000000000000000000000000000000000000',
-    defaultInputJson: '{\n  "prefix": "So1",\n  "startCounter": 0,\n  "endCounter": 1000000,\n  "chunkAttempts": 50000\n}',
-    benchmarkHint: 'Use this as the canonical benchmark to normalize compute/fee multipliers across workers.'
-  },
-  {
     id: 'json-transform',
     name: 'JSON Transform Module',
     tagline: 'Useful for schema-safe ETL style payload validation on worker fleets.',
@@ -154,20 +134,12 @@ const DEFAULT_JOB_ESCROW_LAMPORTS = Math.max(
     SCHEDULER_DEFAULT_FLAT_FEE_LAMPORTS
   )
 )
-const DEFAULT_VANITY_SEARCH_SPACE: VanitySearchSpace = {
-  prefix: 'So1',
-  startCounter: '0',
-  endCounter: '1000000',
-  chunkAttempts: '50000',
-  workerCount: '5'
-}
-
 export default function RunPage() {
   const [activeStep, setActiveStep] = createSignal<RunStep>('step-1')
   const [safetyOpen, setSafetyOpen] = createSignal(false)
   const [submissionMode, setSubmissionMode] = createSignal<'preset' | 'custom'>('preset')
   const [selectedPresetId, setSelectedPresetId] = createSignal(DEFAULT_PRESET.id)
-  const [inputMode, setInputMode] = createSignal<'predefined' | 'json' | 'file'>('predefined')
+  const [inputMode, setInputMode] = createSignal<'json' | 'file'>('json')
   const [executionMode, setExecutionMode] = createSignal<'secure-local' | 'distributed-insecure'>('distributed-insecure')
   const [jobName, setJobName] = createSignal(DEFAULT_PRESET.defaultJobName)
   const [runtimeId, setRuntimeId] = createSignal(DEFAULT_PRESET.defaultRuntimeId)
@@ -181,7 +153,6 @@ export default function RunPage() {
   const [customWasmBase64, setCustomWasmBase64] = createSignal('')
   const [inputFileName, setInputFileName] = createSignal('')
   const [inputFileBase64, setInputFileBase64] = createSignal('')
-  const [vanitySearchSpace, setVanitySearchSpace] = createSignal<VanitySearchSpace>(DEFAULT_VANITY_SEARCH_SPACE)
   const [allowSeedExposure, setAllowSeedExposure] = createSignal(true)
   const [submitStatus, setSubmitStatus] = createSignal<SubmissionStatus>('idle')
   const [submitMessage, setSubmitMessage] = createSignal('')
@@ -194,7 +165,7 @@ export default function RunPage() {
   createEffect(() => {
     const status = submitStatus()
     if (status === 'pending') {
-      const workersActive = Number(vanitySearchSpace().workerCount) || undefined
+      const workersActive = undefined
       let progress = 9
       const timer = window.setInterval(() => {
         progress = progress >= 92 ? 92 : progress + 7
@@ -234,7 +205,6 @@ export default function RunPage() {
   })
 
   const selectedPreset = createMemo<PresetApp>(() => PRESET_APPS.find((app) => app.id === selectedPresetId()) ?? DEFAULT_PRESET)
-  const isVanityApp = createMemo(() => selectedPresetId() === 'vanity-generator')
   const maxMemoryBytes = createMemo(() => parseNonNegativeInt(maxMemoryBytesInput(), DEFAULT_JOB_LIMITS.max_memory_bytes))
   const maxInstructions = createMemo(() => parseNonNegativeInt(maxInstructionsInput(), DEFAULT_JOB_LIMITS.max_instructions))
   const deterministicMinEscrowLamports = createMemo(() => requiredInstructionEscrowLamports(
@@ -253,10 +223,6 @@ export default function RunPage() {
   const failureCount = createMemo(() => jobStatus()?.failures?.length ?? 0)
   const quorumReached = createMemo(() => jobStatus()?.quorum?.quorum_reached === true)
   const appInputSummary = createMemo(() => {
-    if (isVanityApp()) {
-      const spec = vanitySearchSpace()
-      return `Vanity search space: prefix "${spec.prefix}" from counter ${spec.startCounter} to ${spec.endCounter} with chunk size ${spec.chunkAttempts} across ${spec.workerCount} workers.`
-    }
     if (inputMode() === 'json') {
       return 'App input comes from raw JSON payload.'
     }
@@ -272,13 +238,13 @@ export default function RunPage() {
     setJobName(preset.defaultJobName)
     setRuntimeId(preset.defaultRuntimeId)
     setInputJson(preset.defaultInputJson)
-    setInputMode(nextPresetId === 'vanity-generator' ? 'predefined' : 'json')
+    setInputMode('json')
     setSubmitStatus('idle')
     setValidationErrors([])
   }
 
   const applyRecommendedDemo = () => {
-    onPresetChange('vanity-generator')
+    onPresetChange(DEFAULT_PRESET.id)
     setSubmissionMode('preset')
     setExecutionMode('distributed-insecure')
     setMaxMemoryBytesInput(String(DEFAULT_JOB_LIMITS.max_memory_bytes))
@@ -306,16 +272,7 @@ export default function RunPage() {
   const inputPayloadText = () => {
     if (inputMode() === 'json') return inputJson()
     if (inputMode() === 'file') return ''
-    if (!isVanityApp()) return inputJson()
-    const spec = vanitySearchSpace()
-    return JSON.stringify({
-      prefix: spec.prefix,
-      startCounter: Number(spec.startCounter),
-      endCounter: Number(spec.endCounter),
-      chunkAttempts: Number(spec.chunkAttempts),
-      workerCount: Number(spec.workerCount),
-      allowSeedExposure: allowSeedExposure()
-    })
+    return inputJson()
   }
 
   const buildJobCreatePayload = (): JobCreatePayload => {
@@ -384,25 +341,6 @@ export default function RunPage() {
 
     if (inputMode() === 'file' && !inputFileName()) {
       errors.push('Input file is required when Input Source is set to Upload input file.')
-    }
-
-    if (isVanityApp() && inputMode() === 'predefined') {
-      const start = Number(vanitySearchSpace().startCounter)
-      const end = Number(vanitySearchSpace().endCounter)
-      const chunk = Number(vanitySearchSpace().chunkAttempts)
-      const workers = Number(vanitySearchSpace().workerCount)
-      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
-        errors.push('Vanity search space must use numeric counters and End Counter must be greater than Start Counter.')
-      }
-      if (!Number.isFinite(chunk) || chunk <= 0) {
-        errors.push('Vanity search space chunk attempts must be greater than 0.')
-      }
-      if (!Number.isFinite(workers) || workers < 1) {
-        errors.push('Vanity worker count must be at least 1.')
-      }
-      if (!vanitySearchSpace().prefix.trim()) {
-        errors.push('Vanity prefix is required.')
-      }
     }
 
     if (executionMode() === 'distributed-insecure' && !allowSeedExposure()) {
@@ -497,9 +435,9 @@ export default function RunPage() {
 
       <section class="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
         <Alert>
-          <AlertTitle>Vanity Generator = Onboarding + Benchmark Baseline</AlertTitle>
+          <AlertTitle>Preset Modules = Fast Onboarding + Deterministic Baseline</AlertTitle>
           <AlertDescription>
-            Start users with vanity address generation for an interactive first run and reuse its runtime profile to normalize compute calculations later.
+            Start with the recommended preset for a clear first run, then switch modules as needed while keeping the same deterministic execution envelope.
           </AlertDescription>
         </Alert>
 
@@ -541,7 +479,7 @@ export default function RunPage() {
                 <CardContent class="space-y-4">
                   <Alert>
                     <AlertTitle>Frictionless Start</AlertTitle>
-                    <AlertDescription>Pick the recommended vanity demo to see end-to-end output first. Change advanced fields only when needed.</AlertDescription>
+                    <AlertDescription>Pick the recommended preset to see end-to-end output first. Change advanced fields only when needed.</AlertDescription>
                   </Alert>
                   <div class="space-y-1">
                     <Label for="submission-mode">Submission Mode</Label>
@@ -760,46 +698,11 @@ export default function RunPage() {
                       id="input-mode"
                       aria-label="App Input Source"
                       value={inputMode()}
-                      onInput={(event: Event & { currentTarget: HTMLSelectElement }) => setInputMode(event.currentTarget.value as 'predefined' | 'json' | 'file')}
+                      onInput={(event: Event & { currentTarget: HTMLSelectElement }) => setInputMode(event.currentTarget.value as 'json' | 'file')}
                     >
-                      <option value="predefined">Predefined fields</option>
                       <option value="json">Raw JSON payload</option>
                       <option value="file">Upload input file</option>
                     </Select>
-                  </div>
-
-                  <div classList={{ hidden: inputMode() !== 'predefined' }} class="space-y-3" data-testid="predefined-input-panel">
-                    <div hidden={!isVanityApp()} class="space-y-3" data-testid="vanity-app-fields">
-                      <p class="text-xs text-muted-foreground">Search space is a Vanity app field. Configure it here when running the vanity generator.</p>
-                      <div class="grid gap-4 md:grid-cols-3">
-                        <div class="space-y-1">
-                          <Label for="prefix">Prefix</Label>
-                          <Input id="prefix" aria-label="Prefix" value={vanitySearchSpace().prefix} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), prefix: event.currentTarget.value })} />
-                        </div>
-                        <div class="space-y-1">
-                          <Label for="start-counter">Start Counter</Label>
-                          <Input id="start-counter" aria-label="Start Counter" type="number" min="0" value={vanitySearchSpace().startCounter} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), startCounter: event.currentTarget.value })} />
-                        </div>
-                        <div class="space-y-1">
-                          <Label for="end-counter">End Counter</Label>
-                          <Input id="end-counter" aria-label="End Counter" type="number" min="1" value={vanitySearchSpace().endCounter} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), endCounter: event.currentTarget.value })} />
-                        </div>
-                      </div>
-                      <div class="grid gap-4 md:grid-cols-2">
-                        <div class="space-y-1">
-                          <Label for="chunk-attempts">Chunk Attempts</Label>
-                          <Input id="chunk-attempts" aria-label="Chunk Attempts" type="number" min="1" value={vanitySearchSpace().chunkAttempts} class="font-mono text-xs" onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), chunkAttempts: event.currentTarget.value })} />
-                        </div>
-                        <div class="space-y-1">
-                          <Label for="worker-count">Worker Count</Label>
-                          <Input id="worker-count" aria-label="Worker Count" type="number" min="1" value={vanitySearchSpace().workerCount} onInput={(event: Event & { currentTarget: HTMLInputElement }) => setVanitySearchSpace({ ...vanitySearchSpace(), workerCount: event.currentTarget.value })} />
-                        </div>
-                      </div>
-                    </div>
-                    <Alert hidden={isVanityApp()}>
-                      <AlertTitle>No Predefined Search Space For This App</AlertTitle>
-                      <AlertDescription>Search-space controls are specific to the Vanity app. For this app, use raw JSON or input file.</AlertDescription>
-                    </Alert>
                   </div>
 
                   <div classList={{ hidden: inputMode() !== 'json' }} class="space-y-1" data-testid="json-input-panel">
@@ -893,7 +796,7 @@ export default function RunPage() {
                   <Alert>
                     <AlertTitle>Onboarding Path</AlertTitle>
                     <AlertDescription>
-                      Default first demo should use the vanity generator preset so users get a tangible result before exploring custom modules.
+                      Default first demo should use the recommended preset so users get a tangible result before exploring custom modules.
                     </AlertDescription>
                   </Alert>
 

@@ -13,14 +13,6 @@ export function docsQuickStartHref(): string {
   return '/docs/getting-started/quick-start/'
 }
 
-export function docsAddressGeneratorCliHref(version = DOCS_DEFAULT_VERSION): string {
-  return `/docs/${version}/address-generator-cli.html`
-}
-
-export function docsAddressGeneratorPayloadHref(version = DOCS_DEFAULT_VERSION): string {
-  return `/docs/${version}/address-generator-payload.html`
-}
-
 export function docsApiReferenceHref(version = DOCS_DEFAULT_VERSION): string {
   return `/docs/${version}/api-reference.html`
 }
@@ -40,4 +32,3 @@ export function docsChangelogHref(version = DOCS_DEFAULT_VERSION): string {
 export function docsLeafPrettyHref(version: string, slug: string): string {
   return `/docs/${version}/${slug}/`
 }
-

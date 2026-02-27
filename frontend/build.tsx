@@ -207,10 +207,7 @@ function buildChangelogMarkdown(ref: string, version: string): string {
     const commitUrl = repo ? `${repo}/commit/${hash}` : ''
     const compareUrl = repo && parent ? `${repo}/compare/${parent}...${hash}` : ''
     const links = [commitUrl ? `[commit](${commitUrl})` : '', compareUrl ? `[diff](${compareUrl})` : ''].filter(Boolean).join(' · ')
-    const normalizedSubject = docsRenderer.normalizeDocsTerminology(
-      subject.replaceAll('vanity', 'address-prefix').replaceAll('Vanity', 'Address-prefix'),
-      'changelog'
-    )
+    const normalizedSubject = docsRenderer.normalizeDocsTerminology(subject, 'changelog')
     entries.push(`- **${date}** \`${shortHash}\` ${normalizedSubject}${links ? ` (${links})` : ''}`)
   }
 
@@ -865,7 +862,7 @@ function generateVersionDocs(version: string): string[] {
       slug,
       `${pageTitle} (${version})`,
       `Docs for ${pageTitle} in ${version}`,
-      docsLayout(version, pageTitle, docsRenderer.renderDocsContent(found.content, found.resolvedPath), `${(source.sourceLabel || found.resolvedPath).replaceAll('vanity', 'address').replaceAll('Vanity', 'Address')} @ ${ref}`)
+      docsLayout(version, pageTitle, docsRenderer.renderDocsContent(found.content, found.resolvedPath), `${source.sourceLabel || found.resolvedPath} @ ${ref}`)
     )
     writeFileSync(path.join(wikiVersionDir, `${slug}.mdx`), `${normalizedSourceContent}\n`, 'utf8')
   }

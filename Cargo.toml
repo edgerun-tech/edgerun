@@ -24,8 +24,6 @@ members = [
   "crates/edgerun-runtime-proto",
   "crates/edgerun-rbi-gateway",
   "crates/edgerun-containerd-shim",
-  "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-payload",
-  "edgerun-apps/solana-vanity-address-generator/edgerun-vanity-client",
   "crates/edgerun-hwvault-primitives",
 ]
 exclude = ["program/programs/edgerun_program"]

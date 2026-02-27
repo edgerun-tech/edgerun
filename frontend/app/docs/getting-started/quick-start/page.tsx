@@ -4,12 +4,10 @@ import { Nav } from '../../../../components/nav'
 import { Footer } from '../../../../components/footer'
 import { DocsSidebar } from '../../../../components/docs/docs-sidebar'
 import { Card, CardContent, CardHeader, CardTitle } from '../../../../components/ui/card'
-import { Separator } from '../../../../components/ui/separator'
 import { PageHero } from '../../../../components/layout/page-hero'
 import { Alert, AlertDescription, AlertTitle } from '../../../../components/ui/alert'
 import { Button } from '../../../../components/ui/button'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '../../../../components/ui/sheet'
-import { docsAddressGeneratorCliHref, docsAddressGeneratorPayloadHref } from '../../../../lib/docs-links'
 import { getDocsNav } from '../../../../lib/docs-nav'
 
 const docsNav = getDocsNav('main')
@@ -42,73 +40,45 @@ export default function QuickStartPage() {
             <PageHero
               title="Quick Start"
               badge="Get Started"
-              description="Run the end-to-end starter workflow in minutes using the real client, payload, and scheduler surfaces."
+              description="Run the end-to-end starter workflow in minutes using the guided Run Job flow and scheduler control surface."
               maxWidthClass="max-w-4xl"
             />
 
             <section class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
               <div class="space-y-8">
                 <Card>
-                  <CardHeader><CardTitle>1. Build Address Generation Crates</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>1. Validate Frontend Tooling</CardTitle></CardHeader>
                   <CardContent class="space-y-3">
-                    <CodeBlock lang="bash" code={`cargo build -p edgerun-address-payload --target wasm32-unknown-unknown\ncargo build -p edgerun-address-client`} />
+                    <CodeBlock lang="bash" code={`cd frontend\nbun run check\nbun run build`} />
                   </CardContent>
                 </Card>
 
                 <Card>
-                  <CardHeader><CardTitle>2. Run Secure Local Mode</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>2. Open Guided Run Flow</CardTitle></CardHeader>
                   <CardContent class="space-y-3">
                     <CodeBlock
-                      lang="bash"
-                      code={`cargo run -p edgerun-address-client -- \\
-  --mode secure-local \\
-  --seed-hex 0101010101010101010101010101010101010101010101010101010101010101 \\
-  --prefix So1 \\
-  --start-counter 0 \\
-  --end-counter 1000000 \\
-  --chunk-attempts 50000`}
+                      lang="text"
+                      code={`Open /run/\nChoose a preset module\nSet scheduler URL and compute envelope\nReview contract, then submit`}
                     />
                     <Alert>
-                      <AlertTitle>Security model</AlertTitle>
-                      <AlertDescription>In secure-local mode, seed material does not leave the client.</AlertDescription>
+                      <AlertTitle>Safety model</AlertTitle>
+                      <AlertDescription>Distributed mode requires explicit seed exposure acknowledgement before submission.</AlertDescription>
                     </Alert>
                   </CardContent>
                 </Card>
 
                 <Card>
-                  <CardHeader><CardTitle>3. Run Distributed Mode</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>3. Use Deterministic JSON Payload</CardTitle></CardHeader>
                   <CardContent class="space-y-3">
                     <CodeBlock
-                      lang="bash"
-                      code={`cargo run -p edgerun-address-client -- \\
-  --mode distributed-insecure \\
-  --allow-worker-seed-exposure \\
-  --scheduler-url https://api.edgerun.tech \\
-  --runtime-id 0000000000000000000000000000000000000000000000000000000000000000 \\
-  --wasm-path target/wasm32-unknown-unknown/debug/edgerun_address_payload.wasm \\
-  --seed-hex 0101010101010101010101010101010101010101010101010101010101010101 \\
-  --prefix So1 \\
-  --start-counter 0 \\
-  --end-counter 1000000 \\
-  --chunk-attempts 50000 \\
-  --escrow-per-job-lamports 1000000 \\
-  --max-escrow-lamports 20000000`}
+                      lang="json"
+                      code={`{
+  "document": { "status": "pending" },
+  "rules": [{ "op": "set", "path": "status", "value": "ready" }]
+}`}
                     />
                   </CardContent>
                 </Card>
-
-                <Separator />
-
-                <div class="grid gap-4 md:grid-cols-2">
-                  <a href={docsAddressGeneratorCliHref('main')} class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
-                    <p class="font-semibold">Address Generator CLI</p>
-                    <p class="text-sm text-muted-foreground">Detailed CLI flags and mode semantics.</p>
-                  </a>
-                  <a href={docsAddressGeneratorPayloadHref('main')} class="rounded-lg border border-border bg-card p-4 hover:border-primary/50">
-                    <p class="font-semibold">Address Generator Payload</p>
-                    <p class="text-sm text-muted-foreground">Deterministic seed/counter derivation and output encoding.</p>
-                  </a>
-                </div>
               </div>
             </section>
           </section>

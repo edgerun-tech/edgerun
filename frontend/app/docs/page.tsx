@@ -11,8 +11,6 @@ import { PageHero } from '../../components/layout/page-hero'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from '../../components/ui/sheet'
 import {
-  docsAddressGeneratorCliHref,
-  docsAddressGeneratorPayloadHref,
   docsApiReferenceHref,
   docsChangelogHref,
   docsQuickStartHref,
@@ -22,8 +20,6 @@ import { getDocsNav } from '../../lib/docs-nav'
 
 const quickLinks = [
   { title: 'Get Started Guide', description: 'Step-by-step onboarding with local and distributed execution modes', href: docsQuickStartHref(), live: true },
-  { title: 'Address Generator CLI', description: 'Bulk Solana address generation workflow and command semantics', href: docsAddressGeneratorCliHref('main'), live: true },
-  { title: 'Address Generator Payload', description: 'Deterministic payload behavior and encoding details', href: docsAddressGeneratorPayloadHref('main'), live: true },
   { title: 'API Reference', description: 'Generated HTTP, Rust, and CLI references from source', href: docsApiReferenceHref('main'), live: true },
   { title: 'Changelog', description: 'Auto-generated release log with commit dates and diff links', href: docsChangelogHref('main'), live: true },
   { title: 'Routed Terminal Protocol v2', description: 'Current wire contract for routed terminal sessions over multi-hop WebRTC overlays', href: docsLeafPrettyHref('main', 'routed-terminal-protocol-v2'), live: true }
