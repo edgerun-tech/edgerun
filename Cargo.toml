@@ -59,3 +59,11 @@ solana-sdk = "2.3"
 solana-system-interface = "1.0"
 wasmi = "2.0.0-beta.1"
 wat = "1"
+
+[profile.dev-release]
+inherits = "release"
+lto = "off"
+codegen-units = 16
+debug = 0
+strip = "none"
+incremental = true
