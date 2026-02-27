@@ -125,6 +125,7 @@ impl Keypair {
         self.pubkey
     }
 
+    #[allow(dead_code)]
     fn sign_message(&self, message: &[u8]) -> SignatureBytes {
         let mut out = [0_u8; 64];
         let digest = edgerun_crypto::blake3_256(message);
@@ -134,11 +135,13 @@ impl Keypair {
     }
 }
 
+#[allow(dead_code)]
 fn read_keypair_file(path: &str) -> Result<Keypair> {
     anyhow::bail!("chain keypair loading unsupported in this build: {path}")
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
 struct SignatureBytes([u8; 64]);
 
 impl AsRef<[u8]> for SignatureBytes {
@@ -147,7 +150,7 @@ impl AsRef<[u8]> for SignatureBytes {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 struct TxSignature([u8; 64]);
 
 impl std::fmt::Display for TxSignature {
@@ -163,6 +166,7 @@ struct Blockhash([u8; 32]);
 struct RpcClient;
 
 impl RpcClient {
+    #[allow(dead_code)]
     fn new(_rpc_url: String) -> Self {
         Self
     }
@@ -225,11 +229,13 @@ struct GetAccountWithCommitmentResponse {
     context: ResponseContext,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 struct RpcProgramAccountsConfig {
     filters: Option<Vec<RpcFilterType>>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum RpcFilterType {
     DataSize(u64),
@@ -274,7 +280,7 @@ struct Instruction {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 struct Transaction {
     signatures: Vec<TxSignature>,
 }
@@ -298,6 +304,16 @@ impl Transaction {
             signatures: vec![TxSignature([0_u8; 64])],
         }
     }
+}
+
+fn encode_tx_artifact_bytes(tx: &Transaction) -> Vec<u8> {
+    let mut out = Vec::with_capacity(16 + tx.signatures.len() * 64);
+    out.extend_from_slice(b"edgerun:tx:stub:v1");
+    out.extend_from_slice(&(tx.signatures.len() as u32).to_le_bytes());
+    for sig in &tx.signatures {
+        out.extend_from_slice(&sig.0);
+    }
+    out
 }
 
 mod system_program {
@@ -2679,7 +2695,9 @@ fn job_create_inner(
         match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
             Ok(runtime_proof) => {
                 let tx_args = PostJobArgs {
-                    client: parsed_client.unwrap_or_else(|| chain.payer.pubkey()),
+                    client: parsed_client
+                        .map(Pubkey::new_from_array)
+                        .unwrap_or_else(|| chain.payer.pubkey()),
                     job_id: bundle_hash,
                     bundle_hash,
                     runtime_id,
@@ -3037,7 +3055,7 @@ fn build_post_job_tx_base64(
     let mut tx = Transaction::new_with_payer(&[ix], Some(&chain.payer.pubkey()));
     tx.partial_sign(&[&chain.payer], blockhash);
     let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_bytes = encode_tx_artifact_bytes(&tx);
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
     Ok((tx_b64, signature))
 }
@@ -3147,6 +3165,7 @@ fn build_merkle_root_and_proof(
     Some((layer[0], proof))
 }
 
+#[allow(dead_code)]
 fn build_finalize_job_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
@@ -3211,7 +3230,7 @@ fn build_finalize_job_tx_base64(
     );
 
     let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_bytes = encode_tx_artifact_bytes(&tx);
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
     if auto_submit {
         let sent = chain
@@ -3223,6 +3242,7 @@ fn build_finalize_job_tx_base64(
     Ok((tx_b64, signature, false))
 }
 
+#[allow(dead_code)]
 fn build_assign_workers_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
@@ -3262,7 +3282,7 @@ fn build_assign_workers_tx_base64(
         blockhash,
     );
     let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_bytes = encode_tx_artifact_bytes(&tx);
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
     if auto_submit {
         let sent = chain
@@ -3313,7 +3333,7 @@ fn build_cancel_expired_job_tx_base64(
         blockhash,
     );
     let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_bytes = encode_tx_artifact_bytes(&tx);
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
     if auto_submit {
         let sent = chain
@@ -3325,6 +3345,7 @@ fn build_cancel_expired_job_tx_base64(
     Ok((tx_b64, signature, false))
 }
 
+#[allow(dead_code)]
 fn build_slash_worker_tx_base64(
     chain: &ChainContext,
     job_id: [u8; 32],
@@ -3361,7 +3382,7 @@ fn build_slash_worker_tx_base64(
         blockhash,
     );
     let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = bincode::serialize(&tx).context("failed to serialize transaction")?;
+    let tx_bytes = encode_tx_artifact_bytes(&tx);
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
     if auto_submit {
         let sent = chain
@@ -3390,6 +3411,7 @@ fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
     data
 }
 
+#[allow(dead_code)]
 fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
     let mut data = Vec::with_capacity(8 + 32 * 3);
     data.extend_from_slice(&anchor_discriminator("assign_workers"));
@@ -3399,6 +3421,7 @@ fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
     data
 }
 
+#[allow(dead_code)]
 fn encode_finalize_job_data() -> Vec<u8> {
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_discriminator("finalize_job"));
@@ -3411,6 +3434,7 @@ fn encode_cancel_expired_job_data() -> Vec<u8> {
     data
 }
 
+#[allow(dead_code)]
 fn encode_slash_worker_data() -> Vec<u8> {
     let mut data = Vec::with_capacity(8);
     data.extend_from_slice(&anchor_discriminator("slash_worker"));
@@ -4092,7 +4116,6 @@ fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
             &chain.program_id,
             RpcProgramAccountsConfig {
                 filters: Some(filters),
-                ..RpcProgramAccountsConfig::default()
             },
         )
         .context("failed to fetch program accounts for discovery")?;
@@ -4132,7 +4155,6 @@ fn sync_onchain_job_results(state: &AppState) -> Result<()> {
             &chain.program_id,
             RpcProgramAccountsConfig {
                 filters: Some(job_result_rpc_filters()),
-                ..RpcProgramAccountsConfig::default()
             },
         )
         .context("failed to fetch program accounts for job-result sync")?;
@@ -4605,6 +4627,18 @@ fn parse_hex32(value: &str) -> Result<[u8; 32]> {
     let mut out = [0_u8; 32];
     out.copy_from_slice(&bytes);
     Ok(out)
+}
+
+fn parse_committee_workers(committee_workers: &[String]) -> Option<[Pubkey; 3]> {
+    if committee_workers.len() < 3 {
+        return None;
+    }
+    let mut parsed = Vec::with_capacity(3);
+    for worker in committee_workers.iter().take(3) {
+        let bytes = parse_pubkey_bytes(worker).ok()?;
+        parsed.push(Pubkey::new_from_array(bytes));
+    }
+    parsed.try_into().ok()
 }
 
 #[allow(clippy::too_many_arguments)]

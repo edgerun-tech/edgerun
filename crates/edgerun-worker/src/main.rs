@@ -188,7 +188,7 @@ async fn main() -> Result<()> {
 }
 
 fn load_config() -> WorkerConfig {
-    let mut worker_pubkey =
+    let worker_pubkey =
         std::env::var("EDGERUN_WORKER_PUBKEY").unwrap_or_else(|_| "worker-demo-1".to_string());
     let scheduler_base_url = std::env::var("EDGERUN_SCHEDULER_URL")
         .unwrap_or_else(|_| "https://api.edgerun.tech".to_string());
@@ -435,9 +435,8 @@ async fn fetch_policy_info(
         let resp = req.send().await.context("policy info request failed")?;
         let status = resp.status();
         if status.is_success() {
-            return resp
-                .json::<PolicyInfoResponse>()
-                .await
+            let payload = resp.bytes().await.context("policy info response read failed")?;
+            return sonic_rs::from_slice::<PolicyInfoResponse>(&payload)
                 .context("invalid policy info response");
         }
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
