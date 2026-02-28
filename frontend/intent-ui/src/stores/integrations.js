@@ -129,12 +129,20 @@ async function hydrateStateInWorker() {
   const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
   for (const integration of Object.values(catalog)) {
     const token = getRuntimeToken(integration);
-    next[integration.id] = await callIntegrationWorker("hydrate_connection", {
-      integrationId: integration.id,
-      storedConnection: next[integration.id] || {},
-      profileReady,
-      token
-    });
+    try {
+      next[integration.id] = await callIntegrationWorker("hydrate_connection", {
+        integrationId: integration.id,
+        storedConnection: next[integration.id] || {},
+        profileReady,
+        token
+      });
+    } catch {
+      next[integration.id] = integration.hydrateConnection({
+        storedConnection: next[integration.id] || {},
+        profileReady,
+        token
+      });
+    }
   }
   return next;
 }
@@ -178,7 +186,12 @@ async function applyConnectIntent(payload = {}) {
       token
     });
   } catch {
-    return;
+    nextConnection = integration.connectConnection({
+      currentConnection: connections()[id] || {},
+      payload,
+      profileReady,
+      token
+    });
   }
   const next = {
     ...connections(),
@@ -199,7 +212,7 @@ async function applyDisconnectIntent(payload = {}) {
       integrationId: id
     });
   } catch {
-    return;
+    nextConnection = integration.disconnectConnection();
   }
   const next = {
     ...connections(),
@@ -240,7 +253,12 @@ async function applySetConnectorModeIntent(payload = {}) {
       token
     });
   } catch {
-    return;
+    nextConnection = integration.setConnectorModeConnection({
+      currentConnection: current,
+      mode: payload.mode,
+      profileReady,
+      token
+    });
   }
   const next = {
     ...connections(),
@@ -408,14 +426,26 @@ const integrationStore = {
       const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
       const deviceReady = knownDevices().some((device) => Boolean(device?.online));
       const token = String(details.token || "").trim() || getRuntimeToken(integration);
-      const result = await callIntegrationWorker("verify_integration", {
-        integrationId: id,
-        details,
-        connectorMode,
-        profileReady,
-        deviceReady,
-        token
-      });
+      let result = null;
+      try {
+        result = await callIntegrationWorker("verify_integration", {
+          integrationId: id,
+          details,
+          connectorMode,
+          profileReady,
+          deviceReady,
+          token
+        });
+      } catch {
+        result = await integration.verifyConnection({
+          details,
+          connectorMode,
+          profileReady,
+          deviceReady,
+          token,
+          fetchImpl: fetch
+        });
+      }
       if (!result?.ok) {
         const message = String(result?.message || `Failed to verify ${integration.name}.`);
         publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id, message }, uiIntentMeta("integrations.store"));
