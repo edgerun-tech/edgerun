@@ -16,6 +16,8 @@ const targetCss = path.join(targetRoot, 'app.css')
 const eventBusWasmTarget = path.join(targetRoot, 'eventbus.wasm')
 const eventBusWorkerSource = path.join(intentRoot, 'src', 'workers', 'eventbus.worker.js')
 const eventBusWorkerTarget = path.join(targetWorkerRoot, 'eventbus.worker.js')
+const integrationsWorkerSource = path.join(intentRoot, 'src', 'workers', 'integrations.worker.js')
+const integrationsWorkerTarget = path.join(targetWorkerRoot, 'integrations.worker.js')
 const tailwindBin = path.join(frontendRoot, 'node_modules', '.bin', 'tailwindcss')
 const repoRoot = path.resolve(frontendRoot, '..')
 
@@ -106,6 +108,10 @@ if (!existsSync(eventBusWorkerSource)) {
   throw new Error(`Missing event bus worker source at ${eventBusWorkerSource}`)
 }
 copyFileSync(eventBusWorkerSource, eventBusWorkerTarget)
+if (!existsSync(integrationsWorkerSource)) {
+  throw new Error(`Missing integrations worker source at ${integrationsWorkerSource}`)
+}
+copyFileSync(integrationsWorkerSource, integrationsWorkerTarget)
 
 writeFileSync(
   path.join(targetRoot, 'index.html'),

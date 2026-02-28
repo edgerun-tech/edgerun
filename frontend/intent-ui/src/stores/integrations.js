@@ -1,9 +1,11 @@
 import { createSignal } from "solid-js";
 import { UI_EVENT_TOPICS, UI_INTENT_TOPICS, uiIntentMeta } from "../lib/ui-intents";
+import { createIntegrationCatalog } from "../lib/integrations/catalog";
 import { publishEvent, subscribeEvent } from "./eventbus";
 import { profileRuntime } from "./profile-runtime";
 import { knownDevices } from "./devices";
 import { getProfileSecret, removeProfileSecret, setProfileSecret } from "./profile-secrets";
+import { callIntegrationWorker, initializeIntegrationWorker } from "./integrations-worker";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
@@ -11,137 +13,7 @@ let vaultStatusCheckedAt = 0;
 const VAULT_STATUS_TTL_MS = 30 * 1000;
 let subscriptionsInitialized = false;
 
-const catalog = {
-  github: {
-    id: "github",
-    name: "GitHub",
-    authMethod: "token",
-    supportsPlatformConnector: false,
-    defaultConnectorMode: "user_owned",
-    tokenKey: "github_token",
-    defaultCapabilities: ["repos.read", "repos.write", "prs.read", "prs.write"],
-    tags: ["code", "storage", "workflows"]
-  },
-  cloudflare: {
-    id: "cloudflare",
-    name: "Cloudflare",
-    authMethod: "token",
-    supportsPlatformConnector: true,
-    tokenKey: "cloudflare_token",
-    defaultCapabilities: ["zones.read", "workers.read", "workers.write"],
-    tags: ["network", "deploy", "workflows", "code"]
-  },
-  vercel: {
-    id: "vercel",
-    name: "Vercel",
-    authMethod: "token",
-    supportsPlatformConnector: true,
-    tokenKey: "vercel_token",
-    defaultCapabilities: ["projects.read", "deployments.read", "deployments.write"],
-    tags: ["deploy", "workflows", "code"]
-  },
-  google: {
-    id: "google",
-    name: "Google",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "google_token",
-    defaultCapabilities: ["drive.read", "gmail.read", "calendar.read", "contacts.read", "messages.read"],
-    tags: ["messages", "storage", "workflows", "productivity"]
-  },
-  google_photos: {
-    id: "google_photos",
-    name: "Google Photos",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "google_token",
-    defaultCapabilities: ["photos.read"],
-    tags: ["media", "storage"]
-  },
-  email: {
-    id: "email",
-    name: "Email",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "google_token",
-    defaultCapabilities: ["messages.read", "messages.send"],
-    tags: ["messages", "workflows"]
-  },
-  whatsapp: {
-    id: "whatsapp",
-    name: "WhatsApp",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "whatsapp_token",
-    defaultCapabilities: ["messages.read", "messages.send"],
-    tags: ["messages", "workflows"]
-  },
-  messenger: {
-    id: "messenger",
-    name: "Messenger",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "messenger_token",
-    defaultCapabilities: ["messages.read", "messages.send"],
-    tags: ["messages", "workflows"]
-  },
-  telegram: {
-    id: "telegram",
-    name: "Telegram",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "telegram_token",
-    defaultCapabilities: ["messages.read", "messages.send"],
-    tags: ["messages", "workflows"]
-  },
-  qwen: {
-    id: "qwen",
-    name: "Qwen",
-    authMethod: "oauth",
-    supportsPlatformConnector: true,
-    tokenKey: "qwen_token",
-    defaultCapabilities: ["chat.completions"],
-    tags: ["ai", "code", "workflows"]
-  },
-  codex_cli: {
-    id: "codex_cli",
-    name: "Codex CLI",
-    authMethod: "local_cli",
-    supportsPlatformConnector: false,
-    requiresToken: false,
-    tokenKey: "",
-    defaultCapabilities: ["assistant.local_cli.execute"],
-    tags: ["ai", "code", "workflows"]
-  },
-  tailscale: {
-    id: "tailscale",
-    name: "Tailscale",
-    authMethod: "token",
-    supportsPlatformConnector: true,
-    defaultConnectorMode: "user_owned",
-    tokenKey: "tailscale_api_key",
-    defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"],
-    tags: ["network", "devices", "workflows"]
-  },
-  hetzner: {
-    id: "hetzner",
-    name: "Hetzner",
-    authMethod: "token",
-    supportsPlatformConnector: true,
-    tokenKey: "hetzner_token",
-    defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"],
-    tags: ["compute", "network", "storage", "workflows"]
-  },
-  web3: {
-    id: "web3",
-    name: "Web3",
-    authMethod: "wallet",
-    supportsPlatformConnector: false,
-    tokenKey: "web3_wallet",
-    defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"],
-    tags: ["identity", "security", "workflows"]
-  }
-};
+const catalog = createIntegrationCatalog();
 
 function safeParse(raw) {
   try {
@@ -240,37 +112,29 @@ function hydrateState() {
   const runtime = profileRuntime();
   const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
   for (const integration of Object.values(catalog)) {
-    const storedMode = String(next[integration.id]?.connectorMode || "").trim();
-    const defaultMode = integration.defaultConnectorMode
-      || (integration.supportsPlatformConnector ? "platform" : "user_owned");
-    const connectorMode = storedMode || defaultMode;
     const token = getRuntimeToken(integration);
-    const hasUsableToken = integration.requiresToken === false
-      ? Boolean(next[integration.id]?.connected)
-      : Boolean(token);
-    const wasLinked = Boolean(next[integration.id]?.linked);
-    if (connectorMode === "platform" && integration.supportsPlatformConnector) {
-      const connected = Boolean(wasLinked && profileReady);
-      next[integration.id] = {
-        connected,
-        linked: wasLinked,
-        connectorMode: "platform",
-        authMethod: integration.authMethod,
-        capabilities: connected ? integration.defaultCapabilities : [],
-        connectedAt: connected ? (next[integration.id]?.connectedAt || new Date().toISOString()) : null,
-        accountLabel: connected ? (next[integration.id]?.accountLabel || "Platform Connector") : "Platform Connector"
-      };
-      continue;
-    }
-    next[integration.id] = {
-      connected: hasUsableToken,
-      linked: hasUsableToken,
-      connectorMode: "user_owned",
-      authMethod: integration.authMethod,
-      capabilities: hasUsableToken ? integration.defaultCapabilities : [],
-      connectedAt: hasUsableToken ? (next[integration.id]?.connectedAt || new Date().toISOString()) : null,
-      accountLabel: hasUsableToken ? (next[integration.id]?.accountLabel || `${integration.name} Account`) : ""
-    };
+    next[integration.id] = integration.hydrateConnection({
+      storedConnection: next[integration.id] || {},
+      profileReady,
+      token
+    });
+  }
+  return next;
+}
+
+async function hydrateStateInWorker() {
+  const stored = readStoredState();
+  const next = { ...stored };
+  const runtime = profileRuntime();
+  const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
+  for (const integration of Object.values(catalog)) {
+    const token = getRuntimeToken(integration);
+    next[integration.id] = await callIntegrationWorker("hydrate_connection", {
+      integrationId: integration.id,
+      storedConnection: next[integration.id] || {},
+      profileReady,
+      token
+    });
   }
   return next;
 }
@@ -286,66 +150,60 @@ function emitIntegrationStateChanged(id, reason) {
   );
 }
 
-function applyCheckAll() {
-  const next = hydrateState();
-  setConnections(next);
-  persistState(next);
-  publishEvent(UI_EVENT_TOPICS.integration.stateChanged, { integrationId: "*", reason: "check_all" }, uiIntentMeta("integrations.reducer"));
+async function applyCheckAll() {
+  try {
+    const next = await hydrateStateInWorker();
+    setConnections(next);
+    persistState(next);
+    publishEvent(UI_EVENT_TOPICS.integration.stateChanged, { integrationId: "*", reason: "check_all" }, uiIntentMeta("integrations.reducer"));
+  } catch {
+    // keep last known state if worker is unavailable
+  }
 }
 
-function applyConnectIntent(payload = {}) {
+async function applyConnectIntent(payload = {}) {
   const id = String(payload?.id || "").trim();
   const integration = catalog[id];
   if (!integration) return;
-  const connectorMode = String(
-    payload.connectorMode
-    || connections()[id]?.connectorMode
-    || integration.defaultConnectorMode
-    || "user_owned"
-  );
   const runtime = profileRuntime();
   const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
-  const hasToken = integration.requiresToken === false
-    ? true
-    : Boolean(payload.hasToken) || Boolean(getRuntimeToken(integration));
-  const connected = connectorMode === "platform"
-    ? profileReady
-    : hasToken;
+  const token = getRuntimeToken(integration);
+  let nextConnection = null;
+  try {
+    nextConnection = await callIntegrationWorker("connect_connection", {
+      integrationId: id,
+      currentConnection: connections()[id] || {},
+      payload,
+      profileReady,
+      token
+    });
+  } catch {
+    return;
+  }
   const next = {
     ...connections(),
-    [id]: {
-      connected,
-      linked: connectorMode === "platform" ? true : connected,
-      connectorMode,
-      authMethod: integration.authMethod,
-      capabilities: connected ? (Array.isArray(payload.capabilities) && payload.capabilities.length > 0
-        ? payload.capabilities
-        : integration.defaultCapabilities) : [],
-      connectedAt: connected ? (connections()[id]?.connectedAt || new Date().toISOString()) : null,
-      accountLabel: String(payload.accountLabel || "").trim()
-        || (connectorMode === "platform" ? "Platform Connector" : (connected ? `${integration.name} Account` : ""))
-    }
+    [id]: nextConnection
   };
   setConnections(next);
   persistState(next);
   emitIntegrationStateChanged(id, "connect");
 }
 
-function applyDisconnectIntent(payload = {}) {
+async function applyDisconnectIntent(payload = {}) {
   const id = String(payload?.id || "").trim();
   const integration = catalog[id];
   if (!integration) return;
-  const supportsPlatformConnector = Boolean(integration.supportsPlatformConnector);
-  const defaultMode = integration.defaultConnectorMode || (supportsPlatformConnector ? "platform" : "user_owned");
+  let nextConnection = null;
+  try {
+    nextConnection = await callIntegrationWorker("disconnect_connection", {
+      integrationId: id
+    });
+  } catch {
+    return;
+  }
   const next = {
     ...connections(),
-    [id]: {
-      connected: false,
-      linked: false,
-      connectorMode: defaultMode,
-      capabilities: [],
-      accountLabel: ""
-    }
+    [id]: nextConnection
   };
   setConnections(next);
   persistState(next);
@@ -364,32 +222,29 @@ function applyDisconnectIntent(payload = {}) {
   emitIntegrationStateChanged(id, "disconnect");
 }
 
-function applySetConnectorModeIntent(payload = {}) {
+async function applySetConnectorModeIntent(payload = {}) {
   const id = String(payload?.id || "").trim();
   const integration = catalog[id];
   if (!integration) return;
-  const nextMode = payload.mode === "platform" && integration.supportsPlatformConnector ? "platform" : "user_owned";
-  const current = connections()[id] || {};
   const runtime = profileRuntime();
   const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
-  const hasToken = integration.requiresToken === false
-    ? Boolean(current.connected)
-    : Boolean(getRuntimeToken(integration));
-  const connected = nextMode === "platform"
-    ? Boolean(current.linked && profileReady)
-    : hasToken;
+  const current = connections()[id] || {};
+  const token = getRuntimeToken(integration);
+  let nextConnection = null;
+  try {
+    nextConnection = await callIntegrationWorker("set_mode_connection", {
+      integrationId: id,
+      currentConnection: current,
+      mode: payload.mode,
+      profileReady,
+      token
+    });
+  } catch {
+    return;
+  }
   const next = {
     ...connections(),
-    [id]: {
-      ...current,
-      connected,
-      linked: nextMode === "platform" ? Boolean(current.linked) : connected,
-      connectorMode: nextMode,
-      authMethod: integration.authMethod,
-      capabilities: connected ? (current.capabilities?.length ? current.capabilities : integration.defaultCapabilities) : [],
-      connectedAt: connected ? (current.connectedAt || new Date().toISOString()) : null,
-      accountLabel: nextMode === "platform" ? "Platform Connector" : (connected ? (current.accountLabel || `${integration.name} Account`) : "")
-    }
+    [id]: nextConnection
   };
   setConnections(next);
   persistState(next);
@@ -413,21 +268,22 @@ function applyVerificationEvent(payload = {}, ok) {
 function ensureSubscriptions() {
   if (subscriptionsInitialized) return;
   subscriptionsInitialized = true;
+  initializeIntegrationWorker();
 
   subscribeEvent(UI_INTENT_TOPICS.integration.checkAll, () => {
-    applyCheckAll();
+    void applyCheckAll();
   });
 
   subscribeEvent(UI_INTENT_TOPICS.integration.connect, (event) => {
-    applyConnectIntent(event?.payload || {});
+    void applyConnectIntent(event?.payload || {});
   });
 
   subscribeEvent(UI_INTENT_TOPICS.integration.disconnect, (event) => {
-    applyDisconnectIntent(event?.payload || {});
+    void applyDisconnectIntent(event?.payload || {});
   });
 
   subscribeEvent(UI_INTENT_TOPICS.integration.setConnectorMode, (event) => {
-    applySetConnectorModeIntent(event?.payload || {});
+    void applySetConnectorModeIntent(event?.payload || {});
   });
 
   subscribeEvent(UI_INTENT_TOPICS.integration.verifySucceeded, (event) => {
@@ -453,35 +309,14 @@ const integrationStore = {
     const state = connections();
     return Object.values(catalog).map((integration) => {
       const connection = state[integration.id];
-      const connected = Boolean(connection?.connected);
-      const available = connected && profileReady && (integration.id === "codex_cli" ? deviceReady : true);
-      const availabilityReason = integration.id === "tailscale" && !connected
-        ? "Provide Tailscale API key and link integration"
-        : !connected
-          ? "Not connected"
-          : !profileReady
-            ? "Profile session required"
-            : integration.id === "codex_cli" && !deviceReady
-              ? "Connected device required"
-              : "Ready";
+      const lifecycle = integration.listConnectionView({
+        connection,
+        profileReady,
+        deviceReady
+      });
       return {
         ...integration,
-        connected,
-        available,
-        availabilityReason,
-        connectorMode: String(
-          connection?.connectorMode
-          || integration.defaultConnectorMode
-          || (integration.supportsPlatformConnector ? "platform" : "user_owned")
-        ),
-        tags: Array.isArray(integration.tags) ? integration.tags : [],
-        supportsPlatformConnector: Boolean(integration.supportsPlatformConnector),
-        linked: Boolean(connection?.linked),
-        connectedAt: connection?.connectedAt || null,
-        accountLabel: connection?.accountLabel || "",
-        capabilities: available
-          ? connection?.capabilities || integration.defaultCapabilities
-          : []
+        ...lifecycle
       };
     });
   },
@@ -501,13 +336,13 @@ const integrationStore = {
     }
     return false;
   },
-  connect(id, details = {}) {
+  async connect(id, details = {}) {
     const integration = catalog[id];
     if (!integration) return false;
     const connectorMode = String(
       details.connectorMode
       || connections()[id]?.connectorMode
-      || integration.defaultConnectorMode
+      || integration.getDefaultConnectorMode()
       || "user_owned"
     );
 
@@ -519,10 +354,10 @@ const integrationStore = {
     }
     if (typeof window !== "undefined" && integration.tokenKey && token) {
       if (id === "github") {
-        void setProfileSecret(integration.tokenKey, token);
+        await setProfileSecret(integration.tokenKey, token);
         localStorage.removeItem(integration.tokenKey);
       } else if (profileReady) {
-        void setProfileSecret(integration.tokenKey, token);
+        await setProfileSecret(integration.tokenKey, token);
         localStorage.removeItem(integration.tokenKey);
       } else {
         localStorage.setItem(integration.tokenKey, token);
@@ -565,70 +400,36 @@ const integrationStore = {
     const connectorMode = String(
       details.connectorMode
       || connections()[id]?.connectorMode
-      || integration.defaultConnectorMode
-      || "user_owned"
+      || integration.getDefaultConnectorMode()
     );
 
     try {
       const runtime = profileRuntime();
       const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
-      if (id === "github" && !profileReady) {
-        throw new Error("Profile session required for GitHub PAT.");
-      }
-      if (connectorMode === "platform") {
-        if (!profileReady) throw new Error("Profile session required for platform connector.");
-        const message = "Platform connector session is active.";
-        publishEvent(UI_INTENT_TOPICS.integration.verifySucceeded, { id, message, capabilities: integration.defaultCapabilities }, uiIntentMeta("integrations.store"));
-        publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
-        return { ok: true, message };
-      }
-
-      if (id === "codex_cli") {
-        const deviceReady = knownDevices().some((device) => Boolean(device?.online));
-        if (!deviceReady) throw new Error("No connected node manager device is online.");
-        const message = "Connected device is online for local CLI execution.";
-        publishEvent(UI_INTENT_TOPICS.integration.verifySucceeded, { id, message, capabilities: integration.defaultCapabilities }, uiIntentMeta("integrations.store"));
-        publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
-        return { ok: true, message };
-      }
-
-      if (id === "tailscale") {
-        const apiKey = String(details.apiKey || details.token || "").trim() || getRuntimeToken(integration);
-        const tailnet = String(details.tailnet || "").trim();
-        if (!apiKey || !tailnet) throw new Error("Tailscale API key and tailnet are required.");
-        const response = await fetch("/api/tailscale/devices", {
-          method: "POST",
-          headers: { "content-type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ apiKey, tailnet })
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok || !body?.ok) {
-          throw new Error(String(body?.error || `tailscale devices request failed (${response.status})`));
-        }
-        const count = Array.isArray(body?.devices) ? body.devices.length : 0;
-        const message = `Verified Tailscale API access (${count} devices visible).`;
-        publishEvent(UI_INTENT_TOPICS.integration.verifySucceeded, { id, message, capabilities: integration.defaultCapabilities }, uiIntentMeta("integrations.store"));
-        publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
-        return { ok: true, message, devices: Array.isArray(body?.devices) ? body.devices : [] };
-      }
-
-      if (id === "web3") {
-        const wallet = String(details.wallet || "").trim();
-        if (!wallet || !wallet.startsWith("0x")) throw new Error("Connect EVM wallet first.");
-        const message = "Wallet is connected and ready.";
-        publishEvent(UI_INTENT_TOPICS.integration.verifySucceeded, { id, message, capabilities: integration.defaultCapabilities }, uiIntentMeta("integrations.store"));
-        publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
-        return { ok: true, message };
-      }
-
+      const deviceReady = knownDevices().some((device) => Boolean(device?.online));
       const token = String(details.token || "").trim() || getRuntimeToken(integration);
-      if (integration.requiresToken !== false && token.length < 8) {
-        throw new Error(`${integration.name} token missing or invalid.`);
+      const result = await callIntegrationWorker("verify_integration", {
+        integrationId: id,
+        details,
+        connectorMode,
+        profileReady,
+        deviceReady,
+        token
+      });
+      if (!result?.ok) {
+        const message = String(result?.message || `Failed to verify ${integration.name}.`);
+        publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id, message }, uiIntentMeta("integrations.store"));
+        publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: id, message }, uiIntentMeta("integrations.store"));
+        return { ok: false, message };
       }
-      const message = `${integration.name} credentials accepted.`;
-      publishEvent(UI_INTENT_TOPICS.integration.verifySucceeded, { id, message, capabilities: integration.defaultCapabilities }, uiIntentMeta("integrations.store"));
+      const message = String(result?.message || `${integration.name} credentials accepted.`);
+      publishEvent(
+        UI_INTENT_TOPICS.integration.verifySucceeded,
+        { id, message, capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities },
+        uiIntentMeta("integrations.store")
+      );
       publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
-      return { ok: true, message };
+      return { ok: true, message, devices: Array.isArray(result?.devices) ? result.devices : [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to verify ${integration.name}.`;
       publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id, message }, uiIntentMeta("integrations.store"));
