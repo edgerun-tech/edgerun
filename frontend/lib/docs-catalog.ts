@@ -50,12 +50,5 @@ export const generatedApiSpecs: GeneratedApiSpec[] = [
     description: 'Public API surface for edgerun-types.',
     sourcePath: 'crates/edgerun-types/src/lib.rs',
     mode: 'rust'
-  },
-  {
-    slug: 'api-edgerun-cli',
-    title: 'Edgerun CLI Reference',
-    description: 'CLI argument and command surface for edgerun-cli.',
-    sourcePath: 'crates/edgerun-cli/src/main.rs',
-    mode: 'cli'
   }
 ]

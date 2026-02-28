@@ -56,7 +56,8 @@ install -d -m 0750 -o root -g "${EDGERUN_GROUP}" "${EDGERUN_ETC_DIR}"
 
 if [[ "${INSTALL_BINARIES}" == "1" ]]; then
   export CARGO_TARGET_DIR="${ROOT_DIR}/out/target"
-  cargo build --locked --release -p edgerun-scheduler -p edgerun-term-server
+  cargo build --locked --release -p edgerun-scheduler
+  cargo build --locked --release -p edgerun-term-server --features term
   install -m 0755 -o "${EDGERUN_USER}" -g "${EDGERUN_GROUP}" \
     "${CARGO_TARGET_DIR}/release/edgerun-scheduler" \
     "${EDGERUN_ROOT}/out/target/release/edgerun-scheduler"

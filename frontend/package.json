@@ -9,7 +9,7 @@
     "brand:generate": "bun scripts/generate-brand-assets.mjs",
     "font:sync": "bun scripts/sync-fonts.mjs",
     "docs:generate": "bun scripts/generate-scheduler-docs.mjs",
-    "runtime:web:build": "cargo run -p edgerun-cli -- --root .. ci --job build-runtime-web",
+    "runtime:web:build": "../scripts/build-runtime-web.sh",
     "build:css": "mkdir -p ../out/frontend/site/assets && tailwindcss -i ./src/styles.css -o ../out/frontend/site/assets/styles.css --minify",
     "build:js": "timeout 20s bun ./scripts/build-client.mjs",
     "build:html": "timeout 20s bun ./scripts/build-html.mjs",

@@ -124,7 +124,7 @@ EDGERUN_TERM_SERVER_ADDR=127.0.0.1:${TERM_SERVER_PORT} \
 EDGERUN_ROUTE_CONTROL_BASE=${SCHEDULER_BASE} \
 EDGERUN_ROUTE_OWNER_PUBKEY=${ROUTE_OWNER_PUBKEY} \
 EDGERUN_TERM_PUBLIC_BASE_URL=${TERM_SERVER_BASE} \
-cargo run -p edgerun-term-server >"${LOG_DIR}/term-server.log" 2>&1 &
+cargo run -p edgerun-term-server --features term >"${LOG_DIR}/term-server.log" 2>&1 &
 PIDS+=("$!")
 
 echo "[e2e-local] starting static frontend on :${FRONTEND_PORT}"

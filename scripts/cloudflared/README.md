@@ -41,7 +41,7 @@ EDGERUN_HARDWARE_MODE=allow-software \
 EDGERUN_TERM_SERVER_ADDR=127.0.0.1:5577 \
 EDGERUN_TERM_PUBLIC_BASE_URL=https://term.edgerun.tech \
 EDGERUN_ROUTE_CONTROL_BASE=https://api.edgerun.tech \
-cargo run -p edgerun-term-server
+cargo run -p edgerun-term-server --features term
 ```
 
 ## Run Cloudflare tunnel

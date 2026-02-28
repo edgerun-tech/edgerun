@@ -176,7 +176,7 @@ async fn main() -> anyhow::Result<()> {
     let term_client_root = env::var("EDGERUN_TERM_CLIENT_ROOT")
         .ok()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("crates/edgerun-term-web"));
+        .unwrap_or_else(|| PathBuf::from("crates/edgerun-terminal/web"));
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/ws-mux", get(ws_mux_handler))

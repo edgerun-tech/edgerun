@@ -4,6 +4,16 @@ name = "edgerun-term-server"
 version.workspace = true
 edition = "2024"
 license.workspace = true
+autobins = false
+
+[features]
+default = []
+term = []
+
+[[bin]]
+name = "edgerun-term-server"
+path = "src/main.rs"
+required-features = ["term"]
 
 [dependencies]
 anyhow = "1"
@@ -12,11 +22,11 @@ base64.workspace = true
 bincode.workspace = true
 bs58 = "0.5"
 ed25519-dalek.workspace = true
-edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
-edgerun-observability = { path = "../edgerun-observability" }
-edgerun-event-bus = { path = "../edgerun-event-bus" }
-edgerun-transport-core = { path = "../edgerun-transport-core" }
-edgerun-types = { path = "../edgerun-types" }
+edgerun-hwvault-primitives = { path = "../../edgerun-hwvault-primitives" }
+edgerun-observability = { path = "../../edgerun-observability" }
+edgerun-event-bus = { path = "../../edgerun-event-bus" }
+edgerun-transport-core = { path = "../../edgerun-transport-core" }
+edgerun-types = { path = "../../edgerun-types" }
 futures-util = "0.3"
 json = "0.12"
 portable-pty = "0.8"
@@ -34,7 +44,9 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "mux_protocol"
 harness = false
+required-features = ["term"]
 
 [[bench]]
 name = "mux_smoke"
 harness = false
+required-features = ["term"]

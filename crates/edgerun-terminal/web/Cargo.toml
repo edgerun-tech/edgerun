@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 bytemuck = { version = "1.14", features = ["derive"] }
 console_error_panic_hook = "0.1"
 js-sys = "=0.3.77"
-term-core = { package = "edgerun-term-core", path = "../edgerun-term-core" }
+term-core = { package = "edgerun-term-core", path = "../core" }
 vte = "0.13"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = { version = "0.4.50", optional = true }

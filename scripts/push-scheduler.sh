@@ -113,8 +113,8 @@ if [[ "${SCHEDULER_BUILD_ON_REMOTE}" == "1" ]]; then
   echo "[remote] building scheduler stack binaries"
   cargo build --release \
     -p edgerun-scheduler \
-    -p edgerun-worker \
-    -p edgerun-term-server
+    -p edgerun-worker
+  cargo build --release -p edgerun-term-server --features term
 fi
 
 if [[ "${SCHEDULER_RESTART_SERVICES}" == "1" ]]; then

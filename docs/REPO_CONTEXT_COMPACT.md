@@ -6,7 +6,7 @@ This is the canonical high-density context for how to think and operate in this 
 ## Verification Basis (2026-02-23)
 - Repo policy source: `AGENTS.md`.
 - Frontend build/test source: `frontend/package.json`, `frontend/README.md`.
-- Event foundation implementation source: `crates/edgerun-storage/src/event_bus.rs`, `crates/edgerun-storage/src/timeline.rs`, `crates/edgerun-cli/src/commands/execution.rs`, `crates/edgerun-scheduler/src/main.rs`.
+- Event foundation implementation source: `crates/edgerun-storage/src/event_bus.rs`, `crates/edgerun-storage/src/timeline.rs`, `crates/edgerun-scheduler/src/main.rs`, `crates/edgerun-worker/src/main.rs`.
 - Protocol source: `docs/ROUTED_TERMINAL_PROTOCOL_V2.mdx`, `frontend/control-panel/WS_PROTOCOL.md`.
 
 ## Canonical Operating Mentality

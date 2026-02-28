@@ -10,8 +10,8 @@ case "${MODE}" in
   all)
     cargo build --release \
       -p edgerun-scheduler \
-      -p edgerun-worker \
-      -p edgerun-term-server
+      -p edgerun-worker
+    cargo build --release -p edgerun-term-server --features term
     ;;
   stack)
     cargo build --release \
@@ -19,11 +19,10 @@ case "${MODE}" in
       -p edgerun-worker
     ;;
   terminal)
-    cargo build --release -p edgerun-term-server
+    cargo build --release -p edgerun-term-server --features term
     ;;
   *)
     echo "usage: $0 [all|stack|terminal]" >&2
     exit 1
     ;;
 esac
-

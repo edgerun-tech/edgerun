@@ -29,7 +29,7 @@ thiserror.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 arboard = "3.3"
-edgerun-observability = { path = "../edgerun-observability" }
+edgerun-observability = { path = "../../edgerun-observability" }
 pixels = "0.15"
 
 [dev-dependencies]

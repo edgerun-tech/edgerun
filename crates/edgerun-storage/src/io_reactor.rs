@@ -2850,6 +2850,10 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    #[cfg_attr(
+        not(feature = "long-tests"),
+        ignore = "enable with --features long-tests"
+    )]
     fn test_reactor_write_read_roundtrip() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("io-reactor.bin");
@@ -2865,6 +2869,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(feature = "long-tests"),
+        ignore = "enable with --features long-tests"
+    )]
     fn test_reactor_linked_write_fsync() {
         let dir = TempDir::new().unwrap();
         let path = dir.path().join("io-reactor-link.bin");

@@ -2,10 +2,9 @@
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
-EDGERUN := cargo run -p edgerun-cli -- --root .
 
 clean:
-	$(EDGERUN) ci --job clean-artifacts
+	cargo clean
 
 check:
 	cargo check --workspace
@@ -20,7 +19,7 @@ test:
 	cargo test --workspace
 
 verify:
-	$(EDGERUN) ci --job verify
+	./scripts/ecosystem-workflow.sh verify
 
 drift:
 	./scripts/check-workflow-drift.sh
@@ -47,7 +46,7 @@ ecosystem-verify:
 	./scripts/ecosystem-workflow.sh verify
 
 matrix-check:
-	$(EDGERUN) ci --job matrix-check
+	./scripts/ecosystem-workflow.sh check
 
 tree:
 	@find . -maxdepth 3 -type d | sort

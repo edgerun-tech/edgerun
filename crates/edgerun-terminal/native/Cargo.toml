@@ -6,22 +6,27 @@ edition = "2024"
 license.workspace = true
 build = "build.rs"
 
+[features]
+default = []
+term = []
+
 [[bin]]
 name = "term"
 path = "src/main.rs"
+required-features = ["term"]
 
 [dependencies]
 arboard = { version = "3.3", features = ["wayland-data-control"] }
 anyhow = "1"
 dirs = "5.0"
-edgerun-observability = { path = "../edgerun-observability" }
+edgerun-observability = { path = "../../edgerun-observability" }
 json = "0.12"
 log = "0.4"
 once_cell = "1.19"
 pixels = "0.15"
 portable-pty = "0.8"
-term-core = { package = "edgerun-term-core", path = "../edgerun-term-core", features = ["test-util"] }
-term-ui = { package = "edgerun-term-ui", path = "../edgerun-term-ui" }
+term-core = { package = "edgerun-term-core", path = "../core", features = ["test-util"] }
+term-ui = { package = "edgerun-term-ui", path = "../ui" }
 vte = "0.13"
 winit = { version = "0.30", default-features = false, features = [
     "rwh_06",
@@ -40,3 +45,4 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "render_cpu"
 harness = false
+required-features = ["term"]

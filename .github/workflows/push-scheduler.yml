@@ -72,7 +72,7 @@ jobs:
           SCHEDULER_SYSTEMD_SCOPE: ${{ inputs.systemd_scope }}
           SCHEDULER_SERVICES: ${{ inputs.services }}
           SCHEDULER_DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
-        run: cargo run -p edgerun-cli -- --root . ci --job push-scheduler
+        run: ./scripts/push-scheduler.sh
 
       - name: Deployment smoke checks
         id: smoke

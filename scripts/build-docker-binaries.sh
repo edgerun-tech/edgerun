@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 export CARGO_TARGET_DIR="$ROOT_DIR/out/target"
 
 cargo build --locked --release \
-  -p edgerun-cli \
   -p edgerun-scheduler \
-  -p edgerun-term-server \
   -p edgerun-worker
+
+cargo build --locked --release -p edgerun-term-server --features term
