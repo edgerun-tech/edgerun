@@ -92,28 +92,35 @@ async function handleReserveDomain(request, env) {
         { status: 400 }
       )
     }
-    const relayBase = String(env?.RELAY_CONTROL_BASE || 'https://relay.edgerun.tech').replace(/\/+$/, '')
-    const payload = encodeReserveDomainRequest({
-      profilePublicKey,
-      requestedLabel
-    })
-    const relayResponse = await fetch(`${relayBase}/v1/tunnel/reserve-domain`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-protobuf' },
-      body: payload
-    })
-    const bytes = new Uint8Array(await relayResponse.arrayBuffer())
-    const decoded = decodeReserveDomainResponse(bytes)
+    const leaseSecret = String(env?.RELAY_LEASE_HMAC_SECRET || '').trim()
+    if (!leaseSecret) {
+      return json(
+        { ok: false, error: 'RELAY_LEASE_HMAC_SECRET is not configured' },
+        { status: 500 }
+      )
+    }
+    const userId = await deriveUserId(profilePublicKey)
+    const sanitizedLabel = sanitizeLabel(requestedLabel)
+    const label = sanitizedLabel ? `${sanitizedLabel}-${userId.slice(0, 6)}` : userId
+    const domain = `${label}.users.edgerun.tech`
+    const expiresUnixMs = Date.now() + (15 * 60 * 1000)
+    const registrationToken = await signLeaseToken({
+      profilePublicKeyB64url: profilePublicKey,
+      domain,
+      issuedUnixMs: Date.now(),
+      expiresUnixMs,
+      nonce: randomTokenHex(16)
+    }, leaseSecret)
     return json(
       {
-        ok: Boolean(decoded.ok),
-        error: decoded.error || '',
-        userId: decoded.userId || '',
-        domain: decoded.domain || '',
-        status: decoded.status || '',
-        registrationToken: decoded.registrationToken || ''
+        ok: true,
+        error: '',
+        userId,
+        domain,
+        status: 'lease_issued',
+        registrationToken
       },
-      { status: relayResponse.ok ? 200 : relayResponse.status || 502 }
+      { status: 200 }
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'domain reservation failed'
@@ -194,13 +201,6 @@ function encodeCreatePairingCodeRequest(input) {
   ])
 }
 
-function encodeReserveDomainRequest(input) {
-  return concat([
-    encodeString(1, input.profilePublicKey),
-    encodeString(2, input.requestedLabel)
-  ])
-}
-
 function decodeLengthDelimited(bytes, offset) {
   const size = decodeVarint(bytes, offset)
   const end = size.offset + size.value
@@ -243,39 +243,48 @@ function decodeCreatePairingCodeResponse(bytes) {
   return out
 }
 
-function decodeReserveDomainResponse(bytes) {
-  const out = {
-    ok: false,
-    error: '',
-    userId: '',
-    domain: '',
-    status: '',
-    registrationToken: ''
-  }
-  let offset = 0
-  while (offset < bytes.length) {
-    const key = decodeVarint(bytes, offset)
-    offset = key.offset
-    const tag = key.value >> 3
-    const wire = key.value & 0x07
-    if (wire === 2) {
-      const field = decodeLengthDelimited(bytes, offset)
-      offset = field.offset
-      const text = new TextDecoder().decode(field.bytes)
-      if (tag === 2) out.error = text
-      if (tag === 3) out.userId = text
-      if (tag === 4) out.domain = text
-      if (tag === 5) out.status = text
-      if (tag === 6) out.registrationToken = text
-      continue
-    }
-    if (wire === 0) {
-      const value = decodeVarint(bytes, offset)
-      offset = value.offset
-      if (tag === 1) out.ok = value.value !== 0
-      continue
-    }
-    break
-  }
-  return out
+async function deriveUserId(profilePublicKey) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(profilePublicKey))
+  const bytes = new Uint8Array(digest)
+  return Array.from(bytes.slice(0, 8)).map((n) => n.toString(16).padStart(2, '0')).join('')
+}
+
+function sanitizeLabel(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .split('')
+    .filter((ch) => /[a-z0-9-]/.test(ch))
+    .join('')
+}
+
+function randomTokenHex(size) {
+  const bytes = crypto.getRandomValues(new Uint8Array(size))
+  return Array.from(bytes).map((n) => n.toString(16).padStart(2, '0')).join('')
+}
+
+async function signLeaseToken(claims, secret) {
+  const payload = [
+    'lease_v1',
+    `profile_public_key_b64url=${claims.profilePublicKeyB64url}`,
+    `domain=${claims.domain}`,
+    `issued_unix_ms=${claims.issuedUnixMs}`,
+    `expires_unix_ms=${claims.expiresUnixMs}`,
+    `nonce=${claims.nonce}`
+  ].join('\\n')
+  const payloadB64 = base64urlEncode(new TextEncoder().encode(payload))
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payloadB64)))
+  return `${payloadB64}.${base64urlEncode(signature)}`
+}
+
+function base64urlEncode(bytes) {
+  let binary = ''
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '')
 }
