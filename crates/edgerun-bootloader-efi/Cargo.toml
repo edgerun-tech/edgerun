@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "edgerun-bootloader-efi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+efi-app = ["dep:uefi"]
+
+[dependencies]
+uefi = { version = "0.35", optional = true }
+
+[[bin]]
+name = "edgerun-bootloader-efi"
+path = "src/efi_main.rs"
+required-features = ["efi-app"]

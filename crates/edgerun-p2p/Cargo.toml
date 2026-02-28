@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "edgerun-p2p"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+edgerun-transport-core = { path = "../edgerun-transport-core" }
+hex.workspace = true
+libp2p = { version = "0.55", features = ["tokio", "tcp", "noise", "yamux", "identify", "ping", "gossipsub", "macros"] }
+serde.workspace = true
+sha2 = "0.10"
+tokio = { workspace = true, features = ["sync"] }
+tracing.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["time", "rt"] }

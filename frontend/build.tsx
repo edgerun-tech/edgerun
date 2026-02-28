@@ -28,18 +28,6 @@ const buildNumber = process.env.EDGERUN_BUILD_NUMBER || `${currentVersion}-${(pr
 const siteUrl = process.env.EDGERUN_SITE_URL || 'https://www.edgerun.tech'
 const siteDomain = process.env.EDGERUN_SITE_DOMAIN || 'www.edgerun.tech'
 const apiUrl = process.env.EDGERUN_API_URL || 'https://api.edgerun.tech'
-const solanaCluster = process.env.SOLANA_CLUSTER || 'devnet'
-const rpcDefaultByCluster: Record<string, string> = {
-  localnet: 'http://127.0.0.1:8899',
-  devnet: 'https://api.devnet.solana.com',
-  testnet: 'https://api.testnet.solana.com',
-  'mainnet-beta': 'https://api.mainnet-beta.solana.com'
-}
-const solanaRpcUrl = process.env.SOLANA_RPC_URL || rpcDefaultByCluster[solanaCluster] || rpcDefaultByCluster.devnet
-const treasuryAccount = process.env.EDGERUN_TREASURY_ACCOUNT || ''
-const solanaDeployments = JSON.parse(readFileSync(path.join(projectRoot, 'config', 'solana-deployments.json'), 'utf8')) as {
-  programs: Record<string, { label: string; programIdByCluster: Record<string, string> }>
-}
 
 const requestedVersions = Array.from(new Set((process.env.EDGERUN_VERSIONS || currentVersion).split(',').map((v) => v.trim()).filter(Boolean)))
 const versions = requestedVersions.includes('main') ? requestedVersions : ['main', ...requestedVersions]
@@ -116,7 +104,6 @@ function pageDocument(title: string, description: string, bodyHtml: string, rela
   <body>
     <div id="edgerun-root">${bodyHtml}</div>
     <script>
-      window.__EDGERUN_RPC_CONFIG = ${JSON.stringify({ cluster: solanaCluster, rpcUrl: solanaRpcUrl, treasuryAccount, deployments: solanaDeployments })}
       window.__EDGERUN_API_BASE = window.__EDGERUN_API_BASE || ${JSON.stringify(apiUrl)}
     </script>
     <script type="module" src="/assets/client.js"></script>
@@ -1011,10 +998,7 @@ writeStaticSiteMetadata(
     siteUrl,
     siteDomain,
     currentVersion,
-    buildNumber,
-    solanaCluster,
-    solanaRpcUrl: solanaRpcUrl || '',
-    treasuryAccount
+    buildNumber
   },
   paths,
   llmsScheduler

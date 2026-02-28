@@ -90,7 +90,7 @@ export default function DocsHomePage() {
                   <TabsContent value="protocol">
                     <CardHeader class="p-0">
                       <CardTitle>Economic + Verification Model</CardTitle>
-                      <CardDescription>Map worker staking, deterministic execution, and Solana settlement paths from source docs.</CardDescription>
+                      <CardDescription>Map worker staking, deterministic execution, and attestation paths from source docs.</CardDescription>
                     </CardHeader>
                   </TabsContent>
                 </Tabs>

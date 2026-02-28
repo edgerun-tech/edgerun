@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package edgerun.edge_internal.v1;
+
+enum Overlay {
+  OVERLAY_UNSPECIFIED = 0;
+  EDGE_INTERNAL = 1;
+  EDGE_CLUSTER = 2;
+}
+
+message EventTopic {
+  Overlay overlay = 1;
+  string name = 2;
+}
+
+message EventEnvelope {
+  string event_id = 1;
+  EventTopic topic = 2;
+  string publisher = 3;
+  string payload_type = 4;
+  bytes payload = 5;
+  uint64 ts_unix_ms = 6;
+}
+
+message PublishRequest {
+  EventTopic topic = 1;
+  string publisher = 2;
+  string payload_type = 3;
+  bytes payload = 4;
+}
+
+message PublishResponse {
+  bool accepted = 1;
+  string event_id = 2;
+}
+
+message SubscribeRequest {
+  EventTopic topic = 1;
+}
+
+service EdgeInternalEventBus {
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc Subscribe(SubscribeRequest) returns (stream EventEnvelope);
+}

@@ -21,7 +21,6 @@ import { setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
 const WEB3_PROFILE_CIPHER_KEY = "intent-ui-web3-profile-cipher-v1";
 const WEB3_PROFILE_PLAIN_KEY = "intent-ui-profile-v1";
 const WEB3_WALLET_SIGN_MESSAGE = "IntentUI Web3 profile encryption key";
-const WEB3_WALLET_CHAIN_KEY = "intent-ui-web3-wallet-chain-v1";
 
 const toBase64 = (buffer) => {
   const bytes = new Uint8Array(buffer);
@@ -43,8 +42,6 @@ const toHex = (value) => Array.from(new Uint8Array(value))
 
 const resolveEthereumProvider = () =>
   typeof window !== "undefined" ? window.ethereum : undefined;
-const resolveSolanaProvider = () =>
-  typeof window !== "undefined" ? window.solana : undefined;
 
 const signWithEthereumWallet = async (address) => {
   const provider = resolveEthereumProvider();
@@ -63,33 +60,20 @@ const signWithEthereumWallet = async (address) => {
   }
 };
 
-const signWithSolanaWallet = async () => {
-  const provider = resolveSolanaProvider();
-  if (!provider?.signMessage) throw new Error("No Solana wallet provider detected.");
-  const message = new TextEncoder().encode(WEB3_WALLET_SIGN_MESSAGE);
-  const signed = await provider.signMessage(message, "utf8");
-  const signature = signed?.signature || signed;
-  if (signature instanceof Uint8Array) return toBase64(signature.buffer);
-  if (Array.isArray(signature)) return toBase64(new Uint8Array(signature).buffer);
-  return String(signature || "");
-};
-
-const deriveAesKeyFromWallet = async (address, chain = "evm") => {
-  const signature = chain === "solana"
-    ? await signWithSolanaWallet()
-    : await signWithEthereumWallet(address);
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${chain}:${String(signature || "")}`));
+const deriveAesKeyFromWallet = async (address) => {
+  const signature = await signWithEthereumWallet(address);
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`evm:${String(signature || "")}`));
   return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
 };
 
-const encryptProfilePayload = async (address, chain, payload) => {
-  const key = await deriveAesKeyFromWallet(address, chain);
+const encryptProfilePayload = async (address, payload) => {
+  const key = await deriveAesKeyFromWallet(address);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const data = new TextEncoder().encode(JSON.stringify(payload));
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
   return {
     wallet: address,
-    chain,
+    chain: "evm",
     algorithm: "AES-GCM",
     iv: toBase64(iv.buffer),
     cipher: toBase64(cipher),
@@ -97,8 +81,8 @@ const encryptProfilePayload = async (address, chain, payload) => {
   };
 };
 
-const decryptProfilePayload = async (address, chain, payload) => {
-  const key = await deriveAesKeyFromWallet(address, chain);
+const decryptProfilePayload = async (address, payload) => {
+  const key = await deriveAesKeyFromWallet(address);
   const iv = fromBase64(payload?.iv || "");
   const cipher = fromBase64(payload?.cipher || "");
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
@@ -182,7 +166,7 @@ const providerMeta = {
   web3: {
     id: "web3",
     name: "Web3",
-    description: "EVM + Solana wallet encryption for profile backups and portable ciphertext exports.",
+    description: "EVM wallet encryption for profile backups and portable ciphertext exports.",
     authLabel: "Wallet Signature",
     icon: FiShield,
     tone: "text-fuchsia-300",
@@ -204,7 +188,6 @@ function IntegrationsPanel(props) {
   const [tokenInput, setTokenInput] = createSignal("");
   const [accountLabelInput, setAccountLabelInput] = createSignal("");
   const [web3Wallet, setWeb3Wallet] = createSignal("");
-  const [web3Chain, setWeb3Chain] = createSignal("evm");
   const [web3ProfileInput, setWeb3ProfileInput] = createSignal("{}");
   const [web3CipherInput, setWeb3CipherInput] = createSignal("");
   const assistantProvider = createMemo(() => workflowUi().provider || "codex");
@@ -253,12 +236,8 @@ function IntegrationsPanel(props) {
     setAccountLabelInput(provider.accountLabel || `${provider.name} Session`);
     if (provider.id === "web3" && typeof window !== "undefined") {
       const storedToken = String(localStorage.getItem("web3_wallet") || "").trim();
-      const [storedChain, storedWallet] = storedToken.includes(":")
-        ? storedToken.split(":", 2)
-        : [localStorage.getItem(WEB3_WALLET_CHAIN_KEY) || "evm", storedToken];
-      const wallet = String(storedWallet || "").trim();
+      const wallet = String(storedToken.includes(":") ? storedToken.split(":", 2)[1] : storedToken).trim();
       setWeb3Wallet(wallet);
-      setWeb3Chain(storedChain === "solana" ? "solana" : "evm");
       setWeb3ProfileInput(localStorage.getItem(WEB3_PROFILE_PLAIN_KEY) || "{}");
       setWeb3CipherInput(localStorage.getItem(WEB3_PROFILE_CIPHER_KEY) || "");
     }
@@ -277,35 +256,23 @@ function IntegrationsPanel(props) {
     setTokenInput("");
     setAccountLabelInput("");
     setWeb3Wallet("");
-    setWeb3Chain("evm");
     setWeb3ProfileInput("{}");
     setWeb3CipherInput("");
   };
 
   const connectWeb3Wallet = async (provider) => {
     try {
-      const chain = web3Chain();
-      let wallet = "";
-      if (chain === "solana") {
-        const walletProvider = resolveSolanaProvider();
-        if (!walletProvider?.connect) throw new Error("No injected Solana wallet found. Install Phantom/Solflare.");
-        const connected = await walletProvider.connect();
-        const publicKey = connected?.publicKey || walletProvider.publicKey;
-        wallet = String(publicKey?.toBase58 ? publicKey.toBase58() : publicKey || "").trim();
-      } else {
-        const walletProvider = resolveEthereumProvider();
-        if (!walletProvider?.request) throw new Error("No injected EVM wallet found. Install MetaMask/Rabby.");
-        const accounts = await walletProvider.request({ method: "eth_requestAccounts" });
-        wallet = String(Array.isArray(accounts) ? accounts[0] : "").trim();
-      }
+      const walletProvider = resolveEthereumProvider();
+      if (!walletProvider?.request) throw new Error("No injected EVM wallet found. Install MetaMask/Rabby.");
+      const accounts = await walletProvider.request({ method: "eth_requestAccounts" });
+      const wallet = String(Array.isArray(accounts) ? accounts[0] : "").trim();
       if (!wallet) throw new Error("Wallet did not return an address.");
       integrationStore.connect(provider.id, {
-        accountLabel: accountLabelInput().trim() || `${chain === "solana" ? "Solana" : "EVM"} Wallet`,
-        token: `${chain}:${wallet}`
+        accountLabel: accountLabelInput().trim() || "EVM Wallet",
+        token: `evm:${wallet}`
       });
       setWeb3Wallet(wallet);
-      localStorage.setItem(WEB3_WALLET_CHAIN_KEY, chain);
-      setStatus(`Web3 ${chain} connected: ${wallet.slice(0, 6)}...${wallet.slice(-4)}`);
+      setStatus(`Web3 evm connected: ${wallet.slice(0, 6)}...${wallet.slice(-4)}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to connect Web3 wallet.");
     }
@@ -319,13 +286,12 @@ function IntegrationsPanel(props) {
     }
     try {
       const payload = JSON.parse(web3ProfileInput() || "{}");
-      const chain = web3Chain();
-      const encrypted = await encryptProfilePayload(wallet, chain, payload);
+      const encrypted = await encryptProfilePayload(wallet, payload);
       const serialized = JSON.stringify(encrypted);
       localStorage.setItem(WEB3_PROFILE_CIPHER_KEY, serialized);
       localStorage.setItem(WEB3_PROFILE_PLAIN_KEY, JSON.stringify(payload));
       setWeb3CipherInput(serialized);
-      setStatus(`Profile encrypted with ${chain} wallet and saved locally.`);
+      setStatus("Profile encrypted with evm wallet and saved locally.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to encrypt profile.");
     }
@@ -340,8 +306,7 @@ function IntegrationsPanel(props) {
     }
     try {
       const payload = JSON.parse(raw);
-      const chain = String(payload?.chain || web3Chain() || "evm");
-      const decrypted = await decryptProfilePayload(wallet, chain, payload);
+      const decrypted = await decryptProfilePayload(wallet, payload);
       const pretty = JSON.stringify(decrypted, null, 2);
       setWeb3ProfileInput(pretty);
       localStorage.setItem(WEB3_PROFILE_PLAIN_KEY, pretty);
@@ -523,25 +488,9 @@ function IntegrationsPanel(props) {
                 </Show>
                 <Show when={provider.id === "web3"}>
                   <div class="mb-3 space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
-                    <div class="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setWeb3Chain("evm")}
-                        class={`rounded border px-2 py-1 text-[11px] transition-colors ${web3Chain() === "evm" ? "border-[hsl(var(--primary)/0.5)] bg-[hsl(var(--primary)/0.15)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"}`}
-                      >
-                        EVM
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setWeb3Chain("solana")}
-                        class={`rounded border px-2 py-1 text-[11px] transition-colors ${web3Chain() === "solana" ? "border-[hsl(var(--primary)/0.5)] bg-[hsl(var(--primary)/0.15)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"}`}
-                      >
-                        Solana
-                      </button>
-                    </div>
                     <div class="flex items-center justify-between gap-2">
                       <p class="text-xs text-neutral-300">
-                        {web3Chain()} wallet: <span class="font-mono text-neutral-100">{web3Wallet() || "Not connected"}</span>
+                        evm wallet: <span class="font-mono text-neutral-100">{web3Wallet() || "Not connected"}</span>
                       </p>
                       <button
                         type="button"

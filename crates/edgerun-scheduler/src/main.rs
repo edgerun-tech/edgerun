@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Edgerun-Proprietary
 #![allow(deprecated)]
 
-use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::OpenOptions;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,86 +19,33 @@ use axum::{
     routing::get,
     Router,
 };
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use ed25519_dalek::{Signature, Signer as DalekSigner, SigningKey, VerifyingKey};
-use edgerun_hwvault_primitives::hardware::random_token_b64url;
-use edgerun_storage::durability::DurabilityLevel;
-use edgerun_storage::event::{
-    ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
-};
-use edgerun_storage::event_bus::{
-    BusPhaseV1, BusQueryFilter, EventBus, EventBusPolicyV1, PolicyRuleV1, PolicyUpdateRequestV1,
-    StorageBackedEventBus,
-};
-use edgerun_storage::StorageEngine;
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use edgerun_event_bus::edge_internal::{spawn_edge_internal_broker, EdgeInternalBrokerHandle};
+use edgerun_event_bus::{EventTopic, OverlayNetwork, RuntimeEventBus};
 use edgerun_transport_core::{
     assignments_signing_message, failure_signing_message, heartbeat_signing_message,
-    replay_signing_message, result_signing_message, route_register_signing_message,
+    replay_signing_message, result_signing_message,
 };
 use edgerun_types::control_plane::{
     assignment_policy_message, default_policy_key_id, default_policy_version, AssignmentsResponse,
     BundleGetResponse, ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
     ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, JobCreateRequest,
     JobCreateResponse, JobQuorumState, JobStatusRequest, JobStatusResponse, QueuedAssignment,
-    RouteCandidate as CpRouteCandidate, RouteChallengeRequest, RouteChallengeResponse,
-    RouteHeartbeatRequest, RouteHeartbeatResponse, RouteOwnerRequest, RouteRegisterRequest,
-    RouteRegisterResponse, RouteResolveEntry as CpRouteEntry, RouteResolveRequest,
-    RouteResolveResponse as CpRouteResolveResponse, SlashWorkerArtifact, SubmissionAck,
-    WorkerAssignmentsRequest, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
+    SlashWorkerArtifact, SubmissionAck, WorkerAssignmentsRequest, WorkerFailureReport,
+    WorkerReplayArtifactReport, WorkerResultReport,
 };
-use fs2::FileExt;
-use prost::Message as ProstCodec;
+use edgerun_types::intent_pipeline::{
+    WorkerAssignmentsPollIngestEvent, WorkerFailureIngestEvent, WorkerHeartbeatIngestEvent,
+    WorkerReplayIngestEvent, WorkerResultIngestEvent, EVENT_PAYLOAD_TYPE_WORKER_ASSIGNMENTS_POLL,
+    EVENT_PAYLOAD_TYPE_WORKER_FAILURE, EVENT_PAYLOAD_TYPE_WORKER_HEARTBEAT,
+    EVENT_PAYLOAD_TYPE_WORKER_REPLAY, EVENT_PAYLOAD_TYPE_WORKER_RESULT, EVENT_SCHEMA_VERSION_V1,
+    EVENT_TOPIC_SCHEDULER_WORKER_ASSIGNMENTS_POLL, EVENT_TOPIC_SCHEDULER_WORKER_FAILURE,
+    EVENT_TOPIC_SCHEDULER_WORKER_HEARTBEAT, EVENT_TOPIC_SCHEDULER_WORKER_REPLAY,
+    EVENT_TOPIC_SCHEDULER_WORKER_RESULT,
+};
 use serde::{Deserialize, Serialize};
-use tokio::sync::mpsc;
 use tower_http::cors::{Any, CorsLayer};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Pubkey([u8; 32]);
-
-impl Pubkey {
-    fn to_bytes(self) -> [u8; 32] {
-        self.0
-    }
-
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-
-    fn new_from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    fn find_program_address(seeds: &[&[u8]], program_id: &Pubkey) -> (Pubkey, u8) {
-        let mut preimage = Vec::new();
-        preimage.extend_from_slice(program_id.as_ref());
-        for seed in seeds {
-            preimage.extend_from_slice(seed);
-        }
-        (Pubkey(edgerun_crypto::blake3_256(&preimage)), 255)
-    }
-}
-
-impl std::str::FromStr for Pubkey {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let bytes = bs58::decode(s.trim())
-            .into_vec()
-            .map_err(|_| anyhow::anyhow!("invalid base58 pubkey"))?;
-        let arr: [u8; 32] = bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| anyhow::anyhow!("pubkey must decode to 32 bytes"))?;
-        Ok(Pubkey(arr))
-    }
-}
-
-impl std::fmt::Display for Pubkey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", bs58::encode(self.0).into_string())
-    }
-}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct HashDigest([u8; 32]);
@@ -113,215 +58,6 @@ impl HashDigest {
 
 fn hash(bytes: &[u8]) -> HashDigest {
     HashDigest(edgerun_crypto::blake3_256(bytes))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Keypair {
-    pubkey: Pubkey,
-}
-
-impl Keypair {
-    fn pubkey(&self) -> Pubkey {
-        self.pubkey
-    }
-
-    #[allow(dead_code)]
-    fn sign_message(&self, message: &[u8]) -> SignatureBytes {
-        let mut out = [0_u8; 64];
-        let digest = edgerun_crypto::blake3_256(message);
-        out[..32].copy_from_slice(&digest);
-        out[32..].copy_from_slice(&digest);
-        SignatureBytes(out)
-    }
-}
-
-#[allow(dead_code)]
-fn read_keypair_file(path: &str) -> Result<Keypair> {
-    anyhow::bail!("chain keypair loading unsupported in this build: {path}")
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-struct SignatureBytes([u8; 64]);
-
-impl AsRef<[u8]> for SignatureBytes {
-    fn as_ref(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct TxSignature([u8; 64]);
-
-impl std::fmt::Display for TxSignature {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.0))
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-struct Blockhash([u8; 32]);
-
-#[derive(Debug, Clone)]
-struct RpcClient;
-
-impl RpcClient {
-    #[allow(dead_code)]
-    fn new(_rpc_url: String) -> Self {
-        Self
-    }
-
-    fn get_epoch_info(&self) -> Result<EpochInfo> {
-        anyhow::bail!("chain rpc unavailable in this build")
-    }
-
-    fn get_latest_blockhash(&self) -> Result<Blockhash> {
-        anyhow::bail!("chain rpc unavailable in this build")
-    }
-
-    fn send_and_confirm_transaction(&self, _tx: &Transaction) -> Result<TxSignature> {
-        anyhow::bail!("chain rpc unavailable in this build")
-    }
-
-    fn get_account(&self, _pubkey: &Pubkey) -> Result<AccountData> {
-        anyhow::bail!("chain rpc unavailable in this build")
-    }
-
-    fn get_program_accounts_with_config(
-        &self,
-        _program_id: &Pubkey,
-        _cfg: RpcProgramAccountsConfig,
-    ) -> Result<Vec<(Pubkey, AccountData)>> {
-        Ok(Vec::new())
-    }
-
-    fn get_account_with_commitment(
-        &self,
-        _pubkey: &Pubkey,
-        _commitment: CommitmentConfig,
-    ) -> Result<GetAccountWithCommitmentResponse> {
-        Ok(GetAccountWithCommitmentResponse {
-            value: None,
-            context: ResponseContext { slot: 0 },
-        })
-    }
-}
-
-#[derive(Debug, Clone)]
-struct EpochInfo {
-    absolute_slot: u64,
-    epoch: u64,
-}
-
-#[derive(Debug, Clone)]
-struct AccountData {
-    data: Vec<u8>,
-}
-
-#[derive(Debug, Clone)]
-struct ResponseContext {
-    slot: u64,
-}
-
-#[derive(Debug, Clone)]
-struct GetAccountWithCommitmentResponse {
-    value: Option<AccountData>,
-    context: ResponseContext,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Default)]
-struct RpcProgramAccountsConfig {
-    filters: Option<Vec<RpcFilterType>>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-enum RpcFilterType {
-    DataSize(u64),
-    Memcmp(Memcmp),
-}
-
-#[derive(Debug, Clone)]
-struct Memcmp;
-
-impl Memcmp {
-    fn new_raw_bytes(_offset: usize, _bytes: Vec<u8>) -> Self {
-        Self
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct CommitmentConfig;
-
-impl CommitmentConfig {
-    fn processed() -> Self {
-        Self
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct AccountMeta;
-
-impl AccountMeta {
-    fn new(_pubkey: Pubkey, _is_signer: bool) -> Self {
-        Self
-    }
-
-    fn new_readonly(_pubkey: Pubkey, _is_signer: bool) -> Self {
-        Self
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Instruction {
-    program_id: Pubkey,
-    accounts: Vec<AccountMeta>,
-    data: Vec<u8>,
-}
-
-#[derive(Debug, Clone)]
-struct Transaction {
-    signatures: Vec<TxSignature>,
-}
-
-impl Transaction {
-    fn new_with_payer(_instructions: &[Instruction], _payer: Option<&Pubkey>) -> Self {
-        Self {
-            signatures: vec![TxSignature([0_u8; 64])],
-        }
-    }
-
-    fn partial_sign(&mut self, _signers: &[&Keypair], _blockhash: Blockhash) {}
-
-    fn new_signed_with_payer(
-        _instructions: &[Instruction],
-        _payer: Option<&Pubkey>,
-        _signers: &[&Keypair],
-        _blockhash: Blockhash,
-    ) -> Self {
-        Self {
-            signatures: vec![TxSignature([0_u8; 64])],
-        }
-    }
-}
-
-fn encode_tx_artifact_bytes(tx: &Transaction) -> Vec<u8> {
-    let mut out = Vec::with_capacity(16 + tx.signatures.len() * 64);
-    out.extend_from_slice(b"edgerun:tx:stub:v1");
-    out.extend_from_slice(&(tx.signatures.len() as u32).to_le_bytes());
-    for sig in &tx.signatures {
-        out.extend_from_slice(&sig.0);
-    }
-    out
-}
-
-mod system_program {
-    use super::Pubkey;
-
-    pub fn id() -> Pubkey {
-        Pubkey([0_u8; 32])
-    }
 }
 
 #[derive(Clone)]
@@ -357,28 +93,13 @@ struct AppState {
     enable_slash_artifacts: bool,
     require_client_signatures: bool,
     client_signature_max_age_secs: u64,
-    chain_auto_submit: bool,
     job_timeout_secs: u64,
     policy_audit_path: PathBuf,
     trust_policy: Arc<Mutex<edgerun_types::SyncTrustPolicy>>,
     attestation_policy: Arc<Mutex<edgerun_types::AttestationPolicy>>,
-    route_shared_state_path: PathBuf,
-    route_flush_state: Arc<Mutex<SnapshotFlushState>>,
-    route_sync_min_interval_secs: u64,
     housekeeping_interval_secs: u64,
-    route_signature_max_age_secs: u64,
-    route_challenge_ttl_secs: u64,
-    device_routes: Arc<Mutex<HashMap<String, DeviceRouteEntry>>>,
-    route_challenges: Arc<Mutex<HashMap<String, u64>>>,
-    route_heartbeat_tokens: Arc<Mutex<HashMap<String, RouteHeartbeatToken>>>,
-    signal_peers: Arc<tokio::sync::Mutex<HashMap<String, mpsc::UnboundedSender<String>>>>,
-    chain_progress_sink: Arc<Mutex<Option<ChainProgressSink>>>,
-    chain_event_bus_sink: Arc<Mutex<Option<ChainEventBusSink>>>,
-    latest_chain_progress_event_id: Arc<Mutex<Option<String>>>,
-    require_chain_progress_signature_verification: bool,
+    scheduler_event_bus: RuntimeEventBus,
     enforce_event_ingestion: bool,
-    require_chain_context: bool,
-    chain: Option<Arc<ChainContext>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -387,36 +108,6 @@ struct RetentionConfig {
     max_failures_per_job: usize,
     max_replays_per_job: usize,
     max_jobs_tracked: usize,
-}
-
-struct ChainContext {
-    rpc_url: String,
-    rpc: RpcClient,
-    program_id: Pubkey,
-    payer: Keypair,
-}
-
-struct ChainProgressSink {
-    session: edgerun_storage::EngineAppendSession,
-    stream_id: StorageStreamId,
-    actor_id: StorageActorId,
-    signer_pubkey: String,
-    seq: u64,
-}
-
-struct ChainEventBusSink {
-    bus: StorageBackedEventBus,
-    next_nonce: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SchedulerSignedChainProgressEvent {
-    progress_event_id: String,
-    slot: u64,
-    epoch: u64,
-    observed_at_unix_ms: u64,
-    signer: String,
-    signature: String,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -451,117 +142,6 @@ struct PersistedState {
     latest_chain_progress_bus_nonce: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct DeviceRouteEntry {
-    device_id: String,
-    owner_pubkey: String,
-    #[serde(default)]
-    candidates: Vec<CpRouteCandidate>,
-    #[serde(default)]
-    reachable_urls: Vec<String>,
-    #[serde(default)]
-    capabilities: Vec<String>,
-    #[serde(default)]
-    relay_session_id: Option<String>,
-    online: bool,
-    last_seen_unix_s: u64,
-    expires_at_unix_s: u64,
-    updated_at_unix_s: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct RouteResolveResponse {
-    ok: bool,
-    found: bool,
-    route: Option<DeviceRouteEntry>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct OwnerRoutesResponse {
-    ok: bool,
-    owner_pubkey: String,
-    devices: Vec<DeviceRouteEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RouteHeartbeatToken {
-    device_id: String,
-    expires_at_unix_s: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerHeartbeatIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: HeartbeatRequest,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerAssignmentsPollIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: WorkerAssignmentsRequest,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerResultIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: WorkerResultReport,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerFailureIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: WorkerFailureReport,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct WorkerReplayIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: WorkerReplayArtifactReport,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RouteChallengeIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    device_id: String,
-    nonce: String,
-    expires_at_unix_s: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RouteRegisterIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: RouteRegisterRequest,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RouteHeartbeatIngestEvent {
-    schema_version: u32,
-    observed_at_unix_ms: u64,
-    payload: RouteHeartbeatRequest,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct PersistedRouteState {
-    #[serde(default)]
-    device_routes: HashMap<String, DeviceRouteEntry>,
-    #[serde(default)]
-    route_challenges: HashMap<String, u64>,
-    #[serde(default)]
-    route_heartbeat_tokens: HashMap<String, RouteHeartbeatToken>,
-}
-
-#[derive(Debug, Deserialize)]
-struct WebRtcSignalConnectQuery {
-    device_id: String,
-}
-
 #[derive(Debug, Deserialize)]
 struct ControlWsConnectQuery {
     #[serde(default)]
@@ -587,40 +167,6 @@ struct JsonControlWsServerMessage {
     status: Option<u16>,
 }
 
-#[derive(Debug, Deserialize)]
-struct WebRtcSignalClientMessage {
-    to_device_id: String,
-    to_owner_pubkey: String,
-    kind: String,
-    sdp: Option<String>,
-    candidate: Option<String>,
-    sdp_mid: Option<String>,
-    sdp_mline_index: Option<u16>,
-    metadata: Option<String>,
-}
-
-#[derive(Debug)]
-struct WebRtcSignalServerMessage {
-    from_device_id: String,
-    kind: String,
-    sdp: Option<String>,
-    candidate: Option<String>,
-    sdp_mid: Option<String>,
-    sdp_mline_index: Option<u16>,
-    metadata: Option<String>,
-}
-
-struct PostJobArgs {
-    client: Pubkey,
-    job_id: [u8; 32],
-    bundle_hash: [u8; 32],
-    runtime_id: [u8; 32],
-    runtime_proof: Vec<[u8; 32]>,
-    max_memory_bytes: u32,
-    max_instructions: u64,
-    escrow_lamports: u64,
-}
-
 const INSTRUCTION_PRICE_QUANTUM: u128 = 1_000_000_000;
 static STATE_SNAPSHOT_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
 
@@ -632,42 +178,8 @@ async fn main() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(".edgerun-scheduler-data"));
     std::fs::create_dir_all(data_dir.join("bundles"))?;
-    let route_shared_state_path = std::env::var("EDGERUN_SCHEDULER_ROUTE_STATE_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| data_dir.join("route-state.bin"));
-    if let Some(parent) = route_shared_state_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    tracing::info!(
-        path = %route_shared_state_path.display(),
-        "route-state persistence enabled"
-    );
 
     let persisted = load_state(&data_dir)?;
-    let require_chain = read_env_bool("EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT", false);
-
-    let chain = match init_chain_context() {
-        Ok(ctx) => {
-            tracing::info!(
-                rpc = %ctx.rpc_url,
-                payer = %ctx.payer.pubkey(),
-                program_id = %ctx.program_id,
-                "chain context initialized"
-            );
-            Some(Arc::new(ctx))
-        }
-        Err(err) => {
-            if require_chain {
-                anyhow::bail!("chain context required but unavailable: {err}");
-            } else {
-                tracing::warn!(
-                    error = %err,
-                    "chain context unavailable; chain-backed operations will fail"
-                );
-                None
-            }
-        }
-    };
 
     let addr: SocketAddr = std::env::var("EDGERUN_SCHEDULER_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:5566".to_string())
@@ -691,24 +203,12 @@ async fn main() -> Result<()> {
     let trust_policy = load_trust_policy(&trust_policy_path).unwrap_or_default();
     let attestation_policy_path = data_dir.join("attestation-policy.bin");
     let attestation_policy = load_attestation_policy(&attestation_policy_path).unwrap_or_default();
-    let loaded_route_state = load_route_state(&route_shared_state_path).unwrap_or_default();
-    let require_chain_progress_signature_verification = read_env_bool(
-        "EDGERUN_SCHEDULER_REQUIRE_CHAIN_PROGRESS_SIGNATURE_VERIFICATION",
-        false,
-    );
-    if require_chain_progress_signature_verification {
-        anyhow::bail!(
-            "EDGERUN_SCHEDULER_REQUIRE_CHAIN_PROGRESS_SIGNATURE_VERIFICATION=true is not supported yet: \
-implement cryptographic verification for scheduler signed chain progress events before enabling"
-        );
-    }
     let policy_signing_key = load_policy_signing_key()?;
-    let chain_progress_sink = init_chain_progress_sink(
-        &data_dir,
-        hex::encode(policy_signing_key.verifying_key().to_bytes()),
-    );
-    let chain_event_bus_sink =
-        init_chain_event_bus_sink(&data_dir, persisted.latest_chain_progress_bus_nonce)?;
+    let scheduler_event_bus = init_scheduler_event_bus().context("init scheduler event bus")?;
+    let _edge_internal_broker =
+        maybe_start_edge_internal_broker(&data_dir, scheduler_event_bus.clone())
+            .await
+            .context("start edge-internal event bus broker")?;
 
     let state = AppState {
         data_dir: data_dir.clone(),
@@ -775,51 +275,15 @@ implement cryptographic verification for scheduler signed chain progress events 
             "EDGERUN_SCHEDULER_CLIENT_SIGNATURE_MAX_AGE_SECS",
             300,
         ),
-        chain_auto_submit: read_env_bool("EDGERUN_SCHEDULER_CHAIN_AUTO_SUBMIT", false),
         job_timeout_secs: read_env_u64("EDGERUN_SCHEDULER_JOB_TIMEOUT_SECS", 60),
         policy_audit_path: data_dir.join("policy-audit.jsonl"),
         trust_policy: Arc::new(Mutex::new(trust_policy)),
         attestation_policy: Arc::new(Mutex::new(attestation_policy)),
-        route_shared_state_path,
-        route_flush_state: Arc::new(Mutex::new(SnapshotFlushState::default())),
-        route_sync_min_interval_secs: read_env_u64(
-            "EDGERUN_SCHEDULER_ROUTE_SYNC_MIN_INTERVAL_SECS",
-            2,
-        )
-        .max(1),
         housekeeping_interval_secs: read_env_u64("EDGERUN_SCHEDULER_HOUSEKEEPING_INTERVAL_SECS", 5)
             .max(1),
-        route_signature_max_age_secs: read_env_u64(
-            "EDGERUN_SCHEDULER_ROUTE_SIGNATURE_MAX_AGE_SECS",
-            300,
-        ),
-        route_challenge_ttl_secs: read_env_u64("EDGERUN_SCHEDULER_ROUTE_CHALLENGE_TTL_SECS", 120)
-            .max(30),
-        device_routes: Arc::new(Mutex::new(loaded_route_state.device_routes)),
-        route_challenges: Arc::new(Mutex::new(loaded_route_state.route_challenges)),
-        route_heartbeat_tokens: Arc::new(Mutex::new(loaded_route_state.route_heartbeat_tokens)),
-        signal_peers: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
-        chain_progress_sink: Arc::new(Mutex::new(chain_progress_sink)),
-        chain_event_bus_sink: Arc::new(Mutex::new(chain_event_bus_sink)),
-        latest_chain_progress_event_id: Arc::new(Mutex::new(
-            persisted.latest_chain_progress_event_id.clone(),
-        )),
-        require_chain_progress_signature_verification,
+        scheduler_event_bus,
         enforce_event_ingestion: read_env_bool("EDGERUN_SCHEDULER_ENFORCE_EVENT_INGESTION", true),
-        require_chain_context: require_chain,
-        chain,
     };
-    if state.enforce_event_ingestion
-        && state
-            .chain_event_bus_sink
-            .lock()
-            .expect("lock poisoned")
-            .is_none()
-    {
-        anyhow::bail!(
-            "EDGERUN_SCHEDULER_ENFORCE_EVENT_INGESTION=true but scheduler event bus sink is unavailable"
-        );
-    }
     enforce_history_retention(&state);
 
     let housekeeping_state = state.clone();
@@ -832,7 +296,6 @@ implement cryptographic verification for scheduler signed chain progress events 
         .allow_headers(Any)
         .expose_headers([header::CONTENT_TYPE]);
     let app = Router::new()
-        .route("/v1/webrtc/ws", get(webrtc_signal_ws))
         .route("/v1/control/ws", get(control_ws))
         .layer(cors)
         .with_state(state);
@@ -843,66 +306,6 @@ implement cryptographic verification for scheduler signed chain progress events 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-fn with_route_maps_mut<R>(
-    state: &AppState,
-    f: impl FnOnce(
-        &mut HashMap<String, DeviceRouteEntry>,
-        &mut HashMap<String, u64>,
-        &mut HashMap<String, RouteHeartbeatToken>,
-    ) -> Result<R, (StatusCode, String)>,
-) -> Result<R, (StatusCode, String)> {
-    let out = {
-        let mut routes = state.device_routes.lock().expect("lock poisoned");
-        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-        f(&mut routes, &mut challenges, &mut tokens)?
-    };
-    schedule_route_state_flush(state).map_err(internal_err)?;
-    Ok(out)
-}
-
-fn resolve_route_for_device(state: &AppState, device_id: &str) -> RouteResolveResponse {
-    let now = now_unix_seconds();
-    let route = with_route_maps_mut(state, |routes, _, _| {
-        prune_expired_routes(routes, now);
-        Ok(routes.get(device_id.trim()).cloned())
-    })
-    .ok()
-    .flatten();
-    RouteResolveResponse {
-        ok: true,
-        found: route.is_some(),
-        route,
-    }
-}
-
-fn resolve_owner_routes_for_owner(state: &AppState, owner_pubkey: &str) -> OwnerRoutesResponse {
-    let owner_pubkey = owner_pubkey.trim().to_string();
-    let now = now_unix_seconds();
-    let devices = with_route_maps_mut(state, |routes, _, _| {
-        prune_expired_routes(routes, now);
-        Ok(routes
-            .values()
-            .filter(|route| route.owner_pubkey == owner_pubkey)
-            .cloned()
-            .collect::<Vec<_>>())
-    })
-    .unwrap_or_default();
-    OwnerRoutesResponse {
-        ok: true,
-        owner_pubkey,
-        devices,
-    }
-}
-
-async fn webrtc_signal_ws(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-    Query(query): Query<WebRtcSignalConnectQuery>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| webrtc_signal_socket(state, query.device_id, socket))
 }
 
 async fn control_ws(
@@ -1061,46 +464,6 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
                 )
             })?)
         }
-        "route.challenge" => ControlWsRequestPayload::RouteChallenge(
-            sonic_rs::from_value(&payload).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "invalid payload for route.challenge".to_string(),
-                )
-            })?,
-        ),
-        "route.register" => ControlWsRequestPayload::RouteRegister(
-            sonic_rs::from_value(&payload).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "invalid payload for route.register".to_string(),
-                )
-            })?,
-        ),
-        "route.heartbeat" => ControlWsRequestPayload::RouteHeartbeat(
-            sonic_rs::from_value(&payload).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "invalid payload for route.heartbeat".to_string(),
-                )
-            })?,
-        ),
-        "route.resolve" => ControlWsRequestPayload::RouteResolve(
-            sonic_rs::from_value(&payload).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "invalid payload for route.resolve".to_string(),
-                )
-            })?,
-        ),
-        "route.owner" => {
-            ControlWsRequestPayload::RouteOwner(sonic_rs::from_value(&payload).map_err(|_| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "invalid payload for route.owner".to_string(),
-                )
-            })?)
-        }
         "worker.heartbeat" => ControlWsRequestPayload::WorkerHeartbeat(
             sonic_rs::from_value(&payload).map_err(|_| {
                 (
@@ -1117,14 +480,14 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
                 )
             })?,
         ),
-        "worker.result" => ControlWsRequestPayload::WorkerResult(
-            sonic_rs::from_value(&payload).map_err(|_| {
+        "worker.result" => {
+            ControlWsRequestPayload::WorkerResult(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.result".to_string(),
                 )
-            })?,
-        ),
+            })?)
+        }
         "worker.failure" => ControlWsRequestPayload::WorkerFailure(
             sonic_rs::from_value(&payload).map_err(|_| {
                 (
@@ -1133,14 +496,14 @@ fn decode_json_control_request(text: &str) -> Result<ControlWsClientMessage, (St
                 )
             })?,
         ),
-        "worker.replay" => ControlWsRequestPayload::WorkerReplay(
-            sonic_rs::from_value(&payload).map_err(|_| {
+        "worker.replay" => {
+            ControlWsRequestPayload::WorkerReplay(sonic_rs::from_value(&payload).map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
                     "invalid payload for worker.replay".to_string(),
                 )
-            })?,
-        ),
+            })?)
+        }
         "bundle.get" => {
             ControlWsRequestPayload::BundleGet(sonic_rs::from_value(&payload).map_err(|_| {
                 (
@@ -1201,95 +564,15 @@ async fn handle_control_request_payload(
                 )
             }
         }
-        ControlWsRequestPayload::RouteChallenge(payload) => {
-            match route_challenge_inner(state, payload) {
-                Ok(ok) => {
-                    control_ok_response(request_id, ControlWsResponsePayload::RouteChallenge(ok))
-                }
-                Err((status, err)) => control_error_response(request_id, status, err),
-            }
-        }
-        ControlWsRequestPayload::RouteRegister(payload) => {
-            match route_register_inner(state, payload) {
-                Ok(ok) => {
-                    control_ok_response(request_id, ControlWsResponsePayload::RouteRegister(ok))
-                }
-                Err((status, err)) => control_error_response(request_id, status, err),
-            }
-        }
-        ControlWsRequestPayload::RouteHeartbeat(payload) => {
-            match route_heartbeat_inner(state, payload) {
-                Ok(ok) => {
-                    control_ok_response(request_id, ControlWsResponsePayload::RouteHeartbeat(ok))
-                }
-                Err((status, err)) => control_error_response(request_id, status, err),
-            }
-        }
-        ControlWsRequestPayload::RouteResolve(RouteResolveRequest { device_id }) => {
-            let device_id = device_id.trim().to_string();
-            if device_id.is_empty() {
-                control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "device_id is required".to_string(),
-                )
-            } else {
-                let resolved = resolve_route_for_device(state, &device_id);
-                let mapped = CpRouteResolveResponse {
-                    ok: resolved.ok,
-                    found: resolved.found,
-                    route: resolved.route.map(|entry| CpRouteEntry {
-                        device_id: entry.device_id,
-                        owner_pubkey: entry.owner_pubkey,
-                        candidates: entry.candidates,
-                        reachable_urls: entry.reachable_urls,
-                        capabilities: entry.capabilities,
-                        relay_session_id: entry.relay_session_id,
-                        online: entry.online,
-                        last_seen_unix_s: entry.last_seen_unix_s,
-                        expires_at_unix_s: entry.expires_at_unix_s,
-                        updated_at_unix_s: entry.updated_at_unix_s,
-                    }),
-                };
-                control_ok_response(request_id, ControlWsResponsePayload::RouteResolve(mapped))
-            }
-        }
-        ControlWsRequestPayload::RouteOwner(RouteOwnerRequest { owner_pubkey }) => {
-            let owner_pubkey = owner_pubkey.trim().to_string();
-            if owner_pubkey.is_empty() {
-                control_error_response(
-                    request_id,
-                    StatusCode::BAD_REQUEST,
-                    "owner_pubkey is required".to_string(),
-                )
-            } else {
-                let resolved = resolve_owner_routes_for_owner(state, &owner_pubkey);
-                let mapped = edgerun_types::control_plane::OwnerRoutesResponse {
-                    ok: resolved.ok,
-                    owner_pubkey: resolved.owner_pubkey,
-                    devices: resolved
-                        .devices
-                        .into_iter()
-                        .map(|entry| CpRouteEntry {
-                            device_id: entry.device_id,
-                            owner_pubkey: entry.owner_pubkey,
-                            candidates: entry.candidates,
-                            reachable_urls: entry.reachable_urls,
-                            capabilities: entry.capabilities,
-                            relay_session_id: entry.relay_session_id,
-                            online: entry.online,
-                            last_seen_unix_s: entry.last_seen_unix_s,
-                            expires_at_unix_s: entry.expires_at_unix_s,
-                            updated_at_unix_s: entry.updated_at_unix_s,
-                        })
-                        .collect(),
-                };
-                control_ok_response(
-                    request_id,
-                    ControlWsResponsePayload::RouteOwner(Box::new(mapped)),
-                )
-            }
-        }
+        ControlWsRequestPayload::RouteChallenge(_)
+        | ControlWsRequestPayload::RouteRegister(_)
+        | ControlWsRequestPayload::RouteHeartbeat(_)
+        | ControlWsRequestPayload::RouteResolve(_)
+        | ControlWsRequestPayload::RouteOwner(_) => control_error_response(
+            request_id,
+            StatusCode::GONE,
+            "route control operations removed; use libp2p cluster networking".to_string(),
+        ),
         ControlWsRequestPayload::WorkerHeartbeat(payload) => {
             match worker_heartbeat_inner(state, payload) {
                 Ok(ok) => {
@@ -1376,275 +659,44 @@ async fn handle_control_request_payload(
     }
 }
 
-async fn webrtc_signal_socket(state: AppState, device_id: String, mut socket: WebSocket) {
-    let device_id = device_id.trim().to_string();
-    if device_id.is_empty() {
-        let _ = socket
-            .send(Message::Text(
-                r#"{"kind":"error","error":"device_id is required"}"#.into(),
-            ))
-            .await;
-        return;
-    }
+const EVENT_PUBLISHER_SCHEDULER: &str = "scheduler";
 
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-    {
-        let mut peers = state.signal_peers.lock().await;
-        peers.insert(device_id.clone(), tx);
-    }
-    {
-        let now = now_unix_seconds();
-        let _ = with_route_maps_mut(&state, |routes, _, _| {
-            if let Some(entry) = routes.get_mut(&device_id) {
-                entry.online = true;
-                entry.last_seen_unix_s = now;
-                entry.updated_at_unix_s = now;
-                entry.expires_at_unix_s = now.saturating_add(90);
-            }
-            Ok(())
-        });
-    }
-
-    loop {
-        tokio::select! {
-            Some(outbound) = rx.recv() => {
-                if socket.send(Message::Text(outbound.into())).await.is_err() {
-                    break;
-                }
-            }
-            incoming = socket.recv() => {
-                match incoming {
-                    Some(Ok(Message::Text(text))) => {
-                        if let Err(error) = handle_signal_client_message(&state, &device_id, &text).await {
-                            let encoded = encode_signal_error(&device_id, &error);
-                            let _ = socket.send(Message::Text(encoded.into())).await;
-                        }
-                    }
-                    Some(Ok(Message::Close(_))) | None => break,
-                    Some(Ok(_)) => {}
-                    Some(Err(_)) => break,
-                }
-            }
-        }
-    }
-
-    {
-        let mut peers = state.signal_peers.lock().await;
-        peers.remove(&device_id);
-    }
-    {
-        let now = now_unix_seconds();
-        let _ = with_route_maps_mut(&state, |routes, _, _| {
-            if let Some(entry) = routes.get_mut(&device_id) {
-                entry.online = false;
-                entry.updated_at_unix_s = now;
-            }
-            Ok(())
-        });
-    }
-}
-
-async fn handle_signal_client_message(
-    state: &AppState,
-    from_device_id: &str,
-    text: &str,
-) -> Result<(), String> {
-    let msg = decode_signal_client_message(text)?;
-    let to_device_id = msg.to_device_id.trim().to_string();
-    let to_owner_pubkey = msg.to_owner_pubkey.trim().to_string();
-    if to_device_id.is_empty() && to_owner_pubkey.is_empty() {
-        return Err("missing signal target: set to_device_id or to_owner_pubkey".to_string());
-    }
-
-    let outbound = WebRtcSignalServerMessage {
-        from_device_id: from_device_id.to_string(),
-        kind: msg.kind,
-        sdp: msg.sdp,
-        candidate: msg.candidate,
-        sdp_mid: msg.sdp_mid,
-        sdp_mline_index: msg.sdp_mline_index,
-        metadata: msg.metadata,
-    };
-    let encoded = encode_signal_server_message(&outbound);
-
-    if !to_device_id.is_empty() {
-        let sender = {
-            let peers = state.signal_peers.lock().await;
-            peers.get(to_device_id.as_str()).cloned()
-        };
-        let Some(sender) = sender else {
-            return Err(format!(
-                "target device not connected to signaling ws: {}",
-                to_device_id
+fn topic_for_payload_type(payload_type: &str) -> Result<EventTopic, (StatusCode, String)> {
+    let (overlay, name) = match payload_type {
+        EVENT_PAYLOAD_TYPE_WORKER_HEARTBEAT => (
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_HEARTBEAT,
+        ),
+        EVENT_PAYLOAD_TYPE_WORKER_ASSIGNMENTS_POLL => (
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_ASSIGNMENTS_POLL,
+        ),
+        EVENT_PAYLOAD_TYPE_WORKER_RESULT => (
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_RESULT,
+        ),
+        EVENT_PAYLOAD_TYPE_WORKER_FAILURE => (
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_FAILURE,
+        ),
+        EVENT_PAYLOAD_TYPE_WORKER_REPLAY => (
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_REPLAY,
+        ),
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("unknown event payload_type '{payload_type}'"),
             ));
-        };
-        sender.send(encoded).map_err(|_| {
-            format!(
-                "failed to deliver signaling message to target device: {}",
-                to_device_id
-            )
-        })?;
-        return Ok(());
-    }
-
-    let target_device_ids = match with_route_maps_mut(state, |routes, _, _| {
-        let now = now_unix_seconds();
-        prune_expired_routes(routes, now);
-        Ok(routes
-            .values()
-            .filter(|route| route.owner_pubkey == to_owner_pubkey)
-            .map(|route| route.device_id.clone())
-            .collect::<Vec<_>>())
-    }) {
-        Ok(ids) => ids,
-        Err(_) => return Err("failed to resolve route targets for owner".to_string()),
+        }
     };
-    if target_device_ids.is_empty() {
-        return Err(format!(
-            "no routed devices found for owner: {}",
-            to_owner_pubkey
-        ));
-    }
-
-    let peers = state.signal_peers.lock().await;
-    let mut delivered = 0usize;
-    for device_id in target_device_ids {
-        if device_id == from_device_id {
-            continue;
-        }
-        if let Some(sender) = peers.get(device_id.as_str()) {
-            if sender.send(encoded.clone()).is_ok() {
-                delivered = delivered.saturating_add(1);
-            }
-        }
-    }
-    if delivered == 0 {
-        return Err(format!(
-            "no online signaling peers available for owner: {}",
-            to_owner_pubkey
-        ));
-    }
-    Ok(())
-}
-
-fn b64_encode_text(value: &str) -> String {
-    URL_SAFE_NO_PAD.encode(value.as_bytes())
-}
-
-fn b64_decode_text(value: &str) -> Result<String, String> {
-    if value.is_empty() {
-        return Ok(String::new());
-    }
-    let bytes = URL_SAFE_NO_PAD
-        .decode(value.as_bytes())
-        .map_err(|_| "invalid signaling payload encoding".to_string())?;
-    String::from_utf8(bytes).map_err(|_| "invalid signaling utf8 payload".to_string())
-}
-
-fn encode_optional_text(value: Option<&str>) -> String {
-    value.map(b64_encode_text).unwrap_or_default()
-}
-
-fn encode_signal_server_message(message: &WebRtcSignalServerMessage) -> String {
-    let sdp_mline_index = message
-        .sdp_mline_index
-        .map(|v| v.to_string())
-        .unwrap_or_default();
-    [
-        b64_encode_text(&message.from_device_id),
-        b64_encode_text(&message.kind),
-        encode_optional_text(message.sdp.as_deref()),
-        encode_optional_text(message.candidate.as_deref()),
-        encode_optional_text(message.sdp_mid.as_deref()),
-        b64_encode_text(&sdp_mline_index),
-        encode_optional_text(message.metadata.as_deref()),
-        String::new(),
-    ]
-    .join("|")
-}
-
-fn encode_signal_error(from_device_id: &str, error: &str) -> String {
-    [
-        b64_encode_text(from_device_id),
-        b64_encode_text("error"),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        String::new(),
-        b64_encode_text(error),
-    ]
-    .join("|")
-}
-
-fn decode_signal_client_message(text: &str) -> Result<WebRtcSignalClientMessage, String> {
-    let mut parts = text.split('|');
-    let fields: [Cow<'_, str>; 8] =
-        std::array::from_fn(|_| Cow::Borrowed(parts.next().unwrap_or("")));
-    if parts.next().is_some() {
-        return Err("invalid signaling frame format".to_string());
-    }
-
-    let to_device_id = b64_decode_text(&fields[0])?;
-    let to_owner_pubkey = b64_decode_text(&fields[1])?;
-    let kind = b64_decode_text(&fields[2])?;
-    let sdp = b64_decode_text(&fields[3])?;
-    let candidate = b64_decode_text(&fields[4])?;
-    let sdp_mid = b64_decode_text(&fields[5])?;
-    let sdp_mline_index = b64_decode_text(&fields[6])?;
-    let metadata = b64_decode_text(&fields[7])?;
-
-    let parsed_mline = if sdp_mline_index.trim().is_empty() {
-        None
-    } else {
-        Some(
-            sdp_mline_index
-                .trim()
-                .parse::<u16>()
-                .map_err(|_| "invalid sdp_mline_index".to_string())?,
+    EventTopic::new(overlay, name).map_err(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("invalid configured topic '{name}': {err}"),
         )
-    };
-
-    Ok(WebRtcSignalClientMessage {
-        to_device_id,
-        to_owner_pubkey,
-        kind,
-        sdp: if sdp.is_empty() { None } else { Some(sdp) },
-        candidate: if candidate.is_empty() {
-            None
-        } else {
-            Some(candidate)
-        },
-        sdp_mid: if sdp_mid.is_empty() {
-            None
-        } else {
-            Some(sdp_mid)
-        },
-        sdp_mline_index: parsed_mline,
-        metadata: if metadata.is_empty() {
-            None
-        } else {
-            Some(metadata)
-        },
     })
 }
-
-fn prune_expired_routes(routes: &mut HashMap<String, DeviceRouteEntry>, now: u64) {
-    routes.retain(|_, route| route.expires_at_unix_s > now);
-}
-
-const INGEST_SCHEMA_VERSION: u32 = 1;
-const EVENT_PUBLISHER_SCHEDULER: &str = "scheduler";
-const EVENT_SIGNATURE_SCHEDULER_INGEST: &str = "scheduler-control-plane";
-const EVENT_POLICY_ID_SCHEDULER_CONTROL_PLANE: &str = "scheduler-control-plane-v1";
-const EVENT_TYPE_WORKER_HEARTBEAT: &str = "worker_heartbeat";
-const EVENT_TYPE_WORKER_ASSIGNMENTS_POLL: &str = "worker_assignments_poll";
-const EVENT_TYPE_WORKER_RESULT: &str = "worker_result";
-const EVENT_TYPE_WORKER_FAILURE: &str = "worker_failure";
-const EVENT_TYPE_WORKER_REPLAY: &str = "worker_replay";
-const EVENT_TYPE_ROUTE_CHALLENGE: &str = "route_challenge";
-const EVENT_TYPE_ROUTE_REGISTER: &str = "route_register";
-const EVENT_TYPE_ROUTE_HEARTBEAT: &str = "route_heartbeat";
 
 fn ingest_scheduler_event<T: Serialize>(
     state: &AppState,
@@ -1652,34 +704,14 @@ fn ingest_scheduler_event<T: Serialize>(
     payload: &T,
 ) -> Result<(), (StatusCode, String)> {
     let encoded = bincode::serialize(payload).map_err(internal_err)?;
-    let mut guard = state.chain_event_bus_sink.lock().expect("lock poisoned");
-    let Some(bus_sink) = guard.as_mut() else {
-        if state.enforce_event_ingestion {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                "scheduler event ingestion sink is unavailable".to_string(),
-            ));
-        }
-        tracing::warn!(
-            payload_type,
-            "skipping control-plane event ingestion because event bus sink is unavailable"
-        );
-        return Ok(());
-    };
-    let envelope = StorageBackedEventBus::build_envelope(
-        bus_sink.next_nonce,
+    let topic = topic_for_payload_type(payload_type)?;
+    match state.scheduler_event_bus.publish(
+        &topic,
         EVENT_PUBLISHER_SCHEDULER.to_string(),
-        EVENT_SIGNATURE_SCHEDULER_INGEST.to_string(),
-        EVENT_POLICY_ID_SCHEDULER_CONTROL_PLANE.to_string(),
-        vec!["*".to_string()],
         payload_type.to_string(),
         encoded,
-    );
-    match bus_sink.bus.publish(&envelope) {
-        Ok(_) => {
-            bus_sink.next_nonce = bus_sink.next_nonce.saturating_add(1);
-            Ok(())
-        }
+    ) {
+        Ok(_) => Ok(()),
         Err(err) => {
             if state.enforce_event_ingestion {
                 Err((
@@ -1690,440 +722,12 @@ fn ingest_scheduler_event<T: Serialize>(
                 tracing::warn!(
                     payload_type,
                     error = %err,
-                    "control-plane event ingestion failed (continuing because enforcement is disabled)"
+                    "control-plane event publish failed (continuing because enforcement is disabled)"
                 );
                 Ok(())
             }
         }
     }
-}
-
-fn parse_route_owner_verifying_key(
-    owner_pubkey: &str,
-) -> Result<VerifyingKey, (StatusCode, String)> {
-    let trimmed = owner_pubkey.trim();
-    if trimmed.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey is required".to_string(),
-        ));
-    }
-    if let Ok(pubkey_bytes) = parse_pubkey_bytes(trimmed) {
-        return VerifyingKey::from_bytes(&pubkey_bytes).map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "invalid owner_pubkey bytes".to_string(),
-            )
-        });
-    }
-    let bytes = URL_SAFE_NO_PAD.decode(trimmed.as_bytes()).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey must be base58 or base64url".to_string(),
-        )
-    })?;
-    let arr: [u8; 32] = bytes.try_into().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey must decode to 32 bytes".to_string(),
-        )
-    })?;
-    VerifyingKey::from_bytes(&arr).map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "invalid owner_pubkey bytes".to_string(),
-        )
-    })
-}
-
-fn parse_pubkey_bytes(value: &str) -> Result<[u8; 32], ()> {
-    let decoded = bs58::decode(value.trim()).into_vec().map_err(|_| ())?;
-    decoded.as_slice().try_into().map_err(|_| ())
-}
-
-fn parse_signature_b64url(signature: &str) -> Result<Signature, (StatusCode, String)> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(signature.trim().as_bytes())
-        .map_err(|_| {
-            (
-                StatusCode::BAD_REQUEST,
-                "invalid signature encoding".to_string(),
-            )
-        })?;
-    let arr: [u8; 64] = bytes.try_into().map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            "signature must decode to 64 bytes".to_string(),
-        )
-    })?;
-    Ok(Signature::from_bytes(&arr))
-}
-
-fn route_challenge_inner(
-    state: &AppState,
-    payload: RouteChallengeRequest,
-) -> Result<RouteChallengeResponse, (StatusCode, String)> {
-    let device_id = payload.device_id.trim().to_string();
-    if device_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
-    }
-    let now = now_unix_seconds();
-    let nonce = random_token_b64url(24);
-    let expires_at_unix_s = now.saturating_add(state.route_challenge_ttl_secs);
-    let ingest_event = RouteChallengeIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
-        observed_at_unix_ms: now_unix_millis(),
-        device_id,
-        nonce: nonce.clone(),
-        expires_at_unix_s,
-    };
-    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_CHALLENGE, &ingest_event)?;
-    with_route_maps_mut(state, |_, challenges, tokens| {
-        challenges.retain(|_, exp| *exp > now);
-        tokens.retain(|_, token| token.expires_at_unix_s > now);
-        challenges.insert(nonce.clone(), expires_at_unix_s);
-        Ok(())
-    })?;
-    Ok(RouteChallengeResponse {
-        nonce,
-        expires_at_unix_s,
-    })
-}
-
-fn route_register_inner(
-    state: &AppState,
-    payload: RouteRegisterRequest,
-) -> Result<RouteRegisterResponse, (StatusCode, String)> {
-    let device_id = payload.device_id.trim().to_string();
-    if device_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
-    }
-    let owner_pubkey = payload.owner_pubkey.trim().to_string();
-    if owner_pubkey.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "owner_pubkey is required".to_string(),
-        ));
-    }
-    let challenge_nonce = payload.challenge_nonce.trim().to_string();
-    if challenge_nonce.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "challenge_nonce is required".to_string(),
-        ));
-    }
-    let signature = payload.signature.trim().to_string();
-    if signature.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "signature is required".to_string()));
-    }
-    let (candidates, reachable_urls) =
-        normalize_route_candidates(&payload.candidates, &payload.reachable_urls);
-    if candidates.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "at least one valid transport candidate is required".to_string(),
-        ));
-    }
-    let capabilities = payload
-        .capabilities
-        .iter()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .collect::<Vec<_>>();
-    let relay_session_id = payload
-        .relay_session_id
-        .as_ref()
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
-
-    let now = now_unix_seconds();
-    if payload.signed_at_unix_s == 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "signed_at_unix_s is required".to_string(),
-        ));
-    }
-    if payload.signed_at_unix_s > now.saturating_add(state.route_signature_max_age_secs) {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "route signature timestamp is too far in the future".to_string(),
-        ));
-    }
-    let age = now.saturating_sub(payload.signed_at_unix_s);
-    if age > state.route_signature_max_age_secs {
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "route signature is too old".to_string(),
-        ));
-    }
-
-    let challenge_valid = {
-        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-        challenges.retain(|_, exp| *exp > now);
-        challenges
-            .get(&challenge_nonce)
-            .copied()
-            .map(|exp| exp > now)
-            .unwrap_or(false)
-    };
-    if !challenge_valid {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "unknown or expired challenge_nonce".to_string(),
-        ));
-    }
-
-    let verifier = parse_route_owner_verifying_key(&owner_pubkey)?;
-    let parsed_signature = parse_signature_b64url(&signature)?;
-    let signing_message = route_register_signing_message(
-        &owner_pubkey,
-        &device_id,
-        &reachable_urls,
-        &challenge_nonce,
-        payload.signed_at_unix_s,
-    );
-    let signing_digest = hash(signing_message.as_bytes());
-    if !edgerun_crypto::verify(&verifier, signing_message.as_bytes(), &parsed_signature) {
-        tracing::warn!(
-            owner_pubkey = %owner_pubkey,
-            device_id = %device_id,
-            signed_at_unix_s = payload.signed_at_unix_s,
-            signing_digest = %hex::encode(signing_digest.to_bytes()),
-            reachable_urls = ?reachable_urls,
-            "route register signature verification failed"
-        );
-        return Err((
-            StatusCode::UNAUTHORIZED,
-            "invalid route register signature".to_string(),
-        ));
-    }
-
-    let ttl_secs = payload.ttl_secs.clamp(30, 300);
-    let mut normalized_payload = payload.clone();
-    normalized_payload.device_id = device_id.clone();
-    normalized_payload.owner_pubkey = owner_pubkey.clone();
-    normalized_payload.challenge_nonce = challenge_nonce.clone();
-    normalized_payload.candidates = candidates.clone();
-    normalized_payload.reachable_urls = reachable_urls.clone();
-    normalized_payload.capabilities = capabilities.clone();
-    normalized_payload.relay_session_id = relay_session_id.clone();
-    normalized_payload.ttl_secs = ttl_secs;
-    normalized_payload.signature = signature.clone();
-    let ingest_event = RouteRegisterIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
-        observed_at_unix_ms: now_unix_millis(),
-        payload: normalized_payload,
-    };
-    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_REGISTER, &ingest_event)?;
-
-    let heartbeat_token = random_token_b64url(32);
-    with_route_maps_mut(state, |routes, challenges, tokens| {
-        challenges.retain(|_, exp| *exp > now);
-        let Some(expiry) = challenges.remove(&challenge_nonce) else {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "unknown or expired challenge_nonce".to_string(),
-            ));
-        };
-        if expiry <= now {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "unknown or expired challenge_nonce".to_string(),
-            ));
-        }
-        let expires_at = now.saturating_add(ttl_secs);
-        routes.insert(
-            device_id.clone(),
-            DeviceRouteEntry {
-                device_id: device_id.clone(),
-                owner_pubkey,
-                candidates,
-                reachable_urls,
-                capabilities,
-                relay_session_id,
-                online: true,
-                last_seen_unix_s: now,
-                expires_at_unix_s: expires_at,
-                updated_at_unix_s: now,
-            },
-        );
-        tokens.insert(
-            heartbeat_token.clone(),
-            RouteHeartbeatToken {
-                device_id,
-                expires_at_unix_s: expires_at,
-            },
-        );
-        Ok(())
-    })?;
-    Ok(RouteRegisterResponse {
-        ok: true,
-        heartbeat_token,
-    })
-}
-
-fn route_heartbeat_inner(
-    state: &AppState,
-    payload: RouteHeartbeatRequest,
-) -> Result<RouteHeartbeatResponse, (StatusCode, String)> {
-    let device_id = payload.device_id.trim().to_string();
-    if device_id.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "device_id is required".to_string()));
-    }
-    let token = payload.token.trim().to_string();
-    if token.is_empty() {
-        return Err((StatusCode::BAD_REQUEST, "token is required".to_string()));
-    }
-    let ttl_secs = payload.ttl_secs.clamp(30, 300);
-    let now = now_unix_seconds();
-    {
-        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-        tokens.retain(|_, item| item.expires_at_unix_s > now);
-        let Some(stored) = tokens.get(&token) else {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "unknown or expired heartbeat token".to_string(),
-            ));
-        };
-        if stored.device_id != device_id {
-            return Err((
-                StatusCode::FORBIDDEN,
-                "heartbeat token does not match device_id".to_string(),
-            ));
-        }
-    }
-
-    let ingest_event = RouteHeartbeatIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
-        observed_at_unix_ms: now_unix_millis(),
-        payload: RouteHeartbeatRequest {
-            device_id: device_id.clone(),
-            token: token.clone(),
-            ttl_secs,
-        },
-    };
-    ingest_scheduler_event(state, EVENT_TYPE_ROUTE_HEARTBEAT, &ingest_event)?;
-
-    with_route_maps_mut(state, |routes, _, tokens| {
-        tokens.retain(|_, item| item.expires_at_unix_s > now);
-        let Some(stored) = tokens.get_mut(&token) else {
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                "unknown or expired heartbeat token".to_string(),
-            ));
-        };
-        if stored.device_id != device_id {
-            return Err((
-                StatusCode::FORBIDDEN,
-                "heartbeat token does not match device_id".to_string(),
-            ));
-        }
-        let expires_at = now.saturating_add(ttl_secs);
-        stored.expires_at_unix_s = expires_at;
-        let route = routes.get_mut(&device_id).ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                "route not found for device".to_string(),
-            )
-        })?;
-        route.online = true;
-        route.last_seen_unix_s = now;
-        route.expires_at_unix_s = expires_at;
-        route.updated_at_unix_s = now;
-        Ok(())
-    })?;
-
-    Ok(RouteHeartbeatResponse { ok: true })
-}
-
-fn normalize_route_candidates(
-    candidates: &[CpRouteCandidate],
-    reachable_urls: &[String],
-) -> (Vec<CpRouteCandidate>, Vec<String>) {
-    let mut out = Vec::<CpRouteCandidate>::new();
-    let mut seen = HashSet::<String>::new();
-
-    for candidate in candidates {
-        let uri = candidate.uri.trim();
-        if uri.is_empty() {
-            continue;
-        }
-        let Some(kind) = normalize_candidate_kind(candidate.kind.as_str(), uri) else {
-            continue;
-        };
-        if !seen.insert(uri.to_string()) {
-            continue;
-        }
-        let metadata = candidate
-            .metadata
-            .iter()
-            .filter_map(|(k, v)| {
-                let key = k.trim();
-                let value = v.trim();
-                if key.is_empty() || value.is_empty() {
-                    None
-                } else {
-                    Some((key.to_string(), value.to_string()))
-                }
-            })
-            .collect::<BTreeMap<_, _>>();
-        out.push(CpRouteCandidate {
-            kind: kind.to_string(),
-            uri: uri.to_string(),
-            priority: candidate.priority,
-            metadata,
-        });
-    }
-
-    if out.is_empty() {
-        for raw in reachable_urls {
-            let uri = raw.trim();
-            if uri.is_empty() {
-                continue;
-            }
-            let Some(kind) = normalize_candidate_kind("", uri) else {
-                continue;
-            };
-            if !seen.insert(uri.to_string()) {
-                continue;
-            }
-            out.push(CpRouteCandidate {
-                kind: kind.to_string(),
-                uri: uri.to_string(),
-                priority: 100,
-                metadata: BTreeMap::new(),
-            });
-        }
-    }
-
-    let signable_urls = out.iter().map(|candidate| candidate.uri.clone()).collect();
-    (out, signable_urls)
-}
-
-fn normalize_candidate_kind<'a>(kind: &'a str, uri: &'a str) -> Option<&'static str> {
-    let normalized = kind.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "quic" if uri.starts_with("quic://") => return Some("quic"),
-        "websocket" if uri.starts_with("ws://") || uri.starts_with("wss://") => {
-            return Some("websocket");
-        }
-        "wireguard" if uri.starts_with("wg://") || uri.starts_with("wireguard://") => {
-            return Some("wireguard");
-        }
-        _ => {}
-    }
-    if uri.starts_with("quic://") {
-        return Some("quic");
-    }
-    if uri.starts_with("ws://") || uri.starts_with("wss://") {
-        return Some("websocket");
-    }
-    if uri.starts_with("wg://") || uri.starts_with("wireguard://") {
-        return Some("wireguard");
-    }
-    None
 }
 
 fn worker_heartbeat_inner(
@@ -2149,11 +753,11 @@ fn worker_heartbeat_inner(
         "received worker heartbeat"
     );
     let ingest_event = WorkerHeartbeatIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
+        schema_version: EVENT_SCHEMA_VERSION_V1,
         observed_at_unix_ms: now_unix_millis(),
         payload: payload.clone(),
     };
-    ingest_scheduler_event(state, EVENT_TYPE_WORKER_HEARTBEAT, &ingest_event)?;
+    ingest_scheduler_event(state, EVENT_PAYLOAD_TYPE_WORKER_HEARTBEAT, &ingest_event)?;
     let now = now_unix_seconds();
     let (max_concurrent, mem_bytes) = payload
         .capacity
@@ -2199,11 +803,15 @@ fn worker_assignments_inner(
         ));
     }
     let ingest_event = WorkerAssignmentsPollIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
+        schema_version: EVENT_SCHEMA_VERSION_V1,
         observed_at_unix_ms: now_unix_millis(),
         payload: payload.clone(),
     };
-    ingest_scheduler_event(state, EVENT_TYPE_WORKER_ASSIGNMENTS_POLL, &ingest_event)?;
+    ingest_scheduler_event(
+        state,
+        EVENT_PAYLOAD_TYPE_WORKER_ASSIGNMENTS_POLL,
+        &ingest_event,
+    )?;
     let worker_pubkey = payload.worker_pubkey;
     tracing::info!(worker = %worker_pubkey, "assignment poll");
     let mut assignments = state.assignments.lock().expect("lock poisoned");
@@ -2256,11 +864,11 @@ fn worker_result_inner(
         "worker result received"
     );
     let ingest_event = WorkerResultIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
+        schema_version: EVENT_SCHEMA_VERSION_V1,
         observed_at_unix_ms: now_unix_millis(),
         payload: payload.clone(),
     };
-    ingest_scheduler_event(state, EVENT_TYPE_WORKER_RESULT, &ingest_event)?;
+    ingest_scheduler_event(state, EVENT_PAYLOAD_TYPE_WORKER_RESULT, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut results = state.results.lock().expect("lock poisoned");
@@ -2322,11 +930,11 @@ fn worker_failure_inner(
         "worker failure received"
     );
     let ingest_event = WorkerFailureIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
+        schema_version: EVENT_SCHEMA_VERSION_V1,
         observed_at_unix_ms: now_unix_millis(),
         payload: payload.clone(),
     };
-    ingest_scheduler_event(state, EVENT_TYPE_WORKER_FAILURE, &ingest_event)?;
+    ingest_scheduler_event(state, EVENT_PAYLOAD_TYPE_WORKER_FAILURE, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut failures = state.failures.lock().expect("lock poisoned");
@@ -2394,11 +1002,11 @@ fn worker_replay_artifact_inner(
         "worker replay artifact received"
     );
     let ingest_event = WorkerReplayIngestEvent {
-        schema_version: INGEST_SCHEMA_VERSION,
+        schema_version: EVENT_SCHEMA_VERSION_V1,
         observed_at_unix_ms: now_unix_millis(),
         payload: payload.clone(),
     };
-    ingest_scheduler_event(state, EVENT_TYPE_WORKER_REPLAY, &ingest_event)?;
+    ingest_scheduler_event(state, EVENT_PAYLOAD_TYPE_WORKER_REPLAY, &ingest_event)?;
 
     let job_id = payload.job_id.clone();
     let mut replay_artifacts = state.replay_artifacts.lock().expect("lock poisoned");
@@ -2691,53 +1299,8 @@ fn job_create_inner(
         tracing::warn!(error = %err, "failed to append policy audit event");
     }
 
-    let (post_job_tx, post_job_sig) = if let Some(chain) = state.chain.as_ref() {
-        match build_runtime_allowlist_proof_for_chain(chain, runtime_id) {
-            Ok(runtime_proof) => {
-                let tx_args = PostJobArgs {
-                    client: parsed_client
-                        .map(Pubkey::new_from_array)
-                        .unwrap_or_else(|| chain.payer.pubkey()),
-                    job_id: bundle_hash,
-                    bundle_hash,
-                    runtime_id,
-                    runtime_proof,
-                    max_memory_bytes: payload.limits.max_memory_bytes,
-                    max_instructions: payload.limits.max_instructions,
-                    escrow_lamports: payload.escrow_lamports,
-                };
-                build_post_job_tx_base64(chain, tx_args).map_err(|err| {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        format!("failed to build chain post_job transaction: {err}"),
-                    )
-                })?
-            }
-            Err(err) if !state.require_chain_context => {
-                tracing::warn!(
-                    error = %err,
-                    "chain proof unavailable in chain-optional mode; returning empty post_job artifacts"
-                );
-                (String::new(), None)
-            }
-            Err(err) => {
-                return Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    format!("failed to build runtime allowlist proof: {err}"),
-                ));
-            }
-        }
-    } else if state.require_chain_context {
-        return Err((
-            StatusCode::SERVICE_UNAVAILABLE,
-            "chain context unavailable; cannot build post_job transaction".to_string(),
-        ));
-    } else {
-        tracing::warn!(
-            "chain context unavailable in chain-optional mode; returning empty post_job artifacts"
-        );
-        (String::new(), None)
-    };
+    let _ = (parsed_client, bundle_hash, runtime_id);
+    let (post_job_tx, post_job_sig) = (String::new(), None);
 
     Ok(JobCreateResponse {
         // Job identity is bundle-hash keyed at MVP scaffold level.
@@ -2776,677 +1339,50 @@ fn get_job_status_inner(state: &AppState, job_id: String) -> JobStatusResponse {
     }
 }
 
-fn init_chain_context() -> Result<ChainContext> {
-    anyhow::bail!("chain support is disabled in this build")
-}
-
-fn init_chain_progress_sink(data_dir: &FsPath, signer_pubkey: String) -> Option<ChainProgressSink> {
-    let storage_dir = data_dir.join("storage").join("scheduler-chain-progress");
-    let stream_id = fixed_storage_stream_id("edgerun-scheduler-chain-progress-stream");
-    let actor_id = fixed_storage_actor_id("edgerun-scheduler-chain-progress-actor");
-    match StorageEngine::new(storage_dir)
-        .and_then(|engine| engine.create_append_session("chain-progress.seg", 128 * 1024 * 1024))
-    {
-        Ok(session) => Some(ChainProgressSink {
-            session,
-            stream_id,
-            actor_id,
-            signer_pubkey,
-            seq: 0,
-        }),
-        Err(err) => {
-            tracing::warn!(error = %err, "chain progress storage sink unavailable");
-            None
-        }
-    }
-}
-
-fn fixed_storage_stream_id(seed: &str) -> StorageStreamId {
-    let digest = edgerun_crypto::blake3_256(seed.as_bytes());
-    let mut out = [0u8; 16];
-    out.copy_from_slice(&digest[..16]);
-    StorageStreamId::from_bytes(out)
-}
-
-fn fixed_storage_actor_id(seed: &str) -> StorageActorId {
-    let digest = edgerun_crypto::blake3_256(seed.as_bytes());
-    let mut out = [0u8; 16];
-    out.copy_from_slice(&digest[16..32]);
-    StorageActorId::from_bytes(out)
-}
-
-fn query_max_nonce_for_publisher(bus: &mut StorageBackedEventBus, publisher: &str) -> Result<u64> {
-    let mut cursor = 0_u64;
-    let mut max_nonce = 0_u64;
-    loop {
-        let page = bus.query(
-            1024,
-            cursor,
-            BusQueryFilter {
-                publisher: Some(publisher.to_string()),
-                payload_type: None,
-            },
-        )?;
-        for row in page.events {
-            if row.envelope.nonce > max_nonce {
-                max_nonce = row.envelope.nonce;
-            }
-        }
-        let Some(next) = page.next_cursor_offset else {
-            break;
-        };
-        cursor = next;
-    }
-    Ok(max_nonce)
-}
-
-const SCHEDULER_EVENT_BUS_POLICY_VERSION: u32 = 2;
-
-fn scheduler_event_bus_rules() -> Vec<PolicyRuleV1> {
-    vec![
-        PolicyRuleV1 {
-            publisher: "*".to_string(),
-            payload_type: "policy_update_request".to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: "chain_progress".to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_WORKER_HEARTBEAT.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_WORKER_ASSIGNMENTS_POLL.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_WORKER_RESULT.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_WORKER_FAILURE.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_WORKER_REPLAY.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_ROUTE_CHALLENGE.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_ROUTE_REGISTER.to_string(),
-        },
-        PolicyRuleV1 {
-            publisher: EVENT_PUBLISHER_SCHEDULER.to_string(),
-            payload_type: EVENT_TYPE_ROUTE_HEARTBEAT.to_string(),
-        },
-    ]
-}
-
-fn ensure_chain_progress_policy(bus: &mut StorageBackedEventBus, next_nonce: u64) -> Result<u64> {
-    let status = bus.status()?;
-    if status.phase == BusPhaseV1::Running as i32
-        && status.policy_version >= SCHEDULER_EVENT_BUS_POLICY_VERSION
-    {
-        return Ok(next_nonce);
-    }
-    let policy_req = PolicyUpdateRequestV1 {
-        schema_version: 1,
-        policy: Some(EventBusPolicyV1 {
-            version: SCHEDULER_EVENT_BUS_POLICY_VERSION,
-            rules: scheduler_event_bus_rules(),
-        }),
-    };
-    let envelope = StorageBackedEventBus::build_envelope(
-        next_nonce,
-        "scheduler".to_string(),
-        "scheduler-internal".to_string(),
-        "scheduler-chain-progress-v1".to_string(),
-        vec!["*".to_string()],
-        "policy_update_request".to_string(),
-        ProstCodec::encode_to_vec(&policy_req),
-    );
-    let _ = bus.publish(&envelope)?;
-    Ok(next_nonce.saturating_add(1))
-}
-
-fn init_chain_event_bus_sink(
-    data_dir: &FsPath,
-    persisted_nonce: Option<u64>,
-) -> Result<Option<ChainEventBusSink>> {
-    let bus_data_dir = data_dir.join("event-bus");
-    std::fs::create_dir_all(&bus_data_dir)
-        .with_context(|| format!("create event bus dir: {}", bus_data_dir.display()))?;
-    let mut bus = StorageBackedEventBus::open_writer(bus_data_dir, "events.seg")
-        .context("open scheduler event bus sink")?;
-    let discovered_max = query_max_nonce_for_publisher(&mut bus, "scheduler")
-        .context("query scheduler nonce in event bus")?;
-    let mut next_nonce = discovered_max.saturating_add(1);
-    if let Some(saved) = persisted_nonce {
-        next_nonce = next_nonce.max(saved.saturating_add(1));
-    }
-    next_nonce = ensure_chain_progress_policy(&mut bus, next_nonce)
-        .context("ensure chain progress policy in event bus")?;
-    Ok(Some(ChainEventBusSink { bus, next_nonce }))
-}
-
-fn read_and_record_chain_progress(state: &AppState) -> Option<SchedulerSignedChainProgressEvent> {
-    let chain = state.chain.as_ref()?;
-    let epoch_info = match chain.rpc.get_epoch_info() {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::warn!(error = %err, "failed to read current chain epoch info");
-            return None;
-        }
-    };
-    match append_signed_chain_progress_event(state, epoch_info.absolute_slot, epoch_info.epoch) {
-        Ok(ev) => Some(ev),
-        Err(err) => {
-            tracing::warn!(error = %err, "failed to append signed chain progress event");
-            None
-        }
-    }
-}
-
-fn append_signed_chain_progress_event(
-    state: &AppState,
-    slot: u64,
-    epoch: u64,
-) -> Result<SchedulerSignedChainProgressEvent> {
-    if state.require_chain_progress_signature_verification {
-        anyhow::bail!(
-            "chain progress signature verification required but not implemented; \
-implement verification before enabling this mode"
-        );
-    }
-    let mut sink_guard = state.chain_progress_sink.lock().expect("lock poisoned");
-    let sink = sink_guard
-        .as_mut()
-        .context("chain progress sink not initialized")?;
-    sink.seq = sink.seq.saturating_add(1);
-    let observed_at_unix_ms = now_unix_millis();
-    let signing_message = format!(
-        "edgerun:chain_progress:v1:{}:{}:{}:{}:{}",
-        slot, epoch, observed_at_unix_ms, sink.signer_pubkey, sink.seq
-    );
-    let signature = state.policy_signing_key.sign(signing_message.as_bytes());
-    let signature_hex = hex::encode(signature.to_bytes());
-    let progress_event_id = hex::encode(hash(signing_message.as_bytes()).to_bytes());
-    let event_payload = SchedulerSignedChainProgressEvent {
-        progress_event_id: progress_event_id.clone(),
-        slot,
-        epoch,
-        observed_at_unix_ms,
-        signer: sink.signer_pubkey.clone(),
-        signature: signature_hex,
-    };
-    let payload = bincode::serialize(&event_payload).context("serialize chain progress event")?;
-    let event = StorageEvent::new(
-        sink.stream_id.clone(),
-        sink.actor_id.clone(),
-        payload.clone(),
-    );
-    sink.session
-        .append_with_durability(&event, DurabilityLevel::AckDurable)
-        .context("append chain progress event to storage")?;
-    drop(sink_guard);
-
-    let mut latest_chain_event_id = progress_event_id;
-    if let Some(bus_sink) = state
-        .chain_event_bus_sink
-        .lock()
-        .expect("lock poisoned")
-        .as_mut()
-    {
-        let envelope = StorageBackedEventBus::build_envelope(
-            bus_sink.next_nonce,
-            "scheduler".to_string(),
-            "scheduler-internal".to_string(),
-            "scheduler-chain-progress-v1".to_string(),
-            vec!["*".to_string()],
-            "chain_progress".to_string(),
-            payload,
-        );
-        match bus_sink.bus.publish(&envelope) {
-            Ok(_) => {
-                bus_sink.next_nonce = bus_sink.next_nonce.saturating_add(1);
-                latest_chain_event_id = envelope.event_id;
-            }
-            Err(err) => {
-                tracing::warn!(error = %err, "failed to publish chain progress into event bus");
-            }
-        }
-    }
-
-    *state
-        .latest_chain_progress_event_id
-        .lock()
-        .expect("lock poisoned") = Some(latest_chain_event_id);
-    Ok(event_payload)
-}
-
-fn build_post_job_tx_base64(
-    chain: &ChainContext,
-    args: PostJobArgs,
-) -> Result<(String, Option<String>)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &args.job_id], &chain.program_id);
-
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(args.client, true),
-            AccountMeta::new_readonly(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new_readonly(system_program::id(), false),
-        ],
-        data: encode_post_job_data(args),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-
-    let mut tx = Transaction::new_with_payer(&[ix], Some(&chain.payer.pubkey()));
-    tx.partial_sign(&[&chain.payer], blockhash);
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = encode_tx_artifact_bytes(&tx);
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    Ok((tx_b64, signature))
-}
-
-fn build_runtime_allowlist_proof_for_chain(
-    chain: &ChainContext,
-    runtime_id: [u8; 32],
-) -> Result<Vec<[u8; 32]>> {
-    let allowed_root = fetch_chain_allowed_runtime_root(chain)?;
-    if allowed_root == [0_u8; 32] {
-        return Ok(Vec::new());
-    }
-
-    let leaves = load_allowed_runtime_ids_from_env()?.ok_or_else(|| {
-        anyhow::anyhow!(
-            "config.allowed_runtime_root is non-zero but EDGERUN_ALLOWED_RUNTIME_IDS is unset"
-        )
-    })?;
-    let (derived_root, proof) = build_merkle_root_and_proof(&leaves, &runtime_id)
-        .ok_or_else(|| anyhow::anyhow!("runtime_id is not in EDGERUN_ALLOWED_RUNTIME_IDS"))?;
-    if derived_root != allowed_root {
-        anyhow::bail!(
-            "runtime allowlist root mismatch: env-derived root does not match on-chain config"
-        );
-    }
-    Ok(proof)
-}
-
-fn load_allowed_runtime_ids_from_env() -> Result<Option<Vec<[u8; 32]>>> {
-    let Some(raw) = std::env::var("EDGERUN_ALLOWED_RUNTIME_IDS").ok() else {
-        return Ok(None);
-    };
-    let mut leaves = Vec::new();
-    for entry in raw.split(',').map(|v| v.trim()).filter(|v| !v.is_empty()) {
-        leaves.push(parse_hex32(entry).map_err(|_| {
-            anyhow::anyhow!("EDGERUN_ALLOWED_RUNTIME_IDS entries must be 32-byte hex values")
-        })?);
-    }
-    if leaves.is_empty() {
-        return Ok(None);
-    }
-    leaves.sort();
-    leaves.dedup();
-    Ok(Some(leaves))
-}
-
-fn fetch_chain_allowed_runtime_root(chain: &ChainContext) -> Result<[u8; 32]> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let account = chain
-        .rpc
-        .get_account(&config_pda)
-        .context("failed to fetch config account")?;
-    parse_config_allowed_runtime_root(&account.data)
-        .ok_or_else(|| anyhow::anyhow!("unable to parse config.allowed_runtime_root"))
-}
-
-fn merkle_parent_sorted(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
-    let mut preimage = [0_u8; 64];
-    if a <= b {
-        preimage[0..32].copy_from_slice(a);
-        preimage[32..64].copy_from_slice(b);
-    } else {
-        preimage[0..32].copy_from_slice(b);
-        preimage[32..64].copy_from_slice(a);
-    }
-    edgerun_crypto::blake3_256(&preimage)
-}
-
-fn build_merkle_root_and_proof(
-    leaves: &[[u8; 32]],
-    target: &[u8; 32],
-) -> Option<([u8; 32], Vec<[u8; 32]>)> {
-    if leaves.is_empty() {
-        return None;
-    }
-    let mut layer = leaves.to_vec();
-    layer.sort();
-    layer.dedup();
-    let mut index = layer.iter().position(|leaf| leaf == target)?;
-    let mut proof = Vec::new();
-
-    while layer.len() > 1 {
-        let sibling_index = if index % 2 == 0 { index + 1 } else { index - 1 };
-        let sibling = if sibling_index < layer.len() {
-            layer[sibling_index]
-        } else {
-            layer[index]
-        };
-        proof.push(sibling);
-
-        let mut next = Vec::with_capacity(layer.len().div_ceil(2));
-        let mut i = 0usize;
-        while i < layer.len() {
-            let left = layer[i];
-            let right = if i + 1 < layer.len() {
-                layer[i + 1]
-            } else {
-                layer[i]
-            };
-            next.push(merkle_parent_sorted(&left, &right));
-            i += 2;
-        }
-        layer = next;
-        index /= 2;
-    }
-
-    Some((layer[0], proof))
-}
-
-#[allow(dead_code)]
-fn build_finalize_job_tx_base64(
-    chain: &ChainContext,
-    job_id: [u8; 32],
-    committee: [Pubkey; 3],
-    winners: Vec<Pubkey>,
-    auto_submit: bool,
-) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (output_availability_pda, _) =
-        Pubkey::find_program_address(&[b"output", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
-    let (job_result_0, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[0].as_ref()],
-        &chain.program_id,
-    );
-    let (job_result_1, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[1].as_ref()],
-        &chain.program_id,
-    );
-    let (job_result_2, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, committee[2].as_ref()],
-        &chain.program_id,
-    );
-
-    let mut accounts = vec![
-        AccountMeta::new(chain.payer.pubkey(), true),
-        AccountMeta::new(config_pda, false),
-        AccountMeta::new(job_pda, false),
-        AccountMeta::new_readonly(output_availability_pda, false),
-        AccountMeta::new(worker_stake_0, false),
-        AccountMeta::new(worker_stake_1, false),
-        AccountMeta::new(worker_stake_2, false),
-        AccountMeta::new_readonly(job_result_0, false),
-        AccountMeta::new_readonly(job_result_1, false),
-        AccountMeta::new_readonly(job_result_2, false),
+fn init_scheduler_event_bus() -> Result<RuntimeEventBus> {
+    let capacity = read_env_usize("EDGERUN_EVENT_BUS_TOPIC_CAPACITY", 1024).max(8);
+    let topics = vec![
+        EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_HEARTBEAT,
+        )?,
+        EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_ASSIGNMENTS_POLL,
+        )?,
+        EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_RESULT,
+        )?,
+        EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_FAILURE,
+        )?,
+        EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_SCHEDULER_WORKER_REPLAY,
+        )?,
     ];
-    for winner in winners {
-        accounts.push(AccountMeta::new(winner, false));
+    RuntimeEventBus::with_topics(capacity, &topics).map_err(Into::into)
+}
+
+async fn maybe_start_edge_internal_broker(
+    data_dir: &FsPath,
+    bus: RuntimeEventBus,
+) -> Result<Option<EdgeInternalBrokerHandle>> {
+    if !read_env_bool("EDGERUN_EVENT_BUS_EDGE_INTERNAL_ENABLED", true) {
+        tracing::info!("edge-internal event bus broker disabled");
+        return Ok(None);
     }
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts,
-        data: encode_finalize_job_data(),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
+    let socket_path = std::env::var("EDGERUN_EVENT_BUS_EDGE_INTERNAL_SOCK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| data_dir.join("event-bus/edge-internal.sock"));
+    let handle = spawn_edge_internal_broker(&socket_path, bus).await?;
+    tracing::info!(
+        socket = %handle.socket_path.display(),
+        "edge-internal event bus broker enabled"
     );
-
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = encode_tx_artifact_bytes(&tx);
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send finalize_job transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
-}
-
-#[allow(dead_code)]
-fn build_assign_workers_tx_base64(
-    chain: &ChainContext,
-    job_id: [u8; 32],
-    workers: [Pubkey; 3],
-    auto_submit: bool,
-) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", workers[2].as_ref()], &chain.program_id);
-
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(worker_stake_0, false),
-            AccountMeta::new(worker_stake_1, false),
-            AccountMeta::new(worker_stake_2, false),
-        ],
-        data: encode_assign_workers_data(workers),
-    };
-
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = encode_tx_artifact_bytes(&tx);
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send assign_workers transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
-}
-
-fn build_cancel_expired_job_tx_base64(
-    chain: &ChainContext,
-    job_id: [u8; 32],
-    client: Pubkey,
-    committee: [Pubkey; 3],
-    auto_submit: bool,
-) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_0, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[0].as_ref()], &chain.program_id);
-    let (worker_stake_1, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[1].as_ref()], &chain.program_id);
-    let (worker_stake_2, _) =
-        Pubkey::find_program_address(&[b"worker_stake", committee[2].as_ref()], &chain.program_id);
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new_readonly(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(client, false),
-            AccountMeta::new(worker_stake_0, false),
-            AccountMeta::new(worker_stake_1, false),
-            AccountMeta::new(worker_stake_2, false),
-        ],
-        data: encode_cancel_expired_job_data(),
-    };
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = encode_tx_artifact_bytes(&tx);
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send cancel_expired_job transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
-}
-
-#[allow(dead_code)]
-fn build_slash_worker_tx_base64(
-    chain: &ChainContext,
-    job_id: [u8; 32],
-    worker: Pubkey,
-    auto_submit: bool,
-) -> Result<(String, Option<String>, bool)> {
-    let (config_pda, _) = Pubkey::find_program_address(&[b"config"], &chain.program_id);
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let (worker_stake_pda, _) =
-        Pubkey::find_program_address(&[b"worker_stake", worker.as_ref()], &chain.program_id);
-    let (job_result_pda, _) = Pubkey::find_program_address(
-        &[b"job_result", &job_id, worker.as_ref()],
-        &chain.program_id,
-    );
-    let ix = Instruction {
-        program_id: chain.program_id,
-        accounts: vec![
-            AccountMeta::new(chain.payer.pubkey(), true),
-            AccountMeta::new(config_pda, false),
-            AccountMeta::new(job_pda, false),
-            AccountMeta::new(worker_stake_pda, false),
-            AccountMeta::new_readonly(job_result_pda, false),
-        ],
-        data: encode_slash_worker_data(),
-    };
-    let blockhash = chain
-        .rpc
-        .get_latest_blockhash()
-        .context("failed to fetch latest blockhash")?;
-    let tx = Transaction::new_signed_with_payer(
-        &[ix],
-        Some(&chain.payer.pubkey()),
-        &[&chain.payer],
-        blockhash,
-    );
-    let signature = tx.signatures.first().map(ToString::to_string);
-    let tx_bytes = encode_tx_artifact_bytes(&tx);
-    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(tx_bytes);
-    if auto_submit {
-        let sent = chain
-            .rpc
-            .send_and_confirm_transaction(&tx)
-            .context("failed to send slash_worker transaction")?;
-        return Ok((tx_b64, Some(sent.to_string()), true));
-    }
-    Ok((tx_b64, signature, false))
-}
-
-fn encode_post_job_data(args: PostJobArgs) -> Vec<u8> {
-    let mut data =
-        Vec::with_capacity(8 + 32 + 32 + 32 + 4 + (args.runtime_proof.len() * 32) + 4 + 8 + 8);
-    data.extend_from_slice(&anchor_discriminator("post_job"));
-    data.extend_from_slice(&args.job_id);
-    data.extend_from_slice(&args.bundle_hash);
-    data.extend_from_slice(&args.runtime_id);
-    data.extend_from_slice(&(args.runtime_proof.len() as u32).to_le_bytes());
-    for sibling in args.runtime_proof {
-        data.extend_from_slice(&sibling);
-    }
-    data.extend_from_slice(&args.max_memory_bytes.to_le_bytes());
-    data.extend_from_slice(&args.max_instructions.to_le_bytes());
-    data.extend_from_slice(&args.escrow_lamports.to_le_bytes());
-    data
-}
-
-#[allow(dead_code)]
-fn encode_assign_workers_data(workers: [Pubkey; 3]) -> Vec<u8> {
-    let mut data = Vec::with_capacity(8 + 32 * 3);
-    data.extend_from_slice(&anchor_discriminator("assign_workers"));
-    data.extend_from_slice(workers[0].as_ref());
-    data.extend_from_slice(workers[1].as_ref());
-    data.extend_from_slice(workers[2].as_ref());
-    data
-}
-
-#[allow(dead_code)]
-fn encode_finalize_job_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("finalize_job"));
-    data
-}
-
-fn encode_cancel_expired_job_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("cancel_expired_job"));
-    data
-}
-
-#[allow(dead_code)]
-fn encode_slash_worker_data() -> Vec<u8> {
-    let mut data = Vec::with_capacity(8);
-    data.extend_from_slice(&anchor_discriminator("slash_worker"));
-    data
-}
-
-fn anchor_discriminator(ix_name: &str) -> [u8; 8] {
-    let preimage = format!("global:{ix_name}");
-    let h = hash(preimage.as_bytes());
-    let mut out = [0_u8; 8];
-    out.copy_from_slice(&h.to_bytes()[..8]);
-    out
+    Ok(Some(handle))
 }
 
 fn bundle_path(state: &AppState, bundle_hash: &str) -> PathBuf {
@@ -3498,17 +1434,8 @@ fn write_state_snapshot(state: &AppState) -> Result<()> {
         job_last_update: state.job_last_update.lock().expect("lock poisoned").clone(),
         worker_registry: state.worker_registry.lock().expect("lock poisoned").clone(),
         job_quorum: state.job_quorum.lock().expect("lock poisoned").clone(),
-        latest_chain_progress_event_id: state
-            .latest_chain_progress_event_id
-            .lock()
-            .expect("lock poisoned")
-            .clone(),
-        latest_chain_progress_bus_nonce: state
-            .chain_event_bus_sink
-            .lock()
-            .expect("lock poisoned")
-            .as_ref()
-            .map(|sink| sink.next_nonce.saturating_sub(1)),
+        latest_chain_progress_event_id: None,
+        latest_chain_progress_bus_nonce: None,
     };
     let bytes = bincode::serialize(&snapshot)?;
     let final_path = state.data_dir.join("state.bin");
@@ -3956,19 +1883,14 @@ fn build_assign_workers_artifact(
 fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
     let now = now_unix_seconds();
     let timeout = state.job_timeout_secs.max(1);
-    let chain_progress = read_and_record_chain_progress(state);
-    let chain_slot = chain_progress.as_ref().map(|p| p.slot);
     let candidates = {
         let job_quorum = state.job_quorum.lock().expect("lock poisoned");
         job_quorum
             .iter()
             .filter_map(|(job_id, quorum_state)| {
                 let expired = if let Some(deadline_slot) = quorum_state.onchain_deadline_slot {
-                    chain_slot
-                        .map(|slot| slot >= deadline_slot)
-                        .unwrap_or_else(|| {
-                            now.saturating_sub(quorum_state.created_at_unix_s) >= timeout
-                        })
+                    let _ = deadline_slot;
+                    now.saturating_sub(quorum_state.created_at_unix_s) >= timeout
                 } else {
                     now.saturating_sub(quorum_state.created_at_unix_s) >= timeout
                 };
@@ -3980,15 +1902,6 @@ fn evaluate_expired_jobs(state: &AppState) -> Result<()> {
             })
             .collect::<Vec<_>>()
     };
-
-    if let Some(progress) = chain_progress.as_ref() {
-        tracing::debug!(
-            slot = progress.slot,
-            epoch = progress.epoch,
-            progress_event_id = %progress.progress_event_id,
-            "using signed chain progress snapshot for expiry evaluation"
-        );
-    }
 
     if candidates.is_empty() {
         return Ok(());
@@ -4014,600 +1927,12 @@ fn build_cancel_expired_artifact(
     state: &AppState,
     job_id_hex: &str,
 ) -> Result<(Option<String>, Option<String>, bool)> {
-    let Some(chain) = state.chain.as_ref() else {
-        anyhow::bail!("chain context unavailable");
-    };
-    let job_id = parse_hex32(job_id_hex)?;
-    let committee_workers = {
-        let jq = state.job_quorum.lock().expect("lock poisoned");
-        jq.get(job_id_hex)
-            .map(|entry| entry.committee_workers.clone())
-            .unwrap_or_default()
-    };
-    let committee = parse_committee_workers(&committee_workers)
-        .ok_or_else(|| anyhow::anyhow!("invalid committee workers for cancel_expired_job"))?;
-    let (tx, sig, submitted) = build_cancel_expired_job_tx_base64(
-        chain,
-        job_id,
-        chain.payer.pubkey(),
-        committee,
-        state.chain_auto_submit,
-    )?;
-    Ok((Some(tx), sig, submitted))
-}
-
-const ANCHOR_DISCRIMINATOR_LEN: usize = 8;
-const GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR: usize = 96;
-const JOB_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 303;
-const JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
-const JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR: usize = 64;
-const JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR: usize = 72;
-const JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR: usize = 104;
-const JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR: usize = 136;
-const JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR: usize = 140;
-const JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR: usize = 148;
-const JOB_QUORUM_OFFSET_FROM_ANCHOR: usize = 149;
-const JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR: usize = 150;
-const JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR: usize = 158;
-const JOB_STATUS_OFFSET_FROM_ANCHOR: usize = 302;
-const JOB_RESULT_ACCOUNT_MIN_LEN: usize = ANCHOR_DISCRIMINATOR_LEN + 168;
-const JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR: usize = 0;
-const JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR: usize = 32;
-const JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR: usize = 64;
-const JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR: usize = 96;
-const JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR: usize = 160;
-
-#[derive(Debug, Clone)]
-struct OnchainJobView {
-    job_id: [u8; 32],
-    bundle_hash: [u8; 32],
-    runtime_id: [u8; 32],
-    max_memory_bytes: u32,
-    max_instructions: u64,
-    escrow_lamports: u64,
-    committee_size: u8,
-    quorum: u8,
-    created_slot: u64,
-    deadline_slot: u64,
-    status: u8,
-}
-
-#[derive(Debug, Clone)]
-struct OnchainJobResultView {
-    job_id: [u8; 32],
-    worker: Pubkey,
-    output_hash: [u8; 32],
-    attestation_sig: [u8; 64],
-    submitted_slot: u64,
-}
-
-fn posted_job_rpc_filters() -> Vec<RpcFilterType> {
-    vec![
-        RpcFilterType::DataSize(JOB_ACCOUNT_MIN_LEN as u64),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            0,
-            anchor_account_discriminator("Job").to_vec(),
-        )),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR,
-            vec![0_u8], // Posted
-        )),
-    ]
-}
-
-fn job_result_rpc_filters() -> Vec<RpcFilterType> {
-    vec![
-        RpcFilterType::DataSize(JOB_RESULT_ACCOUNT_MIN_LEN as u64),
-        RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
-            0,
-            anchor_account_discriminator("JobResult").to_vec(),
-        )),
-    ]
-}
-
-fn discover_posted_jobs_from_chain(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let filters = posted_job_rpc_filters();
-    let accounts = chain
-        .rpc
-        .get_program_accounts_with_config(
-            &chain.program_id,
-            RpcProgramAccountsConfig {
-                filters: Some(filters),
-            },
-        )
-        .context("failed to fetch program accounts for discovery")?;
-    if accounts.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed = false;
-    for (addr, account) in accounts {
-        let Some(view) = parse_onchain_job_view(&account.data) else {
-            continue;
-        };
-        if !is_valid_job_account_address(&chain.program_id, &addr, &view.job_id) {
-            continue;
-        }
-        if view.status != 0 {
-            continue;
-        }
-        if seed_discovered_posted_job(state, &view)? {
-            changed = true;
-        }
-    }
-
-    if changed {
-        schedule_state_snapshot(state)?;
-    }
-    Ok(())
-}
-
-fn sync_onchain_job_results(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let accounts = chain
-        .rpc
-        .get_program_accounts_with_config(
-            &chain.program_id,
-            RpcProgramAccountsConfig {
-                filters: Some(job_result_rpc_filters()),
-            },
-        )
-        .context("failed to fetch program accounts for job-result sync")?;
-    if accounts.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed_jobs: HashSet<String> = HashSet::new();
-    for (_addr, account) in accounts {
-        let Some(view) = parse_onchain_job_result_view(&account.data) else {
-            continue;
-        };
-        if let Some(job_id_hex) = ingest_onchain_job_result_view(state, &view) {
-            tracing::info!(
-                job_id = %job_id_hex,
-                worker = %view.worker,
-                submitted_slot = view.submitted_slot,
-                "synced on-chain JobResult into scheduler report state"
-            );
-            changed_jobs.insert(job_id_hex);
-        }
-    }
-
-    if changed_jobs.is_empty() {
-        return Ok(());
-    }
-
-    for job_id in changed_jobs {
-        let _ = recompute_job_quorum(state, &job_id)?;
-    }
-    enforce_history_retention(state);
-    schedule_state_snapshot(state)?;
-    Ok(())
-}
-
-fn ingest_onchain_job_result_view(state: &AppState, view: &OnchainJobResultView) -> Option<String> {
-    let job_id_hex = hex::encode(view.job_id);
-    let (expected_bundle_hash, expected_runtime_id, is_assigned) = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        let entry = job_quorum.get(&job_id_hex)?;
-        let worker = view.worker.to_string();
-        let assigned = entry.committee_workers.iter().any(|w| w == &worker);
-        (
-            entry.expected_bundle_hash.clone(),
-            entry.expected_runtime_id.clone(),
-            assigned,
-        )
-    };
-    if !is_assigned {
-        return None;
-    }
-    if !verify_onchain_job_result_attestation(view, &expected_bundle_hash, &expected_runtime_id) {
-        return None;
-    }
-
-    let worker_pubkey = view.worker.to_string();
-    let output_hash_hex = hex::encode(view.output_hash);
-    let idem = scheduler_idempotency_key(
-        "onchain_result",
-        &worker_pubkey,
-        &job_id_hex,
-        "job_result_sync",
-        &output_hash_hex,
-        &expected_bundle_hash,
-    );
-    let mut results = state.results.lock().expect("lock poisoned");
-    let entries = results.entry(job_id_hex.clone()).or_default();
-    if entries.iter().any(|e| {
-        (e.idempotency_key == idem)
-            || (e.worker_pubkey == worker_pubkey && e.output_hash == output_hash_hex)
-    }) {
-        return None;
-    }
-    entries.push(WorkerResultReport {
-        idempotency_key: idem,
-        worker_pubkey,
-        job_id: job_id_hex.clone(),
-        bundle_hash: expected_bundle_hash,
-        output_hash: output_hash_hex,
-        output_len: 0,
-        attestation_sig: Some(
-            base64::engine::general_purpose::STANDARD.encode(view.attestation_sig),
-        ),
-        attestation_claim: None,
-        signature: None,
-    });
-    drop(results);
-    touch_job_last_update(state, &job_id_hex);
-    Some(job_id_hex)
-}
-
-fn verify_onchain_job_result_attestation(
-    view: &OnchainJobResultView,
-    expected_bundle_hash_hex: &str,
-    expected_runtime_id_hex: &str,
-) -> bool {
-    let worker_bytes = view.worker.to_bytes();
-    let Ok(worker_vk) = VerifyingKey::from_bytes(&worker_bytes) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&view.attestation_sig);
-    let Ok(bundle_hash) = parse_hex32(expected_bundle_hash_hex) else {
-        return false;
-    };
-    let Ok(runtime_id) = parse_hex32(expected_runtime_id_hex) else {
-        return false;
-    };
-    let message =
-        build_worker_result_digest(&view.job_id, &bundle_hash, &view.output_hash, &runtime_id);
-    edgerun_crypto::verify(&worker_vk, &message, &signature)
-}
-
-fn seed_discovered_posted_job(state: &AppState, view: &OnchainJobView) -> Result<bool> {
-    let job_id_hex = hex::encode(view.job_id);
-    if view.committee_size != 3 || view.quorum != 2 {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            committee_size = view.committee_size,
-            quorum = view.quorum,
-            "skipping discovered posted job: unsupported committee/quorum for MVP policy"
-        );
-        return Ok(false);
-    }
-    let bundle_hash_hex = hex::encode(view.bundle_hash);
-    if !bundle_path(state, &bundle_hash_hex).exists() {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            bundle_hash = %bundle_hash_hex,
-            "skipping discovered posted job because bundle is unavailable in local store"
-        );
-        return Ok(false);
-    }
-    let already_tracked = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.contains_key(&job_id_hex)
-    };
-    if already_tracked {
-        return Ok(false);
-    }
-    let runtime_id_hex = hex::encode(view.runtime_id);
-    let committee_workers = select_committee_workers(
-        state,
-        &runtime_id_hex,
-        &job_id_hex,
-        usize::from(view.committee_size.max(1)),
-    );
-    let quorum_target = usize::from(view.quorum.max(1));
-    if committee_workers.len() < quorum_target {
-        tracing::warn!(
-            job_id = %job_id_hex,
-            runtime_id = %runtime_id_hex,
-            have = committee_workers.len(),
-            need = quorum_target,
-            "skipping discovered posted job due to insufficient eligible workers"
-        );
-        return Ok(false);
-    }
-
-    let now = now_unix_seconds();
-    let mut queued: Vec<(String, QueuedAssignment)> = Vec::with_capacity(committee_workers.len());
-    for worker_pubkey in &committee_workers {
-        let mut assignment = QueuedAssignment {
-            job_id: job_id_hex.clone(),
-            bundle_hash: bundle_hash_hex.clone(),
-            bundle_url: format!("{}/bundle/{}", state.public_base_url, bundle_hash_hex),
-            runtime_id: runtime_id_hex.clone(),
-            abi_version: edgerun_types::BUNDLE_ABI_CURRENT,
-            limits: edgerun_types::Limits {
-                max_memory_bytes: view.max_memory_bytes,
-                max_instructions: view.max_instructions,
-            },
-            escrow_lamports: view.escrow_lamports,
-            policy_signer_pubkey: hex::encode(state.policy_signing_key.verifying_key().as_bytes()),
-            policy_signature: String::new(),
-            policy_key_id: state.policy_key_id.clone(),
-            policy_version: state.policy_version,
-            policy_valid_after_unix_s: now,
-            policy_valid_until_unix_s: now.saturating_add(state.policy_ttl_secs),
-        };
-        assignment.policy_signature =
-            sign_assignment_policy(&state.policy_signing_key, &assignment);
-        queued.push((worker_pubkey.clone(), assignment));
-    }
-    if let Err((_, err)) = enqueue_assignments_with_limits(state, queued) {
-        tracing::warn!(job_id = %job_id_hex, error = %err, "skipping discovered posted job due to assignment backlog limits");
-        return Ok(false);
-    }
-    {
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.insert(
-            job_id_hex.clone(),
-            JobQuorumState {
-                expected_bundle_hash: hex::encode(view.bundle_hash),
-                expected_runtime_id: runtime_id_hex.clone(),
-                committee_workers: committee_workers.clone(),
-                committee_size: committee_workers.len().min(u8::MAX as usize) as u8,
-                quorum: quorum_target.min(u8::MAX as usize) as u8,
-                assign_tx: None,
-                assign_sig: None,
-                assign_submitted: false,
-                quorum_reached: false,
-                winning_output_hash: None,
-                winning_workers: Vec::new(),
-                finalize_triggered: false,
-                finalize_tx: None,
-                finalize_sig: None,
-                finalize_submitted: false,
-                cancel_triggered: false,
-                cancel_tx: None,
-                cancel_sig: None,
-                cancel_submitted: false,
-                onchain_status: Some("posted".to_string()),
-                onchain_last_observed_slot: None,
-                onchain_last_update_unix_s: Some(now),
-                onchain_deadline_slot: Some(view.deadline_slot),
-                slash_artifacts: Vec::new(),
-                created_at_unix_s: now,
-                quorum_reached_at_unix_s: None,
-            },
-        );
-    }
-    let (assign_workers_tx, assign_workers_sig, assign_workers_submitted) =
-        build_assign_workers_artifact(state, &job_id_hex)?;
-    {
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        if let Some(quorum_state) = job_quorum.get_mut(&job_id_hex) {
-            quorum_state.assign_tx = assign_workers_tx;
-            quorum_state.assign_sig = assign_workers_sig;
-            quorum_state.assign_submitted = assign_workers_submitted;
-        }
-    }
-    touch_job_last_update(state, &job_id_hex);
-    tracing::info!(
+    let _ = state;
+    tracing::warn!(
         job_id = %job_id_hex,
-        created_slot = view.created_slot,
-        deadline_slot = view.deadline_slot,
-        "discovered posted on-chain job and queued assignments"
+        "cancel_expired transaction generation skipped: chain support removed"
     );
-    Ok(true)
-}
-
-fn reconcile_onchain_job_statuses(state: &AppState) -> Result<()> {
-    let Some(chain) = state.chain.as_ref() else {
-        return Ok(());
-    };
-    let job_ids = {
-        let job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        job_quorum.keys().cloned().collect::<Vec<_>>()
-    };
-    if job_ids.is_empty() {
-        return Ok(());
-    }
-
-    let mut changed = false;
-    for job_id_hex in job_ids {
-        let Ok(job_id) = parse_hex32(&job_id_hex) else {
-            continue;
-        };
-        let (status, observed_slot) = match fetch_onchain_job_status(chain, job_id) {
-            Ok(Some(v)) => v,
-            Ok(None) => continue,
-            Err(err) => {
-                tracing::warn!(error = %err, job_id = %job_id_hex, "failed to fetch on-chain job account");
-                continue;
-            }
-        };
-
-        let mut job_quorum = state.job_quorum.lock().expect("lock poisoned");
-        let Some(entry) = job_quorum.get_mut(&job_id_hex) else {
-            continue;
-        };
-        let status_label = onchain_status_label(status).to_string();
-        if entry.onchain_status.as_deref() != Some(status_label.as_str()) {
-            entry.onchain_status = Some(status_label);
-            changed = true;
-        }
-        if entry.onchain_last_observed_slot != Some(observed_slot) {
-            entry.onchain_last_observed_slot = Some(observed_slot);
-            changed = true;
-        }
-        entry.onchain_last_update_unix_s = Some(now_unix_seconds());
-
-        if status >= 1 && !entry.assign_submitted {
-            entry.assign_submitted = true;
-            changed = true;
-        }
-        if status == 2 && !entry.finalize_submitted {
-            entry.finalize_submitted = true;
-            entry.finalize_triggered = true;
-            changed = true;
-        }
-        if status == 3 && !entry.cancel_submitted {
-            entry.cancel_submitted = true;
-            entry.cancel_triggered = true;
-            changed = true;
-        }
-    }
-    if changed {
-        schedule_state_snapshot(state)?;
-    }
-    Ok(())
-}
-
-fn fetch_onchain_job_status(chain: &ChainContext, job_id: [u8; 32]) -> Result<Option<(u8, u64)>> {
-    let (job_pda, _) = Pubkey::find_program_address(&[b"job", &job_id], &chain.program_id);
-    let resp = chain
-        .rpc
-        .get_account_with_commitment(&job_pda, CommitmentConfig::processed())
-        .context("rpc get_account_with_commitment failed")?;
-    let Some(account) = resp.value else {
-        return Ok(None);
-    };
-    let Some(status) = parse_onchain_job_status(&account.data) else {
-        return Ok(None);
-    };
-    Ok(Some((status, resp.context.slot)))
-}
-
-fn parse_onchain_job_status(data: &[u8]) -> Option<u8> {
-    let status_offset = ANCHOR_DISCRIMINATOR_LEN + JOB_STATUS_OFFSET_FROM_ANCHOR;
-    data.get(status_offset).copied()
-}
-
-fn parse_config_allowed_runtime_root(data: &[u8]) -> Option<[u8; 32]> {
-    if !has_anchor_account_discriminator(data, "GlobalConfig") {
-        return None;
-    }
-    read_fixed_32(data, GLOBAL_CONFIG_ALLOWED_RUNTIME_ROOT_OFFSET_FROM_ANCHOR)
-}
-
-fn parse_onchain_job_view(data: &[u8]) -> Option<OnchainJobView> {
-    if data.len() < JOB_ACCOUNT_MIN_LEN {
-        return None;
-    }
-    if !has_anchor_account_discriminator(data, "Job") {
-        return None;
-    }
-    let job_id = read_fixed_32(data, JOB_ID_OFFSET_FROM_ANCHOR)?;
-    let bundle_hash = read_fixed_32(data, JOB_BUNDLE_HASH_OFFSET_FROM_ANCHOR)?;
-    let runtime_id = read_fixed_32(data, JOB_RUNTIME_ID_OFFSET_FROM_ANCHOR)?;
-    let escrow_lamports = read_u64_from_anchor(data, JOB_ESCROW_LAMPORTS_OFFSET_FROM_ANCHOR)?;
-    let max_memory_bytes = read_u32_from_anchor(data, JOB_MAX_MEMORY_OFFSET_FROM_ANCHOR)?;
-    let max_instructions = read_u64_from_anchor(data, JOB_MAX_INSTRUCTIONS_OFFSET_FROM_ANCHOR)?;
-    let committee_size = read_u8_from_anchor(data, JOB_COMMITTEE_SIZE_OFFSET_FROM_ANCHOR)?;
-    let quorum = read_u8_from_anchor(data, JOB_QUORUM_OFFSET_FROM_ANCHOR)?;
-    let created_slot = read_u64_from_anchor(data, JOB_CREATED_SLOT_OFFSET_FROM_ANCHOR)?;
-    let deadline_slot = read_u64_from_anchor(data, JOB_DEADLINE_SLOT_OFFSET_FROM_ANCHOR)?;
-    let status = read_u8_from_anchor(data, JOB_STATUS_OFFSET_FROM_ANCHOR)?;
-    if status > 4 || committee_size == 0 || quorum == 0 {
-        return None;
-    }
-    Some(OnchainJobView {
-        job_id,
-        bundle_hash,
-        runtime_id,
-        max_memory_bytes,
-        max_instructions,
-        escrow_lamports,
-        committee_size,
-        quorum,
-        created_slot,
-        deadline_slot,
-        status,
-    })
-}
-
-fn parse_onchain_job_result_view(data: &[u8]) -> Option<OnchainJobResultView> {
-    if data.len() < JOB_RESULT_ACCOUNT_MIN_LEN {
-        return None;
-    }
-    if !has_anchor_account_discriminator(data, "JobResult") {
-        return None;
-    }
-    let job_id = read_fixed_32(data, JOB_RESULT_JOB_ID_OFFSET_FROM_ANCHOR)?;
-    let worker_bytes = read_fixed_32(data, JOB_RESULT_WORKER_OFFSET_FROM_ANCHOR)?;
-    let worker = Pubkey::new_from_array(worker_bytes);
-    let output_hash = read_fixed_32(data, JOB_RESULT_OUTPUT_HASH_OFFSET_FROM_ANCHOR)?;
-    let attestation_sig = read_fixed_64(data, JOB_RESULT_ATTESTATION_SIG_OFFSET_FROM_ANCHOR)?;
-    let submitted_slot = read_u64_from_anchor(data, JOB_RESULT_SUBMITTED_SLOT_OFFSET_FROM_ANCHOR)?;
-    Some(OnchainJobResultView {
-        job_id,
-        worker,
-        output_hash,
-        attestation_sig,
-        submitted_slot,
-    })
-}
-
-fn has_anchor_account_discriminator(data: &[u8], account_name: &str) -> bool {
-    if data.len() < ANCHOR_DISCRIMINATOR_LEN {
-        return false;
-    }
-    let expected = anchor_account_discriminator(account_name);
-    data[..ANCHOR_DISCRIMINATOR_LEN] == expected
-}
-
-fn anchor_account_discriminator(account_name: &str) -> [u8; 8] {
-    let preimage = format!("account:{account_name}");
-    let h = hash(preimage.as_bytes());
-    let mut out = [0_u8; 8];
-    out.copy_from_slice(&h.to_bytes()[..8]);
-    out
-}
-
-fn is_valid_job_account_address(program_id: &Pubkey, addr: &Pubkey, job_id: &[u8; 32]) -> bool {
-    let (expected, _) = Pubkey::find_program_address(&[b"job", job_id], program_id);
-    expected == *addr
-}
-
-fn read_u8_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u8> {
-    data.get(ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor)
-        .copied()
-}
-
-fn read_u32_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u32> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let bytes = data.get(start..start + 4)?;
-    Some(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
-}
-
-fn read_u64_from_anchor(data: &[u8], offset_from_anchor: usize) -> Option<u64> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let bytes = data.get(start..start + 8)?;
-    Some(u64::from_le_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-    ]))
-}
-
-fn read_fixed_32(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 32]> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let slice = data.get(start..start + 32)?;
-    let mut out = [0_u8; 32];
-    out.copy_from_slice(slice);
-    Some(out)
-}
-
-fn read_fixed_64(data: &[u8], offset_from_anchor: usize) -> Option<[u8; 64]> {
-    let start = ANCHOR_DISCRIMINATOR_LEN + offset_from_anchor;
-    let slice = data.get(start..start + 64)?;
-    let mut out = [0_u8; 64];
-    out.copy_from_slice(slice);
-    Some(out)
-}
-
-fn onchain_status_label(status: u8) -> &'static str {
-    match status {
-        0 => "posted",
-        1 => "assigned",
-        2 => "finalized",
-        3 => "cancelled",
-        4 => "slashed",
-        _ => "unknown",
-    }
+    Ok((None, None, false))
 }
 
 fn build_finalize_trigger_payload(
@@ -4619,6 +1944,11 @@ fn build_finalize_trigger_payload(
     build_finalize_trigger_payload_inner(state, job_id_hex, committee_workers, winning_workers)
 }
 
+fn parse_pubkey_bytes(value: &str) -> Result<[u8; 32], ()> {
+    let decoded = bs58::decode(value.trim()).into_vec().map_err(|_| ())?;
+    decoded.as_slice().try_into().map_err(|_| ())
+}
+
 fn parse_hex32(value: &str) -> Result<[u8; 32]> {
     let bytes = hex::decode(value).context("value must be 32-byte hex")?;
     if bytes.len() != 32 {
@@ -4627,18 +1957,6 @@ fn parse_hex32(value: &str) -> Result<[u8; 32]> {
     let mut out = [0_u8; 32];
     out.copy_from_slice(&bytes);
     Ok(out)
-}
-
-fn parse_committee_workers(committee_workers: &[String]) -> Option<[Pubkey; 3]> {
-    if committee_workers.len() < 3 {
-        return None;
-    }
-    let mut parsed = Vec::with_capacity(3);
-    for worker in committee_workers.iter().take(3) {
-        let bytes = parse_pubkey_bytes(worker).ok()?;
-        parsed.push(Pubkey::new_from_array(bytes));
-    }
-    parsed.try_into().ok()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4969,149 +2287,14 @@ fn load_attestation_policy(path: &std::path::Path) -> Result<edgerun_types::Atte
     Ok(parsed)
 }
 
-fn load_route_state(path: &std::path::Path) -> Result<PersistedRouteState> {
-    if !path.exists() {
-        return Ok(PersistedRouteState::default());
-    }
-    let raw = std::fs::read(path)
-        .with_context(|| format!("failed to read route shared state file {}", path.display()))?;
-    if raw.is_empty() {
-        return Ok(PersistedRouteState::default());
-    }
-    let parsed: PersistedRouteState =
-        bincode::deserialize(&raw).context("invalid route shared state binary")?;
-    Ok(parsed)
-}
-
-fn save_route_state(path: &std::path::Path, state: &PersistedRouteState) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create route shared state parent directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let bytes = bincode::serialize(state).context("serialize route shared state")?;
-    let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, bytes).with_context(|| {
-        format!(
-            "failed to write temp route shared state file {}",
-            tmp.display()
-        )
-    })?;
-    std::fs::rename(&tmp, path).with_context(|| {
-        format!(
-            "failed to rename route shared state temp file {} to {}",
-            tmp.display(),
-            path.display()
-        )
-    })?;
-    Ok(())
-}
-
-fn schedule_route_state_flush(state: &AppState) -> Result<()> {
-    let now = now_unix_seconds();
-    let min_interval = state.route_sync_min_interval_secs;
-    let should_write = {
-        let mut gate = state.route_flush_state.lock().expect("lock poisoned");
-        gate.dirty = true;
-        gate.last_write_unix_s == 0 || now.saturating_sub(gate.last_write_unix_s) >= min_interval
-    };
-    if !should_write {
-        return Ok(());
-    }
-    flush_route_state_if_dirty(state)
-}
-
-fn flush_route_state_if_dirty(state: &AppState) -> Result<()> {
-    let should_write = {
-        let gate = state.route_flush_state.lock().expect("lock poisoned");
-        gate.dirty
-    };
-    if !should_write {
-        return Ok(());
-    }
-    let snapshot = PersistedRouteState {
-        device_routes: state.device_routes.lock().expect("lock poisoned").clone(),
-        route_challenges: state
-            .route_challenges
-            .lock()
-            .expect("lock poisoned")
-            .clone(),
-        route_heartbeat_tokens: state
-            .route_heartbeat_tokens
-            .lock()
-            .expect("lock poisoned")
-            .clone(),
-    };
-    let lock_file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&state.route_shared_state_path)
-        .with_context(|| {
-            format!(
-                "failed to open route shared lock file {}",
-                state.route_shared_state_path.display()
-            )
-        })?;
-    lock_file.lock_exclusive()?;
-    let save_result = save_route_state(&state.route_shared_state_path, &snapshot);
-    let _ = lock_file.unlock();
-    save_result?;
-    let now = now_unix_seconds();
-    let mut gate = state.route_flush_state.lock().expect("lock poisoned");
-    gate.dirty = false;
-    gate.last_write_unix_s = now;
-    Ok(())
-}
-
-fn sync_route_state_from_shared_file(state: &AppState) -> Result<()> {
-    {
-        let gate = state.route_flush_state.lock().expect("lock poisoned");
-        if gate.dirty {
-            return Ok(());
-        }
-    }
-    let loaded = load_route_state(&state.route_shared_state_path)?;
-    {
-        let mut routes = state.device_routes.lock().expect("lock poisoned");
-        let mut challenges = state.route_challenges.lock().expect("lock poisoned");
-        let mut tokens = state.route_heartbeat_tokens.lock().expect("lock poisoned");
-        *routes = loaded.device_routes;
-        *challenges = loaded.route_challenges;
-        *tokens = loaded.route_heartbeat_tokens;
-    }
-    let mut gate = state.route_flush_state.lock().expect("lock poisoned");
-    gate.last_write_unix_s = now_unix_seconds();
-    Ok(())
-}
-
 async fn housekeeping_loop(state: AppState) {
     let interval_secs = state.housekeeping_interval_secs;
     loop {
-        if let Err(err) = sync_route_state_from_shared_file(&state) {
-            tracing::warn!(error = %err, "housekeeping route-state sync failed");
-        }
-        if let Err(err) = discover_posted_jobs_from_chain(&state) {
-            tracing::warn!(error = %err, "housekeeping posted-job discovery failed");
-        }
-        if let Err(err) = sync_onchain_job_results(&state) {
-            tracing::warn!(error = %err, "housekeeping on-chain result sync failed");
-        }
         if let Err(err) = evaluate_expired_jobs(&state) {
             tracing::warn!(error = %err, "housekeeping evaluate_expired_jobs failed");
         }
-        if let Err(err) = reconcile_onchain_job_statuses(&state) {
-            tracing::warn!(error = %err, "housekeeping on-chain reconciliation failed");
-        }
         if let Err(err) = flush_state_snapshot_if_dirty(&state) {
             tracing::warn!(error = %err, "housekeeping state snapshot flush failed");
-        }
-        if let Err(err) = flush_route_state_if_dirty(&state) {
-            tracing::warn!(error = %err, "housekeeping route-state flush failed");
         }
         tokio::time::sleep(Duration::from_secs(interval_secs)).await;
     }
@@ -5181,18 +2364,6 @@ fn persist_job_activity(state: &AppState, job_id: &str) -> Result<()> {
 
 fn is_duplicate_idempotency(existing: &str, incoming: &str) -> bool {
     !incoming.is_empty() && existing == incoming
-}
-
-fn scheduler_idempotency_key(
-    kind: &str,
-    worker_pubkey: &str,
-    job_id: &str,
-    phase: &str,
-    discriminator: &str,
-    bundle_hash: &str,
-) -> String {
-    let raw = format!("{kind}|{worker_pubkey}|{job_id}|{phase}|{discriminator}|{bundle_hash}");
-    hex::encode(edgerun_crypto::blake3_256(raw.as_bytes()))
 }
 
 fn trim_vec<T>(items: &mut Vec<T>, max_len: usize) {

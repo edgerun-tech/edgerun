@@ -5,7 +5,7 @@
 mode = "chain_preferred"
 
 [chain]
-# Seal active segments after this many Solana slots, when chain clock is available.
+# Seal active segments after this many control-plane slots, when chain clock is available.
 max_slot_span = 128
 # Safety cap in epochs for long-lived active segments.
 max_epoch_span = 1

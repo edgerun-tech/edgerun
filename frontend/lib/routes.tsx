@@ -99,7 +99,7 @@ const staticRoutes: SiteRoute[] = [
     outputPath: 'docs/getting-started/quick-start/index.html',
     pageTitle: 'Quick Start',
     chromeTitle: 'Quick Start',
-    description: 'Run bulk Solana address generation workflow end-to-end.',
+    description: 'Run deterministic browser-side compute workflow end-to-end.',
     component: QuickStartPage
   },
   {

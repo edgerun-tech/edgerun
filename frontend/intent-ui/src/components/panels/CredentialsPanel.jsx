@@ -27,8 +27,7 @@ const typeOptions = [
   { id: "secret", label: "Secret" },
   { id: "ssh_key", label: "SSH Key" },
   { id: "mtls_cert", label: "mTLS Cert" },
-  { id: "gpg_key", label: "GPG Key" },
-  { id: "solana_key", label: "Solana Key" }
+  { id: "gpg_key", label: "GPG Key" }
 ];
 
 const toBase64Url = (buffer) => {

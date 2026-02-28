@@ -27,17 +27,6 @@ describe('terminal docker compose stack', () => {
 
       cy.visit('/', {
         onBeforeLoad(win) {
-          const provider = {
-            isPhantom: true,
-            isConnected: true,
-            publicKey: { toString: () => activeDeviceId },
-            connect: () => Promise.resolve({ publicKey: { toString: () => activeDeviceId } }),
-            disconnect: () => Promise.resolve(),
-            on: () => {},
-            removeListener: () => {}
-          }
-          win.solana = provider
-          win.phantom = { solana: provider }
           win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
             connected: true,
             address: activeDeviceId,

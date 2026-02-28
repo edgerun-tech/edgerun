@@ -9,9 +9,6 @@ export type BuildMetaConfig = {
   siteDomain: string
   currentVersion: string
   buildNumber: string
-  solanaCluster: string
-  solanaRpcUrl: string
-  treasuryAccount: string
 }
 
 export function writeStaticSiteMetadata(
@@ -25,10 +22,7 @@ export function writeStaticSiteMetadata(
     siteUrl,
     siteDomain,
     currentVersion,
-    buildNumber,
-    solanaCluster,
-    solanaRpcUrl,
-    treasuryAccount
+    buildNumber
   } = config
 
   const themeConfig = JSON.parse(readFileSync(path.join(projectRoot, 'config', 'brand-theme.json'), 'utf8')) as {
@@ -68,13 +62,13 @@ export function writeStaticSiteMetadata(
     'utf8'
   )
 
-  writeFileSync(path.join(distRoot, 'build-meta.json'), JSON.stringify({ version: currentVersion, buildNumber, siteUrl, solanaCluster, solanaRpcUrl, treasuryAccount }, null, 2) + '\n', 'utf8')
+  writeFileSync(path.join(distRoot, 'build-meta.json'), JSON.stringify({ version: currentVersion, buildNumber, siteUrl }, null, 2) + '\n', 'utf8')
   if (siteDomain) writeFileSync(path.join(distRoot, 'CNAME'), `${siteDomain}\n`, 'utf8')
 
   const llmsBase = [
     '# Edgerun',
     '',
-    '> Deterministic WASM compute with SOL settlement.',
+    '> Deterministic WASM compute for local-first execution.',
     '',
     `Version: ${currentVersion}`,
     `Build: ${buildNumber}`,

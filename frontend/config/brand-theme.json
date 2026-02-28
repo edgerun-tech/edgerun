@@ -1,7 +1,7 @@
 {
   "name": "Edgerun",
   "shortName": "Edgerun",
-  "description": "Deterministic WASM compute with cryptographic proof settlement on Solana.",
+  "description": "Deterministic WASM compute with cryptographic attestation and local-first execution.",
   "applicationName": "Edgerun",
   "colors": {
     "lightBackground": "#ffffff",

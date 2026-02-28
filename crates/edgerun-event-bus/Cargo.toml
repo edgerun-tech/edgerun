@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "edgerun-event-bus"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+bincode.workspace = true
+async-stream = "0.3"
+futures-core = "0.3"
+hyper-util = { version = "0.1", features = ["tokio"] }
+prost = "0.13"
+serde.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt", "sync"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+tonic = { version = "0.12", features = ["transport"] }
+tracing.workspace = true
+tower = { version = "0.5", features = ["util"] }
+
+[build-dependencies]
+tonic-build = "0.12"

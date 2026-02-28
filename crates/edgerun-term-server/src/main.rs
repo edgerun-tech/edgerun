@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::env;
 use std::io::{Read, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -21,26 +19,17 @@ use axum::{
     response::IntoResponse,
     routing::{get, post},
 };
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ed25519_dalek::{Signer, SigningKey};
+use edgerun_event_bus::edge_internal::EdgeInternalClient;
+use edgerun_event_bus::{EventTopic, OverlayNetwork};
 use edgerun_hwvault_primitives::hardware::{
     DeviceSigner, HardwareSecurityMode, load_or_create_device_signer, random_token_b64url,
 };
-use edgerun_transport_core::route_register_signing_message;
-use edgerun_types::control_plane::{
-    ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
-    ControlWsServerMessage, RouteCandidate as CpRouteCandidate,
-    RouteChallengeRequest as CpRouteChallengeRequest,
-    RouteHeartbeatRequest as CpRouteHeartbeatRequest,
-    RouteRegisterRequest as CpRouteRegisterRequest,
+use edgerun_types::intent_pipeline::{
+    EVENT_PAYLOAD_TYPE_TERM_SERVER_LIFECYCLE_START, EVENT_SCHEMA_VERSION_V1,
+    EVENT_TOPIC_TERM_SERVER_LIFECYCLE_START, TermServerLifecycleEvent,
 };
-use futures_util::{SinkExt, StreamExt};
 use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
-use tokio::net::UdpSocket;
 use tokio::sync::{Mutex, mpsc};
-use tokio::time::{Duration, sleep, timeout};
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
 
@@ -56,11 +45,6 @@ struct DeviceIdentityResponse {
     backend: String,
     device_pubkey_b64url: String,
 }
-
-type RouteSigner = Arc<dyn Fn(&[u8]) -> String + Send + Sync>;
-
-static CONTROL_REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
-const CONTROL_WS_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug)]
 struct DeviceChallengeResponse {
@@ -214,13 +198,92 @@ async fn main() -> anyhow::Result<()> {
         "term-server serving terminal client root at /term/"
     );
     info!(%addr, "term-server listening");
-    maybe_start_route_announcer(&state.device, addr);
+    let edge_internal_client = connect_edge_internal_event_bus().await;
+    publish_term_server_lifecycle_event(&state, addr, edge_internal_client.as_ref()).await;
 
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
         .await
         .context("server failed")?;
 
     Ok(())
+}
+
+async fn connect_edge_internal_event_bus() -> Option<EdgeInternalClient> {
+    let enabled = env::var("EDGERUN_TERM_EDGE_INTERNAL_EVENT_BUS_ENABLED")
+        .ok()
+        .map(|v| {
+            let normalized = v.trim().to_ascii_lowercase();
+            matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false);
+    if !enabled {
+        return None;
+    }
+    let socket = env::var("EDGERUN_TERM_EDGE_INTERNAL_EVENT_BUS_SOCK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".edgerun-scheduler-data/event-bus/edge-internal.sock"));
+    match EdgeInternalClient::connect(&socket).await {
+        Ok(client) => Some(client),
+        Err(err) => {
+            warn!(
+                socket = %socket.display(),
+                error = %err,
+                "edge-internal event bus connect failed; continuing without term event publish"
+            );
+            None
+        }
+    }
+}
+
+async fn publish_term_server_lifecycle_event(
+    state: &AppState,
+    bind_addr: SocketAddr,
+    client: Option<&EdgeInternalClient>,
+) {
+    let Some(client) = client else {
+        return;
+    };
+    let payload = TermServerLifecycleEvent {
+        schema_version: EVENT_SCHEMA_VERSION_V1,
+        backend: format!("{:?}", state.device.backend).to_lowercase(),
+        device_pubkey_b64url: state.device.public_key_b64url.clone(),
+        bind_addr: bind_addr.to_string(),
+    };
+    publish_term_server_lifecycle_payload(client, payload).await;
+}
+
+async fn publish_term_server_lifecycle_payload(
+    client: &EdgeInternalClient,
+    payload: TermServerLifecycleEvent,
+) {
+    let topic = match EventTopic::new(
+        OverlayNetwork::EdgeInternal,
+        EVENT_TOPIC_TERM_SERVER_LIFECYCLE_START,
+    ) {
+        Ok(topic) => topic,
+        Err(err) => {
+            warn!(error = %err, "invalid term-server lifecycle topic");
+            return;
+        }
+    };
+    let encoded = match bincode::serialize(&payload) {
+        Ok(encoded) => encoded,
+        Err(err) => {
+            warn!(error = %err, "failed to encode term-server lifecycle event");
+            return;
+        }
+    };
+    if let Err(err) = client
+        .publish(
+            &topic,
+            "term-server",
+            EVENT_PAYLOAD_TYPE_TERM_SERVER_LIFECYCLE_START,
+            encoded,
+        )
+        .await
+    {
+        warn!(error = %err, "failed to publish term-server lifecycle event");
+    }
 }
 
 async fn device_identity(State(state): State<AppState>) -> impl IntoResponse {
@@ -1013,671 +1076,64 @@ fn now_unix_s() -> u64 {
         .unwrap_or(0)
 }
 
-fn maybe_start_route_announcer(device: &DeviceSigner, addr: SocketAddr) {
-    let control_base = env::var("EDGERUN_ROUTE_CONTROL_BASE")
-        .ok()
-        .map(|v| v.trim().trim_end_matches('/').to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| "https://api.edgerun.tech".to_string());
-    let control_base_is_local =
-        is_non_public_route_url(&control_base, "EDGERUN_ROUTE_CONTROL_BASE");
-
-    let device_id = env::var("EDGERUN_ROUTE_DEVICE_ID")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| device.public_key_b64url.clone());
-    let owner_signing_key = parse_owner_signing_key_from_env();
-    let owner_pubkey_from_signing_key = owner_signing_key
-        .as_ref()
-        .map(|sk| bs58::encode(sk.verifying_key().to_bytes()).into_string());
-    let configured_owner_pubkey_from_env = env::var("EDGERUN_ROUTE_OWNER_PUBKEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-    let configured_owner_pubkey = configured_owner_pubkey_from_env
-        .clone()
-        .or_else(|| owner_pubkey_from_signing_key.clone())
-        .unwrap_or_else(|| device.public_key_b64url.clone());
-    let mut owner_pubkey = configured_owner_pubkey.clone();
-    if let (Some(configured), Some(from_signing_key)) = (
-        configured_owner_pubkey_from_env.as_ref(),
-        owner_pubkey_from_signing_key.as_ref(),
-    ) && configured != from_signing_key
-    {
-        warn!(
-            configured_owner_pubkey = %configured,
-            signing_key_owner_pubkey = %from_signing_key,
-            "EDGERUN_ROUTE_OWNER_PUBKEY does not match EDGERUN_ROUTE_OWNER_SECRET_KEY_B58; using signing key pubkey for route registration"
-        );
-        owner_pubkey = from_signing_key.clone();
-    }
-    if owner_signing_key.is_none() && owner_pubkey != device.public_key_b64url {
-        warn!(
-            configured_owner_pubkey = %configured_owner_pubkey,
-            owner_pubkey = %owner_pubkey,
-            "owner pubkey configured without a matching EDGERUN_ROUTE_OWNER_SECRET_KEY_B58; route registration will fail signature validation. Falling back to device pubkey to keep terminal announcements alive."
-        );
-        owner_pubkey = device.public_key_b64url.clone();
-    }
-    let (public_base_url, public_base_was_set) = env::var("EDGERUN_TERM_PUBLIC_BASE_URL")
-        .map(|v| {
-            let value = v.trim().trim_end_matches('/').to_string();
-            let was_set = !value.is_empty();
-            (value, was_set)
-        })
-        .ok()
-        .filter(|(_, is_set)| *is_set)
-        .unwrap_or_else(|| (format!("http://{}", routable_addr(addr)), false));
-    let mut reachable_urls = match parse_reachable_urls("EDGERUN_ROUTE_REACHABLE_URLS") {
-        Ok(value) => value,
-        Err(err) => {
-            warn!(env = "EDGERUN_ROUTE_REACHABLE_URLS", error = %err, "ignoring configured reachable URLs");
-            vec![]
-        }
-    };
-    let public_base_is_non_public =
-        is_non_public_route_url(&public_base_url, "EDGERUN_TERM_PUBLIC_BASE_URL");
-    let stun_server = env::var("EDGERUN_ROUTE_STUN_SERVER")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| "172.245.67.49:3478".to_string());
-
-    if public_base_is_non_public && !control_base_is_local {
-        if public_base_was_set {
-            warn!(
-                control_base = %control_base,
-                public_base_url = %public_base_url,
-                "EDGERUN_TERM_PUBLIC_BASE_URL must be publicly routable when control base is remote"
-            );
-        } else {
-            warn!(
-                control_base = %control_base,
-                public_base_url = %public_base_url,
-                "EDGERUN_TERM_PUBLIC_BASE_URL was not provided; defaulted URL may not be externally reachable"
-            );
-        }
-        warn!(
-            stun_server = %stun_server,
-            "continuing route announcer with STUN reflexive endpoint discovery enabled"
-        );
-    }
-
-    if !reachable_urls.iter().any(|value| value == &public_base_url) {
-        reachable_urls.push(public_base_url.clone());
-    }
-
-    info!(
-        control = %control_base,
-        %device_id,
-        %owner_pubkey,
-        %public_base_url,
-        "route announcer enabled"
-    );
-    let sign_route_payload: RouteSigner = if let Some(owner_signing_key) = owner_signing_key {
-        let signer = Arc::new(owner_signing_key);
-        Arc::new(move |message: &[u8]| {
-            let sig = signer.sign(message);
-            URL_SAFE_NO_PAD.encode(sig.to_bytes())
-        })
-    } else {
-        let signer = device.clone();
-        Arc::new(move |message: &[u8]| signer.sign_b64url(message))
-    };
-
-    tokio::spawn(async move {
-        let mut heartbeat_token: Option<String> = None;
-        let client_id = format!("term-server-route-{device_id}");
-        loop {
-            if let Some(token) = heartbeat_token.as_ref() {
-                let hb = CpRouteHeartbeatRequest {
-                    device_id: device_id.clone(),
-                    token: token.clone(),
-                    ttl_secs: 90,
-                };
-                match scheduler_control_ws_request(
-                    &control_base,
-                    &client_id,
-                    ControlWsRequestPayload::RouteHeartbeat(hb),
-                )
-                .await
-                {
-                    Ok(ControlWsResponsePayload::RouteHeartbeat(resp)) if resp.ok => {}
-                    Ok(other) => {
-                        warn!(
-                            ?other,
-                            "route announcer heartbeat returned unexpected response"
-                        );
-                        heartbeat_token = None;
-                    }
-                    Err(err) => {
-                        warn!(error = %err, "route announcer heartbeat request failed");
-                        heartbeat_token = None;
-                    }
-                }
-            }
-
-            if heartbeat_token.is_none() {
-                let challenge = match scheduler_control_ws_request(
-                    &control_base,
-                    &client_id,
-                    ControlWsRequestPayload::RouteChallenge(CpRouteChallengeRequest {
-                        device_id: device_id.clone(),
-                    }),
-                )
-                .await
-                {
-                    Ok(ControlWsResponsePayload::RouteChallenge(value)) => value,
-                    Ok(other) => {
-                        warn!(
-                            ?other,
-                            "route announcer challenge returned unexpected response"
-                        );
-                        sleep(Duration::from_secs(10)).await;
-                        continue;
-                    }
-                    Err(err) => {
-                        warn!(error = %err, "route announcer challenge request failed");
-                        sleep(Duration::from_secs(10)).await;
-                        continue;
-                    }
-                };
-                if challenge.expires_at_unix_s <= now_unix_s() {
-                    sleep(Duration::from_secs(2)).await;
-                    continue;
-                }
-
-                let signed_at = now_unix_s();
-                let mut advertised_urls = reachable_urls.clone();
-                if let Some(stun_url) =
-                    discover_stun_public_route_url(&public_base_url, &stun_server).await
-                    && !advertised_urls.iter().any(|value| value == &stun_url)
-                {
-                    advertised_urls.push(stun_url);
-                }
-                let candidates = route_candidates_from_urls(&advertised_urls, &stun_server);
-                if candidates.is_empty() {
-                    warn!(
-                        control_base = %control_base,
-                        "route announcer could not derive any valid transport candidates"
-                    );
-                    sleep(Duration::from_secs(10)).await;
-                    continue;
-                }
-                let signable_urls = candidates
-                    .iter()
-                    .map(|candidate| candidate.uri.clone())
-                    .collect::<Vec<_>>();
-                let signing_message = route_register_signing_message(
-                    &owner_pubkey,
-                    &device_id,
-                    &signable_urls,
-                    &challenge.nonce,
-                    signed_at,
-                );
-                let signature = sign_route_payload(signing_message.as_bytes());
-                info!(
-                    owner_pubkey = %owner_pubkey,
-                    device_id = %device_id,
-                    signed_at,
-                    signing_message = %signing_message,
-                    signable_urls = ?signable_urls,
-                    "route announcer signing route.register payload"
-                );
-                let payload = CpRouteRegisterRequest {
-                    device_id: device_id.clone(),
-                    owner_pubkey: owner_pubkey.clone(),
-                    candidates,
-                    reachable_urls: signable_urls,
-                    capabilities: vec!["terminal-ws".to_string(), "webrtc-datachannel".to_string()],
-                    relay_session_id: None,
-                    ttl_secs: 90,
-                    challenge_nonce: challenge.nonce,
-                    signed_at_unix_s: signed_at,
-                    signature,
-                };
-                match scheduler_control_ws_request(
-                    &control_base,
-                    &client_id,
-                    ControlWsRequestPayload::RouteRegister(payload),
-                )
-                .await
-                {
-                    Ok(ControlWsResponsePayload::RouteRegister(resp)) => {
-                        if resp.ok {
-                            heartbeat_token = Some(resp.heartbeat_token);
-                        } else {
-                            heartbeat_token = None;
-                        }
-                    }
-                    Ok(other) => {
-                        warn!(
-                            ?other,
-                            "route announcer register returned unexpected response"
-                        );
-                    }
-                    Err(err) => {
-                        warn!(error = %err, "route announcer register request failed");
-                    }
-                }
-            }
-            sleep(Duration::from_secs(30)).await;
-        }
-    });
-}
-
-fn next_control_request_id() -> String {
-    let seq = CONTROL_REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("term-route-{seq}")
-}
-
-fn scheduler_control_ws_url(control_base: &str, client_id: &str) -> anyhow::Result<String> {
-    let mut url = reqwest::Url::parse(control_base)
-        .with_context(|| format!("invalid route control base URL: {control_base}"))?;
-    let scheme = match url.scheme() {
-        "http" => "ws".to_string(),
-        "https" => "wss".to_string(),
-        "ws" | "wss" => url.scheme().to_string(),
-        other => anyhow::bail!("unsupported route control URL scheme: {other}"),
-    };
-    url.set_scheme(&scheme)
-        .map_err(|_| anyhow::anyhow!("failed to set websocket scheme"))?;
-    url.set_path("/v1/control/ws");
-    url.set_query(None);
-    url.query_pairs_mut().append_pair("client_id", client_id);
-    Ok(url.to_string())
-}
-
-async fn scheduler_control_ws_request(
-    control_base: &str,
-    client_id: &str,
-    payload: ControlWsRequestPayload,
-) -> anyhow::Result<ControlWsResponsePayload> {
-    let ws_url = scheduler_control_ws_url(control_base, client_id)?;
-    let (mut socket, _response) =
-        timeout(CONTROL_WS_TIMEOUT, tokio_tungstenite::connect_async(ws_url))
-            .await
-            .context("scheduler control ws connect timed out")?
-            .context("scheduler control ws connect failed")?;
-
-    let request_id = next_control_request_id();
-    let request = ControlWsClientMessage {
-        request_id: request_id.clone(),
-        payload,
-    };
-    let bytes = bincode::serialize(&request).context("encode control ws request failed")?;
-    timeout(
-        CONTROL_WS_TIMEOUT,
-        socket.send(WsMessage::Binary(bytes.into())),
-    )
-    .await
-    .context("scheduler control ws send timed out")?
-    .context("scheduler control ws send failed")?;
-
-    loop {
-        let frame = timeout(CONTROL_WS_TIMEOUT, socket.next())
-            .await
-            .context("scheduler control ws receive timed out")?;
-        let Some(frame) = frame else {
-            anyhow::bail!("scheduler closed control ws before response");
-        };
-        let frame = frame.context("scheduler control ws frame error")?;
-        let WsMessage::Binary(bytes) = frame else {
-            continue;
-        };
-        let message: ControlWsServerMessage =
-            bincode::deserialize(&bytes).context("decode control ws response failed")?;
-        if message.request_id != request_id {
-            continue;
-        }
-        if !message.ok {
-            let status = message
-                .status
-                .map(|value| format!(" ({value})"))
-                .unwrap_or_default();
-            let err = message
-                .error
-                .unwrap_or_else(|| format!("scheduler control ws request failed{status}"));
-            anyhow::bail!("{err}");
-        }
-        return message
-            .data
-            .ok_or_else(|| anyhow::anyhow!("scheduler control ws response missing payload"));
-    }
-}
-
-fn route_candidates_from_urls(urls: &[String], stun_server: &str) -> Vec<CpRouteCandidate> {
-    urls.iter()
-        .filter_map(|uri| {
-            let kind = if uri.starts_with("quic://") {
-                "quic"
-            } else if uri.starts_with("ws://") || uri.starts_with("wss://") {
-                "websocket"
-            } else if uri.starts_with("wg://") || uri.starts_with("wireguard://") {
-                "wireguard"
-            } else {
-                return None;
-            };
-            let mut metadata = BTreeMap::new();
-            metadata.insert("relay".to_string(), "false".to_string());
-            metadata.insert("direct".to_string(), "true".to_string());
-            if uri.contains("://172.245.67.49") {
-                metadata.insert("source".to_string(), "stun".to_string());
-                metadata.insert("stun_server".to_string(), stun_server.to_string());
-            } else {
-                metadata.insert("source".to_string(), "static".to_string());
-            }
-            Some(CpRouteCandidate {
-                kind: kind.to_string(),
-                uri: uri.to_string(),
-                priority: 100,
-                metadata,
-            })
-        })
-        .collect()
-}
-
-async fn discover_stun_public_route_url(
-    public_base_url: &str,
-    stun_server: &str,
-) -> Option<String> {
-    let mut parsed = reqwest::Url::parse(public_base_url).ok()?;
-    let current_host = parsed.host_str()?;
-    if !is_non_public_host(current_host) {
-        return None;
-    }
-    let public_addr = stun_query_reflexive_addr(stun_server).await?;
-    if parsed
-        .set_host(Some(&public_addr.ip().to_string()))
-        .is_err()
-    {
-        return None;
-    }
-    let target_port = parsed.port().unwrap_or(public_addr.port());
-    if parsed.set_port(Some(target_port)).is_err() {
-        return None;
-    }
-    Some(parsed.to_string().trim_end_matches('/').to_string())
-}
-
-async fn stun_query_reflexive_addr(stun_server: &str) -> Option<SocketAddr> {
-    let server_addr = stun_server.parse::<SocketAddr>().ok()?;
-    let socket = UdpSocket::bind(SocketAddr::from(([0, 0, 0, 0], 0)))
-        .await
-        .ok()?;
-    let tx_id = build_stun_transaction_id();
-    let request = build_stun_binding_request(tx_id);
-    timeout(
-        Duration::from_secs(2),
-        socket.send_to(&request, server_addr),
-    )
-    .await
-    .ok()?
-    .ok()?;
-    let mut buf = [0_u8; 1024];
-    let (n, _peer) = timeout(Duration::from_secs(2), socket.recv_from(&mut buf))
-        .await
-        .ok()?
-        .ok()?;
-    parse_stun_binding_response(&buf[..n], tx_id)
-}
-
-fn build_stun_transaction_id() -> [u8; 12] {
-    let seed = CONTROL_REQUEST_SEQ.fetch_add(1, Ordering::Relaxed)
-        ^ now_unix_s()
-        ^ now_unix_s().rotate_left(13);
-    let mut out = [0_u8; 12];
-    for (idx, byte) in out.iter_mut().enumerate() {
-        let shift = ((idx % 8) * 8) as u32;
-        *byte = ((seed.rotate_left((idx as u32) * 7) >> shift) & 0xff) as u8;
-    }
-    out
-}
-
-fn build_stun_binding_request(tx_id: [u8; 12]) -> [u8; 20] {
-    let mut req = [0_u8; 20];
-    req[0] = 0x00;
-    req[1] = 0x01;
-    req[2] = 0x00;
-    req[3] = 0x00;
-    req[4] = 0x21;
-    req[5] = 0x12;
-    req[6] = 0xA4;
-    req[7] = 0x42;
-    req[8..20].copy_from_slice(&tx_id);
-    req
-}
-
-fn parse_stun_binding_response(buf: &[u8], tx_id: [u8; 12]) -> Option<SocketAddr> {
-    if buf.len() < 20 {
-        return None;
-    }
-    if buf[0] != 0x01 || buf[1] != 0x01 {
-        return None;
-    }
-    if buf[4..8] != [0x21, 0x12, 0xA4, 0x42] {
-        return None;
-    }
-    if buf[8..20] != tx_id {
-        return None;
-    }
-    let body_len = u16::from_be_bytes([buf[2], buf[3]]) as usize;
-    if buf.len() < 20 + body_len {
-        return None;
-    }
-    let mut cursor = 20usize;
-    let body_end = 20 + body_len;
-    while cursor + 4 <= body_end {
-        let attr_type = u16::from_be_bytes([buf[cursor], buf[cursor + 1]]);
-        let attr_len = u16::from_be_bytes([buf[cursor + 2], buf[cursor + 3]]) as usize;
-        cursor += 4;
-        if cursor + attr_len > body_end {
-            return None;
-        }
-        let value = &buf[cursor..cursor + attr_len];
-        if attr_type == 0x0020 {
-            return parse_xor_mapped_address(value);
-        }
-        if attr_type == 0x0001 {
-            return parse_mapped_address(value);
-        }
-        let padded = (attr_len + 3) & !3;
-        cursor += padded;
-    }
-    None
-}
-
-fn parse_xor_mapped_address(value: &[u8]) -> Option<SocketAddr> {
-    if value.len() < 8 {
-        return None;
-    }
-    let family = value[1];
-    let xport = u16::from_be_bytes([value[2], value[3]]);
-    let port = xport ^ 0x2112;
-    match family {
-        0x01 => {
-            if value.len() < 8 {
-                return None;
-            }
-            let ip = Ipv4Addr::new(
-                value[4] ^ 0x21,
-                value[5] ^ 0x12,
-                value[6] ^ 0xA4,
-                value[7] ^ 0x42,
-            );
-            Some(SocketAddr::new(IpAddr::V4(ip), port))
-        }
-        0x02 => {
-            if value.len() < 20 {
-                return None;
-            }
-            let cookie = [0x21_u8, 0x12, 0xA4, 0x42];
-            let mut ip_bytes = [0_u8; 16];
-            for i in 0..16 {
-                ip_bytes[i] = value[4 + i] ^ cookie[i % 4];
-            }
-            Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_bytes)), port))
-        }
-        _ => None,
-    }
-}
-
-fn parse_mapped_address(value: &[u8]) -> Option<SocketAddr> {
-    if value.len() < 8 {
-        return None;
-    }
-    let family = value[1];
-    let port = u16::from_be_bytes([value[2], value[3]]);
-    match family {
-        0x01 => {
-            if value.len() < 8 {
-                return None;
-            }
-            let ip = Ipv4Addr::new(value[4], value[5], value[6], value[7]);
-            Some(SocketAddr::new(IpAddr::V4(ip), port))
-        }
-        0x02 => {
-            if value.len() < 20 {
-                return None;
-            }
-            let mut ip_bytes = [0_u8; 16];
-            ip_bytes.copy_from_slice(&value[4..20]);
-            Some(SocketAddr::new(IpAddr::V6(Ipv6Addr::from(ip_bytes)), port))
-        }
-        _ => None,
-    }
-}
-
-fn parse_owner_signing_key_from_env() -> Option<SigningKey> {
-    let raw = env::var("EDGERUN_ROUTE_OWNER_SECRET_KEY_B58").ok()?;
-    let encoded = raw.trim();
-    if encoded.is_empty() {
-        return None;
-    }
-    let bytes = match bs58::decode(encoded).into_vec() {
-        Ok(value) => value,
-        Err(err) => {
-            warn!(error = %err, "invalid EDGERUN_ROUTE_OWNER_SECRET_KEY_B58");
-            return None;
-        }
-    };
-
-    let seed: [u8; 32] = match bytes.len() {
-        32 => bytes.as_slice().try_into().expect("length checked"),
-        64 => {
-            let mut seed = [0_u8; 32];
-            seed.copy_from_slice(&bytes[..32]);
-            seed
-        }
-        _ => {
-            warn!(
-                len = bytes.len(),
-                "EDGERUN_ROUTE_OWNER_SECRET_KEY_B58 must decode to 32 or 64 bytes"
-            );
-            return None;
-        }
-    };
-
-    Some(SigningKey::from_bytes(&seed))
-}
-
-fn parse_reachable_urls(env_name: &str) -> Result<Vec<String>, String> {
-    let raw = std::env::var(env_name).map_err(|_| "missing value".to_string())?;
-    let mut normalized = Vec::<String>::new();
-    let mut seen = std::collections::HashSet::<String>::new();
-    for item in raw.split(',') {
-        let value = item.trim().trim_end_matches('/').to_string();
-        if value.is_empty() {
-            continue;
-        }
-        if seen.insert(value.clone()) {
-            normalized.push(value);
-        }
-    }
-    if normalized.is_empty() {
-        return Err(format!("{env_name} has no valid URLs"));
-    }
-    Ok(normalized)
-}
-
-fn routable_addr(addr: SocketAddr) -> String {
-    if addr.ip().is_unspecified() {
-        format!("127.0.0.1:{}", addr.port())
-    } else {
-        addr.to_string()
-    }
-}
-
-fn is_non_public_route_url(url: &str, env_name: &str) -> bool {
-    let parsed = match reqwest::Url::parse(url) {
-        Ok(value) => value,
-        Err(err) => {
-            warn!(
-                env = env_name,
-                url = %url,
-                error = %err,
-                "route URL is invalid for route announcement"
-            );
-            return true;
-        }
-    };
-
-    let Some(host) = parsed.host_str() else {
-        warn!(
-            env = env_name,
-            url = %url,
-            "route URL has no host for route announcement"
-        );
-        return true;
-    };
-
-    is_non_public_host(host)
-}
-
-fn is_non_public_host(host: &str) -> bool {
-    let normalized_host = host.trim_start_matches('[').trim_end_matches(']');
-    if normalized_host.eq_ignore_ascii_case("localhost") || normalized_host == "::1" {
-        return true;
-    }
-
-    match normalized_host.parse::<IpAddr>() {
-        Ok(IpAddr::V4(ip)) => {
-            ip.is_loopback()
-                || ip.is_private()
-                || ip.is_link_local()
-                || ip.is_multicast()
-                || ip.is_broadcast()
-                || ip.is_unspecified()
-        }
-        Ok(IpAddr::V6(ip)) => {
-            ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() || ip.is_unique_local()
-        }
-        Err(_) => false,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::is_non_public_route_url;
+    use edgerun_event_bus::edge_internal::{EdgeInternalClient, spawn_edge_internal_broker};
+    use edgerun_event_bus::{EventTopic, OverlayNetwork, RuntimeEventBus};
+    use edgerun_types::intent_pipeline::{
+        EVENT_PAYLOAD_TYPE_TERM_SERVER_LIFECYCLE_START, EVENT_SCHEMA_VERSION_V1,
+        EVENT_TOPIC_TERM_SERVER_LIFECYCLE_START, TermServerLifecycleEvent,
+    };
+    use tokio::time::{Duration, timeout};
 
-    #[test]
-    fn localhost_route_urls_are_rejected() {
-        assert!(is_non_public_route_url("http://127.0.0.1:5577", "TEST"));
-        assert!(is_non_public_route_url("http://localhost:5577", "TEST"));
-    }
+    use super::publish_term_server_lifecycle_payload;
 
-    #[test]
-    fn private_ipv6_addresses_are_rejected() {
-        assert!(is_non_public_route_url("https://[::1]:443", "TEST"));
-        assert!(is_non_public_route_url("http://10.0.0.7", "TEST"));
-    }
-
-    #[test]
-    fn public_dns_names_are_allowed() {
-        assert!(!is_non_public_route_url(
-            "https://term.edgerun.tech",
-            "TEST"
+    #[tokio::test]
+    async fn term_server_lifecycle_event_is_received_over_edge_internal_grpc() {
+        let topic = EventTopic::new(
+            OverlayNetwork::EdgeInternal,
+            EVENT_TOPIC_TERM_SERVER_LIFECYCLE_START,
+        )
+        .expect("topic");
+        let bus = RuntimeEventBus::with_topics(64, std::slice::from_ref(&topic)).expect("bus");
+        let socket_path = std::env::temp_dir().join(format!(
+            "edgerun-term-server-edge-internal-{}-{}.sock",
+            std::process::id(),
+            crate::now_unix_s()
         ));
+
+        let _broker = spawn_edge_internal_broker(&socket_path, bus)
+            .await
+            .expect("spawn broker");
+        let subscriber = EdgeInternalClient::connect(&socket_path)
+            .await
+            .expect("subscriber connect");
+        let publisher = EdgeInternalClient::connect(&socket_path)
+            .await
+            .expect("publisher connect");
+
+        let mut rx = subscriber.subscribe(&topic).await.expect("subscribe");
+        let payload = TermServerLifecycleEvent {
+            schema_version: EVENT_SCHEMA_VERSION_V1,
+            backend: "software".to_string(),
+            device_pubkey_b64url: "device-test-pubkey".to_string(),
+            bind_addr: "127.0.0.1:5577".to_string(),
+        };
+        publish_term_server_lifecycle_payload(&publisher, payload.clone()).await;
+
+        let event = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("recv timeout")
+            .expect("recv event");
+        assert_eq!(
+            event.payload_type,
+            EVENT_PAYLOAD_TYPE_TERM_SERVER_LIFECYCLE_START
+        );
+        let decoded: TermServerLifecycleEvent =
+            bincode::deserialize(&event.payload).expect("decode payload");
+        assert_eq!(decoded.device_pubkey_b64url, payload.device_pubkey_b64url);
+        assert_eq!(decoded.bind_addr, payload.bind_addr);
+
+        let _ = tokio::fs::remove_file(&socket_path).await;
     }
 }

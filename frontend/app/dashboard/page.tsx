@@ -11,7 +11,7 @@ export default function DashboardPage() {
       <PageHero
         title="Dashboard"
         badge="On-Chain Truth"
-        description="Core network metrics are fetched directly from Solana RPC. No mocked chain views."
+        description="Core network metrics are fetched from live runtime telemetry and control-plane endpoints."
       />
 
       <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

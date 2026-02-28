@@ -1,19 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError, TransportKind};
-use edgerun_types::control_plane::{
-    ControlWsClientMessage, ControlWsRequestPayload, ControlWsResponsePayload,
-    ControlWsServerMessage, RouteCandidate, RouteResolveRequest, RouteResolveResponse,
-};
-use futures_util::{SinkExt, StreamExt};
-use tokio_tungstenite::tungstenite::Message;
-use url::Url;
-
-static REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
+use edgerun_p2p::RouteAdvertisementV1;
+use edgerun_transport_core::{DiscoveryProvider, TransportEndpoint, TransportError};
 
 #[derive(Debug, Default, Clone)]
 pub struct StaticDiscoveryProvider {
@@ -39,179 +31,76 @@ impl DiscoveryProvider for StaticDiscoveryProvider {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SchedulerRouteDiscovery {
-    base_url: String,
+#[derive(Debug, Clone, Default)]
+pub struct Libp2pRouteCache {
+    routes: Arc<RwLock<HashMap<String, RouteAdvertisementV1>>>,
 }
 
-impl SchedulerRouteDiscovery {
-    pub fn new(base_url: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
+impl Libp2pRouteCache {
+    pub fn apply_advertisement(&self, advertisement: RouteAdvertisementV1) {
+        if advertisement.peer_id.trim().is_empty() {
+            return;
         }
+        if advertisement.ttl_ms == 0 {
+            return;
+        }
+        if advertisement.endpoints.is_empty() {
+            return;
+        }
+        let mut guard = self.routes.write().expect("lock poisoned");
+        guard.insert(advertisement.peer_id.clone(), advertisement);
+    }
+
+    pub fn discover_live(&self, peer_id: &str) -> Option<Vec<TransportEndpoint>> {
+        let now = now_unix_ms();
+        let mut guard = self.routes.write().expect("lock poisoned");
+        guard.retain(|_, advertisement| !advertisement.is_expired_at(now));
+        guard
+            .get(peer_id)
+            .map(|advertisement| advertisement.endpoints.clone())
     }
 }
 
-fn next_request_id() -> String {
-    let seq = REQUEST_SEQ.fetch_add(1, Ordering::Relaxed);
-    format!("discovery-{seq}")
+#[derive(Debug, Clone)]
+pub struct Libp2pFirstDiscovery {
+    cache: Libp2pRouteCache,
 }
 
-fn control_ws_url(base: &str) -> Result<Url, TransportError> {
-    let mut url = Url::parse(base).map_err(|e| TransportError::Protocol(e.to_string()))?;
-    let scheme = match url.scheme() {
-        "http" => "ws".to_string(),
-        "https" => "wss".to_string(),
-        "ws" | "wss" => url.scheme().to_string(),
-        other => {
-            return Err(TransportError::Protocol(format!(
-                "unsupported scheduler scheme for control ws: {other}"
-            )));
-        }
-    };
-    url.set_scheme(&scheme)
-        .map_err(|_| TransportError::Protocol("failed to set websocket scheme".to_string()))?;
-    url.set_path("/v1/control/ws");
-    url.set_query(None);
-    url.query_pairs_mut()
-        .append_pair("client_id", "discovery-route-resolve");
-    Ok(url)
+impl Libp2pFirstDiscovery {
+    pub fn new(cache: Libp2pRouteCache) -> Self {
+        Self { cache }
+    }
+
+    pub fn route_cache(&self) -> &Libp2pRouteCache {
+        &self.cache
+    }
 }
 
 #[async_trait]
-impl DiscoveryProvider for SchedulerRouteDiscovery {
+impl DiscoveryProvider for Libp2pFirstDiscovery {
     async fn discover(&self, peer_id: &str) -> Result<Vec<TransportEndpoint>, TransportError> {
-        let ws_url = control_ws_url(&self.base_url)?;
-        let (mut socket, _) = tokio_tungstenite::connect_async(ws_url.as_str())
-            .await
-            .map_err(|e| TransportError::Protocol(e.to_string()))?;
-        let request_id = next_request_id();
-        let request = ControlWsClientMessage {
-            request_id: request_id.clone(),
-            payload: ControlWsRequestPayload::RouteResolve(RouteResolveRequest {
-                device_id: peer_id.to_string(),
-            }),
-        };
-        let encoded =
-            bincode::serialize(&request).map_err(|e| TransportError::Protocol(e.to_string()))?;
-        socket
-            .send(Message::Binary(encoded.into()))
-            .await
-            .map_err(|e| TransportError::Protocol(e.to_string()))?;
-        let mut payload: Option<RouteResolveResponse> = None;
-        while let Some(frame) = socket.next().await {
-            let frame = frame.map_err(|e| TransportError::Protocol(e.to_string()))?;
-            let Message::Binary(bytes) = frame else {
-                continue;
-            };
-            let response = bincode::deserialize::<ControlWsServerMessage>(&bytes)
-                .map_err(|e| TransportError::Protocol(e.to_string()))?;
-            if response.request_id != request_id {
-                continue;
-            }
-            if !response.ok {
-                let status = response
-                    .status
-                    .map(|v| format!(" ({v})"))
-                    .unwrap_or_default();
-                let err = response
-                    .error
-                    .unwrap_or_else(|| format!("scheduler route resolve failed{status}"));
-                return Err(TransportError::Protocol(err));
-            }
-            let data = response.data.ok_or_else(|| {
-                TransportError::Protocol("missing route resolve payload".to_string())
-            })?;
-            let ControlWsResponsePayload::RouteResolve(resolved) = data else {
-                return Err(TransportError::Protocol(
-                    "unexpected route resolve response payload".to_string(),
-                ));
-            };
-            payload = Some(resolved);
-            break;
-        }
-        let payload = payload.ok_or_else(|| {
-            TransportError::Protocol("scheduler closed control ws before response".to_string())
-        })?;
-        if !payload.found {
-            return Err(TransportError::NoRoute(format!(
-                "no route found for peer {peer_id}"
-            )));
-        }
-        let Some(route) = payload.route else {
-            return Err(TransportError::NoRoute(format!(
-                "route payload missing for peer {peer_id}"
-            )));
-        };
-
-        let mut out = route
-            .candidates
-            .iter()
-            .filter_map(transport_endpoint_from_candidate)
-            .collect::<Vec<_>>();
-        if out.is_empty() {
-            for raw in route.reachable_urls {
-                let Some(kind) = kind_from_uri(&raw) else {
-                    continue;
-                };
-                out.push(TransportEndpoint::new(kind, raw));
+        if let Some(endpoints) = self.cache.discover_live(peer_id) {
+            if !endpoints.is_empty() {
+                return Ok(endpoints);
             }
         }
-        if out.is_empty() {
-            return Err(TransportError::NoRoute(format!(
-                "no usable endpoints found for peer {peer_id}"
-            )));
-        }
-        Ok(out)
+        Err(TransportError::NoRoute(format!(
+            "no libp2p route found for peer {peer_id}"
+        )))
     }
 }
 
-fn transport_endpoint_from_candidate(candidate: &RouteCandidate) -> Option<TransportEndpoint> {
-    let kind = kind_from_candidate(candidate)?;
-    let uri = candidate.uri.trim();
-    if uri.is_empty() {
-        return None;
-    }
-    let mut endpoint = TransportEndpoint::new(kind, uri.to_string());
-    endpoint.priority = candidate.priority;
-    endpoint.metadata = candidate.metadata.clone();
-    Some(endpoint)
-}
-
-fn kind_from_candidate(candidate: &RouteCandidate) -> Option<TransportKind> {
-    let normalized = candidate.kind.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "quic" if candidate.uri.starts_with("quic://") => Some(TransportKind::Quic),
-        "websocket"
-            if candidate.uri.starts_with("ws://") || candidate.uri.starts_with("wss://") =>
-        {
-            Some(TransportKind::WebSocket)
-        }
-        "wireguard"
-            if candidate.uri.starts_with("wg://") || candidate.uri.starts_with("wireguard://") =>
-        {
-            Some(TransportKind::WireGuard)
-        }
-        _ => kind_from_uri(&candidate.uri),
-    }
-}
-
-fn kind_from_uri(uri: &str) -> Option<TransportKind> {
-    if uri.starts_with("quic://") {
-        return Some(TransportKind::Quic);
-    }
-    if uri.starts_with("ws://") || uri.starts_with("wss://") {
-        return Some(TransportKind::WebSocket);
-    }
-    if uri.starts_with("wg://") || uri.starts_with("wireguard://") {
-        return Some(TransportKind::WireGuard);
-    }
-    None
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_transport_core::TransportKind;
 
     #[tokio::test]
     async fn static_provider_returns_inserted_endpoints() {
@@ -226,5 +115,54 @@ mod tests {
         let endpoints = provider.discover("peer-1").await.expect("discover");
         assert_eq!(endpoints.len(), 1);
         assert_eq!(endpoints[0].kind, TransportKind::Quic);
+    }
+
+    #[test]
+    fn libp2p_cache_returns_live_advertisement() {
+        let cache = Libp2pRouteCache::default();
+        cache.apply_advertisement(RouteAdvertisementV1::new(
+            "peer-42",
+            now_unix_ms(),
+            5_000,
+            vec![TransportEndpoint::new(
+                TransportKind::Quic,
+                "quic://peer-42.example:4433",
+            )],
+        ));
+
+        let endpoints = cache.discover_live("peer-42").expect("cached route");
+        assert_eq!(endpoints.len(), 1);
+        assert_eq!(endpoints[0].kind, TransportKind::Quic);
+    }
+
+    #[test]
+    fn libp2p_cache_expires_stale_advertisement() {
+        let cache = Libp2pRouteCache::default();
+        cache.apply_advertisement(RouteAdvertisementV1::new(
+            "peer-42",
+            1_000,
+            1,
+            vec![TransportEndpoint::new(
+                TransportKind::WebSocket,
+                "wss://peer-42.example/ws",
+            )],
+        ));
+
+        assert!(cache.discover_live("peer-42").is_none());
+    }
+
+    #[tokio::test]
+    async fn libp2p_first_discovery_fails_closed_when_route_missing() {
+        let discovery = Libp2pFirstDiscovery::new(Libp2pRouteCache::default());
+        let err = discovery
+            .discover("peer-missing")
+            .await
+            .expect_err("missing route should fail");
+        match err {
+            TransportError::NoRoute(message) => {
+                assert!(message.contains("peer-missing"));
+            }
+            other => panic!("expected no route error, got {other:?}"),
+        }
     }
 }

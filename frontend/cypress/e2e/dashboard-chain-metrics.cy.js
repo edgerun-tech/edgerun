@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 describe('dashboard chain metrics', () => {
-  it('renders deterministic Solana chain values from test-only RPC mock', () => {
+  it('renders deterministic chain values from test-only RPC mock', () => {
     cy.visit('/dashboard/index.html', {
       onBeforeLoad(win) {
         win.localStorage.setItem('edgerun.rpc.cluster', 'devnet')
-        win.localStorage.setItem('edgerun.rpc.url', 'https://api.devnet.solana.com')
+        win.localStorage.setItem('edgerun.rpc.url', 'https://rpc.devnet.edgerun.local')
         win.__EDGERUN_RPC_CONFIG = {
           cluster: 'devnet',
-          rpcUrl: 'https://api.devnet.solana.com',
+          rpcUrl: 'https://rpc.devnet.edgerun.local',
           treasuryAccount: '',
           deployments: {}
         }
-        win.__EDGERUN_SOLANA_RPC_HTTP_MOCK_ENABLED__ = true
-        win.__EDGERUN_SOLANA_RPC_HTTP_MOCK__ = ({ method }) => {
+        win.__EDGERUN_RPC_HTTP_MOCK_ENABLED__ = true
+        win.__EDGERUN_RPC_HTTP_MOCK__ = ({ method }) => {
           if (method === 'getSlot') return 320000001
           if (method === 'getBlockHeight') return 289999991
           if (method === 'getEpochInfo') return { epoch: 777 }

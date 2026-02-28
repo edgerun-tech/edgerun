@@ -58,7 +58,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: 'Why Edgerun exists: reliable compute with visible economics, verifiable execution, and fewer surprises.',
     publishedAt: '2026-02-18T12:00:00Z',
     readingTime: 9,
-    tags: ['Why Edgerun', 'Protocol', 'Solana'],
+    tags: ['Why Edgerun', 'Protocol', 'Local-First'],
     sections: [
       {
         heading: 'The Problem',
@@ -108,7 +108,7 @@ export const blogPosts: BlogPost[] = [
 export const jobs: JobRecord[] = [
   {
     id: 'job_8x4k9p2m',
-    name: 'solana-address-prefix-search',
+    name: 'local-address-prefix-search',
     status: 'completed',
     createdAt: '2026-02-21T08:10:00Z',
     wasmHash: '0x8f2a5e6d7c8b1a9f3d2c4e5f61728394aa55bb66cc77dd88ee99ff0011223344',
@@ -175,7 +175,7 @@ export const timelineEvents: TimelineEvent[] = [
   {
     id: 'evt-4',
     title: 'Settlement Finalized',
-    description: 'Payout and accounting posted to Solana.',
+    description: 'Payout and accounting posted to the local control ledger.',
     timestamp: '2026-02-21T08:10:16Z',
     type: 'settled',
     txHash: '5jXvKf2mB9rwM3Gm1Jx88a4Czv1L4m9f1xJQ8p5u9M5JwF3p5QvG8x9UyQh7J7gM'

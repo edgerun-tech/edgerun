@@ -6,7 +6,7 @@ const features = [
   { title: 'Deterministic WASM', description: 'Multiple workers execute identical WASM bytecode. Same input always produces same output. Consensus proves correctness.', icon: '⚡' },
   { title: 'Staking Enforces Quality', description: 'Workers stake capital to participate. Incorrect outputs result in slashed stake. Financial consequences enforce honest execution.', icon: '💎' },
   { title: 'Deterministic Pricing', description: 'Pricing is based on deterministic instruction limits and required redundancy, with escrow locked up front.', icon: '📊' },
-  { title: 'Cryptographic Settlement', description: 'Execution proofs settle on Solana with immutable records and deterministic payout accounting.', icon: '🔐' },
+  { title: 'Cryptographic Attestation', description: 'Execution proofs are attested in the control plane with deterministic payout accounting.', icon: '🔐' },
   { title: 'Slashing Protection', description: 'Redundant execution prevents single points of failure. Malicious behavior is penalized on-chain.', icon: '⚔️' },
   { title: 'Universal WASM', description: 'Compile from Rust, C, Go, and more into deterministic WASM jobs.', icon: '🛠️' }
 ]

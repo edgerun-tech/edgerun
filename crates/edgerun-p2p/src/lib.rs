@@ -2,9 +2,11 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use edgerun_transport_core::TransportEndpoint;
 use libp2p::futures::StreamExt;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{gossipsub, identify, identity, noise, ping, tcp, yamux, Multiaddr, SwarmBuilder};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc;
 
@@ -13,6 +15,43 @@ const ENV_LISTEN_ADDRS: &str = "EDGERUN_P2P_LISTEN_ADDRS";
 const ENV_BOOTSTRAP_PEERS: &str = "EDGERUN_P2P_BOOTSTRAP_PEERS";
 const ENV_KEY_SEED_HEX: &str = "EDGERUN_P2P_KEY_SEED_HEX";
 const ENV_EVENT_BUS_TOPIC: &str = "EDGERUN_P2P_EVENT_BUS_TOPIC";
+pub const CLUSTER_ROUTE_SCHEMA_V1: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RouteAdvertisementV1 {
+    pub schema_version: u32,
+    pub peer_id: String,
+    pub published_at_unix_ms: u64,
+    pub ttl_ms: u64,
+    #[serde(default)]
+    pub endpoints: Vec<TransportEndpoint>,
+}
+
+impl RouteAdvertisementV1 {
+    pub fn new(
+        peer_id: impl Into<String>,
+        published_at_unix_ms: u64,
+        ttl_ms: u64,
+        endpoints: Vec<TransportEndpoint>,
+    ) -> Self {
+        Self {
+            schema_version: CLUSTER_ROUTE_SCHEMA_V1,
+            peer_id: peer_id.into(),
+            published_at_unix_ms,
+            ttl_ms,
+            endpoints,
+        }
+    }
+
+    pub fn expires_at_unix_ms(&self) -> u64 {
+        self.published_at_unix_ms.saturating_add(self.ttl_ms)
+    }
+
+    pub fn is_expired_at(&self, now_unix_ms: u64) -> bool {
+        now_unix_ms >= self.expires_at_unix_ms()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct P2pConfig {

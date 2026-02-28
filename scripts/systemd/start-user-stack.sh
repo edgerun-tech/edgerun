@@ -85,10 +85,6 @@ enable_user_linger() {
 "${ROOT_DIR}/scripts/systemd/build-user-binaries.sh" stack
 "${ROOT_DIR}/scripts/systemd/install-user-services.sh" "${PROFILE}" "${WORKER_COUNT}"
 
-if [[ "${PROFILE}" == "local" ]]; then
-  systemctl --user enable --now solana-test-validator.service
-fi
-
 enable_user_linger
 
 mkdir -p "${HOME}/.config/edgerun/workers"
@@ -111,8 +107,5 @@ systemctl --user enable --now "${worker_units[@]}"
 echo "Stack started with ${WORKER_COUNT} workers."
 echo "Health check:"
 echo "  curl -sS -o /dev/null -w \"%{http_code}\\n\" \"http://127.0.0.1:5566/v1/control/ws?client_id=health\"   # expect 400 (non-WebSocket probe)"
-if [[ "${PROFILE}" == "local" ]]; then
-  echo "  curl -fsS http://127.0.0.1:8899"
-fi
 echo
 systemctl --user --no-pager --full status edgerun-scheduler.service "${worker_units[@]}" | sed -n '1,160p'

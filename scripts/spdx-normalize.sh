@@ -13,7 +13,7 @@ license_for_path() {
   local path="$1"
 
   case "$path" in
-    crates/*|program/*|docs/*|scripts/*|frontend/*|edgerun-apps/*) echo "Apache-2.0" ;;
+    crates/*|docs/*|scripts/*|frontend/*|edgerun-apps/*) echo "Apache-2.0" ;;
     *)
       echo ""
       ;;
@@ -92,7 +92,7 @@ while IFS= read -r path; do
   [[ -z "$path" ]] && continue
   [[ "$path" == *"/LICENSE" || "$path" == "LICENSE" ]] && continue
   case "$path" in
-    program/target/*|program/target-local/*|out/*)
+    out/*)
       continue
       ;;
   esac

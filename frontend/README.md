@@ -33,8 +33,6 @@ EDGERUN_VERSION=0.2.0 \
 EDGERUN_BUILD_NUMBER=0.2.0-1 \
 EDGERUN_SITE_URL=https://www.edgerun.tech \
 EDGERUN_SITE_DOMAIN=www.edgerun.tech \
-SOLANA_CLUSTER=mainnet-beta \
-SOLANA_RPC_URL=https://api.mainnet-beta.solana.com \
 EDGERUN_TREASURY_ACCOUNT=<treasury-pubkey> \
 bun run build:prod
 ```
@@ -88,8 +86,6 @@ The generator reads environment variables:
 - `EDGERUN_SITE_DOMAIN`
 - `EDGERUN_FRONTEND_DIST_ROOT`
 - `EDGERUN_FRONTEND_WIKI_ROOT`
-- `SOLANA_CLUSTER`
-- `SOLANA_RPC_URL`
 - `EDGERUN_TREASURY_ACCOUNT`
 
 These values are embedded in pages and release artifacts.

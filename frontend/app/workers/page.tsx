@@ -131,7 +131,7 @@ export default function WorkersPage() {
       <PageHero
         title="Stake Capital. Execute Jobs. Earn Fees."
         badge="Registration Live"
-        description="Run deterministic compute, participate in verification, and earn SOL-based payouts."
+        description="Run deterministic compute, participate in verification, and earn workload payouts."
         actions={
           <>
             <a href={docsSchedulerApiHref('main')}><Button variant="outline">Read Worker Endpoints</Button></a>
@@ -153,14 +153,14 @@ export default function WorkersPage() {
         <Accordion class="mb-2">
           <AccordionItem value="stake">
             <AccordionTrigger value="stake">Stake & Register</AccordionTrigger>
-            <AccordionContent value="stake">Workers commit SOL-denominated stake and expose deterministic runtime capacity for scheduler selection.</AccordionContent>
+            <AccordionContent value="stake">Workers commit deterministic capacity declarations and expose runtime availability for scheduler selection.</AccordionContent>
           </AccordionItem>
           <AccordionItem value="execute">
             <AccordionTrigger value="execute">Execute & Attest</AccordionTrigger>
             <AccordionContent value="execute">Compute tasks are redundantly executed and cross-checked. Workers submit output + verification metadata.</AccordionContent>
           </AccordionItem>
           <AccordionItem value="settle">
-            <AccordionTrigger value="settle">Settle on Solana</AccordionTrigger>
+            <AccordionTrigger value="settle">Settle and attest</AccordionTrigger>
             <AccordionContent value="settle">Payouts and penalties follow on-chain settlement paths with deterministic escrow, quorum, and lock constraints.</AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -344,7 +344,7 @@ export default function WorkersPage() {
               <CardDescription>Stake and register node metadata for scheduler eligibility.</CardDescription>
             </CardHeader>
             <CardContent>
-              <p class="font-mono text-sm text-muted-foreground">$ edgerun-worker register --stake 50 --rpc $SOLANA_RPC_URL</p>
+              <p class="font-mono text-sm text-muted-foreground">$ edgerun-worker register --capacity 50 --control $EDGERUN_ROUTE_CONTROL_BASE</p>
             </CardContent>
           </Card>
         </div>

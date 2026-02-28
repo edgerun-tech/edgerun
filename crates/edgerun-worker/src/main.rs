@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -8,6 +9,8 @@ use anyhow::{Context, Result};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
+use edgerun_event_bus::edge_internal::EdgeInternalClient;
+use edgerun_event_bus::{EventTopic, OverlayNetwork};
 use edgerun_transport_core::{
     assignments_signing_message, failure_signing_message, heartbeat_signing_message,
     replay_signing_message, result_signing_message,
@@ -18,6 +21,11 @@ use edgerun_types::control_plane::{
     ControlWsServerMessage, HeartbeatRequest, HeartbeatResponse, PolicyInfoResponse,
     QueuedAssignment, SessionCreateRequest, SessionCreateResponse, WorkerAssignmentsRequest,
     WorkerCapacity, WorkerFailureReport, WorkerReplayArtifactReport, WorkerResultReport,
+};
+use edgerun_types::intent_pipeline::{
+    WorkerHeartbeatEvent, WorkerLifecycleEvent, EVENT_PAYLOAD_TYPE_WORKER_HEARTBEAT_STATUS,
+    EVENT_PAYLOAD_TYPE_WORKER_LIFECYCLE_START, EVENT_SCHEMA_VERSION_V1,
+    EVENT_TOPIC_WORKER_HEARTBEAT, EVENT_TOPIC_WORKER_LIFECYCLE_START,
 };
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
@@ -43,6 +51,8 @@ struct WorkerConfig {
     retry_base_ms: u64,
     retry_max_ms: u64,
     retry_flush_batch: usize,
+    edge_internal_event_bus_enabled: bool,
+    edge_internal_event_bus_sock: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +134,7 @@ async fn main() -> Result<()> {
     edgerun_observability::init_service("edgerun-worker")?;
 
     let cfg = load_config();
+    let edge_internal_client = connect_edge_internal_event_bus(&cfg).await;
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(15))
         .build()?;
@@ -142,6 +153,7 @@ async fn main() -> Result<()> {
         scheduler = %cfg.scheduler_base_url,
         "edgerun-worker loop starting"
     );
+    publish_lifecycle_start(&cfg, edge_internal_client.as_ref()).await;
 
     let mut next_poll_ms = 2000;
     loop {
@@ -166,6 +178,7 @@ async fn main() -> Result<()> {
             if resp.ok {
                 next_poll_ms = resp.next_poll_ms.max(200);
             }
+            publish_heartbeat(&cfg, edge_internal_client.as_ref(), &resp).await;
         }
 
         match poll_assignments(&cfg).await {
@@ -184,6 +197,105 @@ async fn main() -> Result<()> {
         flush_submission_queue(&cfg, &mut submission_queue).await;
 
         tokio::time::sleep(Duration::from_millis(next_poll_ms)).await;
+    }
+}
+
+async fn connect_edge_internal_event_bus(cfg: &WorkerConfig) -> Option<EdgeInternalClient> {
+    if !cfg.edge_internal_event_bus_enabled {
+        return None;
+    }
+    match EdgeInternalClient::connect(&cfg.edge_internal_event_bus_sock).await {
+        Ok(client) => Some(client),
+        Err(err) => {
+            tracing::warn!(
+                socket = %cfg.edge_internal_event_bus_sock.display(),
+                error = %err,
+                "edge-internal event bus connect failed; continuing without event publish"
+            );
+            None
+        }
+    }
+}
+
+async fn publish_lifecycle_start(cfg: &WorkerConfig, client: Option<&EdgeInternalClient>) {
+    let Some(client) = client else {
+        return;
+    };
+    let topic = match EventTopic::new(
+        OverlayNetwork::EdgeInternal,
+        EVENT_TOPIC_WORKER_LIFECYCLE_START,
+    ) {
+        Ok(topic) => topic,
+        Err(err) => {
+            tracing::warn!(error = %err, "invalid worker lifecycle topic");
+            return;
+        }
+    };
+    let payload = WorkerLifecycleEvent {
+        schema_version: EVENT_SCHEMA_VERSION_V1,
+        worker_pubkey: cfg.worker_pubkey.clone(),
+        runtime_ids: cfg.runtime_ids.clone(),
+        version: cfg.version.clone(),
+        scheduler_base_url: cfg.scheduler_base_url.clone(),
+    };
+    let encoded = match bincode::serialize(&payload) {
+        Ok(encoded) => encoded,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to encode lifecycle event payload");
+            return;
+        }
+    };
+    if let Err(err) = client
+        .publish(
+            &topic,
+            "worker",
+            EVENT_PAYLOAD_TYPE_WORKER_LIFECYCLE_START,
+            encoded,
+        )
+        .await
+    {
+        tracing::warn!(error = %err, "failed to publish worker lifecycle start");
+    }
+}
+
+async fn publish_heartbeat(
+    cfg: &WorkerConfig,
+    client: Option<&EdgeInternalClient>,
+    resp: &HeartbeatResponse,
+) {
+    let Some(client) = client else {
+        return;
+    };
+    let topic = match EventTopic::new(OverlayNetwork::EdgeInternal, EVENT_TOPIC_WORKER_HEARTBEAT) {
+        Ok(topic) => topic,
+        Err(err) => {
+            tracing::warn!(error = %err, "invalid worker heartbeat topic");
+            return;
+        }
+    };
+    let payload = WorkerHeartbeatEvent {
+        schema_version: EVENT_SCHEMA_VERSION_V1,
+        worker_pubkey: cfg.worker_pubkey.clone(),
+        scheduler_ok: resp.ok,
+        next_poll_ms: resp.next_poll_ms,
+    };
+    let encoded = match bincode::serialize(&payload) {
+        Ok(encoded) => encoded,
+        Err(err) => {
+            tracing::warn!(error = %err, "failed to encode heartbeat event payload");
+            return;
+        }
+    };
+    if let Err(err) = client
+        .publish(
+            &topic,
+            "worker",
+            EVENT_PAYLOAD_TYPE_WORKER_HEARTBEAT_STATUS,
+            encoded,
+        )
+        .await
+    {
+        tracing::warn!(error = %err, "failed to publish worker heartbeat event");
     }
 }
 
@@ -226,11 +338,6 @@ fn load_config() -> WorkerConfig {
             tracing::warn!(error = %err, "invalid EDGERUN_WORKER_SIGNING_KEY_HEX; disabling worker request signatures");
             None
         });
-    if read_env_bool("EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED", false) {
-        tracing::warn!(
-            "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED is ignored: chain submission is disabled in this build"
-        );
-    }
     let policy_verify_pubkey_hex = std::env::var("EDGERUN_WORKER_POLICY_VERIFY_KEY_HEX")
         .ok()
         .filter(|v| !v.trim().is_empty())
@@ -306,6 +413,17 @@ fn load_config() -> WorkerConfig {
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|v| *v > 0)
         .unwrap_or(64);
+    let edge_internal_event_bus_enabled =
+        std::env::var("EDGERUN_WORKER_EDGE_INTERNAL_EVENT_BUS_ENABLED")
+            .ok()
+            .map(|v| {
+                let trimmed = v.trim().to_ascii_lowercase();
+                matches!(trimmed.as_str(), "1" | "true" | "yes" | "on")
+            })
+            .unwrap_or(false);
+    let edge_internal_event_bus_sock = std::env::var("EDGERUN_WORKER_EDGE_INTERNAL_EVENT_BUS_SOCK")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(".edgerun-scheduler-data/event-bus/edge-internal.sock"));
 
     WorkerConfig {
         worker_pubkey,
@@ -329,6 +447,8 @@ fn load_config() -> WorkerConfig {
         retry_base_ms,
         retry_max_ms,
         retry_flush_batch,
+        edge_internal_event_bus_enabled,
+        edge_internal_event_bus_sock,
     }
 }
 
@@ -435,7 +555,10 @@ async fn fetch_policy_info(
         let resp = req.send().await.context("policy info request failed")?;
         let status = resp.status();
         if status.is_success() {
-            let payload = resp.bytes().await.context("policy info response read failed")?;
+            let payload = resp
+                .bytes()
+                .await
+                .context("policy info response read failed")?;
             return sonic_rs::from_slice::<PolicyInfoResponse>(&payload)
                 .context("invalid policy info response");
         }
@@ -793,12 +916,6 @@ async fn process_assignment(
         attestation_claim: None,
         signature: None,
     };
-    if read_env_bool("EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED", false) {
-        tracing::warn!(
-            job_id = %result.job_id,
-            "chain submit requested but disabled in this build; continuing with scheduler submission"
-        );
-    }
     result.signature = sign_worker_payload(cfg, result_signing_message(&result));
 
     if !submit_with_retry(
@@ -1260,17 +1377,6 @@ fn now_unix_seconds() -> u64 {
         .unwrap_or(0)
 }
 
-fn read_env_bool(key: &str, default_value: bool) -> bool {
-    std::env::var(key)
-        .ok()
-        .and_then(|v| match v.trim().to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => Some(true),
-            "0" | "false" | "no" | "off" => Some(false),
-            _ => None,
-        })
-        .unwrap_or(default_value)
-}
-
 fn parse_runtime_id_hex(runtime_id: &str) -> Result<[u8; 32]> {
     let raw = runtime_id.trim();
     let hex_str = raw
@@ -1324,6 +1430,8 @@ mod tests {
             retry_base_ms: 5,
             retry_max_ms: 20,
             retry_flush_batch: 16,
+            edge_internal_event_bus_enabled: false,
+            edge_internal_event_bus_sock: PathBuf::from("/tmp/edgerun-edge-internal-test.sock"),
         }
     }
 

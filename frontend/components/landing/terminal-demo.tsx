@@ -6,7 +6,7 @@ import { sha512 } from '@noble/hashes/sha2'
 import * as ed25519 from '@noble/ed25519'
 import bs58 from 'bs58'
 
-const DOMAIN_TAG = new TextEncoder().encode('edgerun.solana.addressgen.v1')
+const DOMAIN_TAG = new TextEncoder().encode('edgerun.local.addressgen.v1')
 const DEFAULT_DEMO_COMMAND =
   'address local --seed-hex 0707070707070707070707070707070707070707070707070707070707070707 --prefix So --start 0 --end 50000'
 
@@ -204,7 +204,7 @@ export function TerminalDemo() {
         <div class="mx-auto mb-12 max-w-3xl text-center">
           <h2 class="mb-4 text-3xl font-bold md:text-4xl">Get Started</h2>
           <p class="text-lg text-muted-foreground">
-            Run real browser-side bulk Solana address generation here first. Then move to distributed workflows with the same command model.
+            Run real browser-side bulk deterministic address generation here first. Then move to distributed workflows with the same command model.
           </p>
         </div>
         <Card class="mx-auto max-w-4xl overflow-hidden border-primary/20 bg-black">

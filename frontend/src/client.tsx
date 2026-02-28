@@ -9,7 +9,6 @@ import {
   normalizeClientRoutePath
 } from '../lib/client-routes'
 import { ensureTerminalDrawerStore, getTerminalDrawerState, subscribeTerminalDrawer, type TerminalDrawerState } from '../lib/terminal-drawer-store'
-import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 import { JOB_TAB_STATUS_EVENT, type JobTabStatus } from '../lib/tab-job-status'
 
 declare global {
@@ -68,16 +67,6 @@ function computeSiteChromeStatus(): SiteChromeStatus {
   const totalDevices = terminalDrawerState.devices.length
   const onlineDevices = terminalDrawerState.devices.filter((device) => device.status === 'online').length
   const terminalOpen = terminalDrawerState.open
-  const walletConnected = walletSessionState.connected
-
-  if (!walletConnected) {
-    return {
-      title: `${currentRouteTitle} · Wallet disconnected | Edgerun`,
-      kind: 'neutral',
-      color: '#64748b',
-      pulse: false
-    }
-  }
   if (onlineDevices > 0) {
     const openLabel = terminalOpen ? 'Terminal open' : 'Terminal ready'
     return {
@@ -89,14 +78,14 @@ function computeSiteChromeStatus(): SiteChromeStatus {
   }
   if (totalDevices > 0) {
     return {
-      title: `${currentRouteTitle} · Wallet connected · ${totalDevices} configured device${totalDevices === 1 ? '' : 's'} (offline) | Edgerun`,
+      title: `${currentRouteTitle} · ${totalDevices} configured device${totalDevices === 1 ? '' : 's'} (offline) | Edgerun`,
       kind: 'warning',
       color: '#f59e0b',
       pulse: false
     }
   }
   return {
-    title: `${currentRouteTitle} · Wallet connected · no devices configured | Edgerun`,
+    title: `${currentRouteTitle} · no devices configured | Edgerun`,
     kind: 'warning',
     color: '#fb923c',
     pulse: false
@@ -178,17 +167,11 @@ function initSiteChromeStatus(): void {
   if (chromeStatusInitialized) return
   chromeStatusInitialized = true
   ensureTerminalDrawerStore()
-  walletSessionState = readWalletSession()
   terminalDrawerState = getTerminalDrawerState()
   currentRouteTitle = routeTitle(window.location.pathname)
   renderSiteChrome()
   subscribeTerminalDrawer((next) => {
     terminalDrawerState = next
-    renderSiteChrome()
-  })
-  window.addEventListener(WALLET_SESSION_EVENT, (event) => {
-    const custom = event as CustomEvent<WalletSessionState>
-    walletSessionState = custom.detail || readWalletSession()
     renderSiteChrome()
   })
   window.addEventListener(JOB_TAB_STATUS_EVENT, (event) => {
@@ -213,7 +196,6 @@ let terminalDrawerMounted = false
 let terminalDrawerMounting = false
 let transitionInFlight = false
 let chromeStatusInitialized = false
-let walletSessionState: WalletSessionState = readWalletSession()
 let terminalDrawerState: TerminalDrawerState = getTerminalDrawerState()
 let faviconAnimationTimer: number | null = null
 let faviconFrame = 0
@@ -222,7 +204,6 @@ let jobTabStatus: JobTabStatus | null = null
 let titleFlashOverride = ''
 let titleFlashTimer: number | null = null
 let docsEnhancementsModulePromise: Promise<typeof import('./runtime/docs-enhancements')> | null = null
-let chainStatusModulePromise: Promise<typeof import('./runtime/chain-status')> | null = null
 
 async function withRouteTransition(update: () => Promise<void> | void): Promise<void> {
   if (transitionInFlight) return
@@ -340,21 +321,11 @@ function applyPageEnhancements(): void {
   void loadPageFeatureEnhancements(path)
 }
 
-function pageHasChainWidgets(): boolean {
-  return Boolean(document.querySelector('[data-chain-field], [data-deployment-badge], [data-deployment-detail]'))
-}
-
 async function loadPageFeatureEnhancements(path: string): Promise<void> {
   if (path.startsWith('/docs/')) {
     docsEnhancementsModulePromise ??= import('./runtime/docs-enhancements')
     const docsEnhancements = await docsEnhancementsModulePromise.catch(() => null)
     await docsEnhancements?.initDocsEnhancements()
-  }
-
-  if (pageHasChainWidgets()) {
-    chainStatusModulePromise ??= import('./runtime/chain-status')
-    const chainStatus = await chainStatusModulePromise.catch(() => null)
-    await chainStatus?.initChainStatusWidgets()
   }
 }
 

@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -81,3 +81,6 @@ nodeos-signed-uki:
 
 nodeos-verify-uki:
 	./scripts/nodeos/verify-signed-uki.sh
+
+nodeos-bootloader-efi:
+	./scripts/nodeos/build-edgerun-bootloader-efi.sh

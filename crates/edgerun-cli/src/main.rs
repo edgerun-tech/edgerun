@@ -1,11 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::ffi::OsString;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
-use std::thread;
-use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -23,7 +19,6 @@ use crate::commands::integration::{
     run_integration_scheduler_api,
 };
 use crate::commands::observer::run_observer_command;
-use crate::commands::program::run_program_command;
 use crate::commands::runtime_ops::{
     compare_replay_profiles, run_replay_corpus, run_weekly_fuzz, validate_external_security_review,
 };
@@ -31,10 +26,7 @@ use crate::commands::storage::run_storage_command;
 use crate::commands::tailscale::run_tailscale_command;
 use crate::commands::tasks::{run_interactive, run_named_task_sync};
 use crate::commands::timeline::run_timeline_command;
-use crate::integration_helpers::pick_free_port;
-use process_helpers::{
-    command_exists, run_program_sync, run_program_sync_owned, run_program_sync_with_env,
-};
+use process_helpers::{command_exists, run_program_sync, run_program_sync_owned};
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun", about = "EdgeRun project orchestration CLI")]
@@ -94,10 +86,6 @@ enum Commands {
         #[command(subcommand)]
         command: TailscaleCommand,
     },
-    Program {
-        #[command(subcommand)]
-        command: ProgramCommand,
-    },
     Observe {
         #[command(subcommand)]
         command: ObserveCommand,
@@ -119,7 +107,6 @@ enum Commands {
 #[derive(Clone, Debug, ValueEnum)]
 enum BuildTarget {
     Workspace,
-    Program,
     All,
 }
 
@@ -131,7 +118,6 @@ enum TestTarget {
     E2e,
     Rotation,
     AbiRollover,
-    Program,
     All,
 }
 
@@ -140,52 +126,6 @@ enum RunTarget {
     FuzzWeekly,
     ReplayCorpus,
     SecurityReview,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-enum ProgramCommand {
-    AnalyzeAccounts {
-        #[arg(value_enum, long, default_value_t = SolanaCluster::Devnet)]
-        cluster: SolanaCluster,
-    },
-    Deploy {
-        #[arg(value_enum, long, default_value_t = SolanaCluster::Devnet)]
-        cluster: SolanaCluster,
-        #[arg(long, default_value_t = false)]
-        skip_build: bool,
-        #[arg(long = "final", default_value_t = false)]
-        final_immutable: bool,
-        #[arg(long)]
-        program_id: Option<String>,
-        #[arg(long)]
-        keypair: Option<PathBuf>,
-        #[arg(long)]
-        fee_payer: Option<PathBuf>,
-        #[arg(long)]
-        max_len: Option<u32>,
-        #[arg(long, default_value_t = false)]
-        no_update_frontend_config: bool,
-    },
-}
-
-#[derive(Clone, Copy, Debug, ValueEnum)]
-enum SolanaCluster {
-    Localnet,
-    Devnet,
-    Testnet,
-    #[value(name = "mainnet-beta")]
-    MainnetBeta,
-}
-
-impl SolanaCluster {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Localnet => "localhost",
-            Self::Devnet => "devnet",
-            Self::Testnet => "testnet",
-            Self::MainnetBeta => "mainnet-beta",
-        }
-    }
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -628,7 +568,6 @@ async fn main() -> Result<()> {
         }
         Commands::Storage { command } => run_storage_command(&root, command)?,
         Commands::Tailscale { command } => run_tailscale_command(&root, command).await?,
-        Commands::Program { command } => run_program_command(&root, command)?,
         Commands::Observe { command } => run_observer_command(&root, command)?,
         Commands::Event { command } => run_event_bus_command(&root, command)?,
         Commands::Timeline { command } => run_timeline_command(&root, command)?,
@@ -641,11 +580,7 @@ async fn main() -> Result<()> {
 fn run_build_target(root: &Path, target: BuildTarget) -> Result<()> {
     match target {
         BuildTarget::Workspace => run_named_task_sync(root, "build-workspace"),
-        BuildTarget::Program => run_named_task_sync(root, "build-program"),
-        BuildTarget::All => {
-            run_named_task_sync(root, "build-workspace")?;
-            run_named_task_sync(root, "build-program")
-        }
+        BuildTarget::All => run_named_task_sync(root, "build-workspace"),
     }
 }
 
@@ -657,7 +592,6 @@ async fn run_test_target(root: &Path, target: TestTarget) -> Result<()> {
         TestTarget::E2e => run_integration_e2e_lifecycle(root).await,
         TestTarget::Rotation => run_integration_policy_rotation(root).await,
         TestTarget::AbiRollover => run_integration_abi_rollover(root).await,
-        TestTarget::Program => run_named_task_sync(root, "test-program"),
         TestTarget::All => {
             run_named_task_sync(root, "test-runtime")?;
             run_integration_scheduler_api(root).await?;
@@ -683,15 +617,6 @@ fn run_doctor_sync(root: &Path) -> Result<()> {
     run_program_sync("Rust compiler", "rustc", &["--version"], root, false)?;
     run_program_sync("Rustup", "rustup", &["--version"], root, false)?;
     run_program_sync("Bun", "bun", &["--version"], root, true)?;
-    run_program_sync("Anchor CLI", "anchor", &["--version"], root, true)?;
-    run_program_sync("Solana CLI", "solana", &["--version"], root, true)?;
-    run_program_sync(
-        "Solana test validator",
-        "solana-test-validator",
-        &["--version"],
-        root,
-        true,
-    )?;
     run_program_sync("cargo-fuzz", "cargo-fuzz", &["--version"], root, true)?;
     run_program_sync("Python3", "python3", &["--version"], root, false)?;
     run_program_sync("curl", "curl", &["--version"], root, false)?;
@@ -700,18 +625,6 @@ fn run_doctor_sync(root: &Path) -> Result<()> {
 
 fn run_setup_sync(root: &Path, install_missing: bool) -> Result<()> {
     run_program_sync("Cargo fetch", "cargo", &["fetch", "--locked"], root, false)?;
-
-    if command_exists("bun") {
-        run_program_sync(
-            "Program bun install",
-            "bun",
-            &["install", "--frozen-lockfile"],
-            &root.join("program"),
-            false,
-        )?;
-    } else {
-        eprintln!("[warn] bun missing; skipping program dependency install");
-    }
 
     if install_missing && !command_exists("cargo-fuzz") {
         run_program_sync(
@@ -771,21 +684,12 @@ fn remove_dir_if_exists(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn remove_file_if_exists(path: &Path) -> Result<()> {
-    if path.is_file() {
-        fs::remove_file(path)
-            .with_context(|| format!("failed to remove file: {}", path.display()))?;
-    }
-    Ok(())
-}
-
 fn run_clean_artifacts_sync(root: &Path) -> Result<()> {
     remove_dir_if_exists(&root.join("out"))?;
     remove_dir_if_exists(&root.join("target"))?;
     remove_dir_if_exists(&root.join("test-ledger"))?;
     remove_dir_if_exists(&root.join("frontend/test-results"))?;
     remove_dir_if_exists(&root.join("frontend/playwright-report"))?;
-    remove_file_if_exists(&root.join("solana-validator.log"))?;
     println!("cleaned artifacts");
     Ok(())
 }
@@ -859,175 +763,7 @@ fn run_verify_sync(root: &Path) -> Result<()> {
         ],
         root,
         false,
-    )?;
-    run_program_anchor_verify_sync(root)
-}
-
-struct AnchorTomlRestoreGuard {
-    path: std::path::PathBuf,
-    original: String,
-}
-
-impl Drop for AnchorTomlRestoreGuard {
-    fn drop(&mut self) {
-        let _ = fs::write(&self.path, &self.original);
-    }
-}
-
-fn prepare_anchor_config_for_cli(program_root: &Path) -> Result<Option<AnchorTomlRestoreGuard>> {
-    let anchor_toml = program_root.join("Anchor.toml");
-    if !anchor_toml.is_file() {
-        return Ok(None);
-    }
-
-    let original = fs::read_to_string(&anchor_toml)
-        .with_context(|| format!("failed to read {}", anchor_toml.display()))?;
-    let mut changed = false;
-    let mut sanitized = String::new();
-    for line in original.lines() {
-        if line.trim().starts_with("package_manager")
-            && line.contains("\"bun\"")
-            && line.contains('=')
-        {
-            changed = true;
-            continue;
-        }
-        sanitized.push_str(line);
-        sanitized.push('\n');
-    }
-
-    if !sanitized.contains("[test.validator]") {
-        let rpc_port = pick_free_port()?;
-        let faucet_port = pick_free_port()?;
-        let gossip_port = pick_free_port()?;
-        if !sanitized.ends_with('\n') {
-            sanitized.push('\n');
-        }
-        sanitized.push_str("\n[test.validator]\n");
-        sanitized.push_str(&format!("rpc_port = {rpc_port}\n"));
-        sanitized.push_str(&format!("faucet_port = {faucet_port}\n"));
-        sanitized.push_str(&format!("gossip_port = {gossip_port}\n"));
-        changed = true;
-    }
-
-    if !changed {
-        return Ok(None);
-    }
-
-    fs::write(&anchor_toml, sanitized)
-        .with_context(|| format!("failed to write {}", anchor_toml.display()))?;
-
-    Ok(Some(AnchorTomlRestoreGuard {
-        path: anchor_toml,
-        original,
-    }))
-}
-
-fn run_program_anchor_verify_sync(root: &Path) -> Result<()> {
-    let program_root = root.join("program");
-    let env = program_tool_env(&program_root);
-
-    ensure(
-        command_exists("cargo-build-sbf"),
-        "cargo-build-sbf not found on PATH",
-    )?;
-
-    let so_path = program_root.join("target/deploy/edgerun.so");
-    let manifest = program_root.join("programs/edgerun_program/Cargo.toml");
-    let source_dir = program_root.join("programs/edgerun_program/src");
-
-    let needs_sbf = !so_path.is_file()
-        || file_is_newer(&manifest, &so_path)?
-        || any_file_newer(&source_dir, &so_path)?;
-    if needs_sbf {
-        run_program_sync_with_env(
-            "Build SBF artifact",
-            "cargo",
-            &[
-                "build-sbf",
-                "--manifest-path",
-                "programs/edgerun_program/Cargo.toml",
-                "--sbf-out-dir",
-                "target/deploy",
-            ],
-            &program_root,
-            false,
-            &env,
-        )?;
-    }
-
-    let idl_path = program_root.join("target/idl/edgerun_program.json");
-    let needs_idl = !idl_path.is_file()
-        || file_is_newer(&manifest, &idl_path)?
-        || any_file_newer(&source_dir, &idl_path)?;
-    if needs_idl {
-        fs::create_dir_all(idl_path.parent().unwrap_or(&program_root))?;
-        let _anchor_guard = prepare_anchor_config_for_cli(&program_root)?;
-        run_program_sync_with_env(
-            "Build Program IDL",
-            "anchor",
-            &[
-                "idl",
-                "build",
-                "-p",
-                "edgerun_program",
-                "-o",
-                "target/idl/edgerun_program.json",
-            ],
-            &program_root,
-            false,
-            &env,
-        )?;
-    }
-
-    let idl_alias = program_root.join("target/idl/edgerun.json");
-    if idl_path.is_file() && !idl_alias.exists() {
-        #[cfg(unix)]
-        std::os::unix::fs::symlink("edgerun_program.json", &idl_alias)
-            .with_context(|| format!("failed to symlink {}", idl_alias.display()))?;
-    }
-
-    let _anchor_guard = prepare_anchor_config_for_cli(&program_root)?;
-    run_program_sync_with_env(
-        "Anchor test --skip-build",
-        "anchor",
-        &["test", "--skip-build"],
-        &program_root,
-        false,
-        &env,
     )
-}
-
-fn file_is_newer(candidate: &Path, base: &Path) -> Result<bool> {
-    if !candidate.is_file() || !base.is_file() {
-        return Ok(false);
-    }
-    let c = fs::metadata(candidate)?.modified()?;
-    let b = fs::metadata(base)?.modified()?;
-    Ok(c > b)
-}
-
-fn any_file_newer(dir: &Path, base: &Path) -> Result<bool> {
-    if !dir.is_dir() || !base.is_file() {
-        return Ok(false);
-    }
-    let base_ts = fs::metadata(base)?.modified()?;
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(current) = stack.pop() {
-        for entry in fs::read_dir(&current)? {
-            let entry = entry?;
-            let path = entry.path();
-            if entry.file_type()?.is_dir() {
-                stack.push(path);
-            } else if entry.file_type()?.is_file() {
-                let modified = fs::metadata(&path)?.modified()?;
-                if modified > base_ts {
-                    return Ok(true);
-                }
-            }
-        }
-    }
-    Ok(false)
 }
 
 fn run_matrix_validation_check_sync(root: &Path) -> Result<()> {
@@ -1082,7 +818,6 @@ fn expected_spdx_for_path(path: &str) -> Option<&'static str> {
         p if p.starts_with("crates/edgerun-cli/")
             || p.starts_with("crates/edgerun-runtime/")
             || p.starts_with("crates/edgerun-worker/")
-            || p.starts_with("program/")
             || p.starts_with("docs/")
             || p.starts_with("scripts/") =>
         {
@@ -1102,9 +837,7 @@ fn is_supported_spdx_source(path: &str) -> bool {
 }
 
 fn is_generated_spdx_exempt(path: &str) -> bool {
-    path.starts_with("program/target/")
-        || path.starts_with("program/target-local/")
-        || path.starts_with("out/")
+    path.starts_with("out/")
 }
 
 fn run_spdx_check_sync(root: &Path) -> Result<()> {
@@ -1159,132 +892,6 @@ fn run_spdx_check_sync(root: &Path) -> Result<()> {
         println!("SPDX check passed.");
         Ok(())
     }
-}
-
-fn run_program_anchor_build_sync(root: &Path) -> Result<()> {
-    let program_root = root.join("program");
-    let env = program_tool_env(&program_root);
-    run_program_sync_with_env(
-        "Build Program",
-        "anchor",
-        &["build"],
-        &program_root,
-        false,
-        &env,
-    )
-}
-
-fn run_program_local_tests_sync(root: &Path) -> Result<()> {
-    let program_root = root.join("program");
-    let env = program_tool_env(&program_root);
-    let program_id = "A2ac8yDnTXKfZCHWqcJVYFfR2jv65kezW95XTgrrdbtG";
-    let ledger_dir = program_root.join(".anchor/manual-test-ledger");
-    let validator_log = ledger_dir.join("validator.log");
-    std::fs::create_dir_all(&ledger_dir)?;
-
-    run_program_anchor_build_sync(root)?;
-
-    let log_file = std::fs::File::create(&validator_log)
-        .with_context(|| format!("failed creating {}", validator_log.display()))?;
-    let log_file_err = log_file.try_clone()?;
-    let mut validator = std::process::Command::new("solana-test-validator")
-        .arg("--reset")
-        .arg("--ledger")
-        .arg(&ledger_dir)
-        .arg("--rpc-port")
-        .arg("8899")
-        .arg("--faucet-port")
-        .arg("9900")
-        .arg("--bpf-program")
-        .arg(program_id)
-        .arg(program_target_dir(&program_root).join("deploy/edgerun.so"))
-        .current_dir(&program_root)
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(log_file_err))
-        .spawn()
-        .context("failed to start solana-test-validator")?;
-
-    let test_result = (|| -> Result<()> {
-        let mut ready = false;
-        for _ in 0..60 {
-            let status = std::process::Command::new("solana")
-                .arg("cluster-version")
-                .arg("--url")
-                .arg("http://127.0.0.1:8899")
-                .current_dir(&program_root)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-            if matches!(status, Ok(s) if s.success()) {
-                ready = true;
-                break;
-            }
-            thread::sleep(Duration::from_millis(500));
-        }
-        ensure(
-            ready,
-            &format!(
-                "validator did not become ready; check {}",
-                validator_log.display()
-            ),
-        )?;
-
-        let mut cmd = std::process::Command::new("bunx");
-        cmd.arg("ts-mocha")
-            .arg("-p")
-            .arg("./tsconfig.json")
-            .arg("-t")
-            .arg("1000000")
-            .arg("tests/**/*.ts")
-            .current_dir(&program_root)
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .env("ANCHOR_PROVIDER_URL", "http://127.0.0.1:8899")
-            .env("ANCHOR_WALLET", program_root.join(".solana/id.json"))
-            .env("ANCHOR_WS_URL", "ws://127.0.0.1:8900");
-        for (k, v) in &env {
-            cmd.env(k, v);
-        }
-        let status = cmd.status().context("failed to run bunx ts-mocha")?;
-        ensure(status.success(), "program local tests failed")
-    })();
-
-    let _ = validator.kill();
-    let _ = validator.wait();
-    test_result
-}
-
-fn program_target_dir(program_root: &Path) -> PathBuf {
-    std::env::var_os("EDGERUN_PROGRAM_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| program_root.join("target"))
-}
-
-pub(crate) fn program_tool_env(program_root: &Path) -> Vec<(OsString, OsString)> {
-    let cargo_home = program_root.join(".cargo-home");
-    let cargo_install_root = program_root.join(".cargo");
-    let cargo_target_dir = program_target_dir(program_root);
-    let cargo_bin_dir = cargo_install_root.join("bin");
-
-    let mut paths = vec![cargo_bin_dir];
-    if let Some(existing) = std::env::var_os("PATH") {
-        paths.extend(std::env::split_paths(&existing));
-    }
-    let joined_path = std::env::join_paths(paths).unwrap_or_else(|_| OsString::from(""));
-
-    vec![
-        (OsString::from("CARGO_HOME"), cargo_home.into_os_string()),
-        (
-            OsString::from("CARGO_INSTALL_ROOT"),
-            cargo_install_root.into_os_string(),
-        ),
-        (
-            OsString::from("CARGO_TARGET_DIR"),
-            cargo_target_dir.into_os_string(),
-        ),
-        (OsString::from("PATH"), joined_path),
-    ]
 }
 
 fn load_app_config(root: &Path) -> Result<AppConfig> {

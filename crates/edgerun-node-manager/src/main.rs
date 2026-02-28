@@ -4,13 +4,16 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use clap::{Parser, Subcommand};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgerun_hwvault_primitives::hardware::{
-    load_or_create_device_signer, tpm_nv_available, tpm_nv_read_blob, tpm_nv_write_blob,
-    DeviceSigner, HardwareBackend, HardwareSecurityMode,
+    load_or_create_device_signer, random_token_b64url, tpm_nv_available, tpm_nv_read_blob,
+    tpm_nv_write_blob, DeviceSigner, HardwareBackend, HardwareSecurityMode,
 };
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -20,13 +23,7 @@ const SECURITY_MODE: HardwareSecurityMode = HardwareSecurityMode::TpmRequired;
 const CONFIG_TPM_NV_INDEX: u32 = 0x0150_0026;
 const CONFIG_TPM_NV_SIZE: usize = 4096;
 const DEFAULT_API_BASE: &str = "https://api.edgerun.tech";
-const DEFAULT_RPC_URL: &str = "http://127.0.0.1:8899";
-const DEFAULT_VALIDATOR_WS_URL: &str = "ws://127.0.0.1:8900";
-const DEFAULT_VALIDATOR_LEDGER_DIR: &str = "/run/edgerun/solana-ledger";
-const DEFAULT_VALIDATOR_BIN: &str = "agave-validator";
-const DEFAULT_VALIDATOR_KEYGEN_BIN: &str = "solana-keygen";
-const DEFAULT_VALIDATOR_IDENTITY_PATH: &str = "/run/edgerun/validator-identity.json";
-const VALIDATOR_PID_FILE: &str = "/run/edgerun/agave-validator.pid";
+const DEFAULT_RPC_URL: &str = "local://edgerun";
 const DEFAULT_WORKER_BIN: &str = "/usr/bin/edgerun-worker";
 const DEFAULT_CRUN_BIN: &str = "/usr/bin/crun";
 const WORKER_PID_FILE: &str = "/run/edgerun/edgerun-worker.pid";
@@ -39,6 +36,9 @@ const EDGE_SECUREBOOT_CERT_DER_PATH: &str =
 const EDGE_SECUREBOOT_CERT_PEM_PATH: &str =
     "/etc/edgerun/secureboot/edgerun-secureboot-db-cert.pem";
 const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
+const BOOT_POLICY_VERIFY_KEY_B64URL_ENV: &str = "EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL";
+const RUNTIME_IMAGE_POLICY_SIGNING_CONTEXT: &str = "edgerun-runtime-image-policy-v1";
+const RUNTIME_IMAGE_REQUEST_SIGNING_CONTEXT: &str = "edgerun-runtime-image-request-v1";
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-node-manager", about = "EdgeRun TPM node manager")]
@@ -93,6 +93,18 @@ struct RuntimeImageResponse {
     #[serde(default)]
     image_ref: Option<String>,
     #[serde(default)]
+    request_nonce_b64url: Option<String>,
+    #[serde(default)]
+    issued_at_unix_s: Option<u64>,
+    #[serde(default)]
+    valid_until_unix_s: Option<u64>,
+    #[serde(default)]
+    rollback_index: Option<u64>,
+    #[serde(default)]
+    signature_b64url: Option<String>,
+    #[serde(default)]
+    signing_key_id: Option<String>,
+    #[serde(default)]
     error: Option<String>,
 }
 
@@ -123,23 +135,25 @@ struct RuntimeImageRequest<'a> {
     owner_pubkey: &'a str,
     device_pubkey_b64url: &'a str,
     rpc_url: &'a str,
+    request_nonce_b64url: &'a str,
+    request_issued_at_unix_s: u64,
+    request_signature_b64url: &'a str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ManagerConfig {
     api_base: String,
     rpc_url: String,
-    validator_ws_url: String,
-    validator_ledger_dir: String,
     worker_max_concurrency: u32,
     worker_mem_bytes: u64,
     #[serde(default)]
     runtime_image_ref: Option<String>,
     #[serde(default)]
     runtime_image_pulled: bool,
+    #[serde(default)]
+    runtime_policy_rollback_index: u64,
     heartbeat_secs: u64,
     bonded: bool,
-    stake_initialized: bool,
     node_initialized: bool,
     owner_pubkey: Option<String>,
 }
@@ -301,15 +315,13 @@ fn cmd_configure(_rpc_url: &str, heartbeat_secs: u64) -> Result<()> {
     let cfg = ManagerConfig {
         api_base: DEFAULT_API_BASE.to_string(),
         rpc_url: DEFAULT_RPC_URL.to_string(),
-        validator_ws_url: DEFAULT_VALIDATOR_WS_URL.to_string(),
-        validator_ledger_dir: DEFAULT_VALIDATOR_LEDGER_DIR.to_string(),
         worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
         worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
         runtime_image_ref: None,
         runtime_image_pulled: false,
+        runtime_policy_rollback_index: 0,
         heartbeat_secs,
         bonded: false,
-        stake_initialized: false,
         node_initialized: false,
         owner_pubkey: None,
     };
@@ -371,15 +383,13 @@ async fn cmd_run() -> Result<()> {
     let mut cfg = load_config().unwrap_or_else(|_| ManagerConfig {
         api_base: DEFAULT_API_BASE.to_string(),
         rpc_url: DEFAULT_RPC_URL.to_string(),
-        validator_ws_url: DEFAULT_VALIDATOR_WS_URL.to_string(),
-        validator_ledger_dir: DEFAULT_VALIDATOR_LEDGER_DIR.to_string(),
         worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
         worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
         runtime_image_ref: None,
         runtime_image_pulled: false,
+        runtime_policy_rollback_index: 0,
         heartbeat_secs: 15,
         bonded: false,
-        stake_initialized: false,
         node_initialized: false,
         owner_pubkey: None,
     });
@@ -388,12 +398,6 @@ async fn cmd_run() -> Result<()> {
         cfg.heartbeat_secs = 15;
     }
     cfg.rpc_url = DEFAULT_RPC_URL.to_string();
-    if cfg.validator_ws_url.is_empty() {
-        cfg.validator_ws_url = DEFAULT_VALIDATOR_WS_URL.to_string();
-    }
-    if cfg.validator_ledger_dir.is_empty() {
-        cfg.validator_ledger_dir = DEFAULT_VALIDATOR_LEDGER_DIR.to_string();
-    }
     if cfg.worker_max_concurrency == 0 {
         cfg.worker_max_concurrency = DEFAULT_WORKER_MAX_CONCURRENCY;
     }
@@ -402,9 +406,8 @@ async fn cmd_run() -> Result<()> {
     }
 
     let client = Client::new();
-    ensure_local_validator(&client, &mut cfg).await?;
     bootstrap_api_state(&client, &signer, &mut cfg, boot_policy.as_ref()).await?;
-    ensure_runtime_image_ready(&client, &mut cfg, &signer.public_key_b64url).await?;
+    ensure_runtime_image_ready(&client, &mut cfg, &signer).await?;
     ensure_worker_running(&cfg, &signer.public_key_b64url)?;
     save_config(&cfg)?;
 
@@ -413,7 +416,6 @@ async fn cmd_run() -> Result<()> {
     println!("device_pubkey_b64url={}", signer.public_key_b64url);
     println!("api_base={}", cfg.api_base);
     println!("rpc_url={}", cfg.rpc_url);
-    println!("validator_ws_url={}", cfg.validator_ws_url);
     println!("worker_max_concurrency={}", cfg.worker_max_concurrency);
     println!("worker_mem_bytes={}", cfg.worker_mem_bytes);
     if let Some(image_ref) = cfg.runtime_image_ref.as_deref() {
@@ -421,11 +423,8 @@ async fn cmd_run() -> Result<()> {
     }
 
     loop {
-        if let Err(err) = ensure_local_validator(&client, &mut cfg).await {
-            eprintln!("validator_error={err}");
-        }
         if !cfg.runtime_image_pulled {
-            match ensure_runtime_image_ready(&client, &mut cfg, &signer.public_key_b64url).await {
+            match ensure_runtime_image_ready(&client, &mut cfg, &signer).await {
                 Ok(()) => {
                     let _ = save_config(&cfg);
                 }
@@ -628,21 +627,6 @@ async fn bootstrap_api_state(
         .as_deref()
         .ok_or_else(|| anyhow!("owner_pubkey missing after bonding"))?;
 
-    if !cfg.stake_initialized {
-        call_ok_json(
-            client,
-            &format!("{}/v1/node/stake/init", cfg.api_base),
-            &NodeInitRequest {
-                owner_pubkey,
-                device_pubkey_b64url: &signer.public_key_b64url,
-                rpc_url: &cfg.rpc_url,
-            },
-        )
-        .await?;
-        cfg.stake_initialized = true;
-        println!("status=stake-initialized");
-    }
-
     if !cfg.node_initialized {
         call_ok_json(
             client,
@@ -659,122 +643,6 @@ async fn bootstrap_api_state(
     }
 
     Ok(())
-}
-
-async fn ensure_local_validator(client: &Client, cfg: &mut ManagerConfig) -> Result<()> {
-    cfg.rpc_url = DEFAULT_RPC_URL.to_string();
-
-    if validator_healthy(client, &cfg.rpc_url).await {
-        return Ok(());
-    }
-
-    if let Some(pid) = read_validator_pid() {
-        if pid_alive(pid) {
-            wait_for_validator(client, &cfg.rpc_url, Duration::from_secs(20)).await?;
-            return Ok(());
-        }
-    }
-
-    let rpc_port = reqwest::Url::parse(&cfg.rpc_url)
-        .context("invalid rpc_url for local validator")?
-        .port_or_known_default()
-        .ok_or_else(|| anyhow!("rpc_url missing port: {}", cfg.rpc_url))?;
-
-    let ws_port = reqwest::Url::parse(&cfg.validator_ws_url)
-        .context("invalid validator_ws_url")?
-        .port_or_known_default()
-        .ok_or_else(|| anyhow!("validator_ws_url missing port: {}", cfg.validator_ws_url))?;
-
-    fs::create_dir_all("/run/edgerun").context("failed to create /run/edgerun")?;
-    fs::create_dir_all(&cfg.validator_ledger_dir)
-        .with_context(|| format!("failed to create {}", cfg.validator_ledger_dir))?;
-    ensure_validator_identity(DEFAULT_VALIDATOR_IDENTITY_PATH)?;
-    ensure_validator_ledger_initialized(&cfg.validator_ledger_dir)?;
-
-    let mut log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/run/edgerun/agave-validator.log")
-        .context("failed to open validator log file")?;
-    writeln!(log_file, "=== starting agave-validator ===").ok();
-    let log_file_err = log_file
-        .try_clone()
-        .context("failed to clone validator log fd")?;
-
-    let mut child = Command::new(DEFAULT_VALIDATOR_BIN)
-        .arg("--identity")
-        .arg(DEFAULT_VALIDATOR_IDENTITY_PATH)
-        .arg("--ledger")
-        .arg(&cfg.validator_ledger_dir)
-        .arg("--rpc-bind-address")
-        .arg("127.0.0.1")
-        .arg("--rpc-port")
-        .arg(rpc_port.to_string())
-        .arg("--dynamic-port-range")
-        .arg(format!("{ws_port}-{}", ws_port + 40))
-        .arg("--bind-address")
-        .arg("127.0.0.1")
-        .arg("--no-voting")
-        .arg("--private-rpc")
-        .arg("--full-rpc-api")
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(log_file_err))
-        .spawn()
-        .context("failed to spawn agave-validator")?;
-
-    let pid = child.id();
-    fs::write(VALIDATOR_PID_FILE, pid.to_string()).context("failed to write validator pid file")?;
-
-    // Detach child; manager keeps liveness through pid+health checks.
-    let _ = child.stdout.take();
-    let _ = child.stderr.take();
-
-    wait_for_validator(client, &cfg.rpc_url, Duration::from_secs(45)).await?;
-    println!("status=validator-started pid={pid} rpc_url={}", cfg.rpc_url);
-    Ok(())
-}
-
-fn ensure_validator_identity(identity_path: &str) -> Result<()> {
-    if Path::new(identity_path).exists() {
-        return Ok(());
-    }
-    let rc = Command::new(DEFAULT_VALIDATOR_KEYGEN_BIN)
-        .arg("new")
-        .arg("--no-bip39-passphrase")
-        .arg("--silent")
-        .arg("--force")
-        .arg("--outfile")
-        .arg(identity_path)
-        .status()
-        .context("failed to launch solana-keygen")?;
-    if !rc.success() {
-        return Err(anyhow!(
-            "solana-keygen failed creating validator identity: {rc}"
-        ));
-    }
-    Ok(())
-}
-
-fn ensure_validator_ledger_initialized(ledger_dir: &str) -> Result<()> {
-    let genesis = Path::new(ledger_dir).join("genesis.bin");
-    if genesis.exists() {
-        return Ok(());
-    }
-    let rc = Command::new(DEFAULT_VALIDATOR_BIN)
-        .arg("--ledger")
-        .arg(ledger_dir)
-        .arg("init")
-        .status()
-        .context("failed to launch agave-validator init")?;
-    if !rc.success() {
-        return Err(anyhow!("agave-validator init failed with status {rc}"));
-    }
-    Ok(())
-}
-
-fn read_validator_pid() -> Option<u32> {
-    let raw = fs::read_to_string(VALIDATOR_PID_FILE).ok()?;
-    raw.trim().parse::<u32>().ok()
 }
 
 fn read_worker_pid() -> Option<u32> {
@@ -828,8 +696,6 @@ fn ensure_worker_running(cfg: &ManagerConfig, worker_pubkey: &str) -> Result<()>
             cfg.worker_max_concurrency.to_string(),
         )
         .env("EDGERUN_WORKER_MEM_BYTES", cfg.worker_mem_bytes.to_string())
-        .env("EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED", "false")
-        .env("EDGERUN_CHAIN_RPC_URL", &cfg.rpc_url)
         .stdout(Stdio::from(log_file))
         .stderr(Stdio::from(log_file_err))
         .spawn()
@@ -839,31 +705,6 @@ fn ensure_worker_running(cfg: &ManagerConfig, worker_pubkey: &str) -> Result<()>
     fs::write(WORKER_PID_FILE, pid.to_string()).context("failed to write worker pid file")?;
     println!("status=worker-started pid={pid} pubkey={worker_pubkey}");
     Ok(())
-}
-
-async fn wait_for_validator(client: &Client, rpc_url: &str, timeout: Duration) -> Result<()> {
-    let deadline = std::time::Instant::now() + timeout;
-    while std::time::Instant::now() < deadline {
-        if validator_healthy(client, rpc_url).await {
-            return Ok(());
-        }
-        sleep(Duration::from_millis(500)).await;
-    }
-    Err(anyhow!("local validator not healthy at {rpc_url}"))
-}
-
-async fn validator_healthy(client: &Client, rpc_url: &str) -> bool {
-    let payload = br#"{"jsonrpc":"2.0","id":1,"method":"getVersion"}"#;
-    match client
-        .post(rpc_url)
-        .header(CONTENT_TYPE, "application/json")
-        .body(payload.to_vec())
-        .send()
-        .await
-    {
-        Ok(resp) => resp.status() == StatusCode::OK,
-        Err(_) => false,
-    }
 }
 
 async fn register_device(
@@ -897,10 +738,10 @@ async fn register_device(
         },
     )?
     .send()
-        .await
-        .with_context(|| format!("handshake request failed: {handshake_url}"))?
-        .error_for_status()
-        .context("handshake endpoint returned error status")?;
+    .await
+    .with_context(|| format!("handshake request failed: {handshake_url}"))?
+    .error_for_status()
+    .context("handshake endpoint returned error status")?;
     let resp: ApiResponse =
         parse_json_response(handshake_resp, "failed to decode handshake response").await?;
 
@@ -920,17 +761,12 @@ async fn register_device(
 async fn ensure_runtime_image_ready(
     client: &Client,
     cfg: &mut ManagerConfig,
-    device_pubkey_b64url: &str,
+    signer: &DeviceSigner,
 ) -> Result<()> {
     if cfg.runtime_image_pulled {
         return Ok(());
     }
-    let owner_pubkey = cfg
-        .owner_pubkey
-        .as_deref()
-        .ok_or_else(|| anyhow!("owner_pubkey missing for runtime image request"))?;
-    let image_ref =
-        request_runtime_image_ref(client, cfg, owner_pubkey, device_pubkey_b64url).await?;
+    let image_ref = request_runtime_image_ref(client, cfg, signer).await?;
     pull_runtime_image(&image_ref)?;
     cfg.runtime_image_ref = Some(image_ref.clone());
     cfg.runtime_image_pulled = true;
@@ -940,14 +776,31 @@ async fn ensure_runtime_image_ready(
 
 async fn request_runtime_image_ref(
     client: &Client,
-    cfg: &ManagerConfig,
-    owner_pubkey: &str,
-    device_pubkey_b64url: &str,
+    cfg: &mut ManagerConfig,
+    signer: &DeviceSigner,
 ) -> Result<String> {
+    let owner_pubkey = cfg
+        .owner_pubkey
+        .as_deref()
+        .ok_or_else(|| anyhow!("owner_pubkey missing for runtime image request"))?
+        .to_string();
+    let request_issued_at_unix_s = now_unix_s()?;
+    let request_nonce_b64url = random_token_b64url(24);
+    let request_canonical = runtime_image_request_canonical_message(
+        &owner_pubkey,
+        &signer.public_key_b64url,
+        &cfg.rpc_url,
+        &request_nonce_b64url,
+        request_issued_at_unix_s,
+    );
+    let request_signature_b64url = signer.sign_b64url(request_canonical.as_bytes());
     let payload = RuntimeImageRequest {
-        owner_pubkey,
-        device_pubkey_b64url,
+        owner_pubkey: &owner_pubkey,
+        device_pubkey_b64url: &signer.public_key_b64url,
         rpc_url: &cfg.rpc_url,
+        request_nonce_b64url: &request_nonce_b64url,
+        request_issued_at_unix_s,
+        request_signature_b64url: &request_signature_b64url,
     };
     let candidate_paths = ["/v1/node/runtime/image-tag", "/v1/node/image-tag"];
     for path in candidate_paths {
@@ -960,19 +813,37 @@ async fn request_runtime_image_ref(
             continue;
         }
         let data: RuntimeImageResponse =
-            parse_json_response(resp, &format!("invalid runtime image response from {url}")).await?;
+            parse_json_response(resp, &format!("invalid runtime image response from {url}"))
+                .await?;
         if !data.ok {
             if let Some(err) = data.error {
                 eprintln!("runtime_image_api_error={err}");
             }
             continue;
         }
-        if let Some(image_ref) = data.image_ref.filter(|s| !s.trim().is_empty()) {
+        if let Some(image_ref) = data.image_ref.as_deref().filter(|s| !s.trim().is_empty()) {
+            let image_ref = image_ref.to_string();
+            verify_runtime_image_policy_response(
+                cfg,
+                &owner_pubkey,
+                &signer.public_key_b64url,
+                &request_nonce_b64url,
+                &data,
+                &image_ref,
+            )?;
             println!("runtime_image_ref_requested={image_ref}");
             return Ok(image_ref);
         }
-        if let Some(tag) = data.image_tag.filter(|s| !s.trim().is_empty()) {
+        if let Some(tag) = data.image_tag.as_deref().filter(|s| !s.trim().is_empty()) {
             let image_ref = format!("ghcr.io/edgerun/worker:{tag}");
+            verify_runtime_image_policy_response(
+                cfg,
+                &owner_pubkey,
+                &signer.public_key_b64url,
+                &request_nonce_b64url,
+                &data,
+                &image_ref,
+            )?;
             println!("runtime_image_tag_requested={tag}");
             return Ok(image_ref);
         }
@@ -1016,6 +887,143 @@ fn pull_runtime_image(image_ref: &str) -> Result<()> {
     ))
 }
 
+fn now_unix_s() -> Result<u64> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock before unix epoch")?
+        .as_secs())
+}
+
+fn runtime_image_request_canonical_message(
+    owner_pubkey: &str,
+    device_pubkey_b64url: &str,
+    rpc_url: &str,
+    request_nonce_b64url: &str,
+    request_issued_at_unix_s: u64,
+) -> String {
+    format!(
+        "{RUNTIME_IMAGE_REQUEST_SIGNING_CONTEXT}\nowner_pubkey={owner_pubkey}\ndevice_pubkey_b64url={device_pubkey_b64url}\nrpc_url={rpc_url}\nrequest_nonce_b64url={request_nonce_b64url}\nrequest_issued_at_unix_s={request_issued_at_unix_s}"
+    )
+}
+
+struct RuntimeImagePolicyCanonicalInput<'a> {
+    owner_pubkey: &'a str,
+    device_pubkey_b64url: &'a str,
+    rpc_url: &'a str,
+    request_nonce_b64url: &'a str,
+    image_ref: &'a str,
+    issued_at_unix_s: u64,
+    valid_until_unix_s: u64,
+    rollback_index: u64,
+}
+
+fn runtime_image_policy_canonical_message(input: &RuntimeImagePolicyCanonicalInput<'_>) -> String {
+    format!(
+        "{RUNTIME_IMAGE_POLICY_SIGNING_CONTEXT}\nowner_pubkey={}\ndevice_pubkey_b64url={}\nrpc_url={}\nrequest_nonce_b64url={}\nimage_ref={}\nissued_at_unix_s={}\nvalid_until_unix_s={}\nrollback_index={}",
+        input.owner_pubkey,
+        input.device_pubkey_b64url,
+        input.rpc_url,
+        input.request_nonce_b64url,
+        input.image_ref,
+        input.issued_at_unix_s,
+        input.valid_until_unix_s,
+        input.rollback_index
+    )
+}
+
+fn parse_ed25519_signature_b64url(signature_b64url: &str) -> Result<Signature> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(signature_b64url.trim().as_bytes())
+        .context("invalid boot policy signature encoding")?;
+    let arr: [u8; 64] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow!("boot policy signature must decode to 64 bytes"))?;
+    Ok(Signature::from_bytes(&arr))
+}
+
+fn load_boot_policy_verifying_key() -> Result<VerifyingKey> {
+    let raw = std::env::var(BOOT_POLICY_VERIFY_KEY_B64URL_ENV).with_context(|| {
+        format!("missing {BOOT_POLICY_VERIFY_KEY_B64URL_ENV} for fail-closed boot policy verify")
+    })?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(raw.trim().as_bytes())
+        .with_context(|| format!("invalid base64url in {BOOT_POLICY_VERIFY_KEY_B64URL_ENV}"))?;
+    let arr: [u8; 32] = bytes.as_slice().try_into().map_err(|_| {
+        anyhow!("{BOOT_POLICY_VERIFY_KEY_B64URL_ENV} must decode to 32-byte ed25519 pubkey")
+    })?;
+    VerifyingKey::from_bytes(&arr).context("invalid ed25519 verifying key bytes")
+}
+
+fn verify_runtime_image_policy_response(
+    cfg: &mut ManagerConfig,
+    owner_pubkey: &str,
+    device_pubkey_b64url: &str,
+    request_nonce_b64url: &str,
+    response: &RuntimeImageResponse,
+    image_ref: &str,
+) -> Result<()> {
+    let response_nonce = response
+        .request_nonce_b64url
+        .as_deref()
+        .ok_or_else(|| anyhow!("runtime policy response missing request_nonce_b64url"))?;
+    if response_nonce != request_nonce_b64url {
+        return Err(anyhow!(
+            "runtime policy nonce mismatch (expected {request_nonce_b64url}, got {response_nonce})"
+        ));
+    }
+    let issued_at_unix_s = response
+        .issued_at_unix_s
+        .ok_or_else(|| anyhow!("runtime policy response missing issued_at_unix_s"))?;
+    let valid_until_unix_s = response
+        .valid_until_unix_s
+        .ok_or_else(|| anyhow!("runtime policy response missing valid_until_unix_s"))?;
+    if valid_until_unix_s <= issued_at_unix_s {
+        return Err(anyhow!(
+            "runtime policy validity window is invalid ({issued_at_unix_s}..{valid_until_unix_s})"
+        ));
+    }
+    let now = now_unix_s()?;
+    if valid_until_unix_s <= now {
+        return Err(anyhow!(
+            "runtime policy expired at {valid_until_unix_s}, now={now}"
+        ));
+    }
+    let rollback_index = response
+        .rollback_index
+        .ok_or_else(|| anyhow!("runtime policy response missing rollback_index"))?;
+    if rollback_index < cfg.runtime_policy_rollback_index {
+        return Err(anyhow!(
+            "runtime policy rollback detected (stored={}, got={rollback_index})",
+            cfg.runtime_policy_rollback_index
+        ));
+    }
+    let canonical = runtime_image_policy_canonical_message(&RuntimeImagePolicyCanonicalInput {
+        owner_pubkey,
+        device_pubkey_b64url,
+        rpc_url: &cfg.rpc_url,
+        request_nonce_b64url,
+        image_ref,
+        issued_at_unix_s,
+        valid_until_unix_s,
+        rollback_index,
+    });
+    let signature_b64url = response
+        .signature_b64url
+        .as_deref()
+        .ok_or_else(|| anyhow!("runtime policy response missing signature_b64url"))?;
+    let signature = parse_ed25519_signature_b64url(signature_b64url)?;
+    let verifying_key = load_boot_policy_verifying_key()?;
+    verifying_key
+        .verify(canonical.as_bytes(), &signature)
+        .context("runtime policy signature verification failed")?;
+    if let Some(signing_key_id) = response.signing_key_id.as_deref() {
+        println!("runtime_policy_signing_key_id={signing_key_id}");
+    }
+    cfg.runtime_policy_rollback_index = rollback_index;
+    Ok(())
+}
+
 fn command_in_path(cmd: &str) -> bool {
     Command::new("sh")
         .arg("-lc")
@@ -1048,8 +1056,8 @@ async fn send_heartbeat(
         },
     )?
     .send()
-        .await
-        .with_context(|| format!("heartbeat request failed: {url}"))?;
+    .await
+    .with_context(|| format!("heartbeat request failed: {url}"))?;
 
     if resp.status() != StatusCode::OK {
         return Err(anyhow!("heartbeat rejected with status {}", resp.status()));
@@ -1078,7 +1086,11 @@ async fn call_ok_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> 
     Ok(())
 }
 
-fn post_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> Result<reqwest::RequestBuilder> {
+fn post_json<T: Serialize>(
+    client: &Client,
+    url: &str,
+    payload: &T,
+) -> Result<reqwest::RequestBuilder> {
     let body = sonic_rs::to_vec(payload).context("failed to encode json request body")?;
     Ok(client
         .post(url)
@@ -1086,7 +1098,10 @@ fn post_json<T: Serialize>(client: &Client, url: &str, payload: &T) -> Result<re
         .body(body))
 }
 
-async fn parse_json_response<T: DeserializeOwned>(resp: reqwest::Response, context: &str) -> Result<T> {
+async fn parse_json_response<T: DeserializeOwned>(
+    resp: reqwest::Response,
+    context: &str,
+) -> Result<T> {
     let payload = resp
         .bytes()
         .await

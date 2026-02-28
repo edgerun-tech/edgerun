@@ -3,17 +3,6 @@ describe('terminal route device resolution', () => {
   it('keeps route:// targets in the in-app terminal surface (never iframe fallback)', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
-        const provider = {
-          isPhantom: true,
-          isConnected: true,
-          publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' },
-          connect: () => Promise.resolve({ publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' } }),
-          disconnect: () => Promise.resolve(),
-          on: () => {},
-          removeListener: () => {}
-        }
-        win.solana = provider
-        win.phantom = { solana: provider }
         win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
           connected: true,
           address: 'Cypresstest111111111111111111111111111111',

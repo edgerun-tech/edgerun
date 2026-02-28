@@ -1,0 +1,35 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "edgerun-device-cap-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+edgerun-device-cap-core = { path = "../edgerun-device-cap-core" }
+libc = "0.2"
+prost = "0.13"
+serde.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_NetworkManagement_Ndis",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_SystemInformation",
+  "Win32_System_Services",
+  "Win32_System_Threading",
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+prost-build = "0.13"

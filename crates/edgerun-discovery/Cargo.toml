@@ -7,12 +7,8 @@ license.workspace = true
 
 [dependencies]
 async-trait = "0.1"
-bincode.workspace = true
+edgerun-p2p = { path = "../edgerun-p2p" }
 edgerun-transport-core = { path = "../edgerun-transport-core" }
-edgerun-types = { path = "../edgerun-types" }
-futures-util = "0.3"
-tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
-url = "2.5"
 
 [dev-dependencies]
 tokio.workspace = true

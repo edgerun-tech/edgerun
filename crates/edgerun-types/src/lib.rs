@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod control_plane;
+pub mod intent_pipeline;
 
 pub const BUNDLE_HASH_LEN: usize = 32;
 pub const OUTPUT_HASH_LEN: usize = 32;

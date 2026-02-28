@@ -177,36 +177,22 @@ validate_scheduler_env() {
   require_absent_tokens "${base_file}"
 
   local scheduler_addr scheduler_base_url scheduler_data_dir
-  local scheduler_require_chain scheduler_require_policy scheduler_require_sig scheduler_require_attestation scheduler_require_quorum
-  local chain_rpc_url chain_wallet chain_program_id
+  local scheduler_require_policy scheduler_require_sig scheduler_require_attestation scheduler_require_quorum
   scheduler_addr="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_ADDR)" || fail "missing EDGERUN_SCHEDULER_ADDR"
   scheduler_base_url="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_BASE_URL)" || fail "missing EDGERUN_SCHEDULER_BASE_URL"
   scheduler_data_dir="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_DATA_DIR)" || fail "missing EDGERUN_SCHEDULER_DATA_DIR"
-  scheduler_require_chain="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT"
   scheduler_require_policy="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION"
   scheduler_require_sig="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES"
   scheduler_require_attestation="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION)" || fail "missing EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION"
   scheduler_require_quorum="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION)" || fail "missing EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION"
-  chain_rpc_url="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_CHAIN_RPC_URL)" || fail "missing EDGERUN_CHAIN_RPC_URL"
-  chain_wallet="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_CHAIN_WALLET)" || fail "missing EDGERUN_CHAIN_WALLET"
-  chain_program_id="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_CHAIN_PROGRAM_ID)" || fail "missing EDGERUN_CHAIN_PROGRAM_ID"
 
   require_socket "EDGERUN_SCHEDULER_ADDR" "${scheduler_addr}"
   require_http_url "EDGERUN_SCHEDULER_BASE_URL" "${scheduler_base_url}"
   require "EDGERUN_SCHEDULER_DATA_DIR" "${scheduler_data_dir}"
-  require_bool "EDGERUN_SCHEDULER_REQUIRE_CHAIN_CONTEXT" "${scheduler_require_chain}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_POLICY_SESSION" "${scheduler_require_policy}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_WORKER_SIGNATURES" "${scheduler_require_sig}"
   require_bool "EDGERUN_SCHEDULER_REQUIRE_RESULT_ATTESTATION" "${scheduler_require_attestation}"
   require_bool "EDGERUN_SCHEDULER_QUORUM_REQUIRES_ATTESTATION" "${scheduler_require_quorum}"
-  require_http_url "EDGERUN_CHAIN_RPC_URL" "${chain_rpc_url}"
-  require "EDGERUN_SCHEDULER_CHAIN_WALLET" "${chain_wallet}"
-  if [[ "${chain_wallet}" == /* ]]; then
-    validate_file_exists_when_enabled "EDGERUN_CHAIN_WALLET" "${chain_wallet}"
-  else
-    fail "EDGERUN_CHAIN_WALLET must be an absolute path"
-  fi
-  require "EDGERUN_SCHEDULER_CHAIN_PROGRAM_ID" "${chain_program_id}"
 }
 
 validate_worker_common_env() {
@@ -217,18 +203,16 @@ validate_worker_common_env() {
   fi
   require_absent_tokens "${base_file}"
 
-  local scheduler_url worker_runtime_ids worker_max_concurrent worker_mem_bytes worker_chain_submit
+  local scheduler_url worker_runtime_ids worker_max_concurrent worker_mem_bytes
   scheduler_url="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_SCHEDULER_URL)" || fail "missing EDGERUN_SCHEDULER_URL"
   worker_runtime_ids="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_WORKER_RUNTIME_IDS)" || fail "missing EDGERUN_WORKER_RUNTIME_IDS"
   worker_max_concurrent="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_WORKER_MAX_CONCURRENT)" || fail "missing EDGERUN_WORKER_MAX_CONCURRENT"
   worker_mem_bytes="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_WORKER_MEM_BYTES)" || fail "missing EDGERUN_WORKER_MEM_BYTES"
-  worker_chain_submit="$(effective_env_value "${base_file}" "${override_file}" EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED)" || fail "missing EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED"
 
   require_http_url "EDGERUN_SCHEDULER_URL" "${scheduler_url}"
   require_runtime_ids "EDGERUN_WORKER_RUNTIME_IDS" "${worker_runtime_ids}"
   require_int "EDGERUN_WORKER_MAX_CONCURRENT" "${worker_max_concurrent}" 1
   require_int "EDGERUN_WORKER_MEM_BYTES" "${worker_mem_bytes}" 1
-  require_bool "EDGERUN_WORKER_CHAIN_SUBMIT_ENABLED" "${worker_chain_submit}"
 }
 
 validate_worker_instance_env() {
@@ -318,13 +302,6 @@ sed \
   > "${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
 chmod 0644 "${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
 
-sed \
-  -e "s|__ROOT_DIR__|${ROOT_DIR}|g" \
-  -e "s|__HOME__|${HOME}|g" \
-  "${ROOT_DIR}/scripts/systemd/user/solana-test-validator.service" \
-  > "${SYSTEMD_USER_DIR}/solana-test-validator.service"
-chmod 0644 "${SYSTEMD_USER_DIR}/solana-test-validator.service"
-
 SCHEDULER_SOURCE="${PROFILE_DIR}/scheduler.env"
 if [[ ! -f "${SCHEDULER_SOURCE}" ]]; then
   SCHEDULER_SOURCE="${ROOT_DIR}/scripts/systemd/env/scheduler.env.example"
@@ -382,7 +359,6 @@ echo "  ${SYSTEMD_USER_DIR}/edgerun-scheduler.service"
 echo "  ${SYSTEMD_USER_DIR}/edgerun-worker@.service"
 echo "  ${SYSTEMD_USER_DIR}/edgerun-term-server.service"
 echo "  ${SYSTEMD_USER_DIR}/edgerun-cloudflared-term.service"
-echo "  ${SYSTEMD_USER_DIR}/solana-test-validator.service"
 echo
 echo "Config directory:"
 echo "  ${EDGERUN_CFG_DIR}"

@@ -88,8 +88,6 @@ tar \
   --exclude='out' \
   --exclude='target' \
   --exclude='**/target' \
-  --exclude='program/target-local' \
-  --exclude='program/.anchor' \
   --exclude='**/node_modules' \
   --exclude='**/dist' \
   --exclude='**/.next' \

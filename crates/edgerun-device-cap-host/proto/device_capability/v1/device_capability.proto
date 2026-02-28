@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package edgerun.devicecap.v1;
+
+enum CapabilityValueV1 {
+  CAPABILITY_VALUE_V1_UNSPECIFIED = 0;
+  CAPABILITY_VALUE_V1_SUPPORTED = 1;
+  CAPABILITY_VALUE_V1_UNSUPPORTED = 2;
+  CAPABILITY_VALUE_V1_UNKNOWN = 3;
+}
+
+enum ProbeSourceV1 {
+  PROBE_SOURCE_V1_UNSPECIFIED = 0;
+  PROBE_SOURCE_V1_RUNTIME = 1;
+  PROBE_SOURCE_V1_COMPILE_TIME = 2;
+  PROBE_SOURCE_V1_NOT_AVAILABLE = 3;
+}
+
+enum ProbeConfidenceV1 {
+  PROBE_CONFIDENCE_V1_UNSPECIFIED = 0;
+  PROBE_CONFIDENCE_V1_HIGH = 1;
+  PROBE_CONFIDENCE_V1_MEDIUM = 2;
+  PROBE_CONFIDENCE_V1_LOW = 3;
+  PROBE_CONFIDENCE_V1_UNKNOWN = 4;
+}
+
+enum ProbeErrorCodeV1 {
+  PROBE_ERROR_CODE_V1_UNSPECIFIED = 0;
+  PROBE_ERROR_CODE_V1_NONE = 1;
+  PROBE_ERROR_CODE_V1_PERMISSION_DENIED = 2;
+  PROBE_ERROR_CODE_V1_NOT_FOUND = 3;
+  PROBE_ERROR_CODE_V1_PARSE_FAILED = 4;
+  PROBE_ERROR_CODE_V1_IO_FAILURE = 5;
+  PROBE_ERROR_CODE_V1_NOT_SUPPORTED = 6;
+  PROBE_ERROR_CODE_V1_UNKNOWN = 7;
+}
+
+enum BenchmarkStatusV1 {
+  BENCHMARK_STATUS_V1_UNSPECIFIED = 0;
+  BENCHMARK_STATUS_V1_PASS = 1;
+  BENCHMARK_STATUS_V1_DEGRADED = 2;
+  BENCHMARK_STATUS_V1_FAIL = 3;
+  BENCHMARK_STATUS_V1_BLOCKED = 4;
+  BENCHMARK_STATUS_V1_UNKNOWN = 5;
+}
+
+message CapabilitySignalV1 {
+  CapabilityValueV1 value = 1;
+  ProbeSourceV1 source = 2;
+}
+
+message CpuCapabilitiesV1 {
+  CapabilitySignalV1 simd128 = 1;
+  CapabilitySignalV1 simd256 = 2;
+  CapabilitySignalV1 simd512 = 3;
+  CapabilitySignalV1 aes = 4;
+  CapabilitySignalV1 sha2 = 5;
+  CapabilitySignalV1 crc32c = 6;
+  CapabilitySignalV1 random = 7;
+  CapabilitySignalV1 virtualization = 8;
+  CapabilitySignalV1 atomics_64 = 9;
+}
+
+message PlatformCapabilitiesV1 {
+  CapabilitySignalV1 family_unix = 1;
+  CapabilitySignalV1 family_windows = 2;
+  CapabilitySignalV1 family_wasm = 3;
+  CapabilitySignalV1 atomic_8 = 4;
+  CapabilitySignalV1 atomic_16 = 5;
+  CapabilitySignalV1 atomic_32 = 6;
+  CapabilitySignalV1 atomic_64 = 7;
+  CapabilitySignalV1 atomic_ptr = 8;
+  CapabilitySignalV1 panic_abort = 9;
+  CapabilitySignalV1 panic_unwind = 10;
+}
+
+message HostEnvironmentCapabilitiesV1 {
+  CapabilitySignalV1 container_detection = 1;
+  CapabilitySignalV1 memory_limits = 2;
+  CapabilitySignalV1 filesystem_inventory = 3;
+  CapabilitySignalV1 network_inventory = 4;
+  CapabilitySignalV1 gpu_inventory = 5;
+  CapabilitySignalV1 bluetooth_inventory = 6;
+  CapabilitySignalV1 nfc_inventory = 7;
+  CapabilitySignalV1 policy_is_root = 8;
+  CapabilitySignalV1 policy_cap_sys_admin = 9;
+  CapabilitySignalV1 policy_cap_net_admin = 10;
+  CapabilitySignalV1 policy_cap_sys_rawio = 11;
+}
+
+message DeviceDomainStatusV1 {
+  CapabilitySignalV1 detected = 1;
+  CapabilitySignalV1 available = 2;
+  CapabilitySignalV1 in_use = 3;
+}
+
+message DeviceDomainStatusesV1 {
+  DeviceDomainStatusV1 cpu = 1;
+  DeviceDomainStatusV1 storage = 2;
+  DeviceDomainStatusV1 gpu = 3;
+  DeviceDomainStatusV1 ram = 4;
+  DeviceDomainStatusV1 usb = 5;
+  DeviceDomainStatusV1 network = 6;
+  DeviceDomainStatusV1 input = 7;
+  DeviceDomainStatusV1 output = 8;
+}
+
+message DomainFieldDiagnosticV1 {
+  ProbeConfidenceV1 confidence = 1;
+  ProbeErrorCodeV1 error = 2;
+  optional string source_path = 3;
+}
+
+message DeviceDomainDiagnosticV1 {
+  DomainFieldDiagnosticV1 detected = 1;
+  DomainFieldDiagnosticV1 available = 2;
+  DomainFieldDiagnosticV1 in_use = 3;
+}
+
+message DeviceDomainDiagnosticsV1 {
+  DeviceDomainDiagnosticV1 cpu = 1;
+  DeviceDomainDiagnosticV1 storage = 2;
+  DeviceDomainDiagnosticV1 gpu = 3;
+  DeviceDomainDiagnosticV1 ram = 4;
+  DeviceDomainDiagnosticV1 usb = 5;
+  DeviceDomainDiagnosticV1 network = 6;
+  DeviceDomainDiagnosticV1 input = 7;
+  DeviceDomainDiagnosticV1 output = 8;
+}
+
+message QuantitativeResourcesV1 {
+  optional uint32 cpu_logical_cores_total = 1;
+  optional uint32 cpu_logical_cores_allocatable = 2;
+  optional uint64 ram_bytes_total = 3;
+  optional uint64 ram_bytes_available = 4;
+  optional uint64 storage_bytes_total = 5;
+  optional uint64 storage_bytes_available = 6;
+  optional uint32 gpu_count_total = 7;
+  optional uint32 gpu_count_available = 8;
+  optional uint32 network_interface_count = 9;
+  optional uint32 usb_device_count = 10;
+  optional uint32 input_device_count = 11;
+  optional uint32 output_device_count = 12;
+  optional uint32 bluetooth_adapter_count = 13;
+  optional uint32 nfc_adapter_count = 14;
+  optional uint32 cpu_load_ratio_per_core_milli = 15;
+  optional uint64 ram_bytes_used = 16;
+  optional uint64 storage_bytes_used = 17;
+  optional uint32 network_links_up_count = 18;
+  optional uint32 gpu_busy_percent = 19;
+}
+
+message ReportMetadataV1 {
+  optional uint64 collected_unix_s = 1;
+  optional uint32 ttl_s = 2;
+}
+
+message TargetInfoV1 {
+  string arch = 1;
+  string os = 2;
+  string env = 3;
+  string vendor = 4;
+  string endian = 5;
+  string pointer_width = 6;
+}
+
+message CapabilityReportV1 {
+  TargetInfoV1 target = 1;
+  PlatformCapabilitiesV1 platform = 2;
+  CpuCapabilitiesV1 cpu = 3;
+  DeviceDomainStatusesV1 domains = 4;
+  DeviceDomainDiagnosticsV1 diagnostics = 5;
+  QuantitativeResourcesV1 metrics = 6;
+  ReportMetadataV1 metadata = 7;
+  HostEnvironmentCapabilitiesV1 host = 8;
+}
+
+message DomainResolvedPathsV1 {
+  repeated string detected = 1;
+  repeated string available = 2;
+  repeated string in_use = 3;
+}
+
+message ResolvedSourcePathsV1 {
+  DomainResolvedPathsV1 cpu = 1;
+  DomainResolvedPathsV1 storage = 2;
+  DomainResolvedPathsV1 gpu = 3;
+  DomainResolvedPathsV1 ram = 4;
+  DomainResolvedPathsV1 usb = 5;
+  DomainResolvedPathsV1 network = 6;
+  DomainResolvedPathsV1 input = 7;
+  DomainResolvedPathsV1 output = 8;
+  DomainResolvedPathsV1 bluetooth = 9;
+  DomainResolvedPathsV1 nfc = 10;
+}
+
+message CapabilityReportWithDetailsV1 {
+  CapabilityReportV1 report = 1;
+  ResolvedSourcePathsV1 resolved_sources = 2;
+}
+
+message BenchmarkCaseResultV1 {
+  string domain = 1;
+  string case_id = 2;
+  BenchmarkStatusV1 status = 3;
+  uint32 score_milli = 4;
+  uint64 duration_ms = 5;
+  uint32 sample_count = 6;
+  optional string error_code = 7;
+  string source_path_or_api = 8;
+}
+
+message DomainAvailabilitySummaryV1 {
+  uint32 effective_availability_milli = 1;
+  string confidence = 2;
+  repeated string blockers = 3;
+}
+
+message BenchmarkReportV1 {
+  string profile = 1;
+  uint64 collected_unix_s = 2;
+  uint32 ttl_s = 3;
+  repeated BenchmarkCaseResultV1 cases = 4;
+  map<string, DomainAvailabilitySummaryV1> effective = 5;
+}

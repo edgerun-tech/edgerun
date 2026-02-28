@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { For, createSignal, onCleanup, onMount } from 'solid-js'
 import { Button } from './ui/button'
-import { WalletButton } from './solana/wallet-button'
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet'
 import { PersonalizationMenu } from './personalization-menu'
 import {
@@ -10,7 +9,6 @@ import {
   subscribeTerminalDrawer,
   terminalDrawerActions
 } from '../lib/terminal-drawer-store'
-import { WALLET_SESSION_EVENT, readWalletSession, type WalletSessionState } from '../lib/wallet-session'
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -26,7 +24,6 @@ const navLinks = [
 export function Nav() {
   const [mobileOpen, setMobileOpen] = createSignal(false)
   const [terminalOpen, setTerminalOpen] = createSignal(getTerminalDrawerState().open)
-  const [walletConnected, setWalletConnected] = createSignal(readWalletSession().connected)
   ensureTerminalDrawerStore()
 
   onMount(() => {
@@ -34,14 +31,8 @@ export function Nav() {
     const unsubscribe = subscribeTerminalDrawer((next) => {
       setTerminalOpen(next.open)
     })
-    const onWalletSession = (event: Event) => {
-      const custom = event as CustomEvent<WalletSessionState>
-      setWalletConnected(Boolean(custom.detail?.connected))
-    }
-    window.addEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
     onCleanup(() => {
       unsubscribe()
-      window.removeEventListener(WALLET_SESSION_EVENT, onWalletSession as EventListener)
     })
   })
 
@@ -74,17 +65,15 @@ export function Nav() {
               {mobileOpen() ? 'Close' : 'Menu'}
             </Button>
             <Button
-              variant={terminalOpen() && walletConnected() ? 'default' : 'outline'}
+              variant={terminalOpen() ? 'default' : 'outline'}
               size="sm"
               class="h-9 w-9 p-0"
-              aria-label={walletConnected() ? (terminalOpen() ? 'Close terminal drawer' : 'Open terminal drawer') : 'Connect wallet to use terminal drawer'}
+              aria-label={terminalOpen() ? 'Close terminal drawer' : 'Open terminal drawer'}
               aria-controls="edgerun-terminal-drawer"
-              aria-expanded={walletConnected() ? terminalOpen() : false}
-              aria-pressed={walletConnected() ? terminalOpen() : false}
-              title={walletConnected() ? (terminalOpen() ? 'Close terminal' : 'Open terminal') : 'Connect wallet first'}
-              disabled={!walletConnected()}
+              aria-expanded={terminalOpen()}
+              aria-pressed={terminalOpen()}
+              title={terminalOpen() ? 'Close terminal' : 'Open terminal'}
               onClick={() => {
-                if (!walletConnected()) return
                 terminalDrawerActions.toggle()
               }}
             >
@@ -94,7 +83,6 @@ export function Nav() {
             </Button>
             <PersonalizationMenu />
             <a href="/dashboard/" class="hidden sm:inline-flex"><Button variant="outline" size="sm">Dashboard</Button></a>
-            <div class="hidden sm:block"><WalletButton /></div>
           </div>
         </div>
       </div>
@@ -114,7 +102,6 @@ export function Nav() {
                 </a>
               )}</For>
             </div>
-            <div class="pt-2"><WalletButton /></div>
           </div>
         </SheetContent>
       </Sheet>

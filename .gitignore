@@ -4,17 +4,13 @@
 # Rust build artifacts (fallback if not using out/target)
 /target/
 **/target/
-program/target-local/
 
 # Cloud OS build output and secrets
 cloud-os/dist/
 cloud-os/oauth_creds.json
 
-# Local validator / chain state
+# Local chain state
 /test-ledger/
-/program/test-ledger/
-/program/.anchor/
-/program/.solana/
 
 # Local environment / tooling
 node_modules/

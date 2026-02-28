@@ -36,8 +36,6 @@ workflow_files=(
   "scripts/e2e-local-terminal.sh"
   "frontend/package.json"
   "cloud-os/package.json"
-  "program/package.json"
-  "program/Anchor.toml"
   ".github/workflows/ci.yml"
   ".github/workflows/dependency-review.yml"
   ".github/workflows/frontend-release.yml"
@@ -52,7 +50,6 @@ workflow_files=(
 )
 
 check_pattern "package manager commands" "\\b(npm|pnpm|yarn|npx)\\b" "${workflow_files[@]}"
-check_pattern "anchor package manager" '^package_manager\\s*=\\s*"npm"$' "program/Anchor.toml"
 
 if rg -n --color=never "wrangler deploy" "cloud-os/package.json" "cloud-os/scripts/deploy.sh" | rg -v -- "--config"; then
   echo "[drift] FAIL (wrangler deploy pinning): found wrangler deploy without --config"

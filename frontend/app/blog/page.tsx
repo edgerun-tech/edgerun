@@ -21,7 +21,7 @@ export default function BlogPage() {
             <Card class="h-full transition-colors hover:border-primary/50">
               <CardHeader>
                 <CardTitle>{featured?.title || 'Introducing Edgerun'}</CardTitle>
-                <CardDescription>{featured?.excerpt || 'Deterministic compute on Solana with verifiable settlement.'}</CardDescription>
+                <CardDescription>{featured?.excerpt || 'Deterministic compute with verifiable execution and transparent receipts.'}</CardDescription>
               </CardHeader>
               <CardContent><p class="text-sm text-muted-foreground">{featured ? `${formatShortDate(featured.publishedAt)} • ${featured.readingTime} min read` : 'Published soon'}</p></CardContent>
             </Card>

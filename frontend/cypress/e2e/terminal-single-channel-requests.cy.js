@@ -8,17 +8,6 @@ describe('terminal user requests use a single control channel', () => {
 
     cy.visit('/', {
       onBeforeLoad(win) {
-        const provider = {
-          isPhantom: true,
-          isConnected: true,
-          publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' },
-          connect: () => Promise.resolve({ publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' } }),
-          disconnect: () => Promise.resolve(),
-          on: () => {},
-          removeListener: () => {}
-        }
-        win.solana = provider
-        win.phantom = { solana: provider }
         win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
           connected: true,
           address: 'Cypresstest111111111111111111111111111111',
@@ -57,15 +46,6 @@ describe('terminal user requests use a single control channel', () => {
   it('uses scheduler websocket signaling and keeps terminal controls labeled', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
-        const provider = {
-          isPhantom: true,
-          isConnected: true,
-          publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' },
-          connect: () => Promise.resolve({ publicKey: { toString: () => 'Cypresstest111111111111111111111111111111' } }),
-          disconnect: () => Promise.resolve(),
-          on: () => {},
-          removeListener: () => {}
-        }
         const NativeWebSocket = win.WebSocket
         const openedWsUrls = []
         const WrappedWebSocket = function WrappedWebSocket(url, protocols) {
@@ -78,8 +58,6 @@ describe('terminal user requests use a single control channel', () => {
         Object.setPrototypeOf(WrappedWebSocket, NativeWebSocket)
         win.WebSocket = WrappedWebSocket
         win.__openedWsUrls = openedWsUrls
-        win.solana = provider
-        win.phantom = { solana: provider }
         win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
           connected: true,
           address: 'Cypresstest111111111111111111111111111111',

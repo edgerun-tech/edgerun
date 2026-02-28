@@ -13,7 +13,7 @@ export function HeroSection() {
           <h1 class="text-balance text-5xl font-bold leading-tight md:text-6xl lg:text-7xl">Dependable Compute.<br />Financially Enforced.<br />Independently verifiable.</h1>
           <p class="mx-auto max-w-3xl text-balance text-xl leading-relaxed text-muted-foreground md:text-2xl">Security by stake. Pricing by deterministic work.</p>
           <p class="mx-auto max-w-3xl text-sm leading-relaxed text-muted-foreground" data-deployment-detail>
-            Cluster availability is derived from deployed on-chain program IDs.
+            Cluster availability is derived from active scheduler and worker telemetry.
           </p>
           <div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <a href="/run/"><Button size="lg">Run a Job</Button></a>

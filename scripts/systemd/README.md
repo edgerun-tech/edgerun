@@ -58,9 +58,7 @@ This creates:
 - `~/.config/systemd/user/edgerun-scheduler.service`
 - `~/.config/systemd/user/edgerun-worker@.service`
 - `~/.config/systemd/user/edgerun-term-server.service`
-- `~/.config/systemd/user/edgerun-cloudflared-term.service`
-- `~/.config/systemd/user/solana-test-validator.service`
-- `~/.config/edgerun/scheduler.env`
+- `~/.config/systemd/user/edgerun-cloudflared-term.service`- `~/.config/edgerun/scheduler.env`
 - `~/.config/edgerun/worker-common.env`
 - `~/.config/edgerun/workers/{1,2,3}.env`
 - `~/.config/edgerun/term-server.env`
@@ -120,20 +118,6 @@ systemctl --user is-enabled edgerun-cloudflared-term.service
 ```
 
 All outputs should be `enabled`.
-
-## Local Solana Test Validator (Local Dev Profile)
-
-If you use local chain mode, start it after install:
-
-```bash
-systemctl --user enable --now solana-test-validator.service
-```
-
-Expected log path:
-
-```bash
-journalctl --user -u solana-test-validator.service -f
-```
 
 ## Service Controls
 
