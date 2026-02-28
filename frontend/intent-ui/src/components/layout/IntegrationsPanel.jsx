@@ -1,15 +1,12 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { Portal } from "solid-js/web";
 import {
-  FiGithub,
   FiLink2,
   FiCheckCircle,
   FiCloud,
   FiDatabase,
   FiCpu,
-  FiGlobe,
-  FiBox,
   FiSearch,
-  FiKey,
   FiXCircle,
   FiShield,
   FiArrowRight,
@@ -17,26 +14,37 @@ import {
   FiZap,
   FiLock
 } from "solid-icons/fi";
+import {
+  SiGithub,
+  SiGoogle,
+  SiCloudflare,
+  SiVercel,
+  SiTelegram,
+  SiWhatsapp,
+  SiMessenger,
+  SiTailscale,
+  SiWeb3dotjs
+} from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
 import { profileRuntime } from "../../stores/profile-runtime";
 import { getProfileSecret, setProfileSecret } from "../../stores/profile-secrets";
 
 const providerMeta = {
-  github: { id: "github", name: "GitHub", icon: FiGithub, tone: "text-neutral-100", tokenHint: "GitHub token", useToken: true },
-  cloudflare: { id: "cloudflare", name: "Cloudflare", icon: FiCloud, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true },
-  vercel: { id: "vercel", name: "Vercel", icon: FiBox, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true },
-  google: { id: "google", name: "Google", icon: FiGlobe, tone: "text-blue-300", useToken: false, oauthRedirect: true },
-  google_photos: { id: "google_photos", name: "Google Photos", icon: FiGlobe, tone: "text-sky-300", useToken: false, oauthRedirect: true },
-  email: { id: "email", name: "Email", icon: FiGlobe, tone: "text-indigo-300", tokenHint: "Email provider token", useToken: true },
-  whatsapp: { id: "whatsapp", name: "WhatsApp", icon: FiGlobe, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true },
-  messenger: { id: "messenger", name: "Messenger", icon: FiGlobe, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true },
-  telegram: { id: "telegram", name: "Telegram", icon: FiGlobe, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true },
+  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub token", useToken: true },
+  cloudflare: { id: "cloudflare", name: "Cloudflare", icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true },
+  vercel: { id: "vercel", name: "Vercel", icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true },
+  google: { id: "google", name: "Google", icon: SiGoogle, tone: "text-blue-300", useToken: false, oauthRedirect: true },
+  google_photos: { id: "google_photos", name: "Google Photos", icon: SiGoogle, tone: "text-sky-300", useToken: false, oauthRedirect: true },
+  email: { id: "email", name: "Email", icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", useToken: true },
+  whatsapp: { id: "whatsapp", name: "WhatsApp", icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true },
+  messenger: { id: "messenger", name: "Messenger", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true },
+  telegram: { id: "telegram", name: "Telegram", icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true },
   qwen: { id: "qwen", name: "Qwen", icon: FiCpu, tone: "text-cyan-300", tokenHint: "Qwen token", useToken: true },
   codex_cli: { id: "codex_cli", name: "Codex CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false },
-  tailscale: { id: "tailscale", name: "Tailscale", icon: FiShield, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },
+  tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },
   hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true },
-  web3: { id: "web3", name: "Web3", icon: FiShield, tone: "text-fuchsia-300", useToken: false }
+  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false }
 };
 
 function IntegrationsPanel(props) {
@@ -297,11 +305,11 @@ function IntegrationsPanel(props) {
                 </button>
                 <button
                   type="button"
-                  class="inline-flex h-6 items-center rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-300 transition hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+                  class="max-w-[84px] truncate text-[10px] text-neutral-300 transition hover:text-[hsl(var(--primary))]"
                   onClick={() => openProviderDialog(provider)}
                   data-testid={`provider-connect-${provider.id}`}
                 >
-                  {provider.connected ? "Manage" : "Connect"}
+                  {provider.name}
                 </button>
                 <div class="pointer-events-none absolute -bottom-9 z-10 hidden whitespace-nowrap rounded border border-neutral-700 bg-[#0b0c0f] px-2 py-1 text-[10px] text-neutral-200 shadow-xl group-hover:block">
                   {provider.name} • {provider.availabilityReason}
@@ -323,8 +331,9 @@ function IntegrationsPanel(props) {
           const verificationMessage = () => String(verification()?.message || "");
           const ProviderIcon = provider.icon || FiCloud;
           return (
-            <div class="fixed inset-0 z-[10040] flex items-center justify-center bg-black/50 px-4">
-              <div class="w-full max-w-lg rounded-xl border border-neutral-700 bg-[#101216] p-4 shadow-2xl" data-testid={`provider-dialog-${provider.id}`}>
+            <Portal>
+              <div class="fixed inset-0 z-[12000] flex items-center justify-center bg-black/70 px-4 py-6">
+                <div class="h-[min(88vh,980px)] w-[min(1120px,96vw)] overflow-auto rounded-xl border border-neutral-700 bg-[#101216] p-5 shadow-2xl" data-testid={`provider-dialog-${provider.id}`}>
                 <div class="mb-3 flex items-start justify-between gap-2">
                   <div>
                     <h4 class="flex items-center gap-2 text-sm font-semibold text-white">
@@ -508,8 +517,9 @@ function IntegrationsPanel(props) {
                     </button>
                   </Show>
                 </div>
+                </div>
               </div>
-            </div>
+            </Portal>
           );
         }}
       </Show>
