@@ -292,7 +292,10 @@ function WorkflowOverlay() {
       `edgerun-node-manager tunnel-connect --relay-control-base https://relay.edgerun.tech --pairing-code \"${pairingCode}\"`,
       "",
       "# 3) Start node manager with local bridge for browser eventbus",
-      `edgerun-node-manager run --local-bridge-listen ${localBridgeListen}`
+      `edgerun-node-manager run --local-bridge-listen ${localBridgeListen}`,
+      "",
+      "# 4) Optional: keep it running on boot (if package installs service unit)",
+      "sudo systemctl enable --now edgerun-node-manager.service"
     ].join("\\n");
   });
   const copyConnectScript = async () => {

@@ -11,10 +11,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{anyhow, Context, Result};
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE};
+use axum::http::header::{
+    ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
+    CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE,
+};
 use axum::http::{HeaderValue, StatusCode as AxumStatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, options};
 use axum::Router;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -703,6 +706,16 @@ fn now_unix_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn local_bridge_envelope(topic: &str, source: &str) -> LocalEventEnvelopeV1 {
+    LocalEventEnvelopeV1 {
+        event_id: format!("local-{}", now_unix_ms()),
+        topic: topic.to_string(),
+        payload: vec![],
+        source: source.to_string(),
+        ts_unix_ms: now_unix_ms(),
+    }
+}
+
 fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> Result<()> {
     let addr: SocketAddr = local_bridge_listen
         .parse()
@@ -720,6 +733,7 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
     };
     let app = Router::new()
         .route("/v1/local/node/info.pb", get(handle_local_node_info))
+        .route("/v1/local/node/info.pb", options(handle_local_options))
         .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
         .with_state(Arc::new(state));
     tokio::spawn(async move {
@@ -756,8 +770,29 @@ async fn handle_local_node_info(State(state): State<Arc<LocalBridgeState>>) -> R
                 HeaderValue::from_static("application/x-protobuf"),
             ),
             (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+            (ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*")),
+            (
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                HeaderValue::from_static("content-type"),
+            ),
+            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
         ],
         payload,
+    )
+        .into_response()
+}
+
+async fn handle_local_options() -> Response {
+    (
+        AxumStatusCode::NO_CONTENT,
+        [
+            (ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*")),
+            (
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                HeaderValue::from_static("content-type"),
+            ),
+            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+        ],
     )
         .into_response()
 }
@@ -788,6 +823,14 @@ async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>)
         }
     });
 
+    let connected = local_bridge_envelope("local.bridge.connected", "node-manager");
+    {
+        let mut ws = socket.lock().await;
+        let _ = ws
+            .send(WsMessage::Binary(connected.encode_to_vec().into()))
+            .await;
+    }
+
     let mut inbound_open = true;
     while inbound_open {
         let next = {
@@ -805,8 +848,9 @@ async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>)
             }
             WsMessage::Text(text) => {
                 if text.trim() == "ping" {
+                    let pong = local_bridge_envelope("local.bridge.pong", "node-manager");
                     let mut ws = socket.lock().await;
-                    let _ = ws.send(WsMessage::Text("pong".into())).await;
+                    let _ = ws.send(WsMessage::Binary(pong.encode_to_vec().into())).await;
                 }
             }
             WsMessage::Close(_) => inbound_open = false,

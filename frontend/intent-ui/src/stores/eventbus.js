@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { decodeLocalEventEnvelope, decodeLocalNodeInfoResponse, encodeLocalEventEnvelope } from "../lib/local-bridge-proto";
 import { setDeviceOnlineState, upsertDevice } from "./devices";
 
 const EVENTBUS_TIMELINE_KEY = "intent-ui-eventbus-timeline-v1";
@@ -67,6 +68,20 @@ function notifyListeners(event) {
 
 function publishEvent(topic, payload = {}, meta = {}) {
   const normalizedTopic = String(topic || "").trim() || "event.unknown";
+  if (localBridgeSocket && localBridgeSocket.readyState === WebSocket.OPEN && meta?.localBridgeForward !== false) {
+    try {
+      const envelope = encodeLocalEventEnvelope({
+        eventId: `local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+        topic: normalizedTopic,
+        source: String(meta?.source || "browser"),
+        tsUnixMs: Date.now(),
+        payloadBytes: new Uint8Array()
+      });
+      localBridgeSocket.send(envelope);
+    } catch {
+      // ignore local bridge send failures
+    }
+  }
   if (eventBusWorker) {
     eventBusWorker.postMessage({
       type: "publish",
@@ -146,38 +161,14 @@ function initializeLocalBridgeSocket() {
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: true }));
-      upsertDevice({
-        id: LOCAL_BRIDGE_DEVICE_ID,
-        name: "Linux Node Manager",
-        type: "host",
-        os: "Linux",
-        browser: "",
-        online: true,
-        connectedAt: new Date().toISOString(),
-        lastSeenAt: new Date().toISOString(),
-        ip: "127.0.0.1",
-        metadata: {
-          host: "localhost",
-          bridgeUrl: LOCAL_BRIDGE_WS_URL,
-          capabilities: {
-            networkUse: true,
-            storageRead: true,
-            storageWrite: true,
-            display: false,
-            graphics: false,
-            audioOutput: false,
-            usb: true,
-            camera: false,
-            microphone: false,
-            shell: true,
-            fileSystem: true,
-            virtualization: true,
-            hostControl: true,
-            tpm: true
-          }
-        }
-      });
-      socket.send("ping");
+      void hydrateLocalBridgeNodeInfo();
+      socket.send(encodeLocalEventEnvelope({
+        eventId: `bridge-hello-${Date.now()}`,
+        topic: "browser.bridge.hello",
+        source: "intent-ui",
+        tsUnixMs: Date.now(),
+        payloadBytes: new Uint8Array()
+      }));
     };
     socket.onclose = () => {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
@@ -191,12 +182,112 @@ function initializeLocalBridgeSocket() {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
     };
     socket.onmessage = (message) => {
+      if (message?.data instanceof ArrayBuffer) {
+        let envelope = null;
+        try {
+          envelope = decodeLocalEventEnvelope(message.data);
+        } catch {
+          envelope = null;
+        }
+        if (!envelope) return;
+        if (String(envelope.topic || "").trim() === "local.bridge.pong") {
+          setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, true);
+          return;
+        }
+        if (String(envelope.topic || "").trim()) {
+          publishEvent(
+            envelope.topic,
+            {},
+            { source: `local-bridge:${envelope.source || "node-manager"}`, localBridgeForward: false }
+          );
+        }
+        return;
+      }
       if (typeof message?.data === "string" && message.data.trim() === "pong") {
         setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, true);
       }
     };
   } catch {
     setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+  }
+}
+
+async function hydrateLocalBridgeNodeInfo() {
+  try {
+    const response = await fetch("http://127.0.0.1:7777/v1/local/node/info.pb", { cache: "no-store" });
+    if (!response.ok) throw new Error(`node info failed (${response.status})`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const info = decodeLocalNodeInfoResponse(bytes);
+    if (!info.ok) throw new Error(info.error || "node info rejected");
+    upsertDevice({
+      id: info.nodeId || LOCAL_BRIDGE_DEVICE_ID,
+      name: "Linux Node Manager",
+      type: "host",
+      os: "Linux",
+      browser: "",
+      online: true,
+      connectedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      ip: "127.0.0.1",
+      metadata: {
+        host: "localhost",
+        bridgeUrl: `ws://127.0.0.1:7777${info.eventbusWsPath || "/v1/local/eventbus/ws"}`,
+        bridgeVersion: info.bridgeVersion || "v1",
+        devicePubkeyB64url: info.devicePubkeyB64url || "",
+        capabilities: {
+          networkUse: true,
+          storageRead: true,
+          storageWrite: true,
+          display: false,
+          graphics: false,
+          audioOutput: false,
+          usb: true,
+          camera: false,
+          microphone: false,
+          shell: true,
+          fileSystem: true,
+          virtualization: true,
+          hostControl: true,
+          tpm: true
+        }
+      }
+    });
+    if (info.nodeId && info.nodeId !== LOCAL_BRIDGE_DEVICE_ID) {
+      setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, false);
+    }
+  } catch {
+    upsertDevice({
+      id: LOCAL_BRIDGE_DEVICE_ID,
+      name: "Linux Node Manager",
+      type: "host",
+      os: "Linux",
+      browser: "",
+      online: true,
+      connectedAt: new Date().toISOString(),
+      lastSeenAt: new Date().toISOString(),
+      ip: "127.0.0.1",
+      metadata: {
+        host: "localhost",
+        bridgeUrl: LOCAL_BRIDGE_WS_URL,
+        bridgeVersion: "v1",
+        capabilities: {
+          networkUse: true,
+          storageRead: true,
+          storageWrite: true,
+          display: false,
+          graphics: false,
+          audioOutput: false,
+          usb: true,
+          camera: false,
+          microphone: false,
+          shell: true,
+          fileSystem: true,
+          virtualization: true,
+          hostControl: true,
+          tpm: true
+        }
+      }
+    });
   }
 }
 
