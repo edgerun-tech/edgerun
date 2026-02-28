@@ -2,11 +2,20 @@
 use std::ffi::CString;
 use std::fs;
 use std::io::Write;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
+use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
+use axum::extract::State;
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE};
+use axum::http::{HeaderValue, StatusCode as AxumStatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::routing::get;
+use axum::Router;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use clap::{Parser, Subcommand};
@@ -15,8 +24,21 @@ use edgerun_hwvault_primitives::hardware::{
     load_or_create_device_signer, random_token_b64url, tpm_nv_available, tpm_nv_read_blob,
     tpm_nv_write_blob, DeviceSigner, HardwareBackend, HardwareSecurityMode,
 };
+use edgerun_runtime_proto::local::v1::{
+    LocalEventEnvelopeV1, LocalNodeInfoResponseV1,
+};
+use edgerun_runtime_proto::tunnel::v1::{
+    CreatePairingCodeRequestV1, CreatePairingCodeResponseV1, RegisterEndpointRequestV1,
+    RegisterEndpointResponseV1, RegisterWithPairingCodeRequestV1,
+    RegisterWithPairingCodeResponseV1, ReserveDomainRequestV1, ReserveDomainResponseV1,
+    TunnelHeartbeatRequestV1, TunnelHeartbeatResponseV1,
+};
+use futures_util::StreamExt;
+use prost::Message;
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio::sync::broadcast;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 const SECURITY_MODE: HardwareSecurityMode = HardwareSecurityMode::TpmRequired;
@@ -39,6 +61,10 @@ const EFI_UPDATEVAR_BIN: &str = "/usr/bin/efi-updatevar";
 const BOOT_POLICY_VERIFY_KEY_B64URL_ENV: &str = "EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL";
 const RUNTIME_IMAGE_POLICY_SIGNING_CONTEXT: &str = "edgerun-runtime-image-policy-v1";
 const RUNTIME_IMAGE_REQUEST_SIGNING_CONTEXT: &str = "edgerun-runtime-image-request-v1";
+const DEFAULT_TUNNEL_CONTROL_BASE: &str = "https://relay.edgerun.tech";
+const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
+const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
+const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
 #[command(name = "edgerun-node-manager", about = "EdgeRun TPM node manager")]
@@ -64,7 +90,54 @@ enum Commands {
         #[arg(long)]
         owner_pubkey: String,
     },
-    Run,
+    TunnelReserve {
+        #[arg(long, default_value = DEFAULT_TUNNEL_CONTROL_BASE)]
+        relay_control_base: String,
+        #[arg(long, default_value = "")]
+        requested_label: String,
+    },
+    TunnelRegister {
+        #[arg(long, default_value = DEFAULT_TUNNEL_CONTROL_BASE)]
+        relay_control_base: String,
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        node_id: String,
+        #[arg(long)]
+        registration_token: String,
+    },
+    TunnelCreateCode {
+        #[arg(long, default_value = DEFAULT_TUNNEL_CONTROL_BASE)]
+        relay_control_base: String,
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        registration_token: String,
+        #[arg(long, default_value_t = 300)]
+        ttl_seconds: u64,
+    },
+    TunnelConnect {
+        #[arg(long, default_value = DEFAULT_TUNNEL_CONTROL_BASE)]
+        relay_control_base: String,
+        #[arg(long)]
+        pairing_code: String,
+        #[arg(long, default_value = "")]
+        node_id: String,
+    },
+    TunnelHeartbeat {
+        #[arg(long, default_value = DEFAULT_TUNNEL_CONTROL_BASE)]
+        relay_control_base: String,
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        node_id: String,
+        #[arg(long)]
+        session_id: String,
+    },
+    Run {
+        #[arg(long, default_value = DEFAULT_LOCAL_BRIDGE_LISTEN)]
+        local_bridge_listen: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -163,6 +236,14 @@ struct BootPolicy {
     owner_pubkey: Option<String>,
 }
 
+#[derive(Clone)]
+struct LocalBridgeState {
+    node_id: String,
+    device_pubkey_b64url: String,
+    started_unix_ms: u64,
+    tx: broadcast::Sender<LocalEventEnvelopeV1>,
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(err) = run_main().await {
@@ -180,7 +261,9 @@ async fn main() {
 async fn run_main() -> Result<()> {
     bootstrap_pid1_runtime();
     let cli = Cli::parse();
-    match cli.command.unwrap_or(Commands::Run) {
+    match cli.command.unwrap_or(Commands::Run {
+        local_bridge_listen: DEFAULT_LOCAL_BRIDGE_LISTEN.to_string(),
+    }) {
         Commands::Configure {
             rpc_url,
             heartbeat_secs,
@@ -188,7 +271,44 @@ async fn run_main() -> Result<()> {
         Commands::Bond { owner_pubkey } => cmd_bond(&owner_pubkey),
         Commands::Identity => cmd_identity(),
         Commands::Register { owner_pubkey } => cmd_register(&owner_pubkey).await,
-        Commands::Run => cmd_run().await,
+        Commands::TunnelReserve {
+            relay_control_base,
+            requested_label,
+        } => cmd_tunnel_reserve(&relay_control_base, &requested_label).await,
+        Commands::TunnelRegister {
+            relay_control_base,
+            domain,
+            node_id,
+            registration_token,
+        } => cmd_tunnel_register(&relay_control_base, &domain, &node_id, &registration_token).await,
+        Commands::TunnelCreateCode {
+            relay_control_base,
+            domain,
+            registration_token,
+            ttl_seconds,
+        } => {
+            cmd_tunnel_create_code(
+                &relay_control_base,
+                &domain,
+                &registration_token,
+                ttl_seconds,
+            )
+            .await
+        }
+        Commands::TunnelConnect {
+            relay_control_base,
+            pairing_code,
+            node_id,
+        } => cmd_tunnel_connect(&relay_control_base, &pairing_code, &node_id).await,
+        Commands::TunnelHeartbeat {
+            relay_control_base,
+            domain,
+            node_id,
+            session_id,
+        } => cmd_tunnel_heartbeat(&relay_control_base, &domain, &node_id, &session_id).await,
+        Commands::Run {
+            local_bridge_listen,
+        } => cmd_run(&local_bridge_listen).await,
     }
 }
 
@@ -371,7 +491,338 @@ async fn cmd_register(owner_pubkey: &str) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_run() -> Result<()> {
+async fn cmd_tunnel_reserve(relay_control_base: &str, requested_label: &str) -> Result<()> {
+    let signer = load_tpm_signer()?;
+    let client = Client::new();
+    let url = format!(
+        "{}/v1/tunnel/reserve-domain",
+        relay_control_base.trim_end_matches('/')
+    );
+    let payload = ReserveDomainRequestV1 {
+        profile_public_key_b64url: signer.public_key_b64url.clone(),
+        requested_label: requested_label.trim().to_string(),
+    };
+    let response: ReserveDomainResponseV1 = post_protobuf(&client, &url, &payload).await?;
+    if !response.ok {
+        return Err(anyhow!("tunnel reserve failed: {}", response.error.trim()));
+    }
+    println!("status=tunnel-domain-reserved");
+    println!("user_id={}", response.user_id);
+    println!("domain={}", response.domain);
+    println!("reservation_status={}", response.status);
+    println!("registration_token={}", response.registration_token);
+    Ok(())
+}
+
+fn tunnel_registration_message(domain: &str, node_id: &str, nonce_b64url: &str) -> String {
+    format!("edgerun-tunnel-register-v1\ndomain={domain}\nnode_id={node_id}\nnonce={nonce_b64url}")
+}
+
+async fn cmd_tunnel_register(
+    relay_control_base: &str,
+    domain: &str,
+    node_id: &str,
+    registration_token: &str,
+) -> Result<()> {
+    let signer = load_tpm_signer()?;
+    if domain.trim().is_empty() {
+        return Err(anyhow!("domain is required"));
+    }
+    if node_id.trim().is_empty() {
+        return Err(anyhow!("node_id is required"));
+    }
+    if registration_token.trim().is_empty() {
+        return Err(anyhow!("registration_token is required"));
+    }
+    let nonce = random_token_b64url(24);
+    let signature = signer
+        .sign_b64url(tunnel_registration_message(domain.trim(), node_id.trim(), &nonce).as_bytes());
+    let payload = RegisterEndpointRequestV1 {
+        domain: domain.trim().to_string(),
+        node_id: node_id.trim().to_string(),
+        endpoint_public_key_b64url: signer.public_key_b64url.clone(),
+        tunnel_nonce_b64url: nonce,
+        registration_signature_b64url: signature,
+        capability_scopes: vec![],
+        registration_token: registration_token.trim().to_string(),
+    };
+    let client = Client::new();
+    let url = format!(
+        "{}/v1/tunnel/register-endpoint",
+        relay_control_base.trim_end_matches('/')
+    );
+    let response: RegisterEndpointResponseV1 = post_protobuf(&client, &url, &payload).await?;
+    if !response.ok {
+        return Err(anyhow!("tunnel register failed: {}", response.error.trim()));
+    }
+    println!("status=tunnel-endpoint-registered");
+    println!("domain={}", domain.trim());
+    println!("node_id={}", node_id.trim());
+    println!("session_id={}", response.session_id);
+    println!("relay_url={}", response.relay_url);
+    println!("expires_unix_ms={}", response.expires_unix_ms);
+    Ok(())
+}
+
+async fn cmd_tunnel_heartbeat(
+    relay_control_base: &str,
+    domain: &str,
+    node_id: &str,
+    session_id: &str,
+) -> Result<()> {
+    if domain.trim().is_empty() || node_id.trim().is_empty() || session_id.trim().is_empty() {
+        return Err(anyhow!("domain, node_id, and session_id are required"));
+    }
+    let client = Client::new();
+    let url = format!(
+        "{}/v1/tunnel/heartbeat",
+        relay_control_base.trim_end_matches('/')
+    );
+    let payload = TunnelHeartbeatRequestV1 {
+        domain: domain.trim().to_string(),
+        node_id: node_id.trim().to_string(),
+        session_id: session_id.trim().to_string(),
+    };
+    let response: TunnelHeartbeatResponseV1 = post_protobuf(&client, &url, &payload).await?;
+    if !response.ok {
+        return Err(anyhow!(
+            "tunnel heartbeat failed: {}",
+            response.error.trim()
+        ));
+    }
+    println!("status=tunnel-heartbeat-ok");
+    println!("expires_unix_ms={}", response.expires_unix_ms);
+    Ok(())
+}
+
+async fn cmd_tunnel_create_code(
+    relay_control_base: &str,
+    domain: &str,
+    registration_token: &str,
+    ttl_seconds: u64,
+) -> Result<()> {
+    if domain.trim().is_empty() {
+        return Err(anyhow!("domain is required"));
+    }
+    if registration_token.trim().is_empty() {
+        return Err(anyhow!("registration_token is required"));
+    }
+    let client = Client::new();
+    let url = format!(
+        "{}/v1/tunnel/create-pairing-code",
+        relay_control_base.trim_end_matches('/')
+    );
+    let payload = CreatePairingCodeRequestV1 {
+        domain: domain.trim().to_string(),
+        registration_token: registration_token.trim().to_string(),
+        ttl_seconds,
+    };
+    let response: CreatePairingCodeResponseV1 = post_protobuf(&client, &url, &payload).await?;
+    if !response.ok {
+        return Err(anyhow!(
+            "tunnel create pairing code failed: {}",
+            response.error.trim()
+        ));
+    }
+    println!("status=tunnel-pairing-code-issued");
+    println!("pairing_code={}", response.pairing_code);
+    println!("expires_unix_ms={}", response.expires_unix_ms);
+    println!("device_command={}", response.device_command);
+    Ok(())
+}
+
+fn derive_default_node_id(device_pubkey_b64url: &str) -> String {
+    let short = device_pubkey_b64url
+        .chars()
+        .take(12)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    format!("node-{short}")
+}
+
+fn tunnel_pairing_registration_message(
+    pairing_code: &str,
+    node_id: &str,
+    nonce_b64url: &str,
+) -> String {
+    format!(
+        "edgerun-tunnel-connect-v1\npairing_code={pairing_code}\nnode_id={node_id}\nnonce={nonce_b64url}"
+    )
+}
+
+async fn cmd_tunnel_connect(
+    relay_control_base: &str,
+    pairing_code: &str,
+    node_id: &str,
+) -> Result<()> {
+    let signer = load_tpm_signer()?;
+    if pairing_code.trim().is_empty() {
+        return Err(anyhow!("pairing_code is required"));
+    }
+    let effective_node_id = if node_id.trim().is_empty() {
+        derive_default_node_id(&signer.public_key_b64url)
+    } else {
+        node_id.trim().to_string()
+    };
+    let nonce = random_token_b64url(24);
+    let signature = signer.sign_b64url(
+        tunnel_pairing_registration_message(pairing_code.trim(), &effective_node_id, &nonce)
+            .as_bytes(),
+    );
+    let payload = RegisterWithPairingCodeRequestV1 {
+        pairing_code: pairing_code.trim().to_string(),
+        node_id: effective_node_id.clone(),
+        endpoint_public_key_b64url: signer.public_key_b64url.clone(),
+        tunnel_nonce_b64url: nonce,
+        registration_signature_b64url: signature,
+        capability_scopes: vec![],
+    };
+    let client = Client::new();
+    let url = format!(
+        "{}/v1/tunnel/register-with-code",
+        relay_control_base.trim_end_matches('/')
+    );
+    let response: RegisterWithPairingCodeResponseV1 =
+        post_protobuf(&client, &url, &payload).await?;
+    if !response.ok {
+        return Err(anyhow!("tunnel connect failed: {}", response.error.trim()));
+    }
+    println!("status=tunnel-connected");
+    println!("domain={}", response.domain);
+    println!("node_id={effective_node_id}");
+    println!("session_id={}", response.session_id);
+    println!("relay_url={}", response.relay_url);
+    println!("expires_unix_ms={}", response.expires_unix_ms);
+    Ok(())
+}
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> Result<()> {
+    let addr: SocketAddr = local_bridge_listen
+        .parse()
+        .with_context(|| format!("invalid local bridge listen addr: {local_bridge_listen}"))?;
+    if !addr.ip().is_loopback() {
+        return Err(anyhow!(
+            "local bridge must bind to loopback only, got {local_bridge_listen}"
+        ));
+    }
+    let state = LocalBridgeState {
+        node_id: derive_default_node_id(device_pubkey_b64url),
+        device_pubkey_b64url: device_pubkey_b64url.to_string(),
+        started_unix_ms: now_unix_ms(),
+        tx: broadcast::channel(512).0,
+    };
+    let app = Router::new()
+        .route("/v1/local/node/info.pb", get(handle_local_node_info))
+        .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
+        .with_state(Arc::new(state));
+    tokio::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind(addr).await {
+            Ok(listener) => listener,
+            Err(err) => {
+                eprintln!("local_bridge_bind_error={err}");
+                return;
+            }
+        };
+        if let Err(err) = axum::serve(listener, app).await {
+            eprintln!("local_bridge_serve_error={err}");
+        }
+    });
+    Ok(())
+}
+
+async fn handle_local_node_info(State(state): State<Arc<LocalBridgeState>>) -> Response {
+    let payload = LocalNodeInfoResponseV1 {
+        ok: true,
+        error: String::new(),
+        node_id: state.node_id.clone(),
+        device_pubkey_b64url: state.device_pubkey_b64url.clone(),
+        bridge_version: LOCAL_BRIDGE_VERSION.to_string(),
+        started_unix_ms: state.started_unix_ms,
+        eventbus_ws_path: LOCAL_BRIDGE_EVENTBUS_PATH.to_string(),
+    }
+    .encode_to_vec();
+    (
+        AxumStatusCode::OK,
+        [
+            (
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/x-protobuf"),
+            ),
+            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        ],
+        payload,
+    )
+        .into_response()
+}
+
+async fn handle_local_eventbus_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<LocalBridgeState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| local_eventbus_session(socket, state))
+}
+
+async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {
+    let mut rx = state.tx.subscribe();
+    let socket = Arc::new(Mutex::new(socket));
+    let sender_socket = Arc::clone(&socket);
+    let outbound = tokio::spawn(async move {
+        loop {
+            let event = match rx.recv().await {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            };
+            let bytes = event.encode_to_vec();
+            let mut ws = sender_socket.lock().await;
+            if ws.send(WsMessage::Binary(bytes.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut inbound_open = true;
+    while inbound_open {
+        let next = {
+            let mut ws = socket.lock().await;
+            ws.next().await
+        };
+        let Some(Ok(message)) = next else {
+            break;
+        };
+        match message {
+            WsMessage::Binary(bytes) => {
+                if let Ok(envelope) = LocalEventEnvelopeV1::decode(bytes.as_ref()) {
+                    let _ = state.tx.send(envelope);
+                }
+            }
+            WsMessage::Text(text) => {
+                if text.trim() == "ping" {
+                    let mut ws = socket.lock().await;
+                    let _ = ws.send(WsMessage::Text("pong".into())).await;
+                }
+            }
+            WsMessage::Close(_) => inbound_open = false,
+            WsMessage::Ping(payload) => {
+                let mut ws = socket.lock().await;
+                if ws.send(WsMessage::Pong(payload)).await.is_err() {
+                    break;
+                }
+            }
+            WsMessage::Pong(_) => {}
+        }
+    }
+    outbound.abort();
+}
+
+async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
     let signer = load_tpm_signer()?;
     let pid1 = std::process::id() == 1;
     let boot_policy = if pid1 {
@@ -410,6 +861,7 @@ async fn cmd_run() -> Result<()> {
     ensure_runtime_image_ready(&client, &mut cfg, &signer).await?;
     ensure_worker_running(&cfg, &signer.public_key_b64url)?;
     save_config(&cfg)?;
+    start_local_bridge(local_bridge_listen, &signer.public_key_b64url)?;
 
     println!("manager=starting");
     println!("backend=tpm");
@@ -418,6 +870,8 @@ async fn cmd_run() -> Result<()> {
     println!("rpc_url={}", cfg.rpc_url);
     println!("worker_max_concurrency={}", cfg.worker_max_concurrency);
     println!("worker_mem_bytes={}", cfg.worker_mem_bytes);
+    println!("local_bridge_listen={local_bridge_listen}");
+    println!("local_bridge_eventbus_path={LOCAL_BRIDGE_EVENTBUS_PATH}");
     if let Some(image_ref) = cfg.runtime_image_ref.as_deref() {
         println!("runtime_image_ref={image_ref}");
     }
@@ -1107,4 +1561,34 @@ async fn parse_json_response<T: DeserializeOwned>(
         .await
         .with_context(|| format!("{context}: failed to read response body"))?;
     sonic_rs::from_slice(&payload).with_context(|| context.to_string())
+}
+
+async fn post_protobuf<Req, Resp>(client: &Client, url: &str, payload: &Req) -> Result<Resp>
+where
+    Req: Message,
+    Resp: Message + Default,
+{
+    let mut body = Vec::with_capacity(payload.encoded_len());
+    payload
+        .encode(&mut body)
+        .context("failed to encode protobuf request body")?;
+    let resp = client
+        .post(url)
+        .header(CONTENT_TYPE, "application/protobuf")
+        .body(body)
+        .send()
+        .await
+        .with_context(|| format!("protobuf request failed: {url}"))?;
+    if !resp.status().is_success() {
+        return Err(anyhow!(
+            "endpoint returned error status {}: {url}",
+            resp.status()
+        ));
+    }
+    let bytes = resp
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read protobuf response body: {url}"))?;
+    Resp::decode(bytes.as_ref())
+        .with_context(|| format!("failed to decode protobuf response: {url}"))
 }

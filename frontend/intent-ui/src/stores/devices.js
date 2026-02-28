@@ -1,11 +1,7 @@
 import { createSignal } from "solid-js";
-import { context } from "./context";
 
 const DEVICES_KEY = "intent-ui-devices-v1";
-const DEVICE_SCAN_KEY = "intent-ui-device-scan-v1";
 const CURRENT_DEVICE_ID = "local-browser-device";
-const SCAN_INTERVAL_MS = 20000;
-const BLUETOOTH_ACTIVE_SCAN_SECONDS = 6;
 
 function safeParse(raw) {
   try {
@@ -25,21 +21,6 @@ function readStoredDevices() {
   return Array.isArray(parsed) ? parsed : [];
 }
 
-function readStoredScan() {
-  if (typeof window === "undefined") {
-    return { wifi: false, bluetooth: false, lan: false };
-  }
-  const parsed = safeParse(localStorage.getItem(DEVICE_SCAN_KEY) || "");
-  if (!parsed || typeof parsed !== "object") {
-    return { wifi: false, bluetooth: false, lan: false };
-  }
-  return {
-    wifi: Boolean(parsed.wifi),
-    bluetooth: Boolean(parsed.bluetooth),
-    lan: Boolean(parsed.lan)
-  };
-}
-
 function persistDevices(next) {
   if (typeof window === "undefined") return;
   try {
@@ -49,20 +30,30 @@ function persistDevices(next) {
   }
 }
 
-function persistScan(next) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(DEVICE_SCAN_KEY, JSON.stringify(next));
-  } catch {
-    // ignore storage failures
-  }
+function browserCapabilities(online) {
+  return {
+    networkUse: Boolean(online),
+    storageRead: true,
+    storageWrite: true,
+    display: true,
+    graphics: true,
+    audioOutput: true,
+    usb: false,
+    camera: false,
+    microphone: false,
+    shell: false,
+    fileSystem: false,
+    virtualization: false,
+    hostControl: false,
+    tpm: false
+  };
 }
 
 function buildCurrentDevice() {
   if (typeof window === "undefined") {
     return {
       id: CURRENT_DEVICE_ID,
-      name: "This Device",
+      name: "This Browser",
       type: "browser",
       os: "Unknown",
       browser: "Unknown",
@@ -70,7 +61,9 @@ function buildCurrentDevice() {
       connectedAt: nowIso(),
       lastSeenAt: nowIso(),
       ip: "Unknown",
-      metadata: {}
+      metadata: {
+        capabilities: browserCapabilities(true)
+      }
     };
   }
   const ua = navigator.userAgent || "";
@@ -83,79 +76,28 @@ function buildCurrentDevice() {
         : ua.includes("Safari")
           ? "Safari"
           : "Unknown";
+  const online = navigator.onLine;
   return {
     id: CURRENT_DEVICE_ID,
-    name: "This Device",
+    name: "This Browser",
     type: "browser",
     os: navigator.platform || "Unknown",
     browser,
-    online: navigator.onLine,
+    online,
     connectedAt: nowIso(),
     lastSeenAt: nowIso(),
     ip: "Unknown",
     metadata: {
       language: navigator.language || "",
       userAgent: ua,
-      viewport: `${window.innerWidth}x${window.innerHeight}`
+      viewport: `${window.innerWidth}x${window.innerHeight}`,
+      capabilities: browserCapabilities(online)
     }
   };
-}
-
-function buildConnectedHostDevice() {
-  const host = String(context.currentHost || "").trim();
-  if (!host) return null;
-  return {
-    id: `host:${host}`,
-    name: "Connected Host",
-    type: "host",
-    os: "Host OS",
-    browser: "",
-    online: true,
-    connectedAt: nowIso(),
-    lastSeenAt: nowIso(),
-    ip: host,
-    metadata: { host }
-  };
-}
-
-async function refreshConnectedHostStatus() {
-  const host = String(context.currentHost || "").trim();
-  if (!host || typeof window === "undefined") return;
-  try {
-    const response = await fetch("/api/host/status");
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.ok === false) {
-      throw new Error(payload?.error || "Host status unavailable.");
-    }
-    const primaryIp = Array.isArray(payload?.host?.ipAddresses) && payload.host.ipAddresses.length > 0
-      ? payload.host.ipAddresses[0]
-      : host;
-    upsertDevice({
-      id: `host:${host}`,
-      name: payload?.host?.hostname || "Connected Host",
-      type: "host",
-      os: [payload?.host?.platform, payload?.host?.release].filter(Boolean).join(" ") || "Host OS",
-      browser: "",
-      online: true,
-      connectedAt: nowIso(),
-      lastSeenAt: nowIso(),
-      ip: primaryIp,
-      metadata: {
-        host,
-        ipAddresses: payload?.host?.ipAddresses || [],
-        resources: payload?.resources || {},
-        capabilities: payload?.capabilities || {},
-        server: payload?.server || {},
-        timestamp: payload?.timestamp || nowIso()
-      }
-    });
-  } catch {
-    setDeviceOnline(`host:${host}`, false);
-  }
 }
 
 const [devices, setDevices] = createSignal(readStoredDevices());
-const [scanSettings, setScanSettings] = createSignal(readStoredScan());
+const [scanSettings, setScanSettings] = createSignal({ wifi: false, bluetooth: false, lan: false });
 const [scanState, setScanState] = createSignal({
   running: false,
   lastScanAt: "",
@@ -163,157 +105,93 @@ const [scanState, setScanState] = createSignal({
   lastCounts: { wifi: 0, bluetooth: 0, lan: 0 }
 });
 
-function buildScanDevice(entry, source) {
-  const ip = String(entry?.ip || "").trim();
-  const id = String(entry?.id || `${source}:${ip || "item"}`).trim();
-  return {
-    id,
-    name: String(entry?.name || entry?.metadata?.mac || ip || `${source} device`).trim(),
-    type: source,
-    os: source.toUpperCase(),
-    browser: "",
-    online: entry?.online !== false,
-    connectedAt: nowIso(),
-    lastSeenAt: nowIso(),
-    ip: ip || "Unknown",
-    metadata: {
-      ...(entry?.metadata && typeof entry.metadata === "object" ? entry.metadata : {}),
-      source
-    }
-  };
-}
-
-async function runDiscoveryScan({ force = false } = {}) {
-  const settings = scanSettings();
-  const enabled = settings.wifi || settings.bluetooth || settings.lan;
-  if (!enabled && !force) return;
-  if (scanState().running && !force) return;
-  setScanState((prev) => ({ ...prev, running: true, error: "" }));
-  try {
-    const response = await fetch("/api/discovery/scan", {
-      method: "POST",
-      headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        scan: {
-          ...settings,
-          bluetoothActiveScanSeconds: settings.bluetooth ? BLUETOOTH_ACTIVE_SCAN_SECONDS : 0
-        }
-      })
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload?.ok === false) {
-      throw new Error(payload?.error || "Discovery scan failed.");
-    }
-    const buckets = [
-      { key: "wifi", items: Array.isArray(payload?.wifi?.items) ? payload.wifi.items : [] },
-      { key: "bluetooth", items: Array.isArray(payload?.bluetooth?.items) ? payload.bluetooth.items : [] },
-      { key: "lan", items: Array.isArray(payload?.lan?.items) ? payload.lan.items : [] }
-    ];
-    for (const bucket of buckets) {
-      for (const item of bucket.items) {
-        upsertDevice(buildScanDevice(item, bucket.key));
-      }
-    }
-    const warning = String(payload?.bluetooth?.warning || "").trim();
-    setScanState((prev) => ({
-      ...prev,
-      running: false,
-      lastScanAt: payload?.timestamp || nowIso(),
-      error: warning,
-      lastCounts: {
-        wifi: buckets[0].items.length,
-        bluetooth: buckets[1].items.length,
-        lan: buckets[2].items.length
-      }
-    }));
-  } catch (error) {
-    setScanState((prev) => ({
-      ...prev,
-      running: false,
-      lastScanAt: prev.lastScanAt || "",
-      error: error instanceof Error ? error.message : "Discovery scan failed."
-    }));
-  }
-}
-
-function setScannerEnabled(kind, enabled) {
-  if (!["wifi", "bluetooth", "lan"].includes(kind)) return;
-  let nextSettings = null;
-  setScanSettings((prev) => {
-    const next = { ...prev, [kind]: Boolean(enabled) };
-    persistScan(next);
-    nextSettings = next;
-    return next;
-  });
-  if (nextSettings && (nextSettings.wifi || nextSettings.bluetooth || nextSettings.lan)) {
-    runDiscoveryScan({ force: true });
-  }
+function setSingleBrowserDevice(entry) {
+  const next = [{ ...entry, lastSeenAt: entry.lastSeenAt || nowIso() }];
+  setDevices(next);
+  persistDevices(next);
 }
 
 function upsertDevice(entry) {
   if (!entry?.id) return;
+  if (entry.id === CURRENT_DEVICE_ID) {
+    setSingleBrowserDevice(entry);
+    return;
+  }
   setDevices((prev) => {
-    const index = prev.findIndex((item) => item.id === entry.id);
+    const current = Array.isArray(prev) ? [...prev] : [];
+    const index = current.findIndex((item) => item?.id === entry.id);
     const nextEntry = {
       ...entry,
+      connectedAt: entry.connectedAt || nowIso(),
       lastSeenAt: entry.lastSeenAt || nowIso()
     };
-    const next = [...prev];
     if (index >= 0) {
-      next[index] = {
-        ...next[index],
-        ...nextEntry
+      const existing = current[index] || {};
+      current[index] = {
+        ...existing,
+        ...nextEntry,
+        metadata: {
+          ...(existing.metadata || {}),
+          ...(nextEntry.metadata || {})
+        }
       };
     } else {
-      next.unshift(nextEntry);
+      current.push(nextEntry);
     }
-    persistDevices(next);
-    return next;
+    persistDevices(current);
+    return current;
   });
 }
 
-function setDeviceOnline(id, online) {
-  if (!id) return;
+function setDeviceOnlineState(id, online) {
+  if (!id || id === CURRENT_DEVICE_ID) return;
   setDevices((prev) => {
-    const next = prev.map((item) => item.id === id ? {
-      ...item,
+    const current = Array.isArray(prev) ? [...prev] : [];
+    const index = current.findIndex((item) => item?.id === id);
+    if (index < 0) return current;
+    current[index] = {
+      ...current[index],
       online: Boolean(online),
       lastSeenAt: nowIso()
-    } : item);
-    persistDevices(next);
-    return next;
+    };
+    persistDevices(current);
+    return current;
   });
+}
+
+async function runDiscoveryScan() {
+  setScanState((prev) => ({
+    ...prev,
+    running: false,
+    error: ""
+  }));
+}
+
+function setScannerEnabled(kind, enabled) {
+  if (!["wifi", "bluetooth", "lan"].includes(kind)) return;
+  setScanSettings((prev) => ({
+    ...prev,
+    [kind]: Boolean(enabled) && false
+  }));
 }
 
 function initializeCurrentDevice() {
-  upsertDevice(buildCurrentDevice());
-  const hostDevice = buildConnectedHostDevice();
-  if (hostDevice) upsertDevice(hostDevice);
+  setSingleBrowserDevice(buildCurrentDevice());
 }
 
 if (typeof window !== "undefined") {
   queueMicrotask(() => {
     initializeCurrentDevice();
-    refreshConnectedHostStatus();
-    const onOnline = () => setDeviceOnline(CURRENT_DEVICE_ID, true);
-    const onOffline = () => setDeviceOnline(CURRENT_DEVICE_ID, false);
-    const onResize = () => {
-      const current = buildCurrentDevice();
-      upsertDevice(current);
-    };
-    const hostTimer = window.setInterval(() => {
-      refreshConnectedHostStatus();
-    }, 15000);
-    const scanTimer = window.setInterval(() => {
-      runDiscoveryScan();
-    }, SCAN_INTERVAL_MS);
-    runDiscoveryScan();
+    const onOnline = () => setSingleBrowserDevice(buildCurrentDevice());
+    const onOffline = () => setSingleBrowserDevice(buildCurrentDevice());
+    const onResize = () => setSingleBrowserDevice(buildCurrentDevice());
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("resize", onResize);
     window.addEventListener("beforeunload", () => {
-      window.clearInterval(hostTimer);
-      window.clearInterval(scanTimer);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("resize", onResize);
     });
   });
 }
@@ -330,6 +208,7 @@ export {
   devices,
   knownDevices,
   upsertDevice,
+  setDeviceOnlineState,
   runDiscoveryScan,
   scanSettings,
   scanState,

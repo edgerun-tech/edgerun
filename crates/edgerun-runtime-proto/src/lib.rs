@@ -1,4 +1,8 @@
 pub mod config;
+pub mod local;
+pub mod oidc;
+pub mod profile;
+pub mod tunnel;
 pub mod wire;
 // SPDX-License-Identifier: Apache-2.0
 

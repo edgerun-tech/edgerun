@@ -1,7 +1,10 @@
 import { createSignal } from "solid-js";
+import { setDeviceOnlineState, upsertDevice } from "./devices";
 
 const EVENTBUS_TIMELINE_KEY = "intent-ui-eventbus-timeline-v1";
 const EVENTBUS_MAX_EVENTS = 300;
+const LOCAL_BRIDGE_WS_URL = "ws://127.0.0.1:7777/v1/local/eventbus/ws";
+const LOCAL_BRIDGE_DEVICE_ID = "local-node-manager";
 
 function safeParse(raw) {
   try {
@@ -27,8 +30,10 @@ function persistTimeline(entries) {
 }
 
 const [eventBusRuntime, setEventBusRuntime] = createSignal({
-  engine: "js",
+  engine: "worker-js",
   wasmLoaded: false,
+  workerReady: false,
+  localBridgeConnected: false,
   peers: [],
   lastSyncAt: ""
 });
@@ -36,20 +41,12 @@ const [eventBusRuntime, setEventBusRuntime] = createSignal({
 const [eventTimeline, setEventTimeline] = createSignal(readTimeline());
 
 const topicListeners = new Map();
+let eventBusWorker = null;
+let localBridgeSocket = null;
+let initialized = false;
 
-function publishEvent(topic, payload = {}, meta = {}) {
-  const event = {
-    id: `${topic}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    topic,
-    payload,
-    meta,
-    createdAt: new Date().toISOString()
-  };
-  setEventTimeline((prev) => {
-    const next = [...prev, event].slice(-EVENTBUS_MAX_EVENTS);
-    persistTimeline(next);
-    return next;
-  });
+function notifyListeners(event) {
+  const topic = String(event?.topic || "");
   const listeners = topicListeners.get(topic) || [];
   for (const listener of listeners) {
     try {
@@ -66,7 +63,32 @@ function publishEvent(topic, payload = {}, meta = {}) {
       // ignore listener failures
     }
   }
-  return event;
+}
+
+function publishEvent(topic, payload = {}, meta = {}) {
+  const normalizedTopic = String(topic || "").trim() || "event.unknown";
+  if (eventBusWorker) {
+    eventBusWorker.postMessage({
+      type: "publish",
+      topic: normalizedTopic,
+      payload,
+      meta
+    });
+    return;
+  }
+  const fallbackEvent = {
+    id: `evt-fallback-${Date.now()}`,
+    topic: normalizedTopic,
+    payload,
+    meta,
+    createdAt: new Date().toISOString()
+  };
+  setEventTimeline((prev) => {
+    const next = [...prev, fallbackEvent].slice(-EVENTBUS_MAX_EVENTS);
+    persistTimeline(next);
+    return next;
+  });
+  notifyListeners(fallbackEvent);
 }
 
 function subscribeEvent(topic, handler) {
@@ -78,50 +100,112 @@ function subscribeEvent(topic, handler) {
   };
 }
 
-async function initializeBrowserEventBus() {
+function initializeBrowserEventBus() {
+  if (typeof window === "undefined" || initialized) return;
+  initialized = true;
+  const worker = new Worker(new URL("../workers/eventbus.worker.js", import.meta.url), { type: "module" });
+  eventBusWorker = worker;
+
+  worker.onmessage = (message) => {
+    const data = message?.data || {};
+    if (data.type === "runtime" && data.runtime) {
+      setEventBusRuntime((prev) => ({ ...prev, ...data.runtime }));
+      return;
+    }
+    if (data.type === "timeline") {
+      const events = Array.isArray(data.events) ? data.events : [];
+      setEventTimeline(events.slice(-EVENTBUS_MAX_EVENTS));
+      persistTimeline(events);
+      return;
+    }
+    if (data.type === "event" && data.event) {
+      const event = data.event;
+      setEventTimeline((prev) => {
+        const next = [...prev, event].slice(-EVENTBUS_MAX_EVENTS);
+        persistTimeline(next);
+        return next;
+      });
+      notifyListeners(event);
+    }
+  };
+
+  worker.onerror = () => {
+    setEventBusRuntime((prev) => ({ ...prev, engine: "worker-js", wasmLoaded: false, workerReady: false }));
+    eventBusWorker = null;
+  };
+
+  worker.postMessage({ type: "init", wasmUrl: "/intent-ui/eventbus.wasm" });
+  initializeLocalBridgeSocket();
+}
+
+function initializeLocalBridgeSocket() {
   if (typeof window === "undefined") return;
   try {
-    const response = await fetch("/intent-ui/eventbus.wasm", { method: "GET" });
-    if (!response.ok) throw new Error("No wasm eventbus artifact");
-    const bytes = await response.arrayBuffer();
-    await WebAssembly.instantiate(bytes, {});
-    setEventBusRuntime((prev) => ({ ...prev, engine: "wasm", wasmLoaded: true }));
-    publishEvent("eventbus.runtime", { engine: "wasm" }, { source: "browser" });
+    const socket = new WebSocket(LOCAL_BRIDGE_WS_URL);
+    localBridgeSocket = socket;
+    socket.binaryType = "arraybuffer";
+    socket.onopen = () => {
+      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: true }));
+      upsertDevice({
+        id: LOCAL_BRIDGE_DEVICE_ID,
+        name: "Linux Node Manager",
+        type: "host",
+        os: "Linux",
+        browser: "",
+        online: true,
+        connectedAt: new Date().toISOString(),
+        lastSeenAt: new Date().toISOString(),
+        ip: "127.0.0.1",
+        metadata: {
+          host: "localhost",
+          bridgeUrl: LOCAL_BRIDGE_WS_URL,
+          capabilities: {
+            networkUse: true,
+            storageRead: true,
+            storageWrite: true,
+            display: false,
+            graphics: false,
+            audioOutput: false,
+            usb: true,
+            camera: false,
+            microphone: false,
+            shell: true,
+            fileSystem: true,
+            virtualization: true,
+            hostControl: true,
+            tpm: true
+          }
+        }
+      });
+      socket.send("ping");
+    };
+    socket.onclose = () => {
+      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+      setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, false);
+      localBridgeSocket = null;
+      window.setTimeout(() => {
+        if (initialized && !localBridgeSocket) initializeLocalBridgeSocket();
+      }, 2500);
+    };
+    socket.onerror = () => {
+      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+    };
+    socket.onmessage = (message) => {
+      if (typeof message?.data === "string" && message.data.trim() === "pong") {
+        setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, true);
+      }
+    };
   } catch {
-    setEventBusRuntime((prev) => ({ ...prev, engine: "js", wasmLoaded: false }));
-    publishEvent("eventbus.runtime", { engine: "js" }, { source: "browser" });
+    setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
   }
 }
 
 function syncRemoteEventBusSnapshot(remoteNodeId, events = []) {
-  if (!remoteNodeId || !Array.isArray(events) || events.length === 0) return;
-  const normalized = events
-    .filter((event) => event && typeof event === "object" && typeof event.topic === "string")
-    .map((event) => ({
-      id: String(event.id || `${event.topic}-${Math.random().toString(36).slice(2, 8)}`),
-      topic: String(event.topic),
-      payload: event.payload || {},
-      meta: { ...(event.meta || {}), remoteNodeId },
-      createdAt: String(event.createdAt || new Date().toISOString())
-    }));
-  if (normalized.length === 0) return;
-  setEventTimeline((prev) => {
-    const existing = new Set(prev.map((event) => event.id));
-    const merged = [...prev];
-    for (const event of normalized) {
-      if (!existing.has(event.id)) merged.push(event);
-    }
-    const next = merged.slice(-EVENTBUS_MAX_EVENTS);
-    persistTimeline(next);
-    return next;
-  });
-  setEventBusRuntime((prev) => {
-    const peers = Array.from(new Set([...(prev.peers || []), remoteNodeId]));
-    return {
-      ...prev,
-      peers,
-      lastSyncAt: new Date().toISOString()
-    };
+  if (!eventBusWorker) return;
+  eventBusWorker.postMessage({
+    type: "snapshot",
+    remoteNodeId: String(remoteNodeId || ""),
+    events: Array.isArray(events) ? events : []
   });
 }
 

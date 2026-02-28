@@ -95,10 +95,12 @@ function LauncherGuidePanel(props) {
       },
       {
         id: "task-devices",
-        title: "Connected device",
-        detail: anyConnectedDevice() ? "At least one device is online." : "Connect a device before assistant execution.",
+        title: "First device connection",
+        detail: anyConnectedDevice()
+          ? "At least one device is online."
+          : "Open Devices, choose Linux, copy script, and run it on your target machine.",
         done: anyConnectedDevice(),
-        actionLabel: "View devices",
+        actionLabel: "Open connect flow",
         action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" })
       },
       {

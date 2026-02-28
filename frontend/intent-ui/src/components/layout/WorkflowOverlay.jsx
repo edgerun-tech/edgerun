@@ -275,6 +275,35 @@ function WorkflowOverlay() {
     });
   });
   const selectedDevice = createMemo(() => fleetDevices().find((item) => item.id === selectedDeviceId()) || null);
+  const [connectPlatform, setConnectPlatform] = createSignal("linux");
+  const initialPairingCode = typeof window === "undefined"
+    ? ""
+    : String(window.localStorage.getItem("intent-ui-device-pairing-code-v1") || "").trim();
+  const [pairingCodeInput, setPairingCodeInput] = createSignal(initialPairingCode);
+  const [deviceConnectCopied, setDeviceConnectCopied] = createSignal(false);
+  const localBridgeListen = "127.0.0.1:7777";
+  const linuxConnectScript = createMemo(() => {
+    const pairingCode = pairingCodeInput().trim() || "<PAIRING_CODE>";
+    return [
+      "# 1) Install node manager",
+      "curl -fsSL https://downloads.edgerun.tech/install-node-manager.sh | sh",
+      "",
+      "# 2) Pair this machine to your EdgeRun domain",
+      `edgerun-node-manager tunnel-connect --relay-control-base https://relay.edgerun.tech --pairing-code \"${pairingCode}\"`,
+      "",
+      "# 3) Start node manager with local bridge for browser eventbus",
+      `edgerun-node-manager run --local-bridge-listen ${localBridgeListen}`
+    ].join("\\n");
+  });
+  const copyConnectScript = async () => {
+    try {
+      await navigator.clipboard.writeText(linuxConnectScript());
+      setDeviceConnectCopied(true);
+      window.setTimeout(() => setDeviceConnectCopied(false), 1200);
+    } catch {
+      setDeviceConnectCopied(false);
+    }
+  };
   const sendDraftMessage = async () => {
     const text = draftMessage().trim();
     const conversation = activeConversation();
@@ -301,6 +330,15 @@ function WorkflowOverlay() {
     if (!selectedDeviceId() || !list.some((item) => item.id === selectedDeviceId())) {
       setSelectedDeviceId(list[0].id);
     }
+  });
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    const value = pairingCodeInput().trim();
+    if (!value) {
+      window.localStorage.removeItem("intent-ui-device-pairing-code-v1");
+      return;
+    }
+    window.localStorage.setItem("intent-ui-device-pairing-code-v1", value);
   });
   createEffect(() => {
     const total = activeConversationMessages().length;
@@ -1087,6 +1125,70 @@ function WorkflowOverlay() {
                       </p>
                     </div>
                     <div class="min-h-0 flex-1 overflow-auto p-3">
+                      <div class="mb-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="device-connect-block">
+                        <p class="text-[10px] uppercase tracking-wide text-neutral-500">Connect Device</p>
+                        <p class="mt-1 text-[10px] text-neutral-500">Choose platform and run the generated command on the target machine.</p>
+                        <div class="mt-2 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            class={cn(
+                              drawerSmallButtonClass,
+                              connectPlatform() === "linux" && "border-[hsl(var(--primary)/0.45)] text-[hsl(var(--primary))]"
+                            )}
+                            onClick={() => setConnectPlatform("linux")}
+                            data-testid="device-platform-linux"
+                          >
+                            Linux
+                          </button>
+                          <button
+                            type="button"
+                            class={cn(drawerSmallButtonClass, "opacity-60")}
+                            disabled
+                            data-testid="device-platform-macos"
+                          >
+                            macOS (soon)
+                          </button>
+                          <button
+                            type="button"
+                            class={cn(drawerSmallButtonClass, "opacity-60")}
+                            disabled
+                            data-testid="device-platform-windows"
+                          >
+                            Windows (soon)
+                          </button>
+                        </div>
+                        <Show when={connectPlatform() === "linux"}>
+                          <label class="mt-2 block text-[10px] text-neutral-500">
+                            Pairing code
+                            <input
+                              type="text"
+                              value={pairingCodeInput()}
+                              onInput={(event) => setPairingCodeInput(event.currentTarget.value)}
+                              placeholder="paste pairing code"
+                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                              data-testid="device-pairing-code-input"
+                            />
+                          </label>
+                          <pre
+                            class="mt-2 overflow-x-auto rounded border border-neutral-800 bg-[#0c0c12] p-2 text-[10px] text-neutral-200"
+                            data-testid="device-linux-script"
+                          >
+{linuxConnectScript()}
+                          </pre>
+                          <div class="mt-2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              class={drawerSmallButtonClass}
+                              onClick={copyConnectScript}
+                              data-testid="device-copy-script"
+                            >
+                              <TbOutlineClipboard size={11} />
+                              {deviceConnectCopied() ? "Copied" : "Copy script"}
+                            </button>
+                            <span class="text-[10px] text-neutral-500">Local bridge: {localBridgeListen}</span>
+                          </div>
+                        </Show>
+                      </div>
                       <Show when={fleetDevices().length > 0} fallback={<p class={drawerStateBlockClass}>No connected devices yet.</p>}>
                         <div class="space-y-1.5">
                           <For each={fleetDevices()}>

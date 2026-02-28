@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package edgerun.local.v1;
+
+message LocalNodeInfoRequestV1 {}
+
+message LocalNodeInfoResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  string node_id = 3;
+  string device_pubkey_b64url = 4;
+  string bridge_version = 5;
+  uint64 started_unix_ms = 6;
+  string eventbus_ws_path = 7;
+}
+
+message LocalEventEnvelopeV1 {
+  string event_id = 1;
+  string topic = 2;
+  bytes payload = 3;
+  string source = 4;
+  uint64 ts_unix_ms = 5;
+}
