@@ -16,6 +16,12 @@ const CONTROL_PREFIXES = [
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+    if (url.pathname === '/api/tailscale/devices' && request.method === 'POST') {
+      return handleTailscaleDevices(request)
+    }
+    if (url.pathname === '/api/tailscale/device-routes' && request.method === 'POST') {
+      return handleTailscaleDeviceRoutes(request)
+    }
     if (url.pathname === '/api/tunnel/reserve-domain' && request.method === 'POST') {
       return handleReserveDomain(request, env)
     }
@@ -38,6 +44,80 @@ function isAllowedPath(pathname) {
     if (prefix.endsWith('/')) return pathname.startsWith(prefix)
     return pathname === prefix
   })
+}
+
+function normalizeApiKey(value) {
+  return String(value || '').trim()
+}
+
+function tailscaleHeaders(apiKey) {
+  return {
+    authorization: `Bearer ${apiKey}`,
+    accept: 'application/json'
+  }
+}
+
+async function handleTailscaleDevices(request) {
+  try {
+    const body = await request.json().catch(() => ({}))
+    const apiKey = normalizeApiKey(body?.apiKey)
+    const tailnet = String(body?.tailnet || '').trim()
+    if (!apiKey || !tailnet) {
+      return json({ ok: false, error: 'apiKey and tailnet are required' }, { status: 400 })
+    }
+    const fields = encodeURIComponent('id,hostname,name,tags,addresses,authorized,advertisedRoutes,enabledRoutes,online')
+    const response = await fetch(`https://api.tailscale.com/api/v2/tailnet/${encodeURIComponent(tailnet)}/devices?fields=${fields}`, {
+      method: 'GET',
+      headers: tailscaleHeaders(apiKey)
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const message = String(payload?.message || `tailscale request failed (${response.status})`)
+      return json({ ok: false, error: message }, { status: response.status || 502 })
+    }
+    const devices = Array.isArray(payload?.devices) ? payload.devices : []
+    return json({ ok: true, error: '', devices }, { status: 200 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'failed to fetch tailscale devices'
+    return json({ ok: false, error: message }, { status: 502 })
+  }
+}
+
+async function handleTailscaleDeviceRoutes(request) {
+  try {
+    const body = await request.json().catch(() => ({}))
+    const apiKey = normalizeApiKey(body?.apiKey)
+    const deviceId = String(body?.deviceId || '').trim()
+    const routes = Array.isArray(body?.routes) ? body.routes.map((value) => String(value || '').trim()).filter(Boolean) : null
+    if (!apiKey || !deviceId) {
+      return json({ ok: false, error: 'apiKey and deviceId are required' }, { status: 400 })
+    }
+    const response = await fetch(`https://api.tailscale.com/api/v2/device/${encodeURIComponent(deviceId)}/routes`, {
+      method: routes ? 'POST' : 'GET',
+      headers: {
+        ...tailscaleHeaders(apiKey),
+        ...(routes ? { 'content-type': 'application/json; charset=utf-8' } : {})
+      },
+      ...(routes ? { body: JSON.stringify({ routes }) } : {})
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const message = String(payload?.message || `tailscale routes request failed (${response.status})`)
+      return json({ ok: false, error: message }, { status: response.status || 502 })
+    }
+    return json(
+      {
+        ok: true,
+        error: '',
+        advertisedRoutes: Array.isArray(payload?.advertisedRoutes) ? payload.advertisedRoutes : [],
+        enabledRoutes: Array.isArray(payload?.enabledRoutes) ? payload.enabledRoutes : []
+      },
+      { status: 200 }
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'failed to set tailscale routes'
+    return json({ ok: false, error: message }, { status: 502 })
+  }
 }
 
 async function handleCreatePairingCode(request, env) {

@@ -7,7 +7,8 @@ import ProfileBootstrapGate from "./components/onboarding/ProfileBootstrapGate";
 import { closeTopWindow, openWindow } from "./stores/windows";
 import { closeWorkflowDemo, hydrateWorkflowUiFromStorage, openCodexResponse, startNewCodexSession, workflowUi } from "./stores/workflow-ui";
 import { clearProfileRuntimeSession, hydrateProfileRuntime, profileRuntime } from "./stores/profile-runtime";
-import { initializeBrowserEventBus, publishEvent } from "./stores/eventbus";
+import { clearProfileSecretsContext } from "./stores/profile-secrets";
+import { eventBusRuntime, eventTimeline, initializeBrowserEventBus, publishEvent } from "./stores/eventbus";
 import { pushClipboardEntry } from "./stores/clipboard-history";
 import { Kbd, KbdGroup } from "./registry/ui/kbd";
 import {
@@ -291,6 +292,9 @@ function App() {
       window.__intentDebug.openWindow = (id) => openWindow(id);
       window.__intentDebug.askAssistant = (prompt, options = {}) => openCodexResponse(prompt, options);
       window.__intentDebug.getWorkflowUi = () => workflowUi();
+      window.__intentDebug.getEventBusRuntime = () => eventBusRuntime();
+      window.__intentDebug.getEventBusTimeline = () => eventTimeline();
+      window.__intentDebug.publishEvent = (topic, payload = {}) => publishEvent(topic, payload, { source: "intent-debug" });
     }
   });
   onCleanup(() => {
@@ -310,6 +314,9 @@ function App() {
       delete window.__intentDebug.openWindow;
       delete window.__intentDebug.askAssistant;
       delete window.__intentDebug.getWorkflowUi;
+      delete window.__intentDebug.getEventBusRuntime;
+      delete window.__intentDebug.getEventBusTimeline;
+      delete window.__intentDebug.publishEvent;
     }
   });
 
@@ -405,6 +412,7 @@ function App() {
                   class="inline-flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-[11px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
                   onClick={() => {
                     clearProfileRuntimeSession();
+                    clearProfileSecretsContext();
                     setShowBootstrapGate(true);
                     setAccountMenuOpen(false);
                   }}

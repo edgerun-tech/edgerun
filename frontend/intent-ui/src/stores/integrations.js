@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { profileRuntime } from "./profile-runtime";
 import { knownDevices } from "./devices";
+import { getProfileSecret, removeProfileSecret, setProfileSecret } from "./profile-secrets";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
@@ -96,6 +97,14 @@ const catalog = {
     requiresToken: false,
     tokenKey: "",
     defaultCapabilities: ["assistant.local_cli.execute"]
+  },
+  tailscale: {
+    id: "tailscale",
+    name: "Tailscale",
+    authMethod: "token",
+    supportsPlatformConnector: true,
+    tokenKey: "tailscale_api_key",
+    defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"]
   },
   hetzner: {
     id: "hetzner",
@@ -194,10 +203,14 @@ function hydrateState() {
   for (const integration of Object.values(catalog)) {
     const storedMode = String(next[integration.id]?.connectorMode || "").trim();
     const connectorMode = storedMode || (integration.supportsPlatformConnector ? "platform" : "user_owned");
-    const rawToken = typeof window !== "undefined" && integration.tokenKey
-      ? localStorage.getItem(integration.tokenKey)
-      : null;
-    const token = typeof rawToken === "string" ? rawToken.trim() : "";
+    let token = "";
+    if (integration.tokenKey) {
+      if (runtime.mode === "profile" && profileReady) {
+        token = getProfileSecret(integration.tokenKey).trim();
+      } else if (typeof window !== "undefined") {
+        token = String(localStorage.getItem(integration.tokenKey) || "").trim();
+      }
+    }
     const hasUsableToken = integration.requiresToken === false
       ? Boolean(next[integration.id]?.connected)
       : integration.id === "github"
@@ -305,11 +318,15 @@ const integrationStore = {
     };
     setConnections(next);
     persistState(next);
-    if (typeof window !== "undefined") {
-      if (integration.tokenKey && typeof details.token === "string") {
+    const runtime = profileRuntime();
+    if (typeof window !== "undefined" && integration.tokenKey && typeof details.token === "string") {
+      if (runtime.mode === "profile" && runtime.profileLoaded) {
+        void setProfileSecret(integration.tokenKey, details.token);
+        localStorage.removeItem(integration.tokenKey);
+      } else {
         localStorage.setItem(integration.tokenKey, details.token);
-        void syncIntegrationTokenToVault(integration, details);
       }
+      void syncIntegrationTokenToVault(integration, details);
     }
     return true;
   },
@@ -328,12 +345,18 @@ const integrationStore = {
     };
     setConnections(next);
     persistState(next);
+    const runtime = profileRuntime();
     if (typeof window !== "undefined") {
       if (id === "github") {
         localStorage.removeItem("github_auth_mode");
       }
       if (integration?.tokenKey) {
-        localStorage.removeItem(integration.tokenKey);
+        if (runtime.mode === "profile" && runtime.profileLoaded) {
+          void removeProfileSecret(integration.tokenKey);
+          localStorage.removeItem(integration.tokenKey);
+        } else {
+          localStorage.removeItem(integration.tokenKey);
+        }
       }
     }
   },
@@ -346,8 +369,12 @@ const integrationStore = {
     const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
     const hasToken = integration.requiresToken === false
       ? Boolean(current.connected)
-      : typeof window !== "undefined" && integration.tokenKey
-        ? Boolean(String(localStorage.getItem(integration.tokenKey) || "").trim())
+      : integration.tokenKey
+        ? runtime.mode === "profile" && runtime.profileLoaded
+          ? Boolean(getProfileSecret(integration.tokenKey).trim())
+          : typeof window !== "undefined"
+            ? Boolean(String(localStorage.getItem(integration.tokenKey) || "").trim())
+            : false
         : false;
     const connected = nextMode === "platform"
       ? Boolean(current.linked && profileReady)

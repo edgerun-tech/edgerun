@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js";
+import { For, Show, createMemo, createSignal, createEffect, onMount } from "solid-js";
 import {
   FiGithub,
   FiLink2,
@@ -12,11 +12,14 @@ import {
   FiKey,
   FiXCircle,
   FiSettings,
-  FiShield
+  FiShield,
+  FiCopy
 } from "solid-icons/fi";
 import { integrationStore } from "../../stores/integrations";
 import { openWindow } from "../../stores/windows";
 import { setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
+import { profileRuntime } from "../../stores/profile-runtime";
+import { getProfileSecret, setProfileSecret } from "../../stores/profile-secrets";
 
 const WEB3_PROFILE_CIPHER_KEY = "intent-ui-web3-profile-cipher-v1";
 const WEB3_PROFILE_PLAIN_KEY = "intent-ui-profile-v1";
@@ -203,6 +206,16 @@ const providerMeta = {
     tokenHint: "",
     useToken: false
   },
+  tailscale: {
+    id: "tailscale",
+    name: "Tailscale",
+    description: "Zero-config overlay network with Funnel and SSH access.",
+    authLabel: "API Access Token",
+    icon: FiShield,
+    tone: "text-blue-300",
+    tokenHint: "Tailscale API key (tskey-api-...)",
+    useToken: true
+  },
   hetzner: {
     id: "hetzner",
     name: "Hetzner",
@@ -240,6 +253,21 @@ function IntegrationsPanel(props) {
   const [web3Wallet, setWeb3Wallet] = createSignal("");
   const [web3ProfileInput, setWeb3ProfileInput] = createSignal("{}");
   const [web3CipherInput, setWeb3CipherInput] = createSignal("");
+  const [tailscaleApiKeyInput, setTailscaleApiKeyInput] = createSignal("");
+  const [tailscaleAuthKeyInput, setTailscaleAuthKeyInput] = createSignal("");
+  const [tailscaleTailnetInput, setTailscaleTailnetInput] = createSignal(
+    typeof window === "undefined" ? "" : String(localStorage.getItem("tailscale_tailnet") || "").trim()
+  );
+  const [tailscaleConnectorTag, setTailscaleConnectorTag] = createSignal("tag:edgerun-app-connector");
+  const [tailscaleDomains, setTailscaleDomains] = createSignal("os.edgerun.tech,*.users.edgerun.tech");
+  const [tailscaleFunnelTarget, setTailscaleFunnelTarget] = createSignal("http://127.0.0.1:7777");
+  const [tailscaleCopied, setTailscaleCopied] = createSignal("");
+  const [tailscaleDevices, setTailscaleDevices] = createSignal([]);
+  const [tailscaleSelectedDeviceId, setTailscaleSelectedDeviceId] = createSignal("");
+  const [tailscaleRoutesInput, setTailscaleRoutesInput] = createSignal("");
+  const [tailscaleRoutesBusy, setTailscaleRoutesBusy] = createSignal(false);
+  const [tailscaleRoutesStatus, setTailscaleRoutesStatus] = createSignal("");
+  const [tailscaleRoutesError, setTailscaleRoutesError] = createSignal("");
   const assistantProvider = createMemo(() => workflowUi().provider || "codex");
 
   onMount(() => {
@@ -258,6 +286,35 @@ function IntegrationsPanel(props) {
     if (props.preselectProviderId) {
       setDialogProviderId(props.preselectProviderId);
     }
+  });
+
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    const runtime = profileRuntime();
+    const value = tailscaleApiKeyInput().trim();
+    if (runtime.mode === "profile" && runtime.profileLoaded) {
+      void setProfileSecret("tailscale_api_key", value);
+      localStorage.removeItem("tailscale_api_key");
+      return;
+    }
+    localStorage.setItem("tailscale_api_key", value);
+  });
+
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    const runtime = profileRuntime();
+    const value = tailscaleAuthKeyInput().trim();
+    if (runtime.mode === "profile" && runtime.profileLoaded) {
+      void setProfileSecret("tailscale_auth_key", value);
+      localStorage.removeItem("tailscale_auth_key");
+      return;
+    }
+    localStorage.setItem("tailscale_auth_key", value);
+  });
+
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("tailscale_tailnet", tailscaleTailnetInput().trim());
   });
 
   const providers = createMemo(() => integrationStore.list().map((integration) => ({
@@ -280,6 +337,25 @@ function IntegrationsPanel(props) {
     setDialogProviderId(provider.id);
     setTokenInput("");
     setAccountLabelInput(provider.accountLabel || `${provider.name} Session`);
+    if (provider.id === "tailscale" && typeof window !== "undefined") {
+      const runtime = profileRuntime();
+      const apiKey = runtime.mode === "profile" && runtime.profileLoaded
+        ? String(getProfileSecret("tailscale_api_key") || "").trim()
+        : String(localStorage.getItem("tailscale_api_key") || "").trim();
+      const authKey = runtime.mode === "profile" && runtime.profileLoaded
+        ? String(getProfileSecret("tailscale_auth_key") || "").trim()
+        : String(localStorage.getItem("tailscale_auth_key") || "").trim();
+      const tailnet = String(localStorage.getItem("tailscale_tailnet") || "").trim();
+      setTailscaleApiKeyInput(apiKey);
+      setTailscaleAuthKeyInput(authKey);
+      setTailscaleTailnetInput(tailnet);
+      setTokenInput(apiKey);
+      setTailscaleDevices([]);
+      setTailscaleSelectedDeviceId("");
+      setTailscaleRoutesInput("");
+      setTailscaleRoutesStatus("");
+      setTailscaleRoutesError("");
+    }
     if (provider.id === "web3" && typeof window !== "undefined") {
       const storedToken = String(localStorage.getItem("web3_wallet") || "").trim();
       const wallet = String(storedToken.includes(":") ? storedToken.split(":", 2)[1] : storedToken).trim();
@@ -304,6 +380,168 @@ function IntegrationsPanel(props) {
     setWeb3Wallet("");
     setWeb3ProfileInput("{}");
     setWeb3CipherInput("");
+    setTailscaleConnectorTag("tag:edgerun-app-connector");
+    setTailscaleDomains("os.edgerun.tech,*.users.edgerun.tech");
+    setTailscaleFunnelTarget("http://127.0.0.1:7777");
+    setTailscaleDevices([]);
+    setTailscaleSelectedDeviceId("");
+    setTailscaleRoutesInput("");
+    setTailscaleRoutesStatus("");
+    setTailscaleRoutesError("");
+    setTailscaleCopied("");
+  };
+
+  const tailscaleDomainsList = createMemo(() => tailscaleDomains()
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean));
+
+  const tailscaleJoinCommand = createMemo(() => {
+    const key = tailscaleAuthKeyInput().trim() || "<TS_AUTH_KEY>";
+    const tag = tailscaleConnectorTag().trim() || "tag:edgerun-app-connector";
+    return `sudo tailscale up --auth-key "${key}" --ssh --advertise-tags=${tag} --advertise-connector`;
+  });
+
+  const tailscaleFunnelCommand = createMemo(
+    () => `sudo tailscale funnel --bg ${tailscaleFunnelTarget().trim() || "http://127.0.0.1:7777"}`
+  );
+
+  const tailscalePolicySnippet = createMemo(() => {
+    const tag = tailscaleConnectorTag().trim() || "tag:edgerun-app-connector";
+    const domains = tailscaleDomainsList().length > 0
+      ? tailscaleDomainsList()
+      : ["os.edgerun.tech", "*.users.edgerun.tech"];
+    const domainLines = domains.map((domain) => `            "${domain}"`).join(",\n");
+    return [
+      "{",
+      "  // Add this to your tailnet policy file (Access controls)",
+      "  \"tagOwners\": {",
+      `    \"${tag}\": [\"autogroup:admin\"]`,
+      "  },",
+      "  \"nodeAttrs\": [",
+      "    {",
+      `      \"target\": [\"${tag}\"],`,
+      "      \"app\": {",
+      "        \"tailscale.com/app-connectors\": [",
+      "          {",
+      "            \"name\": \"edgerun-control-plane\",",
+      `            \"connectors\": [\"${tag}\"],`,
+      "            \"domains\": [",
+      domainLines,
+      "            ]",
+      "          }",
+      "        ]",
+      "      }",
+      "    }",
+      "  ]",
+      "}"
+    ].join("\n");
+  });
+
+  const tailscaleSelectedDevice = createMemo(
+    () => tailscaleDevices().find((device) => String(device?.id || "") === tailscaleSelectedDeviceId()) || null
+  );
+
+  const parseRoutesInput = (value) => String(value || "")
+    .split(/[,\n]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  const loadTailscaleDevices = async () => {
+    const apiKey = tailscaleApiKeyInput().trim();
+    const tailnet = tailscaleTailnetInput().trim();
+    if (!apiKey || !tailnet) {
+      setTailscaleRoutesError("API key and tailnet are required.");
+      setTailscaleRoutesStatus("");
+      return;
+    }
+    setTailscaleRoutesBusy(true);
+    setTailscaleRoutesError("");
+    setTailscaleRoutesStatus("");
+    try {
+      const response = await fetch("/api/tailscale/devices", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ apiKey, tailnet })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.ok) {
+        throw new Error(String(body?.error || `tailscale devices request failed (${response.status})`));
+      }
+      const devices = Array.isArray(body?.devices) ? body.devices : [];
+      setTailscaleDevices(devices);
+      setTailscaleSelectedDeviceId(devices[0]?.id || "");
+      setTailscaleRoutesStatus(`${devices.length} device${devices.length === 1 ? "" : "s"} loaded.`);
+      const runtime = profileRuntime();
+      if (runtime.mode === "profile" && runtime.profileLoaded) {
+        void setProfileSecret("tailscale_api_key", apiKey);
+      } else {
+        localStorage.setItem("tailscale_api_key", apiKey);
+      }
+      localStorage.setItem("tailscale_tailnet", tailnet);
+      setTokenInput(apiKey);
+    } catch (error) {
+      setTailscaleRoutesError(error instanceof Error ? error.message : "Failed to load Tailscale devices.");
+    } finally {
+      setTailscaleRoutesBusy(false);
+    }
+  };
+
+  const applyTailscaleRoutes = async () => {
+    const apiKey = tailscaleApiKeyInput().trim();
+    const deviceId = tailscaleSelectedDeviceId().trim();
+    const routes = parseRoutesInput(tailscaleRoutesInput());
+    if (!apiKey || !deviceId) {
+      setTailscaleRoutesError("API key and device selection are required.");
+      setTailscaleRoutesStatus("");
+      return;
+    }
+    setTailscaleRoutesBusy(true);
+    setTailscaleRoutesError("");
+    setTailscaleRoutesStatus("");
+    try {
+      const response = await fetch("/api/tailscale/device-routes", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ apiKey, deviceId, routes })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.ok) {
+        throw new Error(String(body?.error || `tailscale routes request failed (${response.status})`));
+      }
+      setTailscaleDevices((prev) => prev.map((item) => {
+        if (String(item?.id || "") !== deviceId) return item;
+        return {
+          ...item,
+          advertisedRoutes: Array.isArray(body?.advertisedRoutes) ? body.advertisedRoutes : [],
+          enabledRoutes: Array.isArray(body?.enabledRoutes) ? body.enabledRoutes : []
+        };
+      }));
+      setTailscaleRoutesStatus("Routes updated.");
+      const runtime = profileRuntime();
+      if (runtime.mode === "profile" && runtime.profileLoaded) {
+        void setProfileSecret("tailscale_api_key", apiKey);
+      } else {
+        localStorage.setItem("tailscale_api_key", apiKey);
+      }
+      setTokenInput(apiKey);
+    } catch (error) {
+      setTailscaleRoutesError(error instanceof Error ? error.message : "Failed to apply routes.");
+    } finally {
+      setTailscaleRoutesBusy(false);
+    }
+  };
+
+  const copyText = async (id, text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setTailscaleCopied(id);
+      window.setTimeout(() => {
+        setTailscaleCopied((current) => (current === id ? "" : current));
+      }, 1200);
+    } catch {
+      setStatus("Clipboard write failed.");
+    }
   };
 
   const connectWeb3Wallet = async (provider) => {
@@ -371,7 +609,9 @@ function IntegrationsPanel(props) {
     }
     setBusyId(provider.id);
 
-    const token = tokenInput().trim();
+    const token = provider.id === "tailscale"
+      ? tailscaleApiKeyInput().trim() || tokenInput().trim()
+      : tokenInput().trim();
     if (!token) {
       setStatus(`Enter a ${provider.name} token first.`);
       setBusyId("");
@@ -383,6 +623,19 @@ function IntegrationsPanel(props) {
       accountLabel: accountLabelInput().trim() || `${provider.name} Session`,
       token
     });
+    if (provider.id === "tailscale" && typeof window !== "undefined") {
+      const runtime = profileRuntime();
+      if (runtime.mode === "profile" && runtime.profileLoaded) {
+        void setProfileSecret("tailscale_api_key", token);
+        void setProfileSecret("tailscale_auth_key", tailscaleAuthKeyInput().trim());
+        localStorage.removeItem("tailscale_api_key");
+        localStorage.removeItem("tailscale_auth_key");
+      } else {
+        localStorage.setItem("tailscale_api_key", token);
+        localStorage.setItem("tailscale_auth_key", tailscaleAuthKeyInput().trim());
+      }
+      localStorage.setItem("tailscale_tailnet", tailscaleTailnetInput().trim());
+    }
     setStatus(`${provider.name} integration saved.`);
     setBusyId("");
     closeDialog();
@@ -659,6 +912,198 @@ function IntegrationsPanel(props) {
                       placeholder="Encrypted ciphertext JSON"
                       class="h-20 w-full resize-none rounded-md border border-neutral-700 bg-[#0b0c0f] px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
                     />
+                  </div>
+                </Show>
+                <Show when={provider.id === "tailscale"}>
+                  <div class="mb-3 space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-2" data-testid="provider-tailscale-quickstart">
+                    <p class="text-[11px] uppercase tracking-wide text-neutral-400">Quick start</p>
+                    <p class="text-[11px] text-neutral-400">
+                      Run on node-manager host to join your tailnet, advertise as an App Connector, and expose browser entry with Funnel.
+                    </p>
+                    <label class="block text-[10px] text-neutral-500">
+                      Tailscale API key
+                      <input
+                        type="password"
+                        value={tailscaleApiKeyInput()}
+                        onInput={(event) => {
+                          const value = event.currentTarget.value;
+                          setTailscaleApiKeyInput(value);
+                          setTokenInput(value);
+                        }}
+                        placeholder="tskey-api-..."
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-api-key-input"
+                      />
+                    </label>
+                    <label class="block text-[10px] text-neutral-500">
+                      Tailnet
+                      <input
+                        type="text"
+                        value={tailscaleTailnetInput()}
+                        onInput={(event) => setTailscaleTailnetInput(event.currentTarget.value)}
+                        placeholder="example.github"
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-tailnet-input"
+                      />
+                    </label>
+                    <label class="block text-[10px] text-neutral-500">
+                      Node auth key (for tailscale up)
+                      <input
+                        type="password"
+                        value={tailscaleAuthKeyInput()}
+                        onInput={(event) => setTailscaleAuthKeyInput(event.currentTarget.value)}
+                        placeholder="tskey-auth-..."
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-auth-key-input"
+                      />
+                    </label>
+                    <label class="block text-[10px] text-neutral-500">
+                      Connector tag
+                      <input
+                        type="text"
+                        value={tailscaleConnectorTag()}
+                        onInput={(event) => setTailscaleConnectorTag(event.currentTarget.value)}
+                        placeholder="tag:edgerun-app-connector"
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-connector-tag-input"
+                      />
+                    </label>
+                    <label class="block text-[10px] text-neutral-500">
+                      App domains (comma separated)
+                      <input
+                        type="text"
+                        value={tailscaleDomains()}
+                        onInput={(event) => setTailscaleDomains(event.currentTarget.value)}
+                        placeholder="os.edgerun.tech,*.users.edgerun.tech"
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-app-domains-input"
+                      />
+                    </label>
+                    <label class="block text-[10px] text-neutral-500">
+                      Funnel target
+                      <input
+                        type="text"
+                        value={tailscaleFunnelTarget()}
+                        onInput={(event) => setTailscaleFunnelTarget(event.currentTarget.value)}
+                        placeholder="http://127.0.0.1:7777"
+                        class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                        data-testid="tailscale-funnel-target-input"
+                      />
+                    </label>
+                    <div class="space-y-1">
+                      <p class="text-[10px] text-neutral-500">1) Join tailnet and advertise app connector</p>
+                      <pre class="overflow-x-auto rounded border border-neutral-800 bg-[#0b0c0f] p-2 text-[10px] text-neutral-200" data-testid="tailscale-up-command">
+{tailscaleJoinCommand()}
+                      </pre>
+                      <button
+                        type="button"
+                        class={panelButtonClass}
+                        onClick={() => copyText("tailscale-up", tailscaleJoinCommand())}
+                        data-testid="tailscale-copy-up-command"
+                      >
+                        <FiCopy size={12} />
+                        {tailscaleCopied() === "tailscale-up" ? "Copied" : "Copy join command"}
+                      </button>
+                    </div>
+                    <div class="space-y-1">
+                      <p class="text-[10px] text-neutral-500">2) Tailnet policy for app connector</p>
+                      <pre class="max-h-40 overflow-auto rounded border border-neutral-800 bg-[#0b0c0f] p-2 text-[10px] text-neutral-200" data-testid="tailscale-policy-snippet">
+{tailscalePolicySnippet()}
+                      </pre>
+                      <button
+                        type="button"
+                        class={panelButtonClass}
+                        onClick={() => copyText("tailscale-policy", tailscalePolicySnippet())}
+                        data-testid="tailscale-copy-policy-snippet"
+                      >
+                        <FiCopy size={12} />
+                        {tailscaleCopied() === "tailscale-policy" ? "Copied" : "Copy policy snippet"}
+                      </button>
+                    </div>
+                    <div class="space-y-1">
+                      <p class="text-[10px] text-neutral-500">3) Enable Funnel</p>
+                      <pre class="overflow-x-auto rounded border border-neutral-800 bg-[#0b0c0f] p-2 text-[10px] text-neutral-200" data-testid="tailscale-funnel-command">
+{tailscaleFunnelCommand()}
+                      </pre>
+                      <button
+                        type="button"
+                        class={panelButtonClass}
+                        onClick={() => copyText("tailscale-funnel", tailscaleFunnelCommand())}
+                        data-testid="tailscale-copy-funnel-command"
+                      >
+                        <FiCopy size={12} />
+                        {tailscaleCopied() === "tailscale-funnel" ? "Copied" : "Copy funnel command"}
+                      </button>
+                    </div>
+                    <div class="mt-2 rounded-md border border-neutral-800 bg-neutral-900/55 p-2">
+                      <p class="text-[10px] uppercase tracking-wide text-neutral-400">API routing controls</p>
+                      <p class="mt-1 text-[10px] text-neutral-500">Load devices from tailnet and apply enabled routes to the selected device.</p>
+                      <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          class={panelButtonClass}
+                          disabled={tailscaleRoutesBusy()}
+                          onClick={loadTailscaleDevices}
+                          data-testid="tailscale-load-devices"
+                        >
+                          {tailscaleRoutesBusy() ? "Loading..." : "Load devices"}
+                        </button>
+                      </div>
+                      <Show when={tailscaleRoutesError()}>
+                        <p class="mt-2 text-[10px] text-red-300" data-testid="tailscale-routes-error">{tailscaleRoutesError()}</p>
+                      </Show>
+                      <Show when={tailscaleRoutesStatus()}>
+                        <p class="mt-2 text-[10px] text-[hsl(var(--primary))]" data-testid="tailscale-routes-status">{tailscaleRoutesStatus()}</p>
+                      </Show>
+                      <Show when={tailscaleDevices().length > 0}>
+                        <label class="mt-2 block text-[10px] text-neutral-500">
+                          Device
+                          <select
+                            value={tailscaleSelectedDeviceId()}
+                            onInput={(event) => setTailscaleSelectedDeviceId(event.currentTarget.value)}
+                            class="mt-1 h-8 w-full rounded border border-neutral-700 bg-[#0b0c0f] px-2 text-[11px] text-neutral-200 focus:border-neutral-500 focus:outline-none"
+                            data-testid="tailscale-device-select"
+                          >
+                            <For each={tailscaleDevices()}>
+                              {(device) => (
+                                <option value={String(device?.id || "")}>
+                                  {String(device?.hostname || device?.name || device?.id || "unknown")}
+                                </option>
+                              )}
+                            </For>
+                          </select>
+                        </label>
+                        <Show when={tailscaleSelectedDevice()}>
+                          {(deviceAccessor) => (
+                            <div class="mt-2 rounded border border-neutral-800 bg-[#0b0c0f] p-2 text-[10px] text-neutral-300" data-testid="tailscale-selected-device-routes">
+                              <p><span class="text-neutral-500">Advertised:</span> {(deviceAccessor().advertisedRoutes || []).join(", ") || "none"}</p>
+                              <p><span class="text-neutral-500">Enabled:</span> {(deviceAccessor().enabledRoutes || []).join(", ") || "none"}</p>
+                            </div>
+                          )}
+                        </Show>
+                        <label class="mt-2 block text-[10px] text-neutral-500">
+                          Enabled routes (comma or newline separated CIDRs)
+                          <textarea
+                            value={tailscaleRoutesInput()}
+                            onInput={(event) => setTailscaleRoutesInput(event.currentTarget.value)}
+                            placeholder="10.0.0.0/16, 192.168.1.0/24"
+                            class="mt-1 h-16 w-full resize-y rounded border border-neutral-700 bg-[#0b0c0f] px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-500 focus:outline-none"
+                            data-testid="tailscale-routes-input"
+                          />
+                        </label>
+                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            class={panelButtonClass}
+                            disabled={tailscaleRoutesBusy()}
+                            onClick={applyTailscaleRoutes}
+                            data-testid="tailscale-apply-routes"
+                          >
+                            {tailscaleRoutesBusy() ? "Applying..." : "Apply routes"}
+                          </button>
+                        </div>
+                      </Show>
+                    </div>
                   </div>
                 </Show>
 
