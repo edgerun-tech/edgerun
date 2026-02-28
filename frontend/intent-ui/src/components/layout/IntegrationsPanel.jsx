@@ -143,6 +143,46 @@ const providerMeta = {
     useToken: false,
     oauthRedirect: true
   },
+  email: {
+    id: "email",
+    name: "Email",
+    description: "Unified email provider for conversation threads.",
+    authLabel: "OAuth Token",
+    icon: FiGlobe,
+    tone: "text-indigo-300",
+    tokenHint: "Email provider token",
+    useToken: true
+  },
+  whatsapp: {
+    id: "whatsapp",
+    name: "WhatsApp",
+    description: "WhatsApp message provider for conversations.",
+    authLabel: "OAuth Token",
+    icon: FiGlobe,
+    tone: "text-emerald-300",
+    tokenHint: "WhatsApp token",
+    useToken: true
+  },
+  messenger: {
+    id: "messenger",
+    name: "Messenger",
+    description: "Messenger provider for conversation sync.",
+    authLabel: "OAuth Token",
+    icon: FiGlobe,
+    tone: "text-blue-300",
+    tokenHint: "Messenger token",
+    useToken: true
+  },
+  telegram: {
+    id: "telegram",
+    name: "Telegram",
+    description: "Telegram provider for unified inbox and threads.",
+    authLabel: "OAuth Token",
+    icon: FiGlobe,
+    tone: "text-cyan-300",
+    tokenHint: "Telegram token",
+    useToken: true
+  },
   qwen: {
     id: "qwen",
     name: "Qwen",

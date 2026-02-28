@@ -48,6 +48,38 @@ const catalog = {
     tokenKey: "google_token",
     defaultCapabilities: ["photos.read"]
   },
+  email: {
+    id: "email",
+    name: "Email",
+    authMethod: "oauth",
+    supportsPlatformConnector: true,
+    tokenKey: "google_token",
+    defaultCapabilities: ["messages.read", "messages.send"]
+  },
+  whatsapp: {
+    id: "whatsapp",
+    name: "WhatsApp",
+    authMethod: "oauth",
+    supportsPlatformConnector: true,
+    tokenKey: "whatsapp_token",
+    defaultCapabilities: ["messages.read", "messages.send"]
+  },
+  messenger: {
+    id: "messenger",
+    name: "Messenger",
+    authMethod: "oauth",
+    supportsPlatformConnector: true,
+    tokenKey: "messenger_token",
+    defaultCapabilities: ["messages.read", "messages.send"]
+  },
+  telegram: {
+    id: "telegram",
+    name: "Telegram",
+    authMethod: "oauth",
+    supportsPlatformConnector: true,
+    tokenKey: "telegram_token",
+    defaultCapabilities: ["messages.read", "messages.send"]
+  },
   qwen: {
     id: "qwen",
     name: "Qwen",

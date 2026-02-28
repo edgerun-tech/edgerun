@@ -7,6 +7,8 @@ import ProfileBootstrapGate from "./components/onboarding/ProfileBootstrapGate";
 import { closeTopWindow, openWindow } from "./stores/windows";
 import { closeWorkflowDemo, hydrateWorkflowUiFromStorage, openCodexResponse, startNewCodexSession, workflowUi } from "./stores/workflow-ui";
 import { clearProfileRuntimeSession, hydrateProfileRuntime, profileRuntime } from "./stores/profile-runtime";
+import { initializeBrowserEventBus, publishEvent } from "./stores/eventbus";
+import { pushClipboardEntry } from "./stores/clipboard-history";
 import { Kbd, KbdGroup } from "./registry/ui/kbd";
 import {
   TbOutlineCopy,
@@ -122,6 +124,7 @@ function App() {
     try {
       const text = await navigator.clipboard.readText();
       setClipboardText(String(text || ""));
+      pushClipboardEntry(text, "clipboard-read");
     } catch {
       setClipboardText("");
     }
@@ -154,6 +157,8 @@ function App() {
         run: async () => {
           try {
             await navigator.clipboard?.writeText(copyText());
+            pushClipboardEntry(copyText(), "copy-action");
+            publishEvent("clipboard.copied", { text: copyText() }, { source: "intent-ui" });
           } catch {
             // ignore clipboard permission failures
           }
@@ -169,6 +174,8 @@ function App() {
           if (!text) return;
           const target = contextTarget() || document.activeElement;
           const inserted = pasteIntoTarget(target, text);
+          pushClipboardEntry(text, "paste-action");
+          publishEvent("clipboard.pasted", { text }, { source: "intent-ui" });
           if (!inserted && document.activeElement instanceof HTMLElement && document.activeElement.isContentEditable) {
             document.execCommand("insertText", false, text);
           }
@@ -185,6 +192,8 @@ function App() {
   onMount(() => {
     hydrateProfileRuntime();
     hydrateWorkflowUiFromStorage();
+    void initializeBrowserEventBus();
+    publishEvent("browser.runtime.started", { app: "intent-ui" }, { source: "browser" });
     setIsClient(true);
     const updateLayerFromEvent = (event) => {
       if (layerIndicatorTimeout) {
