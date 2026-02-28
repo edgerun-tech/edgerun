@@ -286,7 +286,7 @@ function WorkflowOverlay() {
     const pairingCode = pairingCodeInput().trim() || "<PAIRING_CODE>";
     return [
       "# 1) Install node manager",
-      "curl -fsSL https://downloads.edgerun.tech/install-node-manager.sh | sh",
+      "curl -fsSL https://downloads.edgerun.tech/install-node-manager.sh | sh -s -- --bridge-listen 127.0.0.1:7777",
       "",
       "# 2) Pair this machine to your EdgeRun domain",
       `edgerun-node-manager tunnel-connect --relay-control-base https://relay.edgerun.tech --pairing-code \"${pairingCode}\"`,

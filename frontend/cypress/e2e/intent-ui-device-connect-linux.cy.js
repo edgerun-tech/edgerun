@@ -26,6 +26,7 @@ describe('intent ui linux first device connect', () => {
     cy.get('[data-testid="device-platform-windows"]').should('be.disabled')
 
     cy.get('[data-testid="device-linux-script"]').should('contain.text', '--local-bridge-listen 127.0.0.1:7777')
+    cy.get('[data-testid="device-linux-script"]').should('contain.text', 'install-node-manager.sh | sh -s -- --bridge-listen 127.0.0.1:7777')
     cy.get('[data-testid="device-linux-script"]').should('contain.text', '<PAIRING_CODE>')
 
     cy.get('[data-testid="device-pairing-code-input"]').clear().type('CCCCC-BRCF-DICT-EINT')

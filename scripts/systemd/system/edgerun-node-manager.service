@@ -1,0 +1,18 @@
+[Unit]
+Description=EdgeRun Node Manager
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@BINARY@ run --local-bridge-listen @BRIDGE_LISTEN@
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/run /var/lib/edgerun /etc/edgerun
+
+[Install]
+WantedBy=multi-user.target
