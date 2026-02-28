@@ -21,7 +21,23 @@ import {
   TbOutlineSend,
   TbOutlineClipboard
 } from "solid-icons/tb";
-import { FiLink2 } from "solid-icons/fi";
+import {
+  FiLink2,
+  FiCloud,
+  FiCpu,
+  FiDatabase
+} from "solid-icons/fi";
+import {
+  SiGithub,
+  SiGoogle,
+  SiCloudflare,
+  SiVercel,
+  SiTelegram,
+  SiWhatsapp,
+  SiMessenger,
+  SiTailscale,
+  SiWeb3dotjs
+} from "solid-icons/si";
 import { CodeDiffViewer } from "../results/CodeDiffViewer";
 import FileManager from "./FileManager";
 import IntegrationsPanel from "./IntegrationsPanel";
@@ -243,7 +259,7 @@ function WorkflowOverlay() {
   const drawerSmallButtonClass = "inline-flex h-7 items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]";
   const drawerListRowClass = "w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2.5 py-2 text-left transition-colors hover:bg-neutral-800/80";
   const drawerStateBlockClass = "rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-500";
-  const drawerSuggestionButtonClass = "w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-left text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:bg-neutral-800/75";
+  const drawerSuggestionIconButtonClass = "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-800 bg-neutral-900/70 text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]";
   const channelBadgeClass = (channel) => {
     if (channel === "ai") return "border-[hsl(var(--primary)/0.42)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]";
     if (channel === "email") return "border-neutral-700 bg-neutral-800/80 text-neutral-300";
@@ -266,37 +282,61 @@ function WorkflowOverlay() {
   const openIntegrationSuggestion = (integrationId) => {
     openWorkflowIntegrations(integrationId);
   };
+  const integrationIconForSuggestion = (integrationId) => {
+    const map = {
+      github: SiGithub,
+      cloudflare: SiCloudflare,
+      vercel: SiVercel,
+      google: SiGoogle,
+      google_photos: SiGoogle,
+      email: SiGoogle,
+      whatsapp: SiWhatsapp,
+      messenger: SiMessenger,
+      telegram: SiTelegram,
+      qwen: FiCpu,
+      codex_cli: FiCpu,
+      tailscale: SiTailscale,
+      hetzner: FiDatabase,
+      web3: SiWeb3dotjs
+    };
+    return map[integrationId] || FiCloud;
+  };
   const DrawerIntegrationSuggestions = (props) => (
     <div class="shrink-0 border-t border-neutral-800 bg-[#0d0e12]/95 px-3 py-2" data-testid={`drawer-suggestions-${props.side}-${props.panel}`}>
-      <div class="mb-1 flex items-center justify-between">
-        <p class="text-[10px] font-medium uppercase tracking-wide text-neutral-400">Suggested Integrations</p>
-        <button
-          type="button"
-          class="text-[10px] text-neutral-500 transition-colors hover:text-[hsl(var(--primary))]"
-          onClick={() => openWorkflowIntegrations("github")}
-        >
-          Open all
-        </button>
+      <div class="relative mb-1 h-7 overflow-hidden">
+        <div class="pointer-events-none absolute inset-0 flex items-center gap-1 opacity-35" aria-hidden="true">
+          <For each={props.items().slice(0, 8)}>
+            {(integration) => {
+              const Icon = integrationIconForSuggestion(integration.id);
+              return <Icon size={12} class="text-neutral-500" />;
+            }}
+          </For>
+        </div>
+        <div class="relative z-10 flex h-full items-center">
+          <p class="text-[10px] font-medium uppercase tracking-wide text-neutral-300">Suggested Integrations</p>
+        </div>
       </div>
       <Show
         when={props.items().length > 0}
-        fallback={<p class="rounded border border-neutral-800 bg-neutral-900/55 px-2 py-1 text-[10px] text-neutral-500">No integration suggestions for this panel yet.</p>}
+        fallback={<p class="px-1 py-1 text-[10px] text-neutral-500">No integration suggestions for this panel yet.</p>}
       >
-        <div class="grid grid-cols-2 gap-1" data-testid={`drawer-suggestions-list-${props.side}-${props.panel}`}>
+        <div class="flex flex-wrap gap-1" data-testid={`drawer-suggestions-list-${props.side}-${props.panel}`}>
           <For each={props.items()}>
-            {(integration) => (
-              <button
-                type="button"
-                class={drawerSuggestionButtonClass}
-                onClick={() => openIntegrationSuggestion(integration.id)}
-                data-testid={`drawer-suggestion-${props.panel}-${integration.id}`}
-              >
-                <p class="truncate">{integration.name}</p>
-                <p class={integration.available ? "text-[9px] text-emerald-300" : "text-[9px] text-amber-300"}>
-                  {integration.available ? "Available" : integration.availabilityReason || "Not ready"}
-                </p>
-              </button>
-            )}
+            {(integration) => {
+              const Icon = integrationIconForSuggestion(integration.id);
+              return (
+                <button
+                  type="button"
+                  class={drawerSuggestionIconButtonClass}
+                  onClick={() => openIntegrationSuggestion(integration.id)}
+                  data-testid={`drawer-suggestion-${props.panel}-${integration.id}`}
+                  title={`${integration.name} · ${integration.available ? "available" : integration.availabilityReason || "not ready"}`}
+                  aria-label={`Open integration ${integration.name}`}
+                >
+                  <Icon size={14} />
+                </button>
+              );
+            }}
           </For>
         </div>
       </Show>

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 fn main() {
+    println!("cargo:rerun-if-changed=proto/control/v1/control.proto");
     println!("cargo:rerun-if-changed=proto/local/v1/node_local_bridge.proto");
     println!("cargo:rerun-if-changed=proto/profile/v1/profile.proto");
     println!("cargo:rerun-if-changed=proto/profile/v1/oidc_scopes.proto");
@@ -7,6 +8,7 @@ fn main() {
 
     prost_build::compile_protos(
         &[
+            "proto/control/v1/control.proto",
             "proto/local/v1/node_local_bridge.proto",
             "proto/profile/v1/profile.proto",
             "proto/profile/v1/oidc_scopes.proto",

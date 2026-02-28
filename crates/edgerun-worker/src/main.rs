@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+mod executor_registry;
+
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -132,6 +134,8 @@ fn install_rustls_crypto_provider() {
 async fn main() -> Result<()> {
     install_rustls_crypto_provider();
     edgerun_observability::init_service("edgerun-worker")?;
+    let registry = executor_registry::default_registry();
+    tracing::info!(executors = ?registry.list_names(), "executor registry initialized");
 
     let cfg = load_config();
     let edge_internal_client = connect_edge_internal_event_bus(&cfg).await;

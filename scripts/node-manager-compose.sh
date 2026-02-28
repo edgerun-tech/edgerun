@@ -14,12 +14,16 @@ usage() {
   cat <<'USAGE'
 Usage:
   scripts/node-manager-compose.sh up
+  scripts/node-manager-compose.sh up-dev
   scripts/node-manager-compose.sh up-tunnel
+  scripts/node-manager-compose.sh status
+  scripts/node-manager-compose.sh ps
   scripts/node-manager-compose.sh prepare-binaries
   scripts/node-manager-compose.sh down
-  scripts/node-manager-compose.sh logs
+  scripts/node-manager-compose.sh logs [SERVICE]
   scripts/node-manager-compose.sh logs-tunnel
-  scripts/node-manager-compose.sh pair <PAIRING_CODE>
+  scripts/node-manager-compose.sh logs-nats
+  scripts/node-manager-compose.sh logs-mcp
   scripts/node-manager-compose.sh shell
 
 Environment:
@@ -44,6 +48,18 @@ case "${cmd}" in
     "${PREPARE_BINARIES_SCRIPT}"
     compose up -d --build
     ;;
+  up-dev)
+    if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
+      echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
+      exit 1
+    fi
+    if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
+      echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
+      exit 1
+    fi
+    "${PREPARE_BINARIES_SCRIPT}"
+    compose --profile tunnel up -d --build
+    ;;
   up-tunnel)
     if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
       echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
@@ -56,27 +72,40 @@ case "${cmd}" in
     "${PREPARE_BINARIES_SCRIPT}"
     compose --profile tunnel up -d --build
     ;;
+  status)
+    compose ps
+    if command -v curl >/dev/null 2>&1; then
+      if curl --silent --show-error --fail --max-time 2 \
+        "http://${EDGERUN_LOCAL_BRIDGE_LISTEN:-127.0.0.1:7777}/v1/local/node/info.pb" \
+        >/dev/null; then
+        echo "local bridge probe: ok"
+      else
+        echo "local bridge probe: failed (${EDGERUN_LOCAL_BRIDGE_LISTEN:-127.0.0.1:7777})" >&2
+        exit 1
+      fi
+    else
+      echo "curl not found; skipped local bridge probe"
+    fi
+    ;;
+  ps)
+    compose ps
+    ;;
   down)
     compose down
     ;;
   logs)
-    compose logs -f node-manager
+    shift || true
+    service="${1:-node-manager}"
+    compose logs -f "${service}"
     ;;
   logs-tunnel)
     compose logs -f cloudflared
     ;;
-  pair)
-    shift || true
-    pairing_code="${1:-}"
-    if [[ -z "${pairing_code}" ]]; then
-      echo "missing pairing code" >&2
-      usage >&2
-      exit 1
-    fi
-    compose exec node-manager \
-      edgerun-node-manager tunnel-connect \
-      --relay-control-base https://relay.edgerun.tech \
-      --pairing-code "${pairing_code}"
+  logs-nats)
+    compose logs -f nats
+    ;;
+  logs-mcp)
+    compose logs -f mcp-syscall
     ;;
   shell)
     compose exec node-manager /bin/bash

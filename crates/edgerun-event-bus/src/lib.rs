@@ -155,6 +155,26 @@ impl RuntimeEventBus {
             .map_err(|err| EventBusError::PublishFailed(err.to_string()))?;
         Ok(envelope)
     }
+
+    pub fn inject(&self, envelope: EventEnvelope) -> Result<(), EventBusError> {
+        if envelope.publisher.trim().is_empty() {
+            return Err(EventBusError::InvalidEnvelope(
+                "publisher must not be empty".to_string(),
+            ));
+        }
+        if envelope.payload_type.trim().is_empty() {
+            return Err(EventBusError::InvalidEnvelope(
+                "payload_type must not be empty".to_string(),
+            ));
+        }
+        let guard = self.inner.channels.lock().expect("lock poisoned");
+        let Some(tx) = guard.get(&envelope.topic) else {
+            return Err(EventBusError::UnknownTopic(envelope.topic.clone()));
+        };
+        tx.send(envelope)
+            .map_err(|err| EventBusError::PublishFailed(err.to_string()))?;
+        Ok(())
+    }
 }
 
 fn now_unix_ms() -> u64 {

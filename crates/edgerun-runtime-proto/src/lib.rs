@@ -1,3 +1,4 @@
+pub mod control;
 pub mod config;
 pub mod local;
 pub mod oidc;

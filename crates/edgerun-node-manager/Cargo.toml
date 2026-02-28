@@ -20,3 +20,4 @@ libc = "0.2"
 prost = "0.13"
 edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
 edgerun-runtime-proto = { path = "../edgerun-runtime-proto" }
+edgerun-storage = { path = "../edgerun-storage" }

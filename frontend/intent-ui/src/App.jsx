@@ -134,11 +134,11 @@ function App() {
       const lines = payload.lines
         .filter((item) => item && typeof item === "object")
         .map((item, index) => ({
-          id: `${item.container_id || "container"}-${item.timestamp || Date.now()}-${index}`,
-          containerName: String(item.container_name || item.container_id || "container"),
+          id: `${item.container_id || item.containerId || "container"}-${item.timestamp || item.ts || Date.now()}-${index}`,
+          containerName: String(item.container_name || item.containerName || item.container_id || item.containerId || "container"),
           message: String(item.message || "").trim(),
-          timestamp: String(item.timestamp || ""),
-          stream: String(item.stream || "")
+          timestamp: String(item.timestamp || item.ts || ""),
+          stream: String(item.stream || item.level || "")
         }))
         .filter((item) => item.message.length > 0);
       setDockerLogLines(lines);

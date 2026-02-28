@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+use std::collections::{HashSet, VecDeque};
 use std::ffi::CString;
 use std::fs;
 use std::io::Write;
@@ -6,6 +7,7 @@ use std::net::SocketAddr;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
@@ -27,15 +29,17 @@ use edgerun_hwvault_primitives::hardware::{
     load_or_create_device_signer, random_token_b64url, tpm_nv_available, tpm_nv_read_blob,
     tpm_nv_write_blob, DeviceSigner, HardwareBackend, HardwareSecurityMode,
 };
-use edgerun_runtime_proto::local::v1::{
-    LocalEventEnvelopeV1, LocalNodeInfoResponseV1,
-};
+use edgerun_runtime_proto::local::v1::{LocalEventEnvelopeV1, LocalNodeInfoResponseV1};
 use edgerun_runtime_proto::tunnel::v1::{
     CreatePairingCodeRequestV1, CreatePairingCodeResponseV1, RegisterEndpointRequestV1,
     RegisterEndpointResponseV1, RegisterWithPairingCodeRequestV1,
     RegisterWithPairingCodeResponseV1, ReserveDomainRequestV1, ReserveDomainResponseV1,
     TunnelHeartbeatRequestV1, TunnelHeartbeatResponseV1,
 };
+use edgerun_storage::event::{
+    ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
+};
+use edgerun_storage::StorageEngine;
 use futures_util::StreamExt;
 use prost::Message;
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
@@ -69,6 +73,12 @@ const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
 const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
 const LOCAL_DOCKER_SUMMARY_PATH: &str = "/v1/local/docker/summary";
 const LOCAL_DOCKER_LOGS_PATH: &str = "/v1/local/docker/logs";
+const LOCAL_DOCKER_LOGS_STORAGE_DIR_ENV: &str = "EDGERUN_DOCKER_LOGS_STORAGE_DIR";
+const LOCAL_DOCKER_LOGS_STORAGE_DIR_DEFAULT: &str = "/var/lib/edgerun/storage";
+const LOCAL_DOCKER_LOGS_JOURNAL_BASE: &str = "node-manager/docker-logs";
+const LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS: usize = 20_000;
+const LOCAL_DOCKER_LOGS_RECENT_KEY_SCAN: usize = 6_000;
+const LOCAL_DOCKER_LOGS_MAX_QUERY_SCAN: usize = 12_000;
 const LOCAL_FS_ROOT_ENV: &str = "EDGERUN_LOCAL_FS_ROOT";
 const LOCAL_FS_META_PATH: &str = "/v1/local/fs/meta";
 const LOCAL_FS_LIST_PATH: &str = "/v1/local/fs/list";
@@ -83,6 +93,10 @@ const LOCAL_FS_EXTRACT_PATH: &str = "/v1/local/fs/extract";
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
+const EVENTBUS_NATS_URL_ENV: &str = "EDGERUN_EVENTBUS_NATS_URL";
+const EVENTBUS_NATS_URL_DEFAULT: &str = "nats://127.0.0.1:4222";
+const INTEGRATION_TOPIC_ROOT_ENV: &str = "EDGERUN_INTEGRATION_TOPIC_ROOT";
+const INTEGRATION_TOPIC_ROOT_DEFAULT: &str = "edgerun.integrations";
 const LOCAL_ASSISTANT_PATH: &str = "/v1/local/assistant";
 const CODEX_CONFIG_PATH: &str = "/workspace/edgerun/.codex/config.toml";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
@@ -313,12 +327,35 @@ struct LocalDockerLogLine {
     message: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredDockerLogLineV1 {
+    key: String,
+    container_id: String,
+    container_name: String,
+    timestamp: String,
+    stream: String,
+    message: String,
+}
+
 #[derive(Debug, Deserialize)]
 struct LocalDockerLogsQuery {
     #[serde(default)]
     limit: Option<usize>,
     #[serde(default)]
     tail_per_container: Option<usize>,
+}
+
+#[derive(Default)]
+struct DockerLogDedupeState {
+    initialized: bool,
+    seen: HashSet<String>,
+    order: VecDeque<String>,
+}
+
+static DOCKER_LOG_DEDUPE_STATE: OnceLock<StdMutex<DockerLogDedupeState>> = OnceLock::new();
+
+fn docker_log_dedupe_state() -> &'static StdMutex<DockerLogDedupeState> {
+    DOCKER_LOG_DEDUPE_STATE.get_or_init(|| StdMutex::new(DockerLogDedupeState::default()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -965,15 +1002,17 @@ where
         data,
     })
     .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
-    with_local_cors_headers((
-        AxumStatusCode::OK,
-        [(
-            AXUM_CONTENT_TYPE,
-            HeaderValue::from_static("application/json; charset=utf-8"),
-        )],
-        payload,
+    with_local_cors_headers(
+        (
+            AxumStatusCode::OK,
+            [(
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            )],
+            payload,
+        )
+            .into_response(),
     )
-        .into_response())
 }
 
 fn local_json_error(status: AxumStatusCode, message: &str) -> Response {
@@ -983,15 +1022,17 @@ fn local_json_error(status: AxumStatusCode, message: &str) -> Response {
         data: LocalFsEmptyData {},
     })
     .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
-    with_local_cors_headers((
-        status,
-        [(
-            AXUM_CONTENT_TYPE,
-            HeaderValue::from_static("application/json; charset=utf-8"),
-        )],
-        payload,
+    with_local_cors_headers(
+        (
+            status,
+            [(
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            )],
+            payload,
+        )
+            .into_response(),
     )
-        .into_response())
 }
 
 fn normalized_relative_path(raw: &str) -> Result<PathBuf> {
@@ -1042,8 +1083,8 @@ fn enforce_local_node(state: &LocalBridgeState, node_id: Option<&str>) -> Result
 }
 
 fn local_fs_entry(root: &Path, path: &Path) -> Result<LocalFsEntry> {
-    let metadata = fs::metadata(path)
-        .with_context(|| format!("failed to stat path {}", path.display()))?;
+    let metadata =
+        fs::metadata(path).with_context(|| format!("failed to stat path {}", path.display()))?;
     let rel = path
         .strip_prefix(root)
         .with_context(|| format!("path {} is outside root {}", path.display(), root.display()))?;
@@ -1075,23 +1116,25 @@ fn local_fs_entry(root: &Path, path: &Path) -> Result<LocalFsEntry> {
 }
 
 fn local_fs_copy_recursive(from: &Path, to: &Path) -> Result<()> {
-    let metadata = fs::metadata(from)
-        .with_context(|| format!("failed to stat source {}", from.display()))?;
+    let metadata =
+        fs::metadata(from).with_context(|| format!("failed to stat source {}", from.display()))?;
     if metadata.is_dir() {
         fs::create_dir_all(to)
             .with_context(|| format!("failed to create destination dir {}", to.display()))?;
-        for entry in fs::read_dir(from)
-            .with_context(|| format!("failed to read dir {}", from.display()))?
+        for entry in
+            fs::read_dir(from).with_context(|| format!("failed to read dir {}", from.display()))?
         {
-            let entry = entry.with_context(|| format!("failed to read dir entry {}", from.display()))?;
+            let entry =
+                entry.with_context(|| format!("failed to read dir entry {}", from.display()))?;
             let source_child = entry.path();
             let target_child = to.join(entry.file_name());
             local_fs_copy_recursive(&source_child, &target_child)?;
         }
     } else {
         if let Some(parent) = to.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create destination parent {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("failed to create destination parent {}", parent.display())
+            })?;
         }
         fs::copy(from, to).with_context(|| {
             format!(
@@ -1106,7 +1149,8 @@ fn local_fs_copy_recursive(from: &Path, to: &Path) -> Result<()> {
 
 fn local_fs_archive_path(path: &Path, format: Option<&str>) -> PathBuf {
     let selected = format.unwrap_or("tar.gz").trim();
-    let suffix = if selected.eq_ignore_ascii_case("tar.gz") || selected.eq_ignore_ascii_case("tgz") {
+    let suffix = if selected.eq_ignore_ascii_case("tar.gz") || selected.eq_ignore_ascii_case("tgz")
+    {
         "tar.gz"
     } else {
         "tar.gz"
@@ -1154,6 +1198,28 @@ fn mcp_token_env_for(integration_id: &str) -> &'static str {
     }
 }
 
+fn integration_topic_root() -> String {
+    std::env::var(INTEGRATION_TOPIC_ROOT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| INTEGRATION_TOPIC_ROOT_DEFAULT.to_string())
+}
+
+fn integration_topic_for(integration_id: &str, lane: &str) -> String {
+    let lane = lane
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    format!("{}.{}.{}", integration_topic_root(), integration_id, lane)
+}
+
 fn is_mcp_container_running(integration_id: &str) -> bool {
     let name = mcp_container_name(integration_id);
     let output = Command::new("docker")
@@ -1173,8 +1239,12 @@ fn is_mcp_container_running(integration_id: &str) -> bool {
 fn sync_codex_mcp_config() -> Result<()> {
     let config_path = Path::new(CODEX_CONFIG_PATH);
     if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create codex config directory {}", parent.display()))?;
+        fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create codex config directory {}",
+                parent.display()
+            )
+        })?;
     }
     let existing = fs::read_to_string(config_path).unwrap_or_default();
     let begin = "# BEGIN EDGERUN MCP";
@@ -1200,7 +1270,9 @@ fn sync_codex_mcp_config() -> Result<()> {
     if github_running {
         managed_block.push_str("[mcp_servers.github]\n");
         managed_block.push_str("command = \"docker\"\n");
-        managed_block.push_str("args = [\"exec\", \"-i\", \"edgerun-mcp-github\", \"node\", \"/app/dist/index.js\"]\n");
+        managed_block.push_str(
+            "args = [\"exec\", \"-i\", \"edgerun-mcp-github\", \"node\", \"/app/dist/index.js\"]\n",
+        );
     }
     managed_block.push_str(end);
     managed_block.push('\n');
@@ -1316,7 +1388,10 @@ async fn handle_local_node_info(State(state): State<Arc<LocalBridgeState>>) -> R
                 ACCESS_CONTROL_ALLOW_HEADERS,
                 HeaderValue::from_static("content-type"),
             ),
-            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+            (
+                ACCESS_CONTROL_ALLOW_METHODS,
+                HeaderValue::from_static("GET, OPTIONS"),
+            ),
         ],
         payload,
     )
@@ -1375,7 +1450,10 @@ async fn handle_local_docker_summary() -> Response {
                 ACCESS_CONTROL_ALLOW_HEADERS,
                 HeaderValue::from_static("content-type"),
             ),
-            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+            (
+                ACCESS_CONTROL_ALLOW_METHODS,
+                HeaderValue::from_static("GET, OPTIONS"),
+            ),
         ],
         payload,
     )
@@ -1409,7 +1487,10 @@ async fn handle_local_docker_logs(Query(query): Query<LocalDockerLogsQuery>) -> 
                 ACCESS_CONTROL_ALLOW_HEADERS,
                 HeaderValue::from_static("content-type"),
             ),
-            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+            (
+                ACCESS_CONTROL_ALLOW_METHODS,
+                HeaderValue::from_static("GET, OPTIONS"),
+            ),
         ],
         payload,
     )
@@ -1460,17 +1541,23 @@ async fn handle_local_fs_list(
     let mut entries = Vec::new();
     let iterator = match fs::read_dir(&absolute) {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     for item in iterator {
         let item = match item {
             Ok(value) => value,
-            Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+            Err(err) => {
+                return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+            }
         };
         let path = item.path();
         match local_fs_entry(&state.local_fs_root, &path) {
             Ok(entry) => entries.push(entry),
-            Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+            Err(err) => {
+                return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+            }
         }
     }
     entries.sort_by(|a, b| {
@@ -1513,7 +1600,9 @@ async fn handle_local_fs_read(
     };
     let content = match String::from_utf8(bytes) {
         Ok(value) => value,
-        Err(_) => return local_json_error(AxumStatusCode::BAD_REQUEST, "file content is not utf-8"),
+        Err(_) => {
+            return local_json_error(AxumStatusCode::BAD_REQUEST, "file content is not utf-8")
+        }
     };
     local_json_ok(LocalFsReadData { content })
 }
@@ -1713,11 +1802,15 @@ async fn handle_local_fs_archive(
     }
     let parent = match absolute.parent() {
         Some(path) => path,
-        None => return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path"),
+        None => {
+            return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path")
+        }
     };
     let source_name = match absolute.file_name() {
         Some(name) => name.to_string_lossy().to_string(),
-        None => return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path"),
+        None => {
+            return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path")
+        }
     };
     let status = Command::new("tar")
         .arg("-czf")
@@ -1734,7 +1827,9 @@ async fn handle_local_fs_archive(
                 &format!("tar failed with status {result}"),
             )
         }
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     }
     let archive_display = match archive.strip_prefix(&state.local_fs_root) {
         Ok(rel) if rel.as_os_str().is_empty() => "/".to_string(),
@@ -1782,7 +1877,9 @@ async fn handle_local_fs_extract(
                 &format!("extract failed with status {result}"),
             )
         }
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     }
     local_json_ok(LocalFsMetaData {
         local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
@@ -1802,7 +1899,10 @@ async fn handle_local_mcp_start(
     }
     let token = body.token.trim().to_string();
     if token.len() < 8 {
-        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration token is missing or invalid");
+        return local_json_error(
+            AxumStatusCode::BAD_REQUEST,
+            "integration token is missing or invalid",
+        );
     }
     let image = match mcp_image_for(&integration_id) {
         Some(value) => value,
@@ -1818,22 +1918,46 @@ async fn handle_local_mcp_start(
         .args(["rm", "-f", &container_name])
         .output();
     let token_env = mcp_token_env_for(&integration_id);
-    let output = match Command::new("docker")
-        .args([
-            "run",
-            "-d",
-            "--name",
-            &container_name,
-            "--restart",
-            "unless-stopped",
-            "-e",
-            &format!("{}={}", token_env, token),
-            &image,
-        ])
-        .output()
-    {
+    let nats_url = std::env::var(EVENTBUS_NATS_URL_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| EVENTBUS_NATS_URL_DEFAULT.to_string());
+    let mut args = vec![
+        "run".to_string(),
+        "-d".to_string(),
+        "--name".to_string(),
+        container_name.clone(),
+        "--restart".to_string(),
+        "unless-stopped".to_string(),
+        "-e".to_string(),
+        format!("{}={}", token_env, token),
+        "-e".to_string(),
+        format!("EDGERUN_INTEGRATION_ID={}", integration_id),
+        "-e".to_string(),
+        format!("EDGERUN_EVENTBUS_NATS_URL={}", nats_url),
+        "-e".to_string(),
+        format!(
+            "EDGERUN_EVENTBUS_TOPIC_INBOUND={}",
+            integration_topic_for(&integration_id, "inbound")
+        ),
+        "-e".to_string(),
+        format!(
+            "EDGERUN_EVENTBUS_TOPIC_OUTBOUND={}",
+            integration_topic_for(&integration_id, "outbound")
+        ),
+        "-e".to_string(),
+        format!(
+            "EDGERUN_EVENTBUS_TOPIC_ERRORS={}",
+            integration_topic_for(&integration_id, "errors")
+        ),
+        image.clone(),
+    ];
+    let output = match Command::new("docker").args(args.drain(..)).output() {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     if !output.status.success() {
         return local_json_error(
@@ -1876,14 +2000,20 @@ async fn handle_local_mcp_stop(
         .output()
     {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.to_ascii_lowercase().contains("no such container") {
             return local_json_error(
                 AxumStatusCode::INTERNAL_SERVER_ERROR,
-                &format!("failed to stop MCP container {}: {}", container_name, stderr.trim()),
+                &format!(
+                    "failed to stop MCP container {}: {}",
+                    container_name,
+                    stderr.trim()
+                ),
             );
         }
     }
@@ -1923,7 +2053,9 @@ async fn handle_local_mcp_status(
         .output()
     {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     if !output.status.success() {
         return local_json_ok(LocalMcpStatusData {
@@ -1992,7 +2124,9 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
 
     let exec_output = match exec_output {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     if !exec_output.status.success() {
         return local_json_error(
@@ -2009,7 +2143,9 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         .output();
     let read_output = match read_output {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        Err(err) => {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
+        }
     };
     if !read_output.status.success() {
         return local_json_error(
@@ -2021,7 +2157,9 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         );
     }
 
-    let message = String::from_utf8_lossy(&read_output.stdout).trim().to_string();
+    let message = String::from_utf8_lossy(&read_output.stdout)
+        .trim()
+        .to_string();
     let response = LocalAssistantResponse {
         ok: true,
         error: String::new(),
@@ -2039,15 +2177,18 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         session_id: body.session_id.unwrap_or_default(),
         thread_id: body.thread_id.unwrap_or_default(),
     };
-    with_local_cors_headers((
-        AxumStatusCode::OK,
-        [(
-            AXUM_CONTENT_TYPE,
-            HeaderValue::from_static("application/json; charset=utf-8"),
-        )],
-        sonic_rs::to_string(&response).unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string()),
+    with_local_cors_headers(
+        (
+            AxumStatusCode::OK,
+            [(
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            )],
+            sonic_rs::to_string(&response)
+                .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string()),
+        )
+            .into_response(),
     )
-        .into_response())
 }
 
 async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {
@@ -2096,7 +2237,9 @@ async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>)
                 if text.trim() == "ping" {
                     let pong = local_bridge_envelope("local.bridge.pong", "node-manager");
                     let mut ws = socket.lock().await;
-                    let _ = ws.send(WsMessage::Binary(pong.encode_to_vec().into())).await;
+                    let _ = ws
+                        .send(WsMessage::Binary(pong.encode_to_vec().into()))
+                        .await;
                 }
             }
             WsMessage::Close(_) => inbound_open = false,
@@ -2115,7 +2258,11 @@ async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>)
 fn collect_local_docker_summary() -> Result<LocalDockerSummaryResponse> {
     let swarm_info = run_command_capture(
         "docker",
-        &["info", "--format", "{{.Swarm.LocalNodeState}}\t{{.Swarm.NodeID}}"],
+        &[
+            "info",
+            "--format",
+            "{{.Swarm.LocalNodeState}}\t{{.Swarm.NodeID}}",
+        ],
     )?;
     let mut swarm_state = String::new();
     let mut swarm_node_id = String::new();
@@ -2212,25 +2359,31 @@ fn collect_local_docker_logs(
             .output()
             .with_context(|| format!("failed to collect logs for container {container_id}"))?;
         for entry in String::from_utf8_lossy(&logs_output.stdout).lines() {
-            if let Some(parsed) = parse_docker_log_line(&container_id, &container_name, entry, "stdout") {
+            if let Some(parsed) =
+                parse_docker_log_line(&container_id, &container_name, entry, "stdout")
+            {
                 lines.push(parsed);
             }
         }
         for entry in String::from_utf8_lossy(&logs_output.stderr).lines() {
-            if let Some(parsed) = parse_docker_log_line(&container_id, &container_name, entry, "stderr") {
+            if let Some(parsed) =
+                parse_docker_log_line(&container_id, &container_name, entry, "stderr")
+            {
                 lines.push(parsed);
             }
         }
     }
-    lines.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-    if lines.len() > limit {
-        lines.truncate(limit);
+    persist_docker_logs_to_storage(&lines)?;
+    let mut stored = query_docker_logs_from_storage(limit)?;
+    stored.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    if stored.len() > limit {
+        stored.truncate(limit);
     }
     Ok(LocalDockerLogsResponse {
         ok: true,
         error: String::new(),
         generated_unix_ms: now_unix_ms(),
-        lines,
+        lines: stored,
     })
 }
 
@@ -2266,6 +2419,129 @@ fn parse_docker_log_line(
         stream: stream.to_string(),
         message,
     })
+}
+
+fn storage_engine_for_docker_logs() -> Result<StorageEngine> {
+    let dir = std::env::var(LOCAL_DOCKER_LOGS_STORAGE_DIR_ENV)
+        .unwrap_or_else(|_| LOCAL_DOCKER_LOGS_STORAGE_DIR_DEFAULT.to_string());
+    StorageEngine::new(PathBuf::from(dir))
+        .with_context(|| "failed to initialize docker logs storage engine".to_string())
+}
+
+fn docker_log_key(line: &LocalDockerLogLine) -> String {
+    format!(
+        "{}|{}|{}|{}",
+        line.container_id.trim(),
+        line.timestamp.trim(),
+        line.stream.trim(),
+        line.message.trim()
+    )
+}
+
+fn hydrate_docker_log_dedupe_from_storage(state: &mut DockerLogDedupeState) -> Result<()> {
+    if state.initialized {
+        return Ok(());
+    }
+    let engine = storage_engine_for_docker_logs()?;
+    let rows = engine.query_segmented_journal_raw(LOCAL_DOCKER_LOGS_JOURNAL_BASE)?;
+    for row in rows
+        .iter()
+        .rev()
+        .take(LOCAL_DOCKER_LOGS_RECENT_KEY_SCAN)
+        .rev()
+    {
+        let parsed = match sonic_rs::from_slice::<StoredDockerLogLineV1>(&row.event.payload) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if parsed.key.trim().is_empty() {
+            continue;
+        }
+        if state.seen.insert(parsed.key.clone()) {
+            state.order.push_back(parsed.key);
+            while state.order.len() > LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS {
+                if let Some(old) = state.order.pop_front() {
+                    state.seen.remove(&old);
+                }
+            }
+        }
+    }
+    state.initialized = true;
+    Ok(())
+}
+
+fn persist_docker_logs_to_storage(lines: &[LocalDockerLogLine]) -> Result<()> {
+    if lines.is_empty() {
+        return Ok(());
+    }
+    let engine = storage_engine_for_docker_logs()?;
+    let state_guard = docker_log_dedupe_state()
+        .lock()
+        .map_err(|_| anyhow!("docker log dedupe mutex poisoned"))?;
+    let mut state = state_guard;
+    hydrate_docker_log_dedupe_from_storage(&mut state)?;
+
+    for line in lines {
+        let key = docker_log_key(line);
+        if key.trim().is_empty() || state.seen.contains(&key) {
+            continue;
+        }
+        let stored = StoredDockerLogLineV1 {
+            key: key.clone(),
+            container_id: line.container_id.clone(),
+            container_name: line.container_name.clone(),
+            timestamp: line.timestamp.clone(),
+            stream: line.stream.clone(),
+            message: line.message.clone(),
+        };
+        let payload = sonic_rs::to_vec(&stored).context("failed to encode stored docker log")?;
+        let event = StorageEvent::new(
+            StorageStreamId::from_bytes(*b"edrdckrlogstrm01"),
+            StorageActorId::from_bytes(*b"edrnodemgractr01"),
+            payload,
+        );
+        engine
+            .append_event_to_segmented_journal(
+                LOCAL_DOCKER_LOGS_JOURNAL_BASE,
+                &event,
+                4 * 1024 * 1024,
+                edgerun_storage::durability::DurabilityLevel::AckDurable,
+            )
+            .with_context(|| "failed to append docker log to edgerun storage".to_string())?;
+        state.seen.insert(key.clone());
+        state.order.push_back(key);
+        while state.order.len() > LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS {
+            if let Some(old) = state.order.pop_front() {
+                state.seen.remove(&old);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn query_docker_logs_from_storage(limit: usize) -> Result<Vec<LocalDockerLogLine>> {
+    let engine = storage_engine_for_docker_logs()?;
+    let rows = engine
+        .query_segmented_journal_raw(LOCAL_DOCKER_LOGS_JOURNAL_BASE)
+        .with_context(|| "failed to query docker logs from edgerun storage".to_string())?;
+    let mut out = Vec::new();
+    for row in rows.iter().rev().take(LOCAL_DOCKER_LOGS_MAX_QUERY_SCAN) {
+        let parsed = match sonic_rs::from_slice::<StoredDockerLogLineV1>(&row.event.payload) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        out.push(LocalDockerLogLine {
+            container_id: parsed.container_id,
+            container_name: parsed.container_name,
+            timestamp: parsed.timestamp,
+            stream: parsed.stream,
+            message: parsed.message,
+        });
+        if out.len() >= limit {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 fn run_command_capture(bin: &str, args: &[&str]) -> Result<String> {

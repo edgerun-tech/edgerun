@@ -1,14 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 use std::collections::HashMap;
+use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_stream::stream;
 use hyper_util::rt::TokioIo;
+use serde::{Deserialize, Serialize};
 use tokio::net::UnixStream;
 use tokio::sync::broadcast;
 use tokio_stream::wrappers::UnixListenerStream;
+use tokio_stream::StreamExt;
 use tonic::transport::{Channel, Endpoint, Server};
 use tonic::{Request, Response, Status};
 use tower::service_fn;
@@ -37,10 +41,86 @@ pub struct EdgeInternalClient {
 #[derive(Clone)]
 struct EdgeInternalGrpcService {
     bus: RuntimeEventBus,
+    nats_mirror: Option<NatsMirror>,
 }
 
 type SubscribeStream =
     std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<ProtoEventEnvelope, Status>> + Send>>;
+
+const EVENTBUS_NATS_URL_ENV: &str = "EDGERUN_EVENTBUS_NATS_URL";
+const EVENTBUS_NATS_SUBJECT_ROOT_ENV: &str = "EDGERUN_EVENTBUS_NATS_SUBJECT_ROOT";
+const EVENTBUS_NATS_STREAM_ENV: &str = "EDGERUN_EVENTBUS_NATS_STREAM";
+const EVENTBUS_NATS_SUBJECT_ROOT_DEFAULT: &str = "edgerun.events";
+const EVENTBUS_NATS_STREAM_DEFAULT: &str = "EDGERUN_EVENTS";
+
+#[derive(Clone)]
+struct NatsMirror {
+    bus: RuntimeEventBus,
+    client: async_nats::Client,
+    jetstream: async_nats::jetstream::Context,
+    subject_root: String,
+    instance_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MirroredEnvelope {
+    origin_instance: String,
+    envelope: EventEnvelope,
+}
+
+impl NatsMirror {
+    async fn publish(&self, envelope: &EventEnvelope) -> Result<(), EventBusError> {
+        let subject = subject_for_topic(&self.subject_root, &envelope.topic);
+        let wire = MirroredEnvelope {
+            origin_instance: self.instance_id.clone(),
+            envelope: envelope.clone(),
+        };
+        let payload = bincode::serialize(&wire)
+            .map_err(|err| EventBusError::PublishFailed(format!("mirror serialize: {err}")))?;
+        self.jetstream
+            .publish(subject, payload.into())
+            .await
+            .map_err(|err| EventBusError::PublishFailed(format!("jetstream publish: {err}")))?
+            .await
+            .map_err(|err| EventBusError::PublishFailed(format!("jetstream ack: {err}")))?;
+        Ok(())
+    }
+
+    fn spawn_subscriber(&self) {
+        let client = self.client.clone();
+        let bus = self.bus.clone();
+        let instance_id = self.instance_id.clone();
+        let subject = format!("{}.>", self.subject_root);
+        tokio::spawn(async move {
+            let mut subscriber = match client.subscribe(subject.clone()).await {
+                Ok(subscriber) => subscriber,
+                Err(err) => {
+                    tracing::warn!(error = %err, subject = %subject, "failed to subscribe NATS mirror subject");
+                    return;
+                }
+            };
+            while let Some(message) = subscriber.next().await {
+                let wire = match bincode::deserialize::<MirroredEnvelope>(&message.payload) {
+                    Ok(wire) => wire,
+                    Err(err) => {
+                        tracing::warn!(error = %err, "failed to decode mirrored envelope payload");
+                        continue;
+                    }
+                };
+                if wire.origin_instance == instance_id {
+                    continue;
+                }
+                if let Err(err) = bus.ensure_topic(&wire.envelope.topic) {
+                    tracing::warn!(error = %err, topic = %wire.envelope.topic.name, "failed to ensure topic for mirrored event");
+                    continue;
+                }
+                if let Err(err) = bus.inject(wire.envelope) {
+                    tracing::warn!(error = %err, "failed to inject mirrored event into local runtime bus");
+                }
+            }
+        });
+    }
+}
 
 #[tonic::async_trait]
 impl GrpcEdgeInternalEventBus for EdgeInternalGrpcService {
@@ -58,6 +138,11 @@ impl GrpcEdgeInternalEventBus for EdgeInternalGrpcService {
             .bus
             .publish(&event_topic, req.publisher, req.payload_type, req.payload)
             .map_err(|err| Status::internal(err.to_string()))?;
+        if let Some(mirror) = &self.nats_mirror {
+            if let Err(err) = mirror.publish(&envelope).await {
+                tracing::warn!(error = %err, topic = %event_topic.name, "failed to mirror event to NATS JetStream");
+            }
+        }
         Ok(Response::new(PublishResponse {
             accepted: true,
             event_id: envelope.event_id,
@@ -116,7 +201,8 @@ pub async fn spawn_edge_internal_broker(
     let uds = tokio::net::UnixListener::bind(socket_path)
         .map_err(|e| EventBusError::PublishFailed(format!("bind edge-internal socket: {e}")))?;
     let incoming = UnixListenerStream::new(uds);
-    let service = EdgeInternalGrpcService { bus };
+    let nats_mirror = init_nats_mirror(bus.clone()).await?;
+    let service = EdgeInternalGrpcService { bus, nats_mirror };
     tokio::spawn(async move {
         let _ = Server::builder()
             .add_service(EdgeInternalEventBusServer::new(service))
@@ -126,6 +212,56 @@ pub async fn spawn_edge_internal_broker(
     Ok(EdgeInternalBrokerHandle {
         socket_path: socket_path.to_path_buf(),
     })
+}
+
+async fn init_nats_mirror(bus: RuntimeEventBus) -> Result<Option<NatsMirror>, EventBusError> {
+    let url = env::var(EVENTBUS_NATS_URL_ENV).unwrap_or_default();
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Ok(None);
+    }
+    let subject_root = env::var(EVENTBUS_NATS_SUBJECT_ROOT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| EVENTBUS_NATS_SUBJECT_ROOT_DEFAULT.to_string());
+    let stream_name = env::var(EVENTBUS_NATS_STREAM_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| EVENTBUS_NATS_STREAM_DEFAULT.to_string());
+    let instance_id = format!(
+        "{}-{}-{}",
+        std::process::id(),
+        now_unix_ms(),
+        socket_hash(&subject_root)
+    );
+
+    let client = async_nats::connect(url.clone())
+        .await
+        .map_err(|err| EventBusError::PublishFailed(format!("connect NATS ({url}): {err}")))?;
+    let jetstream = async_nats::jetstream::new(client.clone());
+    let subjects = vec![format!("{}.>", subject_root)];
+    jetstream
+        .get_or_create_stream(async_nats::jetstream::stream::Config {
+            name: stream_name.clone(),
+            subjects,
+            ..Default::default()
+        })
+        .await
+        .map_err(|err| {
+            EventBusError::PublishFailed(format!("jetstream stream {stream_name}: {err}"))
+        })?;
+
+    let mirror = NatsMirror {
+        bus,
+        client,
+        jetstream,
+        subject_root,
+        instance_id,
+    };
+    mirror.spawn_subscriber();
+    Ok(Some(mirror))
 }
 
 impl EdgeInternalClient {
@@ -271,5 +407,53 @@ fn proto_overlay_to_runtime(overlay: i32) -> Result<OverlayNetwork, EventBusErro
         Err(EventBusError::InvalidTopic(
             "overlay must be specified".to_string(),
         ))
+    }
+}
+
+fn subject_for_topic(subject_root: &str, topic: &EventTopic) -> String {
+    let overlay = match topic.overlay {
+        OverlayNetwork::EdgeInternal => "edge_internal",
+        OverlayNetwork::EdgeCluster => "edge_cluster",
+    };
+    let normalized_name = topic
+        .name
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect::<String>();
+    format!("{}.{}.{}", subject_root, overlay, normalized_name)
+}
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|value| value.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn socket_hash(input: &str) -> u32 {
+    let mut hash: u32 = 2166136261;
+    for byte in input.as_bytes() {
+        hash ^= *byte as u32;
+        hash = hash.wrapping_mul(16777619);
+    }
+    hash
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subject_mapping_keeps_overlay_and_normalizes_topic_name() {
+        let topic =
+            EventTopic::new(OverlayNetwork::EdgeInternal, "worker.lifecycle/start").expect("topic");
+        let subject = subject_for_topic("edgerun.events", &topic);
+        assert_eq!(
+            subject,
+            "edgerun.events.edge_internal.worker.lifecycle_start"
+        );
     }
 }

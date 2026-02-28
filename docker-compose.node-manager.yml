@@ -1,5 +1,49 @@
 # SPDX-License-Identifier: Apache-2.0
 services:
+  mcp-syscall:
+    container_name: edgerun-mcp-syscall
+    build:
+      context: .
+      dockerfile: docker/mcp-syscall/Dockerfile
+    image: edgerun/mcp-syscall:local
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MCP_ADDR: ${MCP_SYSCALL_ADDR:-127.0.0.1:7047}
+      MCP_STATE_DIR: /var/lib/mcp-syscall
+    working_dir: /workspace/mcp-syscall
+    volumes:
+      - ../mcp-syscall:/workspace/mcp-syscall
+      - /home/ken/src/edgerun:/workspace/edgerun
+      - /var/run/docker.sock:/var/run/docker.sock
+      - edgerun-mcp-state:/var/lib/mcp-syscall
+
+  nats:
+    container_name: edgerun-nats
+    image: nats:2.11-alpine
+    restart: unless-stopped
+    command:
+      - --name
+      - edgerun-nats
+      - --jetstream
+      - --store_dir
+      - /data
+      - --http_port
+      - "8222"
+      - --port
+      - "4222"
+    ports:
+      - "4222:4222"
+      - "127.0.0.1:8222:8222"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    volumes:
+      - edgerun-nats-data:/data
+
   node-manager:
     container_name: edgerun-node-manager
     build:
@@ -17,6 +61,8 @@ services:
     environment:
       EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL: ${EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL:-}
       EDGERUN_MCP_GITHUB_IMAGE: ${EDGERUN_MCP_GITHUB_IMAGE:-}
+      EDGERUN_EVENTBUS_NATS_URL: ${EDGERUN_EVENTBUS_NATS_URL:-nats://127.0.0.1:4222}
+      EDGERUN_INTEGRATION_TOPIC_ROOT: ${EDGERUN_INTEGRATION_TOPIC_ROOT:-edgerun.integrations}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /dev:/dev
@@ -208,6 +254,8 @@ services:
       - ./:/workspace:ro
 
 volumes:
+  edgerun-mcp-state: {}
+  edgerun-nats-data: {}
   edgerun-var-lib: {}
   edgerun-etc: {}
   edgerun-run: {}
