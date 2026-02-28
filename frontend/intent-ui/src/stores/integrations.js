@@ -6,12 +6,14 @@ import { profileRuntime } from "./profile-runtime";
 import { knownDevices } from "./devices";
 import { getProfileSecret, removeProfileSecret, setProfileSecret } from "./profile-secrets";
 import { callIntegrationWorker, initializeIntegrationWorker } from "./integrations-worker";
+import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
 let vaultStatusCheckedAt = 0;
 const VAULT_STATUS_TTL_MS = 30 * 1000;
 let subscriptionsInitialized = false;
+const MCP_ENABLED_INTEGRATIONS = new Set(["github"]);
 
 const catalog = createIntegrationCatalog();
 
@@ -89,16 +91,6 @@ async function syncIntegrationTokenToVault(integration, details) {
 function getRuntimeToken(integration) {
   if (!integration?.tokenKey) return "";
   const runtime = profileRuntime();
-  if (integration.id === "github") {
-    if (runtime.mode === "profile" && runtime.profileLoaded) {
-      return getProfileSecret(integration.tokenKey).trim();
-    }
-    if (typeof window !== "undefined") {
-      localStorage.removeItem(integration.tokenKey);
-      localStorage.removeItem("github_auth_mode");
-    }
-    return "";
-  }
   if (runtime.mode === "profile" && runtime.profileLoaded) {
     return getProfileSecret(integration.tokenKey).trim();
   }
@@ -315,6 +307,48 @@ function ensureSubscriptions() {
 
 ensureSubscriptions();
 
+function resolveLocalNodeManagerId() {
+  const host = knownDevices().find((device) => device?.type === "host" && device?.online);
+  return String(host?.id || "local-node-manager").trim();
+}
+
+async function startIntegrationMcp(integrationId, token) {
+  if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) return { ok: true, skipped: true };
+  const trimmed = String(token || "").trim();
+  if (trimmed.length < 8) return { ok: false, message: "missing integration token for MCP runtime" };
+  const response = await fetch(localBridgeHttpUrl("/v1/local/mcp/integration/start"), {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      integration_id: integrationId,
+      token: trimmed,
+      node_id: resolveLocalNodeManagerId()
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    return { ok: false, message: String(payload?.error || `mcp start failed (${response.status})`) };
+  }
+  return { ok: true, data: payload };
+}
+
+async function stopIntegrationMcp(integrationId) {
+  if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) return { ok: true, skipped: true };
+  const response = await fetch(localBridgeHttpUrl("/v1/local/mcp/integration/stop"), {
+    method: "POST",
+    headers: { "content-type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      integration_id: integrationId,
+      node_id: resolveLocalNodeManagerId()
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    return { ok: false, message: String(payload?.error || `mcp stop failed (${response.status})`) };
+  }
+  return { ok: true, data: payload };
+}
+
 const integrationStore = {
   checkAll() {
     publishEvent(UI_INTENT_TOPICS.integration.checkAll, {}, uiIntentMeta("integrations.store"));
@@ -372,14 +406,8 @@ const integrationStore = {
     const runtime = profileRuntime();
     const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
     const token = String(details?.token || "").trim();
-    if (id === "github" && !profileReady) {
-      return false;
-    }
     if (typeof window !== "undefined" && integration.tokenKey && token) {
-      if (id === "github") {
-        await setProfileSecret(integration.tokenKey, token);
-        localStorage.removeItem(integration.tokenKey);
-      } else if (profileReady) {
+      if (profileReady) {
         await setProfileSecret(integration.tokenKey, token);
         localStorage.removeItem(integration.tokenKey);
       } else {
@@ -399,10 +427,35 @@ const integrationStore = {
       },
       uiIntentMeta("integrations.store")
     );
+    if (token && MCP_ENABLED_INTEGRATIONS.has(id)) {
+      try {
+        const result = await startIntegrationMcp(id, token);
+        if (!result.ok) {
+          publishEvent(
+            UI_EVENT_TOPICS.integration.verifyFailed,
+            { integrationId: id, message: `MCP runtime failed to start: ${result.message || "unknown error"}` },
+            uiIntentMeta("integrations.store")
+          );
+        } else {
+          publishEvent(
+            UI_EVENT_TOPICS.integration.stateChanged,
+            { integrationId: id, reason: "mcp_started" },
+            uiIntentMeta("integrations.store")
+          );
+        }
+      } catch (error) {
+        publishEvent(
+          UI_EVENT_TOPICS.integration.verifyFailed,
+          { integrationId: id, message: `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}` },
+          uiIntentMeta("integrations.store")
+        );
+      }
+    }
     return true;
   },
   disconnect(id) {
     publishEvent(UI_INTENT_TOPICS.integration.disconnect, { id }, uiIntentMeta("integrations.store"));
+    void stopIntegrationMcp(id);
   },
   setConnectorMode(id, mode) {
     const integration = catalog[id];

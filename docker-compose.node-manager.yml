@@ -16,25 +16,196 @@ services:
       - ${EDGERUN_LOCAL_BRIDGE_LISTEN:-127.0.0.1:7777}
     environment:
       EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL: ${EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL:-}
+      EDGERUN_MCP_GITHUB_IMAGE: ${EDGERUN_MCP_GITHUB_IMAGE:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /dev:/dev
+      - /home/ken/src/edgerun:/workspace/edgerun
       - edgerun-var-lib:/var/lib/edgerun
       - edgerun-etc:/etc/edgerun
       - edgerun-run:/run/edgerun
 
   cloudflared:
     container_name: edgerun-cloudflared
-    image: cloudflare/cloudflared:2026.2.1
+    image: cloudflare/cloudflared:2026.2.0
+    user: "0:0"
     restart: unless-stopped
     profiles: ["tunnel"]
     network_mode: host
     command:
       - tunnel
       - --no-autoupdate
+      - --config
+      - /etc/cloudflared/config.yml
       - run
-      - --token
-      - ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    volumes:
+      - ./config/cloudflared/node-manager-tunnel.yml:/etc/cloudflared/config.yml:ro
+      - ./config/cloudflared/node-manager-tunnel-credentials.json:/etc/cloudflared/creds/node-manager-tunnel-credentials.json:ro
+
+  osdev-frontend:
+    container_name: edgerun-osdev-frontend
+    image: oven/bun:1.3.9
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    network_mode: host
+    working_dir: /workspace/frontend
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        bun install --frozen-lockfile
+        last_sig=""
+        while true; do
+          sig="$$(find /workspace/frontend/intent-ui /workspace/frontend/public /workspace/frontend/scripts/build-intent-ui-dev.mjs -type f -printf '%p %T@ %s\n' 2>/dev/null | LC_ALL=C sort | sha256sum | awk '{print $$1}')"
+          if [ "$$sig" != "$$last_sig" ]; then
+            bun scripts/build-intent-ui-dev.mjs || true
+            last_sig="$$sig"
+          fi
+          sleep 1
+        done
+    environment:
+      EDGERUN_API_URL: https://api.edgerun.tech
+    volumes:
+      - ./:/workspace
+
+  osdeve2e-manager:
+    container_name: edgerun-osdeve2e-manager
+    image: oven/bun:1.3.9
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    network_mode: host
+    working_dir: /workspace/frontend
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        bun install --frozen-lockfile
+        last_sig=""
+        while true; do
+          sig="$$(find /workspace/frontend/intent-ui /workspace/frontend/public /workspace/frontend/scripts /workspace/frontend/cypress/e2e -type f -printf '%p %T@ %s\n' 2>/dev/null | LC_ALL=C sort | sha256sum | awk '{print $$1}')"
+          if [ "$$sig" != "$$last_sig" ]; then
+            echo "[osdeve2e-manager] change detected, rebuilding and running checks"
+            INTENT_UI_DEV_OUT_DIR=/workspace/out/frontend/osdeve2e bun scripts/build-intent-ui-dev.mjs || true
+            bun run check || true
+            PORT=4199
+            bunx --bun serve /workspace/out/frontend/osdeve2e -p "$$PORT" >/tmp/osdeve2e-serve.log 2>&1 &
+            SERVER_PID=$$!
+            sleep 1
+            bunx --bun cypress run --config-file cypress.config.ts --config baseUrl=http://127.0.0.1:$$PORT --browser electron --spec cypress/e2e/intent-ui-file-manager-node-selector.cy.js || true
+            kill "$$SERVER_PID" >/dev/null 2>&1 || true
+            wait "$$SERVER_PID" >/dev/null 2>&1 || true
+            last_sig="$$sig"
+          fi
+          sleep 1
+        done
+    environment:
+      EDGERUN_API_URL: https://api.edgerun.tech
+    volumes:
+      - ./:/workspace
+
+  codex-cli:
+    container_name: edgerun-codex-cli
+    image: node:22-bookworm
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    network_mode: host
+    working_dir: /workspace/edgerun
+    environment:
+      HOME: /workspace/edgerun
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        cat >/tmp/codex-assistant-bridge.mjs <<'JS'
+        import { createServer } from "node:http";
+        import { spawn } from "node:child_process";
+        import { promises as fs } from "node:fs";
+        import { randomUUID } from "node:crypto";
+
+        function json(res, status, body) {
+          res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+          res.end(JSON.stringify(body));
+        }
+
+        async function runCodex(prompt) {
+          const outFile = "/tmp/codex-last-" + Date.now() + "-" + randomUUID() + ".txt";
+          const args = [
+            "/usr/lib/node_modules/@openai/codex/bin/codex.js",
+            "exec",
+            "--skip-git-repo-check",
+            "-C",
+            "/workspace/edgerun",
+            "--output-last-message",
+            outFile,
+            prompt
+          ];
+          const child = spawn("node", args, { stdio: ["ignore", "pipe", "pipe"] });
+          let stderr = "";
+          child.stderr.on("data", (chunk) => { stderr += String(chunk || ""); });
+          const exitCode = await new Promise((resolve) => child.on("close", resolve));
+          if (exitCode !== 0) {
+            throw new Error(stderr.trim() || ("codex exec failed with exit " + String(exitCode)));
+          }
+          const text = (await fs.readFile(outFile, "utf8")).trim();
+          await fs.rm(outFile, { force: true });
+          return text || "Codex returned no output.";
+        }
+
+        const server = createServer(async (req, res) => {
+          try {
+            if (req.method !== "POST" || req.url !== "/api/assistant") {
+              json(res, 404, { ok: false, error: "not found" });
+              return;
+            }
+            let raw = "";
+            req.on("data", (chunk) => { raw += String(chunk || ""); });
+            await new Promise((resolve) => req.on("end", resolve));
+            const payload = raw ? JSON.parse(raw) : {};
+            const message = String(payload?.message || "").trim();
+            if (!message) {
+              json(res, 400, { ok: false, error: "assistant message is required" });
+              return;
+            }
+            const reply = await runCodex(message);
+            json(res, 200, {
+              ok: true,
+              error: "",
+              message: reply,
+              actions: [],
+              statusEvents: [{ type: "phase", label: "done", detail: "Response ready." }],
+              sessionId: String(payload?.sessionId || ""),
+              threadId: String(payload?.threadId || "")
+            });
+          } catch (error) {
+            json(res, 500, {
+              ok: false,
+              error: error instanceof Error ? error.message : "assistant bridge failed"
+            });
+          }
+        });
+        server.listen(7788, "127.0.0.1");
+        JS
+        exec node /tmp/codex-assistant-bridge.mjs
+    volumes:
+      - /home/ken/src/edgerun:/workspace/edgerun
+      - /usr/lib/node_modules/@openai/codex:/usr/lib/node_modules/@openai/codex:ro
+
+  caddy:
+    container_name: edgerun-osdev-caddy
+    image: caddy:2.10.0
+    restart: unless-stopped
+    profiles: ["tunnel"]
+    network_mode: host
+    command:
+      - caddy
+      - run
+      - --config
+      - /etc/caddy/Caddyfile
+      - --adapter
+      - caddyfile
+    volumes:
+      - ./config/caddy/osdev.Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./:/workspace:ro
 
 volumes:
   edgerun-var-lib: {}

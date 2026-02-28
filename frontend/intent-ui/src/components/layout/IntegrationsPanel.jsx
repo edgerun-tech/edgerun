@@ -135,9 +135,7 @@ function IntegrationsPanel(props) {
       const runtime = profileRuntime();
       const value = runtime.mode === "profile" && runtime.profileLoaded
         ? String(getProfileSecret(provider.tokenKey) || "").trim()
-        : provider.id === "github"
-          ? ""
-          : String(localStorage.getItem(provider.tokenKey) || "").trim();
+        : String(localStorage.getItem(provider.tokenKey) || "").trim();
       setTokenInput(value);
     } else {
       setTokenInput("");

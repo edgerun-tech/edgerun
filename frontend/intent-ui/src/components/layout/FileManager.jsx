@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import {
   TbOutlineArchive,
   TbOutlineBrandGithub,
@@ -18,6 +18,10 @@ import {
 } from "solid-icons/tb";
 import { openWindow } from "../../stores/windows";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
+import { publishEvent } from "../../stores/eventbus";
+import { knownDevices } from "../../stores/devices";
+import { getFsNodeTargetId, setFsNodeTarget } from "../../stores/fs-node-target";
+import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 import {
   copyFsPath,
   deleteFsPath,
@@ -179,12 +183,21 @@ function FileManager(props) {
       mountId: mount.id
     }];
   });
+  const fsNodes = createMemo(() => knownDevices().filter((device) => device?.metadata?.capabilities?.fileSystem));
+  const selectedFsNode = createMemo(() => fsNodes().find((node) => node.id === getFsNodeTargetId()) || null);
+  const localMountUnavailable = createMemo(() => Boolean(activeMount() && activeMount().id === "local" && !selectedFsNode()));
 
   const refreshMounts = () => {
     setMounts(getFsMounts());
   };
 
   const loadChildren = async (path) => {
+    if (path === "/local" || path.startsWith("/local/")) {
+      if (!selectedFsNode()) {
+        setChildrenByPath((prev) => ({ ...prev, [path]: [] }));
+        return;
+      }
+    }
     const mount = mounts().find((item) => path === item.root || path.startsWith(`${item.root}/`));
     if (mount && mount.auth !== "ready") {
       setChildrenByPath((prev) => ({ ...prev, [path]: [] }));
@@ -217,6 +230,21 @@ function FileManager(props) {
     setPropertiesNode(null);
     if (mount.auth === "ready") {
       await ensureDirExpanded(mount.root);
+    }
+    publishEvent("intent.ui.file-manager.mount.selected", { mountId: mount.id }, { source: "intent-ui.file-manager" });
+  };
+
+  const selectFsNode = async (nodeId) => {
+    const next = String(nodeId || "").trim();
+    setFsNodeTarget(next);
+    setChildrenByPath({});
+    setExpandedDirs(new Set());
+    setPropertiesNode(null);
+    setLocalFsRoot("");
+    setActionStatus(next ? `Selected node ${next}` : "Select a node to access local filesystem.");
+    publishEvent("intent.ui.file-manager.node.selected", { nodeId: next }, { source: "intent-ui.file-manager" });
+    if (activeMount()?.id === "local" && selectedMountId()) {
+      await selectMount(selectedMountId());
     }
   };
 
@@ -303,10 +331,10 @@ function FileManager(props) {
       return;
     }
     const providerPath = toLocalProviderPath(node.path);
-    const response = await fetch("/api/fs/archive", {
+    const response = await fetch(localBridgeHttpUrl("/v1/local/fs/archive"), {
       method: "POST",
       headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ path: providerPath, format: "tar.gz" })
+      body: JSON.stringify({ path: providerPath, format: "tar.gz", node_id: getFsNodeTargetId() })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
@@ -322,10 +350,10 @@ function FileManager(props) {
       return;
     }
     const providerPath = toLocalProviderPath(node.path);
-    const response = await fetch("/api/fs/extract", {
+    const response = await fetch(localBridgeHttpUrl("/v1/local/fs/extract"), {
       method: "POST",
       headers: { "content-type": "application/json; charset=utf-8" },
-      body: JSON.stringify({ path: providerPath })
+      body: JSON.stringify({ path: providerPath, node_id: getFsNodeTargetId() })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload?.ok === false) {
@@ -349,8 +377,11 @@ function FileManager(props) {
   const onAction = async (callback) => {
     try {
       await callback();
+      publishEvent("intent.ui.file-manager.fs-operation.succeeded", { selectedPath: selectedPath() }, { source: "intent-ui.file-manager" });
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "File operation failed.");
+      const message = error instanceof Error ? error.message : "File operation failed.";
+      setActionStatus(message);
+      publishEvent("intent.ui.file-manager.fs-operation.failed", { error: message, selectedPath: selectedPath() }, { source: "intent-ui.file-manager" });
     }
   };
 
@@ -382,8 +413,13 @@ function FileManager(props) {
   }));
 
   onMount(() => {
-    fetch("/api/fs/meta")
-      .then((response) => response.json())
+    const initialTarget = getFsNodeTargetId();
+    if (!initialTarget) {
+      const firstFsNode = fsNodes()[0];
+      if (firstFsNode?.id) setFsNodeTarget(firstFsNode.id);
+    }
+    fetch(localBridgeHttpUrl(`/v1/local/fs/meta?node_id=${encodeURIComponent(getFsNodeTargetId())}`), { cache: "no-store" })
+      .then((response) => response.json().catch(() => ({})))
       .then((payload) => {
         if (payload?.ok && typeof payload.localFsRoot === "string") setLocalFsRoot(payload.localFsRoot);
       })
@@ -416,10 +452,65 @@ function FileManager(props) {
     }
   });
 
+  createEffect(() => {
+    const devices = fsNodes();
+    if (!devices.length) {
+      if (getFsNodeTargetId()) {
+        setFsNodeTarget("");
+        setLocalFsRoot("");
+      }
+      return;
+    }
+    const current = getFsNodeTargetId();
+    const exists = devices.some((device) => device.id === current);
+    if (!exists) {
+      setFsNodeTarget(devices[0].id);
+      setLocalFsRoot("");
+    }
+  });
+
+  createEffect(() => {
+    const selectedNodeId = getFsNodeTargetId();
+    if (!selectedNodeId) {
+      setLocalFsRoot("");
+      return;
+    }
+    fetch(localBridgeHttpUrl(`/v1/local/fs/meta?node_id=${encodeURIComponent(selectedNodeId)}`), { cache: "no-store" })
+      .then((response) => response.json().catch(() => ({})))
+      .then((payload) => {
+        if (payload?.ok && typeof payload.localFsRoot === "string") {
+          setLocalFsRoot(payload.localFsRoot);
+        } else {
+          setLocalFsRoot("");
+        }
+      })
+      .catch(() => setLocalFsRoot(""));
+  });
+
   return (
     <div class={`flex h-full min-h-0 flex-col text-sm text-neutral-300 ${compact() ? "" : "bg-[#111] p-4"}`}>
       <div class="shrink-0 border-b border-neutral-800 px-3 py-2">
         <h3 class="text-xs font-medium uppercase tracking-wide text-neutral-300">File Manager</h3>
+        <div class="mt-2">
+          <label class="mb-1 block text-[10px] uppercase tracking-wide text-neutral-500" for="file-manager-node-selector">Node</label>
+          <select
+            id="file-manager-node-selector"
+            data-testid="file-manager-node-selector"
+            class="h-8 w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2 text-xs text-neutral-200 outline-none focus:border-[hsl(var(--primary)/0.45)]"
+            value={getFsNodeTargetId()}
+            onChange={(event) => { void selectFsNode(event.currentTarget.value); }}
+          >
+            <Show when={fsNodes().length > 0} fallback={<option value="">No filesystem nodes available</option>}>
+              <For each={fsNodes()}>
+                {(node) => (
+                  <option value={node.id}>
+                    {node.name || node.id}
+                  </option>
+                )}
+              </For>
+            </Show>
+          </select>
+        </div>
       </div>
 
       <div class="grid grid-cols-4 gap-1.5 px-3 py-2">
@@ -457,6 +548,11 @@ function FileManager(props) {
           >
             Link integration
           </button>
+        </div>
+      </Show>
+      <Show when={localMountUnavailable()}>
+        <div class="mx-3 mb-2 rounded-md border border-rose-500/40 bg-rose-950/20 px-2.5 py-2 text-xs text-rose-200" data-testid="file-manager-node-unavailable">
+          Local filesystem unavailable for selected node.
         </div>
       </Show>
 
@@ -531,6 +627,9 @@ function FileManager(props) {
         </Show>
         <Show when={actionStatus()}>
           <p class="mt-1 truncate text-[10px] text-[hsl(var(--primary))]">{actionStatus()}</p>
+        </Show>
+        <Show when={selectedFsNode()}>
+          <p class="mt-1 truncate text-[10px] text-neutral-500">Node: {selectedFsNode().name || selectedFsNode().id}</p>
         </Show>
         <Show when={lastFsError()}>
           <p class="mt-1 truncate text-rose-300">FS: {lastFsError()}</p>

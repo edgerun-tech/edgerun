@@ -1,6 +1,7 @@
 import { FiCloud, FiServer, FiGlobe, FiShield, FiActivity, FiRefreshCw, FiSearch, FiExternalLink, FiBox, FiFolder, FiGitPullRequest, FiMail, FiCalendar, FiHardDrive, FiSettings, FiArrowRight } from "solid-icons/fi";
 import { createSignal, For, Show, onMount, createMemo } from "solid-js";
 import { getToken } from "../../lib/auth";
+import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 import { openWindow } from "../../stores/windows";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
 import { integrationStore } from "../../stores/integrations";
@@ -75,7 +76,7 @@ function CloudPanel(props) {
     const googleToken = integrationStore.getToken("google");
     try {
       try {
-        const dockerRes = await fetch("http://127.0.0.1:7777/v1/local/docker/summary", { cache: "no-store" });
+        const dockerRes = await fetch(localBridgeHttpUrl("/v1/local/docker/summary"), { cache: "no-store" });
         if (dockerRes.ok) {
           const docker = await dockerRes.json();
           if (docker?.ok) {

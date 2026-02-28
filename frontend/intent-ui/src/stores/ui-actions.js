@@ -8,7 +8,11 @@ function toggleIntentBar() {
 }
 
 function openProfileBootstrap() {
-  publishEvent(UI_INTENT_TOPICS.action.profileBootstrapOpen, {}, uiIntentMeta("ui-actions"));
+  publishEvent(
+    UI_INTENT_TOPICS.action.profileBootstrapOpen,
+    { manual: true, source: "user" },
+    uiIntentMeta("ui-actions")
+  );
 }
 
 function navigateBrowser(url) {

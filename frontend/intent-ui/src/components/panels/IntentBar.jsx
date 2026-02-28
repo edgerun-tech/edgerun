@@ -52,7 +52,15 @@ import {
   clearResults
 } from "../../lib/stores/results";
 import { ResultRenderer } from "../results/ResultRenderer";
-import { openCodexResponse, openWorkflowDemo, openWorkflowIntegrations, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
+import {
+  openCodexResponse,
+  openWorkflowDemo,
+  openWorkflowIntegrations,
+  setAssistantProvider,
+  startNewCodexSession,
+  useWorkflowSession,
+  workflowUi
+} from "../../stores/workflow-ui";
 import { Kbd, KbdGroup } from "../../registry/ui/kbd";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -1510,6 +1518,65 @@ function IntentBar() {
       } catch (error2) {
         setError(error2 instanceof Error ? error2.message : "Failed to load contacts.");
       }
+      return;
+    }
+    if (/^session\s+new$/i.test(trimmed)) {
+      startNewCodexSession();
+      setError(null);
+      addRecentCommand(trimmed);
+      setQuery("");
+      setMode("intent");
+      return;
+    }
+    if (/^session\s+list$/i.test(trimmed)) {
+      const sessions = workflowUi().sessionHistory || [];
+      const lines = sessions.map((session, index) => ({
+        index: index + 1,
+        sessionId: session.sessionId,
+        preview: session.preview || "",
+        provider: session.provider || "codex"
+      }));
+      addResult({
+        query: trimmed,
+        response: {
+          success: true,
+          data: lines,
+          ui: {
+            viewType: "table",
+            title: "Codex Sessions",
+            description: `Loaded ${lines.length} sessions`,
+            metadata: {
+              source: "Session Store",
+              itemCount: lines.length,
+              timestamp: (/* @__PURE__ */ new Date()).toISOString()
+            }
+          }
+        }
+      });
+      setResults(getAllResults());
+      setPinnedResults(getPinnedResults());
+      setError(null);
+      addRecentCommand(trimmed);
+      setQuery("");
+      setMode("intent");
+      return;
+    }
+    const sessionSwitchMatch = trimmed.match(/^session\s+([a-z0-9_-]+)$/i);
+    if (sessionSwitchMatch) {
+      const selector = String(sessionSwitchMatch[1] || "").trim();
+      const sessions = workflowUi().sessionHistory || [];
+      const byPrefix = sessions.find((session) => String(session.sessionId || "").startsWith(selector));
+      const byIndex = Number.isFinite(Number(selector)) ? sessions[Math.max(0, Number(selector) - 1)] : null;
+      const target = byPrefix || byIndex || null;
+      if (!target?.sessionId) {
+        setError(`Session not found: ${selector}`);
+        return;
+      }
+      useWorkflowSession(target);
+      setError(null);
+      addRecentCommand(trimmed);
+      setQuery("");
+      setMode("intent");
       return;
     }
     if (isDemoIntentQuery(q)) {

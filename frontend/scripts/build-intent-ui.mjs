@@ -20,6 +20,7 @@ const integrationsWorkerSource = path.join(intentRoot, 'src', 'workers', 'integr
 const integrationsWorkerTarget = path.join(targetWorkerRoot, 'integrations.worker.js')
 const tailwindBin = path.join(frontendRoot, 'node_modules', '.bin', 'tailwindcss')
 const repoRoot = path.resolve(frontendRoot, '..')
+const buildVersion = Date.now().toString()
 
 function run(cmd, cwd) {
   const proc = spawnSync(cmd[0], cmd.slice(1), {
@@ -121,11 +122,11 @@ writeFileSync(
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Intent UI</title>
-    <link rel="stylesheet" href="/intent-ui/app.css" />
+    <link rel="stylesheet" href="/intent-ui/app.css?v=${buildVersion}" />
   </head>
   <body>
     <main id="root"></main>
-    <script type="module" src="/intent-ui/client/main.js"></script>
+    <script type="module" src="/intent-ui/client/main.js?v=${buildVersion}"></script>
   </body>
 </html>
 `,

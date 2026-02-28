@@ -45,11 +45,8 @@ function getGitHubToken() {
   if (runtime.mode === "profile" && runtime.profileLoaded) {
     return String(getProfileSecret("github_token") || "").trim();
   }
-  if (typeof localStorage !== "undefined") {
-    localStorage.removeItem("github_token");
-    localStorage.removeItem("github_auth_mode");
-  }
-  return "";
+  if (typeof localStorage === "undefined") return "";
+  return String(localStorage.getItem("github_token") || "").trim();
 }
 
 function encodePathSegments(path) {

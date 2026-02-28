@@ -1,0 +1,45 @@
+{
+  auto_https off
+}
+
+:4175 {
+  encode zstd gzip
+
+  handle /v1/local/* {
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @assistant path /api/assistant /api/assistant/*
+  handle @assistant {
+    reverse_proxy 127.0.0.1:7788
+  }
+
+  handle /api/* {
+    reverse_proxy https://api.edgerun.tech {
+      header_up Host api.edgerun.tech
+    }
+  }
+
+  @osdeve2e host osdeve2e.edgerun.tech
+  handle @osdeve2e {
+    root * /workspace/out/frontend/osdeve2e
+    header {
+      Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+      Pragma "no-cache"
+      Expires "0"
+    }
+    try_files {path} {path}/ /index.html
+    file_server
+  }
+
+  handle {
+    root * /workspace/out/frontend/osdev
+    header {
+      Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+      Pragma "no-cache"
+      Expires "0"
+    }
+    try_files {path} {path}/ /index.html
+    file_server
+  }
+}

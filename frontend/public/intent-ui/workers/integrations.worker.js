@@ -146,14 +146,20 @@ class IntegrationLifecycle {
 
   async verifyConnection({ details = {}, connectorMode = "", profileReady = false, deviceReady = false, token = "", fetchImpl = fetch } = {}) {
     const mode = this.resolveConnectorMode(connectorMode || this.getDefaultConnectorMode());
-    if (this.id === "github" && !profileReady) return { ok: false, message: "Profile session required for GitHub PAT." };
     if (this.id === "github") {
       const pat = String(details?.token || "").trim() || String(token || "").trim();
       if (pat.length < 8) {
         return { ok: false, message: "GitHub Personal Access Token missing or invalid." };
       }
       try {
-        const response = await fetchImpl(`/api/github/user?token=${encodeURIComponent(pat)}`, { cache: "no-store" });
+        const response = await fetchImpl("https://api.github.com/user", {
+          cache: "no-store",
+          headers: {
+            accept: "application/vnd.github+json",
+            authorization: `Bearer ${pat}`,
+            "x-github-api-version": "2022-11-28"
+          }
+        });
         const body = await response.json().catch(() => ({}));
         if (!response.ok) {
           return { ok: false, message: String(body?.error || `GitHub user request failed (${response.status})`) };

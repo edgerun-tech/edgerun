@@ -1,15 +1,14 @@
 import { createSignal } from "solid-js";
 import { decodeLocalEventEnvelope, decodeLocalNodeInfoResponse, encodeLocalEventEnvelope } from "../lib/local-bridge-proto";
+import { localBridgeHttpUrl, localBridgeWsUrl } from "../lib/local-bridge-origin";
 import { setDeviceOnlineState, upsertDevice } from "./devices";
 
 const EVENTBUS_TIMELINE_KEY = "intent-ui-eventbus-timeline-v1";
 const EVENTBUS_MAX_EVENTS = 300;
-const LOCAL_BRIDGE_WS_URL = "ws://127.0.0.1:7777/v1/local/eventbus/ws";
+const LOCAL_BRIDGE_WS_PATH = "/v1/local/eventbus/ws";
 const LOCAL_BRIDGE_DEVICE_ID = "local-node-manager";
-const LOCAL_BRIDGE_RETRY_INITIAL_MS = 2000;
-const LOCAL_BRIDGE_RETRY_MAX_MS = 120000;
-const LOCAL_BRIDGE_RETRY_PAUSE_AFTER_ATTEMPTS = 6;
-const LOCAL_BRIDGE_RETRY_PAUSE_MS = 5 * 60 * 1000;
+const LOCAL_BRIDGE_ERROR_MESSAGE = "Can't connect to local bridge, is it running?";
+const LOCAL_BRIDGE_CONNECT_TIMEOUT_MS = 2500;
 
 function safeParse(raw) {
   try {
@@ -35,10 +34,13 @@ function persistTimeline(entries) {
 }
 
 const [eventBusRuntime, setEventBusRuntime] = createSignal({
-  engine: "worker-js",
+  engine: "bridge-ws",
   wasmLoaded: false,
   workerReady: false,
+  bridgeRequired: true,
   localBridgeConnected: false,
+  localBridgeStatus: "connecting",
+  localBridgeError: "",
   peers: [],
   lastSyncAt: ""
 });
@@ -46,12 +48,20 @@ const [eventBusRuntime, setEventBusRuntime] = createSignal({
 const [eventTimeline, setEventTimeline] = createSignal(readTimeline());
 
 const topicListeners = new Map();
-let eventBusWorker = null;
 let localBridgeSocket = null;
 let initialized = false;
-let localBridgeRetryTimer = null;
-let localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
-let localBridgeRetryAttempts = 0;
+let localBridgeConnectTimer = null;
+
+function decodeEnvelopePayload(payloadBytes) {
+  if (!(payloadBytes instanceof Uint8Array) || payloadBytes.length === 0) return {};
+  try {
+    const text = new TextDecoder().decode(payloadBytes);
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 function notifyListeners(event) {
   const topic = String(event?.topic || "");
@@ -75,43 +85,27 @@ function notifyListeners(event) {
 
 function publishEvent(topic, payload = {}, meta = {}) {
   const normalizedTopic = String(topic || "").trim() || "event.unknown";
-  if (localBridgeSocket && localBridgeSocket.readyState === WebSocket.OPEN && meta?.localBridgeForward !== false) {
-    try {
-      const envelope = encodeLocalEventEnvelope({
-        eventId: `local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
-        topic: normalizedTopic,
-        source: String(meta?.source || "browser"),
-        tsUnixMs: Date.now(),
-        payloadBytes: new Uint8Array()
-      });
-      localBridgeSocket.send(envelope);
-    } catch {
-      // ignore local bridge send failures
-    }
+  const canUseBridge = Boolean(localBridgeSocket) && localBridgeSocket.readyState === WebSocket.OPEN;
+  if (!canUseBridge) {
+    return false;
   }
-  const localEvent = {
-    id: `evt-local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
-    topic: normalizedTopic,
-    payload,
-    meta,
-    createdAt: new Date().toISOString()
-  };
-  setEventTimeline((prev) => {
-    const next = [...prev, localEvent].slice(-EVENTBUS_MAX_EVENTS);
-    persistTimeline(next);
-    return next;
-  });
-  notifyListeners(localEvent);
-
-  if (eventBusWorker && meta?.domain !== "ui") {
-    eventBusWorker.postMessage({
-      type: "publish",
+  try {
+    const payloadBytes = new TextEncoder().encode(JSON.stringify({
+      payload: payload && typeof payload === "object" ? payload : {},
+      meta: meta && typeof meta === "object" ? meta : {}
+    }));
+    const envelope = encodeLocalEventEnvelope({
+      eventId: `local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
       topic: normalizedTopic,
-      payload,
-      meta
+      source: String(meta?.source || "browser"),
+      tsUnixMs: Date.now(),
+      payloadBytes
     });
-    return;
+    localBridgeSocket.send(envelope);
+  } catch {
+    return false;
   }
+  return true;
 }
 
 function subscribeEvent(topic, handler) {
@@ -126,56 +120,47 @@ function subscribeEvent(topic, handler) {
 function initializeBrowserEventBus() {
   if (typeof window === "undefined" || initialized) return;
   initialized = true;
-  const worker = new Worker(new URL("../workers/eventbus.worker.js", import.meta.url), { type: "module" });
-  eventBusWorker = worker;
-
-  worker.onmessage = (message) => {
-    const data = message?.data || {};
-    if (data.type === "runtime" && data.runtime) {
-      setEventBusRuntime((prev) => ({ ...prev, ...data.runtime }));
-      return;
-    }
-    if (data.type === "timeline") {
-      const events = Array.isArray(data.events) ? data.events : [];
-      setEventTimeline(events.slice(-EVENTBUS_MAX_EVENTS));
-      persistTimeline(events);
-      return;
-    }
-    if (data.type === "event" && data.event) {
-      const event = data.event;
-      setEventTimeline((prev) => {
-        const next = [...prev, event].slice(-EVENTBUS_MAX_EVENTS);
-        persistTimeline(next);
-        return next;
-      });
-      notifyListeners(event);
-    }
-  };
-
-  worker.onerror = () => {
-    setEventBusRuntime((prev) => ({ ...prev, engine: "worker-js", wasmLoaded: false, workerReady: false }));
-    eventBusWorker = null;
-  };
-
-  worker.postMessage({ type: "init", wasmUrl: "/intent-ui/eventbus.wasm" });
   initializeLocalBridgeSocket();
 }
 
 function initializeLocalBridgeSocket() {
   if (typeof window === "undefined") return;
   if (localBridgeSocket) return;
-  if (localBridgeRetryTimer) {
-    window.clearTimeout(localBridgeRetryTimer);
-    localBridgeRetryTimer = null;
-  }
+  setEventBusRuntime((prev) => ({
+    ...prev,
+    localBridgeConnected: false,
+    localBridgeStatus: "connecting",
+    localBridgeError: ""
+  }));
   try {
-    const socket = new WebSocket(LOCAL_BRIDGE_WS_URL);
+    const socket = new WebSocket(localBridgeWsUrl(LOCAL_BRIDGE_WS_PATH));
     localBridgeSocket = socket;
     socket.binaryType = "arraybuffer";
+    localBridgeConnectTimer = window.setTimeout(() => {
+      if (!localBridgeSocket || localBridgeSocket !== socket) return;
+      setEventBusRuntime((prev) => ({
+        ...prev,
+        localBridgeConnected: false,
+        localBridgeStatus: "error",
+        localBridgeError: LOCAL_BRIDGE_ERROR_MESSAGE
+      }));
+      try {
+        socket.close();
+      } catch {
+        // ignore socket close failures
+      }
+    }, LOCAL_BRIDGE_CONNECT_TIMEOUT_MS);
     socket.onopen = () => {
-      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: true }));
-      localBridgeRetryAttempts = 0;
-      localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
+      if (localBridgeConnectTimer) {
+        window.clearTimeout(localBridgeConnectTimer);
+        localBridgeConnectTimer = null;
+      }
+      setEventBusRuntime((prev) => ({
+        ...prev,
+        localBridgeConnected: true,
+        localBridgeStatus: "connected",
+        localBridgeError: ""
+      }));
       void hydrateLocalBridgeNodeInfo();
       socket.send(encodeLocalEventEnvelope({
         eventId: `bridge-hello-${Date.now()}`,
@@ -186,13 +171,37 @@ function initializeLocalBridgeSocket() {
       }));
     };
     socket.onclose = () => {
-      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+      if (localBridgeConnectTimer) {
+        window.clearTimeout(localBridgeConnectTimer);
+        localBridgeConnectTimer = null;
+      }
+      setEventBusRuntime((prev) => ({
+        ...prev,
+        localBridgeConnected: false,
+        localBridgeStatus: "error",
+        localBridgeError: LOCAL_BRIDGE_ERROR_MESSAGE
+      }));
       setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, false);
       localBridgeSocket = null;
-      scheduleLocalBridgeReconnect();
     };
     socket.onerror = () => {
-      setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+      if (localBridgeConnectTimer) {
+        window.clearTimeout(localBridgeConnectTimer);
+        localBridgeConnectTimer = null;
+      }
+      setEventBusRuntime((prev) => ({
+        ...prev,
+        localBridgeConnected: false,
+        localBridgeStatus: "error",
+        localBridgeError: LOCAL_BRIDGE_ERROR_MESSAGE
+      }));
+      if (localBridgeSocket && localBridgeSocket.readyState !== WebSocket.CLOSED) {
+        try {
+          localBridgeSocket.close();
+        } catch {
+          // ignore socket close failures
+        }
+      }
     };
     socket.onmessage = (message) => {
       if (message?.data instanceof ArrayBuffer) {
@@ -208,11 +217,23 @@ function initializeLocalBridgeSocket() {
           return;
         }
         if (String(envelope.topic || "").trim()) {
-          publishEvent(
-            envelope.topic,
-            {},
-            { source: `local-bridge:${envelope.source || "node-manager"}`, localBridgeForward: false }
-          );
+          const envelopeData = decodeEnvelopePayload(envelope.payloadBytes);
+          const bridgeEvent = {
+            id: envelope.eventId || `evt-bridge-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+            topic: envelope.topic,
+            payload: envelopeData.payload && typeof envelopeData.payload === "object" ? envelopeData.payload : {},
+            meta: {
+              ...(envelopeData.meta && typeof envelopeData.meta === "object" ? envelopeData.meta : {}),
+              source: `local-bridge:${envelope.source || "node-manager"}`
+            },
+            createdAt: envelope.tsUnixMs ? new Date(envelope.tsUnixMs).toISOString() : new Date().toISOString()
+          };
+          setEventTimeline((prev) => {
+            const next = [...prev, bridgeEvent].slice(-EVENTBUS_MAX_EVENTS);
+            persistTimeline(next);
+            return next;
+          });
+          notifyListeners(bridgeEvent);
         }
         return;
       }
@@ -221,32 +242,18 @@ function initializeLocalBridgeSocket() {
       }
     };
   } catch {
-    setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
-    scheduleLocalBridgeReconnect();
+    setEventBusRuntime((prev) => ({
+      ...prev,
+      localBridgeConnected: false,
+      localBridgeStatus: "error",
+      localBridgeError: LOCAL_BRIDGE_ERROR_MESSAGE
+    }));
   }
-}
-
-function scheduleLocalBridgeReconnect() {
-  if (typeof window === "undefined") return;
-  if (!initialized || localBridgeSocket || localBridgeRetryTimer) return;
-  localBridgeRetryAttempts += 1;
-  const shouldPause = localBridgeRetryAttempts >= LOCAL_BRIDGE_RETRY_PAUSE_AFTER_ATTEMPTS;
-  const delay = shouldPause ? LOCAL_BRIDGE_RETRY_PAUSE_MS : localBridgeRetryDelayMs;
-  if (shouldPause) {
-    localBridgeRetryAttempts = 0;
-    localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
-  } else {
-    localBridgeRetryDelayMs = Math.min(localBridgeRetryDelayMs * 2, LOCAL_BRIDGE_RETRY_MAX_MS);
-  }
-  localBridgeRetryTimer = window.setTimeout(() => {
-    localBridgeRetryTimer = null;
-    if (initialized && !localBridgeSocket) initializeLocalBridgeSocket();
-  }, delay);
 }
 
 async function hydrateLocalBridgeNodeInfo() {
   try {
-    const response = await fetch("http://127.0.0.1:7777/v1/local/node/info.pb", { cache: "no-store" });
+    const response = await fetch(localBridgeHttpUrl("/v1/local/node/info.pb"), { cache: "no-store" });
     if (!response.ok) throw new Error(`node info failed (${response.status})`);
     const bytes = new Uint8Array(await response.arrayBuffer());
     const info = decodeLocalNodeInfoResponse(bytes);
@@ -263,7 +270,7 @@ async function hydrateLocalBridgeNodeInfo() {
       ip: "127.0.0.1",
       metadata: {
         host: "localhost",
-        bridgeUrl: `ws://127.0.0.1:7777${info.eventbusWsPath || "/v1/local/eventbus/ws"}`,
+        bridgeUrl: localBridgeWsUrl(info.eventbusWsPath || "/v1/local/eventbus/ws"),
         bridgeVersion: info.bridgeVersion || "v1",
         devicePubkeyB64url: info.devicePubkeyB64url || "",
         capabilities: {
@@ -288,48 +295,35 @@ async function hydrateLocalBridgeNodeInfo() {
       setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, false);
     }
   } catch {
-    upsertDevice({
-      id: LOCAL_BRIDGE_DEVICE_ID,
-      name: "Linux Node Manager",
-      type: "host",
-      os: "Linux",
-      browser: "",
-      online: true,
-      connectedAt: new Date().toISOString(),
-      lastSeenAt: new Date().toISOString(),
-      ip: "127.0.0.1",
-      metadata: {
-        host: "localhost",
-        bridgeUrl: LOCAL_BRIDGE_WS_URL,
-        bridgeVersion: "v1",
-        capabilities: {
-          networkUse: true,
-          storageRead: true,
-          storageWrite: true,
-          display: false,
-          graphics: false,
-          audioOutput: false,
-          usb: true,
-          camera: false,
-          microphone: false,
-          shell: true,
-          fileSystem: true,
-          virtualization: true,
-          hostControl: true,
-          tpm: true
-        }
-      }
-    });
+    setEventBusRuntime((prev) => ({
+      ...prev,
+      localBridgeConnected: false,
+      localBridgeStatus: "error",
+      localBridgeError: LOCAL_BRIDGE_ERROR_MESSAGE
+    }));
   }
 }
 
+function retryLocalBridgeConnection() {
+  if (typeof window !== "undefined" && localBridgeConnectTimer) {
+    window.clearTimeout(localBridgeConnectTimer);
+    localBridgeConnectTimer = null;
+  }
+  if (localBridgeSocket) {
+    try {
+      localBridgeSocket.close();
+    } catch {
+      // ignore close failures
+    }
+    localBridgeSocket = null;
+  }
+  initializeLocalBridgeSocket();
+}
+
 function syncRemoteEventBusSnapshot(remoteNodeId, events = []) {
-  if (!eventBusWorker) return;
-  eventBusWorker.postMessage({
-    type: "snapshot",
-    remoteNodeId: String(remoteNodeId || ""),
-    events: Array.isArray(events) ? events : []
-  });
+  const _remoteNodeId = remoteNodeId;
+  const _events = events;
+  // Bridge-only mode: snapshot sync is disabled in browser runtime.
 }
 
 export {
@@ -338,5 +332,6 @@ export {
   initializeBrowserEventBus,
   publishEvent,
   subscribeEvent,
-  syncRemoteEventBusSnapshot
+  syncRemoteEventBusSnapshot,
+  retryLocalBridgeConnection
 };

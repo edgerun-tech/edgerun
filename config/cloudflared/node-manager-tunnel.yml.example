@@ -1,0 +1,11 @@
+tunnel: 00000000-0000-0000-0000-000000000000
+credentials-file: /etc/cloudflared/creds/node-manager-tunnel-credentials.json
+
+ingress:
+  - hostname: node.example.com
+    service: http://127.0.0.1:7777
+  - hostname: osdev.example.com
+    service: http://127.0.0.1:4175
+  - hostname: osdeve2e.example.com
+    service: http://127.0.0.1:4175
+  - service: http_status:404

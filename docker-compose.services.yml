@@ -12,3 +12,23 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+
+  registry:
+    image: registry:2
+    ports:
+      - target: 5000
+        published: 5001
+        protocol: tcp
+        mode: ingress
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-data:/var/lib/registry
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  registry-data: {}

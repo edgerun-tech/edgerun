@@ -7,6 +7,8 @@ const PROFILE_BACKEND_SESSION_KEY = "intent-ui-profile-backend-v1";
 const PROFILE_SCOPES_SESSION_KEY = "intent-ui-profile-scopes-v1";
 
 const MODE_PROFILE = "profile";
+const DEFAULT_TPM_PROFILE_ID = "tpm_local_node";
+const DEFAULT_TPM_BACKEND = "tpm";
 
 const [profileRuntime, setProfileRuntime] = createSignal({
   ready: false,
@@ -44,7 +46,14 @@ function hydrateProfileRuntime() {
     return;
   }
 
-  setProfileRuntime((prev) => ({ ...prev, ready: false }));
+  setProfileRuntime({
+    ready: true,
+    mode: MODE_PROFILE,
+    profileLoaded: true,
+    profileId: DEFAULT_TPM_PROFILE_ID,
+    backend: DEFAULT_TPM_BACKEND,
+    grantedScopes: DEFAULT_LOCAL_PROFILE_SCOPES
+  });
 }
 
 function activatePersistentProfileSession(input) {
@@ -74,12 +83,12 @@ function clearProfileRuntimeSession() {
   sessionStorage.removeItem(PROFILE_BACKEND_SESSION_KEY);
   sessionStorage.removeItem(PROFILE_SCOPES_SESSION_KEY);
   setProfileRuntime({
-    ready: false,
+    ready: true,
     mode: MODE_PROFILE,
-    profileLoaded: false,
-    profileId: "",
-    backend: "",
-    grantedScopes: []
+    profileLoaded: true,
+    profileId: DEFAULT_TPM_PROFILE_ID,
+    backend: DEFAULT_TPM_BACKEND,
+    grantedScopes: DEFAULT_LOCAL_PROFILE_SCOPES
   });
 }
 
