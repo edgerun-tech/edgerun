@@ -43,6 +43,8 @@ describe('intent ui linux first device connect', () => {
 
     cy.get('button[title="Devices panel"]').first().click({ force: true })
 
+    cy.get('[data-testid="device-open-connect-dialog"]').should('be.visible').click()
+    cy.get('[data-testid="device-connect-dialog"]').should('be.visible')
     cy.get('[data-testid="device-connect-block"]').should('be.visible')
     cy.get('[data-testid="device-platform-linux"]').should('be.visible')
     cy.get('[data-testid="device-platform-macos"]').should('be.disabled')

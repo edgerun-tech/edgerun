@@ -328,6 +328,7 @@ function WorkflowOverlay() {
   const [pairingError, setPairingError] = createSignal("");
   const [pairingStatus, setPairingStatus] = createSignal("");
   const [pairingExpiresAt, setPairingExpiresAt] = createSignal("");
+  const [showDeviceConnectDialog, setShowDeviceConnectDialog] = createSignal(false);
   const localBridgeListen = "127.0.0.1:7777";
   const linuxConnectScript = createMemo(() => {
     const pairingCode = pairingCodeInput().trim() || "<PAIRING_CODE>";
@@ -478,6 +479,10 @@ function WorkflowOverlay() {
   createEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem("intent-ui-device-connect-registration-token-v1", connectRegistrationToken().trim());
+  });
+  createEffect(() => {
+    if (state().rightOpen && state().rightPanel === "devices") return;
+    setShowDeviceConnectDialog(false);
   });
   createEffect(() => {
     const total = activeConversationMessages().length;
@@ -1264,151 +1269,196 @@ function WorkflowOverlay() {
                       </p>
                     </div>
                     <div class="min-h-0 flex-1 overflow-auto p-3">
-                      <div class="mb-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="device-connect-block">
-                        <p class="text-[10px] uppercase tracking-wide text-neutral-500">Connect Device</p>
-                        <p class="mt-1 text-[10px] text-neutral-500">Choose platform and run the generated command on the target machine.</p>
-                        <div class="mt-2 flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            class={cn(
-                              drawerSmallButtonClass,
-                              connectPlatform() === "linux" && "border-[hsl(var(--primary)/0.45)] text-[hsl(var(--primary))]"
-                            )}
-                            onClick={() => setConnectPlatform("linux")}
-                            data-testid="device-platform-linux"
-                          >
-                            Linux
-                          </button>
-                          <button
-                            type="button"
-                            class={cn(drawerSmallButtonClass, "opacity-60")}
-                            disabled
-                            data-testid="device-platform-macos"
-                          >
-                            macOS (soon)
-                          </button>
-                          <button
-                            type="button"
-                            class={cn(drawerSmallButtonClass, "opacity-60")}
-                            disabled
-                            data-testid="device-platform-windows"
-                          >
-                            Windows (soon)
-                          </button>
+                      <div class="mb-3 flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/45 p-2.5">
+                        <div class="min-w-0">
+                          <p class="text-[10px] uppercase tracking-wide text-neutral-500">Device onboarding</p>
+                          <p class="mt-1 truncate text-[10px] text-neutral-500">Add a machine and generate its connect command.</p>
                         </div>
-                        <Show when={connectPlatform() === "linux"}>
-                          <label class="mt-2 block text-[10px] text-neutral-500">
-                            Profile public key (base64url)
-                            <input
-                              type="text"
-                              value={profilePublicKeyInput()}
-                              onInput={(event) => setProfilePublicKeyInput(event.currentTarget.value)}
-                              placeholder="paste profile public key"
-                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                              data-testid="device-profile-public-key-input"
-                            />
-                          </label>
-                          <label class="mt-2 block text-[10px] text-neutral-500">
-                            Requested label (optional)
-                            <input
-                              type="text"
-                              value={requestedLabelInput()}
-                              onInput={(event) => setRequestedLabelInput(event.currentTarget.value)}
-                              placeholder="alice"
-                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                              data-testid="device-requested-label-input"
-                            />
-                          </label>
-                          <div class="mt-2 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              class={drawerSmallButtonClass}
-                              onClick={reserveDomain}
-                              disabled={reserveBusy()}
-                              data-testid="device-reserve-domain"
-                            >
-                              {reserveBusy() ? "Reserving..." : "Reserve domain"}
-                            </button>
-                            <Show when={reserveStatus()}>
-                              <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-reserve-status">{reserveStatus()}</span>
-                            </Show>
-                          </div>
-                          <Show when={reserveError()}>
-                            <p class="mt-1 text-[10px] text-red-300" data-testid="device-reserve-error">{reserveError()}</p>
-                          </Show>
-                          <label class="mt-2 block text-[10px] text-neutral-500">
-                            Domain
-                            <input
-                              type="text"
-                              value={connectDomain()}
-                              onInput={(event) => setConnectDomain(event.currentTarget.value)}
-                              placeholder="alice.users.edgerun.tech"
-                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                              data-testid="device-domain-input"
-                            />
-                          </label>
-                          <label class="mt-2 block text-[10px] text-neutral-500">
-                            Registration token
-                            <input
-                              type="text"
-                              value={connectRegistrationToken()}
-                              onInput={(event) => setConnectRegistrationToken(event.currentTarget.value)}
-                              placeholder="paste registration token"
-                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                              data-testid="device-registration-token-input"
-                            />
-                          </label>
-                          <div class="mt-2 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              class={drawerSmallButtonClass}
-                              onClick={issuePairingCode}
-                              disabled={pairingBusy()}
-                              data-testid="device-issue-pairing-code"
-                            >
-                              {pairingBusy() ? "Issuing..." : "Issue pairing code"}
-                            </button>
-                            <Show when={pairingStatus()}>
-                              <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-pairing-status">{pairingStatus()}</span>
-                            </Show>
-                          </div>
-                          <Show when={pairingError()}>
-                            <p class="mt-1 text-[10px] text-red-300" data-testid="device-pairing-error">{pairingError()}</p>
-                          </Show>
-                          <Show when={pairingExpiresAt()}>
-                            <p class="mt-1 text-[10px] text-neutral-500" data-testid="device-pairing-expiry">Expires: {pairingExpiresAt()}</p>
-                          </Show>
-                          <label class="mt-2 block text-[10px] text-neutral-500">
-                            Pairing code
-                            <input
-                              type="text"
-                              value={pairingCodeInput()}
-                              onInput={(event) => setPairingCodeInput(event.currentTarget.value)}
-                              placeholder="paste pairing code"
-                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                              data-testid="device-pairing-code-input"
-                            />
-                          </label>
-                          <pre
-                            class="mt-2 overflow-x-auto rounded border border-neutral-800 bg-[#0c0c12] p-2 text-[10px] text-neutral-200"
-                            data-testid="device-linux-script"
-                          >
-{linuxConnectScript()}
-                          </pre>
-                          <div class="mt-2 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              class={drawerSmallButtonClass}
-                              onClick={copyConnectScript}
-                              data-testid="device-copy-script"
-                            >
-                              <TbOutlineClipboard size={11} />
-                              {deviceConnectCopied() ? "Copied" : "Copy script"}
-                            </button>
-                            <span class="text-[10px] text-neutral-500">Local bridge: {localBridgeListen}</span>
-                          </div>
-                        </Show>
+                        <button
+                          type="button"
+                          class={drawerSmallButtonClass}
+                          onClick={() => setShowDeviceConnectDialog(true)}
+                          data-testid="device-open-connect-dialog"
+                        >
+                          <TbOutlinePlus size={11} />
+                          Add device
+                        </button>
                       </div>
+                      <Show when={showDeviceConnectDialog()}>
+                        <div
+                          class="fixed inset-0 z-[10040] flex items-center justify-center bg-black/50 px-4"
+                          data-testid="device-connect-dialog-backdrop"
+                          onClick={(event) => {
+                            if (event.target === event.currentTarget) setShowDeviceConnectDialog(false);
+                          }}
+                        >
+                          <div
+                            class="w-full max-w-xl rounded-xl border border-neutral-700 bg-[#101216] p-3 shadow-2xl"
+                            data-testid="device-connect-dialog"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <div class="mb-2 flex items-start justify-between gap-2">
+                              <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wide text-neutral-200">Connect device</p>
+                                <p class="mt-1 text-[10px] text-neutral-500">Choose platform and run the generated command on the target machine.</p>
+                              </div>
+                              <button
+                                type="button"
+                                class={drawerSmallButtonClass}
+                                onClick={() => setShowDeviceConnectDialog(false)}
+                                data-testid="device-connect-dialog-close"
+                              >
+                                Close
+                              </button>
+                            </div>
+                            <div class="max-h-[72vh] overflow-auto pr-1">
+                              <div class="rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="device-connect-block">
+                                <div class="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    class={cn(
+                                      drawerSmallButtonClass,
+                                      connectPlatform() === "linux" && "border-[hsl(var(--primary)/0.45)] text-[hsl(var(--primary))]"
+                                    )}
+                                    onClick={() => setConnectPlatform("linux")}
+                                    data-testid="device-platform-linux"
+                                  >
+                                    Linux
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class={cn(drawerSmallButtonClass, "opacity-60")}
+                                    disabled
+                                    data-testid="device-platform-macos"
+                                  >
+                                    macOS (soon)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class={cn(drawerSmallButtonClass, "opacity-60")}
+                                    disabled
+                                    data-testid="device-platform-windows"
+                                  >
+                                    Windows (soon)
+                                  </button>
+                                </div>
+                                <Show when={connectPlatform() === "linux"}>
+                                  <label class="mt-2 block text-[10px] text-neutral-500">
+                                    Profile public key (base64url)
+                                    <input
+                                      type="text"
+                                      value={profilePublicKeyInput()}
+                                      onInput={(event) => setProfilePublicKeyInput(event.currentTarget.value)}
+                                      placeholder="paste profile public key"
+                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                                      data-testid="device-profile-public-key-input"
+                                    />
+                                  </label>
+                                  <label class="mt-2 block text-[10px] text-neutral-500">
+                                    Requested label (optional)
+                                    <input
+                                      type="text"
+                                      value={requestedLabelInput()}
+                                      onInput={(event) => setRequestedLabelInput(event.currentTarget.value)}
+                                      placeholder="alice"
+                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                                      data-testid="device-requested-label-input"
+                                    />
+                                  </label>
+                                  <div class="mt-2 flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      class={drawerSmallButtonClass}
+                                      onClick={reserveDomain}
+                                      disabled={reserveBusy()}
+                                      data-testid="device-reserve-domain"
+                                    >
+                                      {reserveBusy() ? "Reserving..." : "Reserve domain"}
+                                    </button>
+                                    <Show when={reserveStatus()}>
+                                      <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-reserve-status">{reserveStatus()}</span>
+                                    </Show>
+                                  </div>
+                                  <Show when={reserveError()}>
+                                    <p class="mt-1 text-[10px] text-red-300" data-testid="device-reserve-error">{reserveError()}</p>
+                                  </Show>
+                                  <label class="mt-2 block text-[10px] text-neutral-500">
+                                    Domain
+                                    <input
+                                      type="text"
+                                      value={connectDomain()}
+                                      onInput={(event) => setConnectDomain(event.currentTarget.value)}
+                                      placeholder="alice.users.edgerun.tech"
+                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                                      data-testid="device-domain-input"
+                                    />
+                                  </label>
+                                  <label class="mt-2 block text-[10px] text-neutral-500">
+                                    Registration token
+                                    <input
+                                      type="text"
+                                      value={connectRegistrationToken()}
+                                      onInput={(event) => setConnectRegistrationToken(event.currentTarget.value)}
+                                      placeholder="paste registration token"
+                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                                      data-testid="device-registration-token-input"
+                                    />
+                                  </label>
+                                  <div class="mt-2 flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      class={drawerSmallButtonClass}
+                                      onClick={issuePairingCode}
+                                      disabled={pairingBusy()}
+                                      data-testid="device-issue-pairing-code"
+                                    >
+                                      {pairingBusy() ? "Issuing..." : "Issue pairing code"}
+                                    </button>
+                                    <Show when={pairingStatus()}>
+                                      <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-pairing-status">{pairingStatus()}</span>
+                                    </Show>
+                                  </div>
+                                  <Show when={pairingError()}>
+                                    <p class="mt-1 text-[10px] text-red-300" data-testid="device-pairing-error">{pairingError()}</p>
+                                  </Show>
+                                  <Show when={pairingExpiresAt()}>
+                                    <p class="mt-1 text-[10px] text-neutral-500" data-testid="device-pairing-expiry">Expires: {pairingExpiresAt()}</p>
+                                  </Show>
+                                  <label class="mt-2 block text-[10px] text-neutral-500">
+                                    Pairing code
+                                    <input
+                                      type="text"
+                                      value={pairingCodeInput()}
+                                      onInput={(event) => setPairingCodeInput(event.currentTarget.value)}
+                                      placeholder="paste pairing code"
+                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                                      data-testid="device-pairing-code-input"
+                                    />
+                                  </label>
+                                  <pre
+                                    class="mt-2 overflow-x-auto rounded border border-neutral-800 bg-[#0c0c12] p-2 text-[10px] text-neutral-200"
+                                    data-testid="device-linux-script"
+                                  >
+{linuxConnectScript()}
+                                  </pre>
+                                  <div class="mt-2 flex items-center gap-1.5">
+                                    <button
+                                      type="button"
+                                      class={drawerSmallButtonClass}
+                                      onClick={copyConnectScript}
+                                      data-testid="device-copy-script"
+                                    >
+                                      <TbOutlineClipboard size={11} />
+                                      {deviceConnectCopied() ? "Copied" : "Copy script"}
+                                    </button>
+                                    <span class="text-[10px] text-neutral-500">Local bridge: {localBridgeListen}</span>
+                                  </div>
+                                </Show>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </Show>
                       <Show when={fleetDevices().length > 0} fallback={<p class={drawerStateBlockClass}>No connected devices yet.</p>}>
                         <div class="space-y-1.5">
                           <For each={fleetDevices()}>
