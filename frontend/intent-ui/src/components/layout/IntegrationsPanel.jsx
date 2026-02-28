@@ -153,6 +153,16 @@ const providerMeta = {
     tokenHint: "Qwen token",
     useToken: true
   },
+  codex_cli: {
+    id: "codex_cli",
+    name: "Codex CLI",
+    description: "Local CLI executor for assistant tasks on connected devices.",
+    authLabel: "Local Runtime",
+    icon: FiCpu,
+    tone: "text-emerald-300",
+    tokenHint: "",
+    useToken: false
+  },
   hetzner: {
     id: "hetzner",
     name: "Hetzner",
@@ -227,10 +237,6 @@ function IntegrationsPanel(props) {
 
   const openProviderDialog = (provider) => {
     if (!provider) return;
-    if (provider.oauthRedirect && !provider.connected) {
-      startProviderAuth(provider);
-      return;
-    }
     setDialogProviderId(provider.id);
     setTokenInput("");
     setAccountLabelInput(provider.accountLabel || `${provider.name} Session`);
@@ -319,6 +325,7 @@ function IntegrationsPanel(props) {
   const saveProvider = async (provider) => {
     if (!provider) return;
     if (provider.oauthRedirect) {
+      integrationStore.setConnectorMode(provider.id, "user_owned");
       startProviderAuth(provider);
       return;
     }
@@ -332,6 +339,7 @@ function IntegrationsPanel(props) {
     }
 
     integrationStore.connect(provider.id, {
+      connectorMode: "user_owned",
       accountLabel: accountLabelInput().trim() || `${provider.name} Session`,
       token
     });
@@ -345,6 +353,16 @@ function IntegrationsPanel(props) {
     integrationStore.disconnect(provider.id);
     setStatus(`${provider.name} disconnected.`);
     closeDialog();
+  };
+
+  const setProviderOwnership = (provider, mode) => {
+    if (!provider) return;
+    integrationStore.setConnectorMode(provider.id, mode);
+    setStatus(
+      mode === "platform"
+        ? `${provider.name} now uses platform connector.`
+        : `${provider.name} switched to user-owned connector.`
+    );
   };
 
   return (
@@ -408,6 +426,16 @@ function IntegrationsPanel(props) {
                         </Show>
                         {provider.connected ? "Connected" : "Not connected"}
                       </span>
+                      <span
+                        class={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] ${
+                          provider.connectorMode === "platform"
+                            ? "border border-cyan-500/40 bg-cyan-500/10 text-cyan-200"
+                            : "border border-amber-500/40 bg-amber-500/10 text-amber-200"
+                        }`}
+                        data-testid={`provider-mode-${provider.id}`}
+                      >
+                        {provider.connectorMode === "platform" ? "Platform" : "User-owned"}
+                      </span>
                     </div>
                     <p class="mt-1 truncate text-xs text-neutral-500">{provider.description}</p>
                   </div>
@@ -417,6 +445,7 @@ function IntegrationsPanel(props) {
                     onClick={() => openProviderDialog(provider)}
                     class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-neutral-700 bg-neutral-900 text-neutral-300 transition hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
                     title={provider.connected ? "Settings" : "Link"}
+                    data-testid={`provider-open-${provider.id}`}
                   >
                     <Show when={provider.connected} fallback={<FiLink2 size={14} />}>
                       <FiSettings size={14} />
@@ -440,7 +469,7 @@ function IntegrationsPanel(props) {
           const ProviderIcon = provider.icon || FiCloud;
           return (
             <div class="fixed inset-0 z-[10040] flex items-center justify-center bg-black/50 px-4">
-              <div class="w-full max-w-md rounded-xl border border-neutral-700 bg-[#101216] p-4 shadow-2xl">
+              <div class="w-full max-w-md rounded-xl border border-neutral-700 bg-[#101216] p-4 shadow-2xl" data-testid={`provider-dialog-${provider.id}`}>
                 <div class="mb-3 flex items-start justify-between gap-2">
                   <div>
                     <h4 class="flex items-center gap-2 text-sm font-semibold text-white">
@@ -462,7 +491,39 @@ function IntegrationsPanel(props) {
                   </button>
                 </div>
 
-                <Show when={provider.useToken}>
+                <Show when={provider.supportsPlatformConnector}>
+                  <div class="mb-3 rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
+                    <p class="mb-1 text-[11px] uppercase tracking-wide text-neutral-400">Connector ownership</p>
+                    <div class="grid grid-cols-2 gap-1 rounded-md border border-neutral-800 bg-neutral-900/70 p-1">
+                      <button
+                        type="button"
+                        class={`rounded px-2 py-1 text-[11px] ${
+                          provider.connectorMode === "platform"
+                            ? "bg-[hsl(var(--primary)/0.2)] text-[hsl(var(--primary))]"
+                            : "text-neutral-300 hover:bg-neutral-800"
+                        }`}
+                        onClick={() => setProviderOwnership(provider, "platform")}
+                        data-testid={`provider-ownership-platform-${provider.id}`}
+                      >
+                        Platform connector
+                      </button>
+                      <button
+                        type="button"
+                        class={`rounded px-2 py-1 text-[11px] ${
+                          provider.connectorMode === "user_owned"
+                            ? "bg-[hsl(var(--primary)/0.2)] text-[hsl(var(--primary))]"
+                            : "text-neutral-300 hover:bg-neutral-800"
+                        }`}
+                        onClick={() => setProviderOwnership(provider, "user_owned")}
+                        data-testid={`provider-ownership-user-${provider.id}`}
+                      >
+                        Use my own
+                      </button>
+                    </div>
+                  </div>
+                </Show>
+
+                <Show when={provider.useToken && provider.connectorMode === "user_owned"}>
                   <input
                     id="provider-label"
                     type="text"
@@ -473,7 +534,7 @@ function IntegrationsPanel(props) {
                   />
                 </Show>
 
-                <Show when={provider.useToken}>
+                <Show when={provider.useToken && provider.connectorMode === "user_owned"}>
                   <div class="relative mb-3">
                     <FiKey size={14} class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-neutral-500" />
                     <input
@@ -550,7 +611,7 @@ function IntegrationsPanel(props) {
 
                 <div class="mt-2 flex flex-wrap gap-2">
                   <Show
-                    when={provider.oauthRedirect}
+                    when={provider.oauthRedirect && provider.connectorMode === "user_owned"}
                     fallback={
                       <button
                         type="button"
@@ -561,8 +622,15 @@ function IntegrationsPanel(props) {
                             connectWeb3Wallet(provider);
                             return;
                           }
+                          if (provider.connectorMode === "platform" && provider.supportsPlatformConnector) {
+                            integrationStore.setConnectorMode(provider.id, "platform");
+                            setStatus(`${provider.name} platform connector ready.`);
+                            closeDialog();
+                            return;
+                          }
                           saveProvider(provider);
                         }}
+                        data-testid={`provider-save-${provider.id}`}
                       >
                         <Show when={isConnected()} fallback={<FiLink2 size={12} />}>
                           <FiCheckCircle size={12} />
@@ -575,6 +643,7 @@ function IntegrationsPanel(props) {
                       type="button"
                       class={modalPrimaryButtonClass}
                       onClick={() => startProviderAuth(provider)}
+                      data-testid={`provider-oauth-connect-${provider.id}`}
                     >
                       <FiLink2 size={12} />
                       {isConnected() ? "Reconnect" : "Connect"}

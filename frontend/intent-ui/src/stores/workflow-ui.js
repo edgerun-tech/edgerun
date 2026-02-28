@@ -1,4 +1,6 @@
 import { createSignal } from "solid-js";
+import { knownDevices } from "./devices";
+import { integrationStore } from "./integrations";
 
 const DEFAULT_CODE = `export function sumLatency(samples) {
   if (!samples.length) return 0
@@ -436,9 +438,20 @@ function startNewCodexSession() {
   }));
 }
 
+function assistantIntegrationId(provider) {
+  return provider === "qwen" ? "qwen" : "codex_cli";
+}
+
+function anyDeviceConnected() {
+  return knownDevices().some((device) => Boolean(device?.online));
+}
+
 async function openCodexResponse(queryText, options = {}) {
   const prompt = queryText?.trim() || "No prompt";
   const provider = options.provider === "qwen" ? "qwen" : "codex";
+  const requiredIntegrationId = assistantIntegrationId(provider);
+  integrationStore.checkAll();
+  const requiredIntegration = integrationStore.get(requiredIntegrationId);
   const initialEvents = [
     { type: "phase", label: "queued", detail: "Preparing request..." },
     { type: "phase", label: "thinking", detail: "Routing to assistant..." }
@@ -454,6 +467,47 @@ async function openCodexResponse(queryText, options = {}) {
   }
 
   const currentState = workflowUi();
+
+  if (!anyDeviceConnected()) {
+    setWorkflowUi((prev) => ({
+      ...prev,
+      topOpen: true,
+      topPanel: "codex",
+      streaming: false,
+      codexPhase: "error",
+      codexStepIndex: 0,
+      codexTotalSteps: 0,
+      prompt,
+      statusEvents: [
+        ...prev.statusEvents,
+        { type: "error", label: "blocked", detail: "Assistant blocked: no connected device is available." }
+      ],
+      messages: appendChatMessage(prev.messages, "user", prompt)
+    }));
+    return;
+  }
+
+  if (!requiredIntegration?.connected) {
+    const integrationName = requiredIntegration?.name || requiredIntegrationId;
+    setWorkflowUi((prev) => ({
+      ...prev,
+      topOpen: true,
+      topPanel: "codex",
+      streaming: false,
+      codexPhase: "error",
+      codexStepIndex: 0,
+      codexTotalSteps: 0,
+      prompt,
+      selectedIntegrationId: requiredIntegrationId,
+      statusEvents: [
+        ...prev.statusEvents,
+        { type: "error", label: "blocked", detail: `Assistant blocked: connect ${integrationName} integration first.` }
+      ],
+      messages: appendChatMessage(prev.messages, "user", prompt)
+    }));
+    return;
+  }
+
   const draftMessages = appendChatMessage(
     appendChatMessage(currentState.messages, "user", prompt),
     "assistant",

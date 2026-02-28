@@ -3,8 +3,10 @@ import { IntentBar } from "./components/panels";
 import { WindowManager, WorkflowOverlay } from "./components/layout";
 import WallpaperWidgets from "./components/layout/WallpaperWidgets";
 import WallpaperMap from "./components/layout/WallpaperMap";
+import ProfileBootstrapGate from "./components/onboarding/ProfileBootstrapGate";
 import { closeTopWindow, openWindow } from "./stores/windows";
-import { closeWorkflowDemo, hydrateWorkflowUiFromStorage, startNewCodexSession, workflowUi } from "./stores/workflow-ui";
+import { closeWorkflowDemo, hydrateWorkflowUiFromStorage, openCodexResponse, startNewCodexSession, workflowUi } from "./stores/workflow-ui";
+import { clearProfileRuntimeSession, hydrateProfileRuntime, profileRuntime } from "./stores/profile-runtime";
 import { Kbd, KbdGroup } from "./registry/ui/kbd";
 import {
   TbOutlineCopy,
@@ -17,7 +19,8 @@ import {
   TbOutlineDeviceDesktop,
   TbOutlineHistory,
   TbOutlineRefresh,
-  TbOutlineBook2
+  TbOutlineBook2,
+  TbOutlineChevronDown
 } from "solid-icons/tb";
 
 function App() {
@@ -29,15 +32,59 @@ function App() {
   const [clipboardText, setClipboardText] = createSignal("");
   const [copyText, setCopyText] = createSignal("");
   const [contextTarget, setContextTarget] = createSignal(null);
+  const [showBootstrapGate, setShowBootstrapGate] = createSignal(false);
+  const [accountMenuOpen, setAccountMenuOpen] = createSignal(false);
+  const [registeredDomain, setRegisteredDomain] = createSignal("");
   const canPaste = createMemo(() => clipboardText().trim().length > 0);
   const canCopy = createMemo(() => copyText().trim().length > 0);
+  const sessionModeLabel = createMemo(() => (
+    profileRuntime().mode === "profile" && profileRuntime().profileLoaded
+      ? `profile (${profileRuntime().backend})`
+      : "ephemeral"
+  ));
+  const shortProfileId = createMemo(() => {
+    const id = String(profileRuntime().profileId || "").trim();
+    if (!id) return "Not loaded";
+    if (id.length <= 18) return id;
+    return `${id.slice(0, 8)}...${id.slice(-6)}`;
+  });
   let handleGlobalHotkeys;
   let handleGlobalKeyUp;
   let handleWindowBlur;
   let handleGlobalContextMenu;
   let handleGlobalClick;
   let handleContextEscape;
+  let handleOpenBootstrapGate;
+  let handleStorageUpdate;
   let layerIndicatorTimeout;
+
+  const readRegisteredDomain = () => {
+    if (typeof window === "undefined") return "";
+    const keys = [
+      "intent-ui-user-domain-v1",
+      "intent-ui-domain-v1",
+      "intent-ui-domain-reservation-v1",
+      "edgerun_user_domain"
+    ];
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const trimmed = String(raw).trim();
+      if (!trimmed) continue;
+      if (trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          const value = String(parsed?.domain || parsed?.assignedDomain || parsed?.fqdn || "").trim();
+          if (value) return value;
+        } catch {
+          // ignore parse failures
+        }
+      } else {
+        return trimmed;
+      }
+    }
+    return "";
+  };
 
   const resolveCopyText = (target) => {
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
@@ -136,6 +183,7 @@ function App() {
   });
 
   onMount(() => {
+    hydrateProfileRuntime();
     hydrateWorkflowUiFromStorage();
     setIsClient(true);
     const updateLayerFromEvent = (event) => {
@@ -210,6 +258,7 @@ function App() {
     };
     handleGlobalClick = () => {
       setMenuOpen(false);
+      setAccountMenuOpen(false);
     };
     handleContextEscape = (event) => {
       if (event.key === "Escape") {
@@ -223,6 +272,17 @@ function App() {
     window.addEventListener("contextmenu", handleGlobalContextMenu, { capture: true });
     window.addEventListener("pointerdown", handleGlobalClick);
     window.addEventListener("keydown", handleContextEscape);
+    handleOpenBootstrapGate = () => setShowBootstrapGate(true);
+    window.addEventListener("intent-ui:open-profile-bootstrap", handleOpenBootstrapGate);
+    handleStorageUpdate = () => setRegisteredDomain(readRegisteredDomain());
+    window.addEventListener("storage", handleStorageUpdate);
+    setRegisteredDomain(readRegisteredDomain());
+    if (typeof window !== "undefined") {
+      window.__intentDebug = window.__intentDebug || {};
+      window.__intentDebug.openWindow = (id) => openWindow(id);
+      window.__intentDebug.askAssistant = (prompt, options = {}) => openCodexResponse(prompt, options);
+      window.__intentDebug.getWorkflowUi = () => workflowUi();
+    }
   });
   onCleanup(() => {
     if (handleGlobalHotkeys) window.removeEventListener("keydown", handleGlobalHotkeys);
@@ -231,9 +291,16 @@ function App() {
     if (handleGlobalContextMenu) window.removeEventListener("contextmenu", handleGlobalContextMenu, { capture: true });
     if (handleGlobalClick) window.removeEventListener("pointerdown", handleGlobalClick);
     if (handleContextEscape) window.removeEventListener("keydown", handleContextEscape);
+    if (handleOpenBootstrapGate) window.removeEventListener("intent-ui:open-profile-bootstrap", handleOpenBootstrapGate);
+    if (handleStorageUpdate) window.removeEventListener("storage", handleStorageUpdate);
     if (layerIndicatorTimeout) {
       clearTimeout(layerIndicatorTimeout);
       layerIndicatorTimeout = null;
+    }
+    if (typeof window !== "undefined" && window.__intentDebug?.openWindow) {
+      delete window.__intentDebug.openWindow;
+      delete window.__intentDebug.askAssistant;
+      delete window.__intentDebug.getWorkflowUi;
     }
   });
 
@@ -285,6 +352,62 @@ function App() {
         </div>
       </div>
       </Show>
+      <Show when={profileRuntime().ready}>
+        <div class="fixed right-3 top-3 z-[12000]">
+          <span class="hidden" data-testid="profile-runtime-mode">Session mode: {sessionModeLabel()}</span>
+          <button
+            type="button"
+            class="inline-flex h-10 items-center gap-2 rounded-full border border-neutral-800/80 bg-[#0f0f0f]/75 px-3 text-xs text-neutral-200 shadow-lg backdrop-blur-xl transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={() => setAccountMenuOpen((prev) => !prev)}
+            data-testid="account-circle-trigger"
+          >
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 bg-neutral-900 text-[10px] font-semibold">ER</span>
+            <span class="uppercase tracking-wide">Account</span>
+            <TbOutlineChevronDown size={12} />
+          </button>
+          <Show when={accountMenuOpen()}>
+            <div
+              class="mt-2 w-72 rounded-xl border border-neutral-700 bg-[#101216]/95 p-3 shadow-2xl backdrop-blur-xl"
+              onPointerDown={(event) => event.stopPropagation()}
+              data-testid="account-circle-menu"
+            >
+              <p class="text-[10px] uppercase tracking-wide text-neutral-500">Session Mode</p>
+              <p class="mt-1 text-xs text-neutral-200" data-testid="profile-runtime-mode-menu">{sessionModeLabel()}</p>
+              <div class="mt-2 space-y-1 rounded-md border border-neutral-800 bg-neutral-900/60 p-2 text-[11px] text-neutral-400">
+                <p>Profile: <span class="text-neutral-200">{shortProfileId()}</span></p>
+                <p>Backend: <span class="text-neutral-200">{profileRuntime().backend || "session"}</span></p>
+                <p data-testid="account-domain-value">Domain: <span class="text-neutral-200">{registeredDomain() || "Not registered"}</span></p>
+              </div>
+              <div class="mt-3 grid grid-cols-1 gap-1.5">
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-[11px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+                  onClick={() => {
+                    setShowBootstrapGate(true);
+                    setAccountMenuOpen(false);
+                  }}
+                  data-testid="open-profile-bootstrap-gate"
+                >
+                  Profile onboarding
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-[11px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+                  onClick={() => {
+                    clearProfileRuntimeSession();
+                    setShowBootstrapGate(true);
+                    setAccountMenuOpen(false);
+                  }}
+                  data-testid="account-reset-session"
+                >
+                  Reset session
+                </button>
+              </div>
+            </div>
+          </Show>
+        </div>
+      </Show>
       <WindowManager />
       <IntentBar />
       <WorkflowOverlay />
@@ -294,6 +417,16 @@ function App() {
   return (
     <>
       <AppShell />
+      <Show when={isClient() && (!profileRuntime().ready || showBootstrapGate())}>
+        <ProfileBootstrapGate
+          allowDismiss={profileRuntime().ready}
+          onDismiss={() => setShowBootstrapGate(false)}
+          onComplete={() => {
+            hydrateProfileRuntime();
+            setShowBootstrapGate(false);
+          }}
+        />
+      </Show>
       <Show when={isClient() && menuOpen()}>
         <div
           class="fixed z-[13000] w-56 overflow-hidden rounded-lg border border-neutral-700 bg-[#121218]/95 p-1 shadow-2xl backdrop-blur-xl"

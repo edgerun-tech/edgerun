@@ -3,6 +3,7 @@ import {
   TbOutlineApps,
   TbOutlineBook2,
   TbOutlineBrandGithub,
+  TbOutlineCheck,
   TbOutlineCloud,
   TbOutlineCloudComputing,
   TbOutlineCommand,
@@ -12,10 +13,14 @@ import {
   TbOutlineMail,
   TbOutlinePlayerPlay,
   TbOutlineSettings,
-  TbOutlineTerminal2
+  TbOutlineTerminal2,
+  TbOutlineUser
 } from "solid-icons/tb";
 import { openWindow } from "../../stores/windows";
-import { openWorkflowIntegrations, setAssistantProvider, toggleWorkflowDrawer, workflowUi } from "../../stores/workflow-ui";
+import { toggleWorkflowDrawer, workflowUi, openWorkflowIntegrations } from "../../stores/workflow-ui";
+import { knownDevices } from "../../stores/devices";
+import { integrationStore } from "../../stores/integrations";
+import { profileRuntime } from "../../stores/profile-runtime";
 
 const GUIDE_KEY = "intent-ui-guide-progress-v1";
 
@@ -36,23 +41,12 @@ const launchItems = [
   { id: "settings", label: "Settings", icon: TbOutlineSettings, run: () => openWindow("settings") }
 ];
 
-const drawerItems = [
-  { id: "drawer-launcher", label: "Drawer Launcher", run: () => toggleWorkflowDrawer({ side: "left", panel: "launcher" }) },
-  { id: "drawer-files", label: "Drawer Files", run: () => toggleWorkflowDrawer({ side: "left", panel: "files" }) },
-  { id: "drawer-cloud", label: "Drawer Cloud", run: () => toggleWorkflowDrawer({ side: "left", panel: "cloud" }) },
-  { id: "drawer-integrations", label: "Drawer Integrations", run: () => toggleWorkflowDrawer({ side: "left", panel: "integrations" }) },
-  { id: "drawer-credentials", label: "Drawer Credentials", run: () => toggleWorkflowDrawer({ side: "left", panel: "credentials" }) },
-  { id: "drawer-settings", label: "Drawer Settings", run: () => toggleWorkflowDrawer({ side: "left", panel: "settings" }) },
-  { id: "drawer-conversations", label: "Drawer Conversations", run: () => toggleWorkflowDrawer({ side: "right", panel: "conversations" }) },
-  { id: "drawer-devices", label: "Drawer Devices", run: () => toggleWorkflowDrawer({ side: "right", panel: "devices" }) }
-];
-
 const guideSteps = [
   { id: "open-intent", title: "Open command explorer", detail: "Type /help in IntentBar.", actionLabel: "Focus Intent", action: () => window.dispatchEvent(new CustomEvent("intentbar:toggle")) },
+  { id: "open-onboarding", title: "Review onboarding", detail: "Reopen profile onboarding and verify session mode.", actionLabel: "Open Onboarding", action: () => window.dispatchEvent(new CustomEvent("intent-ui:open-profile-bootstrap")) },
   { id: "connect-github", title: "Connect GitHub", detail: "Link GitHub token in Integrations.", actionLabel: "Open GitHub Link", action: () => openWorkflowIntegrations("github") },
-  { id: "connect-google", title: "Connect Google", detail: "Enable Drive + Gmail + Calendar access.", actionLabel: "Open Google Link", action: () => openWorkflowIntegrations("google") },
-  { id: "open-files", title: "Browse files", detail: "Open File Manager and pick a filesystem.", actionLabel: "Open Files", action: () => openWindow("files") },
-  { id: "open-devices", title: "Check devices", detail: "Open Devices drawer and verify host telemetry.", actionLabel: "Open Devices", action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" }) },
+  { id: "connect-assistant", title: "Connect assistant integration", detail: "Link Codex CLI or Qwen before running assistant tasks.", actionLabel: "Open AI Integration", action: () => openWorkflowIntegrations(workflowUi().provider === "qwen" ? "qwen" : "codex_cli") },
+  { id: "open-devices", title: "Check devices", detail: "Verify a connected device is online.", actionLabel: "Open Devices", action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" }) },
   { id: "open-terminal", title: "Run commands", detail: "Open terminal and run a quick command.", actionLabel: "Open Terminal", action: () => openWindow("terminal") }
 ];
 
@@ -81,6 +75,52 @@ function LauncherGuidePanel(props) {
   const compact = () => Boolean(props.compact);
   const completedCount = createMemo(() => guideSteps.filter((step) => Boolean(progress()[step.id])).length);
   const activeProvider = createMemo(() => workflowUi().provider || "codex");
+  const assistantIntegrationId = createMemo(() => activeProvider() === "qwen" ? "qwen" : "codex_cli");
+  const assistantIntegration = createMemo(() => integrationStore.get(assistantIntegrationId()));
+  const anyConnectedDevice = createMemo(() => knownDevices().some((device) => Boolean(device?.online)));
+  const hasConnectedToolingIntegration = createMemo(() => integrationStore.list()
+    .filter((integration) => integration.id !== "codex_cli" && integration.id !== "qwen")
+    .some((integration) => integration.connected));
+
+  const startupTasks = createMemo(() => {
+    const onboardingDone = profileRuntime().ready;
+    return [
+      {
+        id: "task-onboarding",
+        title: "Onboarding access",
+        detail: onboardingDone ? "Onboarding can be reopened from this launcher or top-right button." : "Finish onboarding to choose profile or ephemeral session.",
+        done: onboardingDone,
+        actionLabel: "Open onboarding",
+        action: () => window.dispatchEvent(new CustomEvent("intent-ui:open-profile-bootstrap"))
+      },
+      {
+        id: "task-devices",
+        title: "Connected device",
+        detail: anyConnectedDevice() ? "At least one device is online." : "Connect a device before assistant execution.",
+        done: anyConnectedDevice(),
+        actionLabel: "View devices",
+        action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" })
+      },
+      {
+        id: "task-integrations",
+        title: "Tool integrations",
+        detail: hasConnectedToolingIntegration() ? "One or more tooling integrations are connected." : "Connect GitHub/Cloud/other integrations for workflows.",
+        done: hasConnectedToolingIntegration(),
+        actionLabel: "Open integrations",
+        action: () => openWindow("integrations")
+      },
+      {
+        id: "task-assistant",
+        title: "Assistant integration",
+        detail: assistantIntegration()?.connected
+          ? `${assistantIntegration()?.name || "Assistant"} integration connected.`
+          : `Connect ${assistantIntegration()?.name || "assistant"} integration first.`,
+        done: Boolean(assistantIntegration()?.connected),
+        actionLabel: "Configure assistant",
+        action: () => openWorkflowIntegrations(assistantIntegrationId())
+      }
+    ];
+  });
 
   const toggleStep = (id) => {
     setProgress((prev) => {
@@ -123,30 +163,33 @@ function LauncherGuidePanel(props) {
       <Show when={tab() === "launcher"}>
         <div class="min-h-0 flex-1 overflow-auto space-y-1.5 pr-1">
           <div class="rounded-md border border-neutral-800 bg-neutral-900/55 p-2.5">
-            <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Assistant Provider</p>
-            <div class="mb-2 grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                class={`inline-flex h-7 items-center justify-center rounded border px-2 text-[10px] transition-colors ${activeProvider() === "codex" ? "border-neutral-800 bg-neutral-900/70 font-semibold text-[hsl(var(--primary))]" : "border-neutral-800 bg-neutral-900/70 text-neutral-300 hover:bg-neutral-800"}`}
-                onClick={() => setAssistantProvider("codex")}
-              >
-                Codex
-              </button>
-              <button
-                type="button"
-                class={`inline-flex h-7 items-center justify-center rounded border px-2 text-[10px] transition-colors ${activeProvider() === "qwen" ? "border-neutral-800 bg-neutral-900/70 font-semibold text-[hsl(var(--primary))]" : "border-neutral-800 bg-neutral-900/70 text-neutral-300 hover:bg-neutral-800"}`}
-                onClick={() => setAssistantProvider("qwen")}
-              >
-                Qwen
-              </button>
+            <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Startup Tasks</p>
+            <div class="space-y-1.5">
+              <For each={startupTasks()}>
+                {(task) => (
+                  <div class="rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="flex items-center gap-1 text-[11px] font-medium text-neutral-100">
+                          <Show when={task.done} fallback={<TbOutlineUser size={12} class="text-neutral-500" />}>
+                            <TbOutlineCheck size={12} class="text-[hsl(var(--primary))]" />
+                          </Show>
+                          {task.title}
+                        </p>
+                        <p class="mt-0.5 text-[10px] text-neutral-500">{task.detail}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={task.action}
+                        class="shrink-0 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+                      >
+                        {task.actionLabel}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </For>
             </div>
-            <button
-              type="button"
-              class="w-full rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5 text-left text-[10px] text-neutral-200 transition-colors hover:bg-neutral-800"
-              onClick={() => openWindow("integrations")}
-            >
-              Open AI Integrations
-            </button>
           </div>
 
           <div class="rounded-md border border-neutral-800 bg-neutral-900/55 p-2.5">
@@ -163,23 +206,6 @@ function LauncherGuidePanel(props) {
                       <item.icon size={12} class="text-neutral-400" />
                       {item.label}
                     </span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-
-          <div class="rounded-md border border-neutral-800 bg-neutral-900/55 p-2.5">
-            <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Drawers</p>
-            <div class="grid grid-cols-2 gap-1.5">
-              <For each={drawerItems}>
-                {(item) => (
-                  <button
-                    type="button"
-                    onClick={item.run}
-                    class="rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5 text-left text-[10px] text-neutral-200 transition-colors hover:bg-neutral-800"
-                  >
-                    {item.label}
                   </button>
                 )}
               </For>

@@ -10,6 +10,7 @@ const catalog = {
     id: "github",
     name: "GitHub",
     authMethod: "oidc",
+    supportsPlatformConnector: true,
     tokenKey: "github_token",
     defaultCapabilities: ["repos.read", "repos.write", "prs.read", "prs.write"]
   },
@@ -17,6 +18,7 @@ const catalog = {
     id: "cloudflare",
     name: "Cloudflare",
     authMethod: "token",
+    supportsPlatformConnector: true,
     tokenKey: "cloudflare_token",
     defaultCapabilities: ["zones.read", "workers.read", "workers.write"]
   },
@@ -24,6 +26,7 @@ const catalog = {
     id: "vercel",
     name: "Vercel",
     authMethod: "token",
+    supportsPlatformConnector: true,
     tokenKey: "vercel_token",
     defaultCapabilities: ["projects.read", "deployments.read", "deployments.write"]
   },
@@ -31,6 +34,7 @@ const catalog = {
     id: "google",
     name: "Google",
     authMethod: "oauth",
+    supportsPlatformConnector: true,
     tokenKey: "google_token",
     defaultCapabilities: ["drive.read", "gmail.read", "calendar.read", "contacts.read", "messages.read"]
   },
@@ -38,6 +42,7 @@ const catalog = {
     id: "google_photos",
     name: "Google Photos",
     authMethod: "oauth",
+    supportsPlatformConnector: true,
     tokenKey: "google_token",
     defaultCapabilities: ["photos.read"]
   },
@@ -45,13 +50,24 @@ const catalog = {
     id: "qwen",
     name: "Qwen",
     authMethod: "oauth",
+    supportsPlatformConnector: true,
     tokenKey: "qwen_token",
     defaultCapabilities: ["chat.completions"]
+  },
+  codex_cli: {
+    id: "codex_cli",
+    name: "Codex CLI",
+    authMethod: "local_cli",
+    supportsPlatformConnector: false,
+    requiresToken: false,
+    tokenKey: "",
+    defaultCapabilities: ["assistant.local_cli.execute"]
   },
   hetzner: {
     id: "hetzner",
     name: "Hetzner",
     authMethod: "token",
+    supportsPlatformConnector: true,
     tokenKey: "hetzner_token",
     defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"]
   },
@@ -59,6 +75,7 @@ const catalog = {
     id: "web3",
     name: "Web3",
     authMethod: "wallet",
+    supportsPlatformConnector: false,
     tokenKey: "web3_wallet",
     defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"]
   }
@@ -139,27 +156,36 @@ function hydrateState() {
   const stored = readStoredState();
   const next = { ...stored };
   for (const integration of Object.values(catalog)) {
+    const storedMode = String(next[integration.id]?.connectorMode || "").trim();
+    const connectorMode = storedMode || (integration.supportsPlatformConnector ? "platform" : "user_owned");
     const rawToken = typeof window !== "undefined" && integration.tokenKey
       ? localStorage.getItem(integration.tokenKey)
       : null;
     const token = typeof rawToken === "string" ? rawToken.trim() : "";
-    const hasUsableToken = integration.id === "github" ? Boolean(token && !token.startsWith("oidc_")) : Boolean(token);
-    if (!hasUsableToken && integration.id === "github" && next[integration.id]?.connected) {
-      next[integration.id] = {
-        connected: false,
-        capabilities: [],
-        accountLabel: ""
-      };
-    }
-    if (hasUsableToken && !next[integration.id]?.connected) {
+    const hasUsableToken = integration.requiresToken === false
+      ? Boolean(next[integration.id]?.connected)
+      : integration.id === "github"
+        ? Boolean(token && !token.startsWith("oidc_"))
+        : Boolean(token);
+    if (connectorMode === "platform" && integration.supportsPlatformConnector) {
       next[integration.id] = {
         connected: true,
+        connectorMode: "platform",
         authMethod: integration.authMethod,
         capabilities: integration.defaultCapabilities,
-        connectedAt: new Date().toISOString(),
-        accountLabel: `${integration.name} Account`
+        connectedAt: next[integration.id]?.connectedAt || new Date().toISOString(),
+        accountLabel: next[integration.id]?.accountLabel || "Platform Connector"
       };
+      continue;
     }
+    next[integration.id] = {
+      connected: hasUsableToken,
+      connectorMode: "user_owned",
+      authMethod: integration.authMethod,
+      capabilities: hasUsableToken ? integration.defaultCapabilities : [],
+      connectedAt: hasUsableToken ? (next[integration.id]?.connectedAt || new Date().toISOString()) : null,
+      accountLabel: hasUsableToken ? (next[integration.id]?.accountLabel || `${integration.name} Account`) : ""
+    };
   }
   return next;
 }
@@ -180,6 +206,8 @@ const integrationStore = {
       return {
         ...integration,
         connected: Boolean(connection?.connected),
+        connectorMode: String(connection?.connectorMode || (integration.supportsPlatformConnector ? "platform" : "user_owned")),
+        supportsPlatformConnector: Boolean(integration.supportsPlatformConnector),
         connectedAt: connection?.connectedAt || null,
         accountLabel: connection?.accountLabel || "",
         capabilities: connection?.connected
@@ -207,14 +235,16 @@ const integrationStore = {
   connect(id, details = {}) {
     const integration = catalog[id];
     if (!integration) return false;
+    const connectorMode = String(details.connectorMode || connections()[id]?.connectorMode || "user_owned");
     const next = {
       ...connections(),
       [id]: {
         connected: true,
+        connectorMode,
         authMethod: integration.authMethod,
         capabilities: details.capabilities || integration.defaultCapabilities,
         connectedAt: new Date().toISOString(),
-        accountLabel: details.accountLabel || ""
+        accountLabel: details.accountLabel || (connectorMode === "platform" ? "Platform Connector" : "")
       }
     };
     setConnections(next);
@@ -228,9 +258,16 @@ const integrationStore = {
     return true;
   },
   disconnect(id) {
+    const integration = catalog[id];
+    const supportsPlatformConnector = Boolean(integration?.supportsPlatformConnector);
     const next = {
       ...connections(),
-      [id]: { connected: false, capabilities: [], accountLabel: "" }
+      [id]: {
+        connected: false,
+        connectorMode: supportsPlatformConnector ? "platform" : "user_owned",
+        capabilities: [],
+        accountLabel: ""
+      }
     };
     setConnections(next);
     persistState(next);
@@ -238,11 +275,37 @@ const integrationStore = {
       if (id === "github") {
         localStorage.removeItem("github_auth_mode");
       }
-      const integration = catalog[id];
       if (integration?.tokenKey) {
         localStorage.removeItem(integration.tokenKey);
       }
     }
+  },
+  setConnectorMode(id, mode) {
+    const integration = catalog[id];
+    if (!integration) return false;
+    const nextMode = mode === "platform" && integration.supportsPlatformConnector ? "platform" : "user_owned";
+    const current = connections()[id] || {};
+    const hasToken = integration.requiresToken === false
+      ? Boolean(current.connected)
+      : typeof window !== "undefined" && integration.tokenKey
+        ? Boolean(String(localStorage.getItem(integration.tokenKey) || "").trim())
+        : false;
+    const connected = nextMode === "platform" ? Boolean(integration.supportsPlatformConnector) : hasToken;
+    const next = {
+      ...connections(),
+      [id]: {
+        ...current,
+        connected,
+        connectorMode: nextMode,
+        authMethod: integration.authMethod,
+        capabilities: connected ? (current.capabilities?.length ? current.capabilities : integration.defaultCapabilities) : [],
+        connectedAt: connected ? (current.connectedAt || new Date().toISOString()) : null,
+        accountLabel: nextMode === "platform" ? "Platform Connector" : (connected ? (current.accountLabel || `${integration.name} Account`) : "")
+      }
+    };
+    setConnections(next);
+    persistState(next);
+    return true;
   }
 };
 
