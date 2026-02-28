@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Apache-2.0
+services:
+  whoami:
+    image: traefik/whoami:v1.11.0
+    ports:
+      - target: 80
+        published: 9081
+        protocol: tcp
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+services:
+  node-manager:
+    container_name: edgerun-node-manager
+    build:
+      context: .
+      dockerfile: docker/node-manager/Dockerfile
+    image: edgerun/node-manager:local
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    command:
+      - edgerun-node-manager
+      - run
+      - --local-bridge-listen
+      - ${EDGERUN_LOCAL_BRIDGE_LISTEN:-127.0.0.1:7777}
+    environment:
+      EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL: ${EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL:-}
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /dev:/dev
+      - edgerun-var-lib:/var/lib/edgerun
+      - edgerun-etc:/etc/edgerun
+      - edgerun-run:/run/edgerun
+
+volumes:
+  edgerun-var-lib: {}
+  edgerun-etc: {}
+  edgerun-run: {}

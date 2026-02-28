@@ -36,6 +36,19 @@ Expected outcome:
 - command exits `0`
 - local bridge is reachable by browser UI on the same host
 
+## 5) Enable Swarm and deploy services (optional)
+
+```bash
+scripts/swarm/deploy-services-stack.sh
+```
+
+This deploys `docker-compose.services.yml` as a swarm stack (`edgerun-services` by default).
+Cloud panel reads running swarm services and containers from:
+
+```text
+GET http://127.0.0.1:7777/v1/local/docker/summary
+```
+
 ## Notes
 - This stack uses `network_mode: host` and `privileged: true` by design for TPM and Docker socket access.
 - State is persisted in named volumes for `/var/lib/edgerun` and `/etc/edgerun`.

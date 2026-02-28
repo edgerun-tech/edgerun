@@ -14,7 +14,8 @@ const providers = {
   vercel: { name: "Vercel", color: "text-white", bg: "bg-white/10" },
   hetzner: { name: "Hetzner", color: "text-red-400", bg: "bg-red-900/20" },
   github: { name: "GitHub", color: "text-white", bg: "bg-neutral-700" },
-  google: { name: "Google", color: "text-blue-400", bg: "bg-blue-900/20" }
+  google: { name: "Google", color: "text-blue-400", bg: "bg-blue-900/20" },
+  docker: { name: "Docker", color: "text-cyan-300", bg: "bg-cyan-900/20" }
 };
 const resourceTypeIcons = {
   server: FiServer,
@@ -29,7 +30,9 @@ const resourceTypeIcons = {
   workflow: FiActivity,
   email: FiMail,
   calendar: FiCalendar,
-  storage: FiHardDrive
+  storage: FiHardDrive,
+  service: FiBox,
+  container: FiBox
 };
 const resourceTypeNames = {
   server: "Servers",
@@ -44,7 +47,9 @@ const resourceTypeNames = {
   workflow: "Workflow Runs",
   email: "Emails",
   calendar: "Events",
-  storage: "Files"
+  storage: "Files",
+  service: "Services",
+  container: "Containers"
 };
 function CloudPanel(props) {
   const compact = () => Boolean(props?.compact);
@@ -57,6 +62,7 @@ function CloudPanel(props) {
   const [selectedType, setSelectedType] = createSignal(null);
   const [actionLoading, setActionLoading] = createSignal(null);
   const [stats, setStats] = createSignal({});
+  const [localDocker, setLocalDocker] = createSignal({ available: false, swarmActive: false });
   const fetchAllResources = async () => {
     setLoading(true);
     setError(null);
@@ -68,6 +74,58 @@ function CloudPanel(props) {
     const githubToken = integrationStore.getToken("github");
     const googleToken = integrationStore.getToken("google");
     try {
+      try {
+        const dockerRes = await fetch("http://127.0.0.1:7777/v1/local/docker/summary", { cache: "no-store" });
+        if (dockerRes.ok) {
+          const docker = await dockerRes.json();
+          if (docker?.ok) {
+            const services = Array.isArray(docker.services) ? docker.services : [];
+            const containers = Array.isArray(docker.containers) ? docker.containers : [];
+            setLocalDocker({
+              available: true,
+              swarmActive: Boolean(docker.swarm_active)
+            });
+            newStats.docker = services.length + containers.length;
+            newStats.dockerServices = services.length;
+            newStats.dockerContainers = containers.length;
+            for (const svc of services) {
+              allResources.push({
+                id: `docker-svc-${svc.id}`,
+                name: svc.name || svc.id,
+                type: "service",
+                provider: "docker",
+                status: (svc.replicas || "").startsWith("0/") ? "inactive" : "active",
+                metadata: {
+                  mode: svc.mode || "",
+                  replicas: svc.replicas || "",
+                  image: svc.image || "",
+                  ports: svc.ports || ""
+                }
+              });
+            }
+            for (const ctr of containers) {
+              allResources.push({
+                id: `docker-ctr-${ctr.id}`,
+                name: ctr.name || ctr.id,
+                type: "container",
+                provider: "docker",
+                status: ctr.state || ctr.status || "unknown",
+                metadata: {
+                  image: ctr.image || "",
+                  status: ctr.status || "",
+                  ports: ctr.ports || ""
+                }
+              });
+            }
+          } else {
+            setLocalDocker({ available: false, swarmActive: false });
+          }
+        } else {
+          setLocalDocker({ available: false, swarmActive: false });
+        }
+      } catch {
+        setLocalDocker({ available: false, swarmActive: false });
+      }
       if (cloudflareToken) {
         try {
           const zonesRes = await fetch(`/api/cloudflare/zones?token=${encodeURIComponent(cloudflareToken)}`);
@@ -351,7 +409,8 @@ function CloudPanel(props) {
       vercel: "vercel",
       hetzner: "hetzner",
       github: "github",
-      google: "email"
+      google: "email",
+      docker: "terminal"
     };
     const panel = panelMap[provider];
     if (panel) openWindow(panel);
@@ -390,6 +449,7 @@ function CloudPanel(props) {
     if (getToken("hetzner")) connected.push("hetzner");
     if (integrationStore.getToken("github")) connected.push("github");
     if (integrationStore.getToken("google")) connected.push("google");
+    if (localDocker().available) connected.push("docker");
     return connected;
   });
   const totalResources = createMemo(() => resources().length);
@@ -571,8 +631,12 @@ function CloudPanel(props) {
                                 <Show when={resource.region}> • {resource.region}</Show>
                                 <Show when={resource.ip}> • {resource.ip}</Show>
                                 <Show when={resource.metadata?.framework}> • {resource.metadata?.framework}</Show>
+                                <Show when={resource.metadata?.replicas}> • {resource.metadata?.replicas}</Show>
+                                <Show when={resource.metadata?.mode}> • {resource.metadata?.mode}</Show>
                                 <Show when={resource.metadata?.stars}> ★ {resource.metadata?.stars}</Show>
                                 <Show when={resource.metadata?.private}> • private</Show>
+                                <Show when={resource.metadata?.image}> • {resource.metadata?.image}</Show>
+                                <Show when={resource.metadata?.ports}> • {resource.metadata?.ports}</Show>
                               </p>
                             </div>
                           </div>

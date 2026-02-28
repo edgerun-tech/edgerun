@@ -67,6 +67,7 @@ const RUNTIME_IMAGE_REQUEST_SIGNING_CONTEXT: &str = "edgerun-runtime-image-reque
 const DEFAULT_TUNNEL_CONTROL_BASE: &str = "https://relay.edgerun.tech";
 const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
 const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
+const LOCAL_DOCKER_SUMMARY_PATH: &str = "/v1/local/docker/summary";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -245,6 +246,36 @@ struct LocalBridgeState {
     device_pubkey_b64url: String,
     started_unix_ms: u64,
     tx: broadcast::Sender<LocalEventEnvelopeV1>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalDockerSummaryResponse {
+    ok: bool,
+    error: String,
+    swarm_active: bool,
+    swarm_node_id: String,
+    services: Vec<LocalDockerService>,
+    containers: Vec<LocalDockerContainer>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalDockerService {
+    id: String,
+    name: String,
+    mode: String,
+    replicas: String,
+    image: String,
+    ports: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalDockerContainer {
+    id: String,
+    name: String,
+    image: String,
+    status: String,
+    state: String,
+    ports: String,
 }
 
 #[tokio::main]
@@ -735,6 +766,8 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route("/v1/local/node/info.pb", get(handle_local_node_info))
         .route("/v1/local/node/info.pb", options(handle_local_options))
         .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
+        .route(LOCAL_DOCKER_SUMMARY_PATH, get(handle_local_docker_summary))
+        .route(LOCAL_DOCKER_SUMMARY_PATH, options(handle_local_options))
         .with_state(Arc::new(state));
     tokio::spawn(async move {
         let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -804,6 +837,40 @@ async fn handle_local_eventbus_ws(
     ws.on_upgrade(move |socket| local_eventbus_session(socket, state))
 }
 
+async fn handle_local_docker_summary() -> Response {
+    let summary = match collect_local_docker_summary() {
+        Ok(summary) => summary,
+        Err(err) => LocalDockerSummaryResponse {
+            ok: false,
+            error: err.to_string(),
+            swarm_active: false,
+            swarm_node_id: String::new(),
+            services: Vec::new(),
+            containers: Vec::new(),
+        },
+    };
+    let payload = sonic_rs::to_string(&summary)
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
+    (
+        AxumStatusCode::OK,
+        [
+            (
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            ),
+            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+            (ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*")),
+            (
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                HeaderValue::from_static("content-type"),
+            ),
+            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+        ],
+        payload,
+    )
+        .into_response()
+}
+
 async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {
     let mut rx = state.tx.subscribe();
     let socket = Arc::new(Mutex::new(socket));
@@ -864,6 +931,97 @@ async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>)
         }
     }
     outbound.abort();
+}
+
+fn collect_local_docker_summary() -> Result<LocalDockerSummaryResponse> {
+    let swarm_info = run_command_capture(
+        "docker",
+        &["info", "--format", "{{.Swarm.LocalNodeState}}\t{{.Swarm.NodeID}}"],
+    )?;
+    let mut swarm_state = String::new();
+    let mut swarm_node_id = String::new();
+    if let Some(line) = swarm_info.lines().next() {
+        let cols: Vec<&str> = line.split('\t').collect();
+        swarm_state = cols.first().copied().unwrap_or_default().trim().to_string();
+        swarm_node_id = cols.get(1).copied().unwrap_or_default().trim().to_string();
+    }
+    let swarm_active = swarm_state == "active";
+
+    let mut services = Vec::new();
+    if swarm_active {
+        let rows = run_command_capture(
+            "docker",
+            &[
+                "service",
+                "ls",
+                "--format",
+                "{{.ID}}\t{{.Name}}\t{{.Mode}}\t{{.Replicas}}\t{{.Image}}\t{{.Ports}}",
+            ],
+        )?;
+        for line in rows.lines() {
+            let cols: Vec<&str> = line.split('\t').collect();
+            if cols.len() < 5 {
+                continue;
+            }
+            services.push(LocalDockerService {
+                id: cols.first().copied().unwrap_or_default().trim().to_string(),
+                name: cols.get(1).copied().unwrap_or_default().trim().to_string(),
+                mode: cols.get(2).copied().unwrap_or_default().trim().to_string(),
+                replicas: cols.get(3).copied().unwrap_or_default().trim().to_string(),
+                image: cols.get(4).copied().unwrap_or_default().trim().to_string(),
+                ports: cols.get(5).copied().unwrap_or_default().trim().to_string(),
+            });
+        }
+    }
+
+    let rows = run_command_capture(
+        "docker",
+        &[
+            "ps",
+            "--format",
+            "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.State}}\t{{.Ports}}",
+        ],
+    )?;
+    let mut containers = Vec::new();
+    for line in rows.lines() {
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        containers.push(LocalDockerContainer {
+            id: cols.first().copied().unwrap_or_default().trim().to_string(),
+            name: cols.get(1).copied().unwrap_or_default().trim().to_string(),
+            image: cols.get(2).copied().unwrap_or_default().trim().to_string(),
+            status: cols.get(3).copied().unwrap_or_default().trim().to_string(),
+            state: cols.get(4).copied().unwrap_or_default().trim().to_string(),
+            ports: cols.get(5).copied().unwrap_or_default().trim().to_string(),
+        });
+    }
+
+    Ok(LocalDockerSummaryResponse {
+        ok: true,
+        error: String::new(),
+        swarm_active,
+        swarm_node_id,
+        services,
+        containers,
+    })
+}
+
+fn run_command_capture(bin: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(bin)
+        .args(args)
+        .output()
+        .with_context(|| format!("failed to run command: {} {}", bin, args.join(" ")))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "command failed: {} {} ({})",
+            bin,
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
 async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
