@@ -1,4 +1,6 @@
 import { createSignal } from "solid-js";
+import { profileRuntime } from "./profile-runtime";
+import { knownDevices } from "./devices";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
@@ -155,6 +157,8 @@ async function syncIntegrationTokenToVault(integration, details) {
 function hydrateState() {
   const stored = readStoredState();
   const next = { ...stored };
+  const runtime = profileRuntime();
+  const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
   for (const integration of Object.values(catalog)) {
     const storedMode = String(next[integration.id]?.connectorMode || "").trim();
     const connectorMode = storedMode || (integration.supportsPlatformConnector ? "platform" : "user_owned");
@@ -167,19 +171,23 @@ function hydrateState() {
       : integration.id === "github"
         ? Boolean(token && !token.startsWith("oidc_"))
         : Boolean(token);
+    const wasLinked = Boolean(next[integration.id]?.linked);
     if (connectorMode === "platform" && integration.supportsPlatformConnector) {
+      const connected = Boolean(wasLinked && profileReady);
       next[integration.id] = {
-        connected: true,
+        connected,
+        linked: wasLinked,
         connectorMode: "platform",
         authMethod: integration.authMethod,
-        capabilities: integration.defaultCapabilities,
-        connectedAt: next[integration.id]?.connectedAt || new Date().toISOString(),
-        accountLabel: next[integration.id]?.accountLabel || "Platform Connector"
+        capabilities: connected ? integration.defaultCapabilities : [],
+        connectedAt: connected ? (next[integration.id]?.connectedAt || new Date().toISOString()) : null,
+        accountLabel: connected ? (next[integration.id]?.accountLabel || "Platform Connector") : "Platform Connector"
       };
       continue;
     }
     next[integration.id] = {
       connected: hasUsableToken,
+      linked: hasUsableToken,
       connectorMode: "user_owned",
       authMethod: integration.authMethod,
       capabilities: hasUsableToken ? integration.defaultCapabilities : [],
@@ -200,17 +208,32 @@ const integrationStore = {
     return true;
   },
   list() {
+    const runtime = profileRuntime();
+    const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
+    const deviceReady = knownDevices().some((device) => Boolean(device?.online));
     const state = connections();
     return Object.values(catalog).map((integration) => {
       const connection = state[integration.id];
+      const connected = Boolean(connection?.connected);
+      const available = connected && profileReady && (integration.id === "codex_cli" ? deviceReady : true);
+      const availabilityReason = !connected
+        ? "Not connected"
+        : !profileReady
+          ? "Profile session required"
+          : integration.id === "codex_cli" && !deviceReady
+            ? "Connected device required"
+            : "Ready";
       return {
         ...integration,
-        connected: Boolean(connection?.connected),
+        connected,
+        available,
+        availabilityReason,
         connectorMode: String(connection?.connectorMode || (integration.supportsPlatformConnector ? "platform" : "user_owned")),
         supportsPlatformConnector: Boolean(integration.supportsPlatformConnector),
+        linked: Boolean(connection?.linked),
         connectedAt: connection?.connectedAt || null,
         accountLabel: connection?.accountLabel || "",
-        capabilities: connection?.connected
+        capabilities: available
           ? connection?.capabilities || integration.defaultCapabilities
           : []
       };
@@ -228,7 +251,7 @@ const integrationStore = {
   },
   hasCapability(capability) {
     for (const integration of this.list()) {
-      if (integration.connected && integration.capabilities.includes(capability)) return true;
+      if (integration.available && integration.capabilities.includes(capability)) return true;
     }
     return false;
   },
@@ -240,6 +263,7 @@ const integrationStore = {
       ...connections(),
       [id]: {
         connected: true,
+        linked: true,
         connectorMode,
         authMethod: integration.authMethod,
         capabilities: details.capabilities || integration.defaultCapabilities,
@@ -264,6 +288,7 @@ const integrationStore = {
       ...connections(),
       [id]: {
         connected: false,
+        linked: false,
         connectorMode: supportsPlatformConnector ? "platform" : "user_owned",
         capabilities: [],
         accountLabel: ""
@@ -285,17 +310,22 @@ const integrationStore = {
     if (!integration) return false;
     const nextMode = mode === "platform" && integration.supportsPlatformConnector ? "platform" : "user_owned";
     const current = connections()[id] || {};
+    const runtime = profileRuntime();
+    const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
     const hasToken = integration.requiresToken === false
       ? Boolean(current.connected)
       : typeof window !== "undefined" && integration.tokenKey
         ? Boolean(String(localStorage.getItem(integration.tokenKey) || "").trim())
         : false;
-    const connected = nextMode === "platform" ? Boolean(integration.supportsPlatformConnector) : hasToken;
+    const connected = nextMode === "platform"
+      ? Boolean(current.linked && profileReady)
+      : hasToken;
     const next = {
       ...connections(),
       [id]: {
         ...current,
         connected,
+        linked: nextMode === "platform" ? Boolean(current.linked) : connected,
         connectorMode: nextMode,
         authMethod: integration.authMethod,
         capabilities: connected ? (current.capabilities?.length ? current.capabilities : integration.defaultCapabilities) : [],

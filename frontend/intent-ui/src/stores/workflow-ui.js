@@ -487,8 +487,9 @@ async function openCodexResponse(queryText, options = {}) {
     return;
   }
 
-  if (!requiredIntegration?.connected) {
+  if (!requiredIntegration?.available) {
     const integrationName = requiredIntegration?.name || requiredIntegrationId;
+    const reason = requiredIntegration?.availabilityReason ? ` (${requiredIntegration.availabilityReason})` : "";
     setWorkflowUi((prev) => ({
       ...prev,
       topOpen: true,
@@ -501,7 +502,7 @@ async function openCodexResponse(queryText, options = {}) {
       selectedIntegrationId: requiredIntegrationId,
       statusEvents: [
         ...prev.statusEvents,
-        { type: "error", label: "blocked", detail: `Assistant blocked: connect ${integrationName} integration first.` }
+        { type: "error", label: "blocked", detail: `Assistant blocked: connect ${integrationName} integration first${reason}.` }
       ],
       messages: appendChatMessage(prev.messages, "user", prompt)
     }));

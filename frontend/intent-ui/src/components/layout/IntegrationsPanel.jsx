@@ -420,11 +420,23 @@ function IntegrationsPanel(props) {
                     <div class="flex items-center gap-2">
                       <Icon size={16} class={provider.connected ? "text-[hsl(var(--primary))]" : "text-neutral-400"} />
                       <p class="truncate text-sm font-medium text-neutral-100">{provider.name}</p>
-                      <span class={`inline-flex items-center gap-1 text-[11px] ${provider.connected ? "text-[hsl(var(--primary))]" : "text-neutral-500"}`}>
+                      <span
+                        class={`inline-flex items-center gap-1 text-[11px] ${provider.connected ? "text-[hsl(var(--primary))]" : "text-neutral-500"}`}
+                        data-testid={`provider-connected-${provider.id}`}
+                      >
                         <Show when={provider.connected} fallback={<FiLink2 size={10} />}>
                           <FiCheckCircle size={10} />
                         </Show>
                         {provider.connected ? "Connected" : "Not connected"}
+                      </span>
+                      <span
+                        class={`inline-flex items-center gap-1 text-[11px] ${provider.available ? "text-emerald-300" : "text-amber-300"}`}
+                        data-testid={`provider-available-${provider.id}`}
+                      >
+                        <Show when={provider.available} fallback={<FiXCircle size={10} />}>
+                          <FiCheckCircle size={10} />
+                        </Show>
+                        {provider.available ? "Available" : "Unavailable"}
                       </span>
                       <span
                         class={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] ${
@@ -438,6 +450,7 @@ function IntegrationsPanel(props) {
                       </span>
                     </div>
                     <p class="mt-1 truncate text-xs text-neutral-500">{provider.description}</p>
+                    <p class="mt-0.5 truncate text-[11px] text-neutral-500">{provider.availabilityReason}</p>
                   </div>
 
                   <button
@@ -623,8 +636,11 @@ function IntegrationsPanel(props) {
                             return;
                           }
                           if (provider.connectorMode === "platform" && provider.supportsPlatformConnector) {
-                            integrationStore.setConnectorMode(provider.id, "platform");
-                            setStatus(`${provider.name} platform connector ready.`);
+                            integrationStore.connect(provider.id, {
+                              connectorMode: "platform",
+                              accountLabel: "Platform Connector"
+                            });
+                            setStatus(`${provider.name} platform connector linked.`);
                             closeDialog();
                             return;
                           }
