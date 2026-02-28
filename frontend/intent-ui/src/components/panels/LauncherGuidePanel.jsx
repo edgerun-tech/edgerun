@@ -21,6 +21,7 @@ import { toggleWorkflowDrawer, workflowUi, openWorkflowIntegrations } from "../.
 import { knownDevices } from "../../stores/devices";
 import { integrationStore } from "../../stores/integrations";
 import { profileRuntime } from "../../stores/profile-runtime";
+import { openProfileBootstrap, toggleIntentBar } from "../../stores/ui-actions";
 
 const GUIDE_KEY = "intent-ui-guide-progress-v1";
 
@@ -42,8 +43,8 @@ const launchItems = [
 ];
 
 const guideSteps = [
-  { id: "open-intent", title: "Open command explorer", detail: "Type /help in IntentBar.", actionLabel: "Focus Intent", action: () => window.dispatchEvent(new CustomEvent("intentbar:toggle")) },
-  { id: "open-onboarding", title: "Review onboarding", detail: "Reopen profile onboarding and verify session mode.", actionLabel: "Open Onboarding", action: () => window.dispatchEvent(new CustomEvent("intent-ui:open-profile-bootstrap")) },
+  { id: "open-intent", title: "Open command explorer", detail: "Type /help in IntentBar.", actionLabel: "Focus Intent", action: () => toggleIntentBar() },
+  { id: "open-onboarding", title: "Review onboarding", detail: "Reopen profile onboarding and verify session mode.", actionLabel: "Open Onboarding", action: () => openProfileBootstrap() },
   { id: "connect-github", title: "Connect GitHub", detail: "Link GitHub token in Integrations.", actionLabel: "Open GitHub Link", action: () => openWorkflowIntegrations("github") },
   { id: "connect-assistant", title: "Connect assistant integration", detail: "Link Codex CLI or Qwen before running assistant tasks.", actionLabel: "Open AI Integration", action: () => openWorkflowIntegrations(workflowUi().provider === "qwen" ? "qwen" : "codex_cli") },
   { id: "open-devices", title: "Check devices", detail: "Verify a connected device is online.", actionLabel: "Open Devices", action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" }) },
@@ -91,7 +92,7 @@ function LauncherGuidePanel(props) {
         detail: onboardingDone ? "Onboarding can be reopened from this launcher or top-right button." : "Finish onboarding to choose profile or ephemeral session.",
         done: onboardingDone,
         actionLabel: "Open onboarding",
-        action: () => window.dispatchEvent(new CustomEvent("intent-ui:open-profile-bootstrap"))
+        action: () => openProfileBootstrap()
       },
       {
         id: "task-devices",

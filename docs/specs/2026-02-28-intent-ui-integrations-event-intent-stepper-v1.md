@@ -19,11 +19,11 @@ Refactor Intent UI event architecture so core UI actions are intent-driven and s
 - Keep Bun-only workflows and frontend root under `frontend/`.
 
 ## Design
-- Introduce canonical UI intent/event topics in a single constants module (`window`, `clipboard`, `integration` domains).
+- Introduce canonical UI intent/event topics in a single constants module (`window`, `clipboard`, `integration`, `action` domains).
 - Route window store and integration store mutations through event reducers that consume intent/event topics.
 - Integrations panel emits intents (`intent.integration.*`) for connect/disconnect/mode/test operations.
 - Integrations store subscribes to those topics and derives connection state via a reducer from resulting `integration.*` events.
-- Existing UI button handlers should use store APIs that now publish intents, so behavior remains compatible while transport shifts to eventbus.
+- Existing UI button handlers should use store APIs that publish intents, including cross-panel actions (intentbar toggle, browser navigation, call ring, terminal input, onboarding open, widgets reset positions).
 - Stepper flow in dialog:
   - Step 1: ownership/auth mode
   - Step 2: required provider inputs
@@ -32,7 +32,7 @@ Refactor Intent UI event architecture so core UI actions are intent-driven and s
 - Tailscale verification remains real by calling `/api/tailscale/devices`.
 
 ## Acceptance Criteria
-- Window open/close/minimize/maximize and clipboard actions are published as intents and reduced from events.
+- Window open/close/minimize/maximize, clipboard actions, and cross-panel UI actions are published as intents and consumed via eventbus subscriptions.
 - Integrations list in panel is icon-only with hover tooltip metadata.
 - Clicking provider connect action opens stepper dialog.
 - Stepper does not allow finalize/link until verification passes.

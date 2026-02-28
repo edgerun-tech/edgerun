@@ -15,6 +15,14 @@ const UI_INTENT_TOPICS = {
     push: "intent.ui.clipboard.push",
     clear: "intent.ui.clipboard.clear"
   },
+  action: {
+    intentBarToggle: "intent.ui.action.intentbar.toggle",
+    profileBootstrapOpen: "intent.ui.action.profile_bootstrap.open",
+    browserNavigate: "intent.ui.action.browser.navigate",
+    callRing: "intent.ui.action.call.ring",
+    terminalInput: "intent.ui.action.terminal.input",
+    widgetsResetPositions: "intent.ui.action.widgets.reset_positions"
+  },
   integration: {
     checkAll: "intent.ui.integration.check_all",
     connect: "intent.ui.integration.connect",
@@ -41,6 +49,14 @@ const UI_EVENT_TOPICS = {
   clipboard: {
     updated: "ui.clipboard.updated",
     cleared: "ui.clipboard.cleared"
+  },
+  action: {
+    intentBarToggled: "ui.action.intentbar.toggled",
+    profileBootstrapOpened: "ui.action.profile_bootstrap.opened",
+    browserNavigated: "ui.action.browser.navigated",
+    callRinging: "ui.action.call.ringing",
+    terminalInputSent: "ui.action.terminal.input_sent",
+    widgetsPositionsReset: "ui.action.widgets.positions_reset"
   },
   integration: {
     stateChanged: "ui.integration.state_changed",

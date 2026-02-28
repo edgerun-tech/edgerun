@@ -8,7 +8,9 @@ import { closeTopWindow, openWindow } from "./stores/windows";
 import { closeWorkflowDemo, hydrateWorkflowUiFromStorage, openCodexResponse, startNewCodexSession, workflowUi } from "./stores/workflow-ui";
 import { clearProfileRuntimeSession, hydrateProfileRuntime, profileRuntime } from "./stores/profile-runtime";
 import { clearProfileSecretsContext } from "./stores/profile-secrets";
-import { eventBusRuntime, eventTimeline, initializeBrowserEventBus, publishEvent } from "./stores/eventbus";
+import { eventBusRuntime, eventTimeline, initializeBrowserEventBus, publishEvent, subscribeEvent } from "./stores/eventbus";
+import { UI_EVENT_TOPICS } from "./lib/ui-intents";
+import { initializeUiActionBridge, toggleIntentBar } from "./stores/ui-actions";
 import { pushClipboardEntry } from "./stores/clipboard-history";
 import { Kbd, KbdGroup } from "./registry/ui/kbd";
 import {
@@ -60,6 +62,7 @@ function App() {
   let handleOpenBootstrapGate;
   let handleStorageUpdate;
   let layerIndicatorTimeout;
+  let unsubscribeBootstrapOpen;
 
   const readRegisteredDomain = () => {
     if (typeof window === "undefined") return "";
@@ -143,7 +146,7 @@ function App() {
       icon: TbOutlineHistory,
       run: () => {
         startNewCodexSession();
-        window.dispatchEvent(new CustomEvent("intentbar:toggle"));
+        toggleIntentBar();
       }
     },
     { label: "Open Guide", icon: TbOutlineBook2, run: () => openWindow("guide") },
@@ -194,6 +197,7 @@ function App() {
     hydrateProfileRuntime();
     hydrateWorkflowUiFromStorage();
     void initializeBrowserEventBus();
+    initializeUiActionBridge();
     publishEvent("browser.runtime.started", { app: "intent-ui" }, { source: "browser" });
     setIsClient(true);
     const updateLayerFromEvent = (event) => {
@@ -239,7 +243,7 @@ function App() {
 
       if (isSuperKey) {
         event.preventDefault();
-        window.dispatchEvent(new CustomEvent("intentbar:toggle"));
+        toggleIntentBar();
         return;
       }
 
@@ -283,7 +287,7 @@ function App() {
     window.addEventListener("pointerdown", handleGlobalClick);
     window.addEventListener("keydown", handleContextEscape);
     handleOpenBootstrapGate = () => setShowBootstrapGate(true);
-    window.addEventListener("intent-ui:open-profile-bootstrap", handleOpenBootstrapGate);
+    unsubscribeBootstrapOpen = subscribeEvent(UI_EVENT_TOPICS.action.profileBootstrapOpened, handleOpenBootstrapGate);
     handleStorageUpdate = () => setRegisteredDomain(readRegisteredDomain());
     window.addEventListener("storage", handleStorageUpdate);
     setRegisteredDomain(readRegisteredDomain());
@@ -304,7 +308,7 @@ function App() {
     if (handleGlobalContextMenu) window.removeEventListener("contextmenu", handleGlobalContextMenu, { capture: true });
     if (handleGlobalClick) window.removeEventListener("pointerdown", handleGlobalClick);
     if (handleContextEscape) window.removeEventListener("keydown", handleContextEscape);
-    if (handleOpenBootstrapGate) window.removeEventListener("intent-ui:open-profile-bootstrap", handleOpenBootstrapGate);
+    if (unsubscribeBootstrapOpen) unsubscribeBootstrapOpen();
     if (handleStorageUpdate) window.removeEventListener("storage", handleStorageUpdate);
     if (layerIndicatorTimeout) {
       clearTimeout(layerIndicatorTimeout);

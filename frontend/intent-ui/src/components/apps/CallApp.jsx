@@ -2,6 +2,8 @@ import { createSignal, onMount, onCleanup, Show, For, createEffect } from "solid
 import { Peer } from "peerjs";
 import { BiRegularVideo, BiRegularVideoOff, BiRegularMicrophone, BiRegularMicrophoneOff, BiRegularPhoneOff, BiRegularSend } from "solid-icons/bi";
 import { TbOutlineBellRinging, TbOutlinePhone, TbOutlineVideo } from "solid-icons/tb";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
+import { subscribeEvent } from "../../stores/eventbus";
 function CallApp() {
   let localVideoRef;
   let remoteVideoRef;
@@ -23,6 +25,7 @@ function CallApp() {
   const [ringTarget, setRingTarget] = createSignal("");
   const [ringMode, setRingMode] = createSignal("call");
   let handleIntentCallRing;
+  let unsubscribeCallRing;
   let peer = null;
   let localStream = null;
   let ringTimeout = null;
@@ -262,10 +265,10 @@ function CallApp() {
     await initPeer();
     joinFromUrl();
     handleIntentCallRing = (event) => {
-      const detail = event?.detail || {};
+      const detail = event?.payload || {};
       startRinging(detail.contact, detail.mode);
     };
-    window.addEventListener("intent:call:ring", handleIntentCallRing);
+    unsubscribeCallRing = subscribeEvent(UI_EVENT_TOPICS.action.callRinging, handleIntentCallRing);
   });
   createEffect(() => {
     messages();
@@ -281,9 +284,7 @@ function CallApp() {
     return "text-muted-foreground bg-muted/60 border-border";
   };
   onCleanup(() => {
-    if (handleIntentCallRing) {
-      window.removeEventListener("intent:call:ring", handleIntentCallRing);
-    }
+    if (unsubscribeCallRing) unsubscribeCallRing();
     stopRinging();
     if (localStream) {
       for (const track of localStream.getTracks()) {

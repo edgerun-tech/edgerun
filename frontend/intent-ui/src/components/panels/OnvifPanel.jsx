@@ -1,5 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js";
 import { openWindow } from "../../stores/windows";
+import { navigateBrowser } from "../../stores/ui-actions";
 
 const ONVIF_CAMERAS_KEY = "intent-ui-onvif-cameras-v1";
 
@@ -251,7 +252,7 @@ function OnvifPanel() {
                       class="rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800"
                       onClick={() => {
                         openWindow("browser");
-                        window.dispatchEvent(new CustomEvent("intent:browser:navigate", { detail: { url: camera.url } }));
+                        navigateBrowser(camera.url);
                       }}
                     >
                       Open

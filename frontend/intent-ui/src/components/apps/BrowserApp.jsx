@@ -1,6 +1,8 @@
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { TbOutlineExternalLink, TbOutlineReload, TbOutlineX } from "solid-icons/tb";
 import { closeWindow } from "../../stores/windows";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
+import { subscribeEvent } from "../../stores/eventbus";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -24,7 +26,7 @@ function BrowserApp(props) {
   const [inputValue, setInputValue] = createSignal(DEFAULT_URL);
   const [url, setUrl] = createSignal(DEFAULT_URL);
   const [frameKey, setFrameKey] = createSignal(0);
-  let onNavigate;
+  let unsubscribeNavigate;
 
   const navigate = (next) => {
     const normalized = normalizeUrl(next);
@@ -58,18 +60,15 @@ function BrowserApp(props) {
   };
 
   onMount(() => {
-    onNavigate = (event) => {
-      const text = event?.detail?.url;
+    unsubscribeNavigate = subscribeEvent(UI_EVENT_TOPICS.action.browserNavigated, (event) => {
+      const text = event?.payload?.url;
       if (typeof text === "string" && text.trim()) {
         navigate(text);
       }
-    };
-    window.addEventListener("intent:browser:navigate", onNavigate);
+    });
   });
   onCleanup(() => {
-    if (onNavigate) {
-      window.removeEventListener("intent:browser:navigate", onNavigate);
-    }
+    if (unsubscribeNavigate) unsubscribeNavigate();
   });
 
   return (

@@ -1,6 +1,7 @@
 import { TbOutlineApps, TbOutlineMap2, TbOutlineClock, TbOutlineCloud, TbOutlineBook2, TbOutlineRotateClockwise2 } from "solid-icons/tb";
 import { preferences, setWallpaperWidgetEnabled } from "../../stores/preferences";
 import { openWindow } from "../../stores/windows";
+import { resetWidgetPositions } from "../../stores/ui-actions";
 
 const WIDGET_POSITIONS_KEY = "intent-ui-widget-positions-v1";
 
@@ -82,7 +83,7 @@ function WidgetsPanel() {
           onClick={() => {
             try {
               localStorage.removeItem(WIDGET_POSITIONS_KEY);
-              window.dispatchEvent(new CustomEvent("intent:widgets:reset-positions"));
+              resetWidgetPositions();
             } catch {
               // ignore local storage failures
             }

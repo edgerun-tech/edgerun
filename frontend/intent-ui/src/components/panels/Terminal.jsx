@@ -1,4 +1,7 @@
 import { For, createSignal, onCleanup, onMount } from "solid-js";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
+import { subscribeEvent } from "../../stores/eventbus";
+import { sendTerminalInput } from "../../stores/ui-actions";
 
 const mockResponses = {
   help: "Available commands:\n  help, ls, pwd, echo, cat, node, npm, git, clear, whoami, date, uname",
@@ -113,7 +116,7 @@ function TerminalComponent(props) {
   };
 
   const handleForwardedInput = (event) => {
-    const detail = event.detail || {};
+    const detail = event?.payload || {};
     const text = typeof detail.text === "string" ? detail.text : "";
     if (!text.trim()) return;
 
@@ -126,11 +129,11 @@ function TerminalComponent(props) {
   };
 
   onMount(() => {
-    window.addEventListener("intent:terminal:input", handleForwardedInput);
+    unsubscribeTerminalInput = subscribeEvent(UI_EVENT_TOPICS.action.terminalInputSent, handleForwardedInput);
   });
 
   onCleanup(() => {
-    window.removeEventListener("intent:terminal:input", handleForwardedInput);
+    if (unsubscribeTerminalInput) unsubscribeTerminalInput();
   });
 
   return <div class="h-full w-full bg-[#1a1a1a] text-neutral-200 p-4 flex flex-col gap-3 font-mono text-sm">
@@ -153,15 +156,12 @@ function TerminalComponent(props) {
 }
 
 function writeToTerminal(text, execute = true) {
-  if (!text || typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent("intent:terminal:input", {
-      detail: { text, execute }
-    })
-  );
+  if (!text) return;
+  sendTerminalInput(text, execute, true);
 }
 
 export {
   TerminalComponent as default,
   writeToTerminal,
 };
+  let unsubscribeTerminalInput;

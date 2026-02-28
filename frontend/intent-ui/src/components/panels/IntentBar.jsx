@@ -40,6 +40,9 @@ import {
   uiRuntime
 } from "../../stores/ui-runtime";
 import { preferences } from "../../stores/preferences";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
+import { subscribeEvent } from "../../stores/eventbus";
+import { navigateBrowser, ringCall, sendTerminalInput } from "../../stores/ui-actions";
 import {
   getAllResults,
   getPinnedResults,
@@ -263,6 +266,7 @@ function IntentBar() {
   let calendarPopoverRef;
   let handleIntentBarToggle;
   let handleCalendarOutside;
+  let unsubscribeIntentbarToggle;
   let mcpMessageHandler;
   let weatherUpdating = false;
   let weatherAborted = false;
@@ -523,12 +527,7 @@ function IntentBar() {
     const contactName = parsed.contact.replace(/\s+/g, " ").trim();
     if (parsed.action === "call" || parsed.action === "video") {
       openWindow("call");
-      window.dispatchEvent(new CustomEvent("intent:call:ring", {
-        detail: {
-          contact: contactName,
-          mode: parsed.action
-        }
-      }));
+      ringCall(contactName, parsed.action);
     }
     setDemoGenerating(true);
     setLoading(true);
@@ -786,7 +785,7 @@ function IntentBar() {
       setHotkeyExpanded(true);
       queueMicrotask(() => inputRef?.focus());
     };
-    window.addEventListener("intentbar:toggle", handleIntentBarToggle);
+    unsubscribeIntentbarToggle = subscribeEvent(UI_EVENT_TOPICS.action.intentBarToggled, handleIntentBarToggle);
     handleCalendarOutside = (event) => {
       if (!showCalendar()) return;
       const target = event.target;
@@ -814,9 +813,7 @@ function IntentBar() {
       recognition.stop();
     }
     clearTimeout(debounceTimer);
-    if (handleIntentBarToggle) {
-      window.removeEventListener("intentbar:toggle", handleIntentBarToggle);
-    }
+    if (unsubscribeIntentbarToggle) unsubscribeIntentbarToggle();
     if (handleCalendarOutside) {
       window.removeEventListener("pointerdown", handleCalendarOutside);
     }
@@ -1215,7 +1212,7 @@ function IntentBar() {
       try {
         if (mediaCommand.action === "open") {
           openWindow("browser");
-          window.dispatchEvent(new CustomEvent("intent:browser:navigate", { detail: { url: "https://music.youtube.com" } }));
+          navigateBrowser("https://music.youtube.com");
           setError(null);
           addRecentCommand(trimmed);
           setQuery("");
@@ -1297,7 +1294,7 @@ function IntentBar() {
       const rawUrl = isDirectUrl || isDomainLike ? trimmed : trimmed.replace(/^browser\s+/i, "").trim();
       if (rawUrl) {
         openWindow("browser");
-        window.dispatchEvent(new CustomEvent("intent:browser:navigate", { detail: { url: rawUrl } }));
+        navigateBrowser(rawUrl);
       }
       setQuery("");
       setMode("intent");
@@ -1527,9 +1524,7 @@ function IntentBar() {
       const shellInput = q.trim().slice(1).trim();
       openWindow("terminal");
       if (shellInput) {
-        window.dispatchEvent(new CustomEvent("intent:terminal:input", {
-          detail: { text: shellInput, execute: true }
-        }));
+        sendTerminalInput(shellInput, true, true);
       }
       setQuery("");
       return;
@@ -1697,9 +1692,7 @@ function IntentBar() {
       const results2 = event.results;
       const latest = results2[results2.length - 1];
       const transcript = latest[0].transcript;
-      window.dispatchEvent(new CustomEvent("intent:terminal:input", {
-        detail: { text: transcript, final: latest.isFinal }
-      }));
+      sendTerminalInput(transcript, false, latest.isFinal);
       if (mode() === "intent" && latest.isFinal) {
         setQuery((prev) => prev + " " + transcript);
       }
@@ -1739,12 +1732,7 @@ function IntentBar() {
           removeOpenWindow(data.params.windowId);
           break;
         case "tool:send_to_terminal":
-          window.dispatchEvent(new CustomEvent("intent:terminal:input", {
-            detail: {
-              text: data.params.text,
-              execute: data.params.execute
-            }
-          }));
+          sendTerminalInput(data.params.text, data.params.execute, true);
           break;
       }
     };

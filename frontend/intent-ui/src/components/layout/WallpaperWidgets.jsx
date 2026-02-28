@@ -1,6 +1,9 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { TbOutlineBook2, TbOutlineCloud, TbOutlineClock, TbOutlineGripVertical } from "solid-icons/tb";
 import { openWindow } from "../../stores/windows";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
+import { subscribeEvent } from "../../stores/eventbus";
+import { navigateBrowser } from "../../stores/ui-actions";
 import { preferences } from "../../stores/preferences";
 
 const WEATHER_SNAPSHOT_KEY = "intent-ui-weather-snapshot-v1";
@@ -73,6 +76,7 @@ function readWeatherSnapshot() {
 function WallpaperWidgets() {
   const [now, setNow] = createSignal(new Date());
   const [weather, setWeather] = createSignal(readWeatherSnapshot());
+  let unsubscribeWidgetsReset;
   const [positions, setPositions] = createSignal(readWidgetPositions());
   const [dragging, setDragging] = createSignal(null);
 
@@ -167,7 +171,7 @@ function WallpaperWidgets() {
     window.addEventListener("pointermove", moveHandler);
     window.addEventListener("pointerup", endHandler);
     window.addEventListener("resize", resizeHandler);
-    window.addEventListener("intent:widgets:reset-positions", resetPositionsHandler);
+    unsubscribeWidgetsReset = subscribeEvent(UI_EVENT_TOPICS.action.widgetsPositionsReset, resetPositionsHandler);
     const weatherTimer = window.setInterval(syncWeather, 60000);
     onCleanup(() => {
       window.clearInterval(timer);
@@ -176,7 +180,7 @@ function WallpaperWidgets() {
       window.removeEventListener("pointermove", moveHandler);
       window.removeEventListener("pointerup", endHandler);
       window.removeEventListener("resize", resizeHandler);
-      window.removeEventListener("intent:widgets:reset-positions", resetPositionsHandler);
+      if (unsubscribeWidgetsReset) unsubscribeWidgetsReset();
     });
   });
 
@@ -231,7 +235,7 @@ function WallpaperWidgets() {
                   class="w-full truncate rounded px-2 py-1 text-left text-xs text-neutral-300 transition-colors hover:bg-neutral-800/60 hover:text-[hsl(var(--primary))]"
                   onClick={() => {
                     openWindow("browser");
-                    window.dispatchEvent(new CustomEvent("intent:browser:navigate", { detail: { url: item.url } }));
+                    navigateBrowser(item.url);
                   }}
                   title={item.url}
                 >
