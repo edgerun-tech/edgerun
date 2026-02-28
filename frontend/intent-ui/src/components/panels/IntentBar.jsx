@@ -701,7 +701,7 @@ function IntentBar() {
         workerScript: "/workers/mcp/browser-os.js",
         enabled: true
       });
-      const githubToken = localStorage.getItem("github_token");
+      const githubToken = integrationStore.getToken("github");
       if (githubToken) {
         await mcpManager.connectServer({
           id: "github",
@@ -711,7 +711,7 @@ function IntentBar() {
           enabled: true
         });
       }
-      const cloudflareToken = localStorage.getItem("cloudflare_token");
+      const cloudflareToken = integrationStore.getToken("cloudflare");
       if (cloudflareToken) {
         await mcpManager.connectServer({
           id: "cloudflare",

@@ -12,6 +12,13 @@ describe('intent ui integrations connection truth', () => {
   }
 
   it('keeps github user-owned and marks it available after PAT verification and linking', () => {
+    cy.intercept('GET', '/api/github/user*', {
+      statusCode: 200,
+      body: {
+        login: 'octocat'
+      }
+    }).as('githubUser')
+
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         win.localStorage.removeItem('intent-ui-integrations-v1')
@@ -44,6 +51,7 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_intent_ui')
     cy.get('[data-testid="integration-step-3"]').click({ force: true })
     cy.get('[data-testid="provider-verify-github"]').click({ force: true })
+    cy.wait('@githubUser')
     cy.get('[data-testid="integration-step-4"]').click({ force: true })
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 

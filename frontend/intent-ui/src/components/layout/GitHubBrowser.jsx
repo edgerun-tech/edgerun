@@ -9,6 +9,8 @@ import {
 } from "solid-icons/tb";
 import { getFsMounts, lastFsError, listFsDir, openFsFile } from "../../stores/fs";
 import { openWindow } from "../../stores/windows";
+import { subscribeEvent } from "../../stores/eventbus";
+import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
 
 const ROOT_PATH = "/github";
 
@@ -77,6 +79,7 @@ function GitHubBrowser() {
   const [childrenByPath, setChildrenByPath] = createSignal({});
   const [isRefreshing, setIsRefreshing] = createSignal(false);
   let onStorageHandler;
+  let unsubscribeIntegrationState;
 
   const matches = createMemo(() => {
     const needle = searchQuery().trim().toLowerCase();
@@ -147,6 +150,11 @@ function GitHubBrowser() {
   onMount(async () => {
     refreshAuth();
     await loadChildren(ROOT_PATH, true);
+    unsubscribeIntegrationState = subscribeEvent(UI_EVENT_TOPICS.integration.stateChanged, (event) => {
+      const integrationId = String(event?.payload?.integrationId || "").trim();
+      if (integrationId && integrationId !== "*" && integrationId !== "github") return;
+      refreshAuth();
+    });
     onStorageHandler = (event) => {
       if (event.key && event.key !== "github_token") return;
       refreshAuth();
@@ -154,6 +162,7 @@ function GitHubBrowser() {
     window.addEventListener("storage", onStorageHandler);
   });
   onCleanup(() => {
+    if (unsubscribeIntegrationState) unsubscribeIntegrationState();
     if (onStorageHandler) {
       window.removeEventListener("storage", onStorageHandler);
     }

@@ -3,6 +3,7 @@ import { createSignal, For, Show, onMount, createMemo } from "solid-js";
 import { getToken } from "../../lib/auth";
 import { openWindow } from "../../stores/windows";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
+import { integrationStore } from "../../stores/integrations";
 function logError(message, error) {
   if (import.meta.env?.DEV) {
     console.warn(message, error);
@@ -64,8 +65,8 @@ function CloudPanel(props) {
     const cloudflareToken = getToken("cloudflare");
     const vercelToken = getToken("vercel");
     const hetznerToken = getToken("hetzner");
-    const githubToken = localStorage.getItem("github_token");
-    const googleToken = localStorage.getItem("google_token");
+    const githubToken = integrationStore.getToken("github");
+    const googleToken = integrationStore.getToken("google");
     try {
       if (cloudflareToken) {
         try {
@@ -387,8 +388,8 @@ function CloudPanel(props) {
     if (getToken("cloudflare")) connected.push("cloudflare");
     if (getToken("vercel")) connected.push("vercel");
     if (getToken("hetzner")) connected.push("hetzner");
-    if (localStorage.getItem("github_token")) connected.push("github");
-    if (localStorage.getItem("google_token")) connected.push("google");
+    if (integrationStore.getToken("github")) connected.push("github");
+    if (integrationStore.getToken("google")) connected.push("google");
     return connected;
   });
   const totalResources = createMemo(() => resources().length);

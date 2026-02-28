@@ -4,12 +4,5 @@
   "compatibility_date": "2026-02-24",
   "assets": {
     "directory": "out/frontend/site"
-  },
-  "kv_namespaces": [
-    {
-      "binding": "EMAIL_SIGNUPS",
-      "id": "f8717d13ad904cd2a867fc94d89ad0e5",
-      "preview_id": "7772695de2ec4bd9ac6fc6a1997a2361"
-    }
-  ]
+  }
 }

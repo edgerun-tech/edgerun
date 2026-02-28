@@ -65,6 +65,8 @@ const providerPresets = [
     bg: "bg-purple-500/10"
   }
 ];
+const DEFAULT_PROVIDER_ICON_COLOR = "text-neutral-300";
+const DEFAULT_PROVIDER_ICON_BG = "bg-neutral-700";
 function LLMSetupOnboarding() {
   const [dismissed, setDismissed] = createSignal(false);
   const [selectedProvider, setSelectedProvider] = createSignal(null);
@@ -276,21 +278,23 @@ function LLMSetupOnboarding() {
                 <div class="p-4 bg-neutral-800/50 rounded-xl border border-neutral-700">
                   <div class="flex items-center gap-3 mb-4">
                     {(() => {
-      const iconKey = selectedProvider().icon;
+      const provider = selectedProvider();
+      if (!provider) return null;
+      const iconKey = provider.icon;
       const Icon = icons[iconKey];
       if (!Icon) return null;
-      return <div class={`p-2 rounded-lg ${selectedProvider().bg}`}>
-                          <Icon size={20} class={selectedProvider().color} />
+      return <div class={`p-2 rounded-lg ${provider.bg || DEFAULT_PROVIDER_ICON_BG}`}>
+                          <Icon size={20} class={provider.color || DEFAULT_PROVIDER_ICON_COLOR} />
                         </div>;
     })()}
                     <div>
-                      <h3 class="font-medium text-white">{customName() || selectedProvider().name}</h3>
-                      <p class="text-xs text-neutral-500">{selectedProvider().description}</p>
+                      <h3 class="font-medium text-white">{customName() || selectedProvider()?.name || "Provider"}</h3>
+                      <p class="text-xs text-neutral-500">{selectedProvider()?.description || "Configure provider settings."}</p>
                     </div>
                   </div>
 
                   <div class="space-y-3">
-                    <Show when={!selectedProvider().requiresOAuth} fallback={
+                    <Show when={!selectedProvider()?.requiresOAuth} fallback={
       /* OAuth Flow for Qwen */
       <div class="text-center py-6">
                         <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-500/20 flex items-center justify-center">
@@ -339,9 +343,9 @@ function LLMSetupOnboarding() {
       placeholder="e.g., gpt-4o"
       class="w-full px-3 py-2 bg-neutral-900 border border-neutral-700 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
     />
-                      <Show when={selectedProvider().models.length > 0}>
+                      <Show when={(selectedProvider()?.models || []).length > 0}>
                         <div class="flex flex-wrap gap-1.5 mt-2">
-                          <For each={selectedProvider().models}>
+                          <For each={selectedProvider()?.models || []}>
                             {(model) => <button
       type="button"
       onClick={() => setCustomModel(model)}
@@ -354,7 +358,7 @@ function LLMSetupOnboarding() {
                       </Show>
                     </div>
 
-                    <Show when={selectedProvider().requiresApiKey}>
+                    <Show when={selectedProvider()?.requiresApiKey}>
                       <div>
                         <label class="block text-xs text-neutral-400 mb-1">API Key</label>
                         <input
@@ -414,7 +418,8 @@ function LLMSetupOnboarding() {
                           <div class={`p-2 rounded-lg ${preset.bg}`}>
                             {(() => {
     const Icon = icons[preset.icon];
-    return <Icon size={20} class={preset.color} />;
+    if (!Icon) return null;
+    return <Icon size={20} class={preset.color || DEFAULT_PROVIDER_ICON_COLOR} />;
   })()}
                           </div>
                           <div class="flex-1 min-w-0">

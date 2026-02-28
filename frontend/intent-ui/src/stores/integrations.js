@@ -354,6 +354,11 @@ const integrationStore = {
     }
     return false;
   },
+  getToken(id) {
+    const integration = catalog[id];
+    if (!integration) return "";
+    return getRuntimeToken(integration);
+  },
   async connect(id, details = {}) {
     const integration = catalog[id];
     if (!integration) return false;

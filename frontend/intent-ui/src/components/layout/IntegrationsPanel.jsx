@@ -207,7 +207,7 @@ function IntegrationsPanel(props) {
     setStep(4);
   }
 
-  function saveProvider(provider) {
+  async function saveProvider(provider) {
     if (!provider) return;
 
     const payload = {
@@ -228,7 +228,11 @@ function IntegrationsPanel(props) {
       payload.token = `evm:${web3Wallet().trim()}`;
     }
 
-    integrationStore.connect(provider.id, payload);
+    const linked = await integrationStore.connect(provider.id, payload);
+    if (!linked) {
+      setStatus(`Unable to link ${provider.name}. Load profile and retry.`);
+      return;
+    }
     setStatus(`${provider.name} integration linked.`);
     closeDialog();
   }
@@ -549,7 +553,7 @@ function IntegrationsPanel(props) {
                     type="button"
                     class={primaryClass}
                     disabled={!verified() || busy()}
-                    onClick={() => saveProvider(provider)}
+                    onClick={() => { void saveProvider(provider); }}
                     data-testid={`provider-save-${provider.id}`}
                   >
                     <FiLock size={12} />

@@ -6,6 +6,10 @@ const EVENTBUS_TIMELINE_KEY = "intent-ui-eventbus-timeline-v1";
 const EVENTBUS_MAX_EVENTS = 300;
 const LOCAL_BRIDGE_WS_URL = "ws://127.0.0.1:7777/v1/local/eventbus/ws";
 const LOCAL_BRIDGE_DEVICE_ID = "local-node-manager";
+const LOCAL_BRIDGE_RETRY_INITIAL_MS = 2000;
+const LOCAL_BRIDGE_RETRY_MAX_MS = 120000;
+const LOCAL_BRIDGE_RETRY_PAUSE_AFTER_ATTEMPTS = 6;
+const LOCAL_BRIDGE_RETRY_PAUSE_MS = 5 * 60 * 1000;
 
 function safeParse(raw) {
   try {
@@ -45,6 +49,9 @@ const topicListeners = new Map();
 let eventBusWorker = null;
 let localBridgeSocket = null;
 let initialized = false;
+let localBridgeRetryTimer = null;
+let localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
+let localBridgeRetryAttempts = 0;
 
 function notifyListeners(event) {
   const topic = String(event?.topic || "");
@@ -156,12 +163,19 @@ function initializeBrowserEventBus() {
 
 function initializeLocalBridgeSocket() {
   if (typeof window === "undefined") return;
+  if (localBridgeSocket) return;
+  if (localBridgeRetryTimer) {
+    window.clearTimeout(localBridgeRetryTimer);
+    localBridgeRetryTimer = null;
+  }
   try {
     const socket = new WebSocket(LOCAL_BRIDGE_WS_URL);
     localBridgeSocket = socket;
     socket.binaryType = "arraybuffer";
     socket.onopen = () => {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: true }));
+      localBridgeRetryAttempts = 0;
+      localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
       void hydrateLocalBridgeNodeInfo();
       socket.send(encodeLocalEventEnvelope({
         eventId: `bridge-hello-${Date.now()}`,
@@ -175,9 +189,7 @@ function initializeLocalBridgeSocket() {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
       setDeviceOnlineState(LOCAL_BRIDGE_DEVICE_ID, false);
       localBridgeSocket = null;
-      window.setTimeout(() => {
-        if (initialized && !localBridgeSocket) initializeLocalBridgeSocket();
-      }, 2500);
+      scheduleLocalBridgeReconnect();
     };
     socket.onerror = () => {
       setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
@@ -210,7 +222,26 @@ function initializeLocalBridgeSocket() {
     };
   } catch {
     setEventBusRuntime((prev) => ({ ...prev, localBridgeConnected: false }));
+    scheduleLocalBridgeReconnect();
   }
+}
+
+function scheduleLocalBridgeReconnect() {
+  if (typeof window === "undefined") return;
+  if (!initialized || localBridgeSocket || localBridgeRetryTimer) return;
+  localBridgeRetryAttempts += 1;
+  const shouldPause = localBridgeRetryAttempts >= LOCAL_BRIDGE_RETRY_PAUSE_AFTER_ATTEMPTS;
+  const delay = shouldPause ? LOCAL_BRIDGE_RETRY_PAUSE_MS : localBridgeRetryDelayMs;
+  if (shouldPause) {
+    localBridgeRetryAttempts = 0;
+    localBridgeRetryDelayMs = LOCAL_BRIDGE_RETRY_INITIAL_MS;
+  } else {
+    localBridgeRetryDelayMs = Math.min(localBridgeRetryDelayMs * 2, LOCAL_BRIDGE_RETRY_MAX_MS);
+  }
+  localBridgeRetryTimer = window.setTimeout(() => {
+    localBridgeRetryTimer = null;
+    if (initialized && !localBridgeSocket) initializeLocalBridgeSocket();
+  }, delay);
 }
 
 async function hydrateLocalBridgeNodeInfo() {

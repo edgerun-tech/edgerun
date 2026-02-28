@@ -8,6 +8,8 @@ import { openWindow } from "../../stores/windows";
 import LLMSetupOnboarding from "./LLMSetupOnboarding";
 const STORAGE_KEY = "cloudos-onboarding-dismissed";
 function Onboarding() {
+  const defaultFeatureColor = "text-neutral-300";
+  const defaultFeatureBg = "bg-neutral-700";
   const [dismissed, setDismissed] = createSignal(false);
   const [showFeature, setShowFeature] = createSignal(null);
   const [showLLMSetup, setShowLLMSetup] = createSignal(false);
@@ -125,11 +127,11 @@ function Onboarding() {
     }}
   >
               <div class="flex items-start gap-3">
-                <div class={`p-2 rounded-lg ${feature.bg}`}>
+                <div class={`p-2 rounded-lg ${feature.bg || defaultFeatureBg}`}>
                   {(() => {
     const Icon = icons[feature.icon];
     if (!Icon) return null;
-    return <Icon size={18} class={feature.color} />;
+    return <Icon size={18} class={feature.color || defaultFeatureColor} />;
   })()}
                 </div>
                 <div class="flex-1 min-w-0">

@@ -10,7 +10,7 @@ const integrations = {
   editor: { id: "editor", name: "Editor", description: "Code editor view" },
   files: { id: "files", name: "Files", description: "File manager panel" },
   integrations: { id: "integrations", name: "Integrations", description: "Connected services" },
-  github: { id: "github", name: "GitHub", description: "OIDC app connection for repository access" },
+  github: { id: "github", name: "GitHub", description: "PAT-based repository integration" },
   email: { id: "email", name: "Gmail", description: "Email management" },
   settings: { id: "settings", name: "Settings", description: "Application settings" },
   onvif: { id: "onvif", name: "ONVIF Cameras", description: "Camera endpoints and live previews" },

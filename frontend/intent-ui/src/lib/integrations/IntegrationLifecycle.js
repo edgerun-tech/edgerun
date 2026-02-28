@@ -177,6 +177,27 @@ class IntegrationLifecycle {
     if (this.id === "github" && !profileReady) {
       return { ok: false, message: "Profile session required for GitHub PAT." };
     }
+    if (this.id === "github") {
+      const pat = String(details?.token || "").trim() || String(token || "").trim();
+      if (pat.length < 8) {
+        return { ok: false, message: "GitHub Personal Access Token missing or invalid." };
+      }
+      try {
+        const response = await fetchImpl(`/api/github/user?token=${encodeURIComponent(pat)}`, { cache: "no-store" });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          return { ok: false, message: String(body?.error || `GitHub user request failed (${response.status})`) };
+        }
+        const login = String(body?.login || "").trim();
+        return {
+          ok: true,
+          message: login ? `Verified GitHub API access as @${login}.` : "Verified GitHub API access.",
+          capabilities: this.defaultCapabilities.slice()
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : "Failed to verify GitHub API access." };
+      }
+    }
     if (mode === "platform") {
       if (!profileReady) return { ok: false, message: "Profile session required for platform connector." };
       return { ok: true, message: "Platform connector session is active.", capabilities: this.defaultCapabilities.slice() };
