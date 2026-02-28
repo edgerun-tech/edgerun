@@ -281,6 +281,44 @@ function WorkflowOverlay() {
     : String(window.localStorage.getItem("intent-ui-device-pairing-code-v1") || "").trim();
   const [pairingCodeInput, setPairingCodeInput] = createSignal(initialPairingCode);
   const [deviceConnectCopied, setDeviceConnectCopied] = createSignal(false);
+  const readDomainReservation = () => {
+    if (typeof window === "undefined") return { domain: "", registrationToken: "" };
+    const keys = [
+      "intent-ui-domain-reservation-v1",
+      "intent-ui-domain-v1",
+      "intent-ui-user-domain-v1",
+      "edgerun_user_domain"
+    ];
+    let domain = "";
+    let registrationToken = "";
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const text = String(raw).trim();
+      if (!text) continue;
+      if (text.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(text);
+          domain = domain || String(parsed?.domain || parsed?.assignedDomain || parsed?.fqdn || "").trim();
+          registrationToken = registrationToken || String(parsed?.registrationToken || parsed?.registration_token || parsed?.token || "").trim();
+        } catch {
+          // ignore parse failures
+        }
+      } else if (text.includes(".")) {
+        domain = domain || text;
+      }
+    }
+    domain = domain || String(localStorage.getItem("intent-ui-device-connect-domain-v1") || "").trim();
+    registrationToken = registrationToken || String(localStorage.getItem("intent-ui-device-connect-registration-token-v1") || "").trim();
+    return { domain, registrationToken };
+  };
+  const initialReservation = readDomainReservation();
+  const [connectDomain, setConnectDomain] = createSignal(initialReservation.domain);
+  const [connectRegistrationToken, setConnectRegistrationToken] = createSignal(initialReservation.registrationToken);
+  const [pairingBusy, setPairingBusy] = createSignal(false);
+  const [pairingError, setPairingError] = createSignal("");
+  const [pairingStatus, setPairingStatus] = createSignal("");
+  const [pairingExpiresAt, setPairingExpiresAt] = createSignal("");
   const localBridgeListen = "127.0.0.1:7777";
   const linuxConnectScript = createMemo(() => {
     const pairingCode = pairingCodeInput().trim() || "<PAIRING_CODE>";
@@ -305,6 +343,40 @@ function WorkflowOverlay() {
       window.setTimeout(() => setDeviceConnectCopied(false), 1200);
     } catch {
       setDeviceConnectCopied(false);
+    }
+  };
+  const issuePairingCode = async () => {
+    if (pairingBusy()) return;
+    const domain = connectDomain().trim();
+    const registrationToken = connectRegistrationToken().trim();
+    if (!domain || !registrationToken) {
+      setPairingError("Domain and registration token are required.");
+      setPairingStatus("");
+      return;
+    }
+    setPairingBusy(true);
+    setPairingError("");
+    setPairingStatus("");
+    try {
+      const response = await fetch("/api/tunnel/create-pairing-code", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ domain, registrationToken, ttlSeconds: 300 })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.ok) {
+        throw new Error(String(body?.error || `pairing request failed (${response.status})`));
+      }
+      const code = String(body?.pairingCode || "").trim();
+      if (!code) throw new Error("Pairing code was empty in relay response.");
+      setPairingCodeInput(code);
+      const expiresMs = Number(body?.expiresUnixMs || 0);
+      setPairingExpiresAt(expiresMs > 0 ? new Date(expiresMs).toISOString() : "");
+      setPairingStatus("Pairing code issued.");
+    } catch (err) {
+      setPairingError(err instanceof Error ? err.message : "Failed to issue pairing code.");
+    } finally {
+      setPairingBusy(false);
     }
   };
   const sendDraftMessage = async () => {
@@ -342,6 +414,14 @@ function WorkflowOverlay() {
       return;
     }
     window.localStorage.setItem("intent-ui-device-pairing-code-v1", value);
+  });
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("intent-ui-device-connect-domain-v1", connectDomain().trim());
+  });
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("intent-ui-device-connect-registration-token-v1", connectRegistrationToken().trim());
   });
   createEffect(() => {
     const total = activeConversationMessages().length;
@@ -1161,6 +1241,48 @@ function WorkflowOverlay() {
                           </button>
                         </div>
                         <Show when={connectPlatform() === "linux"}>
+                          <label class="mt-2 block text-[10px] text-neutral-500">
+                            Domain
+                            <input
+                              type="text"
+                              value={connectDomain()}
+                              onInput={(event) => setConnectDomain(event.currentTarget.value)}
+                              placeholder="alice.users.edgerun.tech"
+                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                              data-testid="device-domain-input"
+                            />
+                          </label>
+                          <label class="mt-2 block text-[10px] text-neutral-500">
+                            Registration token
+                            <input
+                              type="text"
+                              value={connectRegistrationToken()}
+                              onInput={(event) => setConnectRegistrationToken(event.currentTarget.value)}
+                              placeholder="paste registration token"
+                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                              data-testid="device-registration-token-input"
+                            />
+                          </label>
+                          <div class="mt-2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              class={drawerSmallButtonClass}
+                              onClick={issuePairingCode}
+                              disabled={pairingBusy()}
+                              data-testid="device-issue-pairing-code"
+                            >
+                              {pairingBusy() ? "Issuing..." : "Issue pairing code"}
+                            </button>
+                            <Show when={pairingStatus()}>
+                              <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-pairing-status">{pairingStatus()}</span>
+                            </Show>
+                          </div>
+                          <Show when={pairingError()}>
+                            <p class="mt-1 text-[10px] text-red-300" data-testid="device-pairing-error">{pairingError()}</p>
+                          </Show>
+                          <Show when={pairingExpiresAt()}>
+                            <p class="mt-1 text-[10px] text-neutral-500" data-testid="device-pairing-expiry">Expires: {pairingExpiresAt()}</p>
+                          </Show>
                           <label class="mt-2 block text-[10px] text-neutral-500">
                             Pairing code
                             <input
