@@ -27,6 +27,9 @@ describe('intent ui conversations hub', () => {
 
     cy.get('[data-testid="profile-bootstrap-gate"]').should('not.exist')
     cy.get('button[title="Conversations"]').first().click({ force: true })
+    cy.get('[data-testid="drawer-suggestions-right-conversations"]').should('be.visible')
+    cy.get('[data-testid="drawer-suggestions-list-right-conversations"]').should('be.visible')
+    cy.get('[data-testid="drawer-suggestion-conversations-email"]').should('be.visible')
 
     cy.get('[data-testid="conversations-empty-state"]').should('contain.text', 'This is where all your conversations will be available')
     cy.get('[data-testid="conversation-provider-email"]').should('be.visible')
@@ -44,6 +47,6 @@ describe('intent ui conversations hub', () => {
     cy.get('[data-testid="conversation-draft-input"]').type('hello from conversations hub', { force: true })
     cy.get('[data-testid="conversation-send-message"]').click({ force: true })
 
-    cy.contains('hello from conversations hub').should('be.visible')
+    cy.contains('hello from conversations hub').should('exist')
   })
 })

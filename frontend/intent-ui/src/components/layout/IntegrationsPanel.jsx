@@ -105,7 +105,7 @@ function IntegrationsPanel(props) {
     if (!provider) return;
 
     setDialogProviderId(provider.id);
-    setStep(1);
+    setStep(provider.id === "github" ? 2 : 1);
     setStatus("");
     setBusy(false);
     setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
@@ -246,6 +246,18 @@ function IntegrationsPanel(props) {
     return "border-neutral-800 bg-neutral-900/60 text-neutral-500";
   }
 
+  function stepFlow(provider) {
+    if (!provider) return [1, 2, 3, 4];
+    return provider.id === "github" ? [2, 3, 4] : [1, 2, 3, 4];
+  }
+
+  function stepTitle(value) {
+    if (value === 1) return "Mode";
+    if (value === 2) return "Values";
+    if (value === 3) return "Verify";
+    return "Success";
+  }
+
   return (
     <div class={`h-full overflow-auto text-neutral-200 ${compact() ? "" : "bg-[#0f1013] p-4"}`}>
       <div class="border-b border-neutral-800 px-3 py-2">
@@ -332,6 +344,8 @@ function IntegrationsPanel(props) {
           const verified = () => Boolean(verification()?.ok);
           const verificationMessage = () => String(verification()?.message || "");
           const ProviderIcon = provider.icon || FiCloud;
+          const flow = () => stepFlow(provider);
+          const stepIndex = () => Math.max(0, flow().indexOf(step()));
           return (
             <Portal>
               <div class="fixed inset-0 z-[12000] flex items-center justify-center bg-black/70 px-4 py-6">
@@ -350,11 +364,19 @@ function IntegrationsPanel(props) {
                   </button>
                 </div>
 
-                <div class="mb-3 grid grid-cols-4 gap-1">
-                  <button type="button" class={`rounded-md border px-2 py-1 text-[11px] ${stepClass(1)}`} onClick={() => setStep(1)} data-testid="integration-step-1">1. Mode</button>
-                  <button type="button" class={`rounded-md border px-2 py-1 text-[11px] ${stepClass(2)}`} onClick={() => setStep(2)} data-testid="integration-step-2">2. Values</button>
-                  <button type="button" class={`rounded-md border px-2 py-1 text-[11px] ${stepClass(3)}`} onClick={() => setStep(3)} data-testid="integration-step-3">3. Verify</button>
-                  <button type="button" class={`rounded-md border px-2 py-1 text-[11px] ${stepClass(4)}`} onClick={() => setStep(4)} data-testid="integration-step-4">4. Success</button>
+                <div class={`mb-3 grid gap-1 ${provider.id === "github" ? "grid-cols-3" : "grid-cols-4"}`}>
+                  <For each={flow()}>
+                    {(stepValue, index) => (
+                      <button
+                        type="button"
+                        class={`rounded-md border px-2 py-1 text-[11px] ${stepClass(stepValue)}`}
+                        onClick={() => setStep(stepValue)}
+                        data-testid={`integration-step-${stepValue}`}
+                      >
+                        {index() + 1}. {stepTitle(stepValue)}
+                      </button>
+                    )}
+                  </For>
                 </div>
 
                 <Show when={step() === 1}>
@@ -424,6 +446,9 @@ function IntegrationsPanel(props) {
                           data-testid={provider.id === "tailscale" ? "tailscale-api-key-input" : `provider-token-${provider.id}`}
                         />
                       </label>
+                    </Show>
+                    <Show when={provider.id === "github"}>
+                      <p class="text-[11px] text-neutral-500">PAT is encrypted and stored in your profile secrets.</p>
                     </Show>
 
                     <Show when={provider.id === "tailscale" && connectorMode() === "user_owned"}>
@@ -502,15 +527,20 @@ function IntegrationsPanel(props) {
                 </Show>
 
                 <div class="mt-3 flex flex-wrap gap-2">
-                  <button type="button" class={buttonClass} onClick={() => setStep((prev) => Math.max(1, prev - 1))}>
+                  <button
+                    type="button"
+                    class={buttonClass}
+                    onClick={() => setStep(flow()[Math.max(0, stepIndex() - 1)] || flow()[0])}
+                    disabled={stepIndex() === 0}
+                  >
                     <FiArrowLeft size={12} />
                     Back
                   </button>
                   <button
                     type="button"
                     class={buttonClass}
-                    onClick={() => setStep((prev) => Math.min(4, prev + 1))}
-                    disabled={step() === 2 && !requiredInputsReady(provider)}
+                    onClick={() => setStep(flow()[Math.min(flow().length - 1, stepIndex() + 1)] || flow()[flow().length - 1])}
+                    disabled={stepIndex() === flow().length - 1 || (step() === 2 && !requiredInputsReady(provider))}
                   >
                     Next
                     <FiArrowRight size={12} />

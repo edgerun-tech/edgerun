@@ -31,6 +31,7 @@ import LauncherGuidePanel from "../panels/LauncherGuidePanel";
 import SettingsPanel from "../panels/SettingsPanel";
 import {
   closeWorkflowDemo,
+  openWorkflowIntegrations,
   startNewCodexSession,
   setWorkflowCode,
   toggleWorkflowDrawer,
@@ -156,6 +157,37 @@ function WorkflowOverlay() {
     return [...(active.messages || []), ...local];
   });
   const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => ["email", "whatsapp", "messenger", "telegram"].includes(integration.id)));
+  const panelSuggestionTags = {
+    launcher: ["workflows", "ai", "messages", "storage", "code"],
+    files: ["storage", "code"],
+    cloud: ["workflows", "network", "compute", "deploy"],
+    integrations: ["messages", "storage", "code", "workflows", "network", "compute", "ai", "security"],
+    credentials: ["security", "identity"],
+    settings: ["workflows", "devices", "network"],
+    conversations: ["messages", "ai"],
+    devices: ["devices", "network", "workflows"]
+  };
+  const suggestIntegrationsForPanel = (panelId) => {
+    const wantedTags = panelSuggestionTags[panelId] || [];
+    if (wantedTags.length === 0) return [];
+    return integrationStore.list()
+      .map((integration) => {
+        const integrationTags = Array.isArray(integration.tags) ? integration.tags : [];
+        const overlap = integrationTags.filter((tag) => wantedTags.includes(tag)).length;
+        return { integration, overlap };
+      })
+      .filter((item) => item.overlap > 0)
+      .sort((a, b) => {
+        if (a.integration.available !== b.integration.available) return a.integration.available ? 1 : -1;
+        if (a.integration.connected !== b.integration.connected) return a.integration.connected ? 1 : -1;
+        if (b.overlap !== a.overlap) return b.overlap - a.overlap;
+        return a.integration.name.localeCompare(b.integration.name);
+      })
+      .slice(0, 4)
+      .map((item) => item.integration);
+  };
+  const leftPanelSuggestions = createMemo(() => suggestIntegrationsForPanel(state().leftPanel));
+  const rightPanelSuggestions = createMemo(() => suggestIntegrationsForPanel(state().rightPanel));
   const chatHeadForConversation = (conversation) => {
     if (!conversation) return { emoji: "💬", color: CHAT_HEAD_PRESET_COLORS[0], label: "C" };
     const pref = chatHeadPrefs()[conversation.id] || {};
@@ -211,6 +243,7 @@ function WorkflowOverlay() {
   const drawerSmallButtonClass = "inline-flex h-7 items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]";
   const drawerListRowClass = "w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2.5 py-2 text-left transition-colors hover:bg-neutral-800/80";
   const drawerStateBlockClass = "rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-500";
+  const drawerSuggestionButtonClass = "w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-left text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:bg-neutral-800/75";
   const channelBadgeClass = (channel) => {
     if (channel === "ai") return "border-[hsl(var(--primary)/0.42)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]";
     if (channel === "email") return "border-neutral-700 bg-neutral-800/80 text-neutral-300";
@@ -230,6 +263,45 @@ function WorkflowOverlay() {
     if (stripped) return stripped;
     return parseEmailAddress(raw);
   };
+  const openIntegrationSuggestion = (integrationId) => {
+    openWorkflowIntegrations(integrationId);
+  };
+  const DrawerIntegrationSuggestions = (props) => (
+    <div class="shrink-0 border-t border-neutral-800 bg-[#0d0e12]/95 px-3 py-2" data-testid={`drawer-suggestions-${props.side}-${props.panel}`}>
+      <div class="mb-1 flex items-center justify-between">
+        <p class="text-[10px] font-medium uppercase tracking-wide text-neutral-400">Suggested Integrations</p>
+        <button
+          type="button"
+          class="text-[10px] text-neutral-500 transition-colors hover:text-[hsl(var(--primary))]"
+          onClick={() => openWorkflowIntegrations("github")}
+        >
+          Open all
+        </button>
+      </div>
+      <Show
+        when={props.items().length > 0}
+        fallback={<p class="rounded border border-neutral-800 bg-neutral-900/55 px-2 py-1 text-[10px] text-neutral-500">No integration suggestions for this panel yet.</p>}
+      >
+        <div class="grid grid-cols-2 gap-1" data-testid={`drawer-suggestions-list-${props.side}-${props.panel}`}>
+          <For each={props.items()}>
+            {(integration) => (
+              <button
+                type="button"
+                class={drawerSuggestionButtonClass}
+                onClick={() => openIntegrationSuggestion(integration.id)}
+                data-testid={`drawer-suggestion-${props.panel}-${integration.id}`}
+              >
+                <p class="truncate">{integration.name}</p>
+                <p class={integration.available ? "text-[9px] text-emerald-300" : "text-[9px] text-amber-300"}>
+                  {integration.available ? "Available" : integration.availabilityReason || "Not ready"}
+                </p>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
   const ensureThreadBottom = () => {
     if (!threadScrollRef) return;
     threadScrollRef.scrollTop = threadScrollRef.scrollHeight;
@@ -735,50 +807,59 @@ function WorkflowOverlay() {
   >
             <div class="flex h-full">
               <div class="min-w-0 flex-1 p-0">
-                <Show when={state().leftPanel === "settings"}>
-                  <div class={drawerPanelShellClass}>
-                    <SettingsPanel compact />
-                  </div>
-                </Show>
-                <Show when={state().leftPanel === "launcher"}>
-                  <div class={drawerPanelShellClass}>
-                    <div class="border-b border-neutral-800 px-3 py-2">
-                      <div class="flex items-center justify-between gap-2">
-                        <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Launcher</p>
-                        <button
-                          type="button"
-                          class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 transition-colors hover:bg-neutral-800"
-                          onClick={() => openWindow("guide")}
-                        >
-                          Open Guide
-                        </button>
+                <div class="flex h-full min-h-0 flex-col">
+                  <div class="min-h-0 flex-1 overflow-hidden">
+                    <Show when={state().leftPanel === "settings"}>
+                      <div class={drawerPanelShellClass}>
+                        <SettingsPanel compact />
                       </div>
-                    </div>
-                    <div class="min-h-0 flex-1 overflow-auto p-2">
-                      <LauncherGuidePanel compact />
-                    </div>
+                    </Show>
+                    <Show when={state().leftPanel === "launcher"}>
+                      <div class={drawerPanelShellClass}>
+                        <div class="border-b border-neutral-800 px-3 py-2">
+                          <div class="flex items-center justify-between gap-2">
+                            <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Launcher</p>
+                            <button
+                              type="button"
+                              class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 transition-colors hover:bg-neutral-800"
+                              onClick={() => openWindow("guide")}
+                            >
+                              Open Guide
+                            </button>
+                          </div>
+                        </div>
+                        <div class="min-h-0 flex-1 overflow-auto p-2">
+                          <LauncherGuidePanel compact />
+                        </div>
+                      </div>
+                    </Show>
+                    <Show when={state().leftPanel === "files"}>
+                      <div class={drawerPanelShellClass}>
+                        <FileManager compact />
+                      </div>
+                    </Show>
+                    <Show when={state().leftPanel === "cloud"}>
+                      <div class={drawerPanelShellClass}>
+                        <CloudPanel compact />
+                      </div>
+                    </Show>
+                    <Show when={state().leftPanel === "integrations"}>
+                      <div class={drawerPanelShellClass}>
+                        <IntegrationsPanel compact preselectProviderId={state().selectedIntegrationId || ""} />
+                      </div>
+                    </Show>
+                    <Show when={state().leftPanel === "credentials"}>
+                      <div class={drawerPanelShellClass}>
+                        <CredentialsPanel compact />
+                      </div>
+                    </Show>
                   </div>
-                </Show>
-                <Show when={state().leftPanel === "files"}>
-                  <div class={drawerPanelShellClass}>
-                    <FileManager compact />
-                  </div>
-                </Show>
-                <Show when={state().leftPanel === "cloud"}>
-                  <div class={drawerPanelShellClass}>
-                    <CloudPanel compact />
-                  </div>
-                </Show>
-                <Show when={state().leftPanel === "integrations"}>
-                  <div class={drawerPanelShellClass}>
-                    <IntegrationsPanel compact preselectProviderId={state().selectedIntegrationId || ""} />
-                  </div>
-                </Show>
-                <Show when={state().leftPanel === "credentials"}>
-                  <div class={drawerPanelShellClass}>
-                    <CredentialsPanel compact />
-                  </div>
-                </Show>
+                  <DrawerIntegrationSuggestions
+                    side="left"
+                    panel={state().leftPanel}
+                    items={leftPanelSuggestions}
+                  />
+                </div>
               </div>
               <div class="hidden">
                 <div class="flex h-full flex-col items-center justify-center gap-1">
@@ -864,8 +945,10 @@ function WorkflowOverlay() {
                 </div>
               </div>
               <div class="min-w-0 flex-1 p-0">
-                <Show when={state().rightPanel === "conversations"}>
-                  <div class={drawerPanelShellClass}>
+                <div class="flex h-full min-h-0 flex-col">
+                  <div class="min-h-0 flex-1 overflow-hidden">
+                    <Show when={state().rightPanel === "conversations"}>
+                      <div class={drawerPanelShellClass}>
                     <Show when={showConversationList()}>
                       <div class="border-b border-neutral-800 px-3 py-2">
                         <div class="flex items-center justify-between gap-2">
@@ -1258,10 +1341,10 @@ function WorkflowOverlay() {
                         </Show>
                       </div>
                     </Show>
-                  </div>
-                </Show>
-                <Show when={state().rightPanel === "devices"}>
-                  <div class={drawerPanelShellClass}>
+                      </div>
+                    </Show>
+                    <Show when={state().rightPanel === "devices"}>
+                      <div class={drawerPanelShellClass}>
                     <div class="border-b border-neutral-800 px-3 py-2">
                       <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Devices</p>
                       <p class="mt-1 text-[10px] text-neutral-500">
@@ -1574,8 +1657,15 @@ function WorkflowOverlay() {
                         </Show>
                       </Show>
                     </div>
+                      </div>
+                    </Show>
                   </div>
-                </Show>
+                  <DrawerIntegrationSuggestions
+                    side="right"
+                    panel={state().rightPanel}
+                    items={rightPanelSuggestions}
+                  />
+                </div>
               </div>
             </div>
         </Motion.div>

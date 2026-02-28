@@ -26,9 +26,11 @@ Make GitHub integration PAT-only and user-owned only:
 
 ## Acceptance Criteria
 - GitHub card/dialog no longer exposes platform ownership mode.
+- GitHub setup flow omits the Mode step entirely.
 - GitHub connects with PAT only.
 - Connected GitHub state derives from profile secret token.
 - GitHub filesystem provider reads token from encrypted profile secrets (no localStorage fallback).
+- GitHub Values step explicitly states PAT storage in encrypted profile secrets.
 - Existing integrations tests updated and pass.
 
 ## Rollout

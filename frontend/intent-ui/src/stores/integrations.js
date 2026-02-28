@@ -19,7 +19,8 @@ const catalog = {
     supportsPlatformConnector: false,
     defaultConnectorMode: "user_owned",
     tokenKey: "github_token",
-    defaultCapabilities: ["repos.read", "repos.write", "prs.read", "prs.write"]
+    defaultCapabilities: ["repos.read", "repos.write", "prs.read", "prs.write"],
+    tags: ["code", "storage", "workflows"]
   },
   cloudflare: {
     id: "cloudflare",
@@ -27,7 +28,8 @@ const catalog = {
     authMethod: "token",
     supportsPlatformConnector: true,
     tokenKey: "cloudflare_token",
-    defaultCapabilities: ["zones.read", "workers.read", "workers.write"]
+    defaultCapabilities: ["zones.read", "workers.read", "workers.write"],
+    tags: ["network", "deploy", "workflows", "code"]
   },
   vercel: {
     id: "vercel",
@@ -35,7 +37,8 @@ const catalog = {
     authMethod: "token",
     supportsPlatformConnector: true,
     tokenKey: "vercel_token",
-    defaultCapabilities: ["projects.read", "deployments.read", "deployments.write"]
+    defaultCapabilities: ["projects.read", "deployments.read", "deployments.write"],
+    tags: ["deploy", "workflows", "code"]
   },
   google: {
     id: "google",
@@ -43,7 +46,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "google_token",
-    defaultCapabilities: ["drive.read", "gmail.read", "calendar.read", "contacts.read", "messages.read"]
+    defaultCapabilities: ["drive.read", "gmail.read", "calendar.read", "contacts.read", "messages.read"],
+    tags: ["messages", "storage", "workflows", "productivity"]
   },
   google_photos: {
     id: "google_photos",
@@ -51,7 +55,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "google_token",
-    defaultCapabilities: ["photos.read"]
+    defaultCapabilities: ["photos.read"],
+    tags: ["media", "storage"]
   },
   email: {
     id: "email",
@@ -59,7 +64,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "google_token",
-    defaultCapabilities: ["messages.read", "messages.send"]
+    defaultCapabilities: ["messages.read", "messages.send"],
+    tags: ["messages", "workflows"]
   },
   whatsapp: {
     id: "whatsapp",
@@ -67,7 +73,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "whatsapp_token",
-    defaultCapabilities: ["messages.read", "messages.send"]
+    defaultCapabilities: ["messages.read", "messages.send"],
+    tags: ["messages", "workflows"]
   },
   messenger: {
     id: "messenger",
@@ -75,7 +82,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "messenger_token",
-    defaultCapabilities: ["messages.read", "messages.send"]
+    defaultCapabilities: ["messages.read", "messages.send"],
+    tags: ["messages", "workflows"]
   },
   telegram: {
     id: "telegram",
@@ -83,7 +91,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "telegram_token",
-    defaultCapabilities: ["messages.read", "messages.send"]
+    defaultCapabilities: ["messages.read", "messages.send"],
+    tags: ["messages", "workflows"]
   },
   qwen: {
     id: "qwen",
@@ -91,7 +100,8 @@ const catalog = {
     authMethod: "oauth",
     supportsPlatformConnector: true,
     tokenKey: "qwen_token",
-    defaultCapabilities: ["chat.completions"]
+    defaultCapabilities: ["chat.completions"],
+    tags: ["ai", "code", "workflows"]
   },
   codex_cli: {
     id: "codex_cli",
@@ -100,7 +110,8 @@ const catalog = {
     supportsPlatformConnector: false,
     requiresToken: false,
     tokenKey: "",
-    defaultCapabilities: ["assistant.local_cli.execute"]
+    defaultCapabilities: ["assistant.local_cli.execute"],
+    tags: ["ai", "code", "workflows"]
   },
   tailscale: {
     id: "tailscale",
@@ -109,7 +120,8 @@ const catalog = {
     supportsPlatformConnector: true,
     defaultConnectorMode: "user_owned",
     tokenKey: "tailscale_api_key",
-    defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"]
+    defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"],
+    tags: ["network", "devices", "workflows"]
   },
   hetzner: {
     id: "hetzner",
@@ -117,7 +129,8 @@ const catalog = {
     authMethod: "token",
     supportsPlatformConnector: true,
     tokenKey: "hetzner_token",
-    defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"]
+    defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"],
+    tags: ["compute", "network", "storage", "workflows"]
   },
   web3: {
     id: "web3",
@@ -125,7 +138,8 @@ const catalog = {
     authMethod: "wallet",
     supportsPlatformConnector: false,
     tokenKey: "web3_wallet",
-    defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"]
+    defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"],
+    tags: ["identity", "security", "workflows"]
   }
 };
 
@@ -460,6 +474,7 @@ const integrationStore = {
           || integration.defaultConnectorMode
           || (integration.supportsPlatformConnector ? "platform" : "user_owned")
         ),
+        tags: Array.isArray(integration.tags) ? integration.tags : [],
         supportsPlatformConnector: Boolean(integration.supportsPlatformConnector),
         linked: Boolean(connection?.linked),
         connectedAt: connection?.connectedAt || null,
