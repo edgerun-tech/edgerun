@@ -15,8 +15,9 @@ const catalog = {
   github: {
     id: "github",
     name: "GitHub",
-    authMethod: "oidc",
-    supportsPlatformConnector: true,
+    authMethod: "token",
+    supportsPlatformConnector: false,
+    defaultConnectorMode: "user_owned",
     tokenKey: "github_token",
     defaultCapabilities: ["repos.read", "repos.write", "prs.read", "prs.write"]
   },
@@ -202,6 +203,16 @@ async function syncIntegrationTokenToVault(integration, details) {
 function getRuntimeToken(integration) {
   if (!integration?.tokenKey) return "";
   const runtime = profileRuntime();
+  if (integration.id === "github") {
+    if (runtime.mode === "profile" && runtime.profileLoaded) {
+      return getProfileSecret(integration.tokenKey).trim();
+    }
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(integration.tokenKey);
+      localStorage.removeItem("github_auth_mode");
+    }
+    return "";
+  }
   if (runtime.mode === "profile" && runtime.profileLoaded) {
     return getProfileSecret(integration.tokenKey).trim();
   }
@@ -222,9 +233,7 @@ function hydrateState() {
     const token = getRuntimeToken(integration);
     const hasUsableToken = integration.requiresToken === false
       ? Boolean(next[integration.id]?.connected)
-      : integration.id === "github"
-        ? Boolean(token && !token.startsWith("oidc_"))
-        : Boolean(token);
+      : Boolean(token);
     const wasLinked = Boolean(next[integration.id]?.linked);
     if (connectorMode === "platform" && integration.supportsPlatformConnector) {
       const connected = Boolean(wasLinked && profileReady);
@@ -328,9 +337,7 @@ function applyDisconnectIntent(payload = {}) {
   persistState(next);
   const runtime = profileRuntime();
   if (typeof window !== "undefined") {
-    if (id === "github") {
-      localStorage.removeItem("github_auth_mode");
-    }
+    if (id === "github") localStorage.removeItem("github_auth_mode");
     if (integration?.tokenKey) {
       if (runtime.mode === "profile" && runtime.profileLoaded) {
         void removeProfileSecret(integration.tokenKey);
@@ -490,9 +497,16 @@ const integrationStore = {
     );
 
     const runtime = profileRuntime();
+    const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
     const token = String(details?.token || "").trim();
+    if (id === "github" && !profileReady) {
+      return false;
+    }
     if (typeof window !== "undefined" && integration.tokenKey && token) {
-      if (runtime.mode === "profile" && runtime.profileLoaded) {
+      if (id === "github") {
+        void setProfileSecret(integration.tokenKey, token);
+        localStorage.removeItem(integration.tokenKey);
+      } else if (profileReady) {
         void setProfileSecret(integration.tokenKey, token);
         localStorage.removeItem(integration.tokenKey);
       } else {
@@ -543,6 +557,9 @@ const integrationStore = {
     try {
       const runtime = profileRuntime();
       const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
+      if (id === "github" && !profileReady) {
+        throw new Error("Profile session required for GitHub PAT.");
+      }
       if (connectorMode === "platform") {
         if (!profileReady) throw new Error("Profile session required for platform connector.");
         const message = "Platform connector session is active.";

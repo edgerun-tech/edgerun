@@ -25,7 +25,9 @@ check_pattern() {
 
 workflow_files=(
   "Makefile"
-  "cloud-os/scripts/deploy.sh"
+  "scripts/deploy-frontends.sh"
+  "wrangler.jsonc"
+  "wrangler-os.jsonc"
   "scripts/verify-cloudflare-targets.sh"
   "scripts/actions-local-check.sh"
   "scripts/check-required-checks.sh"
@@ -35,13 +37,12 @@ workflow_files=(
   "scripts/e2e-compose-terminal.sh"
   "scripts/e2e-local-terminal.sh"
   "frontend/package.json"
-  "cloud-os/package.json"
+  "package.json"
   ".github/workflows/ci.yml"
   ".github/workflows/dependency-review.yml"
   ".github/workflows/frontend-release.yml"
   ".github/workflows/pipeline-health.yml"
   ".github/workflows/push-scheduler.yml"
-  ".github/workflows/release.yml"
   ".github/workflows/runtime-compliance-matrix.yml"
   ".github/workflows/runtime-provenance.yml"
   ".github/workflows/wiki-sync.yml"
@@ -51,7 +52,7 @@ workflow_files=(
 
 check_pattern "package manager commands" "\\b(npm|pnpm|yarn|npx)\\b" "${workflow_files[@]}"
 
-if rg -n --color=never "wrangler deploy" "cloud-os/package.json" "cloud-os/scripts/deploy.sh" | rg -v -- "--config"; then
+if rg -n --color=never "wrangler deploy" "package.json" "scripts/deploy-frontends.sh" | rg -v -- "--config"; then
   echo "[drift] FAIL (wrangler deploy pinning): found wrangler deploy without --config"
   failures=$((failures + 1))
 else

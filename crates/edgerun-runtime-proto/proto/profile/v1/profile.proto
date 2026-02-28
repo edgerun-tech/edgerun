@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package edgerun.profile.v1;
+
+import "profile/v1/oidc_scopes.proto";
+
+enum ProfileStorageBackendKindV1 {
+  PROFILE_STORAGE_BACKEND_KIND_V1_UNSPECIFIED = 0;
+  PROFILE_STORAGE_BACKEND_KIND_V1_LOCAL_FILE = 1;
+  PROFILE_STORAGE_BACKEND_KIND_V1_GIT_REPOSITORY = 2;
+  PROFILE_STORAGE_BACKEND_KIND_V1_GOOGLE_DRIVE = 3;
+  PROFILE_STORAGE_BACKEND_KIND_V1_OBJECT_STORAGE = 4;
+}
+
+enum AuthFactorKindV1 {
+  AUTH_FACTOR_KIND_V1_UNSPECIFIED = 0;
+  AUTH_FACTOR_KIND_V1_WEBAUTHN_SECURITY_KEY = 1;
+  AUTH_FACTOR_KIND_V1_WEBAUTHN_PLATFORM = 2;
+}
+
+enum UserVerificationRequirementV1 {
+  USER_VERIFICATION_REQUIREMENT_V1_UNSPECIFIED = 0;
+  USER_VERIFICATION_REQUIREMENT_V1_DISCOURAGED = 1;
+  USER_VERIFICATION_REQUIREMENT_V1_PREFERRED = 2;
+  USER_VERIFICATION_REQUIREMENT_V1_REQUIRED = 3;
+}
+
+message CryptoEnvelopeV1 {
+  // e.g. "xchacha20poly1305" or "aes256gcm"
+  string encryption_algorithm = 1;
+  // e.g. "ed25519" or "p256"
+  string signature_algorithm = 2;
+  // Logical key locator (KMS path, hardware slot, DID ref, etc.)
+  string key_ref = 3;
+  bytes nonce = 4;
+  bytes ciphertext = 5;
+  bytes signature = 6;
+  // Hash of plaintext bytes (binary digest bytes, algorithm in field below)
+  bytes plaintext_digest = 7;
+  string digest_algorithm = 8;
+}
+
+message ProfileHeadV1 {
+  uint32 schema_version = 1;
+  string profile_id = 2;
+  string owner_id = 3;
+  uint64 created_unix_ms = 4;
+  uint64 updated_unix_ms = 5;
+  string rendezvous_domain = 6;
+  uint64 profile_epoch = 7;
+}
+
+message ProfileStorageBackendV1 {
+  string backend_id = 1;
+  ProfileStorageBackendKindV1 kind = 2;
+  string display_name = 3;
+  // Backend-specific locator: file path, repo URL, bucket URL, etc.
+  string locator = 4;
+  // Optional sync namespace/path prefix.
+  string sync_path = 5;
+  // Optional encrypted credentials reference.
+  string auth_ref = 6;
+}
+
+message WebauthnCredentialBindingV1 {
+  string binding_id = 1;
+  bytes credential_id = 2;
+  string rp_id = 3;
+  int32 cose_algorithm = 4;
+  repeated string transports = 5;
+  bool backup_eligible = 6;
+  bool backup_state = 7;
+  bool user_verification_capable = 8;
+}
+
+message AuthFactorBindingV1 {
+  string factor_id = 1;
+  AuthFactorKindV1 kind = 2;
+  string label = 3;
+  oneof binding {
+    WebauthnCredentialBindingV1 webauthn = 10;
+  }
+}
+
+message CapabilityGateV1 {
+  // Capability namespace, e.g. "device.camera", "executor.vm", "storage.write".
+  string capability_scope = 1;
+  bool requires_loaded_profile = 2;
+  bool requires_user_verification = 3;
+  OidcScopeRequirementV1 oidc_scope_requirement = 4;
+}
+
+message UnlockPolicyV1 {
+  bool allow_ephemeral_session = 1;
+  bool allow_profileless_discovery = 2;
+  UserVerificationRequirementV1 user_verification_requirement = 3;
+  repeated string required_factor_ids = 4;
+  repeated CapabilityGateV1 capability_gates = 5;
+  OidcScopeRequirementV1 control_plane_scope_requirement = 6;
+  OidcScopeRequirementV1 profile_load_scope_requirement = 7;
+}
+
+message ProfileBlobManifestV1 {
+  string blob_id = 1;
+  string media_type = 2;
+  uint64 size_bytes = 3;
+  bytes encrypted_digest = 4;
+  string digest_algorithm = 5;
+  uint64 version = 6;
+}
+
+message ProfileStateChunkV1 {
+  string chunk_id = 1;
+  uint64 chunk_seq = 2;
+  CryptoEnvelopeV1 payload = 3;
+}
+
+message ProfileSecretsBundleV1 {
+  string bundle_id = 1;
+  uint64 bundle_epoch = 2;
+  CryptoEnvelopeV1 payload = 3;
+}
+
+message ProfileTimelineSegmentV1 {
+  string segment_id = 1;
+  uint64 event_offset_start = 2;
+  uint64 event_offset_end = 3;
+  CryptoEnvelopeV1 payload = 4;
+}
+
+message ProfileDocumentV1 {
+  ProfileHeadV1 head = 1;
+  repeated ProfileStateChunkV1 state_chunks = 2;
+  repeated ProfileTimelineSegmentV1 timeline_segments = 3;
+  ProfileSecretsBundleV1 secrets_bundle = 4;
+  repeated ProfileStorageBackendV1 storage_backends = 5;
+  repeated AuthFactorBindingV1 auth_factors = 6;
+  UnlockPolicyV1 unlock_policy = 7;
+  repeated ProfileBlobManifestV1 manifests = 8;
+  OidcScopeCatalogV1 oidc_scope_catalog = 9;
+  OidcPrincipalBindingV1 oidc_principal = 10;
+}

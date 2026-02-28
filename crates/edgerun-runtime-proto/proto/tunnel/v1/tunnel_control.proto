@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package edgerun.tunnel.v1;
+
+message ReserveDomainRequestV1 {
+  string profile_public_key_b64url = 1;
+  string requested_label = 2;
+}
+
+message ReserveDomainResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  string user_id = 3;
+  string domain = 4;
+  string status = 5;
+  string registration_token = 6;
+}
+
+message RegisterEndpointRequestV1 {
+  string domain = 1;
+  string node_id = 2;
+  string endpoint_public_key_b64url = 3;
+  string tunnel_nonce_b64url = 4;
+  string registration_signature_b64url = 5;
+  repeated string capability_scopes = 6;
+  string registration_token = 7;
+}
+
+message RegisterEndpointResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  string session_id = 3;
+  string relay_url = 4;
+  uint64 expires_unix_ms = 5;
+}
+
+message CreatePairingCodeRequestV1 {
+  string domain = 1;
+  string registration_token = 2;
+  uint64 ttl_seconds = 3;
+}
+
+message CreatePairingCodeResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  string pairing_code = 3;
+  uint64 expires_unix_ms = 4;
+  string device_command = 5;
+}
+
+message RegisterWithPairingCodeRequestV1 {
+  string pairing_code = 1;
+  string node_id = 2;
+  string endpoint_public_key_b64url = 3;
+  string tunnel_nonce_b64url = 4;
+  string registration_signature_b64url = 5;
+  repeated string capability_scopes = 6;
+}
+
+message RegisterWithPairingCodeResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  string domain = 3;
+  string session_id = 4;
+  string relay_url = 5;
+  uint64 expires_unix_ms = 6;
+}
+
+message TunnelHeartbeatRequestV1 {
+  string domain = 1;
+  string node_id = 2;
+  string session_id = 3;
+}
+
+message TunnelHeartbeatResponseV1 {
+  bool ok = 1;
+  string error = 2;
+  uint64 expires_unix_ms = 3;
+}

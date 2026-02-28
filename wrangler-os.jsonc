@@ -1,0 +1,10 @@
+{
+  "name": "edgerun-os",
+  "main": "worker/os.mjs",
+  "compatibility_date": "2026-02-24",
+  "assets": {
+    "directory": "out/frontend/os",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
+}

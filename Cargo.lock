@@ -1759,6 +1759,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-event-bus-wasm"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-hwvault-primitives"
 version = "0.1.0"
 dependencies = [
@@ -1776,11 +1780,15 @@ name = "edgerun-node-manager"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum 0.8.8",
  "base64 0.22.1",
  "clap",
  "ed25519-dalek",
  "edgerun-hwvault-primitives",
+ "edgerun-runtime-proto",
+ "futures-util",
  "libc",
+ "prost 0.13.5",
  "reqwest",
  "serde",
  "sonic-rs",
@@ -1836,6 +1844,7 @@ name = "edgerun-runtime-proto"
 version = "0.1.0"
 dependencies = [
  "prost 0.13.5",
+ "prost-build 0.13.5",
  "serde",
  "thiserror 2.0.18",
 ]
@@ -1992,6 +2001,27 @@ dependencies = [
  "edgerun-types",
  "serde",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "edgerun-tunnel-relay"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "base64 0.22.1",
+ "blake3",
+ "clap",
+ "ed25519-dalek",
+ "edgerun-runtime-proto",
+ "hex",
+ "hmac",
+ "prost 0.13.5",
+ "rand 0.8.5",
+ "sha2",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

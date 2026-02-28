@@ -1,3 +1,6 @@
+import { profileRuntime } from "../../../stores/profile-runtime";
+import { getProfileSecret } from "../../../stores/profile-secrets";
+
 const GITHUB_FS_KEY = "intent-ui-github-fs-v1";
 const GITHUB_API_BASE = "https://api.github.com";
 
@@ -38,10 +41,15 @@ function writeStore(store) {
 }
 
 function getGitHubToken() {
-  if (typeof localStorage === "undefined") return "";
-  const token = String(localStorage.getItem("github_token") || "").trim();
-  if (!token || token.startsWith("oidc_")) return "";
-  return token;
+  const runtime = profileRuntime();
+  if (runtime.mode === "profile" && runtime.profileLoaded) {
+    return String(getProfileSecret("github_token") || "").trim();
+  }
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("github_token");
+    localStorage.removeItem("github_auth_mode");
+  }
+  return "";
 }
 
 function encodePathSegments(path) {

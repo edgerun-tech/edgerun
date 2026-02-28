@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package edgerun.profile.v1;
+
+enum OidcScopeClassV1 {
+  OIDC_SCOPE_CLASS_V1_UNSPECIFIED = 0;
+  OIDC_SCOPE_CLASS_V1_IDENTITY = 1;
+  OIDC_SCOPE_CLASS_V1_CONTROL_PLANE = 2;
+  OIDC_SCOPE_CLASS_V1_CAPABILITY = 3;
+  OIDC_SCOPE_CLASS_V1_ADMIN = 4;
+}
+
+message OidcScopeDescriptorV1 {
+  string scope = 1;
+  OidcScopeClassV1 class = 2;
+  string description = 3;
+}
+
+message OidcScopeCatalogV1 {
+  repeated OidcScopeDescriptorV1 descriptors = 1;
+}
+
+message OidcScopeRequirementV1 {
+  repeated string required_all = 1;
+  repeated string required_any = 2;
+}
+
+message OidcPrincipalBindingV1 {
+  string issuer = 1;
+  string subject = 2;
+  string audience = 3;
+  repeated string granted_scopes = 4;
+  uint64 issued_unix_ms = 5;
+  uint64 expires_unix_ms = 6;
+}

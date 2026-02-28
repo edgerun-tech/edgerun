@@ -31,7 +31,7 @@ import { profileRuntime } from "../../stores/profile-runtime";
 import { getProfileSecret, setProfileSecret } from "../../stores/profile-secrets";
 
 const providerMeta = {
-  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub token", useToken: true },
+  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true },
   cloudflare: { id: "cloudflare", name: "Cloudflare", icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true },
   vercel: { id: "vercel", name: "Vercel", icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true },
   google: { id: "google", name: "Google", icon: SiGoogle, tone: "text-blue-300", useToken: false, oauthRedirect: true },
@@ -135,7 +135,9 @@ function IntegrationsPanel(props) {
       const runtime = profileRuntime();
       const value = runtime.mode === "profile" && runtime.profileLoaded
         ? String(getProfileSecret(provider.tokenKey) || "").trim()
-        : String(localStorage.getItem(provider.tokenKey) || "").trim();
+        : provider.id === "github"
+          ? ""
+          : String(localStorage.getItem(provider.tokenKey) || "").trim();
       setTokenInput(value);
     } else {
       setTokenInput("");
@@ -357,31 +359,44 @@ function IntegrationsPanel(props) {
 
                 <Show when={step() === 1}>
                   <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid="integration-stepper-mode">
-                    <p class="text-xs text-neutral-400">Select connector ownership mode.</p>
-                    <div class="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "platform" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
-                        disabled={!provider.supportsPlatformConnector}
-                        onClick={() => setConnectorMode("platform")}
-                        data-testid={`provider-ownership-platform-${provider.id}`}
-                      >
-                        Platform
-                      </button>
-                      <button
-                        type="button"
-                        class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "user_owned" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
-                        onClick={() => setConnectorMode("user_owned")}
-                        data-testid={`provider-ownership-user-${provider.id}`}
-                      >
-                        User-owned
-                      </button>
-                    </div>
-                    <div class="text-[11px] text-neutral-500">
-                      <Show when={connectorMode() === "platform"} fallback="You provide credentials and keep direct ownership.">
-                        Platform connector requires a loaded profile session.
-                      </Show>
-                    </div>
+                    <Show when={provider.supportsPlatformConnector} fallback={
+                      <div class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-xs text-neutral-300">
+                        <p class="text-xs text-neutral-400">Connector ownership mode.</p>
+                        <div class="mt-2 rounded-md border border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] px-2 py-2 text-[hsl(var(--primary))]" data-testid={`provider-ownership-user-${provider.id}`}>
+                          User-owned only
+                        </div>
+                        <p class="mt-2 text-[11px] text-neutral-500">Credentials stay with your encrypted profile.</p>
+                      </div>
+                    }>
+                      <p class="text-xs text-neutral-400">Select connector ownership mode.</p>
+                      <div class="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "platform" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
+                          disabled={!provider.supportsPlatformConnector}
+                          onClick={() => setConnectorMode("platform")}
+                          data-testid={`provider-ownership-platform-${provider.id}`}
+                        >
+                          Platform
+                        </button>
+                        <button
+                          type="button"
+                          class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "user_owned" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
+                          onClick={() => setConnectorMode("user_owned")}
+                          data-testid={`provider-ownership-user-${provider.id}`}
+                        >
+                          User-owned
+                        </button>
+                      </div>
+                      <div class="text-[11px] text-neutral-500">
+                        <Show when={connectorMode() === "platform"} fallback="You provide credentials and keep direct ownership.">
+                          Platform connector requires a loaded profile session.
+                        </Show>
+                      </div>
+                    </Show>
+                    <Show when={provider.id === "github"}>
+                      <p class="text-[11px] text-neutral-500">Use a GitHub PAT (fine-grained recommended).</p>
+                    </Show>
                   </section>
                 </Show>
 

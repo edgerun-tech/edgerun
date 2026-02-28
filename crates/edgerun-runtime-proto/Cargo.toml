@@ -9,3 +9,6 @@ license.workspace = true
 prost = "0.13"
 serde.workspace = true
 thiserror.workspace = true
+
+[build-dependencies]
+prost-build = "0.13"

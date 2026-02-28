@@ -7,11 +7,11 @@
   - KV binding: `EMAIL_SIGNUPS` (required for `/api/lead` email capture)
   - Deploy command: `bun run deploy:site`
 
-- Cloud OS frontend (`cloud-os/` Astro output):
-  - Wrangler config: `cloud-os/wrangler.jsonc`
-  - Worker name: `cloud-os`
-  - Assets directory: `cloud-os/dist`
-  - Deploy command: `bun run deploy:cloud-os`
+- OS frontend (shared frontend assets + OS worker gate):
+  - Wrangler config: `wrangler-os.jsonc`
+  - Worker name: `edgerun-os`
+  - Assets directory: `out/frontend/os`
+  - Deploy command: `bun run deploy:os`
 
 ## Validation
 Run before deploy:

@@ -10,6 +10,7 @@ members = [
   "crates/edgerun-scheduler",
   "crates/edgerun-storage",
   "crates/edgerun-event-bus",
+  "crates/edgerun-event-bus-wasm",
   "crates/edgerun-terminal/core",
   "crates/edgerun-terminal/ui",
   "crates/edgerun-terminal/web",
@@ -23,6 +24,7 @@ members = [
   "crates/edgerun-device-cap-core",
   "crates/edgerun-device-cap-host",
   "crates/edgerun-p2p",
+  "crates/edgerun-tunnel-relay",
 ]
 resolver = "2"
 

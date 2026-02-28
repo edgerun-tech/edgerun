@@ -11,7 +11,7 @@ describe('intent ui integrations ownership mode', () => {
     )
   }
 
-  it('defaults to platform and allows switching to user-owned', () => {
+  it('keeps github in user-owned mode and hides platform ownership option', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         win.localStorage.removeItem('intent-ui-integrations-v1')
@@ -34,15 +34,14 @@ describe('intent ui integrations ownership mode', () => {
 
     cy.get('[data-testid="provider-open-github"]').should('exist')
 
-    cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'Platform')
+    cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'User-owned')
     cy.get('[data-testid="provider-open-github"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-github"]').should('be.visible')
 
-    cy.get('[data-testid="provider-ownership-user-github"]').click({ force: true })
-
     cy.get('[data-testid="provider-ownership-user-github"]').should('be.visible')
+    cy.get('[data-testid="provider-ownership-platform-github"]').should('not.exist')
     cy.contains('button', 'Close').click({ force: true })
 
-    cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'Platform')
+    cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'User-owned')
   })
 })
