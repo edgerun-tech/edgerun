@@ -2,6 +2,7 @@
 pub mod arena;
 pub mod async_segment_writer;
 pub mod block;
+pub mod context_engine;
 pub mod crash_test;
 pub mod crdt;
 pub mod durability;
@@ -21,6 +22,7 @@ pub mod seal_policy;
 pub mod segment;
 pub mod sharding;
 pub mod timeline;
+pub mod virtual_fs;
 
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

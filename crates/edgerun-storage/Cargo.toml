@@ -125,5 +125,35 @@ name = "encryption_overhead_benchmark"
 path = "tools/encryption_overhead_benchmark.rs"
 bench = false
 
+[[bin]]
+name = "context_ingest_ra_proto"
+path = "tools/context_ingest_ra_proto.rs"
+bench = false
+
+[[bin]]
+name = "context_bundle_dump"
+path = "tools/context_bundle_dump.rs"
+bench = false
+
+[[bin]]
+name = "proposal_gatekeeper"
+path = "tools/proposal_gatekeeper.rs"
+bench = false
+
+[[bin]]
+name = "proposal_batch_gatekeeper"
+path = "tools/proposal_batch_gatekeeper.rs"
+bench = false
+
+[[bin]]
+name = "simulate_10_agents"
+path = "tools/simulate_10_agents.rs"
+bench = false
+
+[[bin]]
+name = "vfs_operator"
+path = "tools/vfs_operator.rs"
+bench = false
+
 [package.metadata.cargo-machete]
 ignored = ["prost-build"]

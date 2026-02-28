@@ -94,3 +94,293 @@ message ManifestV1 {
   uint64 compaction_watermark = 7;
   uint32 manifest_crc = 8;
 }
+
+enum VfsSourceKindV1 {
+  VFS_SOURCE_KIND_UNSPECIFIED = 0;
+  VFS_SOURCE_KIND_GIT = 1;
+  VFS_SOURCE_KIND_FS_SNAPSHOT = 2;
+  VFS_SOURCE_KIND_LOG_STREAM = 3;
+  VFS_SOURCE_KIND_CUSTOM = 4;
+}
+
+enum VfsModeV1 {
+  VFS_MODE_UNSPECIFIED = 0;
+  VFS_MODE_CODE = 1;
+  VFS_MODE_LOG = 2;
+  VFS_MODE_HYBRID = 3;
+}
+
+enum VfsEventTypeV1 {
+  VFS_EVENT_TYPE_UNSPECIFIED = 0;
+  VFS_EVENT_TYPE_SOURCE_IMPORTED = 1;
+  VFS_EVENT_TYPE_BLOB_STORED = 2;
+  VFS_EVENT_TYPE_BRANCH_CREATED = 3;
+  VFS_EVENT_TYPE_BRANCH_HEAD_MOVED = 4;
+  VFS_EVENT_TYPE_FS_DELTA_PROPOSED = 5;
+  VFS_EVENT_TYPE_FS_DELTA_APPLIED = 6;
+  VFS_EVENT_TYPE_FS_DELTA_REJECTED = 7;
+  VFS_EVENT_TYPE_CHECKOUT_MOVED = 8;
+  VFS_EVENT_TYPE_SNAPSHOT_CHECKPOINTED = 9;
+  VFS_EVENT_TYPE_LOG_ENTRY_APPENDED = 10;
+  VFS_EVENT_TYPE_PARTITION_DECLARED = 11;
+}
+
+message VfsCursorV1 {
+  string branch_id = 1;
+  uint64 seq = 2;
+  bytes head_event_hash = 3;
+}
+
+message VfsEventEnvelopeV1 {
+  uint32 schema_version = 1;
+  string event_id = 2;
+  uint64 seq = 3;
+  uint64 ts_unix_ms = 4;
+  string repo_id = 5;
+  string branch_id = 6;
+  VfsEventTypeV1 event_type = 7;
+  string payload_type = 8;
+  bytes payload = 9;
+  bytes payload_hash_blake3 = 10;
+  bytes prev_event_hash = 11;
+  bytes event_hash = 12;
+}
+
+message SourceImportRequestV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  VfsSourceKindV1 source_kind = 3;
+  VfsModeV1 mode = 4;
+  string source_locator = 5;
+  string source_ref = 6;
+  string initiated_by = 7;
+}
+
+message SourceImportedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  VfsSourceKindV1 source_kind = 3;
+  VfsModeV1 mode = 4;
+  string source_locator = 5;
+  string source_ref = 6;
+  uint64 imported_object_count = 7;
+  uint64 imported_bytes = 8;
+  bytes root_projection_hash = 9;
+  string metadata_json = 10;
+}
+
+message BlobStoredV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string path = 4;
+  bytes content_hash_blake3 = 5;
+  uint64 content_len = 6;
+  bytes content_bytes = 7;
+  string idempotency_key = 8;
+}
+
+message BranchCreatedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  VfsCursorV1 from_cursor = 4;
+  string created_by = 5;
+}
+
+message FsDeltaProposedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string proposal_id = 3;
+  string branch_id = 4;
+  VfsCursorV1 base_cursor = 5;
+  string agent_id = 6;
+  string intent = 7;
+  bytes diff_unified = 8;
+}
+
+message FsDeltaAppliedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string proposal_id = 3;
+  string branch_id = 4;
+  VfsCursorV1 base_cursor = 5;
+  VfsCursorV1 resulting_cursor = 6;
+  string applied_by = 7;
+}
+
+message FsDeltaRejectedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string proposal_id = 3;
+  string branch_id = 4;
+  string rejected_by = 5;
+  string reason = 6;
+  repeated string conflict_paths = 7;
+}
+
+message BranchHeadMovedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  VfsCursorV1 previous_cursor = 4;
+  VfsCursorV1 resulting_cursor = 5;
+  string moved_by = 6;
+  string reason = 7;
+}
+
+message LogEntryAppendedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string partition = 4;
+  uint64 offset = 5;
+  string entry_key = 6;
+  bytes entry_payload = 7;
+  string idempotency_key = 8;
+}
+
+message PartitionDeclaredV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string partition = 4;
+  string declared_by = 5;
+}
+
+message MaterializedBranchStateV1 {
+  string branch_id = 1;
+  uint64 head_seq = 2;
+  bytes head_event_hash = 3;
+  uint64 proposed_delta_count = 4;
+  uint64 applied_delta_count = 5;
+  uint64 rejected_delta_count = 6;
+  uint64 log_entry_count = 7;
+}
+
+message MaterializedRepoStateV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  VfsSourceKindV1 source_kind = 3;
+  VfsModeV1 mode = 4;
+  bool imported = 5;
+  repeated MaterializedBranchStateV1 branches = 6;
+}
+
+message SnapshotCheckpointedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  uint64 snapshot_seq = 4;
+  bytes snapshot_hash_blake3 = 5;
+  bytes snapshot_payload = 6;
+  string reason = 7;
+}
+
+enum ContextEventTypeV1 {
+  CONTEXT_EVENT_TYPE_UNSPECIFIED = 0;
+  CONTEXT_EVENT_TYPE_SYMBOL_UPSERTED = 1;
+  CONTEXT_EVENT_TYPE_REFERENCE_RECORDED = 2;
+  CONTEXT_EVENT_TYPE_DIAGNOSTIC_RECORDED = 3;
+  CONTEXT_EVENT_TYPE_TOUCH_RECORDED = 4;
+  CONTEXT_EVENT_TYPE_SNAPSHOT_CHECKPOINTED = 5;
+}
+
+message ContextEventEnvelopeV1 {
+  uint32 schema_version = 1;
+  string event_id = 2;
+  uint64 seq = 3;
+  uint64 ts_unix_ms = 4;
+  string repo_id = 5;
+  string branch_id = 6;
+  ContextEventTypeV1 event_type = 7;
+  string payload_type = 8;
+  bytes payload = 9;
+  bytes payload_hash_blake3 = 10;
+  bytes prev_event_hash = 11;
+  bytes event_hash = 12;
+}
+
+message ContextSymbolUpsertedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string symbol_id = 4;
+  string symbol_name = 5;
+  string symbol_kind = 6;
+  string file_path = 7;
+  uint32 line_start = 8;
+  uint32 col_start = 9;
+  uint32 line_end = 10;
+  uint32 col_end = 11;
+  string signature = 12;
+  string idempotency_key = 13;
+}
+
+message ContextReferenceRecordedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string symbol_id = 4;
+  string file_path = 5;
+  uint32 line = 6;
+  uint32 col = 7;
+  string context_snippet = 8;
+  string idempotency_key = 9;
+}
+
+message ContextDiagnosticRecordedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string diagnostic_id = 4;
+  string severity = 5;
+  string message = 6;
+  string file_path = 7;
+  uint32 line = 8;
+  uint32 col = 9;
+  string source = 10;
+  string idempotency_key = 11;
+}
+
+message ContextTouchRecordedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  string file_path = 4;
+  string reason = 5;
+  string idempotency_key = 6;
+}
+
+message RustAnalyzerSnapshotV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  repeated ContextSymbolUpsertedV1 symbols = 4;
+  repeated ContextReferenceRecordedV1 references = 5;
+  repeated ContextDiagnosticRecordedV1 diagnostics = 6;
+}
+
+message MaterializedContextBranchStateV1 {
+  string branch_id = 1;
+  repeated ContextSymbolUpsertedV1 symbols = 2;
+  repeated ContextReferenceRecordedV1 references = 3;
+  repeated ContextDiagnosticRecordedV1 diagnostics = 4;
+  repeated string touched_files = 5;
+}
+
+message MaterializedContextStateV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  repeated MaterializedContextBranchStateV1 branches = 3;
+}
+
+message ContextSnapshotCheckpointedV1 {
+  uint32 schema_version = 1;
+  string repo_id = 2;
+  string branch_id = 3;
+  uint64 snapshot_seq = 4;
+  bytes snapshot_hash_blake3 = 5;
+  bytes snapshot_payload = 6;
+  string reason = 7;
+}

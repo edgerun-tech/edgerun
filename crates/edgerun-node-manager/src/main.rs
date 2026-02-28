@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-use std::collections::{HashSet, VecDeque};
 use std::ffi::CString;
 use std::fs;
 use std::io::Write;
@@ -7,7 +6,6 @@ use std::net::SocketAddr;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
-use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
@@ -36,14 +34,13 @@ use edgerun_runtime_proto::tunnel::v1::{
     RegisterWithPairingCodeResponseV1, ReserveDomainRequestV1, ReserveDomainResponseV1,
     TunnelHeartbeatRequestV1, TunnelHeartbeatResponseV1,
 };
-use edgerun_storage::event::{
-    ActorId as StorageActorId, Event as StorageEvent, StreamId as StorageStreamId,
-};
-use edgerun_storage::StorageEngine;
 use futures_util::StreamExt;
 use prost::Message;
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio::io::AsyncBufReadExt;
+use tokio::io::BufReader;
+use tokio::process::Command as TokioCommand;
 use tokio::sync::broadcast;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
@@ -72,13 +69,6 @@ const DEFAULT_TUNNEL_CONTROL_BASE: &str = "https://relay.edgerun.tech";
 const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
 const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
 const LOCAL_DOCKER_SUMMARY_PATH: &str = "/v1/local/docker/summary";
-const LOCAL_DOCKER_LOGS_PATH: &str = "/v1/local/docker/logs";
-const LOCAL_DOCKER_LOGS_STORAGE_DIR_ENV: &str = "EDGERUN_DOCKER_LOGS_STORAGE_DIR";
-const LOCAL_DOCKER_LOGS_STORAGE_DIR_DEFAULT: &str = "/var/lib/edgerun/storage";
-const LOCAL_DOCKER_LOGS_JOURNAL_BASE: &str = "node-manager/docker-logs";
-const LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS: usize = 20_000;
-const LOCAL_DOCKER_LOGS_RECENT_KEY_SCAN: usize = 6_000;
-const LOCAL_DOCKER_LOGS_MAX_QUERY_SCAN: usize = 12_000;
 const LOCAL_FS_ROOT_ENV: &str = "EDGERUN_LOCAL_FS_ROOT";
 const LOCAL_FS_META_PATH: &str = "/v1/local/fs/meta";
 const LOCAL_FS_LIST_PATH: &str = "/v1/local/fs/list";
@@ -98,6 +88,7 @@ const EVENTBUS_NATS_URL_DEFAULT: &str = "nats://127.0.0.1:4222";
 const INTEGRATION_TOPIC_ROOT_ENV: &str = "EDGERUN_INTEGRATION_TOPIC_ROOT";
 const INTEGRATION_TOPIC_ROOT_DEFAULT: &str = "edgerun.integrations";
 const LOCAL_ASSISTANT_PATH: &str = "/v1/local/assistant";
+const LOCAL_DOCKER_EVENTS_TOPIC: &str = "local.docker.events";
 const CODEX_CONFIG_PATH: &str = "/workspace/edgerun/.codex/config.toml";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
@@ -311,51 +302,19 @@ struct LocalDockerContainer {
 }
 
 #[derive(Debug, Serialize)]
-struct LocalDockerLogsResponse {
-    ok: bool,
-    error: String,
-    generated_unix_ms: u64,
-    lines: Vec<LocalDockerLogLine>,
+struct LocalDockerEventPayload {
+    event_type: String,
+    action: String,
+    container_id: String,
+    container_name: String,
+    message: String,
+    ts_unix_ms: u64,
 }
 
 #[derive(Debug, Serialize)]
-struct LocalDockerLogLine {
-    container_id: String,
-    container_name: String,
-    timestamp: String,
-    stream: String,
-    message: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StoredDockerLogLineV1 {
-    key: String,
-    container_id: String,
-    container_name: String,
-    timestamp: String,
-    stream: String,
-    message: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct LocalDockerLogsQuery {
-    #[serde(default)]
-    limit: Option<usize>,
-    #[serde(default)]
-    tail_per_container: Option<usize>,
-}
-
-#[derive(Default)]
-struct DockerLogDedupeState {
-    initialized: bool,
-    seen: HashSet<String>,
-    order: VecDeque<String>,
-}
-
-static DOCKER_LOG_DEDUPE_STATE: OnceLock<StdMutex<DockerLogDedupeState>> = OnceLock::new();
-
-fn docker_log_dedupe_state() -> &'static StdMutex<DockerLogDedupeState> {
-    DOCKER_LOG_DEDUPE_STATE.get_or_init(|| StdMutex::new(DockerLogDedupeState::default()))
+struct LocalBridgeEventPayloadEnvelope {
+    payload: sonic_rs::Value,
+    meta: sonic_rs::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1312,14 +1271,14 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         started_unix_ms: now_unix_ms(),
         tx: broadcast::channel(512).0,
     };
+    let state = Arc::new(state);
+    spawn_local_docker_events(Arc::clone(&state));
     let app = Router::new()
         .route("/v1/local/node/info.pb", get(handle_local_node_info))
         .route("/v1/local/node/info.pb", options(handle_local_options))
         .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
         .route(LOCAL_DOCKER_SUMMARY_PATH, get(handle_local_docker_summary))
         .route(LOCAL_DOCKER_SUMMARY_PATH, options(handle_local_options))
-        .route(LOCAL_DOCKER_LOGS_PATH, get(handle_local_docker_logs))
-        .route(LOCAL_DOCKER_LOGS_PATH, options(handle_local_options))
         .route(LOCAL_FS_META_PATH, get(handle_local_fs_meta))
         .route(LOCAL_FS_META_PATH, options(handle_local_options))
         .route(LOCAL_FS_LIST_PATH, get(handle_local_fs_list))
@@ -1348,7 +1307,7 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_MCP_STATUS_PATH, options(handle_local_options))
         .route(LOCAL_ASSISTANT_PATH, post(handle_local_assistant))
         .route(LOCAL_ASSISTANT_PATH, options(handle_local_options))
-        .with_state(Arc::new(state));
+        .with_state(state);
     tokio::spawn(async move {
         let listener = match tokio::net::TcpListener::bind(addr).await {
             Ok(listener) => listener,
@@ -1436,43 +1395,6 @@ async fn handle_local_docker_summary() -> Response {
         },
     };
     let payload = sonic_rs::to_string(&summary)
-        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
-    (
-        AxumStatusCode::OK,
-        [
-            (
-                AXUM_CONTENT_TYPE,
-                HeaderValue::from_static("application/json; charset=utf-8"),
-            ),
-            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
-            (ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*")),
-            (
-                ACCESS_CONTROL_ALLOW_HEADERS,
-                HeaderValue::from_static("content-type"),
-            ),
-            (
-                ACCESS_CONTROL_ALLOW_METHODS,
-                HeaderValue::from_static("GET, OPTIONS"),
-            ),
-        ],
-        payload,
-    )
-        .into_response()
-}
-
-async fn handle_local_docker_logs(Query(query): Query<LocalDockerLogsQuery>) -> Response {
-    let limit = query.limit.unwrap_or(120).clamp(1, 500);
-    let tail_per_container = query.tail_per_container.unwrap_or(25).clamp(1, 200);
-    let logs = match collect_local_docker_logs(tail_per_container, limit) {
-        Ok(logs) => logs,
-        Err(err) => LocalDockerLogsResponse {
-            ok: false,
-            error: err.to_string(),
-            generated_unix_ms: now_unix_ms(),
-            lines: Vec::new(),
-        },
-    };
-    let payload = sonic_rs::to_string(&logs)
         .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
     (
         AxumStatusCode::OK,
@@ -2334,214 +2256,93 @@ fn collect_local_docker_summary() -> Result<LocalDockerSummaryResponse> {
     })
 }
 
-fn collect_local_docker_logs(
-    tail_per_container: usize,
-    limit: usize,
-) -> Result<LocalDockerLogsResponse> {
-    let rows = run_command_capture("docker", &["ps", "--format", "{{.ID}}\t{{.Names}}"])?;
-    let mut lines = Vec::new();
-    for row in rows.lines() {
-        let cols: Vec<&str> = row.split('\t').collect();
-        if cols.is_empty() {
-            continue;
-        }
-        let container_id = cols.first().copied().unwrap_or_default().trim().to_string();
-        if container_id.is_empty() {
-            continue;
-        }
-        let container_name = cols.get(1).copied().unwrap_or_default().trim().to_string();
-        let logs_output = Command::new("docker")
-            .arg("logs")
-            .arg("--timestamps")
-            .arg("--tail")
-            .arg(tail_per_container.to_string())
-            .arg(&container_id)
-            .output()
-            .with_context(|| format!("failed to collect logs for container {container_id}"))?;
-        for entry in String::from_utf8_lossy(&logs_output.stdout).lines() {
-            if let Some(parsed) =
-                parse_docker_log_line(&container_id, &container_name, entry, "stdout")
-            {
-                lines.push(parsed);
+fn spawn_local_docker_events(state: Arc<LocalBridgeState>) {
+    tokio::spawn(async move {
+        loop {
+            if let Err(err) = run_local_docker_event_stream(Arc::clone(&state)).await {
+                eprintln!("local_docker_event_stream_error={err}");
             }
+            sleep(Duration::from_secs(2)).await;
         }
-        for entry in String::from_utf8_lossy(&logs_output.stderr).lines() {
-            if let Some(parsed) =
-                parse_docker_log_line(&container_id, &container_name, entry, "stderr")
-            {
-                lines.push(parsed);
-            }
-        }
-    }
-    persist_docker_logs_to_storage(&lines)?;
-    let mut stored = query_docker_logs_from_storage(limit)?;
-    stored.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-    if stored.len() > limit {
-        stored.truncate(limit);
-    }
-    Ok(LocalDockerLogsResponse {
-        ok: true,
-        error: String::new(),
-        generated_unix_ms: now_unix_ms(),
-        lines: stored,
-    })
+    });
 }
 
-fn parse_docker_log_line(
-    container_id: &str,
-    container_name: &str,
-    raw_line: &str,
-    stream: &str,
-) -> Option<LocalDockerLogLine> {
-    let line = raw_line.trim();
-    if line.is_empty() {
-        return None;
-    }
-    let mut parts = line.splitn(2, ' ');
-    let first = parts.next().unwrap_or_default().trim();
-    let rest = parts.next().unwrap_or_default().trim();
-    let (timestamp, message) = if first.contains('T') && first.contains(':') {
-        (
-            first.to_string(),
-            if rest.is_empty() {
-                "<empty>".to_string()
-            } else {
-                rest.to_string()
-            },
-        )
-    } else {
-        (now_unix_ms().to_string(), line.to_string())
-    };
-    Some(LocalDockerLogLine {
-        container_id: container_id.to_string(),
-        container_name: container_name.to_string(),
-        timestamp,
-        stream: stream.to_string(),
-        message,
-    })
-}
-
-fn storage_engine_for_docker_logs() -> Result<StorageEngine> {
-    let dir = std::env::var(LOCAL_DOCKER_LOGS_STORAGE_DIR_ENV)
-        .unwrap_or_else(|_| LOCAL_DOCKER_LOGS_STORAGE_DIR_DEFAULT.to_string());
-    StorageEngine::new(PathBuf::from(dir))
-        .with_context(|| "failed to initialize docker logs storage engine".to_string())
-}
-
-fn docker_log_key(line: &LocalDockerLogLine) -> String {
-    format!(
-        "{}|{}|{}|{}",
-        line.container_id.trim(),
-        line.timestamp.trim(),
-        line.stream.trim(),
-        line.message.trim()
-    )
-}
-
-fn hydrate_docker_log_dedupe_from_storage(state: &mut DockerLogDedupeState) -> Result<()> {
-    if state.initialized {
-        return Ok(());
-    }
-    let engine = storage_engine_for_docker_logs()?;
-    let rows = engine.query_segmented_journal_raw(LOCAL_DOCKER_LOGS_JOURNAL_BASE)?;
-    for row in rows
-        .iter()
-        .rev()
-        .take(LOCAL_DOCKER_LOGS_RECENT_KEY_SCAN)
-        .rev()
+async fn run_local_docker_event_stream(state: Arc<LocalBridgeState>) -> Result<()> {
+    let mut child = TokioCommand::new("docker")
+        .args([
+            "events",
+            "--format",
+            "{{.TimeNano}}\t{{.Type}}\t{{.Action}}\t{{.Actor.ID}}\t{{.Actor.Attributes.name}}",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .with_context(|| "failed to start docker events stream".to_string())?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("docker events stream missing stdout"))?;
+    let mut lines = BufReader::new(stdout).lines();
+    while let Some(line) = lines
+        .next_line()
+        .await
+        .with_context(|| "failed to read docker event line".to_string())?
     {
-        let parsed = match sonic_rs::from_slice::<StoredDockerLogLineV1>(&row.event.payload) {
-            Ok(value) => value,
-            Err(_) => continue,
-        };
-        if parsed.key.trim().is_empty() {
-            continue;
-        }
-        if state.seen.insert(parsed.key.clone()) {
-            state.order.push_back(parsed.key);
-            while state.order.len() > LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS {
-                if let Some(old) = state.order.pop_front() {
-                    state.seen.remove(&old);
+        let cols: Vec<&str> = line.split('\t').collect();
+        let time_nano = cols.first().copied().unwrap_or_default().trim();
+        let event_type = cols.get(1).copied().unwrap_or_default().trim().to_string();
+        let action = cols.get(2).copied().unwrap_or_default().trim().to_string();
+        let container_id = cols.get(3).copied().unwrap_or_default().trim().to_string();
+        let container_name = cols.get(4).copied().unwrap_or_default().trim().to_string();
+        let ts_unix_ms = time_nano
+            .parse::<u64>()
+            .map(|value| value / 1_000_000)
+            .unwrap_or_else(|_| now_unix_ms());
+        let message = format!(
+            "{} {} {}",
+            if event_type.is_empty() {
+                "docker"
+            } else {
+                &event_type
+            },
+            if action.is_empty() { "event" } else { &action },
+            if container_name.is_empty() {
+                if container_id.is_empty() {
+                    "unknown".to_string()
+                } else {
+                    container_id.clone()
                 }
+            } else {
+                container_name.clone()
             }
-        }
-    }
-    state.initialized = true;
-    Ok(())
-}
-
-fn persist_docker_logs_to_storage(lines: &[LocalDockerLogLine]) -> Result<()> {
-    if lines.is_empty() {
-        return Ok(());
-    }
-    let engine = storage_engine_for_docker_logs()?;
-    let state_guard = docker_log_dedupe_state()
-        .lock()
-        .map_err(|_| anyhow!("docker log dedupe mutex poisoned"))?;
-    let mut state = state_guard;
-    hydrate_docker_log_dedupe_from_storage(&mut state)?;
-
-    for line in lines {
-        let key = docker_log_key(line);
-        if key.trim().is_empty() || state.seen.contains(&key) {
-            continue;
-        }
-        let stored = StoredDockerLogLineV1 {
-            key: key.clone(),
-            container_id: line.container_id.clone(),
-            container_name: line.container_name.clone(),
-            timestamp: line.timestamp.clone(),
-            stream: line.stream.clone(),
-            message: line.message.clone(),
-        };
-        let payload = sonic_rs::to_vec(&stored).context("failed to encode stored docker log")?;
-        let event = StorageEvent::new(
-            StorageStreamId::from_bytes(*b"edrdckrlogstrm01"),
-            StorageActorId::from_bytes(*b"edrnodemgractr01"),
-            payload,
         );
-        engine
-            .append_event_to_segmented_journal(
-                LOCAL_DOCKER_LOGS_JOURNAL_BASE,
-                &event,
-                4 * 1024 * 1024,
-                edgerun_storage::durability::DurabilityLevel::AckDurable,
-            )
-            .with_context(|| "failed to append docker log to edgerun storage".to_string())?;
-        state.seen.insert(key.clone());
-        state.order.push_back(key);
-        while state.order.len() > LOCAL_DOCKER_LOGS_MAX_DEDUPE_KEYS {
-            if let Some(old) = state.order.pop_front() {
-                state.seen.remove(&old);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn query_docker_logs_from_storage(limit: usize) -> Result<Vec<LocalDockerLogLine>> {
-    let engine = storage_engine_for_docker_logs()?;
-    let rows = engine
-        .query_segmented_journal_raw(LOCAL_DOCKER_LOGS_JOURNAL_BASE)
-        .with_context(|| "failed to query docker logs from edgerun storage".to_string())?;
-    let mut out = Vec::new();
-    for row in rows.iter().rev().take(LOCAL_DOCKER_LOGS_MAX_QUERY_SCAN) {
-        let parsed = match sonic_rs::from_slice::<StoredDockerLogLineV1>(&row.event.payload) {
-            Ok(value) => value,
-            Err(_) => continue,
+        let payload = LocalDockerEventPayload {
+            event_type,
+            action,
+            container_id,
+            container_name,
+            message,
+            ts_unix_ms,
         };
-        out.push(LocalDockerLogLine {
-            container_id: parsed.container_id,
-            container_name: parsed.container_name,
-            timestamp: parsed.timestamp,
-            stream: parsed.stream,
-            message: parsed.message,
-        });
-        if out.len() >= limit {
-            break;
-        }
+        let envelope_payload = LocalBridgeEventPayloadEnvelope {
+            payload: sonic_rs::to_value(&payload)
+                .with_context(|| "failed to convert docker event payload value".to_string())?,
+            meta: sonic_rs::json!({ "source": "node-manager", "kind": "docker.event" }),
+        };
+        let mut envelope = local_bridge_envelope(LOCAL_DOCKER_EVENTS_TOPIC, "node-manager");
+        envelope.payload = sonic_rs::to_vec(&envelope_payload)
+            .with_context(|| "failed to encode local docker event payload".to_string())?;
+        let _ = state.tx.send(envelope);
     }
-    Ok(out)
+    let status = child
+        .wait()
+        .await
+        .with_context(|| "failed to wait docker event stream process".to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(anyhow!("docker events stream exited with status {status}"))
+    }
 }
 
 fn run_command_capture(bin: &str, args: &[&str]) -> Result<String> {

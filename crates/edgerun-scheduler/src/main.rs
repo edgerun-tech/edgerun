@@ -175,7 +175,10 @@ static STATE_SNAPSHOT_TMP_SEQ: AtomicU64 = AtomicU64::new(1);
 #[tokio::main]
 async fn main() -> Result<()> {
     edgerun_observability::init_service("edgerun-scheduler")?;
-    tracing::info!(planner_version = workflow_domain::planner_version(), "workflow domain loaded");
+    tracing::info!(
+        planner_version = workflow_domain::planner_version(),
+        "workflow domain loaded"
+    );
 
     let data_dir = std::env::var("EDGERUN_SCHEDULER_DATA_DIR")
         .map(PathBuf::from)

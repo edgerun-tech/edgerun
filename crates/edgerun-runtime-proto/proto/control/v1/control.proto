@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package edgerun.control.v1;
+
+message IntentEnvelope {
+  uint32 schema_version = 1;
+  string intent_id = 2;
+  string intent_kind = 3;
+  string actor_id = 4;
+  uint64 ts_unix_ms = 5;
+  bytes payload = 6;
+  map<string, string> metadata = 7;
+}
+
+message IntegrationRef {
+  string integration_id = 1;
+  string operation = 2;
+  repeated string scopes = 3;
+}
+
+message ExecutorTarget {
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    KIND_LOCAL_ACTION = 1;
+    KIND_GITHUB_ACTIONS = 2;
+    KIND_AGENT_TASK = 3;
+    KIND_INGEST_TRANSFORM = 4;
+    KIND_WASM = 5;
+    KIND_OCI = 6;
+    KIND_VM = 7;
+    KIND_LXC = 8;
+  }
+  Kind kind = 1;
+  string node_hint = 2;
+  map<string, string> config = 3;
+}
+
+message MachineCapability {
+  string node_id = 1;
+  map<string, bool> bool_caps = 2;
+  map<string, uint64> numeric_caps = 3;
+  map<string, string> labels = 4;
+}
+
+message WorkflowStep {
+  string step_id = 1;
+  string action = 2;
+  repeated string depends_on = 3;
+  ExecutorTarget executor = 4;
+  repeated IntegrationRef integrations = 5;
+  map<string, string> required_caps = 6;
+  bytes input = 7;
+}
+
+message WorkflowDefinition {
+  uint32 schema_version = 1;
+  string workflow_id = 2;
+  string intent_id = 3;
+  repeated WorkflowStep steps = 4;
+  map<string, string> metadata = 5;
+}
+
+message WorkflowRun {
+  string run_id = 1;
+  string workflow_id = 2;
+  string status = 3;
+  uint64 started_unix_ms = 4;
+  uint64 updated_unix_ms = 5;
+}
+
+message PolicyDecision {
+  string decision_id = 1;
+  string intent_id = 2;
+  bool allowed = 3;
+  string reason = 4;
+  repeated string matched_policies = 5;
+}
+
+message SchedulingDecision {
+  string decision_id = 1;
+  string run_id = 2;
+  string step_id = 3;
+  string selected_node_id = 4;
+  ExecutorTarget selected_executor = 5;
+  string rationale = 6;
+}

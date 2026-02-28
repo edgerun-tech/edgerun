@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down agent-launch agent-merge agent-test agent-context swarm-add-worker swarm-generate-executors-stack swarm-deploy-executors-stack code-update-event
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down agent-launch agent-merge agent-test agent-context swarm-add-worker swarm-generate-executors-stack swarm-deploy-executors-stack code-update-event tool-build
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -135,3 +135,7 @@ swarm-deploy-executors-stack:
 
 code-update-event:
 	./scripts/executors/publish-code-update.sh
+
+tool-build:
+	@mkdir -p out/tooling
+	cd tooling && go build -o ../out/tooling/edgertool ./cmd/edgertool
