@@ -270,7 +270,7 @@ async function signLeaseToken(claims, secret) {
     `issued_unix_ms=${claims.issuedUnixMs}`,
     `expires_unix_ms=${claims.expiresUnixMs}`,
     `nonce=${claims.nonce}`
-  ].join('\\n')
+  ].join('\n')
   const payloadB64 = base64urlEncode(new TextEncoder().encode(payload))
   const key = await crypto.subtle.importKey(
     'raw',
@@ -286,5 +286,6 @@ async function signLeaseToken(claims, secret) {
 function base64urlEncode(bytes) {
   let binary = ''
   for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i])
-  return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/g, '')
+  const base64 = btoa(binary)
+  return base64.replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/g, '')
 }
