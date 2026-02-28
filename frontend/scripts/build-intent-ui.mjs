@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { build } from 'esbuild'
@@ -11,8 +11,13 @@ const intentEntry = path.join(intentRoot, 'src', 'main.jsx')
 const intentCssEntry = path.join(intentRoot, 'src', 'app.css')
 const targetRoot = path.join(frontendRoot, 'public', 'intent-ui')
 const targetClientRoot = path.join(targetRoot, 'client')
+const targetWorkerRoot = path.join(targetRoot, 'workers')
 const targetCss = path.join(targetRoot, 'app.css')
+const eventBusWasmTarget = path.join(targetRoot, 'eventbus.wasm')
+const eventBusWorkerSource = path.join(intentRoot, 'src', 'workers', 'eventbus.worker.js')
+const eventBusWorkerTarget = path.join(targetWorkerRoot, 'eventbus.worker.js')
 const tailwindBin = path.join(frontendRoot, 'node_modules', '.bin', 'tailwindcss')
+const repoRoot = path.resolve(frontendRoot, '..')
 
 function run(cmd, cwd) {
   const proc = spawnSync(cmd[0], cmd.slice(1), {
@@ -39,6 +44,7 @@ if (!existsSync(tailwindBin)) {
 
 rmSync(targetRoot, { recursive: true, force: true })
 mkdirSync(targetClientRoot, { recursive: true })
+mkdirSync(targetWorkerRoot, { recursive: true })
 
 await build({
   entryPoints: { main: intentEntry },
@@ -72,6 +78,34 @@ run(
   ],
   frontendRoot
 )
+
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'target')
+const eventBusWasmArtifact = path.join(
+  cargoTargetDir,
+  'wasm32-unknown-unknown',
+  'release',
+  'edgerun_event_bus_wasm.wasm'
+)
+run(
+  [
+    'cargo',
+    'build',
+    '--release',
+    '--target',
+    'wasm32-unknown-unknown',
+    '--package',
+    'edgerun-event-bus-wasm'
+  ],
+  repoRoot
+)
+if (!existsSync(eventBusWasmArtifact)) {
+  throw new Error(`Missing event bus wasm artifact at ${eventBusWasmArtifact}`)
+}
+copyFileSync(eventBusWasmArtifact, eventBusWasmTarget)
+if (!existsSync(eventBusWorkerSource)) {
+  throw new Error(`Missing event bus worker source at ${eventBusWorkerSource}`)
+}
+copyFileSync(eventBusWorkerSource, eventBusWorkerTarget)
 
 writeFileSync(
   path.join(targetRoot, 'index.html'),
