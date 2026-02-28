@@ -313,8 +313,17 @@ function WorkflowOverlay() {
     return { domain, registrationToken };
   };
   const initialReservation = readDomainReservation();
+  const [profilePublicKeyInput, setProfilePublicKeyInput] = createSignal(
+    typeof window === "undefined"
+      ? ""
+      : String(window.localStorage.getItem("intent-ui-profile-public-key-v1") || "").trim()
+  );
+  const [requestedLabelInput, setRequestedLabelInput] = createSignal("");
   const [connectDomain, setConnectDomain] = createSignal(initialReservation.domain);
   const [connectRegistrationToken, setConnectRegistrationToken] = createSignal(initialReservation.registrationToken);
+  const [reserveBusy, setReserveBusy] = createSignal(false);
+  const [reserveError, setReserveError] = createSignal("");
+  const [reserveStatus, setReserveStatus] = createSignal("");
   const [pairingBusy, setPairingBusy] = createSignal(false);
   const [pairingError, setPairingError] = createSignal("");
   const [pairingStatus, setPairingStatus] = createSignal("");
@@ -379,6 +388,49 @@ function WorkflowOverlay() {
       setPairingBusy(false);
     }
   };
+  const reserveDomain = async () => {
+    if (reserveBusy()) return;
+    const profilePublicKeyB64url = profilePublicKeyInput().trim();
+    const requestedLabel = requestedLabelInput().trim();
+    if (!profilePublicKeyB64url) {
+      setReserveError("Profile public key is required.");
+      setReserveStatus("");
+      return;
+    }
+    setReserveBusy(true);
+    setReserveError("");
+    setReserveStatus("");
+    try {
+      const response = await fetch("/api/tunnel/reserve-domain", {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ profilePublicKeyB64url, requestedLabel })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.ok) {
+        throw new Error(String(body?.error || `domain reserve failed (${response.status})`));
+      }
+      const domain = String(body?.domain || "").trim();
+      const token = String(body?.registrationToken || "").trim();
+      if (!domain || !token) throw new Error("Relay response missing domain or registration token.");
+      setConnectDomain(domain);
+      setConnectRegistrationToken(token);
+      setReserveStatus(String(body?.status || "reserved"));
+      localStorage.setItem(
+        "intent-ui-domain-reservation-v1",
+        JSON.stringify({
+          domain,
+          registrationToken: token,
+          status: String(body?.status || "reserved"),
+          userId: String(body?.userId || "")
+        })
+      );
+    } catch (err) {
+      setReserveError(err instanceof Error ? err.message : "Failed to reserve domain.");
+    } finally {
+      setReserveBusy(false);
+    }
+  };
   const sendDraftMessage = async () => {
     const text = draftMessage().trim();
     const conversation = activeConversation();
@@ -418,6 +470,10 @@ function WorkflowOverlay() {
   createEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem("intent-ui-device-connect-domain-v1", connectDomain().trim());
+  });
+  createEffect(() => {
+    if (typeof window === "undefined") return;
+    localStorage.setItem("intent-ui-profile-public-key-v1", profilePublicKeyInput().trim());
   });
   createEffect(() => {
     if (typeof window === "undefined") return;
@@ -1241,6 +1297,45 @@ function WorkflowOverlay() {
                           </button>
                         </div>
                         <Show when={connectPlatform() === "linux"}>
+                          <label class="mt-2 block text-[10px] text-neutral-500">
+                            Profile public key (base64url)
+                            <input
+                              type="text"
+                              value={profilePublicKeyInput()}
+                              onInput={(event) => setProfilePublicKeyInput(event.currentTarget.value)}
+                              placeholder="paste profile public key"
+                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                              data-testid="device-profile-public-key-input"
+                            />
+                          </label>
+                          <label class="mt-2 block text-[10px] text-neutral-500">
+                            Requested label (optional)
+                            <input
+                              type="text"
+                              value={requestedLabelInput()}
+                              onInput={(event) => setRequestedLabelInput(event.currentTarget.value)}
+                              placeholder="alice"
+                              class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
+                              data-testid="device-requested-label-input"
+                            />
+                          </label>
+                          <div class="mt-2 flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              class={drawerSmallButtonClass}
+                              onClick={reserveDomain}
+                              disabled={reserveBusy()}
+                              data-testid="device-reserve-domain"
+                            >
+                              {reserveBusy() ? "Reserving..." : "Reserve domain"}
+                            </button>
+                            <Show when={reserveStatus()}>
+                              <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-reserve-status">{reserveStatus()}</span>
+                            </Show>
+                          </div>
+                          <Show when={reserveError()}>
+                            <p class="mt-1 text-[10px] text-red-300" data-testid="device-reserve-error">{reserveError()}</p>
+                          </Show>
                           <label class="mt-2 block text-[10px] text-neutral-500">
                             Domain
                             <input

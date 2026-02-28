@@ -16,6 +16,9 @@ const CONTROL_PREFIXES = [
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+    if (url.pathname === '/api/tunnel/reserve-domain' && request.method === 'POST') {
+      return handleReserveDomain(request, env)
+    }
     if (url.pathname === '/api/tunnel/create-pairing-code' && request.method === 'POST') {
       return handleCreatePairingCode(request, env)
     }
@@ -74,6 +77,46 @@ async function handleCreatePairingCode(request, env) {
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : 'pairing code issuance failed'
+    return json({ ok: false, error: message }, { status: 502 })
+  }
+}
+
+async function handleReserveDomain(request, env) {
+  try {
+    const body = await request.json().catch(() => ({}))
+    const profilePublicKey = String(body?.profilePublicKeyB64url || '').trim()
+    const requestedLabel = String(body?.requestedLabel || '').trim()
+    if (!profilePublicKey) {
+      return json(
+        { ok: false, error: 'profilePublicKeyB64url is required' },
+        { status: 400 }
+      )
+    }
+    const relayBase = String(env?.RELAY_CONTROL_BASE || 'https://relay.edgerun.tech').replace(/\/+$/, '')
+    const payload = encodeReserveDomainRequest({
+      profilePublicKey,
+      requestedLabel
+    })
+    const relayResponse = await fetch(`${relayBase}/v1/tunnel/reserve-domain`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-protobuf' },
+      body: payload
+    })
+    const bytes = new Uint8Array(await relayResponse.arrayBuffer())
+    const decoded = decodeReserveDomainResponse(bytes)
+    return json(
+      {
+        ok: Boolean(decoded.ok),
+        error: decoded.error || '',
+        userId: decoded.userId || '',
+        domain: decoded.domain || '',
+        status: decoded.status || '',
+        registrationToken: decoded.registrationToken || ''
+      },
+      { status: relayResponse.ok ? 200 : relayResponse.status || 502 }
+    )
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'domain reservation failed'
     return json({ ok: false, error: message }, { status: 502 })
   }
 }
@@ -151,6 +194,13 @@ function encodeCreatePairingCodeRequest(input) {
   ])
 }
 
+function encodeReserveDomainRequest(input) {
+  return concat([
+    encodeString(1, input.profilePublicKey),
+    encodeString(2, input.requestedLabel)
+  ])
+}
+
 function decodeLengthDelimited(bytes, offset) {
   const size = decodeVarint(bytes, offset)
   const end = size.offset + size.value
@@ -186,6 +236,43 @@ function decodeCreatePairingCodeResponse(bytes) {
       offset = value.offset
       if (tag === 1) out.ok = value.value !== 0
       if (tag === 4) out.expiresUnixMs = value.value
+      continue
+    }
+    break
+  }
+  return out
+}
+
+function decodeReserveDomainResponse(bytes) {
+  const out = {
+    ok: false,
+    error: '',
+    userId: '',
+    domain: '',
+    status: '',
+    registrationToken: ''
+  }
+  let offset = 0
+  while (offset < bytes.length) {
+    const key = decodeVarint(bytes, offset)
+    offset = key.offset
+    const tag = key.value >> 3
+    const wire = key.value & 0x07
+    if (wire === 2) {
+      const field = decodeLengthDelimited(bytes, offset)
+      offset = field.offset
+      const text = new TextDecoder().decode(field.bytes)
+      if (tag === 2) out.error = text
+      if (tag === 3) out.userId = text
+      if (tag === 4) out.domain = text
+      if (tag === 5) out.status = text
+      if (tag === 6) out.registrationToken = text
+      continue
+    }
+    if (wire === 0) {
+      const value = decodeVarint(bytes, offset)
+      offset = value.offset
+      if (tag === 1) out.ok = value.value !== 0
       continue
     }
     break

@@ -12,6 +12,18 @@ describe('intent ui linux first device connect', () => {
   }
 
   it('shows linux platform script and updates it with pairing code', () => {
+    cy.intercept('POST', '/api/tunnel/reserve-domain', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        error: '',
+        userId: 'alice',
+        domain: 'alice.users.edgerun.tech',
+        status: 'reserved',
+        registrationToken: 'reg_tok_123'
+      }
+    }).as('reserveDomain')
+
     cy.intercept('POST', '/api/tunnel/create-pairing-code', {
       statusCode: 200,
       body: {
@@ -40,8 +52,14 @@ describe('intent ui linux first device connect', () => {
     cy.get('[data-testid="device-linux-script"]').should('contain.text', 'install-node-manager.sh | sh -s -- --bridge-listen 127.0.0.1:7777')
     cy.get('[data-testid="device-linux-script"]').should('contain.text', '<PAIRING_CODE>')
 
-    cy.get('[data-testid="device-domain-input"]').clear().type('alice.users.edgerun.tech')
-    cy.get('[data-testid="device-registration-token-input"]').clear().type('reg_tok_123')
+    cy.get('[data-testid="device-profile-public-key-input"]').clear().type('profile_pub_abc')
+    cy.get('[data-testid="device-requested-label-input"]').clear().type('alice')
+    cy.get('[data-testid="device-reserve-domain"]').click()
+    cy.wait('@reserveDomain')
+    cy.get('[data-testid="device-reserve-status"]').should('contain.text', 'reserved')
+    cy.get('[data-testid="device-domain-input"]').should('have.value', 'alice.users.edgerun.tech')
+    cy.get('[data-testid="device-registration-token-input"]').should('have.value', 'reg_tok_123')
+
     cy.get('[data-testid="device-issue-pairing-code"]').click()
     cy.wait('@issuePairing')
     cy.get('[data-testid="device-pairing-status"]').should('contain.text', 'Pairing code issued')
