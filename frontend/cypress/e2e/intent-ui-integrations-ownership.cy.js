@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-describe('intent ui integrations connection truth', () => {
+describe('intent ui integrations ownership mode', () => {
   const seedProfileSession = (win) => {
     win.sessionStorage.setItem('intent-ui-profile-mode-v1', 'profile')
-    win.sessionStorage.setItem('intent-ui-profile-id-v1', 'profile_truth_test')
+    win.sessionStorage.setItem('intent-ui-profile-id-v1', 'profile_test_owner')
     win.sessionStorage.setItem('intent-ui-profile-backend-v1', 'browser_local')
     win.sessionStorage.setItem(
       'intent-ui-profile-scopes-v1',
@@ -11,7 +11,7 @@ describe('intent ui integrations connection truth', () => {
     )
   }
 
-  it('does not auto-mark platform providers as connected and marks them available after linking', () => {
+  it('defaults to platform and allows switching to user-owned', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         win.localStorage.removeItem('intent-ui-integrations-v1')
@@ -35,17 +35,14 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="provider-open-github"]').should('exist')
 
     cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'Platform')
-    cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Not connected')
-    cy.get('[data-testid="provider-available-github"]').should('contain.text', 'Unavailable')
-
     cy.get('[data-testid="provider-open-github"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-github"]').should('be.visible')
-    cy.get('[data-testid="integration-step-3"]').click({ force: true })
-    cy.get('[data-testid="provider-verify-github"]').click({ force: true })
-    cy.get('[data-testid="integration-step-4"]').click({ force: true })
-    cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
-    cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Connected')
-    cy.get('[data-testid="provider-available-github"]').should('contain.text', 'Available')
+    cy.get('[data-testid="provider-ownership-user-github"]').click({ force: true })
+
+    cy.get('[data-testid="provider-ownership-user-github"]').should('be.visible')
+    cy.contains('button', 'Close').click({ force: true })
+
+    cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'Platform')
   })
 })

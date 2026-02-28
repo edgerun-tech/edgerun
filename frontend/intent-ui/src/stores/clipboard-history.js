@@ -1,8 +1,10 @@
 import { createSignal } from "solid-js";
-import { publishEvent } from "./eventbus";
+import { UI_EVENT_TOPICS, UI_INTENT_TOPICS, uiIntentMeta } from "../lib/ui-intents";
+import { publishEvent, subscribeEvent } from "./eventbus";
 
 const CLIPBOARD_HISTORY_KEY = "intent-ui-clipboard-history-v1";
 const CLIPBOARD_HISTORY_MAX = 48;
+let clipboardSubscriptionsInitialized = false;
 
 function safeParse(raw) {
   try {
@@ -29,7 +31,7 @@ function persistHistory(entries) {
 
 const [clipboardHistory, setClipboardHistory] = createSignal(readHistory());
 
-function pushClipboardEntry(text, source = "unknown") {
+function applyClipboardPush(text, source = "unknown") {
   const value = String(text || "").trim();
   if (!value) return;
   setClipboardHistory((prev) => {
@@ -43,13 +45,38 @@ function pushClipboardEntry(text, source = "unknown") {
     persistHistory(next);
     return next;
   });
+  publishEvent(UI_EVENT_TOPICS.clipboard.updated, { text: value, source }, uiIntentMeta("clipboard.reducer"));
   publishEvent("clipboard.updated", { text: value, source }, { scope: "browser" });
 }
 
-function clearClipboardHistory() {
+function applyClipboardClear() {
   setClipboardHistory([]);
   persistHistory([]);
+  publishEvent(UI_EVENT_TOPICS.clipboard.cleared, {}, uiIntentMeta("clipboard.reducer"));
   publishEvent("clipboard.cleared", {}, { scope: "browser" });
+}
+
+function ensureClipboardIntentSubscriptions() {
+  if (clipboardSubscriptionsInitialized) return;
+  clipboardSubscriptionsInitialized = true;
+
+  subscribeEvent(UI_INTENT_TOPICS.clipboard.push, (event) => {
+    applyClipboardPush(event?.payload?.text, event?.payload?.source || "unknown");
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.clipboard.clear, () => {
+    applyClipboardClear();
+  });
+}
+
+ensureClipboardIntentSubscriptions();
+
+function pushClipboardEntry(text, source = "unknown") {
+  publishEvent(UI_INTENT_TOPICS.clipboard.push, { text, source }, uiIntentMeta("clipboard.store"));
+}
+
+function clearClipboardHistory() {
+  publishEvent(UI_INTENT_TOPICS.clipboard.clear, {}, uiIntentMeta("clipboard.store"));
 }
 
 export {

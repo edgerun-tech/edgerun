@@ -1,4 +1,6 @@
 import { createSignal } from "solid-js";
+import { UI_EVENT_TOPICS, UI_INTENT_TOPICS, uiIntentMeta } from "../lib/ui-intents";
+import { publishEvent, subscribeEvent } from "./eventbus";
 
 /**
  * @typedef {"editor" | "files" | "integrations" | "github" | "email" | "settings" | "widgets" | "onvif" | "terminal" | "cloud" | "call" | "cloudflare" | "drive" | "calendar" | "browser" | "credentials" | "guide"} WindowId
@@ -36,14 +38,13 @@ const WINDOW_PRESETS = {
   guide: { width: 900, height: 680 }
 };
 
-/** @type {[() => Record<string, WindowState>, import("solid-js").Setter<Record<string, WindowState>>]} */
 const [windows, setWindows] = createSignal({});
-
 const [activeWindowId, setActiveWindowId] = createSignal(null);
 const [zCounter, setZCounter] = createSignal(1);
 const [windowLayerOffset, setWindowLayerOffset] = createSignal({ x: 0, y: 0 });
 
-/** @param {string} id */
+let subscriptionsInitialized = false;
+
 const defaultTitle = (id) => id.charAt(0).toUpperCase() + id.slice(1);
 
 function getActiveWindowId() {
@@ -100,8 +101,6 @@ function getCirclePosition(index, size, total) {
   const radius = 220 + Math.min(180, safeTotal * 14);
   const angle = -Math.PI / 2 + (index / safeTotal) * Math.PI * 2;
   const raw = {
-    // Store world-space coordinates so rendered position (world + layer offset)
-    // stays visible even when the whole window layer has been panned.
     x: Math.round(centerX + Math.cos(angle) * radius - size.width / 2 - offset.x),
     y: Math.round(centerY + Math.sin(angle) * radius - size.height / 2 - offset.y)
   };
@@ -118,8 +117,11 @@ function getCirclePosition(index, size, total) {
   };
 }
 
-/** @param {WindowId} id */
-function bringWindowToFront(id) {
+function emitWindowIntent(topic, payload = {}) {
+  publishEvent(topic, payload, uiIntentMeta("windows.store"));
+}
+
+function applyBringToFront(id) {
   const z = nextZ();
   setWindows((prev) => ({
     ...prev,
@@ -135,8 +137,7 @@ function bringWindowToFront(id) {
   setActiveWindowId(id);
 }
 
-/** @param {WindowId} id */
-function openWindow(id) {
+function applyOpenWindow(id) {
   const current = windows();
   const openCount = Object.values(current).filter((w) => w?.isOpen).length;
   const existing = current[id];
@@ -160,8 +161,7 @@ function openWindow(id) {
   setActiveWindowId(id);
 }
 
-/** @param {WindowId} id */
-function closeWindow(id) {
+function applyCloseWindow(id) {
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -178,15 +178,7 @@ function closeWindow(id) {
   });
 }
 
-function closeTopWindow() {
-  const topId = getTopWindowId();
-  if (topId) {
-    closeWindow(topId);
-  }
-}
-
-/** @param {WindowId} id */
-function minimizeWindow(id) {
+function applyMinimizeWindow(id) {
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -203,9 +195,8 @@ function minimizeWindow(id) {
   });
 }
 
-/** @param {WindowId} id */
-function maximizeWindow(id) {
-  bringWindowToFront(id);
+function applyMaximizeWindow(id) {
+  applyBringToFront(id);
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -217,9 +208,8 @@ function maximizeWindow(id) {
   }));
 }
 
-/** @param {WindowId} id */
-function restoreWindow(id) {
-  bringWindowToFront(id);
+function applyRestoreWindow(id) {
+  applyBringToFront(id);
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -231,11 +221,7 @@ function restoreWindow(id) {
   }));
 }
 
-/**
- * @param {WindowId} id
- * @param {{x: number, y: number}} position
- */
-function updateWindowPosition(id, position) {
+function applyUpdateWindowPosition(id, position) {
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -245,11 +231,7 @@ function updateWindowPosition(id, position) {
   }));
 }
 
-/**
- * @param {WindowId} id
- * @param {{width: number, height: number}} size
- */
-function updateWindowSize(id, size) {
+function applyUpdateWindowSize(id, size) {
   setWindows((prev) => ({
     ...prev,
     [id]: {
@@ -259,7 +241,7 @@ function updateWindowSize(id, size) {
   }));
 }
 
-function closeAllWindows() {
+function applyCloseAllWindows() {
   setWindows((prev) => {
     const next = { ...prev };
     for (const id of Object.keys(next)) {
@@ -271,6 +253,124 @@ function closeAllWindows() {
     }
     return next;
   });
+  setActiveWindowId(null);
+}
+
+function ensureWindowIntentSubscriptions() {
+  if (subscriptionsInitialized) return;
+  subscriptionsInitialized = true;
+
+  subscribeEvent(UI_INTENT_TOPICS.window.open, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyOpenWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.opened, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.close, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyCloseWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.closed, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.closeTop, () => {
+    const id = getTopWindowId();
+    if (!id) return;
+    applyCloseWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.closed, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.closeAll, () => {
+    applyCloseAllWindows();
+    publishEvent(UI_EVENT_TOPICS.window.closedAll, {}, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.minimize, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyMinimizeWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.minimized, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.maximize, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyMaximizeWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.maximized, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.restore, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyRestoreWindow(id);
+    publishEvent(UI_EVENT_TOPICS.window.restored, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.focus, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    if (!id) return;
+    applyBringToFront(id);
+    publishEvent(UI_EVENT_TOPICS.window.focused, { windowId: id }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.move, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    const position = event?.payload?.position;
+    if (!id || !position) return;
+    applyUpdateWindowPosition(id, position);
+    publishEvent(UI_EVENT_TOPICS.window.moved, { windowId: id, position }, uiIntentMeta("windows.reducer"));
+  });
+
+  subscribeEvent(UI_INTENT_TOPICS.window.resize, (event) => {
+    const id = String(event?.payload?.windowId || "").trim();
+    const size = event?.payload?.size;
+    if (!id || !size) return;
+    applyUpdateWindowSize(id, size);
+    publishEvent(UI_EVENT_TOPICS.window.resized, { windowId: id, size }, uiIntentMeta("windows.reducer"));
+  });
+}
+
+ensureWindowIntentSubscriptions();
+
+function bringWindowToFront(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.focus, { windowId: id });
+}
+
+function openWindow(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.open, { windowId: id });
+}
+
+function closeWindow(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.close, { windowId: id });
+}
+
+function closeTopWindow() {
+  emitWindowIntent(UI_INTENT_TOPICS.window.closeTop, {});
+}
+
+function minimizeWindow(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.minimize, { windowId: id });
+}
+
+function maximizeWindow(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.maximize, { windowId: id });
+}
+
+function restoreWindow(id) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.restore, { windowId: id });
+}
+
+function updateWindowPosition(id, position) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.move, { windowId: id, position });
+}
+
+function updateWindowSize(id, size) {
+  emitWindowIntent(UI_INTENT_TOPICS.window.resize, { windowId: id, size });
+}
+
+function closeAllWindows() {
+  emitWindowIntent(UI_INTENT_TOPICS.window.closeAll, {});
 }
 
 export {

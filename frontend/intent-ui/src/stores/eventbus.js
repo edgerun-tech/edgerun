@@ -82,7 +82,21 @@ function publishEvent(topic, payload = {}, meta = {}) {
       // ignore local bridge send failures
     }
   }
-  if (eventBusWorker) {
+  const localEvent = {
+    id: `evt-local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+    topic: normalizedTopic,
+    payload,
+    meta,
+    createdAt: new Date().toISOString()
+  };
+  setEventTimeline((prev) => {
+    const next = [...prev, localEvent].slice(-EVENTBUS_MAX_EVENTS);
+    persistTimeline(next);
+    return next;
+  });
+  notifyListeners(localEvent);
+
+  if (eventBusWorker && meta?.domain !== "ui") {
     eventBusWorker.postMessage({
       type: "publish",
       topic: normalizedTopic,
@@ -91,19 +105,6 @@ function publishEvent(topic, payload = {}, meta = {}) {
     });
     return;
   }
-  const fallbackEvent = {
-    id: `evt-fallback-${Date.now()}`,
-    topic: normalizedTopic,
-    payload,
-    meta,
-    createdAt: new Date().toISOString()
-  };
-  setEventTimeline((prev) => {
-    const next = [...prev, fallbackEvent].slice(-EVENTBUS_MAX_EVENTS);
-    persistTimeline(next);
-    return next;
-  });
-  notifyListeners(fallbackEvent);
 }
 
 function subscribeEvent(topic, handler) {
