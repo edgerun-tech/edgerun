@@ -3,21 +3,21 @@ use std::ffi::CString;
 use std::fs;
 use std::io::Write;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Json, Query, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
     CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE,
 };
 use axum::http::{HeaderValue, StatusCode as AxumStatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, options};
+use axum::routing::{get, options, post};
 use axum::Router;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -46,7 +46,7 @@ use tokio::time::sleep;
 
 const SECURITY_MODE: HardwareSecurityMode = HardwareSecurityMode::TpmRequired;
 const CONFIG_TPM_NV_INDEX: u32 = 0x0150_0026;
-const CONFIG_TPM_NV_SIZE: usize = 4096;
+const CONFIG_TPM_NV_SIZE: usize = 1024;
 const DEFAULT_API_BASE: &str = "https://api.edgerun.tech";
 const DEFAULT_RPC_URL: &str = "local://edgerun";
 const DEFAULT_WORKER_BIN: &str = "/usr/bin/edgerun-worker";
@@ -68,6 +68,23 @@ const DEFAULT_TUNNEL_CONTROL_BASE: &str = "https://relay.edgerun.tech";
 const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
 const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
 const LOCAL_DOCKER_SUMMARY_PATH: &str = "/v1/local/docker/summary";
+const LOCAL_DOCKER_LOGS_PATH: &str = "/v1/local/docker/logs";
+const LOCAL_FS_ROOT_ENV: &str = "EDGERUN_LOCAL_FS_ROOT";
+const LOCAL_FS_META_PATH: &str = "/v1/local/fs/meta";
+const LOCAL_FS_LIST_PATH: &str = "/v1/local/fs/list";
+const LOCAL_FS_READ_PATH: &str = "/v1/local/fs/read";
+const LOCAL_FS_WRITE_PATH: &str = "/v1/local/fs/write";
+const LOCAL_FS_MKDIR_PATH: &str = "/v1/local/fs/mkdir";
+const LOCAL_FS_DELETE_PATH: &str = "/v1/local/fs/delete";
+const LOCAL_FS_MOVE_PATH: &str = "/v1/local/fs/move";
+const LOCAL_FS_COPY_PATH: &str = "/v1/local/fs/copy";
+const LOCAL_FS_ARCHIVE_PATH: &str = "/v1/local/fs/archive";
+const LOCAL_FS_EXTRACT_PATH: &str = "/v1/local/fs/extract";
+const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
+const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
+const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
+const LOCAL_ASSISTANT_PATH: &str = "/v1/local/assistant";
+const CODEX_CONFIG_PATH: &str = "/workspace/edgerun/.codex/config.toml";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -244,6 +261,7 @@ struct BootPolicy {
 struct LocalBridgeState {
     node_id: String,
     device_pubkey_b64url: String,
+    local_fs_root: PathBuf,
     started_unix_ms: u64,
     tx: broadcast::Sender<LocalEventEnvelopeV1>,
 }
@@ -276,6 +294,181 @@ struct LocalDockerContainer {
     status: String,
     state: String,
     ports: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalDockerLogsResponse {
+    ok: bool,
+    error: String,
+    generated_unix_ms: u64,
+    lines: Vec<LocalDockerLogLine>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalDockerLogLine {
+    container_id: String,
+    container_name: String,
+    timestamp: String,
+    stream: String,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalDockerLogsQuery {
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    tail_per_container: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalFsQuery {
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalFsWriteRequest {
+    path: String,
+    content: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalFsPathRequest {
+    path: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalFsMoveRequest {
+    from: String,
+    to: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalFsArchiveRequest {
+    path: String,
+    #[serde(default)]
+    format: Option<String>,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsResponse<T>
+where
+    T: Serialize,
+{
+    ok: bool,
+    error: String,
+    #[serde(flatten)]
+    data: T,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsMetaData {
+    #[serde(rename = "localFsRoot")]
+    local_fs_root: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsListData {
+    entries: Vec<LocalFsEntry>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsReadData {
+    content: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsArchiveData {
+    archive_path: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalFsEmptyData {}
+
+#[derive(Debug, Serialize)]
+struct LocalFsEntry {
+    id: String,
+    provider: String,
+    path: String,
+    name: String,
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalMcpStartRequest {
+    integration_id: String,
+    token: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalMcpStopRequest {
+    integration_id: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalMcpStatusQuery {
+    integration_id: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalMcpStatusData {
+    integration_id: String,
+    container_name: String,
+    running: bool,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalAssistantRequest {
+    message: String,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default, alias = "sessionId")]
+    session_id: Option<String>,
+    #[serde(default, alias = "threadId")]
+    thread_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalAssistantResponse {
+    ok: bool,
+    error: String,
+    message: String,
+    #[serde(default)]
+    actions: Vec<String>,
+    #[serde(default, rename = "statusEvents")]
+    status_events: Vec<LocalAssistantStatusEvent>,
+    #[serde(default, rename = "sessionId")]
+    session_id: String,
+    #[serde(default, rename = "threadId")]
+    thread_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalAssistantStatusEvent {
+    #[serde(rename = "type")]
+    event_type: String,
+    label: String,
+    detail: String,
 }
 
 #[tokio::main]
@@ -747,6 +940,281 @@ fn local_bridge_envelope(topic: &str, source: &str) -> LocalEventEnvelopeV1 {
     }
 }
 
+fn with_local_cors_headers(mut response: Response) -> Response {
+    let headers = response.headers_mut();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    headers.insert(
+        ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("content-type"),
+    );
+    headers.insert(
+        ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, POST, OPTIONS"),
+    );
+    response
+}
+
+fn local_json_ok<T>(data: T) -> Response
+where
+    T: Serialize,
+{
+    let payload = sonic_rs::to_string(&LocalFsResponse {
+        ok: true,
+        error: String::new(),
+        data,
+    })
+    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
+    with_local_cors_headers((
+        AxumStatusCode::OK,
+        [(
+            AXUM_CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        )],
+        payload,
+    )
+        .into_response())
+}
+
+fn local_json_error(status: AxumStatusCode, message: &str) -> Response {
+    let payload = sonic_rs::to_string(&LocalFsResponse {
+        ok: false,
+        error: message.to_string(),
+        data: LocalFsEmptyData {},
+    })
+    .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
+    with_local_cors_headers((
+        status,
+        [(
+            AXUM_CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        )],
+        payload,
+    )
+        .into_response())
+}
+
+fn normalized_relative_path(raw: &str) -> Result<PathBuf> {
+    let mut rel = PathBuf::new();
+    for component in Path::new(raw).components() {
+        match component {
+            Component::Prefix(_) | Component::ParentDir => {
+                return Err(anyhow!("path traversal is not allowed"));
+            }
+            Component::CurDir => {}
+            Component::RootDir => {}
+            Component::Normal(part) => rel.push(part),
+        }
+    }
+    Ok(rel)
+}
+
+fn local_fs_display_path(raw: &str) -> Result<String> {
+    let rel = normalized_relative_path(raw)?;
+    if rel.as_os_str().is_empty() {
+        return Ok("/".to_string());
+    }
+    Ok(format!("/{}", rel.to_string_lossy()))
+}
+
+fn local_fs_abs_path(root: &Path, raw: &str) -> Result<PathBuf> {
+    let rel = normalized_relative_path(raw)?;
+    let candidate = root.join(rel);
+    Ok(candidate)
+}
+
+fn assert_path_under_root(root: &Path, candidate: &Path) -> Result<()> {
+    if candidate.starts_with(root) {
+        return Ok(());
+    }
+    Err(anyhow!("path escapes local filesystem root"))
+}
+
+fn enforce_local_node(state: &LocalBridgeState, node_id: Option<&str>) -> Result<()> {
+    let requested = node_id.unwrap_or("").trim();
+    if requested.is_empty() || requested == state.node_id {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "selected node is not local; local bridge filesystem is only available for node {}",
+        state.node_id
+    ))
+}
+
+fn local_fs_entry(root: &Path, path: &Path) -> Result<LocalFsEntry> {
+    let metadata = fs::metadata(path)
+        .with_context(|| format!("failed to stat path {}", path.display()))?;
+    let rel = path
+        .strip_prefix(root)
+        .with_context(|| format!("path {} is outside root {}", path.display(), root.display()))?;
+    let display = if rel.as_os_str().is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", rel.to_string_lossy())
+    };
+    let name = if rel.as_os_str().is_empty() {
+        "/".to_string()
+    } else {
+        path.file_name()
+            .map(|v| v.to_string_lossy().to_string())
+            .unwrap_or_else(|| rel.to_string_lossy().to_string())
+    };
+    let kind = if metadata.is_dir() { "dir" } else { "file" }.to_string();
+    Ok(LocalFsEntry {
+        id: format!("local:{display}"),
+        provider: "local".to_string(),
+        path: display,
+        name,
+        kind,
+        size: if metadata.is_file() {
+            Some(metadata.len())
+        } else {
+            None
+        },
+    })
+}
+
+fn local_fs_copy_recursive(from: &Path, to: &Path) -> Result<()> {
+    let metadata = fs::metadata(from)
+        .with_context(|| format!("failed to stat source {}", from.display()))?;
+    if metadata.is_dir() {
+        fs::create_dir_all(to)
+            .with_context(|| format!("failed to create destination dir {}", to.display()))?;
+        for entry in fs::read_dir(from)
+            .with_context(|| format!("failed to read dir {}", from.display()))?
+        {
+            let entry = entry.with_context(|| format!("failed to read dir entry {}", from.display()))?;
+            let source_child = entry.path();
+            let target_child = to.join(entry.file_name());
+            local_fs_copy_recursive(&source_child, &target_child)?;
+        }
+    } else {
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create destination parent {}", parent.display()))?;
+        }
+        fs::copy(from, to).with_context(|| {
+            format!(
+                "failed to copy source {} to destination {}",
+                from.display(),
+                to.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn local_fs_archive_path(path: &Path, format: Option<&str>) -> PathBuf {
+    let selected = format.unwrap_or("tar.gz").trim();
+    let suffix = if selected.eq_ignore_ascii_case("tar.gz") || selected.eq_ignore_ascii_case("tgz") {
+        "tar.gz"
+    } else {
+        "tar.gz"
+    };
+    let name = path
+        .file_name()
+        .map(|v| v.to_string_lossy().to_string())
+        .unwrap_or_else(|| "archive".to_string());
+    path.with_file_name(format!("{name}.{suffix}"))
+}
+
+fn mcp_container_name(integration_id: &str) -> String {
+    let normalized = integration_id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    format!("edgerun-mcp-{}", normalized.trim_matches('-'))
+}
+
+fn mcp_image_for(integration_id: &str) -> Option<String> {
+    let key = integration_id.trim().to_ascii_uppercase().replace('-', "_");
+    let specific_env = format!("EDGERUN_MCP_{}_IMAGE", key);
+    if let Ok(value) = std::env::var(&specific_env) {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    match integration_id.trim() {
+        "github" => Some("ghcr.io/modelcontextprotocol/server-github:latest".to_string()),
+        _ => None,
+    }
+}
+
+fn mcp_token_env_for(integration_id: &str) -> &'static str {
+    match integration_id.trim() {
+        "github" => "GITHUB_PERSONAL_ACCESS_TOKEN",
+        _ => "MCP_API_TOKEN",
+    }
+}
+
+fn is_mcp_container_running(integration_id: &str) -> bool {
+    let name = mcp_container_name(integration_id);
+    let output = Command::new("docker")
+        .args(["inspect", "-f", "{{.State.Running}}", &name])
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .eq_ignore_ascii_case("true")
+}
+
+fn sync_codex_mcp_config() -> Result<()> {
+    let config_path = Path::new(CODEX_CONFIG_PATH);
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create codex config directory {}", parent.display()))?;
+    }
+    let existing = fs::read_to_string(config_path).unwrap_or_default();
+    let begin = "# BEGIN EDGERUN MCP";
+    let end = "# END EDGERUN MCP";
+    let mut preserved = existing.clone();
+    if let Some(start) = existing.find(begin) {
+        if let Some(rel_end) = existing[start..].find(end) {
+            let end_idx = start + rel_end + end.len();
+            let mut next = String::new();
+            next.push_str(&existing[..start]);
+            let tail = &existing[end_idx..];
+            if !tail.starts_with('\n') {
+                next.push('\n');
+            }
+            next.push_str(tail.trim_start_matches('\n'));
+            preserved = next;
+        }
+    }
+    let github_running = is_mcp_container_running("github");
+    let mut managed_block = String::new();
+    managed_block.push_str(begin);
+    managed_block.push('\n');
+    if github_running {
+        managed_block.push_str("[mcp_servers.github]\n");
+        managed_block.push_str("command = \"docker\"\n");
+        managed_block.push_str("args = [\"exec\", \"-i\", \"edgerun-mcp-github\", \"node\", \"/app/dist/index.js\"]\n");
+    }
+    managed_block.push_str(end);
+    managed_block.push('\n');
+
+    let mut next = preserved.trim_end().to_string();
+    if !next.is_empty() {
+        next.push_str("\n\n");
+    }
+    next.push_str(&managed_block);
+    fs::write(config_path, next)
+        .with_context(|| format!("failed to write codex config {}", config_path.display()))?;
+    Ok(())
+}
+
 fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> Result<()> {
     let addr: SocketAddr = local_bridge_listen
         .parse()
@@ -756,9 +1224,19 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
             "local bridge must bind to loopback only, got {local_bridge_listen}"
         ));
     }
+    let local_fs_root = std::env::var(LOCAL_FS_ROOT_ENV).unwrap_or_else(|_| "/".to_string());
+    let local_fs_root = fs::canonicalize(Path::new(local_fs_root.trim()))
+        .with_context(|| format!("failed to resolve {}", LOCAL_FS_ROOT_ENV))?;
+    if !local_fs_root.is_dir() {
+        return Err(anyhow!(
+            "{} must resolve to an existing directory",
+            LOCAL_FS_ROOT_ENV
+        ));
+    }
     let state = LocalBridgeState {
         node_id: derive_default_node_id(device_pubkey_b64url),
         device_pubkey_b64url: device_pubkey_b64url.to_string(),
+        local_fs_root,
         started_unix_ms: now_unix_ms(),
         tx: broadcast::channel(512).0,
     };
@@ -768,6 +1246,36 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
         .route(LOCAL_DOCKER_SUMMARY_PATH, get(handle_local_docker_summary))
         .route(LOCAL_DOCKER_SUMMARY_PATH, options(handle_local_options))
+        .route(LOCAL_DOCKER_LOGS_PATH, get(handle_local_docker_logs))
+        .route(LOCAL_DOCKER_LOGS_PATH, options(handle_local_options))
+        .route(LOCAL_FS_META_PATH, get(handle_local_fs_meta))
+        .route(LOCAL_FS_META_PATH, options(handle_local_options))
+        .route(LOCAL_FS_LIST_PATH, get(handle_local_fs_list))
+        .route(LOCAL_FS_LIST_PATH, options(handle_local_options))
+        .route(LOCAL_FS_READ_PATH, get(handle_local_fs_read))
+        .route(LOCAL_FS_READ_PATH, options(handle_local_options))
+        .route(LOCAL_FS_WRITE_PATH, post(handle_local_fs_write))
+        .route(LOCAL_FS_WRITE_PATH, options(handle_local_options))
+        .route(LOCAL_FS_MKDIR_PATH, post(handle_local_fs_mkdir))
+        .route(LOCAL_FS_MKDIR_PATH, options(handle_local_options))
+        .route(LOCAL_FS_DELETE_PATH, post(handle_local_fs_delete))
+        .route(LOCAL_FS_DELETE_PATH, options(handle_local_options))
+        .route(LOCAL_FS_MOVE_PATH, post(handle_local_fs_move))
+        .route(LOCAL_FS_MOVE_PATH, options(handle_local_options))
+        .route(LOCAL_FS_COPY_PATH, post(handle_local_fs_copy))
+        .route(LOCAL_FS_COPY_PATH, options(handle_local_options))
+        .route(LOCAL_FS_ARCHIVE_PATH, post(handle_local_fs_archive))
+        .route(LOCAL_FS_ARCHIVE_PATH, options(handle_local_options))
+        .route(LOCAL_FS_EXTRACT_PATH, post(handle_local_fs_extract))
+        .route(LOCAL_FS_EXTRACT_PATH, options(handle_local_options))
+        .route(LOCAL_MCP_START_PATH, post(handle_local_mcp_start))
+        .route(LOCAL_MCP_START_PATH, options(handle_local_options))
+        .route(LOCAL_MCP_STOP_PATH, post(handle_local_mcp_stop))
+        .route(LOCAL_MCP_STOP_PATH, options(handle_local_options))
+        .route(LOCAL_MCP_STATUS_PATH, get(handle_local_mcp_status))
+        .route(LOCAL_MCP_STATUS_PATH, options(handle_local_options))
+        .route(LOCAL_ASSISTANT_PATH, post(handle_local_assistant))
+        .route(LOCAL_ASSISTANT_PATH, options(handle_local_options))
         .with_state(Arc::new(state));
     tokio::spawn(async move {
         let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -824,7 +1332,10 @@ async fn handle_local_options() -> Response {
                 ACCESS_CONTROL_ALLOW_HEADERS,
                 HeaderValue::from_static("content-type"),
             ),
-            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+            (
+                ACCESS_CONTROL_ALLOW_METHODS,
+                HeaderValue::from_static("GET, POST, OPTIONS"),
+            ),
         ],
     )
         .into_response()
@@ -869,6 +1380,674 @@ async fn handle_local_docker_summary() -> Response {
         payload,
     )
         .into_response()
+}
+
+async fn handle_local_docker_logs(Query(query): Query<LocalDockerLogsQuery>) -> Response {
+    let limit = query.limit.unwrap_or(120).clamp(1, 500);
+    let tail_per_container = query.tail_per_container.unwrap_or(25).clamp(1, 200);
+    let logs = match collect_local_docker_logs(tail_per_container, limit) {
+        Ok(logs) => logs,
+        Err(err) => LocalDockerLogsResponse {
+            ok: false,
+            error: err.to_string(),
+            generated_unix_ms: now_unix_ms(),
+            lines: Vec::new(),
+        },
+    };
+    let payload = sonic_rs::to_string(&logs)
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
+    (
+        AxumStatusCode::OK,
+        [
+            (
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            ),
+            (CACHE_CONTROL, HeaderValue::from_static("no-store")),
+            (ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*")),
+            (
+                ACCESS_CONTROL_ALLOW_HEADERS,
+                HeaderValue::from_static("content-type"),
+            ),
+            (ACCESS_CONTROL_ALLOW_METHODS, HeaderValue::from_static("GET, OPTIONS")),
+        ],
+        payload,
+    )
+        .into_response()
+}
+
+async fn handle_local_fs_meta(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalFsQuery>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, query.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_list(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalFsQuery>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, query.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let requested = query.path.unwrap_or_else(|| "/".to_string());
+    let display = match local_fs_display_path(&requested) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let metadata = match fs::metadata(&absolute) {
+        Ok(meta) => meta,
+        Err(err) => return local_json_error(AxumStatusCode::NOT_FOUND, &err.to_string()),
+    };
+    if !metadata.is_dir() {
+        return local_json_error(
+            AxumStatusCode::BAD_REQUEST,
+            "list path must resolve to a directory",
+        );
+    }
+    let mut entries = Vec::new();
+    let iterator = match fs::read_dir(&absolute) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    for item in iterator {
+        let item = match item {
+            Ok(value) => value,
+            Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        };
+        let path = item.path();
+        match local_fs_entry(&state.local_fs_root, &path) {
+            Ok(entry) => entries.push(entry),
+            Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+        }
+    }
+    entries.sort_by(|a, b| {
+        let a_kind = a.kind.as_str();
+        let b_kind = b.kind.as_str();
+        if a_kind != b_kind {
+            return if a_kind == "dir" {
+                std::cmp::Ordering::Less
+            } else {
+                std::cmp::Ordering::Greater
+            };
+        }
+        a.name.to_lowercase().cmp(&b.name.to_lowercase())
+    });
+    local_json_ok(LocalFsListData { entries })
+}
+
+async fn handle_local_fs_read(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalFsQuery>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, query.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let requested = query.path.unwrap_or_else(|| "/".to_string());
+    let display = match local_fs_display_path(&requested) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let bytes = match fs::read(&absolute) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::NOT_FOUND, &err.to_string()),
+    };
+    let content = match String::from_utf8(bytes) {
+        Ok(value) => value,
+        Err(_) => return local_json_error(AxumStatusCode::BAD_REQUEST, "file content is not utf-8"),
+    };
+    local_json_ok(LocalFsReadData { content })
+}
+
+async fn handle_local_fs_write(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsWriteRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let display = match local_fs_display_path(&body.path) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Some(parent) = absolute.parent() {
+        if let Err(err) = fs::create_dir_all(parent) {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+        }
+    }
+    if let Err(err) = fs::write(&absolute, body.content.as_bytes()) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_mkdir(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsPathRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let display = match local_fs_display_path(&body.path) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Err(err) = fs::create_dir_all(&absolute) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_delete(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsPathRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let display = match local_fs_display_path(&body.path) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let metadata = match fs::metadata(&absolute) {
+        Ok(meta) => meta,
+        Err(err) => return local_json_error(AxumStatusCode::NOT_FOUND, &err.to_string()),
+    };
+    let result = if metadata.is_dir() {
+        fs::remove_dir_all(&absolute)
+    } else {
+        fs::remove_file(&absolute)
+    };
+    if let Err(err) = result {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_move(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsMoveRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let from_display = match local_fs_display_path(&body.from) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let to_display = match local_fs_display_path(&body.to) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let from_absolute = match local_fs_abs_path(&state.local_fs_root, &from_display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let to_absolute = match local_fs_abs_path(&state.local_fs_root, &to_display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &from_absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &to_absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Some(parent) = to_absolute.parent() {
+        if let Err(err) = fs::create_dir_all(parent) {
+            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+        }
+    }
+    if let Err(err) = fs::rename(&from_absolute, &to_absolute) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_copy(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsMoveRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let from_display = match local_fs_display_path(&body.from) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let to_display = match local_fs_display_path(&body.to) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let from_absolute = match local_fs_abs_path(&state.local_fs_root, &from_display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let to_absolute = match local_fs_abs_path(&state.local_fs_root, &to_display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &from_absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &to_absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    if let Err(err) = local_fs_copy_recursive(&from_absolute, &to_absolute) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_fs_archive(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsArchiveRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let display = match local_fs_display_path(&body.path) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let absolute = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &absolute) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let archive = local_fs_archive_path(&absolute, body.format.as_deref());
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &archive) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let parent = match absolute.parent() {
+        Some(path) => path,
+        None => return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path"),
+    };
+    let source_name = match absolute.file_name() {
+        Some(name) => name.to_string_lossy().to_string(),
+        None => return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive source path"),
+    };
+    let status = Command::new("tar")
+        .arg("-czf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(parent)
+        .arg(source_name)
+        .status();
+    match status {
+        Ok(result) if result.success() => {}
+        Ok(result) => {
+            return local_json_error(
+                AxumStatusCode::INTERNAL_SERVER_ERROR,
+                &format!("tar failed with status {result}"),
+            )
+        }
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    }
+    let archive_display = match archive.strip_prefix(&state.local_fs_root) {
+        Ok(rel) if rel.as_os_str().is_empty() => "/".to_string(),
+        Ok(rel) => format!("/{}", rel.to_string_lossy()),
+        Err(_) => archive.to_string_lossy().to_string(),
+    };
+    local_json_ok(LocalFsArchiveData {
+        archive_path: archive_display,
+    })
+}
+
+async fn handle_local_fs_extract(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalFsPathRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let display = match local_fs_display_path(&body.path) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let archive = match local_fs_abs_path(&state.local_fs_root, &display) {
+        Ok(path) => path,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = assert_path_under_root(&state.local_fs_root, &archive) {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string());
+    }
+    let parent = match archive.parent() {
+        Some(path) => path,
+        None => return local_json_error(AxumStatusCode::BAD_REQUEST, "invalid archive path"),
+    };
+    let status = Command::new("tar")
+        .arg("-xf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(parent)
+        .status();
+    match status {
+        Ok(result) if result.success() => {}
+        Ok(result) => {
+            return local_json_error(
+                AxumStatusCode::INTERNAL_SERVER_ERROR,
+                &format!("extract failed with status {result}"),
+            )
+        }
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    }
+    local_json_ok(LocalFsMetaData {
+        local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+async fn handle_local_mcp_start(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalMcpStartRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let integration_id = body.integration_id.trim().to_ascii_lowercase();
+    if integration_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration_id is required");
+    }
+    let token = body.token.trim().to_string();
+    if token.len() < 8 {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration token is missing or invalid");
+    }
+    let image = match mcp_image_for(&integration_id) {
+        Some(value) => value,
+        None => {
+            return local_json_error(
+                AxumStatusCode::BAD_REQUEST,
+                &format!("no MCP image mapping for integration {}", integration_id),
+            )
+        }
+    };
+    let container_name = mcp_container_name(&integration_id);
+    let _ = Command::new("docker")
+        .args(["rm", "-f", &container_name])
+        .output();
+    let token_env = mcp_token_env_for(&integration_id);
+    let output = match Command::new("docker")
+        .args([
+            "run",
+            "-d",
+            "--name",
+            &container_name,
+            "--restart",
+            "unless-stopped",
+            "-e",
+            &format!("{}={}", token_env, token),
+            &image,
+        ])
+        .output()
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    if !output.status.success() {
+        return local_json_error(
+            AxumStatusCode::INTERNAL_SERVER_ERROR,
+            &format!(
+                "failed to start MCP container {}: {}",
+                container_name,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        );
+    }
+    if let Err(err) = sync_codex_mcp_config() {
+        return local_json_error(
+            AxumStatusCode::INTERNAL_SERVER_ERROR,
+            &format!("MCP started but codex config sync failed: {err}"),
+        );
+    }
+    local_json_ok(LocalMcpStatusData {
+        integration_id,
+        container_name,
+        running: true,
+        status: "running".to_string(),
+    })
+}
+
+async fn handle_local_mcp_stop(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalMcpStopRequest>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, body.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let integration_id = body.integration_id.trim().to_ascii_lowercase();
+    if integration_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration_id is required");
+    }
+    let container_name = mcp_container_name(&integration_id);
+    let output = match Command::new("docker")
+        .args(["rm", "-f", &container_name])
+        .output()
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.to_ascii_lowercase().contains("no such container") {
+            return local_json_error(
+                AxumStatusCode::INTERNAL_SERVER_ERROR,
+                &format!("failed to stop MCP container {}: {}", container_name, stderr.trim()),
+            );
+        }
+    }
+    if let Err(err) = sync_codex_mcp_config() {
+        return local_json_error(
+            AxumStatusCode::INTERNAL_SERVER_ERROR,
+            &format!("MCP stopped but codex config sync failed: {err}"),
+        );
+    }
+    local_json_ok(LocalMcpStatusData {
+        integration_id,
+        container_name,
+        running: false,
+        status: "stopped".to_string(),
+    })
+}
+
+async fn handle_local_mcp_status(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalMcpStatusQuery>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, query.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let integration_id = query.integration_id.trim().to_ascii_lowercase();
+    if integration_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration_id is required");
+    }
+    let container_name = mcp_container_name(&integration_id);
+    let output = match Command::new("docker")
+        .args([
+            "inspect",
+            "-f",
+            "{{.State.Running}}\t{{.State.Status}}",
+            &container_name,
+        ])
+        .output()
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    if !output.status.success() {
+        return local_json_ok(LocalMcpStatusData {
+            integration_id,
+            container_name,
+            running: false,
+            status: "not_found".to_string(),
+        });
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let cols: Vec<&str> = stdout.split('\t').collect();
+    let running = cols
+        .first()
+        .map(|value| value.trim().eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    let status = cols
+        .get(1)
+        .map(|value| value.trim().to_string())
+        .unwrap_or_else(|| {
+            if running {
+                "running".to_string()
+            } else {
+                "stopped".to_string()
+            }
+        });
+    local_json_ok(LocalMcpStatusData {
+        integration_id,
+        container_name,
+        running,
+        status,
+    })
+}
+
+async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Response {
+    let prompt = body.message.trim().to_string();
+    if prompt.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "assistant message is required");
+    }
+    let provider = body
+        .provider
+        .as_deref()
+        .unwrap_or("codex")
+        .trim()
+        .to_ascii_lowercase();
+    if provider != "codex" && provider != "qwen" {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "unsupported provider");
+    }
+
+    let output_file = format!("/tmp/edgerun-codex-last-{}.txt", now_unix_ms());
+    let exec_output = Command::new("timeout")
+        .args([
+            "30s",
+            "docker",
+            "exec",
+            "edgerun-codex-cli",
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "-C",
+            "/workspace/edgerun",
+            "--output-last-message",
+            &output_file,
+            &prompt,
+        ])
+        .output();
+
+    let exec_output = match exec_output {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    if !exec_output.status.success() {
+        return local_json_error(
+            AxumStatusCode::INTERNAL_SERVER_ERROR,
+            &format!(
+                "codex exec failed: {}",
+                String::from_utf8_lossy(&exec_output.stderr).trim()
+            ),
+        );
+    }
+
+    let read_output = Command::new("docker")
+        .args(["exec", "edgerun-codex-cli", "cat", &output_file])
+        .output();
+    let read_output = match read_output {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string()),
+    };
+    if !read_output.status.success() {
+        return local_json_error(
+            AxumStatusCode::INTERNAL_SERVER_ERROR,
+            &format!(
+                "failed to read codex output: {}",
+                String::from_utf8_lossy(&read_output.stderr).trim()
+            ),
+        );
+    }
+
+    let message = String::from_utf8_lossy(&read_output.stdout).trim().to_string();
+    let response = LocalAssistantResponse {
+        ok: true,
+        error: String::new(),
+        message: if message.is_empty() {
+            "Codex returned no output.".to_string()
+        } else {
+            message
+        },
+        actions: Vec::new(),
+        status_events: vec![LocalAssistantStatusEvent {
+            event_type: "phase".to_string(),
+            label: "done".to_string(),
+            detail: "Response ready.".to_string(),
+        }],
+        session_id: body.session_id.unwrap_or_default(),
+        thread_id: body.thread_id.unwrap_or_default(),
+    };
+    with_local_cors_headers((
+        AxumStatusCode::OK,
+        [(
+            AXUM_CONTENT_TYPE,
+            HeaderValue::from_static("application/json; charset=utf-8"),
+        )],
+        sonic_rs::to_string(&response).unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string()),
+    )
+        .into_response())
 }
 
 async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {
@@ -1008,6 +2187,87 @@ fn collect_local_docker_summary() -> Result<LocalDockerSummaryResponse> {
     })
 }
 
+fn collect_local_docker_logs(
+    tail_per_container: usize,
+    limit: usize,
+) -> Result<LocalDockerLogsResponse> {
+    let rows = run_command_capture("docker", &["ps", "--format", "{{.ID}}\t{{.Names}}"])?;
+    let mut lines = Vec::new();
+    for row in rows.lines() {
+        let cols: Vec<&str> = row.split('\t').collect();
+        if cols.is_empty() {
+            continue;
+        }
+        let container_id = cols.first().copied().unwrap_or_default().trim().to_string();
+        if container_id.is_empty() {
+            continue;
+        }
+        let container_name = cols.get(1).copied().unwrap_or_default().trim().to_string();
+        let logs_output = Command::new("docker")
+            .arg("logs")
+            .arg("--timestamps")
+            .arg("--tail")
+            .arg(tail_per_container.to_string())
+            .arg(&container_id)
+            .output()
+            .with_context(|| format!("failed to collect logs for container {container_id}"))?;
+        for entry in String::from_utf8_lossy(&logs_output.stdout).lines() {
+            if let Some(parsed) = parse_docker_log_line(&container_id, &container_name, entry, "stdout") {
+                lines.push(parsed);
+            }
+        }
+        for entry in String::from_utf8_lossy(&logs_output.stderr).lines() {
+            if let Some(parsed) = parse_docker_log_line(&container_id, &container_name, entry, "stderr") {
+                lines.push(parsed);
+            }
+        }
+    }
+    lines.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    if lines.len() > limit {
+        lines.truncate(limit);
+    }
+    Ok(LocalDockerLogsResponse {
+        ok: true,
+        error: String::new(),
+        generated_unix_ms: now_unix_ms(),
+        lines,
+    })
+}
+
+fn parse_docker_log_line(
+    container_id: &str,
+    container_name: &str,
+    raw_line: &str,
+    stream: &str,
+) -> Option<LocalDockerLogLine> {
+    let line = raw_line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let mut parts = line.splitn(2, ' ');
+    let first = parts.next().unwrap_or_default().trim();
+    let rest = parts.next().unwrap_or_default().trim();
+    let (timestamp, message) = if first.contains('T') && first.contains(':') {
+        (
+            first.to_string(),
+            if rest.is_empty() {
+                "<empty>".to_string()
+            } else {
+                rest.to_string()
+            },
+        )
+    } else {
+        (now_unix_ms().to_string(), line.to_string())
+    };
+    Some(LocalDockerLogLine {
+        container_id: container_id.to_string(),
+        container_name: container_name.to_string(),
+        timestamp,
+        stream: stream.to_string(),
+        message,
+    })
+}
+
 fn run_command_capture(bin: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(bin)
         .args(args)
@@ -1059,8 +2319,14 @@ async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
     }
 
     let client = Client::new();
-    bootstrap_api_state(&client, &signer, &mut cfg, boot_policy.as_ref()).await?;
-    ensure_runtime_image_ready(&client, &mut cfg, &signer).await?;
+    let cloud_enabled = owner_context_available(&cfg, boot_policy.as_ref());
+    if cloud_enabled {
+        bootstrap_api_state(&client, &signer, &mut cfg, boot_policy.as_ref()).await?;
+        ensure_runtime_image_ready(&client, &mut cfg, &signer).await?;
+    } else {
+        println!("mode=local-unbonded");
+        println!("status=cloud-bootstrap-skipped");
+    }
     ensure_worker_running(&cfg, &signer.public_key_b64url)?;
     save_config(&cfg)?;
     start_local_bridge(local_bridge_listen, &signer.public_key_b64url)?;
@@ -1074,12 +2340,13 @@ async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
     println!("worker_mem_bytes={}", cfg.worker_mem_bytes);
     println!("local_bridge_listen={local_bridge_listen}");
     println!("local_bridge_eventbus_path={LOCAL_BRIDGE_EVENTBUS_PATH}");
+    println!("cloud_enabled={cloud_enabled}");
     if let Some(image_ref) = cfg.runtime_image_ref.as_deref() {
         println!("runtime_image_ref={image_ref}");
     }
 
     loop {
-        if !cfg.runtime_image_pulled {
+        if cloud_enabled && !cfg.runtime_image_pulled {
             match ensure_runtime_image_ready(&client, &mut cfg, &signer).await {
                 Ok(()) => {
                     let _ = save_config(&cfg);
@@ -1094,8 +2361,10 @@ async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
         if let Err(err) = ensure_worker_running(&cfg, &signer.public_key_b64url) {
             eprintln!("worker_error={err}");
         }
-        if let Err(err) = send_heartbeat(&client, &cfg, &signer.public_key_b64url).await {
-            eprintln!("heartbeat_error={err}");
+        if cloud_enabled {
+            if let Err(err) = send_heartbeat(&client, &cfg, &signer.public_key_b64url).await {
+                eprintln!("heartbeat_error={err}");
+            }
         }
         sleep(Duration::from_secs(cfg.heartbeat_secs)).await;
     }
@@ -1223,6 +2492,10 @@ fn cmdline_arg(cmdline: &str, key: &str) -> Option<String> {
         part.strip_prefix(&format!("{key}="))
             .map(ToString::to_string)
     })
+}
+
+fn owner_context_available(cfg: &ManagerConfig, policy: Option<&BootPolicy>) -> bool {
+    cfg.owner_pubkey.is_some() || policy.and_then(|p| p.owner_pubkey.as_ref()).is_some()
 }
 
 async fn bootstrap_api_state(
