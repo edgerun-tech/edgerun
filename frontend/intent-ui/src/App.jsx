@@ -45,7 +45,7 @@ function App() {
   const sessionModeLabel = createMemo(() => (
     profileRuntime().mode === "profile" && profileRuntime().profileLoaded
       ? `profile (${profileRuntime().backend})`
-      : "ephemeral"
+      : "profile required"
   ));
   const shortProfileId = createMemo(() => {
     const id = String(profileRuntime().profileId || "").trim();
@@ -396,7 +396,7 @@ function App() {
               <p class="mt-1 text-xs text-neutral-200" data-testid="profile-runtime-mode-menu">{sessionModeLabel()}</p>
               <div class="mt-2 space-y-1 rounded-md border border-neutral-800 bg-neutral-900/60 p-2 text-[11px] text-neutral-400">
                 <p>Profile: <span class="text-neutral-200">{shortProfileId()}</span></p>
-                <p>Backend: <span class="text-neutral-200">{profileRuntime().backend || "session"}</span></p>
+                <p>Backend: <span class="text-neutral-200">{profileRuntime().backend || "not linked"}</span></p>
                 <p data-testid="account-domain-value">Domain: <span class="text-neutral-200">{registeredDomain() || "Not registered"}</span></p>
               </div>
               <div class="mt-3 grid grid-cols-1 gap-1.5">

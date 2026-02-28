@@ -89,7 +89,7 @@ function LauncherGuidePanel(props) {
       {
         id: "task-onboarding",
         title: "Onboarding access",
-        detail: onboardingDone ? "Onboarding can be reopened from this launcher or top-right button." : "Finish onboarding to choose profile or ephemeral session.",
+        detail: onboardingDone ? "Onboarding can be reopened from this launcher or top-right button." : "Finish onboarding to create or load your encrypted profile.",
         done: onboardingDone,
         actionLabel: "Open onboarding",
         action: () => openProfileBootstrap()

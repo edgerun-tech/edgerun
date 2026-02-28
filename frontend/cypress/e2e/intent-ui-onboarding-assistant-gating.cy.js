@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 describe('intent ui onboarding and assistant integration gating', () => {
+
+  const seedProfileSession = (win) => {
+    win.sessionStorage.setItem('intent-ui-profile-mode-v1', 'profile')
+    win.sessionStorage.setItem('intent-ui-profile-id-v1', 'profile_onboarding_gate')
+    win.sessionStorage.setItem('intent-ui-profile-backend-v1', 'browser_local')
+    win.sessionStorage.setItem(
+      'intent-ui-profile-scopes-v1',
+      JSON.stringify(['openid', 'profile', 'edgerun:profile.read', 'edgerun:profile.write'])
+    )
+  }
+
   const clearRuntimeState = (win) => {
     win.localStorage.removeItem('intent-ui-integrations-v1')
     win.localStorage.removeItem('qwen_token')
@@ -20,12 +31,11 @@ describe('intent ui onboarding and assistant integration gating', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         clearRuntimeState(win)
+        seedProfileSession(win)
       }
     })
 
-    cy.get('[data-testid="profile-bootstrap-gate"]').should('be.visible')
-    cy.get('[data-testid="profile-bootstrap-ephemeral"]').click({ force: true })
-    cy.get('[data-testid="profile-runtime-mode"]').should('contain.text', 'ephemeral')
+    cy.get('[data-testid="profile-bootstrap-gate"]').should('not.exist')
 
     cy.get('[data-testid="account-circle-trigger"]').click({ force: true })
     cy.get('[data-testid="open-profile-bootstrap-gate"]').click({ force: true })

@@ -3,10 +3,13 @@ import { Motion } from "solid-motionone";
 import { windows, initializeDefaultWindows } from "../../stores/windows";
 import { shiftWindowLayer } from "../../stores/windows";
 import { getActiveWorkspaceId } from "../../stores/workspaces";
+import { clearProfileRuntimeSession, profileRuntime } from "../../stores/profile-runtime";
 import Window from "./Window";
 import { currentFile, updateCurrentFileContent } from "../../stores/fs";
 import { EditorSkeleton, FileManagerSkeleton, WindowSkeleton, LoadingDots } from "../ui/Skeleton";
 import { getIntegrationById } from "../../lib/config/integrations.config";
+import { requirementForWindow } from "../../lib/profile-capability-policy";
+import { scopeRequirementSatisfied } from "../../lib/oidc-scopes";
 const Editor = lazy(() => import("./Editor"));
 const Terminal = lazy(() => import("../panels/Terminal").then((m) => ({ default: m.default })));
 const FileManager = lazy(() => import("./FileManager"));
@@ -24,6 +27,31 @@ const CloudPanel = lazy(() => import("../panels/CloudPanel"));
 const CredentialsPanel = lazy(() => import("../panels/CredentialsPanel"));
 const LauncherGuidePanel = lazy(() => import("../panels/LauncherGuidePanel"));
 const BrowserApp = lazy(() => import("../apps/BrowserApp"));
+
+function ProfileCapabilityLocked(props) {
+  return <div class="h-full p-4" data-testid="profile-capability-locked">
+      <div class="mx-auto flex h-full max-w-lg items-center">
+        <div class="w-full rounded-xl border border-neutral-700 bg-neutral-900/80 p-4">
+          <p class="text-[11px] uppercase tracking-wide text-neutral-400">Profile-Gated Capability</p>
+          <h3 class="mt-1 text-sm font-semibold text-neutral-100">{props.windowTitle} is locked</h3>
+          <p class="mt-2 text-xs text-neutral-400">
+            {props.reason}
+          </p>
+          <p class="mt-2 text-[11px] text-neutral-500">
+            Required scopes: {props.requiredScopesText}
+          </p>
+          <button
+            type="button"
+            class="mt-3 inline-flex items-center gap-1 rounded-md border border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.16)] px-3 py-1.5 text-xs text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.25)]"
+            onClick={() => clearProfileRuntimeSession()}
+            data-testid="profile-open-bootstrap-gate"
+          >
+            Load or create profile
+          </button>
+        </div>
+      </div>
+    </div>;
+}
 function LoadingFallback(props) {
   return <Motion.div
     initial={{ opacity: 0 }}
@@ -40,6 +68,22 @@ function LoadingFallback(props) {
     </Motion.div>;
 }
 function getWindowContent(id) {
+  const requirement = requirementForWindow(id);
+  if (requirement) {
+    const runtime = profileRuntime();
+    const scopeOk = scopeRequirementSatisfied(runtime.grantedScopes, requirement);
+    const profileLoaded = runtime.mode === "profile" && runtime.profileLoaded;
+    if (!profileLoaded || !scopeOk) {
+      const required = [...(requirement.requiredAll || []), ...(requirement.requiredAny || [])];
+      return <ProfileCapabilityLocked
+          windowTitle={id}
+          requiredScopesText={required.join(", ")}
+          reason={!profileLoaded
+            ? "This surface requires a loaded profile session."
+            : "This surface is blocked because the active profile session is missing required OIDC scopes."}
+        />;
+    }
+  }
   const integration = getIntegrationById(id);
   const githubFile = currentFile();
   switch (id) {

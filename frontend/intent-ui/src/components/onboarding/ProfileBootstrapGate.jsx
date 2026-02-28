@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal } from "solid-js";
 import {
   TbOutlineCloud,
+  TbOutlineDownload,
   TbOutlineDeviceFloppy,
   TbOutlineFile,
   TbOutlineFingerprint,
@@ -8,11 +9,10 @@ import {
   TbOutlineKey,
   TbOutlinePlugConnected,
   TbOutlineShieldLock,
-  TbOutlineUserCheck,
   TbOutlineX
 } from "solid-icons/tb";
-import { activateEphemeralSession, activatePersistentProfileSession } from "../../stores/profile-runtime";
-import { clearProfileSecretsContext, setProfileSecretsContext } from "../../stores/profile-secrets";
+import { activatePersistentProfileSession } from "../../stores/profile-runtime";
+import { setProfileSecretsContext } from "../../stores/profile-secrets";
 import { DEFAULT_LOCAL_PROFILE_SCOPES } from "../../lib/oidc-scopes";
 import {
   toBase64Url,
@@ -26,8 +26,8 @@ import {
 } from "../../lib/profile-blob";
 
 const backendOptions = [
-  { id: "browser_local", label: "Browser Local", icon: TbOutlineDeviceFloppy, detail: "Stores encrypted profile blob in local browser storage." },
-  { id: "local_file", label: "Local File", icon: TbOutlineFile, detail: "Exports encrypted profile blob as a local file." },
+  { id: "browser_local", label: "Browser Local", icon: TbOutlineDeviceFloppy, detail: "Stores encrypted profile blob in browser local storage." },
+  { id: "local_file", label: "Profile File", icon: TbOutlineFile, detail: "Load encrypted profile blob from a local file." },
   { id: "google_drive", label: "Google Drive", icon: TbOutlineCloud, detail: "Keeps a local cache now; sync adapter can upload later." },
   { id: "git_repo", label: "Git Repository", icon: TbOutlinePlugConnected, detail: "Keeps a local cache now; git sync adapter can push later." }
 ];
@@ -89,6 +89,11 @@ function ProfileBootstrapGate(props) {
   const [busy, setBusy] = createSignal(false);
   const [status, setStatus] = createSignal("");
   const [error, setError] = createSignal("");
+  const [createdProfileId, setCreatedProfileId] = createSignal("");
+  const [createdBlobBytes, setCreatedBlobBytes] = createSignal(null);
+  const [downloadedCopy, setDownloadedCopy] = createSignal(false);
+  const [savedToLocalFolder, setSavedToLocalFolder] = createSignal(false);
+  const [localFolderLabel, setLocalFolderLabel] = createSignal("");
 
   const webauthnReady = createMemo(() => (
     typeof window !== "undefined" &&
@@ -105,10 +110,57 @@ function ProfileBootstrapGate(props) {
     props.onDismiss?.();
   };
 
-  const proceedEphemeral = () => {
-    clearProfileSecretsContext();
-    activateEphemeralSession();
-    setCompleted();
+  const fileSystemAccessReady = createMemo(() => (
+    typeof window !== "undefined" &&
+    typeof window.showDirectoryPicker === "function"
+  ));
+
+  const downloadCreatedProfile = () => {
+    const bytes = createdBlobBytes();
+    const profileId = createdProfileId();
+    if (!bytes || !profileId) {
+      setError("No created profile is available to download yet.");
+      return;
+    }
+    const link = document.createElement("a");
+    const file = new Blob([bytes], { type: "application/octet-stream" });
+    link.href = URL.createObjectURL(file);
+    link.download = `${profileId}.edgerun-profile.bin`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+    setDownloadedCopy(true);
+    setStatus("Encrypted profile downloaded. Store it in a secure location.");
+  };
+
+  const connectLocalFolderAndSave = async () => {
+    const bytes = createdBlobBytes();
+    const profileId = createdProfileId();
+    if (!bytes || !profileId) {
+      setError("Create a profile first.");
+      return;
+    }
+    if (!fileSystemAccessReady()) {
+      setError("Browser file system access API is unavailable. Use download for safekeeping.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+      const fileHandle = await dirHandle.getFileHandle(`${profileId}.edgerun-profile.bin`, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      setSavedToLocalFolder(true);
+      setLocalFolderLabel(String(dirHandle?.name || "selected folder"));
+      setStatus(`Encrypted profile saved to ${String(dirHandle?.name || "selected folder")}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save profile to local folder.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const createProfile = async () => {
@@ -156,16 +208,6 @@ function ProfileBootstrapGate(props) {
       });
 
       const encoded = saveBlobByBackend(backend(), blobBytes);
-      if (backend() === "local_file") {
-        const link = document.createElement("a");
-        const file = new Blob([blobBytes], { type: "application/octet-stream" });
-        link.href = URL.createObjectURL(file);
-        link.download = `${profileId}.edgerun-profile.bin`;
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        URL.revokeObjectURL(link.href);
-      }
 
       activatePersistentProfileSession({ profileId, backend: backend(), grantedScopes: DEFAULT_LOCAL_PROFILE_SCOPES });
       setProfileSecretsContext({
@@ -177,15 +219,15 @@ function ProfileBootstrapGate(props) {
         key,
         integrations: {}
       });
-      setStatus(
-        backend() === "local_file"
-          ? "Profile created and exported as encrypted file."
-          : `Profile created and encrypted blob stored (${backend()}).`
-      );
+      setCreatedProfileId(profileId);
+      setCreatedBlobBytes(blobBytes);
+      setDownloadedCopy(false);
+      setSavedToLocalFolder(false);
+      setLocalFolderLabel("");
+      setStatus(`Profile created and unlocked. Download the encrypted profile for safekeeping, then optionally connect a local folder.`);
       setPassphrase("");
       setConfirmPassphrase("");
       setUploadedFile(null);
-      setCompleted();
 
       if (backend() === "google_drive" || backend() === "git_repo") {
         localStorage.setItem("intent-ui-profile-sync-pending-v1", `${backend()}:${encoded.slice(0, 16)}`);
@@ -236,6 +278,11 @@ function ProfileBootstrapGate(props) {
           : {}
       });
       setStatus("Encrypted profile loaded and unlocked.");
+      setCreatedProfileId("");
+      setCreatedBlobBytes(null);
+      setDownloadedCopy(false);
+      setSavedToLocalFolder(false);
+      setLocalFolderLabel("");
       setPassphrase("");
       setConfirmPassphrase("");
       setUploadedFile(null);
@@ -255,18 +302,9 @@ function ProfileBootstrapGate(props) {
             <p class="text-[11px] uppercase tracking-wide text-neutral-400">EdgeRun Intent UI</p>
             <h1 class="mt-1 text-xl font-semibold text-neutral-100">Load or create profile</h1>
             <p class="mt-1 text-sm text-neutral-400">
-              Persistent mode unlocks registered devices. Ephemeral mode runs local session state only.
+              Profile mode unlocks registered devices and integrations. Create a password-protected encrypted profile, then keep a backup.
             </p>
           </div>
-          <button
-            type="button"
-            class="inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-            onClick={proceedEphemeral}
-            data-testid="profile-bootstrap-ephemeral"
-          >
-            <TbOutlineUserCheck size={15} />
-            Proceed without profile
-          </button>
         </div>
         <Show when={Boolean(props.allowDismiss)}>
           <div class="mb-4 flex justify-end">
@@ -290,6 +328,11 @@ function ProfileBootstrapGate(props) {
               setMode("create");
               setError("");
               setStatus("");
+              setCreatedProfileId("");
+              setCreatedBlobBytes(null);
+              setDownloadedCopy(false);
+              setSavedToLocalFolder(false);
+              setLocalFolderLabel("");
             }}
             data-testid="profile-bootstrap-tab-create"
           >
@@ -302,6 +345,11 @@ function ProfileBootstrapGate(props) {
               setMode("load");
               setError("");
               setStatus("");
+              setCreatedProfileId("");
+              setCreatedBlobBytes(null);
+              setDownloadedCopy(false);
+              setSavedToLocalFolder(false);
+              setLocalFolderLabel("");
             }}
             data-testid="profile-bootstrap-tab-load"
           >
@@ -394,22 +442,55 @@ function ProfileBootstrapGate(props) {
           <p class="mb-3 rounded-md border border-red-500/30 bg-red-600/10 px-3 py-2 text-xs text-red-200">{error()}</p>
         </Show>
 
+        <Show when={mode() === "create" && createdProfileId()}>
+          <div class="mb-4 rounded-lg border border-amber-500/30 bg-amber-600/10 p-3" data-testid="profile-create-next-steps">
+            <p class="text-xs font-medium text-amber-100">Profile created: <span class="font-mono">{createdProfileId()}</span></p>
+            <p class="mt-1 text-[11px] text-amber-200/90">
+              Recommended: download the encrypted profile and connect a local folder so you always retain access.
+            </p>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
+                onClick={downloadCreatedProfile}
+                data-testid="profile-download-created"
+              >
+                <TbOutlineDownload size={14} />
+                {downloadedCopy() ? "Downloaded" : "Download profile"}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={busy() || !fileSystemAccessReady()}
+                onClick={() => {
+                  void connectLocalFolderAndSave();
+                }}
+                data-testid="profile-connect-local-folder"
+              >
+                <TbOutlineFolderOpen size={14} />
+                {savedToLocalFolder() ? `Saved to ${localFolderLabel() || "folder"}` : "Connect local folder"}
+              </button>
+            </div>
+            <Show when={!fileSystemAccessReady()}>
+              <p class="mt-2 text-[11px] text-neutral-300">
+                Browser file system API unavailable here. Download is still available.
+              </p>
+            </Show>
+          </div>
+        </Show>
+
         <div class="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
-            class="inline-flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
-            onClick={proceedEphemeral}
-          >
-            <TbOutlineFolderOpen size={14} />
-            Ephemeral session
-          </button>
-          <button
-            type="button"
             class="inline-flex items-center gap-1 rounded-md border border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.16)] px-3 py-1.5 text-xs text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.25)] disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={busy()}
+            disabled={busy() || (mode() === "create" && !createdProfileId())}
             onClick={() => {
               if (mode() === "create") {
-                void createProfile();
+                if (!createdProfileId()) {
+                  void createProfile();
+                  return;
+                }
+                setCompleted();
                 return;
               }
               void loadProfile();
@@ -417,7 +498,11 @@ function ProfileBootstrapGate(props) {
             data-testid="profile-bootstrap-submit"
           >
             <TbOutlineKey size={14} />
-            {busy() ? "Working..." : mode() === "create" ? "Create encrypted profile" : "Load encrypted profile"}
+            {busy()
+              ? "Working..."
+              : mode() === "create"
+                ? createdProfileId() ? "Continue to workspace" : "Create encrypted profile"
+                : "Load encrypted profile"}
           </button>
         </div>
       </div>
