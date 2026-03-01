@@ -7,6 +7,7 @@ RESOLVE_IP="${EDGERUN_VERIFY_RESOLVE_IP:-127.0.0.1}"
 LOCAL_BRIDGE_URL="${EDGERUN_VERIFY_LOCAL_BRIDGE_URL:-http://127.0.0.1:7777/v1/local/node/info.pb}"
 FRONTEND_URL="${EDGERUN_VERIFY_FRONTEND_URL:-http://127.0.0.1:4175/}"
 HOST_BRIDGE_URL="${EDGERUN_VERIFY_HOST_BRIDGE_URL:-https://${DOMAIN}/v1/local/node/info.pb}"
+CADDY_CONTAINER="${EDGERUN_VERIFY_CADDY_CONTAINER:-edgerun-framework-caddy}"
 
 pass() { printf '[pass] %s\n' "$1"; }
 fail() { printf '[fail] %s\n' "$1" >&2; exit 1; }
@@ -45,12 +46,10 @@ if ! command -v curl >/dev/null 2>&1; then
   fail "curl is required"
 fi
 
-if docker ps --format '{{.Names}}' | grep -qx 'edgerun-framework-caddy'; then
+if docker ps --format '{{.Names}}' | grep -qx "${CADDY_CONTAINER}"; then
   pass "framework caddy container is running"
-elif docker ps --format '{{.Names}}' | grep -qx 'edgerun-osdev-caddy'; then
-  pass "legacy caddy container is running"
 else
-  fail "caddy container is not running"
+  fail "caddy container is not running: ${CADDY_CONTAINER}"
 fi
 
 if docker ps --format '{{.Names}}' | grep -qx 'edgerun-cloudflared'; then

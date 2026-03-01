@@ -41,6 +41,23 @@ compose() {
   fi
 }
 
+require_tunnel_prereqs() {
+  if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
+    echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
+    echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
+    exit 1
+  fi
+}
+
+start_tunnel_stack() {
+  require_tunnel_prereqs
+  "${PREPARE_BINARIES_SCRIPT}"
+  compose --profile tunnel up -d --build
+}
+
 cmd="${1:-}"
 case "${cmd}" in
   prepare-binaries)
@@ -51,40 +68,13 @@ case "${cmd}" in
     compose up -d --build
     ;;
   up-dev)
-    if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
-      echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
-      exit 1
-    fi
-    if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
-      echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
-      exit 1
-    fi
-    "${PREPARE_BINARIES_SCRIPT}"
-    compose --profile tunnel up -d --build
+    start_tunnel_stack
     ;;
   up-tunnel)
-    if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
-      echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
-      exit 1
-    fi
-    if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
-      echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
-      exit 1
-    fi
-    "${PREPARE_BINARIES_SCRIPT}"
-    compose --profile tunnel up -d --build
+    start_tunnel_stack
     ;;
   up-tunnel-verify)
-    if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
-      echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
-      exit 1
-    fi
-    if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
-      echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
-      exit 1
-    fi
-    "${PREPARE_BINARIES_SCRIPT}"
-    compose --profile tunnel up -d --build
+    start_tunnel_stack
     "${VERIFY_LOCAL_STACK_SCRIPT}"
     ;;
   status)
