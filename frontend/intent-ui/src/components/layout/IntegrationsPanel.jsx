@@ -712,11 +712,14 @@ function IntegrationsPanel(props) {
     setVerifiedForDialog(true);
     setDalyProbeDetails(result);
     const battery = Number.isFinite(result.batteryLevel) ? `${result.batteryLevel}%` : "n/a";
-    const packets = Array.isArray(result.packetSamplesHex) ? result.packetSamplesHex.length : 0;
+    const packets = Number.isFinite(result?.stats?.packetCount)
+      ? result.stats.packetCount
+      : (Array.isArray(result.packetSamplesHex) ? result.packetSamplesHex.length : 0);
     const protocol = String(result.protocol || "unknown").trim();
+    const elapsed = Number.isFinite(result?.stats?.elapsedMs) ? ` · ${result.stats.elapsedMs}ms` : "";
     const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
     const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
-    setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${warningText}`);
+    setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${elapsed}${warningText}`);
   }
 
   function disconnectProvider(provider) {
@@ -1281,12 +1284,36 @@ function IntegrationsPanel(props) {
                                 const probe = probeAccessor();
                                 const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
                                 const packets = Array.isArray(probe?.packetSamplesHex) ? probe.packetSamplesHex.slice(0, 3) : [];
+                                const stats = probe?.stats || {};
                                 return (
                                   <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="daly-probe-details">
                                     <p>Protocol: {probe?.protocol || "unknown"}</p>
                                     <p>Battery: {Number.isFinite(probe?.batteryLevel) ? `${probe.batteryLevel}%` : "n/a"}</p>
                                     <p>Services: {Array.isArray(probe?.services) ? probe.services.length : 0}</p>
                                     <p>Profile: {probe?.serial?.profileLabel || "unknown"}</p>
+                                    <Show when={Number.isFinite(stats?.packetCount) || Number.isFinite(stats?.elapsedMs)}>
+                                      <div class="space-y-0.5">
+                                        <p class="text-neutral-400">Stats:</p>
+                                        <Show when={Number.isFinite(stats?.packetCount)}>
+                                          <p>Packets captured: {stats.packetCount}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(stats?.d2PacketCount) || Number.isFinite(stats?.a5PacketCount)}>
+                                          <p>D2/A5 frames: {Number.isFinite(stats?.d2PacketCount) ? stats.d2PacketCount : 0}/{Number.isFinite(stats?.a5PacketCount) ? stats.a5PacketCount : 0}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(stats?.packetBytesAvg) || Number.isFinite(stats?.packetBytesMax)}>
+                                          <p>Packet bytes avg/max: {Number.isFinite(stats?.packetBytesAvg) ? stats.packetBytesAvg : 0}/{Number.isFinite(stats?.packetBytesMax) ? stats.packetBytesMax : 0}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(stats?.writeAttempts) || Number.isFinite(stats?.writeSuccessRate)}>
+                                          <p>Write success: {Number.isFinite(stats?.writeSuccesses) ? stats.writeSuccesses : 0}/{Number.isFinite(stats?.writeAttempts) ? stats.writeAttempts : 0} ({Number.isFinite(stats?.writeSuccessRate) ? stats.writeSuccessRate : 0}%)</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(stats?.notifyCharacteristicCount) || Number.isFinite(stats?.writeCharacteristicCount)}>
+                                          <p>Notify/write chars: {Number.isFinite(stats?.notifyCharacteristicCount) ? stats.notifyCharacteristicCount : 0}/{Number.isFinite(stats?.writeCharacteristicCount) ? stats.writeCharacteristicCount : 0}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(stats?.elapsedMs)}>
+                                          <p>Probe elapsed: {stats.elapsedMs}ms</p>
+                                        </Show>
+                                      </div>
+                                    </Show>
                                     <Show when={packets.length > 0}>
                                       <div class="space-y-0.5">
                                         <p class="text-neutral-400">Packet samples:</p>

@@ -51,6 +51,51 @@ function detectProtocolFromSamples(samples) {
   return "unknown";
 }
 
+function summarizePacketStats(samples) {
+  const list = (Array.isArray(samples) ? samples : []).filter((sample) => sample instanceof Uint8Array && sample.length > 0);
+  const packetCount = list.length;
+  let packetBytesTotal = 0;
+  let packetBytesMax = 0;
+  let d2PacketCount = 0;
+  let a5PacketCount = 0;
+
+  for (const sample of list) {
+    packetBytesTotal += sample.length;
+    if (sample.length > packetBytesMax) packetBytesMax = sample.length;
+    if (sample[0] === 0xD2) d2PacketCount += 1;
+    else if (sample[0] === 0xA5) a5PacketCount += 1;
+  }
+
+  return {
+    packetCount,
+    packetBytesTotal,
+    packetBytesMax,
+    packetBytesAvg: packetCount > 0 ? Math.round((packetBytesTotal / packetCount) * 10) / 10 : 0,
+    d2PacketCount,
+    a5PacketCount,
+    unknownPacketCount: Math.max(0, packetCount - d2PacketCount - a5PacketCount)
+  };
+}
+
+function emptyDalyProbeStats() {
+  return {
+    packetCount: 0,
+    packetBytesTotal: 0,
+    packetBytesAvg: 0,
+    packetBytesMax: 0,
+    d2PacketCount: 0,
+    a5PacketCount: 0,
+    unknownPacketCount: 0,
+    writeAttempts: 0,
+    writeSuccesses: 0,
+    writeSuccessRate: 0,
+    notifyCharacteristicCount: 0,
+    writeCharacteristicCount: 0,
+    primaryServiceCount: 0,
+    elapsedMs: 0
+  };
+}
+
 function buildA5ReadFrame(command) {
   const frame = Uint8Array.from([0xA5, 0x40, command & 0xff, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
   let checksum = 0;
@@ -190,6 +235,7 @@ async function verifyDalyBmsBluetooth(details = {}) {
 }
 
 async function probeDalyBms(details = {}) {
+  const probeStartedAt = Date.now();
   let device = null;
   let server = null;
   let txChar = null;
@@ -201,6 +247,8 @@ async function probeDalyBms(details = {}) {
   let listeners = [];
   let notifiedChars = [];
   let writableChars = [];
+  let writeAttempts = 0;
+  let writeSuccesses = 0;
   let session = null;
   try {
     session = await openDalySession(details);
@@ -257,12 +305,14 @@ async function probeDalyBms(details = {}) {
     ];
     for (const frame of candidates) {
       for (const characteristic of writableChars) {
+        writeAttempts += 1;
         try {
           if (typeof characteristic.writeValueWithoutResponse === "function") {
             await characteristic.writeValueWithoutResponse(frame);
           } else if (typeof characteristic.writeValue === "function") {
             await characteristic.writeValue(frame);
           }
+          writeSuccesses += 1;
         } catch {
           // continue
         }
@@ -293,6 +343,17 @@ async function probeDalyBms(details = {}) {
     }
     if (samples.length === 0) diagnostics.push("no notify packets captured during probe");
     const protocol = detectProtocolFromSamples(samples);
+    const packetStats = summarizePacketStats(samples);
+    const stats = {
+      ...packetStats,
+      writeAttempts,
+      writeSuccesses,
+      writeSuccessRate: writeAttempts > 0 ? Math.round((writeSuccesses / writeAttempts) * 1000) / 10 : 0,
+      notifyCharacteristicCount: notifiedChars.length,
+      writeCharacteristicCount: writableChars.length,
+      primaryServiceCount: services.length,
+      elapsedMs: Math.max(0, Date.now() - probeStartedAt)
+    };
 
     return {
       deviceId: String(device.id || "").trim(),
@@ -301,6 +362,7 @@ async function probeDalyBms(details = {}) {
       services,
       protocol,
       packetSamplesHex: samples.slice(0, 5).map((sample) => toHex(sample)),
+      stats,
       diagnostics,
       probeOk: diagnostics.length === 0,
       serial: {
@@ -321,6 +383,10 @@ async function probeDalyBms(details = {}) {
       services: [],
       protocol: "unknown",
       packetSamplesHex: [],
+      stats: {
+        ...emptyDalyProbeStats(),
+        elapsedMs: Math.max(0, Date.now() - probeStartedAt)
+      },
       diagnostics: [error instanceof Error ? error.message : String(error || "probe failed")],
       probeOk: false,
       serial: {

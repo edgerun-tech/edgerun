@@ -315,13 +315,40 @@ function characteristicSupportsWrite(characteristic) {
 }
 
 function resolveSerialDataPath(txCharacteristic, rxCharacteristic) {
-  const txNotify = characteristicSupportsNotify(txCharacteristic);
-  const txWrite = characteristicSupportsWrite(txCharacteristic);
-  const rxNotify = characteristicSupportsNotify(rxCharacteristic);
-  const rxWrite = characteristicSupportsWrite(rxCharacteristic);
+  const candidates = [txCharacteristic, rxCharacteristic].filter(Boolean);
+  const unique = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const key = normalizeUuid(candidate?.uuid) || `${unique.length}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
 
-  const notifyChar = txNotify ? txCharacteristic : (rxNotify ? rxCharacteristic : null);
-  const writeChar = rxWrite ? rxCharacteristic : (txWrite ? txCharacteristic : null);
+  const notifyCandidates = unique.filter((candidate) => characteristicSupportsNotify(candidate));
+  const writeCandidates = unique.filter((candidate) => characteristicSupportsWrite(candidate));
+
+  const notifyScore = (candidate) => {
+    const p = candidate?.properties || {};
+    let score = 0;
+    if (p.indicate) score += 4;
+    if (p.notify) score += 3;
+    if (!p.write && !p.writeWithoutResponse) score += 2;
+    if (typeof candidate?.startNotifications === "function") score += 1;
+    return score;
+  };
+
+  const writeScore = (candidate) => {
+    const p = candidate?.properties || {};
+    let score = 0;
+    if (p.writeWithoutResponse) score += 4;
+    if (p.write) score += 3;
+    if (!p.notify && !p.indicate) score += 2;
+    return score;
+  };
+
+  const notifyChar = notifyCandidates.sort((left, right) => writeScore(left) - writeScore(right) || notifyScore(right) - notifyScore(left))[0] || null;
+  const writeChar = writeCandidates.sort((left, right) => notifyScore(left) - notifyScore(right) || writeScore(right) - writeScore(left))[0] || null;
 
   if (!notifyChar) {
     throw new Error("Flipper serial transport is missing a notify/indicate characteristic.");
@@ -390,11 +417,14 @@ class FlipperSerialSession {
     await this.txChar.startNotifications();
     this.txChar.addEventListener("characteristicvaluechanged", this.onTxNotification);
 
-    if (!characteristicSupportsNotify(this.flowChar) || typeof this.flowChar.startNotifications !== "function") {
-      throw new Error("Flipper flow-control characteristic cannot subscribe to notifications.");
+    if (characteristicSupportsNotify(this.flowChar) && typeof this.flowChar.startNotifications === "function") {
+      try {
+        await this.flowChar.startNotifications();
+        this.flowChar.addEventListener("characteristicvaluechanged", this.onFlowNotification);
+      } catch {
+        // best effort: keep using read/default budget if flow notifications fail.
+      }
     }
-    await this.flowChar.startNotifications();
-    this.flowChar.addEventListener("characteristicvaluechanged", this.onFlowNotification);
 
     if (typeof this.rpcStatusChar?.startNotifications === "function") {
       try {
@@ -600,9 +630,21 @@ async function openFlipperSerialSession(details = {}) {
     serialService = resolved.service;
   } catch (error) {
     if (flipperBluetooth.isPermissionError(error)) {
-      throw new Error("Flipper serial service is not granted for this origin. Re-select the device and allow serial service access.");
+      try {
+        device = await flipperBluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [SERIAL_SERVICE_UUID, BATTERY_SERVICE, "device_information"]
+        });
+        const resolved = await flipperBluetooth.getService(device, SERIAL_SERVICE_UUID);
+        device = resolved.device;
+        server = resolved.server;
+        serialService = resolved.service;
+      } catch {
+        throw new Error("Flipper serial service is not granted for this origin. Re-select the device and allow serial service access.");
+      }
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   if (!serialService) throw new Error("Flipper serial service unavailable.");

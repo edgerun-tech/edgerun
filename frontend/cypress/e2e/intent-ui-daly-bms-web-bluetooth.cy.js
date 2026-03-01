@@ -56,7 +56,9 @@ describe('intent ui daly bms web bluetooth integration', () => {
         }
         const emitTx = (bytes) => {
           const event = { target: { value: asDataView(bytes) } }
-          txListeners.forEach((listener) => listener(event))
+          txListeners.forEach((listener) => {
+            listener(event)
+          })
         }
         const rxCharacteristic = {
           properties: { write: true, writeWithoutResponse: true, read: true },
@@ -117,5 +119,7 @@ describe('intent ui daly bms web bluetooth integration', () => {
 
     cy.get('[data-testid="daly-run-probe"]').click({ force: true })
     cy.get('[data-testid="daly-probe-summary"]', { timeout: 12000 }).should('contain.text', 'Probe ok')
+    cy.get('[data-testid="daly-probe-details"]').should('contain.text', 'Stats:')
+    cy.get('[data-testid="daly-probe-details"]').should('contain.text', 'Write success:')
   })
 })
