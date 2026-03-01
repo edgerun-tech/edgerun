@@ -92,27 +92,23 @@ function computeSiteChromeStatus(): SiteChromeStatus {
   }
 }
 
-function faviconEmoji(kind: SiteChromeStatus['kind'], frame: number): string {
-  if (kind === 'running') return frame % 2 === 0 ? '🚀' : '⚙️'
-  if (kind === 'success') return '✅'
-  if (kind === 'warning') return '⚠️'
-  if (kind === 'error') return '❌'
-  return '🔌'
-}
+function faviconPngDataUrl(status: SiteChromeStatus, frame: number): string {
+  if (typeof document === 'undefined') return ''
+  void status
+  void frame
+  const canvas = document.createElement('canvas')
+  canvas.width = 64
+  canvas.height = 64
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return ''
 
-function escapeSvgText(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;')
-}
+  ctx.clearRect(0, 0, 64, 64)
+  ctx.font = '52px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('🚀', 32, 34)
 
-function faviconSvgDataUrl(status: SiteChromeStatus, frame: number): string {
-  const emoji = escapeSvgText(faviconEmoji(status.kind, frame))
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#05070d"/><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-size="44" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, EmojiOne Color, sans-serif">${emoji}</text></svg>`
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`
+  return canvas.toDataURL('image/png')
 }
 
 function updateFavicon(status: SiteChromeStatus): void {
@@ -121,12 +117,12 @@ function updateFavicon(status: SiteChromeStatus): void {
   if (!link) {
     link = document.createElement('link')
     link.setAttribute('rel', 'icon')
-    link.setAttribute('type', 'image/svg+xml')
+    link.setAttribute('type', 'image/png')
     link.setAttribute('data-edgerun-dynamic-favicon', '1')
     document.head.appendChild(link)
   }
-  const svgDataUrl = faviconSvgDataUrl(status, faviconFrame)
-  if (svgDataUrl) link.setAttribute('href', svgDataUrl)
+  const pngDataUrl = faviconPngDataUrl(status, faviconFrame)
+  if (pngDataUrl) link.setAttribute('href', pngDataUrl)
 }
 
 function renderSiteChrome(): void {

@@ -1,18 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <style>
-    @media (prefers-color-scheme: light) {
-      .bg { fill: #ffffff; }
-      .fg { fill: #171717; }
-    }
-    @media (prefers-color-scheme: dark) {
-      .bg { fill: #000000; }
-      .fg { fill: #fafafa; }
-    }
-  </style>
-  <rect class="bg" width="100" height="100" rx="16"/>
-  <g transform="scale(0.5208333333)">
-    <path class="fg" d="M96 24 L168 48 L96 72 L24 48 Z
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="edgerun-transparent-gradient" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c3aed" />
+      <stop offset="1" stop-color="#1d4ed8" />
+    </linearGradient>
+  </defs>
+  <path d="M96 24 L168 48 L96 72 L24 48 Z
 M24 72 L96 96 L168 72 L168 96 L96 120 L24 96 Z
-M24 120 L96 144 L168 120 L168 144 L96 168 L24 144 Z" />
-  </g>
+M24 120 L96 144 L168 120 L168 144 L96 168 L24 144 Z" transform="translate(0 0) scale(0.3333333333)" fill="url(#edgerun-transparent-gradient)" />
 </svg>

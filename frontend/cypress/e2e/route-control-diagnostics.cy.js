@@ -16,9 +16,9 @@ describe('route control diagnostics', () => {
     cy.get('[data-testid="route-debug-overlay-summary"]').should('not.exist')
     cy.get('[data-testid="route-debug-route-advert"]').should('not.exist')
     cy.get('link[data-edgerun-dynamic-favicon]')
-      .should('have.attr', 'type', 'image/svg+xml')
+      .should('have.attr', 'type', 'image/png')
       .invoke('attr', 'href')
-      .should('match', /^data:image\/svg\+xml,/)
+      .should('match', /^data:image\/png;base64,/)
   })
 
   it('keeps nav functional when configured API base is invalid', () => {

@@ -15,6 +15,7 @@ const lightBg = theme.colors.lightBackground || '#ffffff'
 const darkBg = theme.colors.darkBackground || '#000000'
 const lightFg = theme.colors.lightForeground || '#171717'
 const darkFg = theme.colors.darkForeground || '#fafafa'
+const brandPrimary = theme.colors.brandPrimary || '#7c3aed'
 const neutralMarkFg = '#808080'
 
 mkdirSync(brandDir, { recursive: true })
@@ -83,23 +84,20 @@ const wordmarkDarkSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56
 </svg>
 `
 
-const iconAdaptiveSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
-  <style>
-    @media (prefers-color-scheme: light) {
-      .bg { fill: ${theme.colors.lightBackground}; }
-      .fg { fill: ${theme.colors.lightForeground}; }
-    }
-    @media (prefers-color-scheme: dark) {
-      .bg { fill: ${theme.colors.darkBackground}; }
-      .fg { fill: ${theme.colors.darkForeground}; }
-    }
-  </style>
-  <rect class="bg" width="100" height="100" rx="16"/>
-  <g transform="scale(0.5208333333)">
-    <path class="fg" d="${markPath}" />
-  </g>
+function transparentMarkSvg({ gradA = brandPrimary, gradB = '#1d4ed8' } = {}) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="edgerun-transparent-gradient" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="${gradA}" />
+      <stop offset="1" stop-color="${gradB}" />
+    </linearGradient>
+  </defs>
+  <path d="${markPath}" transform="translate(0 0) scale(0.3333333333)" fill="url(#edgerun-transparent-gradient)" />
 </svg>
 `
+}
+
+const iconAdaptiveSvg = transparentMarkSvg()
 
 writeFileSync(path.join(brandDir, 'edgerun-mark.svg'), markSvg(lightFg))
 writeFileSync(path.join(brandDir, 'edgerun-mark-light.svg'), markSvg(lightFg, lightBg))
@@ -114,8 +112,8 @@ writeFileSync(path.join(publicDir, 'placeholder.svg'), markSvg(neutralMarkFg))
 
 const iconLightTemp = path.join(brandDir, 'icon-light-temp.svg')
 const iconDarkTemp = path.join(brandDir, 'icon-dark-temp.svg')
-writeFileSync(iconLightTemp, markSvg(lightFg, lightBg))
-writeFileSync(iconDarkTemp, markSvg(darkFg, darkBg))
+writeFileSync(iconLightTemp, transparentMarkSvg({ gradA: brandPrimary, gradB: '#2563eb' }))
+writeFileSync(iconDarkTemp, transparentMarkSvg({ gradA: brandPrimary, gradB: '#1d4ed8' }))
 
 function magick(args) {
   execFileSync('magick', args, { stdio: 'inherit' })
