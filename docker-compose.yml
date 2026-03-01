@@ -11,10 +11,25 @@ services:
     environment:
       MCP_ADDR: ${MCP_SYSCALL_ADDR:-127.0.0.1:7047}
       MCP_STATE_DIR: /var/lib/mcp-syscall
+      MCP_CODE_EDIT_SUBMIT_ONLY: ${MCP_CODE_EDIT_SUBMIT_ONLY:-1}
+      MCP_CODE_EDIT_PROTECT_CWD: ${MCP_CODE_EDIT_PROTECT_CWD:-1}
+      MCP_CODE_EDIT_PROTECTED_ROOTS: ${MCP_CODE_EDIT_PROTECTED_ROOTS:-/workspace/edgerun}
+      MCP_CODE_EDIT_REPO_ROOT: ${MCP_CODE_EDIT_REPO_ROOT:-/workspace/edgerun}
+      MCP_STORAGE_VFS_OPERATOR_BIN: ${MCP_STORAGE_VFS_OPERATOR_BIN:-/var/cache/build/rust/target/release/vfs_operator}
+      MCP_STORAGE_DATA_DIR: ${MCP_STORAGE_DATA_DIR:-/var/lib/mcp-syscall/storage}
+      MCP_STORAGE_REPO_ID: ${MCP_STORAGE_REPO_ID:-edgerun}
+      MCP_STORAGE_BRANCH: ${MCP_STORAGE_BRANCH:-main}
+      MCP_STORAGE_AGENT_ID: ${MCP_STORAGE_AGENT_ID:-opencode-codex}
+      MCP_STORAGE_GIT_REF: ${MCP_STORAGE_GIT_REF:-HEAD}
+      MCP_STORAGE_INITIATED_BY: ${MCP_STORAGE_INITIATED_BY:-mcp-syscall}
+      MCP_STORAGE_IMPORT_GIT_ON_SUBMIT: ${MCP_STORAGE_IMPORT_GIT_ON_SUBMIT:-1}
+      MCP_STORAGE_AGENT_BOOTSTRAP_ENABLE: ${MCP_STORAGE_AGENT_BOOTSTRAP_ENABLE:-1}
+      MCP_STORAGE_AGENT_BOOTSTRAP_LIMIT: ${MCP_STORAGE_AGENT_BOOTSTRAP_LIMIT:-20}
     working_dir: /workspace/mcp-syscall
     volumes:
       - ../mcp-syscall:/workspace/mcp-syscall
       - /home/ken/src/edgerun:/workspace/edgerun
+      - /var/cache/build/rust/target/release:/var/cache/build/rust/target/release:ro
       - /var/run/docker.sock:/var/run/docker.sock
       - edgerun-mcp-state:/var/lib/mcp-syscall
 

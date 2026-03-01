@@ -137,6 +137,13 @@ Default MCP image mappings in node-manager include:
 
 All can be overridden via `EDGERUN_MCP_*_IMAGE` in `config/node-manager.compose.env`.
 
+Storage-native code editing defaults for OpenCode/Codex:
+- `mcp-syscall` runs with submit-only code edit mode enabled by default.
+- Protected roots default to `/workspace/edgerun`.
+- Diff proposals are submitted through `edgerun-storage` (`vfs_operator`) instead of direct file writes.
+- New Codex sessions receive recent storage state bootstrap context (proposed/applied/rejected summaries).
+- Override knobs live in `config/node-manager.compose.env` under `MCP_CODE_EDIT_*` and `MCP_STORAGE_*`.
+
 ## Notes
 - This stack uses `network_mode: host` and `privileged: true` by design for TPM and Docker socket access.
 - State is persisted in named volumes for `/var/lib/edgerun` and `/etc/edgerun`.
