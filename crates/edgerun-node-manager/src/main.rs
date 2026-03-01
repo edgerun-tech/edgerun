@@ -91,6 +91,7 @@ const LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH: &str = "/v1/local/credentials/in
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
+const LOCAL_TAILSCALE_DEVICES_PATH: &str = "/v1/local/tailscale/devices";
 const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
 const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
 const LOCAL_GOOGLE_EVENTS_PATH: &str = "/v1/local/google/events";
@@ -526,6 +527,14 @@ struct LocalMcpStatusQuery {
     integration_id: String,
     #[serde(default, alias = "nodeId")]
     node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalTailscaleDevicesRequest {
+    #[serde(default, alias = "apiKey")]
+    api_key: Option<String>,
+    #[serde(default)]
+    tailnet: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1207,6 +1216,65 @@ fn google_token_from(raw: &str) -> Result<String> {
     Ok(token.to_string())
 }
 
+fn tailscale_api_key_from(raw: &str) -> Result<String> {
+    let key = raw.trim();
+    if key.len() < 12 {
+        return Err(anyhow!("tailscale api key is missing or invalid"));
+    }
+    Ok(key.to_string())
+}
+
+fn tailscale_tailnet_from(raw: &str) -> Result<String> {
+    let tailnet = raw.trim();
+    if tailnet.is_empty() {
+        return Err(anyhow!("tailnet is required"));
+    }
+    if tailnet.len() > 255 {
+        return Err(anyhow!("tailnet is too long"));
+    }
+    Ok(tailnet.to_string())
+}
+
+fn tailscale_encode_path_segment(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| {
+            let ch = *byte as char;
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' || ch == '~' {
+                ch.to_string()
+            } else {
+                format!("%{:02X}", byte)
+            }
+        })
+        .collect::<String>()
+}
+
+async fn tailscale_api_get_devices(api_key: &str, tailnet: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let encoded_tailnet = tailscale_encode_path_segment(tailnet);
+    let url = format!(
+        "https://api.tailscale.com/api/v2/tailnet/{encoded_tailnet}/devices"
+    );
+    let response = client
+        .get(&url)
+        .basic_auth(api_key, Some(""))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .with_context(|| format!("tailscale api request failed: {url}"))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read tailscale api response: {url}"))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("tailscale api request failed ({status}): {detail}"));
+    }
+    sonic_rs::from_slice(&bytes).with_context(|| format!("failed to parse tailscale api json: {url}"))
+}
+
 async fn google_api_get_json(token: &str, url: &str) -> Result<sonic_rs::Value> {
     let client = Client::new();
     let response = client
@@ -1798,6 +1866,11 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_MCP_STOP_PATH, options(handle_local_options))
         .route(LOCAL_MCP_STATUS_PATH, get(handle_local_mcp_status))
         .route(LOCAL_MCP_STATUS_PATH, options(handle_local_options))
+        .route(
+            LOCAL_TAILSCALE_DEVICES_PATH,
+            post(handle_local_tailscale_devices),
+        )
+        .route(LOCAL_TAILSCALE_DEVICES_PATH, options(handle_local_options))
         .route(LOCAL_GOOGLE_MESSAGES_PATH, get(handle_local_google_messages))
         .route(LOCAL_GOOGLE_MESSAGES_PATH, options(handle_local_options))
         .route(LOCAL_GOOGLE_MESSAGE_PATH, get(handle_local_google_message))
@@ -2709,6 +2782,30 @@ async fn handle_local_mcp_status(
         running,
         status,
     })
+}
+
+async fn handle_local_tailscale_devices(
+    Json(body): Json<LocalTailscaleDevicesRequest>,
+) -> Response {
+    let api_key = match tailscale_api_key_from(body.api_key.as_deref().unwrap_or_default()) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let tailnet = match tailscale_tailnet_from(body.tailnet.as_deref().unwrap_or_default()) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let payload = match tailscale_api_get_devices(&api_key, &tailnet).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "devices": payload["devices"].as_array().cloned().unwrap_or_default(),
+        }),
+    )
 }
 
 async fn handle_local_google_messages(Query(query): Query<LocalGoogleMessagesQuery>) -> Response {

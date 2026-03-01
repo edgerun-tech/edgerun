@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 05:55:06Z
+Generated: 2026-03-01 06:01:12Z
 
 ## Summary
 
-- Total specs: 174
-- Cataloged: 37
-- Active: 23
+- Total specs: 175
+- Cataloged: 38
+- Active: 24
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 137
@@ -28,6 +28,7 @@ Generated: 2026-03-01 05:55:06Z
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
 | [2026-03-01-tailscale-integration-quickstart-v2.md](./2026-03-01-tailscale-integration-quickstart-v2.md) | intent-ui | Generates Tailscale join/funnel/app-connector setup artifacts from integration inputs. |
+| [2026-03-01-tailscale-local-bridge-routing-fix-v1.md](./2026-03-01-tailscale-local-bridge-routing-fix-v1.md) | node-manager | Routes Tailscale device verification through local bridge to eliminate /api 404. |
 | [2026-03-01-telemetry-panel-minimize-dock-v1.md](./2026-03-01-telemetry-panel-minimize-dock-v1.md) | intent-ui | Adds minimize controls and restore dock tray for telemetry floating panels. |
 | [2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md](./2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md) | intent-ui | Removes suggested-integration strips from workflow drawers. |
 | [2026-03-01-workflow-modal-gating-v1.md](./2026-03-01-workflow-modal-gating-v1.md) | intent-ui | Gates code-edit modal to explicit demo flow so integrations do not trigger it. |

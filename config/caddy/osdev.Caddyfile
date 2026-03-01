@@ -28,6 +28,12 @@
     reverse_proxy 127.0.0.1:7777
   }
 
+  @tailscale path /api/tailscale /api/tailscale/*
+  handle @tailscale {
+    uri replace /api/tailscale /v1/local/tailscale
+    reverse_proxy 127.0.0.1:7777
+  }
+
   handle /api/* {
     reverse_proxy https://api.edgerun.tech {
       header_up Host api.edgerun.tech

@@ -279,14 +279,21 @@ class IntegrationLifecycle {
       const tailnet = String(details?.tailnet || "").trim();
       if (!apiKey || !tailnet) return { ok: false, message: "Tailscale API key and tailnet are required." };
       try {
-        const response = await fetchImpl("/api/tailscale/devices", {
-          method: "POST",
-          headers: { "content-type": "application/json; charset=utf-8" },
-          body: JSON.stringify({ apiKey, tailnet })
-        });
-        const body = await response.json().catch(() => ({}));
-        if (!response.ok || !body?.ok) {
-          return { ok: false, message: String(body?.error || `tailscale devices request failed (${response.status})`) };
+        let body = null;
+        let statusCode = 0;
+        for (const path of ["/api/tailscale/devices", "/v1/local/tailscale/devices"]) {
+          const response = await fetchImpl(path, {
+            method: "POST",
+            headers: { "content-type": "application/json; charset=utf-8" },
+            body: JSON.stringify({ apiKey, tailnet })
+          });
+          statusCode = response.status;
+          body = await response.json().catch(() => ({}));
+          if (response.ok && body?.ok) break;
+          if (response.status !== 404) break;
+        }
+        if (!body?.ok) {
+          return { ok: false, message: String(body?.error || `tailscale devices request failed (${statusCode})`) };
         }
         const devices = Array.isArray(body?.devices) ? body.devices : [];
         return {
