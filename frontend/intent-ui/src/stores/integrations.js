@@ -436,6 +436,14 @@ async function stopIntegrationMcp(integrationId) {
 }
 
 async function verifyFlipperWebBluetooth(integration, details = {}) {
+  const resolveErrorMessage = (error, fallback) => {
+    if (error instanceof Error && String(error.message || "").trim()) return error.message;
+    if (error && typeof error === "object" && "message" in error) {
+      const text = String(error.message || "").trim();
+      if (text) return text;
+    }
+    return fallback;
+  };
   try {
     const verified = await verifyFlipperBluetooth(details);
     return {
@@ -446,7 +454,7 @@ async function verifyFlipperWebBluetooth(integration, details = {}) {
       deviceName: verified.deviceName
     };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "Failed to verify Flipper over Web Bluetooth." };
+    return { ok: false, message: resolveErrorMessage(error, "Failed to verify Flipper over Web Bluetooth.") };
   }
 }
 

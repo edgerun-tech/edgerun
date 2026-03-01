@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { Portal } from "solid-js/web";
 import {
   FiLink2,
@@ -8,7 +8,6 @@ import {
   FiCpu,
   FiSearch,
   FiXCircle,
-  FiShield,
   FiArrowRight,
   FiArrowLeft,
   FiZap,
@@ -71,6 +70,10 @@ function IntegrationsPanel(props) {
   const [flipperProbeDetails, setFlipperProbeDetails] = createSignal(null);
   const [flipperKnownDevices, setFlipperKnownDevices] = createSignal([]);
   const [flipperKnownLoading, setFlipperKnownLoading] = createSignal(false);
+  const [testRunning, setTestRunning] = createSignal(false);
+  const [testCompleted, setTestCompleted] = createSignal(false);
+  const [testStageIndex, setTestStageIndex] = createSignal(0);
+  let testLoaderTimer = null;
 
   const assistantProvider = createMemo(() => workflowUi().provider || "codex");
 
@@ -99,6 +102,42 @@ function IntegrationsPanel(props) {
   const activeProvider = createMemo(() => providers().find((provider) => provider.id === dialogProviderId()) || null);
   const verification = createMemo(() => integrationVerification()[dialogProviderId()] || null);
 
+  function getLoadingStates(provider) {
+    const providerName = provider?.name || "Integration";
+    return [
+      { text: `Validating ${providerName} credentials` },
+      { text: "Checking ownership and profile policy" },
+      { text: "Verifying connector capability wiring" },
+      { text: "Running readiness tests" },
+      { text: "Preparing unlocked capability set" }
+    ];
+  }
+
+  function stopLoadingStates() {
+    if (testLoaderTimer) {
+      clearInterval(testLoaderTimer);
+      testLoaderTimer = null;
+    }
+    setTestRunning(false);
+  }
+
+  function resetTestFlow() {
+    stopLoadingStates();
+    setTestCompleted(false);
+    setTestStageIndex(0);
+  }
+
+  function startLoadingStates(provider) {
+    const states = getLoadingStates(provider);
+    stopLoadingStates();
+    setTestStageIndex(0);
+    setTestRunning(true);
+    if (states.length <= 1 || typeof window === "undefined") return;
+    testLoaderTimer = window.setInterval(() => {
+      setTestStageIndex((current) => Math.min(current + 1, states.length - 1));
+    }, 2000);
+  }
+
   function openProviderDialog(providerOrId) {
     const provider = typeof providerOrId === "string"
       ? providers().find((entry) => entry.id === providerOrId)
@@ -106,10 +145,11 @@ function IntegrationsPanel(props) {
     if (!provider) return;
 
     setDialogProviderId(provider.id);
-    setStep(2);
+    setStep(1);
     setStatus("");
     setBusy(false);
     setVerifiedForDialog(false);
+    resetTestFlow();
     setFlipperProbeSummary("");
     setFlipperProbeDetails(null);
     setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
@@ -150,6 +190,7 @@ function IntegrationsPanel(props) {
     setStep(1);
     setBusy(false);
     setVerifiedForDialog(false);
+    resetTestFlow();
     setFlipperProbeSummary("");
     setFlipperProbeDetails(null);
   }
@@ -182,6 +223,10 @@ function IntegrationsPanel(props) {
 
   async function runVerification(provider) {
     if (!provider) return;
+    setStatus("");
+    setTestCompleted(false);
+    setFlipperProbeSummary("");
+    setFlipperProbeDetails(null);
     setBusy(true);
 
     if (provider.oauthRedirect && connectorMode() === "user_owned") {
@@ -193,6 +238,7 @@ function IntegrationsPanel(props) {
       return;
     }
 
+    startLoadingStates(provider);
     const result = await integrationStore.verify(provider.id, {
       connectorMode: connectorMode(),
       token: tokenInput().trim(),
@@ -203,8 +249,9 @@ function IntegrationsPanel(props) {
       flipperDeviceId: tokenInput().trim(),
       flipperDeviceName: flipperDeviceName().trim()
     });
-
+    stopLoadingStates();
     setBusy(false);
+
     if (!result.ok) {
       setVerifiedForDialog(false);
       setStatus(result.message || "Verification failed.");
@@ -221,8 +268,9 @@ function IntegrationsPanel(props) {
       }
     }
     setVerifiedForDialog(true);
+    setTestCompleted(true);
     setStatus(result.message || "Verification succeeded.");
-    setStep(4);
+    setStep(2);
   }
 
   async function selectFlipperDevice() {
@@ -366,15 +414,18 @@ function IntegrationsPanel(props) {
   }
 
   function stepFlow(provider) {
-    if (!provider) return [1, 2, 3, 4];
-    return [2, 3, 4];
+    if (!provider) return [1, 2];
+    return [1, 2];
   }
 
   function stepTitle(value) {
-    if (value === 2) return "Values";
-    if (value === 3) return "Verify";
-    return "Success";
+    if (value === 1) return "Required Info";
+    return "Run Tests";
   }
+
+  onCleanup(() => {
+    stopLoadingStates();
+  });
 
   return (
     <div class={`h-full overflow-auto text-neutral-200 ${compact() ? "" : "bg-[#0f1013] p-4"}`}>
@@ -469,6 +520,13 @@ function IntegrationsPanel(props) {
           const ProviderIcon = provider.icon || FiCloud;
           const flow = () => stepFlow(provider);
           const stepIndex = () => Math.max(0, flow().indexOf(step()));
+          const loadingStates = createMemo(() => getLoadingStates(provider));
+          const visibleLoadingStage = createMemo(() => {
+            const list = loadingStates();
+            if (list.length === 0) return 0;
+            return Math.min(testStageIndex(), list.length - 1);
+          });
+          const activeLoadingText = createMemo(() => loadingStates()[visibleLoadingStage()]?.text || "Running integration tests...");
           return (
             <Portal>
               <div class="fixed inset-0 z-[12000] flex items-center justify-center bg-black/70 px-4 py-6">
@@ -493,7 +551,7 @@ function IntegrationsPanel(props) {
                   <div class="mb-3 rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-300">{status()}</div>
                 </Show>
 
-                <div class={`mb-3 grid gap-1 ${provider.id === "github" ? "grid-cols-3" : "grid-cols-4"}`}>
+                <div class="mb-3 grid grid-cols-2 gap-1">
                   <For each={flow()}>
                     {(stepValue, index) => (
                       <button
@@ -508,7 +566,7 @@ function IntegrationsPanel(props) {
                   </For>
                 </div>
 
-                <Show when={step() === 2}>
+                <Show when={step() === 1}>
                   <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid="integration-stepper-values">
                     <label class="block text-[11px] text-neutral-500">
                       Account label
@@ -624,14 +682,14 @@ function IntegrationsPanel(props) {
                     </Show>
 
                     <Show when={provider.oauthRedirect && connectorMode() === "user_owned"}>
-                      <p class="text-[11px] text-neutral-500">OAuth integrations redirect on Verify step to complete login.</p>
+                      <p class="text-[11px] text-neutral-500">OAuth integrations redirect on Run Tests step to complete login.</p>
                     </Show>
                   </section>
                 </Show>
 
-                <Show when={step() === 3}>
+                <Show when={step() === 2}>
                   <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid={provider.id === "tailscale" ? "provider-tailscale-quickstart" : "integration-stepper-verify"}>
-                    <p class="text-xs text-neutral-400">Run integration checks before linking.</p>
+                    <p class="text-xs text-neutral-400">Run integration tests before linking.</p>
                     <button
                       type="button"
                       class={primaryClass}
@@ -643,76 +701,94 @@ function IntegrationsPanel(props) {
                       {busy() ? "Verifying..." : "Run verification"}
                     </button>
                     <Show when={!requiredInputsReady(provider)}>
-                      <p class="text-[11px] text-amber-300">Fill required values in Step 2 first.</p>
+                      <p class="text-[11px] text-amber-300">Fill required values in Step 1 first.</p>
+                    </Show>
+                    <Show when={testRunning()}>
+                      <div class="rounded-md border border-neutral-700 bg-black/20 p-2" data-testid="integration-test-loader">
+                        <p class="text-[11px] text-neutral-300">{activeLoadingText()}</p>
+                        <div class="mt-2 space-y-1">
+                          <For each={loadingStates()}>
+                            {(state, index) => {
+                              const done = () => index() < visibleLoadingStage();
+                              const active = () => index() === visibleLoadingStage();
+                              return (
+                                <div class="flex items-center gap-2 text-[10px]">
+                                  <span class={`h-2 w-2 rounded-full ${done() ? "bg-emerald-400" : active() ? "bg-cyan-300 animate-pulse" : "bg-neutral-700"}`} />
+                                  <span class={`${done() ? "text-emerald-200" : active() ? "text-cyan-200" : "text-neutral-500"}`}>{state.text}</span>
+                                </div>
+                              );
+                            }}
+                          </For>
+                        </div>
+                      </div>
                     </Show>
                     <Show when={verificationMessage()}>
                       <p class={`text-[11px] ${verified() ? "text-emerald-300" : lifecycleStatus() === "verifying" ? "text-amber-300" : "text-red-300"}`}>{verificationMessage()}</p>
                     </Show>
-                  </section>
-                </Show>
-
-                <Show when={step() === 4}>
-                  <section class="space-y-2 rounded-md border border-emerald-500/35 bg-emerald-500/10 p-3" data-testid="integration-stepper-success">
-                    <p class="flex items-center gap-1 text-xs font-medium text-emerald-200">
-                      <FiCheckCircle size={12} />
-                      Verification passed
-                    </p>
-                    <p class="text-[11px] text-emerald-100/80">Link integration to unlock:</p>
-                    <ul class="space-y-1 text-[11px] text-emerald-100/90" data-testid="integration-unlocked-capabilities">
-                      <For each={provider.defaultCapabilities || []}>
-                        {(capability) => <li>• {capability}</li>}
-                      </For>
-                    </ul>
-                    <Show when={provider.id === "flipper"}>
-                      <div class="mt-2 rounded border border-neutral-700 bg-neutral-950/55 p-2">
-                        <button
-                          type="button"
-                          class={buttonClass}
-                          onClick={() => { void runFlipperProbe(); }}
-                          disabled={busy()}
-                          data-testid="flipper-run-probe"
-                        >
-                          <FiZap size={12} />
-                          {busy() ? "Probing..." : "Probe Device"}
-                        </button>
-                        <Show when={flipperProbeSummary()}>
-                          <p class="mt-2 text-[11px] text-neutral-200" data-testid="flipper-probe-summary">{flipperProbeSummary()}</p>
-                        </Show>
-                        <Show when={flipperProbeDetails()}>
-                          {(probeAccessor) => {
-                            const probe = probeAccessor();
-                            const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
-                            const entries = Array.isArray(probe?.deviceInfoEntries) ? probe.deviceInfoEntries.slice(0, 4) : [];
-                            return (
-                              <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="flipper-probe-details">
-                                <p>Model: {probe?.summary?.model || "unknown"}</p>
-                                <p>Firmware: {probe?.summary?.firmware || "unknown"}</p>
-                                <p>Hardware: {probe?.summary?.hardware || "unknown"}</p>
-                                <p>Flow budget: {Number.isFinite(probe?.serial?.flowBudget) ? probe.serial.flowBudget : "n/a"}</p>
-                                <Show when={Number.isFinite(probe?.rpc?.ping?.latencyMs)}>
-                                  <p>Ping latency: {probe.rpc.ping.latencyMs}ms</p>
-                                </Show>
-                                <Show when={entries.length > 0}>
-                                  <div class="space-y-0.5">
-                                    <p class="text-neutral-400">Device info sample:</p>
-                                    <For each={entries}>
-                                      {(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
-                                    </For>
+                    <Show when={verified() || testCompleted()}>
+                      <section class="space-y-2 rounded-md border border-emerald-500/35 bg-emerald-500/10 p-3" data-testid="integration-stepper-success">
+                        <p class="flex items-center gap-1 text-xs font-medium text-emerald-200">
+                          <FiCheckCircle size={12} />
+                          Tests passed
+                        </p>
+                        <p class="text-[11px] text-emerald-100/80">Link integration to unlock:</p>
+                        <ul class="space-y-1 text-[11px] text-emerald-100/90" data-testid="integration-unlocked-capabilities">
+                          <For each={provider.defaultCapabilities || []}>
+                            {(capability) => <li>• {capability}</li>}
+                          </For>
+                        </ul>
+                        <Show when={provider.id === "flipper"}>
+                          <div class="mt-2 rounded border border-neutral-700 bg-neutral-950/55 p-2">
+                            <button
+                              type="button"
+                              class={buttonClass}
+                              onClick={() => { void runFlipperProbe(); }}
+                              disabled={busy()}
+                              data-testid="flipper-run-probe"
+                            >
+                              <FiZap size={12} />
+                              {busy() ? "Probing..." : "Probe Device"}
+                            </button>
+                            <Show when={flipperProbeSummary()}>
+                              <p class="mt-2 text-[11px] text-neutral-200" data-testid="flipper-probe-summary">{flipperProbeSummary()}</p>
+                            </Show>
+                            <Show when={flipperProbeDetails()}>
+                              {(probeAccessor) => {
+                                const probe = probeAccessor();
+                                const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
+                                const entries = Array.isArray(probe?.deviceInfoEntries) ? probe.deviceInfoEntries.slice(0, 4) : [];
+                                return (
+                                  <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="flipper-probe-details">
+                                    <p>Model: {probe?.summary?.model || "unknown"}</p>
+                                    <p>Firmware: {probe?.summary?.firmware || "unknown"}</p>
+                                    <p>Hardware: {probe?.summary?.hardware || "unknown"}</p>
+                                    <p>Flow budget: {Number.isFinite(probe?.serial?.flowBudget) ? probe.serial.flowBudget : "n/a"}</p>
+                                    <Show when={Number.isFinite(probe?.rpc?.ping?.latencyMs)}>
+                                      <p>Ping latency: {probe.rpc.ping.latencyMs}ms</p>
+                                    </Show>
+                                    <Show when={entries.length > 0}>
+                                      <div class="space-y-0.5">
+                                        <p class="text-neutral-400">Device info sample:</p>
+                                        <For each={entries}>
+                                          {(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                    <Show when={warnings.length > 0}>
+                                      <div class="space-y-0.5 text-amber-300">
+                                        <p>Warnings:</p>
+                                        <For each={warnings}>
+                                          {(warning) => <p>• {warning}</p>}
+                                        </For>
+                                      </div>
+                                    </Show>
                                   </div>
-                                </Show>
-                                <Show when={warnings.length > 0}>
-                                  <div class="space-y-0.5 text-amber-300">
-                                    <p>Warnings:</p>
-                                    <For each={warnings}>
-                                      {(warning) => <p>• {warning}</p>}
-                                    </For>
-                                  </div>
-                                </Show>
-                              </div>
-                            );
-                          }}
+                                );
+                              }}
+                            </Show>
+                          </div>
                         </Show>
-                      </div>
+                      </section>
                     </Show>
                   </section>
                 </Show>
@@ -731,7 +807,7 @@ function IntegrationsPanel(props) {
                     type="button"
                     class={buttonClass}
                     onClick={() => setStep(flow()[Math.min(flow().length - 1, stepIndex() + 1)] || flow()[flow().length - 1])}
-                    disabled={stepIndex() === flow().length - 1 || (step() === 2 && !requiredInputsReady(provider))}
+                    disabled={stepIndex() === flow().length - 1 || (step() === 1 && !requiredInputsReady(provider))}
                   >
                     Next
                     <FiArrowRight size={12} />

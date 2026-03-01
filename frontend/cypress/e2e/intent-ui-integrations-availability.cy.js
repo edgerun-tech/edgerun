@@ -46,12 +46,13 @@ describe('intent ui integrations connection truth', () => {
 
     cy.get('[data-testid="provider-open-github"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-github"]').should('be.visible')
-    cy.get('[data-testid="integration-step-2"]').click({ force: true })
+    cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_intent_ui')
-    cy.get('[data-testid="integration-step-3"]').click({ force: true })
+    cy.get('[data-testid="integration-step-2"]').click({ force: true })
     cy.get('[data-testid="provider-verify-github"]').click({ force: true })
+    cy.get('[data-testid="integration-test-loader"]').should('be.visible')
     cy.wait('@githubUser')
-    cy.get('[data-testid="integration-step-4"]').click({ force: true })
+    cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
     cy.contains('GitHub integration linked.').should('be.visible')
@@ -77,12 +78,12 @@ describe('intent ui integrations connection truth', () => {
     cy.get('button[title="Integrations panel"]').first().click({ force: true })
     cy.get('[data-testid="provider-open-github"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-github"]').should('be.visible')
-    cy.get('[data-testid="integration-step-2"]').click({ force: true })
+    cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_persistence')
-    cy.get('[data-testid="integration-step-3"]').click({ force: true })
+    cy.get('[data-testid="integration-step-2"]').click({ force: true })
     cy.get('[data-testid="provider-verify-github"]').click({ force: true })
     cy.wait('@githubUser')
-    cy.get('[data-testid="integration-step-4"]').click({ force: true })
+    cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
     cy.window().then((win) => {

@@ -1,3 +1,5 @@
+import { BluetoothIntegration } from "./BluetoothIntegration";
+
 const SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 const SERIAL_TX_UUID = "19ed82ae-ed21-4c9d-4145-228e61fe0000";
 const SERIAL_RX_UUID = "19ed82ae-ed21-4c9d-4145-228e62fe0000";
@@ -14,6 +16,10 @@ const RPC_TIMEOUT_MS = 8000;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const flipperBluetooth = new BluetoothIntegration({
+  integrationId: "flipper",
+  optionalServices: [SERIAL_SERVICE_UUID, BATTERY_SERVICE, "device_information"]
+});
 
 function normalizeUuid(input) {
   return String(input || "").trim().toLowerCase();
@@ -249,64 +255,6 @@ function decodeFlowBudget(dataView) {
   return Math.max(...candidates);
 }
 
-function requireWebBluetooth() {
-  if (typeof window === "undefined" || !window.isSecureContext) {
-    throw new Error("Web Bluetooth requires a secure browser context (HTTPS).");
-  }
-  if (!navigator?.bluetooth?.requestDevice) {
-    throw new Error("Web Bluetooth API is unavailable in this browser.");
-  }
-  return navigator.bluetooth;
-}
-
-async function resolveKnownDevice(bluetooth, preferredId = "") {
-  const normalizedId = String(preferredId || "").trim();
-  if (!normalizedId || typeof bluetooth.getDevices !== "function") return null;
-  const devices = await bluetooth.getDevices();
-  return devices.find((device) => String(device?.id || "").trim() === normalizedId) || null;
-}
-
-async function requestFlipperDevice(bluetooth) {
-  return bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: [SERIAL_SERVICE_UUID, BATTERY_SERVICE, "device_information"]
-  });
-}
-
-function isSerialPermissionError(error) {
-  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
-  return message.includes("origin is not allowed") || message.includes("optionalservices");
-}
-
-function isGattDisconnectedError(error) {
-  const message = String(error instanceof Error ? error.message : error || "").toLowerCase();
-  return message.includes("gatt server is disconnected") || message.includes("not connected");
-}
-
-async function reconnectGattServer(device) {
-  if (!device?.gatt) throw new Error("Selected device does not expose GATT.");
-  try {
-    if (typeof device.gatt.disconnect === "function" && device.gatt.connected) {
-      device.gatt.disconnect();
-    }
-  } catch {
-    // best effort disconnect
-  }
-  return device.gatt.connect();
-}
-
-async function resolveFlipperDevice(preferredId = "") {
-  const bluetooth = requireWebBluetooth();
-  const known = await resolveKnownDevice(bluetooth, preferredId);
-  return known || requestFlipperDevice(bluetooth);
-}
-
-async function ensureGattServer(device) {
-  if (!device?.gatt) throw new Error("Selected device does not expose GATT.");
-  if (device.gatt.connected) return device.gatt;
-  return device.gatt.connect();
-}
-
 async function readBatteryLevel(server) {
   try {
     const batteryService = await server.getPrimaryService(BATTERY_SERVICE);
@@ -524,40 +472,23 @@ class FlipperSerialSession {
 
 async function openFlipperSerialSession(details = {}) {
   const preferredId = String(details?.flipperDeviceId || "").trim();
-  let device = await resolveFlipperDevice(preferredId);
+  let device = await flipperBluetooth.resolveDevice(preferredId);
   if (!device) throw new Error("No Flipper device selected.");
 
-  let server = await ensureGattServer(device);
+  let server = null;
   let serialService = null;
-  let permissionError = null;
   try {
-    serialService = await server.getPrimaryService(SERIAL_SERVICE_UUID);
+    const resolved = await flipperBluetooth.getService(device, SERIAL_SERVICE_UUID, {
+      optionalServices: [SERIAL_SERVICE_UUID]
+    });
+    device = resolved.device;
+    server = resolved.server;
+    serialService = resolved.service;
   } catch (error) {
-    if (isGattDisconnectedError(error)) {
-      server = await reconnectGattServer(device);
-      serialService = await server.getPrimaryService(SERIAL_SERVICE_UUID);
+    if (flipperBluetooth.isPermissionError(error)) {
+      throw new Error("Flipper serial service is not granted for this origin. Re-select the device and allow serial service access.");
     }
-    permissionError = isSerialPermissionError(error) ? error : null;
-    if (!serialService && !permissionError) throw error;
-  }
-
-  if (!serialService && permissionError) {
-    // Attempt to recover by requesting device again with explicit serial optionalServices grant.
-    const bluetooth = requireWebBluetooth();
-    try {
-      device = await requestFlipperDevice(bluetooth);
-      server = await ensureGattServer(device);
-      serialService = await server.getPrimaryService(SERIAL_SERVICE_UUID);
-    } catch (error) {
-      if (isGattDisconnectedError(error)) {
-        server = await reconnectGattServer(device);
-        serialService = await server.getPrimaryService(SERIAL_SERVICE_UUID);
-      }
-      if (isSerialPermissionError(error)) {
-        throw new Error("Flipper serial service is not granted for this origin. Re-select the device and allow serial service access.");
-      }
-      throw error;
-    }
+    throw error;
   }
 
   if (!serialService) throw new Error("Flipper serial service unavailable.");
@@ -565,20 +496,30 @@ async function openFlipperSerialSession(details = {}) {
   let rxChar = null;
   let flowChar = null;
   let rpcStatusChar = null;
-  try {
-    txChar = await serialService.getCharacteristic(SERIAL_TX_UUID);
-    rxChar = await serialService.getCharacteristic(SERIAL_RX_UUID);
-    flowChar = await serialService.getCharacteristic(SERIAL_FLOW_UUID);
-    rpcStatusChar = await serialService.getCharacteristic(SERIAL_RPC_STATUS_UUID);
-  } catch (error) {
-    if (!isGattDisconnectedError(error)) throw error;
-    server = await reconnectGattServer(device);
-    serialService = await server.getPrimaryService(SERIAL_SERVICE_UUID);
-    txChar = await serialService.getCharacteristic(SERIAL_TX_UUID);
-    rxChar = await serialService.getCharacteristic(SERIAL_RX_UUID);
-    flowChar = await serialService.getCharacteristic(SERIAL_FLOW_UUID);
-    rpcStatusChar = await serialService.getCharacteristic(SERIAL_RPC_STATUS_UUID);
-  }
+  ({ device, server, service: serialService, characteristic: txChar } = await flipperBluetooth.getCharacteristic(
+    device,
+    SERIAL_SERVICE_UUID,
+    SERIAL_TX_UUID,
+    { optionalServices: [SERIAL_SERVICE_UUID] }
+  ));
+  ({ device, server, service: serialService, characteristic: rxChar } = await flipperBluetooth.getCharacteristic(
+    device,
+    SERIAL_SERVICE_UUID,
+    SERIAL_RX_UUID,
+    { optionalServices: [SERIAL_SERVICE_UUID] }
+  ));
+  ({ device, server, service: serialService, characteristic: flowChar } = await flipperBluetooth.getCharacteristic(
+    device,
+    SERIAL_SERVICE_UUID,
+    SERIAL_FLOW_UUID,
+    { optionalServices: [SERIAL_SERVICE_UUID] }
+  ));
+  ({ device, server, service: serialService, characteristic: rpcStatusChar } = await flipperBluetooth.getCharacteristic(
+    device,
+    SERIAL_SERVICE_UUID,
+    SERIAL_RPC_STATUS_UUID,
+    { optionalServices: [SERIAL_SERVICE_UUID] }
+  ));
 
   if (!txChar || !rxChar || !flowChar || !rpcStatusChar) {
     throw new Error("Flipper serial service is missing required characteristics.");

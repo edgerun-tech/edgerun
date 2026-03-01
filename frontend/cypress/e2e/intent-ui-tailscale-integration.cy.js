@@ -59,14 +59,14 @@ describe('intent ui tailscale integration', () => {
 
     cy.get('[data-testid="provider-open-tailscale"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-tailscale"]').should('be.visible')
-    cy.get('[data-testid="integration-step-2"]').click({ force: true })
+    cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="tailscale-api-key-input"]').type('tskey-api-testkey')
     cy.get('[data-testid="tailscale-tailnet-input"]').type('acme.github')
-    cy.get('[data-testid="integration-step-3"]').click({ force: true })
+    cy.get('[data-testid="integration-step-2"]').click({ force: true })
     cy.get('[data-testid="provider-tailscale-quickstart"]').should('be.visible')
     cy.get('[data-testid="tailscale-load-devices"]').click({ force: true })
     cy.wait('@tailscaleDevices')
-    cy.get('[data-testid="integration-step-4"]').click({ force: true })
+    cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
     cy.get('[data-testid="provider-save-tailscale"]').click({ force: true })
 
     cy.contains('Tailscale integration linked.').should('be.visible')

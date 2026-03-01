@@ -70,9 +70,22 @@ describe('intent ui flipper web bluetooth integration', () => {
           }
           throw new Error('invalid varint')
         }
-        const decodeDelimited = (bytes) => {
-          const len = decodeVarint(bytes, 0)
-          return bytes.slice(len.offset, len.offset + len.value)
+        const tryDecodeDelimitedFrames = (buffer) => {
+          const frames = []
+          let cursor = 0
+          try {
+            while (cursor < buffer.length) {
+              const len = decodeVarint(buffer, cursor)
+              const start = len.offset
+              const end = start + len.value
+              if (end > buffer.length) break
+              frames.push(buffer.slice(start, end))
+              cursor = end
+            }
+          } catch {
+            return { frames: [], remainder: buffer }
+          }
+          return { frames, remainder: buffer.slice(cursor) }
         }
         const decodeMain = (frameBytes) => {
           let commandId = 0
@@ -173,34 +186,39 @@ describe('intent ui flipper web bluetooth integration', () => {
         }
         const rxCharacteristic = {
           properties: { read: true, write: true, writeWithoutResponse: true },
+          _inboundBuffer: new Uint8Array(),
           writeValueWithoutResponse: (payload) => {
-            const frame = decodeDelimited(toBytes(payload))
-            const request = decodeMain(frame)
-            if (request.contentTag === 5) {
-              const pingRequestData = decodePingRequestData(request.contentBytes)
-              const pingResponseBody = encodeBytesField(1, pingRequestData)
-              const responseMain = encodeMain({
-                commandId: request.commandId,
-                contentTag: 6,
-                contentBytes: pingResponseBody
-              })
-              setTimeout(() => emitTx(encodeDelimited(responseMain)), 0)
-            } else if (request.contentTag === 32) {
-              const entries = [
-                ['model_name', 'Flipper Zero'],
-                ['firmware_version', 'dev']
-              ]
-              entries.forEach(([key, value], index) => {
-                const infoBody = concat([encodeBytesField(1, key), encodeBytesField(2, value)])
-                const frameMain = concat([
-                  encodeUintField(1, request.commandId),
-                  encodeUintField(2, 0),
-                  encodeBoolField(3, index < entries.length - 1),
-                  encodeField(33, 2, concat([encodeVarint(infoBody.length), infoBody]))
-                ])
-                setTimeout(() => emitTx(encodeDelimited(frameMain)), 0)
-              })
-            }
+            rxCharacteristic._inboundBuffer = concat([rxCharacteristic._inboundBuffer, toBytes(payload)])
+            const decoded = tryDecodeDelimitedFrames(rxCharacteristic._inboundBuffer)
+            rxCharacteristic._inboundBuffer = decoded.remainder
+            decoded.frames.forEach((frame) => {
+              const request = decodeMain(frame)
+              if (request.contentTag === 5) {
+                const pingRequestData = decodePingRequestData(request.contentBytes)
+                const pingResponseBody = encodeBytesField(1, pingRequestData)
+                const responseMain = encodeMain({
+                  commandId: request.commandId,
+                  contentTag: 6,
+                  contentBytes: pingResponseBody
+                })
+                setTimeout(() => emitTx(encodeDelimited(responseMain)), 0)
+              } else if (request.contentTag === 32) {
+                const entries = [
+                  ['model_name', 'Flipper Zero'],
+                  ['firmware_version', 'dev']
+                ]
+                entries.forEach(([key, value], index) => {
+                  const infoBody = concat([encodeBytesField(1, key), encodeBytesField(2, value)])
+                  const frameMain = concat([
+                    encodeUintField(1, request.commandId),
+                    encodeUintField(2, 0),
+                    encodeBoolField(3, index < entries.length - 1),
+                    encodeField(33, 2, concat([encodeVarint(infoBody.length), infoBody]))
+                  ])
+                  setTimeout(() => emitTx(encodeDelimited(frameMain)), 0)
+                })
+              }
+            })
             return Promise.resolve()
           }
         }
@@ -255,13 +273,13 @@ describe('intent ui flipper web bluetooth integration', () => {
     cy.get('[data-testid="provider-open-flipper"]').click({ force: true })
     cy.get('[data-testid="provider-dialog-flipper"]').should('be.visible')
 
-    cy.get('[data-testid="integration-step-2"]').click({ force: true })
+    cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="flipper-select-device"]').click({ force: true })
     cy.contains('Selected Flipper Zero via Web Bluetooth.').should('exist')
 
-    cy.get('[data-testid="integration-step-3"]').click({ force: true })
+    cy.get('[data-testid="integration-step-2"]').click({ force: true })
     cy.get('[data-testid="provider-verify-flipper"]').click({ force: true })
-    cy.get('[data-testid="integration-step-4"]').click({ force: true })
+    cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
     cy.get('[data-testid="flipper-run-probe"]').click({ force: true })
     cy.get('[data-testid="flipper-probe-summary"]').should('contain.text', 'Probe ok')
     cy.get('[data-testid="flipper-probe-details"]').should('contain.text', 'Model: Flipper Zero')
