@@ -28,6 +28,14 @@ import { integrationStore, integrationVerification } from "../../stores/integrat
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
 
 const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
+const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+const DALY_OPTIONAL_SERVICE_UUIDS = [
+  DALY_NUS_SERVICE_UUID,
+  "0000fff0-0000-1000-8000-00805f9b34fb",
+  "0000ffe0-0000-1000-8000-00805f9b34fb",
+  "battery_service",
+  "device_information"
+];
 
 const providerMeta = {
   github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true },
@@ -44,7 +52,8 @@ const providerMeta = {
   tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },
   hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true },
   web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false },
-  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false }
+  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false },
+  daly_bms: { id: "daly_bms", name: "Daly BMS", icon: FiZap, tone: "text-emerald-300", useToken: false }
 };
 
 function IntegrationsPanel(props) {
@@ -70,6 +79,11 @@ function IntegrationsPanel(props) {
   const [flipperProbeDetails, setFlipperProbeDetails] = createSignal(null);
   const [flipperKnownDevices, setFlipperKnownDevices] = createSignal([]);
   const [flipperKnownLoading, setFlipperKnownLoading] = createSignal(false);
+  const [dalyDeviceName, setDalyDeviceName] = createSignal("");
+  const [dalyProbeSummary, setDalyProbeSummary] = createSignal("");
+  const [dalyProbeDetails, setDalyProbeDetails] = createSignal(null);
+  const [dalyKnownDevices, setDalyKnownDevices] = createSignal([]);
+  const [dalyKnownLoading, setDalyKnownLoading] = createSignal(false);
   const [testRunning, setTestRunning] = createSignal(false);
   const [testCompleted, setTestCompleted] = createSignal(false);
   const [testStageIndex, setTestStageIndex] = createSignal(0);
@@ -152,6 +166,8 @@ function IntegrationsPanel(props) {
     resetTestFlow();
     setFlipperProbeSummary("");
     setFlipperProbeDetails(null);
+    setDalyProbeSummary("");
+    setDalyProbeDetails(null);
     setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
     setAccountLabel(provider.accountLabel || `${provider.name} Session`);
 
@@ -176,6 +192,12 @@ function IntegrationsPanel(props) {
       void refreshKnownFlipperDevices();
       return;
     }
+    if (provider.id === "daly_bms" && typeof window !== "undefined") {
+      setTokenInput(String(localStorage.getItem("daly_bms_device_id") || "").trim());
+      setDalyDeviceName(String(localStorage.getItem("daly_bms_device_name") || "").trim());
+      void refreshKnownDalyDevices();
+      return;
+    }
 
     if (provider.tokenKey && typeof window !== "undefined") {
       const value = String(integrationStore.getToken(provider.id) || "").trim();
@@ -193,6 +215,8 @@ function IntegrationsPanel(props) {
     resetTestFlow();
     setFlipperProbeSummary("");
     setFlipperProbeDetails(null);
+    setDalyProbeSummary("");
+    setDalyProbeDetails(null);
   }
 
   function requiredInputsReady(provider) {
@@ -201,6 +225,7 @@ function IntegrationsPanel(props) {
     if (provider.id === "tailscale") return tokenInput().trim().length > 8 && tailscaleTailnet().trim().length > 0;
     if (provider.id === "web3") return web3Wallet().trim().startsWith("0x");
     if (provider.id === "flipper") return tokenInput().trim().length > 0;
+    if (provider.id === "daly_bms") return tokenInput().trim().length > 0;
     if (provider.oauthRedirect) return true;
     if (!provider.useToken) return true;
     return tokenInput().trim().length > 7;
@@ -227,6 +252,8 @@ function IntegrationsPanel(props) {
     setTestCompleted(false);
     setFlipperProbeSummary("");
     setFlipperProbeDetails(null);
+    setDalyProbeSummary("");
+    setDalyProbeDetails(null);
     setBusy(true);
 
     if (provider.oauthRedirect && connectorMode() === "user_owned") {
@@ -247,7 +274,9 @@ function IntegrationsPanel(props) {
       authKey: tailscaleAuthKey().trim(),
       wallet: web3Wallet().trim(),
       flipperDeviceId: tokenInput().trim(),
-      flipperDeviceName: flipperDeviceName().trim()
+      flipperDeviceName: flipperDeviceName().trim(),
+      dalyDeviceId: tokenInput().trim(),
+      dalyDeviceName: dalyDeviceName().trim()
     });
     stopLoadingStates();
     setBusy(false);
@@ -264,6 +293,15 @@ function IntegrationsPanel(props) {
       if (resolvedId) setTokenInput(resolvedId);
       if (resolvedName) {
         setFlipperDeviceName(resolvedName);
+        setAccountLabel(resolvedName);
+      }
+    }
+    if (provider.id === "daly_bms") {
+      const resolvedId = String(result.deviceId || "").trim();
+      const resolvedName = String(result.deviceName || "").trim();
+      if (resolvedId) setTokenInput(resolvedId);
+      if (resolvedName) {
+        setDalyDeviceName(resolvedName);
         setAccountLabel(resolvedName);
       }
     }
@@ -341,6 +379,75 @@ function IntegrationsPanel(props) {
     await runVerification(provider);
   }
 
+  async function selectDalyDevice() {
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      setStatus("Web Bluetooth requires HTTPS and a secure browser context.");
+      return;
+    }
+    const bluetooth = navigator?.bluetooth;
+    if (!bluetooth?.requestDevice) {
+      setStatus("Web Bluetooth API is unavailable in this browser.");
+      return;
+    }
+    try {
+      const device = await bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: DALY_OPTIONAL_SERVICE_UUIDS
+      });
+      const deviceId = String(device?.id || "").trim();
+      const deviceName = String(device?.name || "Daly BMS").trim();
+      if (!deviceId) throw new Error("Selected device did not return an id.");
+      setTokenInput(deviceId);
+      setDalyDeviceName(deviceName);
+      setAccountLabel(deviceName);
+      setStatus(`Selected ${deviceName} via Web Bluetooth.`);
+      void refreshKnownDalyDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Failed to select Daly BMS device.");
+    }
+  }
+
+  async function refreshKnownDalyDevices() {
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      setDalyKnownDevices([]);
+      return;
+    }
+    const bluetooth = navigator?.bluetooth;
+    if (!bluetooth?.getDevices) {
+      setDalyKnownDevices([]);
+      return;
+    }
+    setDalyKnownLoading(true);
+    try {
+      const devices = await bluetooth.getDevices();
+      const list = (Array.isArray(devices) ? devices : []).map((device) => ({
+        id: String(device?.id || "").trim(),
+        name: String(device?.name || "").trim() || "Unknown BLE device"
+      })).filter((device) => device.id);
+      setDalyKnownDevices(list);
+    } catch {
+      setDalyKnownDevices([]);
+    } finally {
+      setDalyKnownLoading(false);
+    }
+  }
+
+  function chooseKnownDalyDevice(device) {
+    const id = String(device?.id || "").trim();
+    if (!id) return;
+    const name = String(device?.name || "Daly BMS").trim();
+    setTokenInput(id);
+    setDalyDeviceName(name);
+    setAccountLabel(name);
+    setStatus(`Selected known device: ${name}.`);
+  }
+
+  async function selectAndVerifyDaly(provider) {
+    await selectDalyDevice();
+    if (!tokenInput().trim()) return;
+    await runVerification(provider);
+  }
+
   async function saveProvider(provider) {
     if (!provider) return;
 
@@ -366,6 +473,12 @@ function IntegrationsPanel(props) {
       payload.accountLabel = accountLabel().trim() || flipperDeviceName().trim() || "Flipper";
       localStorage.setItem("flipper_device_id", tokenInput().trim());
       localStorage.setItem("flipper_device_name", flipperDeviceName().trim());
+    }
+    if (provider.id === "daly_bms" && typeof window !== "undefined") {
+      payload.token = tokenInput().trim();
+      payload.accountLabel = accountLabel().trim() || dalyDeviceName().trim() || "Daly BMS";
+      localStorage.setItem("daly_bms_device_id", tokenInput().trim());
+      localStorage.setItem("daly_bms_device_name", dalyDeviceName().trim());
     }
 
     const linked = await integrationStore.connect(provider.id, payload);
@@ -398,6 +511,28 @@ function IntegrationsPanel(props) {
     const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
     const latency = Number.isFinite(result?.rpc?.ping?.latencyMs) ? ` · ping ${result.rpc.ping.latencyMs}ms` : "";
     setFlipperProbeSummary(`Probe ok · battery ${battery} · model ${model} · services ${serviceCount}${latency}${warningText}`);
+  }
+
+  async function runDalyProbe() {
+    setBusy(true);
+    const result = await integrationStore.probeDalyBms({
+      dalyDeviceId: tokenInput().trim(),
+      dalyDeviceName: dalyDeviceName().trim()
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setDalyProbeDetails(null);
+      setDalyProbeSummary(result.message || "Daly probe failed.");
+      return;
+    }
+    setVerifiedForDialog(true);
+    setDalyProbeDetails(result);
+    const battery = Number.isFinite(result.batteryLevel) ? `${result.batteryLevel}%` : "n/a";
+    const packets = Array.isArray(result.packetSamplesHex) ? result.packetSamplesHex.length : 0;
+    const protocol = String(result.protocol || "unknown").trim();
+    const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+    const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
+    setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${warningText}`);
   }
 
   function disconnectProvider(provider) {
@@ -680,6 +815,59 @@ function IntegrationsPanel(props) {
                         </Show>
                       </div>
                     </Show>
+                    <Show when={provider.id === "daly_bms"}>
+                      <div class="space-y-2 rounded border border-neutral-800 bg-[#0b0c0f] p-2">
+                        <p class="text-[11px] text-neutral-400">Device: {dalyDeviceName() || "Not selected"}</p>
+                        <p class="text-[11px] text-neutral-500">
+                          Daly integration uses BLE transport with read-first diagnostics. Writes are limited to probe polling frames.
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            class={buttonClass}
+                            onClick={selectDalyDevice}
+                            data-testid="daly-select-device"
+                          >
+                            Select Device
+                          </button>
+                          <button
+                            type="button"
+                            class={buttonClass}
+                            onClick={() => { void refreshKnownDalyDevices(); }}
+                            disabled={dalyKnownLoading()}
+                            data-testid="daly-refresh-known"
+                          >
+                            {dalyKnownLoading() ? "Refreshing..." : "Refresh Known"}
+                          </button>
+                          <button
+                            type="button"
+                            class={primaryClass}
+                            onClick={() => { void selectAndVerifyDaly(provider); }}
+                            disabled={busy()}
+                            data-testid="daly-select-verify"
+                          >
+                            Select + Verify
+                          </button>
+                        </div>
+                        <Show when={dalyKnownDevices().length > 0}>
+                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5">
+                            <For each={dalyKnownDevices()}>
+                              {(device) => (
+                                <button
+                                  type="button"
+                                  class="mb-1 flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
+                                  onClick={() => chooseKnownDalyDevice(device)}
+                                  data-testid={`daly-known-${device.id}`}
+                                >
+                                  <span class="truncate">{device.name}</span>
+                                  <span class="ml-2 truncate text-neutral-500">{device.id.slice(0, 8)}...</span>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
 
                     <Show when={provider.oauthRedirect && connectorMode() === "user_owned"}>
                       <p class="text-[11px] text-neutral-500">OAuth integrations redirect on Run Tests step to complete login.</p>
@@ -771,6 +959,54 @@ function IntegrationsPanel(props) {
                                         <p class="text-neutral-400">Device info sample:</p>
                                         <For each={entries}>
                                           {(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                    <Show when={warnings.length > 0}>
+                                      <div class="space-y-0.5 text-amber-300">
+                                        <p>Warnings:</p>
+                                        <For each={warnings}>
+                                          {(warning) => <p>• {warning}</p>}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                  </div>
+                                );
+                              }}
+                            </Show>
+                          </div>
+                        </Show>
+                        <Show when={provider.id === "daly_bms"}>
+                          <div class="mt-2 rounded border border-neutral-700 bg-neutral-950/55 p-2">
+                            <button
+                              type="button"
+                              class={buttonClass}
+                              onClick={() => { void runDalyProbe(); }}
+                              disabled={busy()}
+                              data-testid="daly-run-probe"
+                            >
+                              <FiZap size={12} />
+                              {busy() ? "Probing..." : "Probe Daly"}
+                            </button>
+                            <Show when={dalyProbeSummary()}>
+                              <p class="mt-2 text-[11px] text-neutral-200" data-testid="daly-probe-summary">{dalyProbeSummary()}</p>
+                            </Show>
+                            <Show when={dalyProbeDetails()}>
+                              {(probeAccessor) => {
+                                const probe = probeAccessor();
+                                const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
+                                const packets = Array.isArray(probe?.packetSamplesHex) ? probe.packetSamplesHex.slice(0, 3) : [];
+                                return (
+                                  <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="daly-probe-details">
+                                    <p>Protocol: {probe?.protocol || "unknown"}</p>
+                                    <p>Battery: {Number.isFinite(probe?.batteryLevel) ? `${probe.batteryLevel}%` : "n/a"}</p>
+                                    <p>Services: {Array.isArray(probe?.services) ? probe.services.length : 0}</p>
+                                    <p>Profile: {probe?.serial?.profileLabel || "unknown"}</p>
+                                    <Show when={packets.length > 0}>
+                                      <div class="space-y-0.5">
+                                        <p class="text-neutral-400">Packet samples:</p>
+                                        <For each={packets}>
+                                          {(sample) => <p>{sample}</p>}
                                         </For>
                                       </div>
                                     </Show>

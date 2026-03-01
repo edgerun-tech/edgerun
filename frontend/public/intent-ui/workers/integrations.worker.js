@@ -117,15 +117,18 @@ class IntegrationLifecycle {
 
   listConnectionView({ connection = {}, profileReady = false, deviceReady = true } = {}) {
     const connected = Boolean(connection?.connected);
-    const available = connected && profileReady && (this.id === "codex_cli" ? deviceReady : true);
+    const requiresProfileSession = this.id !== "codex_cli";
+    const available = connected
+      && (requiresProfileSession ? profileReady : true)
+      && (this.id === "codex_cli" ? deviceReady : true);
     const availabilityReason = this.id === "tailscale" && !connected
       ? "Provide Tailscale API key and link integration"
       : !connected
         ? "Not connected"
-        : !profileReady
-          ? "Profile session required"
-          : this.id === "codex_cli" && !deviceReady
-            ? "Connected device required"
+        : this.id === "codex_cli" && !deviceReady
+          ? "Connected device required"
+          : requiresProfileSession && !profileReady
+            ? "Profile session required"
             : "Ready";
     const connectorMode = this.resolveConnectorMode(connection?.connectorMode || this.getDefaultConnectorMode());
     return {
@@ -212,8 +215,8 @@ class IntegrationLifecycle {
       if (!wallet.startsWith("0x")) return { ok: false, message: "Connect EVM wallet first." };
       return { ok: true, message: "Wallet is connected and ready.", capabilities: this.defaultCapabilities.slice() };
     }
-    if (this.id === "flipper") {
-      return { ok: false, message: "Flipper verification must run in browser main thread." };
+    if (this.id === "flipper" || this.id === "daly_bms") {
+      return { ok: false, message: `${this.name} verification must run in browser main thread.` };
     }
     const resolvedToken = String(details?.token || "").trim() || String(token || "").trim();
     if (this.requiresToken && resolvedToken.length < 8) {
@@ -238,7 +241,8 @@ const integrationDefinitions = [
   { id: "tailscale", name: "Tailscale", authMethod: "token", supportsPlatformConnector: true, defaultConnectorMode: "user_owned", tokenKey: "tailscale_api_key", defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"], tags: ["network", "devices", "workflows"] },
   { id: "hetzner", name: "Hetzner", authMethod: "token", supportsPlatformConnector: true, tokenKey: "hetzner_token", defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"], tags: ["compute", "network", "storage", "workflows"] },
   { id: "web3", name: "Web3", authMethod: "wallet", supportsPlatformConnector: false, tokenKey: "web3_wallet", defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"], tags: ["identity", "security", "workflows"] },
-  { id: "flipper", name: "Flipper", authMethod: "web_bluetooth", supportsPlatformConnector: false, requiresToken: false, tokenKey: "flipper_device_id", defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.flipper.interact"], tags: ["devices", "security", "workflows"] }
+  { id: "flipper", name: "Flipper", authMethod: "web_bluetooth", supportsPlatformConnector: false, requiresToken: false, tokenKey: "flipper_device_id", defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.flipper.interact"], tags: ["devices", "security", "workflows"] },
+  { id: "daly_bms", name: "Daly BMS", authMethod: "web_bluetooth", supportsPlatformConnector: false, requiresToken: false, tokenKey: "daly_bms_device_id", defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.bms.read"], tags: ["devices", "energy", "workflows"] }
 ];
 
 const catalog = Object.fromEntries(integrationDefinitions.map((definition) => [definition.id, new IntegrationLifecycle(definition)]));

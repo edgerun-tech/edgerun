@@ -78,6 +78,7 @@ DONT PUT ANYTHING ON PORT 8080!!!
 ## Operator Workflow Preference
 - Operate autonomously end-to-end by default: investigate, implement, run required checks, and report outcomes without asking the operator to execute commands that the agent can run directly.
 - Treat user requests as completion-oriented: continue until the issue is actually resolved (or a concrete external blocker is proven).
+- Assume multiple agents may be editing concurrently; do not delete/revert/overwrite unrelated foreign changes unless explicitly instructed by the operator.
 - Ask the operator only when truly necessary:
   1. missing credentials/secrets/access the agent cannot obtain,
   2. destructive/high-risk decisions requiring explicit sign-off,

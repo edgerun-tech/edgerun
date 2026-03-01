@@ -3,12 +3,26 @@ import { BluetoothIntegration } from "./BluetoothIntegration";
 const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const DALY_NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 const DALY_NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+const DALY_FFF0_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
+const DALY_FFF1_CHAR_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
+const DALY_FFF2_CHAR_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
+const DALY_FFE0_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+const DALY_FFE1_CHAR_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
 const BATTERY_SERVICE = "battery_service";
 const BATTERY_LEVEL_CHARACTERISTIC = "battery_level";
 
+const DALY_PROFILES = [
+  { serviceUuid: DALY_NUS_SERVICE_UUID, txUuid: DALY_NUS_TX_UUID, rxUuid: DALY_NUS_RX_UUID, label: "NUS" },
+  { serviceUuid: DALY_FFF0_SERVICE_UUID, txUuid: DALY_FFF1_CHAR_UUID, rxUuid: DALY_FFF2_CHAR_UUID, label: "FFF0/FFF1/FFF2" },
+  { serviceUuid: DALY_FFF0_SERVICE_UUID, txUuid: DALY_FFF2_CHAR_UUID, rxUuid: DALY_FFF1_CHAR_UUID, label: "FFF0/FFF2/FFF1" },
+  { serviceUuid: DALY_FFE0_SERVICE_UUID, txUuid: DALY_FFE1_CHAR_UUID, rxUuid: DALY_FFE1_CHAR_UUID, label: "FFE0/FFE1" }
+];
+
+const DALY_OPTIONAL_SERVICES = Array.from(new Set(DALY_PROFILES.map((profile) => profile.serviceUuid)));
+
 const dalyBluetooth = new BluetoothIntegration({
   integrationId: "daly_bms",
-  optionalServices: [DALY_NUS_SERVICE_UUID, BATTERY_SERVICE, "device_information"]
+  optionalServices: [...DALY_OPTIONAL_SERVICES, BATTERY_SERVICE, "device_information"]
 });
 
 function sleep(ms) {
@@ -37,39 +51,102 @@ function detectProtocolFromSamples(samples) {
   return "unknown";
 }
 
+function buildA5ReadFrame(command) {
+  const frame = Uint8Array.from([0xA5, 0x40, command & 0xff, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+  let checksum = 0;
+  for (let index = 0; index < 12; index += 1) checksum = (checksum + frame[index]) & 0xff;
+  frame[12] = checksum;
+  return frame;
+}
+
+function normalizeUuid(input) {
+  return String(input || "").trim().toLowerCase();
+}
+
+async function resolveProfileSession(device, profile) {
+  const serviceResolved = await dalyBluetooth.getService(device, profile.serviceUuid);
+  const txResolved = await dalyBluetooth.getCharacteristic(serviceResolved.device, profile.serviceUuid, profile.txUuid);
+  const rxResolved = await dalyBluetooth.getCharacteristic(txResolved.device, profile.serviceUuid, profile.rxUuid);
+  return {
+    device: rxResolved.device,
+    server: rxResolved.server,
+    service: serviceResolved.service,
+    txChar: txResolved.characteristic,
+    rxChar: rxResolved.characteristic,
+    serviceUuid: profile.serviceUuid,
+    txUuid: profile.txUuid,
+    rxUuid: profile.rxUuid,
+    profileLabel: profile.label
+  };
+}
+
+async function resolveAdaptiveSession(device) {
+  const server = await dalyBluetooth.connectGatt(device);
+  if (typeof server.getPrimaryServices !== "function") {
+    throw new Error("Primary service enumeration is unavailable for Daly adaptive probe.");
+  }
+  const services = await server.getPrimaryServices();
+  for (const service of Array.isArray(services) ? services : []) {
+    const serviceUuid = normalizeUuid(service?.uuid);
+    if (!serviceUuid) continue;
+    let characteristics = [];
+    try {
+      characteristics = await service.getCharacteristics();
+    } catch {
+      continue;
+    }
+    const list = Array.isArray(characteristics) ? characteristics : [];
+    const txChar = list.find((char) => {
+      const p = char?.properties || {};
+      return Boolean(p.notify || p.indicate || p.read);
+    });
+    const rxChar = list.find((char) => {
+      const p = char?.properties || {};
+      return Boolean(p.write || p.writeWithoutResponse);
+    });
+    if (!txChar || !rxChar) continue;
+    return {
+      device,
+      server,
+      service,
+      txChar,
+      rxChar,
+      serviceUuid,
+      txUuid: normalizeUuid(txChar?.uuid),
+      rxUuid: normalizeUuid(rxChar?.uuid),
+      profileLabel: "adaptive"
+    };
+  }
+  throw new Error("No compatible notify/write characteristic pair found for Daly device.");
+}
+
 async function openDalySession(details = {}) {
   const preferredId = String(details?.dalyDeviceId || "").trim();
   const namePrefix = String(details?.namePrefix || "DL-").trim();
   const requestOptions = namePrefix
-    ? { filters: [{ namePrefix }], optionalServices: [DALY_NUS_SERVICE_UUID] }
-    : { acceptAllDevices: true, optionalServices: [DALY_NUS_SERVICE_UUID] };
+    ? { filters: [{ namePrefix }], optionalServices: DALY_OPTIONAL_SERVICES }
+    : { acceptAllDevices: true, optionalServices: DALY_OPTIONAL_SERVICES };
   let device = await dalyBluetooth.resolveDevice(preferredId, requestOptions);
   if (!device) throw new Error("No Daly device selected.");
 
-  let server = null;
-  let service = null;
+  for (const profile of DALY_PROFILES) {
+    try {
+      return await resolveProfileSession(device, profile);
+    } catch (error) {
+      if (dalyBluetooth.isPermissionError(error)) {
+        throw new Error("Daly BLE service not granted for this origin. Re-select the device and allow BLE service access.");
+      }
+      // continue profile probing
+    }
+  }
   try {
-    const resolved = await dalyBluetooth.getService(device, DALY_NUS_SERVICE_UUID);
-    device = resolved.device;
-    server = resolved.server;
-    service = resolved.service;
+    return await resolveAdaptiveSession(device);
   } catch (error) {
     if (dalyBluetooth.isPermissionError(error)) {
       throw new Error("Daly BLE service not granted for this origin. Re-select the device and allow BLE service access.");
     }
     throw error;
   }
-
-  const txResolved = await dalyBluetooth.getCharacteristic(device, DALY_NUS_SERVICE_UUID, DALY_NUS_TX_UUID);
-  const rxResolved = await dalyBluetooth.getCharacteristic(txResolved.device, DALY_NUS_SERVICE_UUID, DALY_NUS_RX_UUID);
-
-  return {
-    device: rxResolved.device,
-    server: rxResolved.server,
-    service,
-    txChar: txResolved.characteristic,
-    rxChar: rxResolved.characteristic
-  };
 }
 
 async function readBatteryLevel(server) {
@@ -96,7 +173,7 @@ async function readPrimaryServiceUuids(server) {
 }
 
 async function verifyDalyBmsBluetooth(details = {}) {
-  const { device, txChar, rxChar } = await openDalySession(details);
+  const { device, txChar, rxChar, profileLabel } = await openDalySession(details);
   const txProps = txChar?.properties || {};
   const rxProps = rxChar?.properties || {};
   if (!txProps.notify && !txProps.indicate && typeof txChar.startNotifications !== "function") {
@@ -107,7 +184,8 @@ async function verifyDalyBmsBluetooth(details = {}) {
   }
   return {
     deviceId: String(device.id || "").trim(),
-    deviceName: String(device.name || details?.dalyDeviceName || "Daly BMS").trim()
+    deviceName: String(device.name || details?.dalyDeviceName || "Daly BMS").trim(),
+    profileLabel
   };
 }
 
@@ -120,50 +198,95 @@ async function probeDalyBms(details = {}) {
   const diagnostics = [];
   let batteryLevel = null;
   let services = [];
-  let listener = null;
+  let listeners = [];
+  let notifiedChars = [];
+  let writableChars = [];
+  let session = null;
   try {
-    const opened = await openDalySession(details);
-    device = opened.device;
-    server = opened.server;
-    txChar = opened.txChar;
-    rxChar = opened.rxChar;
+    session = await openDalySession(details);
+    device = session.device;
+    server = session.server;
+    txChar = session.txChar;
+    rxChar = session.rxChar;
 
     [batteryLevel, services] = await Promise.all([
       readBatteryLevel(server),
       readPrimaryServiceUuids(server)
     ]);
 
-    listener = (event) => {
-      const value = toUint8Array(event?.target?.value);
-      if (value.length === 0) return;
-      if (samples.length < 10) samples.push(value);
-    };
-    if (typeof txChar.startNotifications === "function") {
-      await txChar.startNotifications();
-      txChar.addEventListener("characteristicvaluechanged", listener);
+    const notifyCandidates = [txChar, rxChar].filter((characteristic, index, list) =>
+      characteristic && list.indexOf(characteristic) === index
+    );
+    for (const characteristic of notifyCandidates) {
+      const props = characteristic?.properties || {};
+      if (!props.notify && !props.indicate && typeof characteristic.startNotifications !== "function") continue;
+      const listener = (event) => {
+        const value = toUint8Array(event?.target?.value);
+        if (value.length === 0) return;
+        if (samples.length < 10) samples.push(value);
+      };
+      try {
+        if (typeof characteristic.startNotifications === "function") {
+          await characteristic.startNotifications();
+        }
+        characteristic.addEventListener("characteristicvaluechanged", listener);
+        listeners.push({ characteristic, listener });
+        notifiedChars.push(normalizeUuid(characteristic?.uuid));
+      } catch {
+        // continue probing other characteristics
+      }
     }
 
-    // Conservative probe writes: common Daly poll frame candidates.
+    writableChars = [txChar, rxChar].filter((characteristic, index, list) => {
+      if (!characteristic || list.indexOf(characteristic) !== index) return false;
+      const props = characteristic?.properties || {};
+      return Boolean(props.write || props.writeWithoutResponse || typeof characteristic.writeValueWithoutResponse === "function" || typeof characteristic.writeValue === "function");
+    });
+
+    // Conservative poll frames: D2 query + checksum-correct A5 reads.
     const candidates = [
       Uint8Array.from([0xD2, 0x03, 0x00, 0x00, 0x00, 0x3D]),
-      Uint8Array.from([0xA5, 0x40, 0x90, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
+      buildA5ReadFrame(0x90),
+      buildA5ReadFrame(0x91),
+      buildA5ReadFrame(0x93),
+      buildA5ReadFrame(0x94)
     ];
     for (const frame of candidates) {
-      try {
-        if (typeof rxChar.writeValueWithoutResponse === "function") {
-          await rxChar.writeValueWithoutResponse(frame);
-        } else if (typeof rxChar.writeValue === "function") {
-          await rxChar.writeValue(frame);
+      for (const characteristic of writableChars) {
+        try {
+          if (typeof characteristic.writeValueWithoutResponse === "function") {
+            await characteristic.writeValueWithoutResponse(frame);
+          } else if (typeof characteristic.writeValue === "function") {
+            await characteristic.writeValue(frame);
+          }
+        } catch {
+          // continue
         }
-      } catch {
-        // continue with other candidates
       }
       await sleep(220);
     }
-    await sleep(450);
+    await sleep(600);
 
     if (!Number.isFinite(batteryLevel)) diagnostics.push("battery characteristic unavailable");
-    if (!services.includes(DALY_NUS_SERVICE_UUID)) diagnostics.push("daly nus service not visible in primary services");
+    if (writableChars.length === 0) diagnostics.push("no writable Daly characteristic detected");
+    if (notifiedChars.length === 0) diagnostics.push("no notify Daly characteristic detected");
+    const expectedServiceUuid = normalizeUuid(session?.serviceUuid || "");
+    if (expectedServiceUuid && !services.includes(expectedServiceUuid)) {
+      diagnostics.push(`selected service ${expectedServiceUuid} not visible in primary services`);
+    }
+    if (samples.length === 0) {
+      for (const characteristic of [txChar, rxChar]) {
+        if (!characteristic || typeof characteristic.readValue !== "function") continue;
+        try {
+          const snapshot = toUint8Array(await characteristic.readValue());
+          if (snapshot.length > 0 && samples.length < 10) {
+            samples.push(snapshot);
+          }
+        } catch {
+          // ignore read fallback failures
+        }
+      }
+    }
     if (samples.length === 0) diagnostics.push("no notify packets captured during probe");
     const protocol = detectProtocolFromSamples(samples);
 
@@ -177,9 +300,12 @@ async function probeDalyBms(details = {}) {
       diagnostics,
       probeOk: diagnostics.length === 0,
       serial: {
-        serviceUuid: DALY_NUS_SERVICE_UUID,
-        txUuid: DALY_NUS_TX_UUID,
-        rxUuid: DALY_NUS_RX_UUID
+        serviceUuid: session.serviceUuid || "",
+        txUuid: session.txUuid || "",
+        rxUuid: session.rxUuid || "",
+        profileLabel: session.profileLabel || "unknown",
+        notifyUuids: notifiedChars.filter(Boolean),
+        writeUuids: writableChars.map((char) => normalizeUuid(char?.uuid)).filter(Boolean)
       },
       probedAt: new Date().toISOString()
     };
@@ -194,20 +320,24 @@ async function probeDalyBms(details = {}) {
       diagnostics: [error instanceof Error ? error.message : String(error || "probe failed")],
       probeOk: false,
       serial: {
-        serviceUuid: DALY_NUS_SERVICE_UUID,
-        txUuid: DALY_NUS_TX_UUID,
-        rxUuid: DALY_NUS_RX_UUID
+        serviceUuid: "",
+        txUuid: "",
+        rxUuid: "",
+        profileLabel: "unknown"
       },
       probedAt: new Date().toISOString()
     };
   } finally {
-    if (txChar && listener) {
+    for (const entry of listeners) {
+      const characteristic = entry?.characteristic;
+      const listener = entry?.listener;
+      if (!characteristic || !listener) continue;
       try {
-        txChar.removeEventListener("characteristicvaluechanged", listener);
+        characteristic.removeEventListener("characteristicvaluechanged", listener);
       } catch {}
       try {
-        if (typeof txChar.stopNotifications === "function") {
-          await txChar.stopNotifications();
+        if (typeof characteristic.stopNotifications === "function") {
+          await characteristic.stopNotifications();
         }
       } catch {}
     }

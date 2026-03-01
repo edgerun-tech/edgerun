@@ -7,6 +7,7 @@ import { knownDevices } from "./devices";
 import { callIntegrationWorker, initializeIntegrationWorker } from "./integrations-worker";
 import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
 import { probeFlipper, verifyFlipperBluetooth } from "../lib/integrations/flipper-ble";
+import { probeDalyBms, verifyDalyBmsBluetooth } from "../lib/integrations/daly-bms-ble";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
@@ -460,6 +461,31 @@ async function verifyFlipperWebBluetooth(integration, details = {}) {
   }
 }
 
+async function verifyDalyBmsWebBluetooth(integration, details = {}) {
+  const resolveErrorMessage = (error, fallback) => {
+    if (error instanceof Error && String(error.message || "").trim()) return error.message;
+    if (error && typeof error === "object" && "message" in error) {
+      const text = String(error.message || "").trim();
+      if (text) return text;
+    }
+    return fallback;
+  };
+  try {
+    const verified = await verifyDalyBmsBluetooth(details);
+    return {
+      ok: true,
+      message: verified.profileLabel
+        ? `Verified Web Bluetooth access to ${verified.deviceName} (${verified.profileLabel} profile).`
+        : `Verified Web Bluetooth access to ${verified.deviceName}.`,
+      capabilities: integration.defaultCapabilities.slice(),
+      deviceId: verified.deviceId,
+      deviceName: verified.deviceName
+    };
+  } catch (error) {
+    return { ok: false, message: resolveErrorMessage(error, "Failed to verify Daly BMS over Web Bluetooth.") };
+  }
+}
+
 const integrationStore = {
   checkAll() {
     publishEvent(UI_INTENT_TOPICS.integration.checkAll, {}, uiIntentMeta("integrations.store"));
@@ -607,6 +633,8 @@ const integrationStore = {
       let result = null;
       if (id === "flipper") {
         result = await verifyFlipperWebBluetooth(integration, details);
+      } else if (id === "daly_bms") {
+        result = await verifyDalyBmsWebBluetooth(integration, details);
       } else {
         try {
           result = await callIntegrationWorker("verify_integration", {
@@ -669,6 +697,19 @@ const integrationStore = {
       return { ok: true, ...result };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : "Failed to probe Flipper." };
+    }
+  },
+  async probeDalyBms(details = {}) {
+    try {
+      const result = await probeDalyBms(details);
+      publishEvent(
+        UI_EVENT_TOPICS.integration.dalyBmsProbed,
+        result,
+        uiIntentMeta("integrations.store")
+      );
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Failed to probe Daly BMS." };
     }
   }
 };
