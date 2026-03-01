@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js";
 import { openWindow } from "../../stores/windows";
 import { navigateBrowser } from "../../stores/ui-actions";
+import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 
 const ONVIF_CAMERAS_KEY = "intent-ui-onvif-cameras-v1";
 
@@ -82,6 +83,69 @@ function isVideoLike(url) {
   return /^rtsp:\/\//i.test(url) || /\.m3u8($|\?)/i.test(url) || /\.(mp4|webm)($|\?)/i.test(url);
 }
 
+function toScanItem(input, index = 0) {
+  const url = String(input?.url || input?.xaddr || input?.xAddr || input?.endpoint || "").trim();
+  const ip = String(input?.ip || input?.host || "").trim();
+  const name = String(input?.name || input?.label || ip || "").trim();
+  const candidateUrl = url || (ip ? `http://${ip}/onvif/device_service` : "");
+  if (!candidateUrl) return null;
+  const normalized = normalizeCameraUrl(candidateUrl).url;
+  if (!normalized) return null;
+  return {
+    id: String(input?.id || `scan-${Date.now()}-${index}`),
+    name,
+    ip,
+    url: normalized
+  };
+}
+
+function normalizeScanItems(items) {
+  const source = Array.isArray(items) ? items : [];
+  const seen = new Set();
+  const results = [];
+  source.forEach((item, index) => {
+    const next = toScanItem(item, index);
+    if (!next) return;
+    const key = getCameraKey(next.url);
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push(next);
+  });
+  return results;
+}
+
+async function requestOnvifDiscover() {
+  const endpoints = [
+    localBridgeHttpUrl("/v1/local/onvif/discover"),
+    "/api/onvif/discover"
+  ];
+  let sawMissingEndpoint = false;
+  let lastError = null;
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        if (response.status === 404 || response.status === 405 || response.status === 501) {
+          sawMissingEndpoint = true;
+          continue;
+        }
+        const detail = String(payload?.error || "").trim();
+        throw new Error(detail || `ONVIF scan failed (${response.status}).`);
+      }
+      return normalizeScanItems(payload?.items || payload?.devices || payload?.results || []);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (sawMissingEndpoint) {
+    throw new Error("ONVIF scan service unavailable on this node. Add camera URL manually.");
+  }
+  throw (lastError instanceof Error ? lastError : new Error("Failed to scan ONVIF cameras."));
+}
+
 function getPreviewSrc(url) {
   if (!url) return "";
   if (isVideoLike(url)) return url;
@@ -141,12 +205,7 @@ function OnvifPanel() {
     setScanBusy(true);
     setStatus("");
     try {
-      const response = await fetch("/api/onvif/discover", { cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload?.ok === false) {
-        throw new Error(String(payload?.error || "Failed to scan ONVIF cameras."));
-      }
-      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const items = await requestOnvifDiscover();
       setScanResults(items);
       setStatus(items.length > 0 ? `Found ${items.length} ONVIF candidates.` : "No ONVIF candidates found.");
     } catch (error) {
@@ -164,7 +223,7 @@ function OnvifPanel() {
   })));
 
   return (
-    <div class="h-full overflow-auto bg-[#1a1a1a] p-4 text-neutral-200">
+    <div class="h-full overflow-auto bg-[#1a1a1a] p-4 text-neutral-200" data-testid="onvif-panel">
       <div class="mb-3">
         <h2 class="text-lg font-semibold text-white">ONVIF Cameras</h2>
         <p class="mt-1 text-xs text-neutral-500">Add camera URL or scan LAN for ONVIF endpoints. You can keep multiple camera widgets.</p>
@@ -177,6 +236,7 @@ function OnvifPanel() {
           onInput={(event) => setLabelInput(event.currentTarget.value)}
           placeholder="Label (optional)"
           class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+          data-testid="onvif-label-input"
         />
         <input
           type="text"
@@ -184,12 +244,14 @@ function OnvifPanel() {
           onInput={(event) => setUrlInput(event.currentTarget.value)}
           placeholder="Camera URL or host (example: 192.168.1.22/onvif/device_service)"
           class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+          data-testid="onvif-url-input"
         />
         <div class="flex gap-2">
           <button
             type="button"
             class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800"
             onClick={() => addCamera(urlInput(), labelInput())}
+            data-testid="onvif-add-camera"
           >
             Add Camera
           </button>
@@ -198,6 +260,7 @@ function OnvifPanel() {
             class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-50"
             onClick={runScan}
             disabled={scanBusy()}
+            data-testid="onvif-scan-lan"
           >
             {scanBusy() ? "Scanning..." : "Scan LAN"}
           </button>
@@ -205,11 +268,11 @@ function OnvifPanel() {
       </div>
 
       <Show when={status()}>
-        <p class="mb-3 text-xs text-cyan-300">{status()}</p>
+        <p class="mb-3 text-xs text-cyan-300" data-testid="onvif-status">{status()}</p>
       </Show>
 
       <Show when={scanResults().length > 0}>
-        <section class="mb-4 rounded-lg border border-neutral-800 bg-neutral-900/60 p-2.5">
+        <section class="mb-4 rounded-lg border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="onvif-scan-results">
           <p class="mb-2 text-xs uppercase tracking-wide text-neutral-500">Scan Results</p>
           <div class="space-y-1.5">
             <For each={scanResults()}>
@@ -223,6 +286,7 @@ function OnvifPanel() {
                     type="button"
                     class="shrink-0 rounded border border-neutral-700 px-2 py-0.5 text-[11px] text-neutral-200 hover:bg-neutral-800"
                     onClick={() => addCamera(item.url, item.name)}
+                    data-testid="onvif-scan-add"
                   >
                     Add
                   </button>
@@ -240,6 +304,7 @@ function OnvifPanel() {
               <article
                 class="resize overflow-auto rounded-lg border border-neutral-800 bg-neutral-900/70 p-2 flex flex-col"
                 style={{ "min-height": "220px", "min-width": "280px" }}
+                data-testid="onvif-camera-card"
               >
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <div class="min-w-0">
