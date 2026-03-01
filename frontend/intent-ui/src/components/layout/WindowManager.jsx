@@ -1,4 +1,4 @@
-import { For, lazy, Suspense, onMount, onCleanup } from "solid-js";
+import { For, lazy, Suspense, onMount, onCleanup, createMemo } from "solid-js";
 import { Motion } from "solid-motionone";
 import { windows, initializeDefaultWindows, openWindow } from "../../stores/windows";
 import { shiftWindowLayer } from "../../stores/windows";
@@ -222,11 +222,11 @@ function WindowManager() {
       window.removeEventListener("blur", handleMouseUp);
     }
   });
-  const openWindows = () => {
+  const openWindows = createMemo(() => {
     const store = windows();
     const activeWorkspace = getActiveWorkspaceId();
     return Object.entries(store).filter(([_, state]) => state.isOpen && (state.workspaceId === activeWorkspace || !state.workspaceId)).map(([id, state], index) => ({ id, state, index }));
-  };
+  });
   return <>
       <For each={openWindows()}>
         {({ id, state }) => <Window id={id} title={state.title}>

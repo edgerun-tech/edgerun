@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onMount } from "solid-js";
+import { createSignal, createMemo, Show, For, onMount } from "solid-js";
 import { Motion } from "solid-motionone";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -107,8 +107,8 @@ function CodeDiffViewer(props) {
     }
     setExpandedFiles(newSet);
   };
-  const totalAdditions = () => diffs().reduce((sum, d) => sum + d.additions, 0);
-  const totalDeletions = () => diffs().reduce((sum, d) => sum + d.deletions, 0);
+  const totalAdditions = createMemo(() => diffs().reduce((sum, d) => sum + d.additions, 0));
+  const totalDeletions = createMemo(() => diffs().reduce((sum, d) => sum + d.deletions, 0));
   return <Motion.div
     initial={{ opacity: 0, y: 8 }}
     animate={{ opacity: 1, y: 0 }}

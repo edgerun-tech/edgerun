@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onMount } from "solid-js";
+import { createSignal, createMemo, Show, For, onMount } from "solid-js";
 import { Motion } from "solid-motionone";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -76,7 +76,7 @@ function Timeline(props) {
     const parsed = parseTimelineData(props.response.data);
     setEvents(parsed);
   });
-  const filteredEvents = () => {
+  const filteredEvents = createMemo(() => {
     let result = [...events()];
     if (typeFilter()) {
       result = result.filter((e) => e.type === typeFilter());
@@ -93,7 +93,7 @@ function Timeline(props) {
       return sortOrder() === "asc" ? aTime - bTime : bTime - aTime;
     });
     return result;
-  };
+  });
   const formatTimestamp = (timestamp) => {
     const date = new Date(timestamp);
     const now = /* @__PURE__ */ new Date();

@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, Show, For } from "solid-js";
+import { createSignal, createMemo, createEffect, onMount, Show, For } from "solid-js";
 import { Motion } from "solid-motionone";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -50,7 +50,7 @@ function LogViewer(props) {
       logContainerRef.scrollTop = logContainerRef.scrollHeight;
     }
   });
-  const filteredLogs = () => {
+  const filteredLogs = createMemo(() => {
     let result = logs();
     if (filter()) {
       const query = filter().toLowerCase();
@@ -62,7 +62,7 @@ function LogViewer(props) {
       result = result.filter((log) => log.level === levelFilter());
     }
     return result;
-  };
+  });
   const clearLogs = () => {
     setLogs([]);
   };

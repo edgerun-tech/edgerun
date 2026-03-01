@@ -260,6 +260,7 @@ export default function DevicesPanel(props) {
             {(deviceAccessor) => {
               const device = deviceAccessor();
               const detail = device.primary || {};
+              const enabledCapabilities = Object.entries(detail.metadata?.capabilities || {}).filter(([, enabled]) => Boolean(enabled));
               return (
                 <div class="mt-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2 text-[11px] text-neutral-300">
                   <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Details</p>
@@ -305,14 +306,14 @@ export default function DevicesPanel(props) {
                     <div class="mt-2">
                       <p class="mb-1"><span class="text-neutral-500">Capabilities:</span></p>
                       <div class="flex flex-wrap gap-1">
-                        <For each={Object.entries(detail.metadata.capabilities).filter(([, enabled]) => Boolean(enabled))}>
+                        <For each={enabledCapabilities}>
                           {([name]) => (
                             <span class="inline-flex items-center rounded border border-neutral-700 bg-neutral-800/70 px-1.5 py-0.5 text-[10px] text-neutral-200">
                               {name}
                             </span>
                           )}
                         </For>
-                        <Show when={Object.entries(detail.metadata.capabilities).filter(([, enabled]) => Boolean(enabled)).length === 0}>
+                        <Show when={enabledCapabilities.length === 0}>
                           <span class="text-[10px] text-neutral-500">none</span>
                         </Show>
                       </div>

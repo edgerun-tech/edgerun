@@ -72,7 +72,8 @@ function WorkflowOverlay() {
   const [showConversationSettings, setShowConversationSettings] = createSignal(false);
   const [showEmojiPalette, setShowEmojiPalette] = createSignal(false);
   const [draftMessage, setDraftMessage] = createSignal("");
-  let previousConversationId = "";
+  const [previousConversationId, setPreviousConversationId] = createSignal("");
+  let conversationDraftInputRef;
   const [localMessagesByConversation, setLocalMessagesByConversation] = createSignal((() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(LOCAL_CONVERSATION_MESSAGES_KEY) || "{}");
@@ -97,7 +98,7 @@ function WorkflowOverlay() {
       return [];
     }
   })());
-  let activeBubbleDrag = null;
+  const [activeBubbleDrag, setActiveBubbleDrag] = createSignal(null);
   const bubbleWidth = 260;
   const bubbleHeight = 132;
   const clampBubblePosition = (x, y) => {
@@ -288,11 +289,11 @@ function WorkflowOverlay() {
     event.preventDefault();
     const bubble = chatBubbles().find((item) => item.id === bubbleId);
     if (!bubble) return;
-    activeBubbleDrag = {
+    setActiveBubbleDrag({
       id: bubbleId,
       offsetX: event.clientX - Number(bubble.x || 0),
       offsetY: event.clientY - Number(bubble.y || 0)
-    };
+    });
   };
   const visibleThreadMessages = createMemo(() => {
     const all = activeConversationMessages();
@@ -413,8 +414,7 @@ function WorkflowOverlay() {
       setShowEmojiPalette(true);
       setSelectedConversationId("ai-active");
       queueMicrotask(() => {
-        const draftInput = document.querySelector('[data-testid="conversation-draft-input"]');
-        if (draftInput instanceof HTMLElement) draftInput.focus();
+        if (conversationDraftInputRef instanceof HTMLElement) conversationDraftInputRef.focus();
       });
       if (navigator.clipboard?.readText) {
         void navigator.clipboard.readText().then((text) => {
@@ -426,17 +426,18 @@ function WorkflowOverlay() {
       }
     };
     handleBubblePointerMove = (event) => {
-      if (!activeBubbleDrag) return;
-      const nextX = event.clientX - activeBubbleDrag.offsetX;
-      const nextY = event.clientY - activeBubbleDrag.offsetY;
+      const drag = activeBubbleDrag();
+      if (!drag) return;
+      const nextX = event.clientX - drag.offsetX;
+      const nextY = event.clientY - drag.offsetY;
       const clamped = clampBubblePosition(nextX, nextY);
-      setChatBubbles((prev) => prev.map((bubble) => bubble.id === activeBubbleDrag.id
+      setChatBubbles((prev) => prev.map((bubble) => bubble.id === drag.id
         ? { ...bubble, x: clamped.x, y: clamped.y, updatedAt: Date.now() }
         : bubble
       ));
     };
     handleBubblePointerUp = () => {
-      activeBubbleDrag = null;
+      setActiveBubbleDrag(null);
     };
     handleCallLinkReady = (event) => {
       const detail = event?.detail || {};
@@ -499,8 +500,8 @@ function WorkflowOverlay() {
   createEffect(() => {
     const conversationId = activeConversation()?.id;
     if (!conversationId) return;
-    if (conversationId === previousConversationId) return;
-    previousConversationId = conversationId;
+    if (conversationId === previousConversationId()) return;
+    setPreviousConversationId(conversationId);
     setFollowThreadBottom(true);
     setThreadScrollTop(0);
     setLoadedThreadCount(THREAD_PAGE_SIZE);
@@ -752,6 +753,9 @@ function WorkflowOverlay() {
                         draftMessage={draftMessage}
                         setDraftMessage={setDraftMessage}
                         sendDraftMessage={sendDraftMessage}
+                        conversationDraftInputRef={(el) => {
+                          conversationDraftInputRef = el;
+                        }}
                       />
                     </Show>
                     <Show when={state().rightPanel === "devices"}>

@@ -22,6 +22,7 @@ const mockFileSystem = {
 };
 
 function TerminalComponent(props) {
+  let unsubscribeTerminalInput;
   const [currentDir, setCurrentDir] = createSignal("/home");
   const [history, setHistory] = createSignal([
     "Browser OS Terminal",
@@ -164,4 +165,3 @@ export {
   TerminalComponent as default,
   writeToTerminal,
 };
-  let unsubscribeTerminalInput;

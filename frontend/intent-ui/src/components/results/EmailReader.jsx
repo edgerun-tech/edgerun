@@ -1,4 +1,4 @@
-import { createSignal, Show, For, onMount } from "solid-js";
+import { createSignal, createMemo, Show, For, onMount } from "solid-js";
 import { Motion } from "solid-motionone";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -50,7 +50,7 @@ function EmailReader(props) {
       setSelectedEmail(parsed[0]);
     }
   });
-  const filteredEmails = () => {
+  const filteredEmails = createMemo(() => {
     let result = emails();
     if (starredOnly()) {
       result = result.filter((e) => e.isStarred);
@@ -62,13 +62,13 @@ function EmailReader(props) {
       );
     }
     return result;
-  };
+  });
   const toggleStar = (id) => {
     setEmails((prev) => prev.map(
       (e) => e.id === id ? { ...e, isStarred: !e.isStarred } : e
     ));
   };
-  const unreadCount = () => emails().filter((e) => !e.isRead).length;
+  const unreadCount = createMemo(() => emails().filter((e) => !e.isRead).length);
   return <Motion.div
     initial={{ opacity: 0, y: 8 }}
     animate={{ opacity: 1, y: 0 }}

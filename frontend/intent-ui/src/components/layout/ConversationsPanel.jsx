@@ -528,6 +528,7 @@ export default function ConversationsPanel(props) {
             </div>
           </Show>
           <textarea
+            ref={props.conversationDraftInputRef}
             value={props.draftMessage()}
             onInput={(event) => props.setDraftMessage(event.currentTarget.value)}
             onKeyDown={(event) => {

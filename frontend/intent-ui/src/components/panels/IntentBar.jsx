@@ -279,13 +279,13 @@ function IntentBar() {
   let handleIntentBarToggle;
   let unsubscribeIntentbarToggle;
   let mcpMessageHandler;
-  let weatherUpdating = false;
-  let weatherAborted = false;
-  let lastGoodWeather = null;
-  let latestAssistantSnapshot = "";
-  let pendingAssistantChunk = "";
-  let activeStreamingLineId = "";
-  let pausedAssistantSnapshot = "";
+  const [weatherUpdating, setWeatherUpdating] = createSignal(false);
+  const [weatherAborted, setWeatherAborted] = createSignal(false);
+  const [lastGoodWeather, setLastGoodWeather] = createSignal(null);
+  const [latestAssistantSnapshot, setLatestAssistantSnapshot] = createSignal("");
+  const [pendingAssistantChunk, setPendingAssistantChunk] = createSignal("");
+  const [activeStreamingLineId, setActiveStreamingLineId] = createSignal("");
+  const [pausedAssistantSnapshot, setPausedAssistantSnapshot] = createSignal("");
   const clearNyanTimers = () => {
     if (nyanTimer) {
       clearTimeout(nyanTimer);
@@ -663,10 +663,10 @@ function IntentBar() {
     timeInterval = setInterval(() => {
       setCurrentTime(/* @__PURE__ */ new Date());
     }, 30000);
-    weatherAborted = false;
+    setWeatherAborted(false);
     await refreshWeather();
     const scheduleWeatherRefresh = (delayMs = WEATHER_REFRESH_MS) => {
-      if (weatherAborted) return;
+      if (weatherAborted()) return;
       if (weatherTimer) clearTimeout(weatherTimer);
       const jitter = Math.floor(Math.random() * 20000);
       weatherTimer = setTimeout(async () => {
@@ -759,7 +759,7 @@ function IntentBar() {
     if (timeInterval) clearInterval(timeInterval);
     if (responseLineTimer) clearInterval(responseLineTimer);
     if (peekCloseTimer) clearTimeout(peekCloseTimer);
-    weatherAborted = true;
+    setWeatherAborted(true);
     if (weatherTimer) clearTimeout(weatherTimer);
     clearNyanTimers();
     setNyanFlight(null);
@@ -846,9 +846,9 @@ function IntentBar() {
   });
   const normalizeLineText = (value) => String(value || "").replace(/\s+/g, " ").trim();
   const clearStreamingResponseLine = () => {
-    if (!activeStreamingLineId) return;
-    const id = activeStreamingLineId;
-    activeStreamingLineId = "";
+    const id = activeStreamingLineId();
+    if (!id) return;
+    setActiveStreamingLineId("");
     setResponseLines((prev) => prev.filter((line) => line.id !== id));
   };
   const setStreamingResponseLine = (text) => {
@@ -858,15 +858,17 @@ function IntentBar() {
       return;
     }
     const now = Date.now();
-    if (!activeStreamingLineId) {
-      activeStreamingLineId = `streaming-${now}`;
+    const streamingId = activeStreamingLineId();
+    if (!streamingId) {
+      const nextId = `streaming-${now}`;
+      setActiveStreamingLineId(nextId);
       setResponseLines((prev) => [
         ...prev,
-        { id: activeStreamingLineId, text: normalized, createdAt: now, streaming: true }
+        { id: nextId, text: normalized, createdAt: now, streaming: true }
       ].slice(-RESPONSE_MAX_LINES));
       return;
     }
-    setResponseLines((prev) => prev.map((line) => line.id === activeStreamingLineId
+    setResponseLines((prev) => prev.map((line) => line.id === streamingId
       ? { ...line, text: normalized, createdAt: now, streaming: true }
       : line
     ));
@@ -879,7 +881,7 @@ function IntentBar() {
       ...prev.filter((line) => !line.streaming),
       { id: `line-${now}-${Math.random().toString(16).slice(2, 6)}`, text: normalized, createdAt: now, streaming: false }
     ].slice(-RESPONSE_MAX_LINES));
-    activeStreamingLineId = "";
+    setActiveStreamingLineId("");
   };
   const flushAssistantLines = (text) => {
     const normalized = String(text || "").replace(/\r/g, "");
@@ -892,55 +894,55 @@ function IntentBar() {
   createEffect(() => {
     const assistantText = latestAssistantMessage();
     if (responsePaused()) {
-      pausedAssistantSnapshot = assistantText || pausedAssistantSnapshot;
+      setPausedAssistantSnapshot(assistantText || pausedAssistantSnapshot());
       return;
     }
-    if (pausedAssistantSnapshot && assistantText === latestAssistantSnapshot) {
-      const resumed = pausedAssistantSnapshot;
-      pausedAssistantSnapshot = "";
-      if (resumed && resumed !== latestAssistantSnapshot) {
-        latestAssistantSnapshot = "";
+    if (pausedAssistantSnapshot() && assistantText === latestAssistantSnapshot()) {
+      const resumed = pausedAssistantSnapshot();
+      setPausedAssistantSnapshot("");
+      if (resumed && resumed !== latestAssistantSnapshot()) {
+        setLatestAssistantSnapshot("");
       }
     }
     if (!assistantText) {
-      latestAssistantSnapshot = "";
-      pendingAssistantChunk = "";
+      setLatestAssistantSnapshot("");
+      setPendingAssistantChunk("");
       clearStreamingResponseLine();
       return;
     }
-    if (assistantText === latestAssistantSnapshot) {
-      if (!workflowUi().streaming && pendingAssistantChunk.trim()) {
-        pushFinalResponseLine(pendingAssistantChunk);
-        pendingAssistantChunk = "";
+    if (assistantText === latestAssistantSnapshot()) {
+      if (!workflowUi().streaming && pendingAssistantChunk().trim()) {
+        pushFinalResponseLine(pendingAssistantChunk());
+        setPendingAssistantChunk("");
       }
       if (!workflowUi().streaming) {
         clearStreamingResponseLine();
       }
       return;
     }
-    const delta = assistantText.startsWith(latestAssistantSnapshot)
-      ? assistantText.slice(latestAssistantSnapshot.length)
+    const delta = assistantText.startsWith(latestAssistantSnapshot())
+      ? assistantText.slice(latestAssistantSnapshot().length)
       : (() => {
-        pendingAssistantChunk = "";
+        setPendingAssistantChunk("");
         clearStreamingResponseLine();
         return assistantText;
       })();
-    latestAssistantSnapshot = assistantText;
+    setLatestAssistantSnapshot(assistantText);
     if (!delta) return;
-    const combined = `${pendingAssistantChunk}${delta}`;
+    const combined = `${pendingAssistantChunk()}${delta}`;
     const parts = combined.split(/\n+/);
     const complete = parts.slice(0, -1).join("\n");
-    pendingAssistantChunk = parts[parts.length - 1] || "";
+    setPendingAssistantChunk(parts[parts.length - 1] || "");
     if (complete.trim()) {
       flushAssistantLines(complete);
     }
     if (workflowUi().streaming) {
-      setStreamingResponseLine(pendingAssistantChunk);
+      setStreamingResponseLine(pendingAssistantChunk());
       return;
     }
-    if (pendingAssistantChunk.trim()) {
-      pushFinalResponseLine(pendingAssistantChunk);
-      pendingAssistantChunk = "";
+    if (pendingAssistantChunk().trim()) {
+      pushFinalResponseLine(pendingAssistantChunk());
+      setPendingAssistantChunk("");
     }
     clearStreamingResponseLine();
   });
@@ -1845,15 +1847,15 @@ function IntentBar() {
     }
   };
   const refreshWeather = async () => {
-    if (weatherUpdating || weatherAborted) return;
-    weatherUpdating = true;
+    if (weatherUpdating() || weatherAborted()) return;
+    setWeatherUpdating(true);
     try {
       const coords = await resolveWeatherCoords();
       const routeWeather = await fetchWeatherViaApiRoute(coords);
       const next = routeWeather || await fetchWeatherViaOpenMeteo(coords);
       if (!next) {
-        if (lastGoodWeather) {
-          setWeather((prev) => ({ ...prev, ...lastGoodWeather }));
+        if (lastGoodWeather()) {
+          setWeather((prev) => ({ ...prev, ...lastGoodWeather() }));
         }
         return;
       }
@@ -1866,18 +1868,18 @@ function IntentBar() {
         location: typeof next.location === "string" && next.location ? next.location : coords.location || weather().location,
         forecast: Array.isArray(next.forecast) && next.forecast.length > 0 ? next.forecast : weather().forecast
       };
-      lastGoodWeather = mergedWeather;
+      setLastGoodWeather(mergedWeather);
       setWeather((prev) => ({
         ...prev,
         ...mergedWeather
       }));
       persistWeatherSnapshot(mergedWeather);
     } catch {
-      if (lastGoodWeather) {
-        setWeather((prev) => ({ ...prev, ...lastGoodWeather }));
+      if (lastGoodWeather()) {
+        setWeather((prev) => ({ ...prev, ...lastGoodWeather() }));
       }
     } finally {
-      weatherUpdating = false;
+      setWeatherUpdating(false);
     }
   };
   const getWeatherIcon = (condition, size = 20) => {
