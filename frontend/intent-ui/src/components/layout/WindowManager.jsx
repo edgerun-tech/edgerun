@@ -1,6 +1,6 @@
 import { For, lazy, Suspense, onMount, onCleanup } from "solid-js";
 import { Motion } from "solid-motionone";
-import { windows, initializeDefaultWindows } from "../../stores/windows";
+import { windows, initializeDefaultWindows, openWindow } from "../../stores/windows";
 import { shiftWindowLayer } from "../../stores/windows";
 import { getActiveWorkspaceId } from "../../stores/workspaces";
 import { clearProfileRuntimeSession, profileRuntime } from "../../stores/profile-runtime";
@@ -183,6 +183,9 @@ function WindowManager() {
   let handleMouseUp;
   onMount(() => {
     initializeDefaultWindows();
+    if (typeof window !== "undefined" && /\/call\/.+/.test(window.location.pathname)) {
+      openWindow("call");
+    }
     let isPanningLayer = false;
     let lastX = 0;
     let lastY = 0;

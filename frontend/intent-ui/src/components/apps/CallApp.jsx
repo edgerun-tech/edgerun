@@ -4,6 +4,14 @@ import { BiRegularVideo, BiRegularVideoOff, BiRegularMicrophone, BiRegularMicrop
 import { TbOutlineBellRinging, TbOutlinePhone, TbOutlineVideo } from "solid-icons/tb";
 import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
 import { subscribeEvent } from "../../stores/eventbus";
+
+function createPeerClient(options) {
+  if (typeof window !== "undefined" && typeof window.__intentUiPeerFactory === "function") {
+    return window.__intentUiPeerFactory(options || {});
+  }
+  return new Peer(options || {});
+}
+
 function CallApp() {
   let localVideoRef;
   let remoteVideoRef;
@@ -24,6 +32,8 @@ function CallApp() {
   const [ringing, setRinging] = createSignal(false);
   const [ringTarget, setRingTarget] = createSignal("");
   const [ringMode, setRingMode] = createSignal("call");
+  const [autoJoinTarget, setAutoJoinTarget] = createSignal("");
+  const [autoJoinAttemptKey, setAutoJoinAttemptKey] = createSignal("");
   let handleIntentCallRing;
   let unsubscribeCallRing;
   let peer = null;
@@ -37,7 +47,7 @@ function CallApp() {
   const initPeer = async () => {
     setStatus("Connecting to signaling server...");
     try {
-      peer = new Peer({
+      peer = createPeerClient({
         debug: 1
       });
       peer.on("open", (id) => {
@@ -101,13 +111,16 @@ function CallApp() {
     }
     return localStream;
   };
-  const startCall = async () => {
-    if (!peer || !callId()) return;
+  const startCall = async (targetOverride = "") => {
+    const target = String(targetOverride || callId() || "").trim();
+    if (!peer || !target) return;
+    if (target === peerId()) return;
+    setCallId(target);
     setStatus("Calling...");
     try {
       const stream = await getLocalStream();
-      const call = peer.call(callId(), stream);
-      const dataConn = peer.connect(callId());
+      const call = peer.call(target, stream);
+      const dataConn = peer.connect(target);
       dataConn.on("open", () => {
         setConnections((prev) => [...prev, dataConn]);
         updateConnectionStatus();
@@ -220,11 +233,12 @@ function CallApp() {
   const joinFromUrl = () => {
     const path = window.location.pathname;
     const match = path.match(/\/call\/(.+)/);
-    if (match && peerId()) {
-      const targetId = match[1];
-      if (targetId === peerId()) return;
+    if (match) {
+      const targetId = decodeURIComponent(match[1] || "").trim();
+      if (!targetId) return;
       setCallId(targetId);
-      setStatus('Click "Connect" to join the call');
+      setAutoJoinTarget(targetId);
+      setStatus("Joining call from shared link...");
     }
   };
   const connectChat = () => {
@@ -269,6 +283,17 @@ function CallApp() {
       startRinging(detail.contact, detail.mode);
     };
     unsubscribeCallRing = subscribeEvent(UI_EVENT_TOPICS.action.callRinging, handleIntentCallRing);
+  });
+  createEffect(() => {
+    const target = autoJoinTarget();
+    const self = peerId();
+    if (!target || !self) return;
+    if (target === self) return;
+    const key = `${self}->${target}`;
+    if (autoJoinAttemptKey() === key) return;
+    if (currentCall() || callConnected()) return;
+    setAutoJoinAttemptKey(key);
+    void startCall(target);
   });
   createEffect(() => {
     messages();
