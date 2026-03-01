@@ -51,7 +51,7 @@ jobs:
           path: /tmp/edgerun-runtime-release
 
       - name: Attest runtime release artifact provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: /tmp/edgerun-runtime-release/edgerun-runtime
 
