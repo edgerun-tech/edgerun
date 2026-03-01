@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down swarm-add-worker
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down swarm-add-worker spec-index
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -107,3 +107,6 @@ nm-down:
 
 swarm-add-worker:
 	./scripts/swarm/add-worker-node.sh 10.13.37.2
+
+spec-index:
+	./scripts/generate-spec-index.sh

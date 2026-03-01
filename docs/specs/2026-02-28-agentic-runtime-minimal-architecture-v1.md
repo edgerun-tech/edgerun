@@ -1,5 +1,7 @@
 # 2026-02-28 Agentic Runtime Minimal Architecture V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 - Simplify agent automation to one seamless event-driven path: task -> shard -> diff -> gate -> apply.
 - Remove redundant wrappers and legacy merge paths so data flow is explicit and deterministic.

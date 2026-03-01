@@ -1,5 +1,7 @@
 # 2026-02-28 Agent Storage Native Proposal Flow V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 - Connect the current virtualized agent diff workflow to the `edgerun-storage` proposal queue and gatekeeper tools.
 - Keep event-first semantics while making proposal lifecycle queryable and enforceable through storage-native events.

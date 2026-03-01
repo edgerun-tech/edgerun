@@ -1,0 +1,24 @@
+spec	status	domain	replaces	note
+2026-03-01-spec-catalog-and-active-index-v1.md	active	docs		Introduces deterministic status catalog and generated active index.
+2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	active	repo-ops		Current cleanup baseline after removal of agent/executor tool surfaces.
+DOCS_CONTEXT_CONSOLIDATION_V1.md	active	docs		Compact context docs are current operator baseline.
+UNIFIED_WORKFLOW_ECOSYSTEM_V1.md	active	ci		Unified check/build/test/verify workflow remains canonical.
+CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md	active	ci		Required checks policy remains enforced.
+CLOUDFLARE_FRONTEND_TARGETS_V1.md	active	frontend-delivery		Frontend deploy target pinning policy remains active.
+NODE_MANAGER_DOCKER_COMPOSE_BOOTSTRAP_V1.md	active	node-manager		Compose bootstrap remains active operational path.
+2026-03-01-integration-machine-workflow-contract-v1.md	active	integrations		Current integration/workflow contract baseline.
+2026-03-01-integration-lifecycle-class-template-v1.md	active	integrations		Current integration lifecycle implementation template.
+2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md	active	intent-ui		Current hardening direction for lifecycle logic.
+FRONTEND_PRODUCTION_READINESS_GATES_V1.md	active	frontend-quality		Production gates for frontend are still active.
+FRONTEND_ROUTED_WS_AND_A11Y_POLISH_V1.md	active	frontend-quality		Routed WS and accessibility contract remains active.
+GO_TOOLING_EVENT_WORKFLOW_V1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	edgertool-based workflow removed.
+AGENT_WORKFLOW_SCRIPT_RESILIENCE_V1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Referenced scripts were removed.
+AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Acceptance flow depended on removed scripts.
+2026-02-28-agent-storage-native-proposal-flow-v1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Storage proposal wrapper flow removed with tooling surface cleanup.
+2026-02-28-agentic-runtime-minimal-architecture-v1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Runtime entrypoints referenced removed tooling wrappers.
+2026-03-01-ai-native-storage-agent-workflow-v1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Assumed edgertool-based autosubmit path.
+2026-03-01-agent-virtualized-context-diff-events-and-test-executors-v1.md	superseded	agent-tooling	2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md	Defined flows via removed agent script surface.
+2026-03-01-nats-jetstream-central-eventbus-and-container-agents-v1.md	historical	eventbus		Aspirational architecture; current implementation diverged.
+2026-02-24-cloud-os-eslint-config.md	historical	cloud-os		Cloud-os scope removed from current repo surface.
+CLOUD_OS_CODEX_CLI_PIPELINE_V1.md	historical	cloud-os		Cloud-os pipeline is not in current active tree.
+CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os dev loop no longer active in current repository layout.

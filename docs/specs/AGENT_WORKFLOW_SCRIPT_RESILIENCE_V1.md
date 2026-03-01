@@ -1,5 +1,7 @@
 # Agent Workflow Script Resilience V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 Harden agent and executor shell workflows for event-native operation with deterministic failure signaling.
 

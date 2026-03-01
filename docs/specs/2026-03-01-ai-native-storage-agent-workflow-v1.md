@@ -1,5 +1,7 @@
 # 2026-03-01 AI Native Storage Agent Workflow V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 - Remove agent workflow glue between proposal submission and gatekeeping.
 - Make `edgerun-storage` the native authority for `submit -> validate -> apply/reject`.

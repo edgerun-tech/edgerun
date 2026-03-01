@@ -1,5 +1,7 @@
 # Go Tooling Event Workflow V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 Replace ad-hoc shell implementations for event and diff workflow operations with a typed Go CLI.
 

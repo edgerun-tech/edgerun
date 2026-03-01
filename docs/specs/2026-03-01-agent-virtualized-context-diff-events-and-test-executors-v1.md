@@ -1,5 +1,7 @@
 # 2026-03-01 Agent Virtualized Context Diff Events And Test Executors V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 - Move agent execution away from direct git worktrees to virtualized workspace views.
 - Use `mcp-syscall` as the context/code-edit tool backend for agent context gathering.

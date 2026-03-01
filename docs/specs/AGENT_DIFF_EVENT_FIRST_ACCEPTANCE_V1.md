@@ -1,5 +1,7 @@
 # Agent Diff Event-First Acceptance V1
 
+Superseded on 2026-03-01 by `2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md`.
+
 ## Goal
 Ensure accepted agent/code-edit diffs are propagated through the event bus (NATS) first, with no implicit local repository mutation.
 
