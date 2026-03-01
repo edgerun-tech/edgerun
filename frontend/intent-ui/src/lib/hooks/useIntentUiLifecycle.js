@@ -176,7 +176,9 @@ export function useIntentUiLifecycle(params) {
     window.addEventListener("keydown", handleContextEscape);
     unsubscribeBootstrapOpen = subscribeEvent(UI_EVENT_TOPICS.action.profileBootstrapOpened, (event) => {
       if (!event?.payload?.manual) return;
-      params.setShowBootstrapGate(true);
+      if (typeof params.setShowBootstrapGate === "function") {
+        params.setShowBootstrapGate(true);
+      }
     });
     handleStorageUpdate = () => params.setRegisteredDomain(readRegisteredDomain());
     window.addEventListener("storage", handleStorageUpdate);

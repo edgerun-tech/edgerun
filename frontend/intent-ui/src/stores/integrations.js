@@ -4,7 +4,6 @@ import { createIntegrationCatalog } from "../lib/integrations/catalog";
 import { publishEvent, subscribeEvent } from "./eventbus";
 import { profileRuntime } from "./profile-runtime";
 import { knownDevices } from "./devices";
-import { getProfileSecret, removeProfileSecret, setProfileSecret } from "./profile-secrets";
 import { callIntegrationWorker, initializeIntegrationWorker } from "./integrations-worker";
 import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
 import { probeFlipper, verifyFlipperBluetooth } from "../lib/integrations/flipper-ble";
@@ -44,7 +43,7 @@ async function getVaultStatus() {
     return cachedVaultStatus;
   }
   try {
-    const response = await fetch("/api/credentials/status", { cache: "no-store" });
+    const response = await fetch(localBridgeHttpUrl("/v1/local/credentials/status"), { cache: "no-store" });
     const payload = await response.json().catch(() => ({}));
     cachedVaultStatus = {
       installed: Boolean(payload?.installed),
@@ -66,11 +65,12 @@ async function syncIntegrationTokenToVault(integration, details) {
   const accountLabel = String(details?.accountLabel || `${integration.name} Session`).trim();
   const entryName = `integration/${integration.id}/token`;
   try {
-    await fetch("/api/credentials/store", {
+    await fetch(localBridgeHttpUrl("/v1/local/credentials/store"), {
       method: "POST",
       headers: { "content-type": "application/json; charset=utf-8" },
       body: JSON.stringify({
         credentialType: "token",
+        entryId: entryName,
         name: entryName,
         username: accountLabel,
         secret: token,
@@ -89,12 +89,42 @@ async function syncIntegrationTokenToVault(integration, details) {
   }
 }
 
+async function removeIntegrationTokenFromVault(integrationId) {
+  const id = String(integrationId || "").trim();
+  if (!id) return;
+  try {
+    await fetch(localBridgeHttpUrl("/v1/local/credentials/delete"), {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ entryId: `integration/${id}/token` })
+    });
+  } catch {
+    // best effort cleanup only
+  }
+}
+
+async function hydrateIntegrationTokenFromVault(integration) {
+  if (typeof window === "undefined" || !integration?.id || !integration?.tokenKey) return;
+  const existing = String(localStorage.getItem(integration.tokenKey) || "").trim();
+  if (existing) return;
+  try {
+    const query = new URLSearchParams({ integration_id: integration.id });
+    const response = await fetch(
+      localBridgeHttpUrl(`/v1/local/credentials/integration-token?${query.toString()}`),
+      { cache: "no-store" }
+    );
+    const payload = await response.json().catch(() => ({}));
+    const token = String(payload?.token || "").trim();
+    if (response.ok && payload?.ok !== false && token) {
+      localStorage.setItem(integration.tokenKey, token);
+    }
+  } catch {
+    // ignore vault hydrate errors and keep current runtime state
+  }
+}
+
 function getRuntimeToken(integration) {
   if (!integration?.tokenKey) return "";
-  const runtime = profileRuntime();
-  if (runtime.mode === "profile" && runtime.profileLoaded) {
-    return getProfileSecret(integration.tokenKey).trim();
-  }
   if (typeof window === "undefined") return "";
   return String(localStorage.getItem(integration.tokenKey) || "").trim();
 }
@@ -189,6 +219,10 @@ function emitIntegrationStateChanged(id, reason) {
 
 async function applyCheckAll() {
   try {
+    for (const integration of Object.values(catalog)) {
+      if (!integration?.tokenKey) continue;
+      await hydrateIntegrationTokenFromVault(integration);
+    }
     const next = await hydrateStateInWorker();
     setConnections(next);
     persistState(next);
@@ -251,16 +285,11 @@ async function applyDisconnectIntent(payload = {}) {
   };
   setConnections(next);
   persistState(next);
-  const runtime = profileRuntime();
   if (typeof window !== "undefined") {
     if (id === "github") localStorage.removeItem("github_auth_mode");
     if (integration?.tokenKey) {
-      if (runtime.mode === "profile" && runtime.profileLoaded) {
-        void removeProfileSecret(integration.tokenKey);
-        localStorage.removeItem(integration.tokenKey);
-      } else {
-        localStorage.removeItem(integration.tokenKey);
-      }
+      localStorage.removeItem(integration.tokenKey);
+      void removeIntegrationTokenFromVault(id);
     }
   }
   setLifecycleState(id, "disconnected", "Integration disconnected.");
@@ -484,17 +513,10 @@ const integrationStore = {
       || "user_owned"
     );
 
-    const runtime = profileRuntime();
-    const profileReady = runtime.mode === "profile" && runtime.profileLoaded;
     const token = String(details?.token || "").trim();
     if (typeof window !== "undefined" && integration.tokenKey && token) {
-      if (profileReady) {
-        await setProfileSecret(integration.tokenKey, token);
-        localStorage.removeItem(integration.tokenKey);
-      } else {
-        localStorage.setItem(integration.tokenKey, token);
-      }
-      void syncIntegrationTokenToVault(integration, details);
+      localStorage.setItem(integration.tokenKey, token);
+      await syncIntegrationTokenToVault(integration, details);
     }
 
     setLifecycleState(id, "linking", "Linking integration...");

@@ -1,1 +1,0 @@
-import{a as o,b as r,c as e,d as f,e as m,f as p,g as t,h as x,i as a,j as b}from"./chunk-OF5NGI5X.js";import"./chunk-7SZRL6FY.js";export{x as deleteOldEmails,f as getAllEmails,p as getEmail,e as getEmailCount,m as getEmailIdSet,o as getSyncSettings,t as saveEmails,r as saveSyncSettings,a as searchEmails,b as updateLastSync};

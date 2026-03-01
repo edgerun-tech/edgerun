@@ -1,1 +1,0 @@
-import{I as t,x as e}from"./chunk-22PVQXFM.js";import"./chunk-7SZRL6FY.js";var l=e('<div class="h-full bg-[#111] p-4 text-neutral-300"><h3 class="text-white font-medium mb-2">Cloudflare</h3><p class=text-sm>No active incidents. Zone health is green.');function n(){return t(l)}export{n as default};

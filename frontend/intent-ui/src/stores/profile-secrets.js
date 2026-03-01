@@ -41,6 +41,18 @@ function getProfileSecret(key) {
   return String(state.integrations?.[key] || "");
 }
 
+function hasActiveProfileSecretsContext() {
+  const state = profileSecretState();
+  return Boolean(
+    state.profileId &&
+    state.backend &&
+    state.rpId &&
+    state.credentialId &&
+    state.salt &&
+    state.key
+  );
+}
+
 async function persistProfileSecrets(nextIntegrations) {
   const runtime = profileRuntime();
   if (runtime.mode !== "profile" || !runtime.profileLoaded) return false;
@@ -95,6 +107,7 @@ export {
   profileSecretState,
   setProfileSecretsContext,
   clearProfileSecretsContext,
+  hasActiveProfileSecretsContext,
   getProfileSecret,
   setProfileSecret,
   removeProfileSecret

@@ -8,7 +8,6 @@ import IntentContextMenu from "./components/layout/IntentContextMenu";
 import LayerIndicator from "./components/layout/LayerIndicator";
 import LocalBridgeRequiredOverlay from "./components/layout/LocalBridgeRequiredOverlay";
 import TelemetryPanels from "./components/layout/TelemetryPanels";
-import ProfileBootstrapGate from "./components/onboarding/ProfileBootstrapGate";
 import { useAccountSession } from "./lib/hooks/useAccountSession";
 import { useIntentContextMenuActions } from "./lib/hooks/useIntentContextMenuActions";
 import { useIntentTelemetry } from "./lib/hooks/useIntentTelemetry";
@@ -30,16 +29,13 @@ function App() {
     handleRootContextMenu
   } = useIntentContextMenuActions();
   const {
-    showBootstrapGate,
-    setShowBootstrapGate,
     accountMenuOpen,
     setAccountMenuOpen,
     registeredDomain,
     setRegisteredDomain,
     sessionModeLabel,
     shortProfileId,
-    resetSession,
-    completeBootstrap
+    resetSession
   } = useAccountSession();
   const {
     latestEventBusItems,
@@ -58,7 +54,6 @@ function App() {
     setShowLayerIndicator,
     setMenuOpen,
     setAccountMenuOpen,
-    setShowBootstrapGate,
     setRegisteredDomain
   });
 
@@ -119,13 +114,6 @@ function App() {
   return (
     <>
       <AppShell />
-      <Show when={isClient() && (!profileRuntime().ready || showBootstrapGate())}>
-        <ProfileBootstrapGate
-          allowDismiss={profileRuntime().ready}
-          onDismiss={() => setShowBootstrapGate(false)}
-          onComplete={completeBootstrap}
-        />
-      </Show>
       <IntentContextMenu
         open={isClient() && menuOpen()}
         position={menuPos()}

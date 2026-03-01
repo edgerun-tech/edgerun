@@ -27,8 +27,8 @@ import {
 } from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
-import { profileRuntime } from "../../stores/profile-runtime";
-import { getProfileSecret, setProfileSecret } from "../../stores/profile-secrets";
+
+const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 
 const providerMeta = {
   github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true },
@@ -68,6 +68,7 @@ function IntegrationsPanel(props) {
   const [web3Wallet, setWeb3Wallet] = createSignal("");
   const [flipperDeviceName, setFlipperDeviceName] = createSignal("");
   const [flipperProbeSummary, setFlipperProbeSummary] = createSignal("");
+  const [flipperProbeDetails, setFlipperProbeDetails] = createSignal(null);
   const [flipperKnownDevices, setFlipperKnownDevices] = createSignal([]);
   const [flipperKnownLoading, setFlipperKnownLoading] = createSignal(false);
 
@@ -80,13 +81,7 @@ function IntegrationsPanel(props) {
 
   createEffect(() => {
     if (typeof window === "undefined") return;
-    const runtime = profileRuntime();
     const value = tailscaleAuthKey().trim();
-    if (runtime.mode === "profile" && runtime.profileLoaded) {
-      void setProfileSecret("tailscale_auth_key", value);
-      localStorage.removeItem("tailscale_auth_key");
-      return;
-    }
     localStorage.setItem("tailscale_auth_key", value);
   });
 
@@ -116,17 +111,13 @@ function IntegrationsPanel(props) {
     setBusy(false);
     setVerifiedForDialog(false);
     setFlipperProbeSummary("");
+    setFlipperProbeDetails(null);
     setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
     setAccountLabel(provider.accountLabel || `${provider.name} Session`);
 
     if (provider.id === "tailscale" && typeof window !== "undefined") {
-      const runtime = profileRuntime();
-      const apiKey = runtime.mode === "profile" && runtime.profileLoaded
-        ? String(getProfileSecret("tailscale_api_key") || "").trim()
-        : String(localStorage.getItem("tailscale_api_key") || "").trim();
-      const authKey = runtime.mode === "profile" && runtime.profileLoaded
-        ? String(getProfileSecret("tailscale_auth_key") || "").trim()
-        : String(localStorage.getItem("tailscale_auth_key") || "").trim();
+      const apiKey = String(integrationStore.getToken("tailscale") || "").trim();
+      const authKey = String(localStorage.getItem("tailscale_auth_key") || "").trim();
       setTokenInput(apiKey);
       setTailscaleAuthKey(authKey);
       setTailscaleTailnet(String(localStorage.getItem("tailscale_tailnet") || "").trim());
@@ -147,10 +138,7 @@ function IntegrationsPanel(props) {
     }
 
     if (provider.tokenKey && typeof window !== "undefined") {
-      const runtime = profileRuntime();
-      const value = runtime.mode === "profile" && runtime.profileLoaded
-        ? String(getProfileSecret(provider.tokenKey) || "").trim()
-        : String(localStorage.getItem(provider.tokenKey) || "").trim();
+      const value = String(integrationStore.getToken(provider.id) || "").trim();
       setTokenInput(value);
     } else {
       setTokenInput("");
@@ -163,6 +151,7 @@ function IntegrationsPanel(props) {
     setBusy(false);
     setVerifiedForDialog(false);
     setFlipperProbeSummary("");
+    setFlipperProbeDetails(null);
   }
 
   function requiredInputsReady(provider) {
@@ -249,7 +238,7 @@ function IntegrationsPanel(props) {
     try {
       const device = await bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: ["device_information", "battery_service"]
+        optionalServices: [FLIPPER_SERIAL_SERVICE_UUID, "battery_service", "device_information"]
       });
       const deviceId = String(device?.id || "").trim();
       const deviceName = String(device?.name || "Flipper").trim();
@@ -348,16 +337,19 @@ function IntegrationsPanel(props) {
     });
     setBusy(false);
     if (!result.ok) {
+      setFlipperProbeDetails(null);
       setFlipperProbeSummary(result.message || "Flipper probe failed.");
       return;
     }
     setVerifiedForDialog(true);
+    setFlipperProbeDetails(result);
     const battery = Number.isFinite(result.batteryLevel) ? `${result.batteryLevel}%` : "n/a";
-    const model = String(result.deviceInfo?.model || result.deviceInfo?.hardware || result.deviceName || "").trim() || "unknown";
+    const model = String(result.summary?.model || result.deviceName || "").trim() || "unknown";
     const serviceCount = Array.isArray(result.services) ? result.services.length : 0;
     const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
     const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
-    setFlipperProbeSummary(`Probe ok · battery ${battery} · model ${model} · services ${serviceCount}${warningText}`);
+    const latency = Number.isFinite(result?.rpc?.ping?.latencyMs) ? ` · ping ${result.rpc.ping.latencyMs}ms` : "";
+    setFlipperProbeSummary(`Probe ok · battery ${battery} · model ${model} · services ${serviceCount}${latency}${warningText}`);
   }
 
   function disconnectProvider(provider) {
@@ -542,7 +534,7 @@ function IntegrationsPanel(props) {
                       </label>
                     </Show>
                     <Show when={provider.id === "github"}>
-                      <p class="text-[11px] text-neutral-500">PAT is encrypted and stored in your profile secrets.</p>
+                      <p class="text-[11px] text-neutral-500">PAT is persisted in TPM-backed local credentials vault.</p>
                     </Show>
 
                     <Show when={provider.id === "tailscale" && connectorMode() === "user_owned"}>
@@ -685,6 +677,40 @@ function IntegrationsPanel(props) {
                         </button>
                         <Show when={flipperProbeSummary()}>
                           <p class="mt-2 text-[11px] text-neutral-200" data-testid="flipper-probe-summary">{flipperProbeSummary()}</p>
+                        </Show>
+                        <Show when={flipperProbeDetails()}>
+                          {(probeAccessor) => {
+                            const probe = probeAccessor();
+                            const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
+                            const entries = Array.isArray(probe?.deviceInfoEntries) ? probe.deviceInfoEntries.slice(0, 4) : [];
+                            return (
+                              <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="flipper-probe-details">
+                                <p>Model: {probe?.summary?.model || "unknown"}</p>
+                                <p>Firmware: {probe?.summary?.firmware || "unknown"}</p>
+                                <p>Hardware: {probe?.summary?.hardware || "unknown"}</p>
+                                <p>Flow budget: {Number.isFinite(probe?.serial?.flowBudget) ? probe.serial.flowBudget : "n/a"}</p>
+                                <Show when={Number.isFinite(probe?.rpc?.ping?.latencyMs)}>
+                                  <p>Ping latency: {probe.rpc.ping.latencyMs}ms</p>
+                                </Show>
+                                <Show when={entries.length > 0}>
+                                  <div class="space-y-0.5">
+                                    <p class="text-neutral-400">Device info sample:</p>
+                                    <For each={entries}>
+                                      {(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
+                                    </For>
+                                  </div>
+                                </Show>
+                                <Show when={warnings.length > 0}>
+                                  <div class="space-y-0.5 text-amber-300">
+                                    <p>Warnings:</p>
+                                    <For each={warnings}>
+                                      {(warning) => <p>• {warning}</p>}
+                                    </For>
+                                  </div>
+                                </Show>
+                              </div>
+                            );
+                          }}
                         </Show>
                       </div>
                     </Show>

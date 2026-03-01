@@ -80,6 +80,13 @@ const LOCAL_FS_MOVE_PATH: &str = "/v1/local/fs/move";
 const LOCAL_FS_COPY_PATH: &str = "/v1/local/fs/copy";
 const LOCAL_FS_ARCHIVE_PATH: &str = "/v1/local/fs/archive";
 const LOCAL_FS_EXTRACT_PATH: &str = "/v1/local/fs/extract";
+const LOCAL_CREDENTIALS_STATUS_PATH: &str = "/v1/local/credentials/status";
+const LOCAL_CREDENTIALS_LIST_PATH: &str = "/v1/local/credentials/list";
+const LOCAL_CREDENTIALS_STORE_PATH: &str = "/v1/local/credentials/store";
+const LOCAL_CREDENTIALS_DELETE_PATH: &str = "/v1/local/credentials/delete";
+const LOCAL_CREDENTIALS_LOCK_PATH: &str = "/v1/local/credentials/lock";
+const LOCAL_CREDENTIALS_UNLOCK_PATH: &str = "/v1/local/credentials/unlock";
+const LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH: &str = "/v1/local/credentials/integration-token";
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
@@ -255,6 +262,8 @@ struct ManagerConfig {
     bonded: bool,
     node_initialized: bool,
     owner_pubkey: Option<String>,
+    #[serde(default)]
+    credentials: Vec<LocalCredentialEntry>,
 }
 
 #[derive(Debug)]
@@ -262,13 +271,28 @@ struct BootPolicy {
     owner_pubkey: Option<String>,
 }
 
-#[derive(Clone)]
 struct LocalBridgeState {
     node_id: String,
     device_pubkey_b64url: String,
     local_fs_root: PathBuf,
     started_unix_ms: u64,
     tx: broadcast::Sender<LocalEventEnvelopeV1>,
+    credentials_lock: Mutex<()>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LocalCredentialEntry {
+    entry_id: String,
+    credential_type: String,
+    name: String,
+    username: String,
+    secret: String,
+    url: String,
+    note: String,
+    tags: String,
+    folder: String,
+    created_unix_ms: u64,
+    updated_unix_ms: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -393,6 +417,27 @@ struct LocalFsArchiveData {
 struct LocalFsEmptyData {}
 
 #[derive(Debug, Serialize)]
+struct LocalCredentialsStatusData {
+    installed: bool,
+    locked: bool,
+    count: u64,
+    backend: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalCredentialsListData {
+    entries: Vec<LocalCredentialEntry>,
+    count: u64,
+    locked: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalCredentialTokenData {
+    integration_id: String,
+    token: String,
+}
+
+#[derive(Debug, Serialize)]
 struct LocalFsEntry {
     id: String,
     provider: String,
@@ -409,6 +454,46 @@ struct LocalMcpStartRequest {
     token: String,
     #[serde(default, alias = "nodeId")]
     node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCredentialStoreRequest {
+    #[serde(default, alias = "credentialType")]
+    credential_type: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    secret: Option<String>,
+    #[serde(default)]
+    url: Option<String>,
+    #[serde(default)]
+    note: Option<String>,
+    #[serde(default)]
+    tags: Option<String>,
+    #[serde(default)]
+    folder: Option<String>,
+    #[serde(default, alias = "entryId")]
+    entry_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCredentialDeleteRequest {
+    #[serde(default, alias = "entryId")]
+    entry_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCredentialUnlockRequest {
+    #[serde(default, rename = "reason")]
+    _reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCredentialTokenQuery {
+    #[serde(default, alias = "integrationId")]
+    integration_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -623,6 +708,23 @@ fn load_config() -> Result<ManagerConfig> {
     sonic_rs::from_slice(raw).context("failed to parse manager config json from TPM")
 }
 
+fn default_manager_config() -> ManagerConfig {
+    ManagerConfig {
+        api_base: DEFAULT_API_BASE.to_string(),
+        rpc_url: DEFAULT_RPC_URL.to_string(),
+        worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
+        worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
+        runtime_image_ref: None,
+        runtime_image_pulled: false,
+        runtime_policy_rollback_index: 0,
+        heartbeat_secs: 15,
+        bonded: false,
+        node_initialized: false,
+        owner_pubkey: None,
+        credentials: Vec::new(),
+    }
+}
+
 fn save_config(cfg: &ManagerConfig) -> Result<()> {
     let payload = sonic_rs::to_vec(cfg).context("failed to encode manager config")?;
     if payload.len() > (CONFIG_TPM_NV_SIZE - 4) {
@@ -655,19 +757,8 @@ fn cmd_configure(_rpc_url: &str, heartbeat_secs: u64) -> Result<()> {
             ));
         }
     }
-    let cfg = ManagerConfig {
-        api_base: DEFAULT_API_BASE.to_string(),
-        rpc_url: DEFAULT_RPC_URL.to_string(),
-        worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
-        worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
-        runtime_image_ref: None,
-        runtime_image_pulled: false,
-        runtime_policy_rollback_index: 0,
-        heartbeat_secs,
-        bonded: false,
-        node_initialized: false,
-        owner_pubkey: None,
-    };
+    let mut cfg = default_manager_config();
+    cfg.heartbeat_secs = heartbeat_secs;
     save_config(&cfg)?;
     println!("status=configured");
     println!("config_tpm_nv_index=0x{CONFIG_TPM_NV_INDEX:08x}");
@@ -1270,6 +1361,7 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         local_fs_root,
         started_unix_ms: now_unix_ms(),
         tx: broadcast::channel(512).0,
+        credentials_lock: Mutex::new(()),
     };
     let state = Arc::new(state);
     spawn_local_docker_events(Arc::clone(&state));
@@ -1299,6 +1391,44 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_FS_ARCHIVE_PATH, options(handle_local_options))
         .route(LOCAL_FS_EXTRACT_PATH, post(handle_local_fs_extract))
         .route(LOCAL_FS_EXTRACT_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_STATUS_PATH,
+            get(handle_local_credentials_status),
+        )
+        .route(LOCAL_CREDENTIALS_STATUS_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_LIST_PATH,
+            get(handle_local_credentials_list),
+        )
+        .route(LOCAL_CREDENTIALS_LIST_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_STORE_PATH,
+            post(handle_local_credentials_store),
+        )
+        .route(LOCAL_CREDENTIALS_STORE_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_DELETE_PATH,
+            post(handle_local_credentials_delete),
+        )
+        .route(LOCAL_CREDENTIALS_DELETE_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_LOCK_PATH,
+            post(handle_local_credentials_lock),
+        )
+        .route(LOCAL_CREDENTIALS_LOCK_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_UNLOCK_PATH,
+            post(handle_local_credentials_unlock),
+        )
+        .route(LOCAL_CREDENTIALS_UNLOCK_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH,
+            get(handle_local_credentials_integration_token),
+        )
+        .route(
+            LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH,
+            options(handle_local_options),
+        )
         .route(LOCAL_MCP_START_PATH, post(handle_local_mcp_start))
         .route(LOCAL_MCP_START_PATH, options(handle_local_options))
         .route(LOCAL_MCP_STOP_PATH, post(handle_local_mcp_stop))
@@ -1805,6 +1935,197 @@ async fn handle_local_fs_extract(
     }
     local_json_ok(LocalFsMetaData {
         local_fs_root: state.local_fs_root.to_string_lossy().to_string(),
+    })
+}
+
+fn normalize_credential_type(value: Option<&str>) -> String {
+    let trimmed = value.unwrap_or("").trim();
+    if trimmed.is_empty() {
+        "secret".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn local_credential_store_name(body: &LocalCredentialStoreRequest) -> Option<String> {
+    let name = body.name.as_deref().unwrap_or("").trim();
+    if !name.is_empty() {
+        return Some(name.to_string());
+    }
+    if let Some(raw) = body.entry_id.as_deref() {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    None
+}
+
+fn find_integration_token_entry<'a>(
+    entries: &'a [LocalCredentialEntry],
+    integration_id: &str,
+) -> Option<&'a LocalCredentialEntry> {
+    let expected_name = format!("integration/{integration_id}/token");
+    entries.iter().find(|entry| {
+        entry.name.eq_ignore_ascii_case(&expected_name)
+            || entry.entry_id.eq_ignore_ascii_case(&expected_name)
+    })
+}
+
+async fn handle_local_credentials_status(State(state): State<Arc<LocalBridgeState>>) -> Response {
+    let _guard = state.credentials_lock.lock().await;
+    let cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    local_json_ok(LocalCredentialsStatusData {
+        installed: true,
+        locked: false,
+        count: cfg.credentials.len() as u64,
+        backend: "tpm".to_string(),
+    })
+}
+
+async fn handle_local_credentials_list(State(state): State<Arc<LocalBridgeState>>) -> Response {
+    let _guard = state.credentials_lock.lock().await;
+    let mut cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    cfg.credentials
+        .sort_by(|a, b| b.updated_unix_ms.cmp(&a.updated_unix_ms));
+    let count = cfg.credentials.len() as u64;
+    local_json_ok(LocalCredentialsListData {
+        entries: cfg.credentials,
+        count,
+        locked: false,
+    })
+}
+
+async fn handle_local_credentials_store(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalCredentialStoreRequest>,
+) -> Response {
+    let name = match local_credential_store_name(&body) {
+        Some(value) => value,
+        None => {
+            return local_json_error(AxumStatusCode::BAD_REQUEST, "credential name is required")
+        }
+    };
+    let mut entry_id = body.entry_id.unwrap_or_default().trim().to_string();
+    let secret = body.secret.unwrap_or_default().trim().to_string();
+    if secret.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "credential secret is required");
+    }
+    if entry_id.is_empty() {
+        entry_id = name.clone();
+    }
+
+    let now = now_unix_ms();
+    let _guard = state.credentials_lock.lock().await;
+    let mut cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    let mut updated = false;
+    for entry in &mut cfg.credentials {
+        if entry.entry_id.eq_ignore_ascii_case(&entry_id) || entry.name.eq_ignore_ascii_case(&name)
+        {
+            entry.credential_type = normalize_credential_type(body.credential_type.as_deref());
+            entry.name = name.clone();
+            entry.username = body.username.clone().unwrap_or_default().trim().to_string();
+            entry.secret = secret.clone();
+            entry.url = body.url.clone().unwrap_or_default().trim().to_string();
+            entry.note = body.note.clone().unwrap_or_default().trim().to_string();
+            entry.tags = body.tags.clone().unwrap_or_default().trim().to_string();
+            entry.folder = body.folder.clone().unwrap_or_default().trim().to_string();
+            entry.updated_unix_ms = now;
+            updated = true;
+            break;
+        }
+    }
+    if !updated {
+        cfg.credentials.push(LocalCredentialEntry {
+            entry_id,
+            credential_type: normalize_credential_type(body.credential_type.as_deref()),
+            name,
+            username: body.username.unwrap_or_default().trim().to_string(),
+            secret,
+            url: body.url.unwrap_or_default().trim().to_string(),
+            note: body.note.unwrap_or_default().trim().to_string(),
+            tags: body.tags.unwrap_or_default().trim().to_string(),
+            folder: body.folder.unwrap_or_default().trim().to_string(),
+            created_unix_ms: now,
+            updated_unix_ms: now,
+        });
+    }
+    if let Err(err) = save_config(&cfg) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsEmptyData {})
+}
+
+async fn handle_local_credentials_delete(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalCredentialDeleteRequest>,
+) -> Response {
+    let entry_id = body.entry_id.unwrap_or_default().trim().to_string();
+    if entry_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "entryId is required");
+    }
+    let _guard = state.credentials_lock.lock().await;
+    let mut cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    let initial_len = cfg.credentials.len();
+    cfg.credentials
+        .retain(|entry| !entry.entry_id.eq_ignore_ascii_case(&entry_id));
+    if cfg.credentials.len() == initial_len {
+        return local_json_error(AxumStatusCode::NOT_FOUND, "credential not found");
+    }
+    if let Err(err) = save_config(&cfg) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsEmptyData {})
+}
+
+async fn handle_local_credentials_lock(State(state): State<Arc<LocalBridgeState>>) -> Response {
+    let _guard = state.credentials_lock.lock().await;
+    let cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    local_json_ok(LocalCredentialsStatusData {
+        installed: true,
+        locked: false,
+        count: cfg.credentials.len() as u64,
+        backend: "tpm".to_string(),
+    })
+}
+
+async fn handle_local_credentials_unlock(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(_body): Json<LocalCredentialUnlockRequest>,
+) -> Response {
+    let _guard = state.credentials_lock.lock().await;
+    let cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    local_json_ok(LocalCredentialsStatusData {
+        installed: true,
+        locked: false,
+        count: cfg.credentials.len() as u64,
+        backend: "tpm".to_string(),
+    })
+}
+
+async fn handle_local_credentials_integration_token(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalCredentialTokenQuery>,
+) -> Response {
+    let integration_id = query
+        .integration_id
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    if integration_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration_id is required");
+    }
+    let _guard = state.credentials_lock.lock().await;
+    let cfg = load_config().unwrap_or_else(|_| default_manager_config());
+    if let Some(entry) = find_integration_token_entry(&cfg.credentials, &integration_id) {
+        return local_json_ok(LocalCredentialTokenData {
+            integration_id,
+            token: entry.secret.clone(),
+        });
+    }
+    local_json_ok(LocalCredentialTokenData {
+        integration_id,
+        token: String::new(),
     })
 }
 
@@ -2370,19 +2691,7 @@ async fn cmd_run(local_bridge_listen: &str) -> Result<()> {
         None
     };
 
-    let mut cfg = load_config().unwrap_or_else(|_| ManagerConfig {
-        api_base: DEFAULT_API_BASE.to_string(),
-        rpc_url: DEFAULT_RPC_URL.to_string(),
-        worker_max_concurrency: DEFAULT_WORKER_MAX_CONCURRENCY,
-        worker_mem_bytes: DEFAULT_WORKER_MEM_BYTES,
-        runtime_image_ref: None,
-        runtime_image_pulled: false,
-        runtime_policy_rollback_index: 0,
-        heartbeat_secs: 15,
-        bonded: false,
-        node_initialized: false,
-        owner_pubkey: None,
-    });
+    let mut cfg = load_config().unwrap_or_else(|_| default_manager_config());
 
     if cfg.heartbeat_secs == 0 {
         cfg.heartbeat_secs = 15;

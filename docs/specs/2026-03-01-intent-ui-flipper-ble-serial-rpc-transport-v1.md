@@ -26,6 +26,7 @@
 - BLE identity (`deviceId`, `deviceName`).
 - Serial transport diagnostics (`flowBudget`, characteristic/service list).
 - RPC diagnostics (`ping` result and sampled device info key/values).
+- Normalized summary fields (`model`, `hardware`, `firmware`, `serial`) derived from common Flipper RPC key variants.
 3. Integration dialog surfaces verification/probe errors without leaking to unrelated panels.
 4. Frontend validation passes:
 - `cd frontend && bun run check`

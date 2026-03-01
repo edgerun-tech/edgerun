@@ -11,6 +11,7 @@ import {
 } from "solid-icons/tb";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 
 function cn(...classes) {
   return twMerge(clsx(classes));
@@ -99,7 +100,7 @@ function CredentialsPanel(props) {
 
   const refreshStatus = async () => {
     try {
-      const response = await fetch("/api/credentials/status", { cache: "no-store" });
+      const response = await fetch(localBridgeHttpUrl("/v1/local/credentials/status"), { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) {
         throw new Error(payload?.error || "Failed to read credentials status.");
@@ -109,8 +110,14 @@ function CredentialsPanel(props) {
         locked: Boolean(payload.locked),
         count: Number(payload.count || 0)
       });
+      return {
+        installed: Boolean(payload.installed),
+        locked: Boolean(payload.locked),
+        count: Number(payload.count || 0)
+      };
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to read credentials status.");
+      return null;
     }
   };
 
@@ -118,7 +125,7 @@ function CredentialsPanel(props) {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/credentials/list", { cache: "no-store" });
+      const response = await fetch(localBridgeHttpUrl("/v1/local/credentials/list"), { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) {
         if (payload?.locked) {
@@ -127,7 +134,7 @@ function CredentialsPanel(props) {
         }
         throw new Error(payload?.error || "Failed to load credentials.");
       }
-      setEntries(Array.isArray(payload.entries) ? payload.entries : []);
+      setEntries(Array.isArray(payload.entries) ? payload.entries.map(normalizeEntry) : []);
       setStatus((prev) => ({ ...prev, locked: false, count: Number(payload.count || 0) }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load credentials.");
@@ -204,7 +211,7 @@ function CredentialsPanel(props) {
       if (!assertion) {
         throw new Error("Fingerprint verification cancelled.");
       }
-      const unlockRes = await fetch("/api/credentials/unlock", {
+      const unlockRes = await fetch(localBridgeHttpUrl("/v1/local/credentials/unlock"), {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body: JSON.stringify({ reason: "biometric" })
@@ -224,7 +231,7 @@ function CredentialsPanel(props) {
 
   const lockVault = async () => {
     try {
-      await fetch("/api/credentials/lock", { method: "POST" });
+      await fetch(localBridgeHttpUrl("/v1/local/credentials/lock"), { method: "POST" });
     } finally {
       sessionStorage.removeItem(SESSION_UNLOCK_KEY);
       setUnlocked(false);
@@ -257,7 +264,7 @@ function CredentialsPanel(props) {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/credentials/store", {
+      const response = await fetch(localBridgeHttpUrl("/v1/local/credentials/store"), {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body: JSON.stringify({
@@ -290,7 +297,7 @@ function CredentialsPanel(props) {
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/credentials/delete", {
+      const response = await fetch(localBridgeHttpUrl("/v1/local/credentials/delete"), {
         method: "POST",
         headers: { "content-type": "application/json; charset=utf-8" },
         body: JSON.stringify({ entryId })
@@ -316,11 +323,16 @@ function CredentialsPanel(props) {
         setPlatformAuthenticatorAvailable(false);
       }
     }
+    const statusSnapshot = await refreshStatus();
     if (typeof window !== "undefined" && sessionStorage.getItem(SESSION_UNLOCK_KEY) === "1") {
       setUnlocked(true);
       await fetchEntries();
+      return;
     }
-    await refreshStatus();
+    if (statusSnapshot && !statusSnapshot.locked) {
+      setUnlocked(true);
+      await fetchEntries();
+    }
   });
 
   createEffect(() => {
@@ -540,3 +552,8 @@ function CredentialsPanel(props) {
 }
 
 export default CredentialsPanel;
+  const normalizeEntry = (entry) => ({
+    ...entry,
+    entryId: String(entry?.entryId || entry?.entry_id || "").trim(),
+    credentialType: String(entry?.credentialType || entry?.credential_type || "secret").trim()
+  });

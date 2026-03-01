@@ -56,4 +56,51 @@ describe('intent ui integrations connection truth', () => {
 
     cy.contains('GitHub integration linked.').should('be.visible')
   })
+
+  it('writes github token to local credentials vault and remains connected across revisit', () => {
+    cy.intercept('GET', 'https://api.github.com/user', {
+      statusCode: 200,
+      body: {
+        login: 'octocat'
+      }
+    }).as('githubUser')
+
+    cy.visit('/intent-ui/', {
+      onBeforeLoad(win) {
+        installLocalBridgeSimulator(win)
+        win.localStorage.removeItem('intent-ui-integrations-v1')
+        win.localStorage.removeItem('github_token')
+        seedProfileSession(win)
+      }
+    })
+
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
+    cy.get('[data-testid="provider-open-github"]').click({ force: true })
+    cy.get('[data-testid="provider-dialog-github"]').should('be.visible')
+    cy.get('[data-testid="integration-step-2"]').click({ force: true })
+    cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_persistence')
+    cy.get('[data-testid="integration-step-3"]').click({ force: true })
+    cy.get('[data-testid="provider-verify-github"]').click({ force: true })
+    cy.wait('@githubUser')
+    cy.get('[data-testid="integration-step-4"]').click({ force: true })
+    cy.get('[data-testid="provider-save-github"]').click({ force: true })
+
+    cy.window().then((win) => {
+      const raw = String(win.localStorage.getItem('intent-ui-local-bridge-credentials-sim-v1') || '[]')
+      const parsed = JSON.parse(raw)
+      const tokenEntry = parsed.find((entry) => String(entry?.name || '').trim() === 'integration/github/token')
+      expect(tokenEntry).to.not.equal(undefined)
+      expect(String(tokenEntry?.secret || '')).to.eq('ghp_test_token_for_persistence')
+    })
+
+    cy.visit('/intent-ui/', {
+      onBeforeLoad(win) {
+        installLocalBridgeSimulator(win)
+        seedProfileSession(win)
+      }
+    })
+
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
+    cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Connected')
+  })
 })
