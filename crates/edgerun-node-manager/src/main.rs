@@ -3852,6 +3852,19 @@ fn onvif_host_from_url(url: &str) -> Option<String> {
     parsed.host_str().map(|value| value.to_string())
 }
 
+fn is_likely_onvif_service_url(url: &str) -> bool {
+    let parsed = match reqwest::Url::parse(url) {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+    if host.is_empty() || host == "www.onvif.org" || host.ends_with(".onvif.org") {
+        return false;
+    }
+    let path = parsed.path().to_ascii_lowercase();
+    path.contains("device_service") || path.contains("/onvif/")
+}
+
 async fn discover_onvif_ws(wait_ms: u64) -> Result<Vec<sonic_rs::Value>> {
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
         .await
@@ -3898,10 +3911,7 @@ async fn discover_onvif_ws(wait_ms: u64) -> Result<Vec<sonic_rs::Value>> {
         let mut urls: Vec<String> = extract_http_urls(&payload)
             .into_iter()
             .filter_map(|item| normalize_onvif_candidate_url(&item))
-            .filter(|item| {
-                let lower = item.to_ascii_lowercase();
-                lower.contains("onvif") || lower.contains("device_service")
-            })
+            .filter(|item| is_likely_onvif_service_url(item))
             .collect();
 
         if urls.is_empty() {
