@@ -18,6 +18,7 @@ node_modules/
 .DS_Store
 .env
 *.log
+.wrangler/
 
 # Local service state
 .edgerun-cli/

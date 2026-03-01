@@ -8,6 +8,7 @@ import {
   workflowUi
 } from "../../stores/workflow-ui";
 import {
+  eventBusRuntime,
   eventTimeline,
   initializeBrowserEventBus,
   publishEvent,
@@ -76,7 +77,6 @@ export function useIntentUiLifecycle(params) {
   let handleGlobalHotkeys;
   let handleGlobalKeyUp;
   let handleWindowBlur;
-  let handleGlobalContextMenu;
   let handleGlobalClick;
   let handleContextEscape;
   let handleStorageUpdate;
@@ -158,9 +158,6 @@ export function useIntentUiLifecycle(params) {
         layerIndicatorTimeout = null;
       }
     };
-    handleGlobalContextMenu = (event) => {
-      event.preventDefault();
-    };
     handleGlobalClick = () => {
       params.setMenuOpen(false);
       params.setAccountMenuOpen(false);
@@ -174,7 +171,6 @@ export function useIntentUiLifecycle(params) {
     window.addEventListener("keydown", handleGlobalHotkeys);
     window.addEventListener("keyup", handleGlobalKeyUp);
     window.addEventListener("blur", handleWindowBlur);
-    window.addEventListener("contextmenu", handleGlobalContextMenu, { capture: true });
     window.addEventListener("pointerdown", handleGlobalClick);
     window.addEventListener("keydown", handleContextEscape);
     unsubscribeBootstrapOpen = subscribeEvent(UI_EVENT_TOPICS.action.profileBootstrapOpened, (event) => {
@@ -193,7 +189,6 @@ export function useIntentUiLifecycle(params) {
     if (handleGlobalHotkeys) window.removeEventListener("keydown", handleGlobalHotkeys);
     if (handleGlobalKeyUp) window.removeEventListener("keyup", handleGlobalKeyUp);
     if (handleWindowBlur) window.removeEventListener("blur", handleWindowBlur);
-    if (handleGlobalContextMenu) window.removeEventListener("contextmenu", handleGlobalContextMenu, { capture: true });
     if (handleGlobalClick) window.removeEventListener("pointerdown", handleGlobalClick);
     if (handleContextEscape) window.removeEventListener("keydown", handleContextEscape);
     if (unsubscribeBootstrapOpen) unsubscribeBootstrapOpen();

@@ -130,6 +130,7 @@ export function useIntentContextMenuActions() {
   });
 
   const handleRootContextMenu = (event) => {
+    if (event.defaultPrevented) return;
     event.preventDefault();
     event.stopPropagation();
     setContextTarget(event.target instanceof Element ? event.target : null);

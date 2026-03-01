@@ -1,4 +1,4 @@
-import { Show, For, createEffect, onCleanup } from "solid-js";
+import { Show, For, createEffect, createMemo, onCleanup } from "solid-js";
 import {
   TbOutlinePlus,
   TbOutlineUser,
@@ -23,6 +23,28 @@ import { emitClipboardHistoryCleared } from "./workflow-overlay.events";
 export default function ConversationsPanel(props) {
   let threadScrollRef;
   let threadResizeObserver;
+  const safeFallbackChatHead = createMemo(() => {
+    const fallback = props.fallbackChatHead;
+    if (fallback && typeof fallback === "object") {
+      return {
+        emoji: String(fallback.emoji || "💬"),
+        color: String(fallback.color || CHAT_HEAD_PRESET_COLORS[0]),
+        label: String(fallback.label || "C")
+      };
+    }
+    return { emoji: "💬", color: CHAT_HEAD_PRESET_COLORS[0], label: "C" };
+  });
+  const safeActiveChatHead = createMemo(() => {
+    const resolved = typeof props.activeChatHead === "function" ? props.activeChatHead() : null;
+    if (resolved && typeof resolved === "object") {
+      return {
+        emoji: String(resolved.emoji || safeFallbackChatHead().emoji),
+        color: String(resolved.color || safeFallbackChatHead().color),
+        label: String(resolved.label || safeFallbackChatHead().label)
+      };
+    }
+    return safeFallbackChatHead();
+  });
 
   const ensureThreadBottom = () => {
     if (!threadScrollRef) return;
@@ -114,11 +136,11 @@ export default function ConversationsPanel(props) {
                         <span
                           class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
                           style={{
-                            "background-color": `${(props.chatHeadForConversation(thread)?.color || props.fallbackChatHead.color)}33`,
-                            color: props.chatHeadForConversation(thread)?.color || props.fallbackChatHead.color
+                            "background-color": `${(props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color)}33`,
+                            color: props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color
                           }}
                         >
-                          {props.chatHeadForConversation(thread)?.emoji || props.chatHeadForConversation(thread)?.label || props.fallbackChatHead.label}
+                          {props.chatHeadForConversation(thread)?.emoji || props.chatHeadForConversation(thread)?.label || safeFallbackChatHead().label}
                         </span>
                         <p class={props.cn("truncate text-[11px] text-neutral-200", props.activeConversation()?.id === thread.id ? "font-semibold text-[hsl(var(--primary))]" : "font-medium")}>{thread.title}</p>
                       </div>
@@ -228,8 +250,8 @@ export default function ConversationsPanel(props) {
             </button>
           </div>
           <div class="flex min-w-0 items-center gap-2">
-            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]" style={{ "background-color": `${props.activeChatHead().color}33`, color: props.activeChatHead().color }}>
-              {props.activeChatHead().emoji || props.activeChatHead().label}
+            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]" style={{ "background-color": `${safeActiveChatHead().color}33`, color: safeActiveChatHead().color }}>
+              {safeActiveChatHead().emoji || safeActiveChatHead().label}
             </span>
             <p class="truncate text-[11px] font-medium text-neutral-200">{props.activeConversation()?.title || "Conversation"}</p>
             <span class={props.cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(props.activeConversation()?.channel || "ai"))}>
@@ -264,7 +286,7 @@ export default function ConversationsPanel(props) {
                 {(color) => (
                   <button
                     type="button"
-                    class={props.cn("h-6 rounded border", props.activeChatHead().color === color ? "border-[hsl(var(--primary))]" : "border-neutral-700")}
+                    class={props.cn("h-6 rounded border", safeActiveChatHead().color === color ? "border-[hsl(var(--primary))]" : "border-neutral-700")}
                     style={{ "background-color": color }}
                     onClick={() => props.persistChatHeadPref(props.activeConversation()?.id, { color })}
                     data-testid={`chat-head-color-${color.replace("#", "")}`}
