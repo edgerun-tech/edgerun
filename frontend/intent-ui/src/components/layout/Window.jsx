@@ -12,7 +12,8 @@ const defaultPositions = {
   guide: { x: 220, y: 130 },
   prompt: { x: 300, y: 240 },
   products: { x: 120, y: 100 },
-  github: { x: 180, y: 140 }
+  github: { x: 180, y: 140 },
+  photos: { x: 210, y: 160 }
 };
 const getInitialPosition = (id) => defaultPositions[id] || { x: 100 + Math.random() * 200, y: 80 + Math.random() * 150 };
 function Window(props) {

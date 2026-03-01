@@ -95,6 +95,8 @@ const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
 const LOCAL_MCP_PREFLIGHT_PATH: &str = "/v1/local/mcp/integration/preflight";
 const LOCAL_CLOUDFLARE_VERIFY_PATH: &str = "/v1/local/cloudflare/verify";
+const LOCAL_BEEPER_VERIFY_PATH: &str = "/v1/local/beeper/verify";
+const LOCAL_BEEPER_CHATS_PATH: &str = "/v1/local/beeper/chats";
 const LOCAL_TAILSCALE_DEVICES_PATH: &str = "/v1/local/tailscale/devices";
 const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
 const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
@@ -118,6 +120,8 @@ const MCP_IMAGE_GITHUB_DEFAULT: &str = "ghcr.io/github/github-mcp-server:latest"
 const MCP_IMAGE_GOOGLE_MESSAGES_DEFAULT: &str = "dock.mau.dev/mautrix/gmessages:latest";
 const MCP_IMAGE_GVOICE_DEFAULT: &str = "dock.mau.dev/mautrix/gvoice:latest";
 const MCP_IMAGE_GOOGLECHAT_DEFAULT: &str = "dock.mau.dev/mautrix/googlechat:latest";
+const BEEPER_DESKTOP_API_BASE_ENV: &str = "BEEPER_DESKTOP_API_BASE";
+const BEEPER_DESKTOP_API_BASE_DEFAULT: &str = "http://127.0.0.1:23373";
 const GOOGLE_OAUTH_CLIENT_ID_ENV: &str = "GOOGLE_OAUTH_CLIENT_ID";
 const GOOGLE_OAUTH_CLIENT_SECRET_ENV: &str = "GOOGLE_OAUTH_CLIENT_SECRET";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
@@ -544,6 +548,19 @@ struct LocalMcpPreflightQuery {
 struct LocalCloudflareVerifyRequest {
     #[serde(default)]
     token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperVerifyRequest {
+    #[serde(default)]
+    token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperChatsQuery {
+    token: String,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1344,6 +1361,102 @@ async fn cloudflare_api_get_user(token: &str) -> Result<sonic_rs::Value> {
     Err(anyhow!("cloudflare user lookup rejected token: {first_error}"))
 }
 
+fn beeper_token_from(raw: &str) -> Result<String> {
+    let token = raw.trim();
+    if token.len() < 8 {
+        return Err(anyhow!("beeper access token is missing or invalid"));
+    }
+    Ok(token.to_string())
+}
+
+fn beeper_api_base() -> String {
+    std::env::var(BEEPER_DESKTOP_API_BASE_ENV)
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| BEEPER_DESKTOP_API_BASE_DEFAULT.to_string())
+}
+
+async fn beeper_api_verify_token(token: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let base = beeper_api_base();
+    let candidates = ["/v0/accounts", "/v1/accounts"];
+    let mut last_error = String::new();
+    for path in candidates {
+        let url = format!("{base}{path}");
+        let response = match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => {
+                last_error = format!("beeper accounts request failed: {url}: {err}");
+                continue;
+            }
+        };
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("failed to read beeper accounts response: {url}"))?;
+        if !status.is_success() {
+            let detail = String::from_utf8_lossy(&bytes).to_string();
+            last_error = format!("beeper token verify failed ({status}) at {url}: {detail}");
+            continue;
+        }
+        return sonic_rs::from_slice(&bytes)
+            .with_context(|| format!("failed to parse beeper accounts json: {url}"));
+    }
+    Err(anyhow!(
+        "unable to verify Beeper token at {} (tried /v0/accounts and /v1/accounts): {}",
+        base,
+        last_error
+    ))
+}
+
+async fn beeper_api_get_chats(token: &str, limit: usize) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let base = beeper_api_base();
+    let candidates = ["/v1/chats", "/v0/chats"];
+    let mut last_error = String::new();
+    for path in candidates {
+        let url = format!("{base}{path}?limit={limit}");
+        let response = match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => {
+                last_error = format!("beeper chats request failed: {url}: {err}");
+                continue;
+            }
+        };
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("failed to read beeper chats response: {url}"))?;
+        if !status.is_success() {
+            let detail = String::from_utf8_lossy(&bytes).to_string();
+            last_error = format!("beeper chats request failed ({status}) at {url}: {detail}");
+            continue;
+        }
+        return sonic_rs::from_slice(&bytes)
+            .with_context(|| format!("failed to parse beeper chats json: {url}"));
+    }
+    Err(anyhow!(
+        "unable to fetch Beeper chats at {} (tried /v1/chats and /v0/chats): {}",
+        base,
+        last_error
+    ))
+}
+
 fn tailscale_api_key_from(raw: &str) -> Result<String> {
     let key = raw.trim();
     if key.len() < 12 {
@@ -2001,6 +2114,10 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
             post(handle_local_cloudflare_verify),
         )
         .route(LOCAL_CLOUDFLARE_VERIFY_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_VERIFY_PATH, post(handle_local_beeper_verify))
+        .route(LOCAL_BEEPER_VERIFY_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_CHATS_PATH, get(handle_local_beeper_chats))
+        .route(LOCAL_BEEPER_CHATS_PATH, options(handle_local_options))
         .route(
             LOCAL_TAILSCALE_DEVICES_PATH,
             post(handle_local_tailscale_devices),
@@ -2972,6 +3089,50 @@ async fn handle_local_cloudflare_verify(
             "not_before": payload["result"]["not_before"].as_str().unwrap_or_default(),
             "user_email": user_email,
             "user_id": user_id,
+        }),
+    )
+}
+
+async fn handle_local_beeper_verify(Json(body): Json<LocalBeeperVerifyRequest>) -> Response {
+    let token = match beeper_token_from(body.token.as_deref().unwrap_or_default()) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let payload = match beeper_api_verify_token(&token).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let account_count = payload["items"]
+        .as_array()
+        .map(|items| items.len())
+        .or_else(|| payload.as_array().map(|items| items.len()))
+        .unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "accounts": payload,
+            "account_count": account_count,
+            "api_base": beeper_api_base(),
+        }),
+    )
+}
+
+async fn handle_local_beeper_chats(Query(query): Query<LocalBeeperChatsQuery>) -> Response {
+    let token = match beeper_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let payload = match beeper_api_get_chats(&token, limit).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "items": payload["items"],
         }),
     )
 }

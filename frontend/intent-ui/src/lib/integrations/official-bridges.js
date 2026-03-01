@@ -1,19 +1,37 @@
 const OFFICIAL_BRIDGES = [
-  { id: "telegram", aliases: ["telegram"], repository: "mautrix/telegram" },
-  { id: "whatsapp", aliases: ["whatsapp"], repository: "mautrix/whatsapp" },
-  { id: "signal", aliases: ["signal"], repository: "mautrix/signal" },
-  { id: "discord", aliases: ["discord"], repository: "mautrix/discord" },
-  { id: "slack", aliases: ["slack"], repository: "mautrix/slack" },
-  { id: "google_messages", aliases: ["gmessages", "googlemessages", "google_messages", "rcs", "sms"], repository: "mautrix/gmessages" },
-  { id: "gvoice", aliases: ["gvoice", "googlevoice"], repository: "mautrix/gvoice" },
-  { id: "meta", aliases: ["meta", "instagram", "facebook", "messenger"], repository: "mautrix/meta" },
-  { id: "googlechat", aliases: ["googlechat", "gchat"], repository: "mautrix/googlechat" },
-  { id: "twitter", aliases: ["twitter"], repository: "mautrix/twitter" },
-  { id: "bluesky", aliases: ["bluesky", "bsky"], repository: "mautrix/bluesky" },
-  { id: "imessage", aliases: ["imessage"], repository: "mautrix/imessage" },
-  { id: "imessagego", aliases: ["imessagego"], repository: "beeper/imessage" },
-  { id: "linkedin", aliases: ["linkedin"], repository: "mautrix/linkedin" },
-  { id: "heisenbridge", aliases: ["heisenbridge", "irc"], repository: "hifi/heisenbridge" }
+  {
+    id: "beeper",
+    aliases: [
+      "beeper",
+      "telegram",
+      "whatsapp",
+      "signal",
+      "discord",
+      "slack",
+      "gmessages",
+      "googlemessages",
+      "google_messages",
+      "rcs",
+      "sms",
+      "gvoice",
+      "googlevoice",
+      "meta",
+      "instagram",
+      "facebook",
+      "messenger",
+      "googlechat",
+      "gchat",
+      "twitter",
+      "bluesky",
+      "bsky",
+      "imessage",
+      "imessagego",
+      "linkedin",
+      "heisenbridge",
+      "irc"
+    ],
+    repository: "beeper/desktop-api"
+  }
 ];
 
 const aliasToCanonical = new Map();

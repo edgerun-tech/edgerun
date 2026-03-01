@@ -103,41 +103,38 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Connected')
   })
 
-  it('keeps whatsapp user-owned and only marks connected after matrix runtime verification/link', () => {
+  it('keeps beeper user-owned and marks connected after desktop api verification/link', () => {
+    cy.intercept('POST', '/api/beeper/verify', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        account_count: 5,
+        accounts: { items: [] }
+      }
+    }).as('beeperVerify')
+
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         installLocalBridgeSimulator(win)
         win.localStorage.removeItem('intent-ui-integrations-v1')
-        win.localStorage.removeItem('whatsapp_token')
+        win.localStorage.removeItem('beeper_access_token')
         seedProfileSession(win)
       }
     })
 
     cy.get('button[title="Integrations panel"]').first().click({ force: true })
-    cy.get('[data-testid="provider-mode-whatsapp"]').should('contain.text', 'User-owned')
-    cy.get('[data-testid="provider-connected-whatsapp"]').should('contain.text', 'Not connected')
+    cy.get('[data-testid="provider-mode-beeper"]').should('contain.text', 'User-owned')
+    cy.get('[data-testid="provider-connected-beeper"]').should('contain.text', 'Not connected')
 
-    cy.get('[data-testid="provider-open-whatsapp"]').click({ force: true })
-    cy.get('[data-testid="provider-dialog-whatsapp"]').should('be.visible')
+    cy.get('[data-testid="provider-open-beeper"]').click({ force: true })
+    cy.get('[data-testid="provider-dialog-beeper"]').should('be.visible')
     cy.get('[data-testid="integration-step-1"]').click({ force: true })
-    cy.get('[data-testid="matrix-token-auto-whatsapp"]').should('be.visible')
+    cy.get('[data-testid="provider-token-beeper"]').type('beeper_access_token_test_12345678')
     cy.get('[data-testid="integration-step-2"]').click({ force: true })
-    cy.get('[data-testid="integration-runtime-state-whatsapp"]').should('contain.text', 'Not started')
-    cy.get('[data-testid="provider-verify-whatsapp"]').click({ force: true })
+    cy.get('[data-testid="provider-verify-beeper"]').click({ force: true })
+    cy.wait('@beeperVerify')
     cy.get('[data-testid="integration-stepper-success"]').should('exist')
-    cy.get('[data-testid="integration-runtime-state-whatsapp"]').should('contain.text', 'Not started')
-    cy.window().then((win) => {
-      const raw = String(win.localStorage.getItem('intent-ui-local-bridge-mcp-sim-v1') || '{}')
-      const parsed = JSON.parse(raw)
-      expect(Boolean(parsed?.whatsapp?.running)).to.eq(false)
-    })
-    cy.get('[data-testid="provider-save-whatsapp"]').click({ force: true })
-
-    cy.window().then((win) => {
-      const raw = String(win.localStorage.getItem('intent-ui-local-bridge-mcp-sim-v1') || '{}')
-      const parsed = JSON.parse(raw)
-      expect(Boolean(parsed?.whatsapp?.running)).to.eq(true)
-    })
+    cy.get('[data-testid="provider-save-beeper"]').click({ force: true })
 
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
@@ -146,11 +143,6 @@ describe('intent ui integrations connection truth', () => {
       }
     })
     cy.get('button[title="Integrations panel"]').first().click({ force: true })
-    cy.get('[data-testid="provider-open-whatsapp"]').click({ force: true })
-    cy.get('[data-testid="provider-dialog-whatsapp"]').should('be.visible')
-    cy.get('[data-testid="integration-step-2"]').click({ force: true })
-    cy.get('[data-testid="integration-runtime-state-whatsapp"]').should('contain.text', 'Running')
-    cy.contains('button', 'Close').click({ force: true })
-    cy.get('[data-testid="provider-connected-whatsapp"]').should('contain.text', 'Connected')
+    cy.get('[data-testid="provider-connected-beeper"]').should('contain.text', 'Connected')
   })
 })

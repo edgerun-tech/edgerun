@@ -155,6 +155,10 @@ function getWindowContent(id) {
       return <Suspense fallback={<LoadingFallback />}>
           <BrowserApp windowId={id} />
         </Suspense>;
+    case "photos":
+      return <Suspense fallback={<LoadingFallback />}>
+          <BrowserApp windowId={id} initialUrl="https://photos.google.com" />
+        </Suspense>;
     case "credentials":
       return <Suspense fallback={<LoadingFallback />}>
           <CredentialsPanel />

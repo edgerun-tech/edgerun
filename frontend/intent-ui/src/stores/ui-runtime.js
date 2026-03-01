@@ -6,9 +6,9 @@ const WEATHER_COORDS_KEY = "intent-ui-weather-coords";
 const DEFAULT_STATE = {
   accentIndex: 0,
   weatherCoords: {
-    lat: 40.7128,
-    lon: -74.006,
-    location: "New York, US"
+    lat: 12.9236,
+    lon: 100.8825,
+    location: "Pattaya, Thailand"
   }
 };
 const DEFAULT_WEATHER_COORDS = DEFAULT_STATE.weatherCoords;

@@ -23,8 +23,9 @@ function normalizeUrl(raw) {
 }
 
 function BrowserApp(props) {
-  const [inputValue, setInputValue] = createSignal(DEFAULT_URL);
-  const [url, setUrl] = createSignal(DEFAULT_URL);
+  const initialUrl = normalizeUrl(typeof props.initialUrl === "string" && props.initialUrl.trim() ? props.initialUrl : DEFAULT_URL);
+  const [inputValue, setInputValue] = createSignal(initialUrl);
+  const [url, setUrl] = createSignal(initialUrl);
   const [frameKey, setFrameKey] = createSignal(0);
   let unsubscribeNavigate;
 

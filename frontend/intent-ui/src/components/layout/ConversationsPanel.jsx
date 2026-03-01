@@ -369,6 +369,11 @@ export default function ConversationsPanel(props) {
                         ? "ml-6 border-[hsl(var(--primary)/0.38)] bg-[hsl(var(--primary)/0.12)]"
                         : "mr-6 border-neutral-700 bg-neutral-900/70"
                     )}
+                    data-testid="conversation-thread-message"
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      props.onOpenChatBubble?.(row.message);
+                    }}
                   >
                     <div class="mb-1 flex items-center justify-between gap-2">
                       <div class="flex items-center gap-1.5">

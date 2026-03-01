@@ -3,6 +3,7 @@ import { Motion } from "solid-motionone";
 import { Portal } from "solid-js/web";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { TbOutlineX } from "solid-icons/tb";
 import { CodeDiffViewer } from "../results/CodeDiffViewer";
 import ConversationsPanel from "./ConversationsPanel";
 import DevicesPanel from "./DevicesPanel";
@@ -21,6 +22,7 @@ import { openWindow } from "../../stores/windows";
 import { isOfficialBridgeId } from "../../lib/integrations/official-bridges";
 import {
   CHAT_HEAD_PREFS_KEY,
+  CHAT_BUBBLES_KEY,
   CHAT_HEAD_PRESET_COLORS,
   DRAWER_ICON_BUTTON_CLASS,
   LEFT_DRAWER_PANEL_ITEMS,
@@ -86,6 +88,34 @@ function WorkflowOverlay() {
       return {};
     }
   })());
+  const [chatBubbles, setChatBubbles] = createSignal((() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(CHAT_BUBBLES_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((bubble) => bubble && typeof bubble === "object") : [];
+    } catch {
+      return [];
+    }
+  })());
+  let activeBubbleDrag = null;
+  const bubbleWidth = 260;
+  const bubbleHeight = 132;
+  const clampBubblePosition = (x, y) => {
+    const width = typeof window === "undefined" ? 1440 : window.innerWidth;
+    const height = typeof window === "undefined" ? 900 : window.innerHeight;
+    const margin = 12;
+    const maxX = Math.max(margin, width - bubbleWidth - margin);
+    const maxY = Math.max(margin, height - bubbleHeight - margin);
+    return {
+      x: Math.max(margin, Math.min(maxX, Math.round(Number(x) || margin))),
+      y: Math.max(margin, Math.min(maxY, Math.round(Number(y) || margin)))
+    };
+  };
+  const nextBubblePosition = () => {
+    const count = chatBubbles().length;
+    const baseX = (typeof window === "undefined" ? 1440 : window.innerWidth) - bubbleWidth - 20;
+    const baseY = (typeof window === "undefined" ? 900 : window.innerHeight) - bubbleHeight - 110;
+    return clampBubblePosition(baseX - (count % 4) * 20, baseY - (count % 4) * 26);
+  };
   const aiConversation = createMemo(() => ({
     id: "ai-active",
     kind: "ai",
@@ -189,6 +219,51 @@ function WorkflowOverlay() {
       return next;
     });
   };
+  const openChatBubbleFromMessage = (message) => {
+    const conversation = activeConversation();
+    if (!conversation || !message) return;
+    const text = String(message.text || "").trim();
+    if (!text) return;
+    const displayHead = chatHeadForConversation(conversation);
+    setChatBubbles((prev) => {
+      const existingIndex = prev.findIndex((bubble) => bubble.messageId === message.id && bubble.conversationId === conversation.id);
+      const base = {
+        id: existingIndex >= 0 ? prev[existingIndex].id : `bubble-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        conversationId: conversation.id,
+        messageId: message.id || `msg-${Date.now()}`,
+        title: String(conversation.title || "Conversation"),
+        author: String(message.author || (message.role === "user" ? "You" : "Assistant")),
+        text: text.slice(0, 400),
+        emoji: displayHead.emoji,
+        color: displayHead.color,
+        updatedAt: Date.now(),
+        ...nextBubblePosition()
+      };
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = {
+          ...next[existingIndex],
+          ...base
+        };
+        return next;
+      }
+      return [...prev.slice(-7), base];
+    });
+  };
+  const closeChatBubble = (bubbleId) => {
+    setChatBubbles((prev) => prev.filter((bubble) => bubble.id !== bubbleId));
+  };
+  const beginBubbleDrag = (bubbleId, event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const bubble = chatBubbles().find((item) => item.id === bubbleId);
+    if (!bubble) return;
+    activeBubbleDrag = {
+      id: bubbleId,
+      offsetX: event.clientX - Number(bubble.x || 0),
+      offsetY: event.clientY - Number(bubble.y || 0)
+    };
+  };
   const visibleThreadMessages = createMemo(() => {
     const all = activeConversationMessages();
     return all.slice(Math.max(0, all.length - loadedThreadCount()));
@@ -254,6 +329,8 @@ function WorkflowOverlay() {
     setShowEmojiPalette(false);
   };
   let handleSuperVShortcut;
+  let handleBubblePointerMove;
+  let handleBubblePointerUp;
   onMount(() => {
     handleSuperVShortcut = () => {
       if (!(state().rightOpen && state().rightPanel === "conversations")) {
@@ -277,11 +354,32 @@ function WorkflowOverlay() {
         });
       }
     };
+    handleBubblePointerMove = (event) => {
+      if (!activeBubbleDrag) return;
+      const nextX = event.clientX - activeBubbleDrag.offsetX;
+      const nextY = event.clientY - activeBubbleDrag.offsetY;
+      const clamped = clampBubblePosition(nextX, nextY);
+      setChatBubbles((prev) => prev.map((bubble) => bubble.id === activeBubbleDrag.id
+        ? { ...bubble, x: clamped.x, y: clamped.y, updatedAt: Date.now() }
+        : bubble
+      ));
+    };
+    handleBubblePointerUp = () => {
+      activeBubbleDrag = null;
+    };
     window.addEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
+    window.addEventListener("pointermove", handleBubblePointerMove);
+    window.addEventListener("pointerup", handleBubblePointerUp);
   });
   onCleanup(() => {
     if (handleSuperVShortcut) {
       window.removeEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
+    }
+    if (handleBubblePointerMove) {
+      window.removeEventListener("pointermove", handleBubblePointerMove);
+    }
+    if (handleBubblePointerUp) {
+      window.removeEventListener("pointerup", handleBubblePointerUp);
     }
   });
   createEffect(() => {
@@ -316,6 +414,13 @@ function WorkflowOverlay() {
   createEffect(() => {
     try {
       localStorage.setItem(LOCAL_CONVERSATION_MESSAGES_KEY, JSON.stringify(localMessagesByConversation()));
+    } catch {
+      // ignore storage failures
+    }
+  });
+  createEffect(() => {
+    try {
+      localStorage.setItem(CHAT_BUBBLES_KEY, JSON.stringify(chatBubbles()));
     } catch {
       // ignore storage failures
     }
@@ -528,6 +633,7 @@ function WorkflowOverlay() {
                         showConversationSettings={showConversationSettings}
                         setShowConversationSettings={setShowConversationSettings}
                         persistChatHeadPref={persistChatHeadPref}
+                        onOpenChatBubble={openChatBubbleFromMessage}
                         activeConversationMessages={activeConversationMessages}
                         loadedThreadCount={loadedThreadCount}
                         setLoadedThreadCount={setLoadedThreadCount}
@@ -636,6 +742,45 @@ function WorkflowOverlay() {
       </>
 
       <Portal mount={document.body}>
+        <For each={chatBubbles()}>
+          {(bubble) => (
+            <div
+              class="fixed z-[10045] w-[260px] rounded-2xl border border-neutral-700 bg-neutral-950/95 p-2 shadow-[0_16px_30px_rgba(0,0,0,0.45)] backdrop-blur"
+              style={{ left: `${bubble.x}px`, top: `${bubble.y}px` }}
+              data-testid="conversation-chat-bubble"
+            >
+              <div
+                class="mb-1.5 flex cursor-move items-center justify-between gap-2 rounded-xl border border-neutral-800 bg-neutral-900/80 px-2 py-1"
+                onPointerDown={(event) => beginBubbleDrag(bubble.id, event)}
+                data-testid="conversation-chat-bubble-drag"
+              >
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <span
+                    class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
+                    style={{ "background-color": `${String(bubble.color || CHAT_HEAD_PRESET_COLORS[0])}33`, color: String(bubble.color || CHAT_HEAD_PRESET_COLORS[0]) }}
+                  >
+                    {String(bubble.emoji || "💬")}
+                  </span>
+                  <div class="min-w-0">
+                    <p class="truncate text-[10px] uppercase tracking-wide text-neutral-400">{bubble.author || "Message"}</p>
+                    <p class="truncate text-[11px] text-neutral-200">{bubble.title || "Conversation"}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="inline-flex h-6 w-6 items-center justify-center rounded border border-neutral-700 bg-neutral-900/70 text-neutral-300 hover:border-rose-400/50 hover:text-rose-200"
+                  onClick={() => closeChatBubble(bubble.id)}
+                  aria-label="Close chat bubble"
+                >
+                  <TbOutlineX size={12} />
+                </button>
+              </div>
+              <p class="max-h-[74px] overflow-auto rounded-xl border border-neutral-800 bg-neutral-900/60 px-2 py-1.5 text-[11px] leading-5 text-neutral-200">
+                {bubble.text || "No message preview"}
+              </p>
+            </div>
+          )}
+        </For>
         <Show when={state().isOpen && state().leftOpen}>
           <div
             data-workflow-portal="left"

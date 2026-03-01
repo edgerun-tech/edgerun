@@ -234,6 +234,39 @@ class IntegrationLifecycle {
     if (this.isMatrixBridgeIntegration()) {
       return this.verifyMatrixBridgeRuntime({ details, token, fetchImpl });
     }
+    if (this.id === "beeper") {
+      const accessToken = String(details?.token || "").trim() || String(token || "").trim();
+      if (accessToken.length < 8) {
+        return { ok: false, message: "Beeper access token missing or invalid." };
+      }
+      try {
+        let body = null;
+        let statusCode = 0;
+        for (const path of ["/api/beeper/verify", "/v1/local/beeper/verify"]) {
+          const response = await fetchImpl(path, {
+            method: "POST",
+            headers: { "content-type": "application/json; charset=utf-8" },
+            body: JSON.stringify({ token: accessToken })
+          });
+          statusCode = response.status;
+          body = await response.json().catch(() => ({}));
+          if (response.ok && body?.ok) break;
+          if (response.status !== 404) break;
+        }
+        if (!body?.ok) {
+          return { ok: false, message: String(body?.error || `beeper token verify failed (${statusCode})`) };
+        }
+        const accountCount = Number(body?.account_count || 0);
+        return {
+          ok: true,
+          message: `Verified Beeper Desktop API access (${accountCount} accounts visible).`,
+          capabilities: this.defaultCapabilities.slice(),
+          accountLabel: "Beeper Desktop"
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : "Failed to verify Beeper Desktop API access." };
+      }
+    }
     if (this.id === "github") {
       const pat = String(details?.token || "").trim() || String(token || "").trim();
       if (pat.length < 8) {

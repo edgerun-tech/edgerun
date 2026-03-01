@@ -10,6 +10,7 @@ import {
 import { FiLink2 } from "solid-icons/fi";
 
 export const CHAT_HEAD_PREFS_KEY = "intent-ui-chat-head-prefs-v1";
+export const CHAT_BUBBLES_KEY = "intent-ui-chat-bubbles-v1";
 export const CHAT_HEAD_PRESET_COLORS = ["#1d4ed8", "#0f766e", "#6d28d9", "#b45309", "#be123c", "#374151"];
 export const EMOJI_QUICK_SET = ["😀", "🚀", "🔥", "💬", "✅", "🧠", "📌", "👀", "🎯", "🤝", "❤️", "⚡"];
 export const THREAD_PAGE_SIZE = 80;

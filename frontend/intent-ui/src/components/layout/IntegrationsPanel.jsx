@@ -34,7 +34,7 @@ import {
 } from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
-import { canonicalBridgeId, isOfficialBridgeId } from "../../lib/integrations/official-bridges";
+import { canonicalBridgeId } from "../../lib/integrations/official-bridges";
 
 const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -53,6 +53,7 @@ const providerMeta = {
   google: { icon: SiGoogle, tone: "text-blue-300", category: "productivity" },
   google_photos: { icon: SiGoogle, tone: "text-sky-300", category: "productivity" },
   email: { icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", category: "messaging" },
+  beeper: { icon: SiMessenger, tone: "text-blue-300", tokenHint: "Beeper Desktop API access token", category: "messaging" },
   whatsapp: { icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", category: "messaging" },
   messenger: { icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", category: "messaging" },
   telegram: { icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", category: "messaging" },
@@ -203,7 +204,7 @@ function IntegrationsPanel(props) {
 
   function usesRuntimeContainer(provider) {
     if (!provider) return false;
-    return provider.id === "github" || isOfficialBridgeId(provider.id);
+    return provider.id === "github" || isMatrixBridgeProvider(provider);
   }
 
   function providerUsesToken(provider) {
@@ -914,6 +915,22 @@ function IntegrationsPanel(props) {
                           data-testid="cloudflare-open-token-dashboard"
                         >
                           Open Cloudflare token page
+                        </button>
+                      </div>
+                    </Show>
+                    <Show when={provider.id === "beeper"}>
+                      <div class="space-y-1.5 rounded-md border border-neutral-800 bg-[#0b0c0f] px-2.5 py-2 text-[11px] text-neutral-400">
+                        <p>Sign in to Beeper Desktop, enable Desktop API in Settings -&gt; Developers, then paste your Beeper access token.</p>
+                        <button
+                          type="button"
+                          class={buttonClass}
+                          onClick={() => {
+                            if (typeof window === "undefined") return;
+                            window.open("https://developers.beeper.com/desktop-api/", "_blank", "noopener,noreferrer");
+                          }}
+                          data-testid="beeper-open-desktop-api-docs"
+                        >
+                          Open Beeper Desktop API guide
                         </button>
                       </div>
                     </Show>

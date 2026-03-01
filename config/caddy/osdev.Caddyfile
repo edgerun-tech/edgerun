@@ -40,6 +40,12 @@
     reverse_proxy 127.0.0.1:7777
   }
 
+  @beeper path /api/beeper /api/beeper/*
+  handle @beeper {
+    uri replace /api/beeper /v1/local/beeper
+    reverse_proxy 127.0.0.1:7777
+  }
+
   handle /api/* {
     reverse_proxy https://api.edgerun.tech {
       header_up Host api.edgerun.tech

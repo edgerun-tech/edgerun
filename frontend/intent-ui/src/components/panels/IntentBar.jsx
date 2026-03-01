@@ -23,6 +23,7 @@ import {
   TbOutlineHistory,
   TbOutlineSparkles,
   TbOutlineKey,
+  TbOutlinePhoto,
 } from "solid-icons/tb";
 import { FiSettings, FiGithub, FiGlobe } from "solid-icons/fi";
 import { mcpManager } from "../../lib/mcp/client";
@@ -56,7 +57,7 @@ import {
   openWorkflowIntegrations,
   setAssistantProvider,
   startNewAssistantSession,
-  useWorkflowSession,
+  switchWorkflowSession,
   workflowUi
 } from "../../stores/workflow-ui";
 import { Kbd, KbdGroup } from "../../registry/ui/kbd";
@@ -193,7 +194,10 @@ const googleCommandCatalog = [
   "google messages",
   "google events",
   "google contacts",
-  "google drive"
+  "google drive",
+  "google photos",
+  "open photos",
+  "photos"
 ];
 const systemCommandCatalog = [
   "/help",
@@ -231,7 +235,8 @@ const helpCommandCatalog = [
       { command: "google drive", description: "Open Drive panel" },
       { command: "google messages", description: "Fetch Gmail messages" },
       { command: "google events", description: "Fetch Calendar events" },
-      { command: "google contacts", description: "Fetch Contacts list" }
+      { command: "google contacts", description: "Fetch Contacts list" },
+      { command: "google photos", description: "Open Google Photos panel" }
     ]
   },
   {
@@ -1391,6 +1396,20 @@ function IntentBar() {
       setError(null);
       return;
     }
+    if (/^(google\s+photos|open\s+photos|photos)$/i.test(trimmed)) {
+      const googleToken = localStorage.getItem("google_token");
+      if (!googleToken) {
+        setError("Google not connected. Use 'connect google' first.");
+        openWorkflowIntegrations("google_photos");
+        return;
+      }
+      openWindow("photos");
+      addRecentCommand("google photos");
+      setQuery("");
+      setMode("intent");
+      setError(null);
+      return;
+    }
     if (/^google\s+messages$/i.test(trimmed)) {
       const googleToken = localStorage.getItem("google_token");
       if (!googleToken) {
@@ -1554,15 +1573,10 @@ function IntentBar() {
     const sessionSwitchMatch = trimmed.match(/^session\s+([a-z0-9_-]+)$/i);
     if (sessionSwitchMatch) {
       const selector = String(sessionSwitchMatch[1] || "").trim();
-      const sessions = workflowUi().sessionHistory || [];
-      const byPrefix = sessions.find((session) => String(session.sessionId || "").startsWith(selector));
-      const byIndex = Number.isFinite(Number(selector)) ? sessions[Math.max(0, Number(selector) - 1)] : null;
-      const target = byPrefix || byIndex || null;
-      if (!target?.sessionId) {
+      if (!switchWorkflowSession(selector)) {
         setError(`Session not found: ${selector}`);
         return;
       }
-      useWorkflowSession(target);
       setError(null);
       addRecentCommand(trimmed);
       setQuery("");
@@ -1803,26 +1817,7 @@ function IntentBar() {
     }
   };
   const resolveWeatherCoords = async () => {
-    const cached = uiRuntime().weatherCoords;
-    if (Number.isFinite(cached?.lat) && Number.isFinite(cached?.lon)) return cached;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return DEFAULT_WEATHER_COORDS;
-    try {
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: false,
-          timeout: 7000,
-          maximumAge: 15 * 60 * 1000
-        });
-      });
-      const coords = {
-        lat: Number(position.coords.latitude),
-        lon: Number(position.coords.longitude),
-        location: "Current location"
-      };
-      return setRuntimeWeatherCoords(coords);
-    } catch {
-      return DEFAULT_WEATHER_COORDS;
-    }
+    return setRuntimeWeatherCoords(DEFAULT_WEATHER_COORDS);
   };
   const fetchWithTimeout = async (url, timeoutMs = 9000) => {
     const controller = new AbortController();
@@ -2556,6 +2551,18 @@ function IntentBar() {
     title="GitHub"
   >
             <FiGithub size={14} />
+          </Motion.button>
+
+          <Motion.button
+    type="button"
+    onClick={() => openWindow("photos")}
+    hover={{ scale: 1.05 }}
+    press={{ scale: 0.95 }}
+    class={`flex items-center justify-center px-2.5 py-1.5 text-xs text-neutral-400 ${accentHoverButtonClass} rounded-lg transition-colors whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-900`}
+    aria-label="Open Photos"
+    title="Photos"
+  >
+            <TbOutlinePhoto size={14} />
           </Motion.button>
 
           <Motion.button

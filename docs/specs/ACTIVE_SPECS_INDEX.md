@@ -1,21 +1,23 @@
 # Active Specs Index
 
-Generated: 2026-03-01 06:42:06Z
+Generated: 2026-03-01 07:10:29Z
 
 ## Summary
 
-- Total specs: 184
-- Cataloged: 45
-- Active: 31
+- Total specs: 188
+- Cataloged: 47
+- Active: 33
 - Superseded: 10
 - Historical: 4
-- Uncataloged: 139
+- Uncataloged: 141
 
 ## Active
 
 | Spec | Domain | Note |
 |---|---|---|
 | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
+| [2026-03-01-beeper-desktop-api-replace-self-hosted-bridges-v1.md](./2026-03-01-beeper-desktop-api-replace-self-hosted-bridges-v1.md) | intent-ui | Replaces self-hosted messaging bridge integrations with Beeper Desktop API token flow. |
+| [2026-03-01-beeper-sync-backend-flow-v1.md](./2026-03-01-beeper-sync-backend-flow-v1.md) | node-manager | Moves Beeper chat synchronization through backend local bridge endpoint. |
 | [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
 | [2026-03-01-cloudflare-account-token-verification-v1.md](./2026-03-01-cloudflare-account-token-verification-v1.md) | node-manager | Verifies Cloudflare account API tokens via local bridge endpoint for integrations. |
 | [2026-03-01-cloudflare-auth-assist-flow-v1.md](./2026-03-01-cloudflare-auth-assist-flow-v1.md) | intent-ui | Adds Cloudflare sign-in assist flow and logged-in identity label after verify. |
@@ -126,4 +128,4 @@ These specs exist but do not yet have status metadata in `spec-status.tsv`.
 - [2026-02-28-linux-node-manager-installer-service-v1.md](./2026-02-28-linux-node-manager-installer-service-v1.md)
 - [2026-02-28-local-first-solana-removal-phase1-v1.md](./2026-02-28-local-first-solana-removal-phase1-v1.md)
 
-- ... and 89 more uncataloged specs
+- ... and 91 more uncataloged specs

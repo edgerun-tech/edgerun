@@ -13,25 +13,80 @@ const SESSION_HISTORY_KEY = "intent-ui-opencode-sessions";
 const SESSION_MESSAGES_KEY = "intent-ui-opencode-session-messages";
 const LEGACY_SESSION_HISTORY_KEY = "intent-ui-codex-sessions";
 const LEGACY_SESSION_MESSAGES_KEY = "intent-ui-codex-session-messages";
-const MAX_SESSIONS = 24;
+const MAX_SESSIONS = Number.POSITIVE_INFINITY;
 const MAX_SESSION_MESSAGES = 200;
 
-function loadSessionHistory() {
+function normalizeSessionEntry(item, index) {
+  if (!item || typeof item !== "object") return null;
+  const sessionId = typeof item.sessionId === "string" ? item.sessionId.trim() : "";
+  const threadId = typeof item.threadId === "string" ? item.threadId.trim() : "";
+  const resolvedSessionId = sessionId || threadId;
+  if (!resolvedSessionId) return null;
+  const updatedAt = typeof item.updatedAt === "string" && item.updatedAt.trim()
+    ? item.updatedAt
+    : new Date(Date.now() - index).toISOString();
+  return {
+    sessionId: resolvedSessionId,
+    threadId: threadId || resolvedSessionId,
+    provider: typeof item.provider === "string" && item.provider.trim() ? item.provider : "opencode",
+    preview: typeof item.preview === "string" && item.preview.trim() ? item.preview : "Current session",
+    updatedAt
+  };
+}
+
+function loadSessionHistoryFromKey(storageKey) {
   if (typeof localStorage === "undefined") return [];
   try {
-    const raw = localStorage.getItem(SESSION_HISTORY_KEY) || localStorage.getItem(LEGACY_SESSION_HISTORY_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.slice(0, MAX_SESSIONS) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry, index) => normalizeSessionEntry(entry, index))
+      .filter(Boolean);
   } catch {
     return [];
   }
 }
 
+function sortSessionsByUpdatedAt(history) {
+  return [...history].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+}
+
+function mergeSessionHistories(...histories) {
+  const merged = [];
+  const seen = new Set();
+  for (const history of histories) {
+    for (const entry of history || []) {
+      if (!entry?.sessionId) continue;
+      if (seen.has(entry.sessionId)) continue;
+      seen.add(entry.sessionId);
+      merged.push(entry);
+    }
+  }
+  return sortSessionsByUpdatedAt(merged);
+}
+
+function loadSessionHistory() {
+  const next = mergeSessionHistories(
+    loadSessionHistoryFromKey(SESSION_HISTORY_KEY),
+    loadSessionHistoryFromKey(LEGACY_SESSION_HISTORY_KEY)
+  );
+  return Number.isFinite(MAX_SESSIONS) ? next.slice(0, MAX_SESSIONS) : next;
+}
+
 function persistSessionHistory(history) {
   if (typeof localStorage === "undefined") return;
   try {
-    localStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(history.slice(0, MAX_SESSIONS)));
+    const normalized = sortSessionsByUpdatedAt(
+      (history || [])
+        .map((entry, index) => normalizeSessionEntry(entry, index))
+        .filter(Boolean)
+    );
+    localStorage.setItem(
+      SESSION_HISTORY_KEY,
+      JSON.stringify(Number.isFinite(MAX_SESSIONS) ? normalized.slice(0, MAX_SESSIONS) : normalized)
+    );
   } catch {
     // ignore storage failures
   }
@@ -49,10 +104,10 @@ function normalizeMessage(item, index) {
   };
 }
 
-function loadSessionMessageMap() {
+function loadSessionMessageMapForKey(storageKey) {
   if (typeof localStorage === "undefined") return {};
   try {
-    const raw = localStorage.getItem(SESSION_MESSAGES_KEY) || localStorage.getItem(LEGACY_SESSION_MESSAGES_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -68,6 +123,53 @@ function loadSessionMessageMap() {
   } catch {
     return {};
   }
+}
+
+function mergeSessionMessageMaps(...maps) {
+  const next = {};
+  for (const messageMap of maps) {
+    for (const [sessionId, messages] of Object.entries(messageMap || {})) {
+      if (!sessionId || !Array.isArray(messages)) continue;
+      const existing = Array.isArray(next[sessionId]) ? next[sessionId] : [];
+      next[sessionId] = [...existing, ...messages]
+        .map((message, index) => normalizeMessage(message, index))
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime())
+        .slice(-MAX_SESSION_MESSAGES);
+    }
+  }
+  return next;
+}
+
+function loadSessionMessageMap() {
+  return mergeSessionMessageMaps(
+    loadSessionMessageMapForKey(SESSION_MESSAGES_KEY),
+    loadSessionMessageMapForKey(LEGACY_SESSION_MESSAGES_KEY)
+  );
+}
+
+function buildSessionHistoryFromMessageMap(messageMap) {
+  const entries = [];
+  for (const [sessionId, messages] of Object.entries(messageMap || {})) {
+    if (!sessionId || !Array.isArray(messages) || messages.length === 0) continue;
+    const latestMessage = messages[messages.length - 1] || null;
+    const preview = getLatestAssistantText(messages)
+      || (typeof latestMessage?.text === "string" ? latestMessage.text.trim() : "")
+      || "Restored session";
+    entries.push(normalizeSessionEntry({
+      sessionId,
+      threadId: sessionId,
+      provider: "opencode",
+      preview,
+      updatedAt: latestMessage?.createdAt || new Date().toISOString()
+    }, entries.length));
+  }
+  return entries.filter(Boolean);
+}
+
+function mergeHistoryWithMessageMap(history, messageMap) {
+  const derived = buildSessionHistoryFromMessageMap(messageMap);
+  return mergeSessionHistories(history, derived);
 }
 
 function persistSessionMessageMap(messageMap) {
@@ -113,8 +215,12 @@ function buildSessionHistoryEntry(sessionId, threadId, provider, preview) {
 }
 
 function upsertSessionHistory(history, entry) {
-  const deduped = history.filter((item) => item.sessionId !== entry.sessionId);
-  return [entry, ...deduped].slice(0, MAX_SESSIONS);
+  const normalized = normalizeSessionEntry(entry, 0);
+  if (!normalized) return history;
+  const deduped = (history || []).filter((item) => item.sessionId !== normalized.sessionId);
+  const next = [normalized, ...deduped];
+  const sorted = sortSessionsByUpdatedAt(next);
+  return Number.isFinite(MAX_SESSIONS) ? sorted.slice(0, MAX_SESSIONS) : sorted;
 }
 
 function appendChatMessage(messages, role, text) {
@@ -369,9 +475,13 @@ function setAssistantProvider() {
 
 function hydrateWorkflowUiFromStorage() {
   sessionMessageMap = loadSessionMessageMap();
-  const history = loadSessionHistory();
+  const history = mergeHistoryWithMessageMap(loadSessionHistory(), sessionMessageMap);
+  if (history.length > 0) {
+    persistSessionHistory(history);
+  }
   const first = history[0] || null;
-  const restoredMessages = first?.sessionId ? getSessionMessages(first.sessionId) : [];
+  const activeSessionId = workflowUi().sessionId || first?.sessionId || "";
+  const restoredMessages = activeSessionId ? getSessionMessages(activeSessionId) : [];
   const restoredResponse = getLatestAssistantText(restoredMessages);
   const nextBuild = getNextBuildNumber();
   setWorkflowUi((prev) => ({
@@ -379,7 +489,7 @@ function hydrateWorkflowUiFromStorage() {
     buildNumber: nextBuild,
     sessionHistory: prev.sessionHistory.length > 0 ? prev.sessionHistory : history,
     sessionId: prev.sessionId || first?.sessionId || "",
-    threadId: prev.threadId || first?.threadId || "",
+    threadId: prev.threadId || first?.threadId || prev.sessionId || first?.sessionId || "",
     provider: prev.provider || first?.provider || "opencode",
     prompt: prev.prompt || first?.preview || "",
     messages: prev.messages.length > 0 ? prev.messages : restoredMessages,
@@ -430,7 +540,10 @@ function openWorkflowFlipper(deviceName = "Flipper") {
 
 function useWorkflowSession(session) {
   if (!session?.sessionId) return;
-  const sessionMessages = getSessionMessages(session.sessionId);
+  const primaryMessages = getSessionMessages(session.sessionId);
+  const sessionMessages = primaryMessages.length > 0
+    ? primaryMessages
+    : getSessionMessages(session.threadId || session.sessionId);
   const latestResponse = getLatestAssistantText(sessionMessages);
   setWorkflowUi((prev) => ({
     ...prev,
@@ -451,9 +564,10 @@ function switchWorkflowSession(selector) {
   if (!value) return false;
   const sessions = workflowUi().sessionHistory || [];
   const byPrefix = sessions.find((session) => String(session?.sessionId || "").startsWith(value));
+  const byThreadPrefix = sessions.find((session) => String(session?.threadId || "").startsWith(value));
   const parsed = Number.parseInt(value, 10);
   const byIndex = Number.isFinite(parsed) && parsed > 0 ? sessions[Math.max(0, parsed - 1)] : null;
-  const target = byPrefix || byIndex || null;
+  const target = byPrefix || byThreadPrefix || byIndex || null;
   if (!target?.sessionId) return false;
   useWorkflowSession(target);
   return true;

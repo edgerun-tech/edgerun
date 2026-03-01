@@ -3,7 +3,7 @@ import { UI_EVENT_TOPICS, UI_INTENT_TOPICS, uiIntentMeta } from "../lib/ui-inten
 import { publishEvent, subscribeEvent } from "./eventbus";
 
 /**
- * @typedef {"editor" | "files" | "integrations" | "github" | "email" | "settings" | "widgets" | "onvif" | "terminal" | "cloud" | "call" | "cloudflare" | "drive" | "calendar" | "browser" | "credentials" | "guide"} WindowId
+ * @typedef {"editor" | "files" | "integrations" | "github" | "email" | "settings" | "widgets" | "onvif" | "terminal" | "cloud" | "call" | "cloudflare" | "drive" | "calendar" | "browser" | "photos" | "credentials" | "guide"} WindowId
  */
 
 /**
@@ -34,6 +34,7 @@ const WINDOW_PRESETS = {
   drive: { width: 940, height: 680 },
   calendar: { width: 940, height: 680 },
   browser: { width: 1020, height: 760 },
+  photos: { width: 1020, height: 760 },
   credentials: { width: 920, height: 700 },
   guide: { width: 900, height: 680 }
 };

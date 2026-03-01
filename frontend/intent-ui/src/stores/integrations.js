@@ -8,14 +8,14 @@ import { callIntegrationWorker, initializeIntegrationWorker } from "./integratio
 import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
 import { probeFlipper, verifyFlipperBluetooth } from "../lib/integrations/flipper-ble";
 import { probeDalyBms, verifyDalyBmsBluetooth } from "../lib/integrations/daly-bms-ble";
-import { OFFICIAL_BRIDGES, canonicalBridgeId, isOfficialBridgeId } from "../lib/integrations/official-bridges";
+import { canonicalBridgeId } from "../lib/integrations/official-bridges";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
 let vaultStatusCheckedAt = 0;
 const VAULT_STATUS_TTL_MS = 30 * 1000;
 let subscriptionsInitialized = false;
-const MCP_ENABLED_INTEGRATIONS = new Set(["github", ...OFFICIAL_BRIDGES.map((bridge) => bridge.id)]);
+const MCP_ENABLED_INTEGRATIONS = new Set(["github"]);
 
 const catalog = createIntegrationCatalog();
 
@@ -829,7 +829,7 @@ const integrationStore = {
         result = await verifyFlipperWebBluetooth(integration, details);
       } else if (normalizedId === "daly_bms") {
         result = await verifyDalyBmsWebBluetooth(integration, details);
-      } else if (isOfficialBridgeId(normalizedId)) {
+      } else if (integration.isMatrixBridgeIntegration()) {
         if (token.length < 8) {
           result = { ok: false, message: `${integration.name} bridge token missing or invalid.` };
         } else {
