@@ -188,6 +188,7 @@ function persistMessagesForSession(sessionId, messages, history) {
 
 const [workflowUi, setWorkflowUi] = createSignal({
   isOpen: false,
+  showCodeWorkflow: false,
   visible: false,
   leftOpen: false,
   rightOpen: false,
@@ -253,6 +254,7 @@ function openWorkflowDemo(promptText) {
   setWorkflowUi((prev) => ({
     ...prev,
     isOpen: true,
+    showCodeWorkflow: true,
     visible: true,
     rightOpen: true,
     leftOpen: prev.leftOpen,
@@ -293,6 +295,7 @@ function closeWorkflowDemo() {
   clearWorkflowTimers();
   setWorkflowUi((prev) => ({
     ...prev,
+    showCodeWorkflow: false,
     visible: false,
     streaming: false,
     commitPending: false
@@ -394,6 +397,7 @@ function openWorkflowIntegrations(providerId = "github") {
   setWorkflowUi((prev) => ({
     ...prev,
     isOpen: true,
+    showCodeWorkflow: false,
     visible: true,
     leftOpen: true,
     leftPanel: "integrations",

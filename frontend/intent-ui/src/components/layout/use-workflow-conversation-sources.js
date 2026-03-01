@@ -1,6 +1,49 @@
 import { createEffect, createSignal } from "solid-js";
 import { parseEmailAddress, parseEmailName } from "./workflow-overlay.utils";
 
+function firstNonEmptyString(values = []) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function normalizeGoogleContact(item, index) {
+  const names = Array.isArray(item?.names) ? item.names : [];
+  const emailAddresses = Array.isArray(item?.emailAddresses) ? item.emailAddresses : [];
+  const emails = Array.isArray(item?.emails) ? item.emails : [];
+  const explicitEmail = typeof item?.email === "string" ? item.email : "";
+  const email = parseEmailAddress(firstNonEmptyString([
+    explicitEmail,
+    emailAddresses[0]?.value,
+    emailAddresses[0]?.email,
+    emails[0]?.value,
+    emails[0]?.email,
+    typeof emails[0] === "string" ? emails[0] : ""
+  ]));
+  const name = firstNonEmptyString([
+    typeof item?.name === "string" ? item.name : "",
+    names[0]?.displayName,
+    names[0]?.unstructuredName,
+    names[0]?.givenName,
+    names[0]?.familyName,
+    email,
+    "Unnamed"
+  ]);
+  const rawId = firstNonEmptyString([
+    typeof item?.resourceName === "string" ? item.resourceName : "",
+    typeof item?.id === "string" ? item.id : "",
+    email
+  ]) || `google-contact-${index}`;
+
+  return {
+    id: `contact-${rawId.replace(/[^a-zA-Z0-9:_-]/g, "-")}`,
+    name,
+    email,
+    source: "Google Contacts"
+  };
+}
+
 export function useWorkflowConversationSources({ messageProviderIntegrations, localMessagesByConversation }) {
   const [emailThreads, setEmailThreads] = createSignal([]);
   const [bridgeThreads, setBridgeThreads] = createSignal([]);
@@ -93,21 +136,15 @@ export function useWorkflowConversationSources({ messageProviderIntegrations, lo
       try {
         const response = await fetch(`/api/google/contacts?limit=100&token=${encodeURIComponent(googleToken)}`);
         const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          throw new Error(payload?.error || `Google contacts request failed (${response.status})`);
+        }
         const items = Array.isArray(payload?.items) ? payload.items : [];
-        setContacts(items.map((item, index) => {
-          const rawEmailValue = Array.isArray(item.emails) ? item.emails[0] : item.email;
-          const emailValue = typeof rawEmailValue === "object" && rawEmailValue
-            ? (rawEmailValue.value || rawEmailValue.email || rawEmailValue.address || "")
-            : rawEmailValue;
-          const email = parseEmailAddress(emailValue || "");
-          const id = email ? `contact-${email}` : `contact-${item.id || index}`;
-          return {
-            id,
-            name: item.name || email || "Unnamed",
-            email,
-            source: "Google Contacts"
-          };
-        }));
+        const normalized = items
+          .map((item, index) => normalizeGoogleContact(item, index))
+          .filter((contact) => contact.name || contact.email)
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setContacts(normalized);
       } catch {
         setContacts([]);
       } finally {

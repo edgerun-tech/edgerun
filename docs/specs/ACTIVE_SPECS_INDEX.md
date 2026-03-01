@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 05:16:01Z
+Generated: 2026-03-01 05:40:31Z
 
 ## Summary
 
-- Total specs: 167
-- Cataloged: 32
-- Active: 18
+- Total specs: 169
+- Cataloged: 34
+- Active: 20
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 135
@@ -17,6 +17,7 @@ Generated: 2026-03-01 05:16:01Z
 |---|---|---|
 | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
 | [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
+| [2026-03-01-google-contacts-intent-ui-normalization-v1.md](./2026-03-01-google-contacts-intent-ui-normalization-v1.md) | intent-ui | Normalizes People API contacts payloads for Intent UI conversations. |
 | [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
 | [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
@@ -26,6 +27,7 @@ Generated: 2026-03-01 05:16:01Z
 | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
+| [2026-03-01-workflow-modal-gating-v1.md](./2026-03-01-workflow-modal-gating-v1.md) | intent-ui | Gates code-edit modal to explicit demo flow so integrations do not trigger it. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |
 | [CLOUDFLARE_FRONTEND_TARGETS_V1.md](./CLOUDFLARE_FRONTEND_TARGETS_V1.md) | frontend-delivery | Frontend deploy target pinning policy remains active. |
 | [DOCS_CONTEXT_CONSOLIDATION_V1.md](./DOCS_CONTEXT_CONSOLIDATION_V1.md) | docs | Compact context docs are current operator baseline. |

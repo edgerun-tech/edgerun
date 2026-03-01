@@ -418,7 +418,7 @@ function WorkflowOverlay() {
   }));
 
   return <>
-      <Show when={state().isOpen}>
+      <Show when={state().isOpen && state().showCodeWorkflow}>
         <Motion.div
     initial={{ opacity: 0, scale: 0.98, y: 12 }}
     animate={{ opacity: isVisible() ? 1 : 0, scale: isVisible() ? 1 : 0.98, y: isVisible() ? 0 : 12 }}

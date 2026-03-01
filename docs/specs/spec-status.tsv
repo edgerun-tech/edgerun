@@ -31,3 +31,5 @@ CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os
 2026-03-01-google-messaging-bridge-default-images-v1.md	active	node-manager		Adds deterministic default MCP image mappings for Google messaging bridge integrations.
 2026-03-01-google-productivity-local-bridge-v1.md	active	node-manager		Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge.
 2026-03-01-super-v-conversation-composer-launch-v1.md	active	intent-ui		Adds Super+V launcher for conversation composer with emoji and clipboard affordances.
+2026-03-01-google-contacts-intent-ui-normalization-v1.md	active	intent-ui		Normalizes People API contacts payloads for Intent UI conversations.
+2026-03-01-workflow-modal-gating-v1.md	active	intent-ui		Gates code-edit modal to explicit demo flow so integrations do not trigger it.
