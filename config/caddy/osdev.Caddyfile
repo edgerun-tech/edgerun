@@ -15,6 +15,13 @@
     reverse_proxy 127.0.0.1:7777
   }
 
+  @google path /api/google /api/google/*
+  handle @google {
+    uri strip_prefix /api/google
+    rewrite * /v1/local/google{uri}
+    reverse_proxy 127.0.0.1:7777
+  }
+
   handle /api/* {
     reverse_proxy https://api.edgerun.tech {
       header_up Host api.edgerun.tech

@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
-use axum::extract::{Json, Query, State};
+use axum::extract::{Json, Path as AxumPath, Query, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
     CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE,
@@ -38,7 +38,7 @@ use futures_util::StreamExt;
 use prost::Message;
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sonic_rs::{JsonValueMutTrait, JsonValueTrait, Value};
+use sonic_rs::{JsonContainerTrait, JsonValueMutTrait, JsonValueTrait, Value};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command as TokioCommand;
@@ -91,6 +91,14 @@ const LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH: &str = "/v1/local/credentials/in
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
+const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
+const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
+const LOCAL_GOOGLE_EVENTS_PATH: &str = "/v1/local/google/events";
+const LOCAL_GOOGLE_CONTACTS_PATH: &str = "/v1/local/google/contacts";
+const LOCAL_GOOGLE_DRIVE_FILES_PATH: &str = "/v1/local/google/drive/files";
+const LOCAL_GOOGLE_DRIVE_FILE_PATH: &str = "/v1/local/google/drive/file/{id}";
+const LOCAL_GOOGLE_PHOTOS_PATH: &str = "/v1/local/google/photos";
+const LOCAL_GOOGLE_REFRESH_PATH: &str = "/v1/local/google/refresh";
 const EVENTBUS_NATS_URL_ENV: &str = "EDGERUN_EVENTBUS_NATS_URL";
 const EVENTBUS_NATS_URL_DEFAULT: &str = "nats://127.0.0.1:4222";
 const INTEGRATION_TOPIC_ROOT_ENV: &str = "EDGERUN_INTEGRATION_TOPIC_ROOT";
@@ -101,6 +109,12 @@ const OPENCODE_CLI_CONTAINER_NAME: &str = "edgerun-opencode-cli";
 const OPENCODE_CONFIG_PATH: &str = "/home/ken/.config/opencode/opencode.jsonb";
 const OPENCODE_MCP_SCHEMA_URL: &str = "https://opencode.ai/config.json";
 const OPENCODE_MANAGED_MCP_PREFIX: &str = "edgerun-";
+const MCP_IMAGE_GITHUB_DEFAULT: &str = "ghcr.io/modelcontextprotocol/server-github:latest";
+const MCP_IMAGE_GOOGLE_MESSAGES_DEFAULT: &str = "dock.mau.dev/mautrix/gmessages:latest";
+const MCP_IMAGE_GVOICE_DEFAULT: &str = "dock.mau.dev/mautrix/gvoice:latest";
+const MCP_IMAGE_GOOGLECHAT_DEFAULT: &str = "dock.mau.dev/mautrix/googlechat:latest";
+const GOOGLE_OAUTH_CLIENT_ID_ENV: &str = "GOOGLE_OAUTH_CLIENT_ID";
+const GOOGLE_OAUTH_CLIENT_SECRET_ENV: &str = "GOOGLE_OAUTH_CLIENT_SECRET";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -520,6 +534,62 @@ struct LocalMcpStatusData {
     container_name: String,
     running: bool,
     status: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleMessagesQuery {
+    token: String,
+    #[serde(default)]
+    after: Option<u64>,
+    #[serde(default, alias = "maxResults")]
+    max_results: Option<u32>,
+    #[serde(default)]
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleMessageQuery {
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleEventsQuery {
+    token: String,
+    #[serde(default)]
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleContactsQuery {
+    token: String,
+    #[serde(default)]
+    limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleDriveFilesQuery {
+    token: String,
+    #[serde(default, alias = "parentId")]
+    parent_id: Option<String>,
+    #[serde(default, alias = "pageSize")]
+    page_size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleDriveFileQuery {
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGooglePhotosQuery {
+    token: String,
+    #[serde(default, alias = "pageSize")]
+    page_size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleRefreshRequest {
+    refresh_token: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1113,6 +1183,126 @@ fn local_json_error(status: AxumStatusCode, message: &str) -> Response {
     )
 }
 
+fn local_json_value(status: AxumStatusCode, value: sonic_rs::Value) -> Response {
+    let payload = sonic_rs::to_string(&value)
+        .unwrap_or_else(|_| "{\"ok\":false,\"error\":\"encode failed\"}".to_string());
+    with_local_cors_headers(
+        (
+            status,
+            [(
+                AXUM_CONTENT_TYPE,
+                HeaderValue::from_static("application/json; charset=utf-8"),
+            )],
+            payload,
+        )
+            .into_response(),
+    )
+}
+
+fn google_token_from(raw: &str) -> Result<String> {
+    let token = raw.trim();
+    if token.len() < 12 {
+        return Err(anyhow!("google token is missing or invalid"));
+    }
+    Ok(token.to_string())
+}
+
+async fn google_api_get_json(token: &str, url: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .with_context(|| format!("google api request failed: {url}"))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read google api response: {url}"))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("google api request failed ({status}): {detail}"));
+    }
+    sonic_rs::from_slice(&bytes).with_context(|| format!("failed to parse google api json: {url}"))
+}
+
+async fn google_api_get_bytes(token: &str, url: &str) -> Result<Vec<u8>> {
+    let client = Client::new();
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .send()
+        .await
+        .with_context(|| format!("google api request failed: {url}"))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read google api response: {url}"))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("google api request failed ({status}): {detail}"));
+    }
+    Ok(bytes.to_vec())
+}
+
+fn gmail_header(payload: &sonic_rs::Value, name: &str) -> String {
+    payload["headers"]
+        .as_array()
+        .and_then(|headers| {
+            headers.iter().find_map(|header| {
+                let key = header["name"].as_str().unwrap_or_default();
+                if key.eq_ignore_ascii_case(name) {
+                    Some(header["value"].as_str().unwrap_or_default().to_string())
+                } else {
+                    None
+                }
+            })
+        })
+        .unwrap_or_default()
+}
+
+fn decode_gmail_part_body(part: &sonic_rs::Value) -> String {
+    let data = part["body"]["data"].as_str().unwrap_or_default().trim();
+    if data.is_empty() {
+        return String::new();
+    }
+    match URL_SAFE_NO_PAD.decode(data.as_bytes()) {
+        Ok(bytes) => String::from_utf8(bytes).unwrap_or_default(),
+        Err(_) => String::new(),
+    }
+}
+
+fn extract_gmail_text(payload: &sonic_rs::Value) -> (String, String) {
+    let mime_type = payload["mimeType"].as_str().unwrap_or_default();
+    if mime_type.eq_ignore_ascii_case("text/plain") {
+        return (decode_gmail_part_body(payload), String::new());
+    }
+    if mime_type.eq_ignore_ascii_case("text/html") {
+        return (String::new(), decode_gmail_part_body(payload));
+    }
+
+    let mut plain = String::new();
+    let mut html = String::new();
+    let mut stack: Vec<&sonic_rs::Value> = vec![payload];
+    while let Some(node) = stack.pop() {
+        let node_mime = node["mimeType"].as_str().unwrap_or_default();
+        if node_mime.eq_ignore_ascii_case("text/plain") && plain.is_empty() {
+            plain = decode_gmail_part_body(node);
+        } else if node_mime.eq_ignore_ascii_case("text/html") && html.is_empty() {
+            html = decode_gmail_part_body(node);
+        }
+        if let Some(parts) = node["parts"].as_array() {
+            for part in parts {
+                stack.push(part);
+            }
+        }
+    }
+    (plain, html)
+}
+
 fn normalized_relative_path(raw: &str) -> Result<PathBuf> {
     let mut rel = PathBuf::new();
     for component in Path::new(raw).components() {
@@ -1264,7 +1454,10 @@ fn mcp_image_for(integration_id: &str) -> Option<String> {
         }
     }
     match integration_id.trim() {
-        "github" => Some("ghcr.io/modelcontextprotocol/server-github:latest".to_string()),
+        "github" => Some(MCP_IMAGE_GITHUB_DEFAULT.to_string()),
+        "google_messages" => Some(MCP_IMAGE_GOOGLE_MESSAGES_DEFAULT.to_string()),
+        "gvoice" => Some(MCP_IMAGE_GVOICE_DEFAULT.to_string()),
+        "googlechat" => Some(MCP_IMAGE_GOOGLECHAT_DEFAULT.to_string()),
         _ => None,
     }
 }
@@ -1578,6 +1771,22 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_MCP_STOP_PATH, options(handle_local_options))
         .route(LOCAL_MCP_STATUS_PATH, get(handle_local_mcp_status))
         .route(LOCAL_MCP_STATUS_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_MESSAGES_PATH, get(handle_local_google_messages))
+        .route(LOCAL_GOOGLE_MESSAGES_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_MESSAGE_PATH, get(handle_local_google_message))
+        .route(LOCAL_GOOGLE_MESSAGE_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_EVENTS_PATH, get(handle_local_google_events))
+        .route(LOCAL_GOOGLE_EVENTS_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_CONTACTS_PATH, get(handle_local_google_contacts))
+        .route(LOCAL_GOOGLE_CONTACTS_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_DRIVE_FILES_PATH, get(handle_local_google_drive_files))
+        .route(LOCAL_GOOGLE_DRIVE_FILES_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_DRIVE_FILE_PATH, get(handle_local_google_drive_file))
+        .route(LOCAL_GOOGLE_DRIVE_FILE_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_PHOTOS_PATH, get(handle_local_google_photos))
+        .route(LOCAL_GOOGLE_PHOTOS_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_REFRESH_PATH, post(handle_local_google_refresh))
+        .route(LOCAL_GOOGLE_REFRESH_PATH, options(handle_local_options))
         .route(LOCAL_ASSISTANT_PATH, post(handle_local_assistant))
         .route(LOCAL_ASSISTANT_PATH, options(handle_local_options))
         .with_state(state);
@@ -2473,6 +2682,286 @@ async fn handle_local_mcp_status(
         running,
         status,
     })
+}
+
+async fn handle_local_google_messages(Query(query): Query<LocalGoogleMessagesQuery>) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let max_results = query.max_results.or(query.limit).unwrap_or(50).clamp(1, 500);
+    let mut url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults={max_results}&fields=messages(id,threadId),resultSizeEstimate"
+    );
+    if let Some(after) = query.after {
+        url.push_str(&format!("&q=after:{after}"));
+    }
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "messages": payload["messages"].as_array().cloned().unwrap_or_default(),
+            "resultSizeEstimate": payload["resultSizeEstimate"].as_u64().unwrap_or_default(),
+        }),
+    )
+}
+
+async fn handle_local_google_message(
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<LocalGoogleMessageQuery>,
+) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let message_id = id.trim();
+    if message_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "message id is required");
+    }
+    let url = format!(
+        "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}?format=full",
+        message_id
+    );
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let gmail_payload = &payload["payload"];
+    let (body, html) = extract_gmail_text(gmail_payload);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "id": payload["id"].as_str().unwrap_or_default(),
+            "threadId": payload["threadId"].as_str().unwrap_or_default(),
+            "labelIds": payload["labelIds"].as_array().cloned().unwrap_or_default(),
+            "snippet": payload["snippet"].as_str().unwrap_or_default(),
+            "subject": gmail_header(gmail_payload, "Subject"),
+            "from": gmail_header(gmail_payload, "From"),
+            "to": gmail_header(gmail_payload, "To"),
+            "date": gmail_header(gmail_payload, "Date"),
+            "body": body,
+            "html": html,
+        }),
+    )
+}
+
+async fn handle_local_google_events(Query(query): Query<LocalGoogleEventsQuery>) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let limit = query.limit.unwrap_or(10).clamp(1, 100);
+    let url = format!(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults={limit}"
+    );
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "items": payload["items"].as_array().cloned().unwrap_or_default(),
+        }),
+    )
+}
+
+async fn handle_local_google_contacts(Query(query): Query<LocalGoogleContactsQuery>) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    let url = format!(
+        "https://people.googleapis.com/v1/people/me/connections?pageSize={limit}&personFields=names,emailAddresses,photos"
+    );
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let items = payload["connections"].as_array().cloned().unwrap_or_default();
+    local_json_value(AxumStatusCode::OK, sonic_rs::json!({ "ok": true, "items": items }))
+}
+
+async fn handle_local_google_drive_files(
+    Query(query): Query<LocalGoogleDriveFilesQuery>,
+) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let parent_id = query.parent_id.as_deref().unwrap_or("root").trim();
+    let page_size = query.page_size.unwrap_or(200).clamp(1, 1000);
+    let parent_filter = format!("'{}'+in+parents+and+trashed+=+false", parent_id.replace('"', ""));
+    let url = format!(
+        "https://www.googleapis.com/drive/v3/files?pageSize={page_size}&q={}&fields=files(id,name,mimeType,size,modifiedTime)",
+        parent_filter
+    );
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "files": payload["files"].as_array().cloned().unwrap_or_default(),
+        }),
+    )
+}
+
+async fn handle_local_google_drive_file(
+    AxumPath(id): AxumPath<String>,
+    Query(query): Query<LocalGoogleDriveFileQuery>,
+) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let file_id = id.trim();
+    if file_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "file id is required");
+    }
+    let metadata_url = format!(
+        "https://www.googleapis.com/drive/v3/files/{}?fields=id,name,mimeType,size,modifiedTime",
+        file_id
+    );
+    let file = match google_api_get_json(&token, &metadata_url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let mime_type = file["mimeType"].as_str().unwrap_or_default().to_string();
+    let mut content = String::new();
+    if !mime_type.eq_ignore_ascii_case("application/vnd.google-apps.folder") {
+        let content_url = if mime_type.eq_ignore_ascii_case("application/vnd.google-apps.document") {
+            format!(
+                "https://www.googleapis.com/drive/v3/files/{}/export?mimeType=text/plain",
+                file_id
+            )
+        } else {
+            format!(
+                "https://www.googleapis.com/drive/v3/files/{}?alt=media",
+                file_id
+            )
+        };
+        let bytes = match google_api_get_bytes(&token, &content_url).await {
+            Ok(value) => value,
+            Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+        };
+        content = String::from_utf8(bytes).unwrap_or_default();
+    }
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "file": file,
+            "content": content,
+        }),
+    )
+}
+
+async fn handle_local_google_photos(Query(query): Query<LocalGooglePhotosQuery>) -> Response {
+    let token = match google_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let page_size = query.page_size.unwrap_or(50).clamp(1, 100);
+    let url = format!("https://photoslibrary.googleapis.com/v1/mediaItems?pageSize={page_size}");
+    let payload = match google_api_get_json(&token, &url).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "items": payload["mediaItems"].as_array().cloned().unwrap_or_default(),
+        }),
+    )
+}
+
+async fn handle_local_google_refresh(Json(body): Json<LocalGoogleRefreshRequest>) -> Response {
+    let refresh_token = body.refresh_token.trim();
+    if refresh_token.len() < 12 {
+        return local_json_error(
+            AxumStatusCode::BAD_REQUEST,
+            "google refresh_token is missing or invalid",
+        );
+    }
+    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let client_secret = std::env::var(GOOGLE_OAUTH_CLIENT_SECRET_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let (Some(client_id), Some(client_secret)) = (client_id, client_secret) else {
+        return local_json_error(
+            AxumStatusCode::NOT_IMPLEMENTED,
+            &format!(
+                "google refresh is not configured (set {} and {})",
+                GOOGLE_OAUTH_CLIENT_ID_ENV, GOOGLE_OAUTH_CLIENT_SECRET_ENV
+            ),
+        );
+    };
+    let client = Client::new();
+    let response = match client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("refresh_token", refresh_token),
+            ("grant_type", "refresh_token"),
+        ])
+        .send()
+        .await
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let status = response.status();
+    let bytes = match response.bytes().await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    if !status.is_success() {
+        return local_json_error(
+            AxumStatusCode::BAD_GATEWAY,
+            &format!(
+                "google token refresh failed ({}): {}",
+                status,
+                String::from_utf8_lossy(&bytes)
+            ),
+        );
+    }
+    let payload: sonic_rs::Value = match sonic_rs::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let access_token = payload["access_token"].as_str().unwrap_or_default();
+    if access_token.is_empty() {
+        return local_json_error(
+            AxumStatusCode::BAD_GATEWAY,
+            "google token refresh response is missing access_token",
+        );
+    }
+    let expires_in = payload["expires_in"].as_i64().unwrap_or(3600).max(60) as u64;
+    let expires_at = now_unix_ms() + (expires_in * 1000);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "access_token": access_token,
+            "expires_at": expires_at,
+        }),
+    )
 }
 
 async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Response {
@@ -3658,6 +4147,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn opencode_mcp_sync_preserves_user_entries() {
@@ -3715,6 +4207,60 @@ mod tests {
         assert_eq!(
             parsed["$schema"].as_str().unwrap_or_default(),
             OPENCODE_MCP_SCHEMA_URL
+        );
+    }
+
+    #[test]
+    fn mcp_image_for_google_integrations_has_defaults() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let key = "EDGERUN_MCP_GOOGLE_MESSAGES_IMAGE";
+        let previous = std::env::var(key).ok();
+        unsafe {
+            std::env::remove_var(key);
+        }
+
+        assert_eq!(
+            mcp_image_for("google_messages").as_deref(),
+            Some(MCP_IMAGE_GOOGLE_MESSAGES_DEFAULT)
+        );
+        assert_eq!(mcp_image_for("gvoice").as_deref(), Some(MCP_IMAGE_GVOICE_DEFAULT));
+        assert_eq!(
+            mcp_image_for("googlechat").as_deref(),
+            Some(MCP_IMAGE_GOOGLECHAT_DEFAULT)
+        );
+
+        match previous {
+            Some(value) => unsafe {
+                std::env::set_var(key, value);
+            },
+            None => unsafe {
+                std::env::remove_var(key);
+            },
+        }
+    }
+
+    #[test]
+    fn mcp_image_for_prefers_env_override() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let key = "EDGERUN_MCP_GOOGLE_MESSAGES_IMAGE";
+        let previous = std::env::var(key).ok();
+        unsafe {
+            std::env::set_var(key, "example.com/custom/gmessages:stable");
+        }
+        let resolved = mcp_image_for("google_messages");
+
+        match previous {
+            Some(value) => unsafe {
+                std::env::set_var(key, value);
+            },
+            None => unsafe {
+                std::env::remove_var(key);
+            },
+        }
+
+        assert_eq!(
+            resolved.as_deref(),
+            Some("example.com/custom/gmessages:stable")
         );
     }
 }

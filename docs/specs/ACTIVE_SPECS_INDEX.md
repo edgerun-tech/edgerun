@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 04:27:44Z
+Generated: 2026-03-01 04:42:37Z
 
 ## Summary
 
-- Total specs: 163
-- Cataloged: 29
-- Active: 15
+- Total specs: 165
+- Cataloged: 31
+- Active: 17
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 134
@@ -17,6 +17,8 @@ Generated: 2026-03-01 04:27:44Z
 |---|---|---|
 | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
 | [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
+| [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
+| [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
 | [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |
 | [2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md](./2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md) | intent-ui | Current hardening direction for lifecycle logic. |

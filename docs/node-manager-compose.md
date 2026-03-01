@@ -104,6 +104,29 @@ POST http://127.0.0.1:7777/v1/local/mcp/integration/stop
 GET  http://127.0.0.1:7777/v1/local/mcp/integration/status
 ```
 
+Google productivity API proxy endpoints (used by Gmail/Drive/Contacts/Photos UI paths):
+
+```text
+GET  http://127.0.0.1:7777/v1/local/google/messages
+GET  http://127.0.0.1:7777/v1/local/google/message/{id}
+GET  http://127.0.0.1:7777/v1/local/google/events
+GET  http://127.0.0.1:7777/v1/local/google/contacts
+GET  http://127.0.0.1:7777/v1/local/google/drive/files
+GET  http://127.0.0.1:7777/v1/local/google/drive/file/{id}
+GET  http://127.0.0.1:7777/v1/local/google/photos
+POST http://127.0.0.1:7777/v1/local/google/refresh
+```
+
+`/api/google/*` on the osdev Caddy listener rewrites to these local bridge routes.
+
+Default MCP image mappings in node-manager include:
+- `github` -> `ghcr.io/modelcontextprotocol/server-github:latest`
+- `google_messages` -> `dock.mau.dev/mautrix/gmessages:latest`
+- `gvoice` -> `dock.mau.dev/mautrix/gvoice:latest`
+- `googlechat` -> `dock.mau.dev/mautrix/googlechat:latest`
+
+All can be overridden via `EDGERUN_MCP_*_IMAGE` in `config/node-manager.compose.env`.
+
 ## Notes
 - This stack uses `network_mode: host` and `privileged: true` by design for TPM and Docker socket access.
 - State is persisted in named volumes for `/var/lib/edgerun` and `/etc/edgerun`.

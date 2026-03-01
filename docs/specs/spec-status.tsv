@@ -28,3 +28,5 @@ CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os
 2026-03-01-codex-session-persistence-and-resume-v1.md	superseded	intent-ui	2026-03-01-opencode-only-assistant-integration-v1.md	Session persistence now follows OpenCode assistant execution.
 2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md	superseded	intent-ui	2026-03-01-opencode-only-assistant-integration-v1.md	Codex CLI availability policy replaced by OpenCode CLI policy.
 2026-03-01-opencode-mcp-config-sync-v1.md	active	node-manager		Deterministic OpenCode MCP managed-entry sync from node-manager lifecycle events.
+2026-03-01-google-messaging-bridge-default-images-v1.md	active	node-manager		Adds deterministic default MCP image mappings for Google messaging bridge integrations.
+2026-03-01-google-productivity-local-bridge-v1.md	active	node-manager		Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge.
