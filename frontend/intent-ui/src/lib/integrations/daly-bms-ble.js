@@ -96,6 +96,91 @@ function emptyDalyProbeStats() {
   };
 }
 
+function roundNumber(value, digits = 2) {
+  if (!Number.isFinite(value)) return null;
+  const factor = 10 ** Math.max(0, digits);
+  return Math.round(value * factor) / factor;
+}
+
+function decodeA5MetricsFromSample(sample) {
+  if (!(sample instanceof Uint8Array) || sample.length < 13 || sample[0] !== 0xA5) return null;
+  const command = sample[2];
+  if (command !== 0x90) return null;
+  const payload = sample.slice(4, 12);
+  if (payload.length < 8) return null;
+
+  const packVoltageRaw = (payload[0] << 8) | payload[1];
+  const currentRaw = (payload[4] << 8) | payload[5];
+  const socRaw = (payload[6] << 8) | payload[7];
+  const packVoltageV = packVoltageRaw / 10;
+  const currentA = (currentRaw - 30000) / 10;
+  const stateOfChargePct = socRaw / 10;
+
+  if (!Number.isFinite(packVoltageV) || packVoltageV <= 0 || packVoltageV > 120) return null;
+
+  return {
+    source: "a5_90",
+    packVoltageV: roundNumber(packVoltageV, 2),
+    currentA: Number.isFinite(currentA) && Math.abs(currentA) <= 1000 ? roundNumber(currentA, 2) : null,
+    stateOfChargePct: Number.isFinite(stateOfChargePct) && stateOfChargePct >= 0 && stateOfChargePct <= 100
+      ? roundNumber(stateOfChargePct, 1)
+      : null
+  };
+}
+
+function decodeD2CellMetricsFromSample(sample) {
+  if (!(sample instanceof Uint8Array) || sample.length < 12 || sample[0] !== 0xD2) return null;
+  const runs = [];
+  let run = [];
+
+  for (let index = 2; index + 1 < sample.length; index += 2) {
+    const value = sample[index] | (sample[index + 1] << 8);
+    if (value >= 2000 && value <= 4500) {
+      run.push(value);
+    } else if (run.length > 0) {
+      runs.push(run);
+      run = [];
+    }
+  }
+  if (run.length > 0) runs.push(run);
+
+  const cellsMv = runs.sort((left, right) => right.length - left.length)[0] || [];
+  if (cellsMv.length < 4) return null;
+
+  const cellMinMv = Math.min(...cellsMv);
+  const cellMaxMv = Math.max(...cellsMv);
+  const cellAvgMv = cellsMv.reduce((sum, value) => sum + value, 0) / cellsMv.length;
+  const packVoltageV = cellsMv.reduce((sum, value) => sum + value, 0) / 1000;
+
+  return {
+    source: "d2_cells",
+    cellCount: cellsMv.length,
+    cellVoltageMinV: roundNumber(cellMinMv / 1000, 3),
+    cellVoltageMaxV: roundNumber(cellMaxMv / 1000, 3),
+    cellVoltageAvgV: roundNumber(cellAvgMv / 1000, 3),
+    packVoltageV: roundNumber(packVoltageV, 2)
+  };
+}
+
+function decodeDalyTelemetry(samples) {
+  const list = Array.isArray(samples) ? samples : [];
+  const a5 = list.map((sample) => decodeA5MetricsFromSample(sample)).find(Boolean) || null;
+  const d2 = list.map((sample) => decodeD2CellMetricsFromSample(sample)).find(Boolean) || null;
+
+  if (!a5 && !d2) return null;
+
+  return {
+    source: [a5?.source, d2?.source].filter(Boolean).join("+") || "unknown",
+    packVoltageV: a5?.packVoltageV ?? d2?.packVoltageV ?? null,
+    stateOfChargePct: a5?.stateOfChargePct ?? null,
+    currentA: a5?.currentA ?? null,
+    cellCount: d2?.cellCount ?? null,
+    cellVoltageMinV: d2?.cellVoltageMinV ?? null,
+    cellVoltageMaxV: d2?.cellVoltageMaxV ?? null,
+    cellVoltageAvgV: d2?.cellVoltageAvgV ?? null
+  };
+}
+
 function buildA5ReadFrame(command) {
   const frame = Uint8Array.from([0xA5, 0x40, command & 0xff, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
   let checksum = 0;
@@ -343,6 +428,7 @@ async function probeDalyBms(details = {}) {
     }
     if (samples.length === 0) diagnostics.push("no notify packets captured during probe");
     const protocol = detectProtocolFromSamples(samples);
+    const decoded = decodeDalyTelemetry(samples);
     const packetStats = summarizePacketStats(samples);
     const stats = {
       ...packetStats,
@@ -362,6 +448,7 @@ async function probeDalyBms(details = {}) {
       services,
       protocol,
       packetSamplesHex: samples.slice(0, 5).map((sample) => toHex(sample)),
+      decoded,
       stats,
       diagnostics,
       probeOk: diagnostics.length === 0,
@@ -383,6 +470,7 @@ async function probeDalyBms(details = {}) {
       services: [],
       protocol: "unknown",
       packetSamplesHex: [],
+      decoded: null,
       stats: {
         ...emptyDalyProbeStats(),
         elapsedMs: Math.max(0, Date.now() - probeStartedAt)

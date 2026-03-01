@@ -716,10 +716,12 @@ function IntegrationsPanel(props) {
       ? result.stats.packetCount
       : (Array.isArray(result.packetSamplesHex) ? result.packetSamplesHex.length : 0);
     const protocol = String(result.protocol || "unknown").trim();
+    const decodedVoltage = Number.isFinite(result?.decoded?.packVoltageV) ? ` · ${result.decoded.packVoltageV}V` : "";
+    const decodedSoc = Number.isFinite(result?.decoded?.stateOfChargePct) ? ` · soc ${result.decoded.stateOfChargePct}%` : "";
     const elapsed = Number.isFinite(result?.stats?.elapsedMs) ? ` · ${result.stats.elapsedMs}ms` : "";
     const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
     const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
-    setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${elapsed}${warningText}`);
+    setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${decodedVoltage}${decodedSoc}${elapsed}${warningText}`);
   }
 
   function disconnectProvider(provider) {
@@ -1285,12 +1287,33 @@ function IntegrationsPanel(props) {
                                 const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
                                 const packets = Array.isArray(probe?.packetSamplesHex) ? probe.packetSamplesHex.slice(0, 3) : [];
                                 const stats = probe?.stats || {};
+                                const decoded = probe?.decoded || {};
                                 return (
                                   <div class="mt-2 space-y-1 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-300" data-testid="daly-probe-details">
                                     <p>Protocol: {probe?.protocol || "unknown"}</p>
                                     <p>Battery: {Number.isFinite(probe?.batteryLevel) ? `${probe.batteryLevel}%` : "n/a"}</p>
                                     <p>Services: {Array.isArray(probe?.services) ? probe.services.length : 0}</p>
                                     <p>Profile: {probe?.serial?.profileLabel || "unknown"}</p>
+                                    <Show when={Number.isFinite(decoded?.packVoltageV) || Number.isFinite(decoded?.stateOfChargePct) || Number.isFinite(decoded?.currentA)}>
+                                      <div class="space-y-0.5">
+                                        <p class="text-neutral-400">Decoded:</p>
+                                        <Show when={Number.isFinite(decoded?.packVoltageV)}>
+                                          <p>Pack voltage: {decoded.packVoltageV}V</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(decoded?.stateOfChargePct)}>
+                                          <p>State of charge: {decoded.stateOfChargePct}%</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(decoded?.currentA)}>
+                                          <p>Current: {decoded.currentA}A</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(decoded?.cellCount)}>
+                                          <p>Cell count: {decoded.cellCount}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(decoded?.cellVoltageMinV) || Number.isFinite(decoded?.cellVoltageMaxV) || Number.isFinite(decoded?.cellVoltageAvgV)}>
+                                          <p>Cell volts min/max/avg: {Number.isFinite(decoded?.cellVoltageMinV) ? decoded.cellVoltageMinV : 0}/{Number.isFinite(decoded?.cellVoltageMaxV) ? decoded.cellVoltageMaxV : 0}/{Number.isFinite(decoded?.cellVoltageAvgV) ? decoded.cellVoltageAvgV : 0}</p>
+                                        </Show>
+                                      </div>
+                                    </Show>
                                     <Show when={Number.isFinite(stats?.packetCount) || Number.isFinite(stats?.elapsedMs)}>
                                       <div class="space-y-0.5">
                                         <p class="text-neutral-400">Stats:</p>
