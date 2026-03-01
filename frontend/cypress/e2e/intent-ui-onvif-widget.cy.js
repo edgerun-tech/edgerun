@@ -52,6 +52,6 @@ describe('intent ui onvif widget', () => {
 
     cy.get('[data-testid="onvif-camera-card"]').should('have.length', 1)
     cy.contains('Front Gate').should('exist')
-    cy.contains('http://192.168.1.22/onvif/device_service').should('exist')
+    cy.contains('rtsp://192.168.1.22/stream1').should('exist')
   })
 })

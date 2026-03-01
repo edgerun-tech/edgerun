@@ -4,6 +4,13 @@ import { navigateBrowser } from "../../stores/ui-actions";
 import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 
 const ONVIF_CAMERAS_KEY = "intent-ui-onvif-cameras-v1";
+const ONVIF_DEFAULTS_KEY = "intent-ui-onvif-defaults-v1";
+const ONVIF_DEFAULTS_BASE = {
+  protocol: "rtsp",
+  streamPath: "stream1",
+  username: "",
+  password: ""
+};
 
 function safeParse(raw) {
   try {
@@ -30,6 +37,33 @@ function persistCameras(cameras) {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(ONVIF_CAMERAS_KEY, JSON.stringify(cameras));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function normalizeOnvifDefaults(input) {
+  const value = input && typeof input === "object" ? input : {};
+  const protocolRaw = String(value?.protocol || ONVIF_DEFAULTS_BASE.protocol).trim().toLowerCase();
+  const protocol = ["rtsp", "http", "https"].includes(protocolRaw) ? protocolRaw : ONVIF_DEFAULTS_BASE.protocol;
+  return {
+    protocol,
+    streamPath: String(value?.streamPath || ONVIF_DEFAULTS_BASE.streamPath).trim().slice(0, 120) || ONVIF_DEFAULTS_BASE.streamPath,
+    username: String(value?.username || "").trim().slice(0, 120),
+    password: String(value?.password || "").slice(0, 120)
+  };
+}
+
+function readStoredOnvifDefaults() {
+  if (typeof localStorage === "undefined") return ONVIF_DEFAULTS_BASE;
+  const parsed = safeParse(localStorage.getItem(ONVIF_DEFAULTS_KEY) || "");
+  return normalizeOnvifDefaults(parsed);
+}
+
+function persistOnvifDefaults(defaults) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(ONVIF_DEFAULTS_KEY, JSON.stringify(normalizeOnvifDefaults(defaults)));
   } catch {
     // ignore storage failures
   }
@@ -77,6 +111,49 @@ function getCardTitle(camera) {
   } catch {
     return camera.url;
   }
+}
+
+function normalizeStreamPath(pathValue) {
+  const raw = String(pathValue || "").trim().replace(/^\/+/, "");
+  const normalized = raw || ONVIF_DEFAULTS_BASE.streamPath;
+  return `/${normalized}`;
+}
+
+function deriveStreamUrlFromOnvifService(url, defaults) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname.toLowerCase().includes("/onvif/device_service")) {
+      return url;
+    }
+    const settings = normalizeOnvifDefaults(defaults);
+    const streamPath = normalizeStreamPath(settings.streamPath);
+    return `${settings.protocol}://${parsed.host}${streamPath}`;
+  } catch {
+    return url;
+  }
+}
+
+function applyRuntimeCredentials(url, defaults) {
+  const settings = normalizeOnvifDefaults(defaults);
+  if (!settings.username) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.username) return url;
+    parsed.username = settings.username;
+    parsed.password = settings.password || "";
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+function normalizeStoredCameraUrl(url, defaults) {
+  return deriveStreamUrlFromOnvifService(url, defaults);
+}
+
+function resolveRuntimeCameraUrl(url, defaults) {
+  const streamUrl = deriveStreamUrlFromOnvifService(url, defaults);
+  return applyRuntimeCredentials(streamUrl, defaults);
 }
 
 function isVideoLike(url) {
@@ -162,6 +239,7 @@ function getPreviewSrc(url) {
 
 function OnvifPanel() {
   const [cameras, setCameras] = createSignal(readStoredCameras());
+  const [defaults, setDefaults] = createSignal(readStoredOnvifDefaults());
   const [urlInput, setUrlInput] = createSignal("");
   const [labelInput, setLabelInput] = createSignal("");
   const [scanBusy, setScanBusy] = createSignal(false);
@@ -170,6 +248,7 @@ function OnvifPanel() {
 
   onMount(() => {
     setCameras(readStoredCameras());
+    setDefaults(readStoredOnvifDefaults());
   });
 
   const saveCameras = (next) => {
@@ -184,17 +263,37 @@ function OnvifPanel() {
       setStatus("Camera URL is required.");
       return;
     }
-    const key = getCameraKey(normalized);
+    const storedUrl = normalizeStoredCameraUrl(normalized, defaults());
+    const key = getCameraKey(storedUrl);
     if (cameras().some((item) => getCameraKey(item.url) === key)) {
       setStatus("Camera already added.");
       return;
     }
     const id = `cam-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`;
-    const next = [{ id, url: normalized, label: String(label || "").trim() }, ...cameras()];
+    const next = [{ id, url: storedUrl, label: String(label || "").trim() }, ...cameras()];
     saveCameras(next);
     setUrlInput("");
     setLabelInput("");
-    setStatus(normalizedResult.hadCredentials ? "Camera added. Embedded credentials were stripped." : "Camera added.");
+
+    const mappedToStream = storedUrl !== normalized;
+    const hasDefaultAuth = Boolean(defaults()?.username);
+    if (normalizedResult.hadCredentials) {
+      setStatus("Camera added. Embedded credentials were stripped.");
+    } else if (mappedToStream && hasDefaultAuth) {
+      setStatus("Camera added. ONVIF service endpoint mapped to stream path; default auth applies at runtime.");
+    } else if (mappedToStream) {
+      setStatus("Camera added. ONVIF service endpoint mapped to stream path.");
+    } else if (hasDefaultAuth) {
+      setStatus("Camera added. Default auth applies at runtime.");
+    } else {
+      setStatus("Camera added.");
+    }
+  };
+
+  const updateDefaults = (patch) => {
+    const next = normalizeOnvifDefaults({ ...defaults(), ...(patch || {}) });
+    setDefaults(next);
+    persistOnvifDefaults(next);
   };
 
   const removeCamera = (id) => {
@@ -219,7 +318,8 @@ function OnvifPanel() {
   const cameraCards = createMemo(() => cameras().map((camera) => ({
     ...camera,
     title: getCardTitle(camera),
-    previewSrc: getPreviewSrc(camera.url)
+    runtimeUrl: resolveRuntimeCameraUrl(camera.url, defaults()),
+    previewSrc: getPreviewSrc(resolveRuntimeCameraUrl(camera.url, defaults()))
   })));
 
   return (
@@ -230,6 +330,47 @@ function OnvifPanel() {
       </div>
 
       <div class="mb-3 grid grid-cols-1 gap-2">
+        <div class="rounded-md border border-neutral-800 bg-neutral-900/50 p-2">
+          <p class="mb-1 text-[11px] uppercase tracking-wide text-neutral-500">Stream Defaults</p>
+          <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <input
+              type="text"
+              value={defaults().username}
+              onInput={(event) => updateDefaults({ username: event.currentTarget.value })}
+              placeholder="Default username"
+              class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+              data-testid="onvif-default-username"
+            />
+            <input
+              type="password"
+              value={defaults().password}
+              onInput={(event) => updateDefaults({ password: event.currentTarget.value })}
+              placeholder="Default password"
+              class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+              data-testid="onvif-default-password"
+            />
+            <select
+              value={defaults().protocol}
+              onChange={(event) => updateDefaults({ protocol: event.currentTarget.value })}
+              class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+              data-testid="onvif-default-protocol"
+            >
+              <option value="rtsp">rtsp</option>
+              <option value="http">http</option>
+              <option value="https">https</option>
+            </select>
+            <input
+              type="text"
+              value={defaults().streamPath}
+              onInput={(event) => updateDefaults({ streamPath: event.currentTarget.value })}
+              placeholder="Default stream path (stream1)"
+              class="rounded-md border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100"
+              data-testid="onvif-default-stream-path"
+            />
+          </div>
+          <p class="mt-1 text-[10px] text-neutral-500">Default credentials apply only at runtime for preview/open actions.</p>
+        </div>
+
         <input
           type="text"
           value={labelInput()}
@@ -309,7 +450,10 @@ function OnvifPanel() {
                 <div class="mb-2 flex items-center justify-between gap-2">
                   <div class="min-w-0">
                     <p class="truncate text-sm font-medium text-neutral-100">{camera.title}</p>
-                    <p class="truncate text-[11px] text-neutral-500">{camera.url}</p>
+                    <p class="truncate text-[11px] text-neutral-500">{camera.runtimeUrl}</p>
+                    <Show when={camera.runtimeUrl !== camera.url}>
+                      <p class="truncate text-[10px] text-neutral-600">source: {camera.url}</p>
+                    </Show>
                   </div>
                   <div class="flex items-center gap-1">
                     <button
@@ -317,7 +461,7 @@ function OnvifPanel() {
                       class="rounded border border-neutral-700 px-2 py-1 text-[11px] text-neutral-300 hover:bg-neutral-800"
                       onClick={() => {
                         openWindow("browser");
-                        navigateBrowser(camera.url);
+                        navigateBrowser(camera.runtimeUrl);
                       }}
                     >
                       Open
@@ -337,7 +481,7 @@ function OnvifPanel() {
                     fallback={<div class="p-3 text-xs text-neutral-500">Preview unavailable for this URL.</div>}
                   >
                     <Show
-                      when={isVideoLike(camera.url)}
+                      when={isVideoLike(camera.runtimeUrl)}
                       fallback={
                         <iframe
                           src={camera.previewSrc}
