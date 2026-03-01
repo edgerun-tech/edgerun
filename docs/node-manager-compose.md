@@ -43,6 +43,12 @@ Edit `config/cloudflared/node-manager-tunnel.yml`:
 scripts/node-manager-compose.sh up-tunnel
 ```
 
+Or start and verify in one step:
+
+```bash
+scripts/node-manager-compose.sh up-tunnel-verify
+```
+
 This starts:
 - `node-manager` local bridge on `127.0.0.1:7777`
 - `cloudflared` tunnel ingress

@@ -20,9 +20,10 @@ describe('frontend architecture proof', () => {
       })
     })
 
-    cy.get('button[aria-label="Open wallet details"]').first().click({ force: true })
-    cy.contains('h2', 'Wallet + Network').should('be.visible')
-    cy.contains('button', /^Close$/).click({ force: true })
+    cy.get('button[aria-label="Open personalization settings"]').first().click({ force: true })
+    cy.get('section[role="dialog"][aria-label="Personalization settings"]').should('be.visible')
+    cy.get('body').type('{esc}')
+    cy.get('section[role="dialog"][aria-label="Personalization settings"]').should('not.exist')
 
     cy.contains('a', /^Docs$/).first().click()
 

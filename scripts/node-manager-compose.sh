@@ -7,6 +7,7 @@ COMPOSE_FILE="${ROOT_DIR}/docker-compose.node-manager.yml"
 ENV_FILE_DEFAULT="${ROOT_DIR}/config/node-manager.compose.env"
 ENV_FILE="${EDGERUN_NODE_MANAGER_COMPOSE_ENV_FILE:-${ENV_FILE_DEFAULT}}"
 PREPARE_BINARIES_SCRIPT="${ROOT_DIR}/scripts/prepare-node-manager-image-binaries.sh"
+VERIFY_LOCAL_STACK_SCRIPT="${ROOT_DIR}/scripts/verify-local-stack.sh"
 TUNNEL_CONFIG_FILE="${ROOT_DIR}/config/cloudflared/node-manager-tunnel.yml"
 TUNNEL_CREDENTIALS_FILE="${ROOT_DIR}/config/cloudflared/node-manager-tunnel-credentials.json"
 
@@ -16,6 +17,7 @@ Usage:
   scripts/node-manager-compose.sh up
   scripts/node-manager-compose.sh up-dev
   scripts/node-manager-compose.sh up-tunnel
+  scripts/node-manager-compose.sh up-tunnel-verify
   scripts/node-manager-compose.sh status
   scripts/node-manager-compose.sh ps
   scripts/node-manager-compose.sh prepare-binaries
@@ -71,6 +73,19 @@ case "${cmd}" in
     fi
     "${PREPARE_BINARIES_SCRIPT}"
     compose --profile tunnel up -d --build
+    ;;
+  up-tunnel-verify)
+    if [[ ! -f "${TUNNEL_CONFIG_FILE}" ]]; then
+      echo "missing tunnel config: ${TUNNEL_CONFIG_FILE}" >&2
+      exit 1
+    fi
+    if [[ ! -f "${TUNNEL_CREDENTIALS_FILE}" ]]; then
+      echo "missing tunnel credentials: ${TUNNEL_CREDENTIALS_FILE}" >&2
+      exit 1
+    fi
+    "${PREPARE_BINARIES_SCRIPT}"
+    compose --profile tunnel up -d --build
+    "${VERIFY_LOCAL_STACK_SCRIPT}"
     ;;
   status)
     compose ps

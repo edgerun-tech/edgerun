@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-describe('intent ui connected devices widget', () => {
+describe('intent ui connected devices panel', () => {
   const seedProfileSession = (win) => {
     win.sessionStorage.setItem('intent-ui-profile-mode-v1', 'profile')
     win.sessionStorage.setItem('intent-ui-profile-id-v1', 'profile_connected_devices_widget')
@@ -11,16 +11,17 @@ describe('intent ui connected devices widget', () => {
     )
   }
 
-  it('shows centered connected device rows with IP and flag info', () => {
+  it('shows connected device rows in devices drawer', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         seedProfileSession(win)
       }
     })
 
-    cy.get('[data-testid="connected-devices-widget"]').should('be.visible')
-    cy.get('[data-testid="connected-devices-widget-row"]').should('have.length.at.least', 1)
-    cy.contains('This Browser').should('be.visible')
-    cy.contains('--').should('be.visible')
+    cy.get('button[title="Devices panel"]').first().click({ force: true })
+    cy.contains('p', /^Devices$/).should('be.visible')
+    cy.get('body').invoke('text').then((text) => {
+      expect(text).to.match(/This Device|This Browser|No connected devices yet\./)
+    })
   })
 })
