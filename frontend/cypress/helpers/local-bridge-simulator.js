@@ -69,6 +69,12 @@ export function installLocalBridgeSimulator(win) {
     accessApps: [
       { id: 'app-sim-1', name: 'Terminal Access', domain: 'terminal.example.com' }
     ],
+    workers: [
+      { id: 'edge-worker', modified_on: '2026-03-01T00:00:00.000Z' }
+    ],
+    pages: [
+      { id: 'pages-sim-1', name: 'edge-site', subdomain: 'edge-site.pages.dev' }
+    ],
     dnsByZone: {
       'zone-sim-1': [
         { id: 'dns-sim-1', type: 'CNAME', name: 'terminal.example.com', content: 'edge-terminal.cfargotunnel.com' }
@@ -87,6 +93,8 @@ export function installLocalBridgeSimulator(win) {
           zones: Array.isArray(parsed.zones) ? parsed.zones : defaultCloudflareState().zones,
           tunnels: Array.isArray(parsed.tunnels) ? parsed.tunnels : defaultCloudflareState().tunnels,
           accessApps: Array.isArray(parsed.accessApps) ? parsed.accessApps : defaultCloudflareState().accessApps,
+          workers: Array.isArray(parsed.workers) ? parsed.workers : defaultCloudflareState().workers,
+          pages: Array.isArray(parsed.pages) ? parsed.pages : defaultCloudflareState().pages,
           dnsByZone: parsed.dnsByZone && typeof parsed.dnsByZone === 'object' ? parsed.dnsByZone : defaultCloudflareState().dnsByZone
         }
       }
@@ -439,6 +447,54 @@ export function installLocalBridgeSimulator(win) {
       const state = readCloudflareState()
       return Promise.resolve(
         new win.Response(JSON.stringify({ ok: true, account_id: state.accountId, apps: state.accessApps, count: state.accessApps.length }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/cloudflare/workers') {
+      const token = (() => {
+        try {
+          return String(new URL(url, win.location.origin).searchParams.get('token') || '').trim()
+        } catch {
+          return ''
+        }
+      })()
+      if (token.length < 20) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'cloudflare account api token is missing or invalid' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const state = readCloudflareState()
+      return Promise.resolve(
+        new win.Response(JSON.stringify({ ok: true, account_id: state.accountId, workers: state.workers, count: state.workers.length }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/cloudflare/pages') {
+      const token = (() => {
+        try {
+          return String(new URL(url, win.location.origin).searchParams.get('token') || '').trim()
+        } catch {
+          return ''
+        }
+      })()
+      if (token.length < 20) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'cloudflare account api token is missing or invalid' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const state = readCloudflareState()
+      return Promise.resolve(
+        new win.Response(JSON.stringify({ ok: true, account_id: state.accountId, pages: state.pages, count: state.pages.length }), {
           status: 200,
           headers: { 'content-type': 'application/json; charset=utf-8' }
         })

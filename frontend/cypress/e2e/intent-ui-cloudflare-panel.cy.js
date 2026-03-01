@@ -19,7 +19,7 @@ describe('intent ui cloudflare panel', () => {
     )
   }
 
-  it('loads cloudflare domains, tunnels, access apps, and upserts dns record', () => {
+  it('loads cloudflare domains, tunnels, access, workers, pages, and upserts dns record', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         installLocalBridgeSimulator(win)
@@ -50,6 +50,8 @@ describe('intent ui cloudflare panel', () => {
     cy.get('[data-testid="cloudflare-zones-list"]').should('contain.text', 'example.com')
     cy.get('[data-testid="cloudflare-tunnels-list"]').should('contain.text', 'edge-terminal')
     cy.get('[data-testid="cloudflare-access-list"]').should('contain.text', 'Terminal Access')
+    cy.get('[data-testid="cloudflare-workers-list"]').should('contain.text', 'edge-worker')
+    cy.get('[data-testid="cloudflare-pages-list"]').should('contain.text', 'edge-site')
     cy.get('[data-testid="cloudflare-zone-select"]').select('example.com', { force: true })
 
     cy.get('[data-testid="cloudflare-dns-records-list"]').within(() => {

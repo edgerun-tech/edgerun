@@ -102,6 +102,8 @@ const LOCAL_CLOUDFLARE_VERIFY_PATH: &str = "/v1/local/cloudflare/verify";
 const LOCAL_CLOUDFLARE_ZONES_PATH: &str = "/v1/local/cloudflare/zones";
 const LOCAL_CLOUDFLARE_TUNNELS_PATH: &str = "/v1/local/cloudflare/tunnels";
 const LOCAL_CLOUDFLARE_ACCESS_APPS_PATH: &str = "/v1/local/cloudflare/access/apps";
+const LOCAL_CLOUDFLARE_WORKERS_PATH: &str = "/v1/local/cloudflare/workers";
+const LOCAL_CLOUDFLARE_PAGES_PATH: &str = "/v1/local/cloudflare/pages";
 const LOCAL_CLOUDFLARE_DNS_RECORDS_PATH: &str = "/v1/local/cloudflare/dns/records";
 const LOCAL_CLOUDFLARE_DNS_UPSERT_PATH: &str = "/v1/local/cloudflare/dns/records/upsert";
 const LOCAL_BEEPER_VERIFY_PATH: &str = "/v1/local/beeper/verify";
@@ -611,6 +613,20 @@ struct LocalCloudflareTunnelsQuery {
 
 #[derive(Debug, Deserialize)]
 struct LocalCloudflareAccessAppsQuery {
+    token: String,
+    #[serde(default, alias = "accountId")]
+    account_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareWorkersQuery {
+    token: String,
+    #[serde(default, alias = "accountId")]
+    account_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflarePagesQuery {
     token: String,
     #[serde(default, alias = "accountId")]
     account_id: Option<String>,
@@ -2805,6 +2821,19 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
             options(handle_local_options),
         )
         .route(
+            LOCAL_CLOUDFLARE_WORKERS_PATH,
+            get(handle_local_cloudflare_workers),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_WORKERS_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_PAGES_PATH,
+            get(handle_local_cloudflare_pages),
+        )
+        .route(LOCAL_CLOUDFLARE_PAGES_PATH, options(handle_local_options))
+        .route(
             LOCAL_CLOUDFLARE_DNS_RECORDS_PATH,
             get(handle_local_cloudflare_dns_records),
         )
@@ -4032,6 +4061,68 @@ async fn handle_local_cloudflare_access_apps(
             "ok": true,
             "account_id": account_id,
             "apps": apps,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_workers(
+    Query(query): Query<LocalCloudflareWorkersQuery>,
+) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let account_id = match cloudflare_resolve_account_id(&token, query.account_id.as_deref()).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{account_id}/workers/scripts"
+    );
+    let payload = match cloudflare_api_request(&token, reqwest::Method::GET, &url, None).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let workers = payload["result"].clone();
+    let count = workers.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "account_id": account_id,
+            "workers": workers,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_pages(
+    Query(query): Query<LocalCloudflarePagesQuery>,
+) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let account_id = match cloudflare_resolve_account_id(&token, query.account_id.as_deref()).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{account_id}/pages/projects"
+    );
+    let payload = match cloudflare_api_request(&token, reqwest::Method::GET, &url, None).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let pages = payload["result"].clone();
+    let count = pages.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "account_id": account_id,
+            "pages": pages,
             "count": count,
         }),
     )

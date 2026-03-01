@@ -25,6 +25,8 @@ export default function CloudflarePanel() {
   const [zones, setZones] = createSignal([]);
   const [tunnels, setTunnels] = createSignal([]);
   const [apps, setApps] = createSignal([]);
+  const [workers, setWorkers] = createSignal([]);
+  const [pages, setPages] = createSignal([]);
   const [records, setRecords] = createSignal([]);
   const [accountId, setAccountId] = createSignal("");
   const [zoneId, setZoneId] = createSignal("");
@@ -76,6 +78,28 @@ export default function CloudflarePanel() {
     setApps(Array.isArray(payload?.apps) ? payload.apps : []);
   };
 
+  const loadWorkers = async () => {
+    const response = await fetch(localBridgeHttpUrl(`/v1/local/cloudflare/workers?token=${encodeURIComponent(tokenValue())}`), {
+      cache: "no-store"
+    });
+    const payload = await readJson(response);
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(String(payload?.error || `cloudflare workers request failed (${response.status})`));
+    }
+    setWorkers(Array.isArray(payload?.workers) ? payload.workers : []);
+  };
+
+  const loadPages = async () => {
+    const response = await fetch(localBridgeHttpUrl(`/v1/local/cloudflare/pages?token=${encodeURIComponent(tokenValue())}`), {
+      cache: "no-store"
+    });
+    const payload = await readJson(response);
+    if (!response.ok || payload?.ok === false) {
+      throw new Error(String(payload?.error || `cloudflare pages request failed (${response.status})`));
+    }
+    setPages(Array.isArray(payload?.pages) ? payload.pages : []);
+  };
+
   const loadDnsRecords = async (selectedZone = zoneId()) => {
     const activeZoneId = String(selectedZone || "").trim();
     if (!activeZoneId) {
@@ -99,6 +123,8 @@ export default function CloudflarePanel() {
       setZones([]);
       setTunnels([]);
       setApps([]);
+      setWorkers([]);
+      setPages([]);
       setRecords([]);
       setError("Cloudflare account API token missing. Connect Cloudflare integration first.");
       return;
@@ -108,7 +134,7 @@ export default function CloudflarePanel() {
     setNotice("");
     try {
       await loadZones();
-      await Promise.all([loadTunnels(), loadAccessApps()]);
+      await Promise.all([loadTunnels(), loadAccessApps(), loadWorkers(), loadPages()]);
       await loadDnsRecords();
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Failed to load Cloudflare resources.");
@@ -170,6 +196,21 @@ export default function CloudflarePanel() {
           <p class="text-[11px] text-neutral-500">Domains, tunnels, DNS, and access apps via local bridge</p>
         </div>
         <div class="flex items-center gap-1.5">
+          <select
+            class="h-7 rounded border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200"
+            value={zoneId()}
+            onChange={(event) => {
+              const nextZoneId = String(event.currentTarget.value || "").trim();
+              setZoneId(nextZoneId);
+              void loadDnsRecords(nextZoneId);
+            }}
+            data-testid="cloudflare-zone-select"
+          >
+            <option value="">Select domain</option>
+            <For each={zones()}>
+              {(zone) => <option value={zone.id}>{String(zone?.name || zone?.id || "zone")}</option>}
+            </For>
+          </select>
           <button
             type="button"
             class="inline-flex h-7 items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)]"
@@ -203,7 +244,7 @@ export default function CloudflarePanel() {
         </div>
       </Show>
 
-      <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-2">
+      <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto p-3 lg:grid-cols-2 xl:grid-cols-3">
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-zones-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Domains (Zones)</p>
           <p class="mt-1 text-[10px] text-neutral-500">{zones().length} zones</p>
@@ -265,27 +306,49 @@ export default function CloudflarePanel() {
           </div>
         </section>
 
+        <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-workers-list">
+          <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Workers</p>
+          <p class="mt-1 text-[10px] text-neutral-500">{workers().length} scripts</p>
+          <div class="mt-2 max-h-52 space-y-1 overflow-auto">
+            <For each={workers()}>
+              {(worker) => (
+                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+                  <p class="truncate">{String(worker?.id || worker?.name || "Worker")}</p>
+                  <p class="truncate text-neutral-500">{String(worker?.modified_on || worker?.created_on || "")}</p>
+                </div>
+              )}
+            </For>
+            <Show when={workers().length === 0 && !loading()}>
+              <p class="text-[10px] text-neutral-500">No workers found.</p>
+            </Show>
+          </div>
+        </section>
+
+        <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-pages-list">
+          <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Pages</p>
+          <p class="mt-1 text-[10px] text-neutral-500">{pages().length} projects</p>
+          <div class="mt-2 max-h-52 space-y-1 overflow-auto">
+            <For each={pages()}>
+              {(page) => (
+                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+                  <p class="truncate">{String(page?.name || page?.id || "Page Project")}</p>
+                  <p class="truncate text-neutral-500">{String(page?.subdomain || page?.domains?.[0] || "")}</p>
+                </div>
+              )}
+            </For>
+            <Show when={pages().length === 0 && !loading()}>
+              <p class="text-[10px] text-neutral-500">No pages projects found.</p>
+            </Show>
+          </div>
+        </section>
+
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-dns-records-list">
           <div class="flex items-center justify-between gap-2">
             <div>
               <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">DNS</p>
               <p class="mt-1 text-[10px] text-neutral-500">{records().length} records</p>
             </div>
-            <select
-              class="h-7 rounded border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200"
-              value={zoneId()}
-              onChange={(event) => {
-                const nextZoneId = String(event.currentTarget.value || "").trim();
-                setZoneId(nextZoneId);
-                void loadDnsRecords(nextZoneId);
-              }}
-              data-testid="cloudflare-zone-select"
-            >
-              <option value="">Select zone</option>
-              <For each={zones()}>
-                {(zone) => <option value={zone.id}>{String(zone?.name || zone?.id || "zone")}</option>}
-              </For>
-            </select>
+            <p class="text-[10px] text-neutral-500">{zoneId() ? `zone: ${zoneId()}` : "select domain above"}</p>
           </div>
 
           <div class="mt-2 rounded border border-neutral-800 bg-black/20 p-2 text-[10px] text-neutral-200">
