@@ -34,6 +34,12 @@
     reverse_proxy 127.0.0.1:7777
   }
 
+  @cloudflare_verify path /api/cloudflare/verify /api/cloudflare/verify/*
+  handle @cloudflare_verify {
+    uri replace /api/cloudflare/verify /v1/local/cloudflare/verify
+    reverse_proxy 127.0.0.1:7777
+  }
+
   handle /api/* {
     reverse_proxy https://api.edgerun.tech {
       header_up Host api.edgerun.tech

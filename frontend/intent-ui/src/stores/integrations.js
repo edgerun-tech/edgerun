@@ -472,6 +472,44 @@ async function getIntegrationMcpStatus(integrationId) {
   };
 }
 
+async function getIntegrationMcpPreflight(integrationId) {
+  if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) {
+    return {
+      ok: true,
+      imageResolved: false,
+      image: "",
+      tokenEnv: "",
+      message: "No runtime container for this integration."
+    };
+  }
+  const params = new URLSearchParams({
+    integration_id: integrationId,
+    node_id: resolveLocalNodeManagerId()
+  });
+  const response = await fetch(localBridgeHttpUrl(`/v1/local/mcp/integration/preflight?${params.toString()}`), {
+    cache: "no-store"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    return {
+      ok: false,
+      imageResolved: false,
+      image: "",
+      tokenEnv: "",
+      message: String(payload?.error || `mcp preflight failed (${response.status})`)
+    };
+  }
+  const data = payload?.data || {};
+  const image = String(data.image || "").trim();
+  return {
+    ok: true,
+    imageResolved: Boolean(data.image_resolved),
+    image,
+    tokenEnv: String(data.token_env || "").trim(),
+    message: image ? `Runtime image configured: ${image}` : "No runtime image mapping configured for this integration."
+  };
+}
+
 async function syncRuntimeBackedConnectionTruth(state) {
   const next = { ...(state || {}) };
   for (const integration of Object.values(catalog)) {
@@ -672,11 +710,13 @@ const integrationStore = {
           return false;
         }
         const status = await getIntegrationMcpStatus(normalizedId);
-        if (!status.ok || !status.running) {
-          setLifecycleState(normalizedId, "error", `MCP runtime not healthy: ${status.message || status.status || "not running"}`);
+        const healthy = Boolean(status.ok && status.running && status.status === "running");
+        if (!healthy) {
+          const detail = status.message || status.status || "not running";
+          setLifecycleState(normalizedId, "error", `MCP runtime not healthy: ${detail}`);
           publishEvent(
             UI_EVENT_TOPICS.integration.verifyFailed,
-            { integrationId: normalizedId, message: `MCP runtime not healthy: ${status.message || status.status || "not running"}` },
+            { integrationId: normalizedId, message: `MCP runtime not healthy: ${detail}` },
             uiIntentMeta("integrations.store")
           );
           return false;
@@ -747,10 +787,12 @@ const integrationStore = {
       }
       return {
         ok: true,
-        state: status.running ? "running" : "stopped",
+        state: status.running && status.status === "running" ? "running" : "stopped",
         running: Boolean(status.running),
         status: String(status.status || ""),
-        message: status.running ? "Runtime container is running." : "Runtime container is not started."
+        message: status.running && status.status === "running"
+          ? "Runtime container is running."
+          : `Runtime container is ${String(status.status || "not started")}.`
       };
     } catch (error) {
       return {
@@ -792,7 +834,7 @@ const integrationStore = {
           result = { ok: false, message: `${integration.name} bridge token missing or invalid.` };
         } else {
           const statusBefore = await getIntegrationMcpStatus(normalizedId);
-          if (statusBefore.ok && statusBefore.running) {
+          if (statusBefore.ok && statusBefore.running && statusBefore.status === "running") {
             result = {
               ok: true,
               message: `${integration.name} Matrix bridge runtime is running (${statusBefore.status}).`,
@@ -848,12 +890,33 @@ const integrationStore = {
         },
         uiIntentMeta("integrations.store")
       );
-      return { ok: true, message, devices: Array.isArray(result?.devices) ? result.devices : [] };
+      return {
+        ok: true,
+        message,
+        devices: Array.isArray(result?.devices) ? result.devices : [],
+        accountLabel: String(result?.accountLabel || "").trim()
+      };
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to verify ${integration.name}.`;
       publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id: normalizedId, message }, uiIntentMeta("integrations.store"));
       publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: normalizedId, message }, uiIntentMeta("integrations.store"));
       return { ok: false, message };
+    }
+  }
+  ,
+  async runtimePreflight(id) {
+    const normalizedId = normalizeIntegrationId(id);
+    if (!normalizedId) return { ok: false, imageResolved: false, image: "", message: "integration id is required" };
+    try {
+      return await getIntegrationMcpPreflight(normalizedId);
+    } catch (error) {
+      return {
+        ok: false,
+        imageResolved: false,
+        image: "",
+        tokenEnv: "",
+        message: error instanceof Error ? error.message : "Failed to run runtime preflight."
+      };
     }
   }
   ,

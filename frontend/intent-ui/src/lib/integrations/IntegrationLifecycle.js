@@ -14,14 +14,10 @@ class IntegrationLifecycle {
   }
 
   getDefaultConnectorMode() {
-    if (this.forceUserOwned) return "user_owned";
-    return this.defaultConnectorMode || (this.supportsPlatformConnector ? "platform" : "user_owned");
+    return "user_owned";
   }
 
   resolveConnectorMode(mode) {
-    if (this.forceUserOwned) return "user_owned";
-    const requested = String(mode || "").trim();
-    if (requested === "platform" && this.supportsPlatformConnector) return "platform";
     return "user_owned";
   }
 
@@ -264,6 +260,43 @@ class IntegrationLifecycle {
         };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : "Failed to verify GitHub API access." };
+      }
+    }
+    if (this.id === "cloudflare" && mode === "user_owned") {
+      const apiToken = String(details?.token || "").trim() || String(token || "").trim();
+      if (apiToken.length < 20) {
+        return { ok: false, message: "Cloudflare account API token missing or invalid." };
+      }
+      try {
+        let body = null;
+        let statusCode = 0;
+        for (const path of ["/api/cloudflare/verify", "/v1/local/cloudflare/verify"]) {
+          const response = await fetchImpl(path, {
+            method: "POST",
+            headers: { "content-type": "application/json; charset=utf-8" },
+            body: JSON.stringify({ token: apiToken })
+          });
+          statusCode = response.status;
+          body = await response.json().catch(() => ({}));
+          if (response.ok && body?.ok) break;
+          if (response.status !== 404) break;
+        }
+        if (!body?.ok) {
+          return { ok: false, message: String(body?.error || `cloudflare token verify failed (${statusCode})`) };
+        }
+        const status = String(body?.status || "").trim();
+        const userEmail = String(body?.user_email || "").trim();
+        const accountLabel = userEmail || "Cloudflare Account";
+        return {
+          ok: true,
+          message: userEmail
+            ? `Verified Cloudflare account token (${status || "active"}) as ${userEmail}.`
+            : (status ? `Verified Cloudflare account token (${status}).` : "Verified Cloudflare account token."),
+          capabilities: this.defaultCapabilities.slice(),
+          accountLabel
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : "Failed to verify Cloudflare account token." };
       }
     }
     if (mode === "platform") {

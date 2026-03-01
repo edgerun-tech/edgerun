@@ -16,6 +16,7 @@ const integrationDefinitions = [
     name: "Cloudflare",
     authMethod: "token",
     supportsPlatformConnector: true,
+    defaultConnectorMode: "user_owned",
     tokenKey: "cloudflare_token",
     defaultCapabilities: ["zones.read", "workers.read", "workers.write"],
     tags: ["network", "deploy", "workflows", "code"]

@@ -34,7 +34,7 @@ import {
 } from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
-import { canonicalBridgeId } from "../../lib/integrations/official-bridges";
+import { canonicalBridgeId, isOfficialBridgeId } from "../../lib/integrations/official-bridges";
 
 const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -47,34 +47,34 @@ const DALY_OPTIONAL_SERVICE_UUIDS = [
 ];
 
 const providerMeta = {
-  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true, category: "development" },
-  cloudflare: { id: "cloudflare", name: "Cloudflare", icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true, category: "cloud" },
-  vercel: { id: "vercel", name: "Vercel", icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true, category: "cloud" },
-  google: { id: "google", name: "Google", icon: SiGoogle, tone: "text-blue-300", useToken: false, oauthRedirect: true, category: "productivity" },
-  google_photos: { id: "google_photos", name: "Google Photos", icon: SiGoogle, tone: "text-sky-300", useToken: false, oauthRedirect: true, category: "productivity" },
-  email: { id: "email", name: "Email", icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", useToken: true, category: "messaging" },
-  whatsapp: { id: "whatsapp", name: "WhatsApp", icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true, category: "messaging" },
-  messenger: { id: "messenger", name: "Messenger", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true, category: "messaging" },
-  telegram: { id: "telegram", name: "Telegram", icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true, category: "messaging" },
-  google_messages: { id: "google_messages", name: "Google Messages", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Messages bridge token", useToken: true, category: "messaging" },
-  meta: { id: "meta", name: "Meta", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Mautrix Meta bridge token", useToken: true, category: "messaging" },
-  signal: { id: "signal", name: "Signal", icon: SiSignal, tone: "text-sky-300", tokenHint: "Mautrix Signal bridge token", useToken: true, category: "messaging" },
-  discord: { id: "discord", name: "Discord", icon: SiDiscord, tone: "text-indigo-300", tokenHint: "Mautrix Discord bridge token", useToken: true, category: "messaging" },
-  slack: { id: "slack", name: "Slack", icon: FiHash, tone: "text-emerald-300", tokenHint: "Mautrix Slack bridge token", useToken: true, category: "messaging" },
-  gvoice: { id: "gvoice", name: "Google Voice", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Voice bridge token", useToken: true, category: "messaging" },
-  googlechat: { id: "googlechat", name: "Google Chat", icon: SiGooglechat, tone: "text-blue-300", tokenHint: "Mautrix Google Chat bridge token", useToken: true, category: "messaging" },
-  twitter: { id: "twitter", name: "X / Twitter", icon: SiX, tone: "text-neutral-200", tokenHint: "Mautrix Twitter bridge token", useToken: true, category: "messaging" },
-  bluesky: { id: "bluesky", name: "Bluesky", icon: SiBluesky, tone: "text-sky-300", tokenHint: "Mautrix Bluesky bridge token", useToken: true, category: "messaging" },
-  imessage: { id: "imessage", name: "iMessage", icon: SiImessage, tone: "text-blue-300", tokenHint: "Mautrix iMessage bridge token", useToken: true, category: "messaging" },
-  imessagego: { id: "imessagego", name: "iMessage (Go)", icon: SiApple, tone: "text-blue-300", tokenHint: "Beeper iMessage Go bridge token", useToken: true, category: "messaging" },
-  linkedin: { id: "linkedin", name: "LinkedIn", icon: FiLink2, tone: "text-blue-300", tokenHint: "Mautrix LinkedIn bridge token", useToken: true, category: "messaging" },
-  heisenbridge: { id: "heisenbridge", name: "IRC (Heisenbridge)", icon: FiDatabase, tone: "text-neutral-300", tokenHint: "Heisenbridge token", useToken: true, category: "messaging" },
-  opencode_cli: { id: "opencode_cli", name: "OpenCode CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false, category: "ai" },
-  tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true, category: "cloud" },
-  hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true, category: "cloud" },
-  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false, category: "identity" },
-  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false, category: "devices" },
-  daly_bms: { id: "daly_bms", name: "Daly BMS", icon: FiZap, tone: "text-emerald-300", useToken: false, category: "devices" }
+  github: { icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", category: "development" },
+  cloudflare: { icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare account API token", category: "cloud" },
+  vercel: { icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", category: "cloud" },
+  google: { icon: SiGoogle, tone: "text-blue-300", category: "productivity" },
+  google_photos: { icon: SiGoogle, tone: "text-sky-300", category: "productivity" },
+  email: { icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", category: "messaging" },
+  whatsapp: { icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", category: "messaging" },
+  messenger: { icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", category: "messaging" },
+  telegram: { icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", category: "messaging" },
+  google_messages: { icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Messages bridge token", category: "messaging" },
+  meta: { icon: SiMessenger, tone: "text-blue-300", tokenHint: "Mautrix Meta bridge token", category: "messaging" },
+  signal: { icon: SiSignal, tone: "text-sky-300", tokenHint: "Mautrix Signal bridge token", category: "messaging" },
+  discord: { icon: SiDiscord, tone: "text-indigo-300", tokenHint: "Mautrix Discord bridge token", category: "messaging" },
+  slack: { icon: FiHash, tone: "text-emerald-300", tokenHint: "Mautrix Slack bridge token", category: "messaging" },
+  gvoice: { icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Voice bridge token", category: "messaging" },
+  googlechat: { icon: SiGooglechat, tone: "text-blue-300", tokenHint: "Mautrix Google Chat bridge token", category: "messaging" },
+  twitter: { icon: SiX, tone: "text-neutral-200", tokenHint: "Mautrix Twitter bridge token", category: "messaging" },
+  bluesky: { icon: SiBluesky, tone: "text-sky-300", tokenHint: "Mautrix Bluesky bridge token", category: "messaging" },
+  imessage: { icon: SiImessage, tone: "text-blue-300", tokenHint: "Mautrix iMessage bridge token", category: "messaging" },
+  imessagego: { icon: SiApple, tone: "text-blue-300", tokenHint: "Beeper iMessage Go bridge token", category: "messaging" },
+  linkedin: { icon: FiLink2, tone: "text-blue-300", tokenHint: "Mautrix LinkedIn bridge token", category: "messaging" },
+  heisenbridge: { icon: FiDatabase, tone: "text-neutral-300", tokenHint: "Heisenbridge token", category: "messaging" },
+  opencode_cli: { icon: FiCpu, tone: "text-emerald-300", category: "ai" },
+  tailscale: { icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", category: "cloud" },
+  hetzner: { icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", category: "cloud" },
+  web3: { icon: SiWeb3dotjs, tone: "text-fuchsia-300", category: "identity" },
+  flipper: { icon: FiZap, tone: "text-amber-300", category: "devices" },
+  daly_bms: { icon: FiZap, tone: "text-emerald-300", category: "devices" }
 };
 
 const CATEGORY_ORDER = ["ai", "messaging", "cloud", "development", "productivity", "identity", "devices", "other"];
@@ -89,6 +89,19 @@ const CATEGORY_LABEL = {
   other: "Other"
 };
 
+const MATRIX_BRIDGE_TOKEN_SOURCE = {
+  default: "your bridge config (provisioning shared secret / API token)",
+  whatsapp: "your mautrix-whatsapp bridge config",
+  telegram: "your mautrix-telegram bridge config",
+  signal: "your mautrix-signal bridge config",
+  discord: "your mautrix-discord bridge config",
+  slack: "your mautrix-slack bridge config",
+  google_messages: "your mautrix-gmessages bridge config",
+  meta: "your mautrix-meta bridge config",
+  gvoice: "your mautrix-gvoice bridge config",
+  googlechat: "your mautrix-googlechat bridge config"
+};
+
 function IntegrationsPanel(props) {
   const compact = () => Boolean(props?.compact);
   const buttonClass = "inline-flex h-8 items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-xs text-neutral-200 transition hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))] disabled:cursor-not-allowed disabled:opacity-60";
@@ -101,7 +114,7 @@ function IntegrationsPanel(props) {
   const [busy, setBusy] = createSignal(false);
   const [verifiedForDialog, setVerifiedForDialog] = createSignal(false);
 
-  const [connectorMode, setConnectorMode] = createSignal("platform");
+  const [connectorMode, setConnectorMode] = createSignal("user_owned");
   const [accountLabel, setAccountLabel] = createSignal("");
   const [tokenInput, setTokenInput] = createSignal("");
   const [tailscaleTailnet, setTailscaleTailnet] = createSignal("");
@@ -121,6 +134,7 @@ function IntegrationsPanel(props) {
   const [testCompleted, setTestCompleted] = createSignal(false);
   const [testStageIndex, setTestStageIndex] = createSignal(0);
   const [runtimeState, setRuntimeState] = createSignal({ state: "unknown", message: "" });
+  const [runtimePreflight, setRuntimePreflight] = createSignal({ ok: true, imageResolved: true, image: "", tokenEnv: "", message: "" });
   let testLoaderTimer = null;
 
   const assistantProvider = createMemo(() => workflowUi().provider || "opencode");
@@ -166,10 +180,45 @@ function IntegrationsPanel(props) {
   const activeProvider = createMemo(() => providers().find((provider) => provider.id === dialogProviderId()) || null);
   const verification = createMemo(() => integrationVerification()[dialogProviderId()] || null);
 
+  function isMatrixBridgeProvider(provider) {
+    return Boolean(provider && Array.isArray(provider.tags) && provider.tags.includes("matrix-bridge"));
+  }
+
+  function generateBridgeSecret() {
+    if (typeof crypto === "undefined" || typeof crypto.getRandomValues !== "function") {
+      return `edgerun-bridge-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 18)}`;
+    }
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    const token = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `edgerun-bridge-${token}`;
+  }
+
+  function ensureMatrixBridgeSecret(provider) {
+    if (!isMatrixBridgeProvider(provider)) return;
+    const current = tokenInput().trim();
+    if (current) return;
+    setTokenInput(generateBridgeSecret());
+  }
+
   function usesRuntimeContainer(provider) {
     if (!provider) return false;
-    if (provider.id === "github") return true;
-    return Array.isArray(provider.tags) && provider.tags.includes("matrix-bridge");
+    return provider.id === "github" || isOfficialBridgeId(provider.id);
+  }
+
+  function providerUsesToken(provider) {
+    if (!provider) return false;
+    if (provider.id === "web3" || provider.id === "flipper" || provider.id === "daly_bms") return false;
+    return provider.requiresToken !== false && provider.authMethod === "token";
+  }
+
+  function providerUsesOAuthRedirect(provider) {
+    return Boolean(provider && provider.authMethod === "oauth");
+  }
+
+  function matrixBridgeTokenGuide(provider) {
+    if (!provider || !Array.isArray(provider.tags) || !provider.tags.includes("matrix-bridge")) return null;
+    return MATRIX_BRIDGE_TOKEN_SOURCE[provider.id] || MATRIX_BRIDGE_TOKEN_SOURCE.default;
   }
 
   async function refreshRuntimeState(provider) {
@@ -180,6 +229,21 @@ function IntegrationsPanel(props) {
     const result = await integrationStore.runtimeStatus(provider.id);
     setRuntimeState({
       state: String(result?.state || "unknown"),
+      message: String(result?.message || "").trim()
+    });
+  }
+
+  async function refreshRuntimePreflight(provider) {
+    if (!provider || !usesRuntimeContainer(provider)) {
+      setRuntimePreflight({ ok: true, imageResolved: true, image: "", tokenEnv: "", message: "" });
+      return;
+    }
+    const result = await integrationStore.runtimePreflight(provider.id);
+    setRuntimePreflight({
+      ok: Boolean(result?.ok),
+      imageResolved: Boolean(result?.imageResolved),
+      image: String(result?.image || "").trim(),
+      tokenEnv: String(result?.tokenEnv || "").trim(),
       message: String(result?.message || "").trim()
     });
   }
@@ -239,7 +303,7 @@ function IntegrationsPanel(props) {
     setFlipperProbeDetails(null);
     setDalyProbeSummary("");
     setDalyProbeDetails(null);
-    setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
+    setConnectorMode("user_owned");
     setAccountLabel(provider.accountLabel || `${provider.name} Session`);
 
     if (provider.id === "tailscale" && typeof window !== "undefined") {
@@ -273,9 +337,12 @@ function IntegrationsPanel(props) {
     if (provider.tokenKey && typeof window !== "undefined") {
       const value = String(integrationStore.getToken(provider.id) || "").trim();
       setTokenInput(value);
+      ensureMatrixBridgeSecret(provider);
     } else {
       setTokenInput("");
+      ensureMatrixBridgeSecret(provider);
     }
+    void refreshRuntimePreflight(provider);
     void refreshRuntimeState(provider);
   }
 
@@ -290,17 +357,18 @@ function IntegrationsPanel(props) {
     setDalyProbeSummary("");
     setDalyProbeDetails(null);
     setRuntimeState({ state: "unknown", message: "" });
+    setRuntimePreflight({ ok: true, imageResolved: true, image: "", tokenEnv: "", message: "" });
   }
 
   function requiredInputsReady(provider) {
     if (!provider) return false;
-    if (connectorMode() === "platform") return true;
+    if (isMatrixBridgeProvider(provider)) return true;
     if (provider.id === "tailscale") return tokenInput().trim().length > 8 && tailscaleTailnet().trim().length > 0;
     if (provider.id === "web3") return web3Wallet().trim().startsWith("0x");
     if (provider.id === "flipper") return tokenInput().trim().length > 0;
     if (provider.id === "daly_bms") return tokenInput().trim().length > 0;
-    if (provider.oauthRedirect) return true;
-    if (!provider.useToken) return true;
+    if (providerUsesOAuthRedirect(provider)) return true;
+    if (!providerUsesToken(provider)) return true;
     return tokenInput().trim().length > 7;
   }
 
@@ -329,7 +397,7 @@ function IntegrationsPanel(props) {
     setDalyProbeDetails(null);
     setBusy(true);
 
-    if (provider.oauthRedirect && connectorMode() === "user_owned") {
+    if (providerUsesOAuthRedirect(provider) && connectorMode() === "user_owned") {
       if (typeof window !== "undefined") {
         const returnTo = `${window.location.pathname}${window.location.search || ""}`;
         window.location.assign(`/api/google/oauth/start?returnTo=${encodeURIComponent(returnTo)}`);
@@ -339,6 +407,7 @@ function IntegrationsPanel(props) {
     }
 
     startLoadingStates(provider);
+    ensureMatrixBridgeSecret(provider);
     const result = await integrationStore.verify(provider.id, {
       connectorMode: connectorMode(),
       token: tokenInput().trim(),
@@ -381,6 +450,9 @@ function IntegrationsPanel(props) {
     }
     setVerifiedForDialog(true);
     setTestCompleted(true);
+    if (result.accountLabel) {
+      setAccountLabel(String(result.accountLabel));
+    }
     setStatus(result.message || "Verification succeeded.");
     setStep(2);
     await refreshRuntimeState(provider);
@@ -531,7 +603,7 @@ function IntegrationsPanel(props) {
       accountLabel: accountLabel().trim() || `${provider.name} Session`
     };
 
-    if (connectorMode() === "user_owned" && provider.useToken) {
+    if (connectorMode() === "user_owned" && providerUsesToken(provider)) {
       payload.token = tokenInput().trim();
     }
 
@@ -793,7 +865,7 @@ function IntegrationsPanel(props) {
                       />
                     </label>
 
-                    <Show when={connectorMode() === "user_owned" && provider.useToken}>
+                    <Show when={providerUsesToken(provider) && !isMatrixBridgeProvider(provider)}>
                       <label class="block text-[11px] text-neutral-500">
                         Token
                         <input
@@ -806,11 +878,47 @@ function IntegrationsPanel(props) {
                         />
                       </label>
                     </Show>
+                    <Show when={isMatrixBridgeProvider(provider)}>
+                      <p class="text-[11px] text-neutral-500" data-testid={`matrix-token-auto-${provider.id}`}>
+                        EdgeRun generates and manages the bridge secret automatically for this integration.
+                      </p>
+                    </Show>
+                    <p class="text-[11px] text-neutral-500" data-testid="integration-mode-help-label">
+                      User-owned setup: provide your own integration credentials in this dialog.
+                    </p>
+                    <Show when={matrixBridgeTokenGuide(provider)}>
+                      {(source) => (
+                        <div
+                          class="rounded-md border border-neutral-800 bg-[#0b0c0f] px-2.5 py-2 text-[11px] text-neutral-400"
+                          data-testid={`matrix-token-guidance-${provider.id}`}
+                        >
+                          <p>
+                            We still use the bridge provisioning/API secret from {source()} under the hood. This is not your Matrix account password or OAuth token.
+                          </p>
+                        </div>
+                      )}
+                    </Show>
                     <Show when={provider.id === "github"}>
                       <p class="text-[11px] text-neutral-500">PAT is persisted in TPM-backed local credentials vault.</p>
                     </Show>
+                    <Show when={provider.id === "cloudflare"}>
+                      <div class="space-y-1.5 rounded-md border border-neutral-800 bg-[#0b0c0f] px-2.5 py-2 text-[11px] text-neutral-400">
+                        <p>Use a Cloudflare account API token (not Global API Key). Minimum scope: User Tokens:Read.</p>
+                        <button
+                          type="button"
+                          class={buttonClass}
+                          onClick={() => {
+                            if (typeof window === "undefined") return;
+                            window.open("https://dash.cloudflare.com/profile/api-tokens", "_blank", "noopener,noreferrer");
+                          }}
+                          data-testid="cloudflare-open-token-dashboard"
+                        >
+                          Open Cloudflare token page
+                        </button>
+                      </div>
+                    </Show>
 
-                    <Show when={provider.id === "tailscale" && connectorMode() === "user_owned"}>
+                    <Show when={provider.id === "tailscale"}>
                       <label class="block text-[11px] text-neutral-500">
                         Tailnet
                         <input
@@ -949,7 +1057,7 @@ function IntegrationsPanel(props) {
                       </div>
                     </Show>
 
-                    <Show when={provider.oauthRedirect && connectorMode() === "user_owned"}>
+                    <Show when={providerUsesOAuthRedirect(provider)}>
                       <p class="text-[11px] text-neutral-500">OAuth integrations redirect on Run Tests step to complete login.</p>
                     </Show>
                   </section>
@@ -972,6 +1080,21 @@ function IntegrationsPanel(props) {
                       <p class="text-[11px] text-amber-300">Fill required values in Step 1 first.</p>
                     </Show>
                     <Show when={usesRuntimeContainer(provider)}>
+                      <div class="rounded-md border border-neutral-800 bg-black/25 px-2 py-1.5 text-[11px]" data-testid={`integration-runtime-preflight-${provider.id}`}>
+                        <p class="text-neutral-400">Runtime preflight</p>
+                        <p class={`mt-0.5 ${runtimePreflight().ok && runtimePreflight().imageResolved ? "text-emerald-300" : "text-amber-300"}`}>
+                          {runtimePreflight().ok && runtimePreflight().imageResolved ? "Image mapping configured" : "Image mapping missing"}
+                        </p>
+                        <Show when={runtimePreflight().image}>
+                          <p class="mt-0.5 break-all font-mono text-[10px] text-neutral-500">{runtimePreflight().image}</p>
+                        </Show>
+                        <Show when={runtimePreflight().tokenEnv}>
+                          <p class="mt-0.5 text-[10px] text-neutral-500">Token env: {runtimePreflight().tokenEnv}</p>
+                        </Show>
+                        <Show when={runtimePreflight().message && !(runtimePreflight().ok && runtimePreflight().imageResolved)}>
+                          <p class="mt-0.5 text-[10px] text-amber-300">{runtimePreflight().message}</p>
+                        </Show>
+                      </div>
                       <div class="rounded-md border border-neutral-800 bg-black/25 px-2 py-1.5 text-[11px]" data-testid={`integration-runtime-state-${provider.id}`}>
                         <p class="text-neutral-400">Runtime container</p>
                         <p class={`mt-0.5 ${

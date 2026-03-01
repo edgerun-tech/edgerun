@@ -37,3 +37,10 @@ CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os
 2026-03-01-telemetry-panel-minimize-dock-v1.md	active	intent-ui		Adds minimize controls and restore dock tray for telemetry floating panels.
 2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md	active	intent-ui		Removes suggested-integration strips from workflow drawers.
 2026-03-01-tailscale-local-bridge-routing-fix-v1.md	active	node-manager		Routes Tailscale device verification through local bridge to eliminate /api 404.
+2026-03-01-matrix-integration-token-guidance-v1.md	active	intent-ui		Adds explicit matrix bridge token origin guidance in Integrations dialog.
+2026-03-01-cloudflare-account-token-verification-v1.md	active	node-manager		Verifies Cloudflare account API tokens via local bridge endpoint for integrations.
+2026-03-01-remove-platform-connector-mode-v1.md	active	intent-ui		Removes platform connector mode and standardizes integrations on user-owned flow.
+2026-03-01-matrix-bridge-auto-secret-v1.md	active	intent-ui		Auto-generates matrix bridge secret so users do not manually enter token.
+2026-03-01-cloudflare-auth-assist-flow-v1.md	active	intent-ui		Adds Cloudflare sign-in assist flow and logged-in identity label after verify.
+2026-03-01-mcp-runtime-health-and-preflight-v1.md	active	intent-ui		Treats restarting MCP containers as unhealthy and surfaces runtime preflight mapping metadata.
+2026-03-01-integrations-dedup-unified-flow-v1.md	active	intent-ui		Removes duplicated integration lifecycle/catalog logic and unifies auth flow flags.

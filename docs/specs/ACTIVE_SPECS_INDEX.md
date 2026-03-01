@@ -1,15 +1,15 @@
 # Active Specs Index
 
-Generated: 2026-03-01 06:01:12Z
+Generated: 2026-03-01 06:42:06Z
 
 ## Summary
 
-- Total specs: 175
-- Cataloged: 38
-- Active: 24
+- Total specs: 184
+- Cataloged: 45
+- Active: 31
 - Superseded: 10
 - Historical: 4
-- Uncataloged: 137
+- Uncataloged: 139
 
 ## Active
 
@@ -17,14 +17,21 @@ Generated: 2026-03-01 06:01:12Z
 |---|---|---|
 | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
 | [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
+| [2026-03-01-cloudflare-account-token-verification-v1.md](./2026-03-01-cloudflare-account-token-verification-v1.md) | node-manager | Verifies Cloudflare account API tokens via local bridge endpoint for integrations. |
+| [2026-03-01-cloudflare-auth-assist-flow-v1.md](./2026-03-01-cloudflare-auth-assist-flow-v1.md) | intent-ui | Adds Cloudflare sign-in assist flow and logged-in identity label after verify. |
 | [2026-03-01-google-contacts-intent-ui-normalization-v1.md](./2026-03-01-google-contacts-intent-ui-normalization-v1.md) | intent-ui | Normalizes People API contacts payloads for Intent UI conversations. |
 | [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
 | [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
 | [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |
+| [2026-03-01-integrations-dedup-unified-flow-v1.md](./2026-03-01-integrations-dedup-unified-flow-v1.md) | intent-ui | Removes duplicated integration lifecycle/catalog logic and unifies auth flow flags. |
 | [2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md](./2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md) | intent-ui | Current hardening direction for lifecycle logic. |
+| [2026-03-01-matrix-bridge-auto-secret-v1.md](./2026-03-01-matrix-bridge-auto-secret-v1.md) | intent-ui | Auto-generates matrix bridge secret so users do not manually enter token. |
+| [2026-03-01-matrix-integration-token-guidance-v1.md](./2026-03-01-matrix-integration-token-guidance-v1.md) | intent-ui | Adds explicit matrix bridge token origin guidance in Integrations dialog. |
+| [2026-03-01-mcp-runtime-health-and-preflight-v1.md](./2026-03-01-mcp-runtime-health-and-preflight-v1.md) | intent-ui | Treats restarting MCP containers as unhealthy and surfaces runtime preflight mapping metadata. |
 | [2026-03-01-opencode-mcp-config-sync-v1.md](./2026-03-01-opencode-mcp-config-sync-v1.md) | node-manager | Deterministic OpenCode MCP managed-entry sync from node-manager lifecycle events. |
 | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
+| [2026-03-01-remove-platform-connector-mode-v1.md](./2026-03-01-remove-platform-connector-mode-v1.md) | intent-ui | Removes platform connector mode and standardizes integrations on user-owned flow. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
 | [2026-03-01-tailscale-integration-quickstart-v2.md](./2026-03-01-tailscale-integration-quickstart-v2.md) | intent-ui | Generates Tailscale join/funnel/app-connector setup artifacts from integration inputs. |
@@ -119,4 +126,4 @@ These specs exist but do not yet have status metadata in `spec-status.tsv`.
 - [2026-02-28-linux-node-manager-installer-service-v1.md](./2026-02-28-linux-node-manager-installer-service-v1.md)
 - [2026-02-28-local-first-solana-removal-phase1-v1.md](./2026-02-28-local-first-solana-removal-phase1-v1.md)
 
-- ... and 87 more uncataloged specs
+- ... and 89 more uncataloged specs

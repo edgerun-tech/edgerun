@@ -49,6 +49,8 @@ use tokio::time::sleep;
 const SECURITY_MODE: HardwareSecurityMode = HardwareSecurityMode::TpmRequired;
 const CONFIG_TPM_NV_INDEX: u32 = 0x0150_0026;
 const CONFIG_TPM_NV_SIZE: usize = 1024;
+const CREDENTIALS_TPM_NV_INDEX: u32 = 0x0150_0027;
+const CREDENTIALS_TPM_NV_SIZE: usize = 1024;
 const DEFAULT_API_BASE: &str = "https://api.edgerun.tech";
 const DEFAULT_RPC_URL: &str = "local://edgerun";
 const DEFAULT_WORKER_BIN: &str = "/usr/bin/edgerun-worker";
@@ -91,6 +93,8 @@ const LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH: &str = "/v1/local/credentials/in
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
+const LOCAL_MCP_PREFLIGHT_PATH: &str = "/v1/local/mcp/integration/preflight";
+const LOCAL_CLOUDFLARE_VERIFY_PATH: &str = "/v1/local/cloudflare/verify";
 const LOCAL_TAILSCALE_DEVICES_PATH: &str = "/v1/local/tailscale/devices";
 const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
 const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
@@ -530,6 +534,19 @@ struct LocalMcpStatusQuery {
 }
 
 #[derive(Debug, Deserialize)]
+struct LocalMcpPreflightQuery {
+    integration_id: String,
+    #[serde(default, alias = "nodeId")]
+    node_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareVerifyRequest {
+    #[serde(default)]
+    token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct LocalTailscaleDevicesRequest {
     #[serde(default, alias = "apiKey")]
     api_key: Option<String>,
@@ -543,6 +560,15 @@ struct LocalMcpStatusData {
     container_name: String,
     running: bool,
     status: String,
+}
+
+#[derive(Debug, Serialize)]
+struct LocalMcpPreflightData {
+    integration_id: String,
+    container_name: String,
+    token_env: String,
+    image: String,
+    image_resolved: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -801,18 +827,55 @@ fn cmd_identity() -> Result<()> {
     Ok(())
 }
 
+fn decode_nv_json_blob<T: DeserializeOwned>(blob: &[u8], nv_size: usize, label: &str) -> Result<T> {
+    if blob.len() < 4 {
+        return Err(anyhow!("invalid TPM {label} blob"));
+    }
+    let len = u32::from_le_bytes([blob[0], blob[1], blob[2], blob[3]]) as usize;
+    if len > (nv_size - 4) {
+        return Err(anyhow!("invalid TPM {label} length: {len}"));
+    }
+    let raw = &blob[4..4 + len];
+    sonic_rs::from_slice(raw).with_context(|| format!("failed to parse TPM {label} json"))
+}
+
+fn encode_nv_json_blob<T: Serialize + ?Sized>(value: &T, nv_size: usize, label: &str) -> Result<Vec<u8>> {
+    let payload = sonic_rs::to_vec(value).with_context(|| format!("failed to encode TPM {label} json"))?;
+    if payload.len() > (nv_size - 4) {
+        return Err(anyhow!(
+            "{label} too large for TPM NV ({} > {})",
+            payload.len(),
+            nv_size - 4
+        ));
+    }
+    let mut blob = vec![0_u8; nv_size];
+    let len = payload.len() as u32;
+    blob[0..4].copy_from_slice(&len.to_le_bytes());
+    blob[4..4 + payload.len()].copy_from_slice(&payload);
+    Ok(blob)
+}
+
+fn load_credentials_from_nv() -> Result<Vec<LocalCredentialEntry>> {
+    let blob = tpm_nv_read_blob(CREDENTIALS_TPM_NV_INDEX, CREDENTIALS_TPM_NV_SIZE)
+        .context("failed to read credentials from TPM NV")?;
+    decode_nv_json_blob(&blob, CREDENTIALS_TPM_NV_SIZE, "credentials")
+}
+
+fn save_credentials_to_nv(credentials: &[LocalCredentialEntry]) -> Result<()> {
+    let blob = encode_nv_json_blob(credentials, CREDENTIALS_TPM_NV_SIZE, "credentials")?;
+    tpm_nv_write_blob(CREDENTIALS_TPM_NV_INDEX, &blob, CREDENTIALS_TPM_NV_SIZE)
+        .context("failed to store credentials in TPM NV")?;
+    Ok(())
+}
+
 fn load_config() -> Result<ManagerConfig> {
     let blob = tpm_nv_read_blob(CONFIG_TPM_NV_INDEX, CONFIG_TPM_NV_SIZE)
         .context("failed to read manager config from TPM NV")?;
-    if blob.len() < 4 {
-        return Err(anyhow!("invalid TPM config blob"));
+    let mut cfg: ManagerConfig = decode_nv_json_blob(&blob, CONFIG_TPM_NV_SIZE, "config")?;
+    if let Ok(credentials) = load_credentials_from_nv() {
+        cfg.credentials = credentials;
     }
-    let len = u32::from_le_bytes([blob[0], blob[1], blob[2], blob[3]]) as usize;
-    if len == 0 || len > (CONFIG_TPM_NV_SIZE - 4) {
-        return Err(anyhow!("invalid TPM config length: {len}"));
-    }
-    let raw = &blob[4..4 + len];
-    sonic_rs::from_slice(raw).context("failed to parse manager config json from TPM")
+    Ok(cfg)
 }
 
 fn default_manager_config() -> ManagerConfig {
@@ -833,20 +896,13 @@ fn default_manager_config() -> ManagerConfig {
 }
 
 fn save_config(cfg: &ManagerConfig) -> Result<()> {
-    let payload = sonic_rs::to_vec(cfg).context("failed to encode manager config")?;
-    if payload.len() > (CONFIG_TPM_NV_SIZE - 4) {
-        return Err(anyhow!(
-            "config too large for TPM NV ({} > {})",
-            payload.len(),
-            CONFIG_TPM_NV_SIZE - 4
-        ));
-    }
-    let mut blob = vec![0_u8; CONFIG_TPM_NV_SIZE];
-    let len = payload.len() as u32;
-    blob[0..4].copy_from_slice(&len.to_le_bytes());
-    blob[4..4 + payload.len()].copy_from_slice(&payload);
+    let mut config_without_credentials = cfg.clone();
+    let credentials = config_without_credentials.credentials.clone();
+    config_without_credentials.credentials = Vec::new();
+    let blob = encode_nv_json_blob(&config_without_credentials, CONFIG_TPM_NV_SIZE, "config")?;
     tpm_nv_write_blob(CONFIG_TPM_NV_INDEX, &blob, CONFIG_TPM_NV_SIZE)
         .context("failed to store manager config in TPM NV")?;
+    save_credentials_to_nv(&credentials)?;
     Ok(())
 }
 
@@ -1214,6 +1270,78 @@ fn google_token_from(raw: &str) -> Result<String> {
         return Err(anyhow!("google token is missing or invalid"));
     }
     Ok(token.to_string())
+}
+
+fn cloudflare_token_from(raw: &str) -> Result<String> {
+    let token = raw.trim();
+    if token.len() < 20 {
+        return Err(anyhow!("cloudflare account api token is missing or invalid"));
+    }
+    Ok(token.to_string())
+}
+
+async fn cloudflare_api_verify_token(token: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let url = "https://api.cloudflare.com/client/v4/user/tokens/verify";
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .context("cloudflare token verify request failed")?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .context("failed to read cloudflare token verify response")?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("cloudflare token verify failed ({status}): {detail}"));
+    }
+    let payload: sonic_rs::Value =
+        sonic_rs::from_slice(&bytes).context("failed to parse cloudflare token verify json")?;
+    if payload["success"].as_bool().unwrap_or(false) {
+        return Ok(payload);
+    }
+    let first_error = payload["errors"]
+        .as_array()
+        .and_then(|errors| errors.first())
+        .and_then(|error| error["message"].as_str())
+        .unwrap_or("token verify returned unsuccessful response");
+    Err(anyhow!("cloudflare token verify rejected token: {first_error}"))
+}
+
+async fn cloudflare_api_get_user(token: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let url = "https://api.cloudflare.com/client/v4/user";
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .context("cloudflare user request failed")?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .context("failed to read cloudflare user response")?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("cloudflare user request failed ({status}): {detail}"));
+    }
+    let payload: sonic_rs::Value =
+        sonic_rs::from_slice(&bytes).context("failed to parse cloudflare user json")?;
+    if payload["success"].as_bool().unwrap_or(false) {
+        return Ok(payload);
+    }
+    let first_error = payload["errors"]
+        .as_array()
+        .and_then(|errors| errors.first())
+        .and_then(|error| error["message"].as_str())
+        .unwrap_or("user request returned unsuccessful response");
+    Err(anyhow!("cloudflare user lookup rejected token: {first_error}"))
 }
 
 fn tailscale_api_key_from(raw: &str) -> Result<String> {
@@ -1866,6 +1994,13 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_MCP_STOP_PATH, options(handle_local_options))
         .route(LOCAL_MCP_STATUS_PATH, get(handle_local_mcp_status))
         .route(LOCAL_MCP_STATUS_PATH, options(handle_local_options))
+        .route(LOCAL_MCP_PREFLIGHT_PATH, get(handle_local_mcp_preflight))
+        .route(LOCAL_MCP_PREFLIGHT_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CLOUDFLARE_VERIFY_PATH,
+            post(handle_local_cloudflare_verify),
+        )
+        .route(LOCAL_CLOUDFLARE_VERIFY_PATH, options(handle_local_options))
         .route(
             LOCAL_TAILSCALE_DEVICES_PATH,
             post(handle_local_tailscale_devices),
@@ -2782,6 +2917,63 @@ async fn handle_local_mcp_status(
         running,
         status,
     })
+}
+
+async fn handle_local_mcp_preflight(
+    State(state): State<Arc<LocalBridgeState>>,
+    Query(query): Query<LocalMcpPreflightQuery>,
+) -> Response {
+    if let Err(err) = enforce_local_node(&state, query.node_id.as_deref()) {
+        return local_json_error(AxumStatusCode::FORBIDDEN, &err.to_string());
+    }
+    let integration_id = query.integration_id.trim().to_ascii_lowercase();
+    if integration_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "integration_id is required");
+    }
+    let container_name = mcp_container_name(&integration_id);
+    let image = mcp_image_for(&integration_id).unwrap_or_default();
+    let token_env = mcp_token_env_for(&integration_id).to_string();
+    local_json_ok(LocalMcpPreflightData {
+        integration_id,
+        container_name,
+        token_env,
+        image: image.clone(),
+        image_resolved: !image.trim().is_empty(),
+    })
+}
+
+async fn handle_local_cloudflare_verify(
+    Json(body): Json<LocalCloudflareVerifyRequest>,
+) -> Response {
+    let token = match cloudflare_token_from(body.token.as_deref().unwrap_or_default()) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let payload = match cloudflare_api_verify_token(&token).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let user_payload = cloudflare_api_get_user(&token).await.ok();
+    let user_email = user_payload
+        .as_ref()
+        .and_then(|value| value["result"]["email"].as_str())
+        .unwrap_or_default();
+    let user_id = user_payload
+        .as_ref()
+        .and_then(|value| value["result"]["id"].as_str())
+        .unwrap_or_default();
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "token_id": payload["result"]["id"].as_str().unwrap_or_default(),
+            "status": payload["result"]["status"].as_str().unwrap_or_default(),
+            "expires_on": payload["result"]["expires_on"].as_str().unwrap_or_default(),
+            "not_before": payload["result"]["not_before"].as_str().unwrap_or_default(),
+            "user_email": user_email,
+            "user_id": user_id,
+        }),
+    )
 }
 
 async fn handle_local_tailscale_devices(
