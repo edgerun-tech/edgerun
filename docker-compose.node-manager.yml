@@ -188,7 +188,7 @@ services:
       - /home/ken/.local/state/opencode:/home/ken/.local/state/opencode
 
   caddy:
-    container_name: edgerun-osdev-caddy
+    container_name: edgerun-framework-caddy
     image: caddy:2.10.0
     restart: unless-stopped
     profiles: ["tunnel"]
@@ -201,7 +201,7 @@ services:
       - --adapter
       - caddyfile
     volumes:
-      - ./config/caddy/osdev.Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config/caddy/framework.Caddyfile:/etc/caddy/Caddyfile:ro
       - ./:/workspace:ro
 
 volumes:

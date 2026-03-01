@@ -1,0 +1,85 @@
+{
+  auto_https off
+}
+
+framework.bengal-salary.ts.net:443 {
+  tls /workspace/out/tailscale/framework.bengal-salary.ts.net.crt /workspace/out/tailscale/framework.bengal-salary.ts.net.key
+  reverse_proxy 127.0.0.1:4175 {
+    header_up Host {http.request.host}
+  }
+}
+
+:4175 {
+  encode zstd gzip
+
+  handle /v1/local/* {
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @assistant path /api/assistant /api/assistant/*
+  handle @assistant {
+    rewrite * /v1/local/assistant
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @google_oauth path /api/google/oauth /api/google/oauth/*
+  handle @google_oauth {
+    uri replace /api/google/oauth /v1/local/google/oauth
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @google path /api/google /api/google/*
+  handle @google {
+    uri replace /api/google /v1/local/google
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @tailscale path /api/tailscale /api/tailscale/*
+  handle @tailscale {
+    uri replace /api/tailscale /v1/local/tailscale
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @cloudflare path /api/cloudflare /api/cloudflare/*
+  handle @cloudflare {
+    uri replace /api/cloudflare /v1/local/cloudflare
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  @beeper path /api/beeper /api/beeper/*
+  handle @beeper {
+    uri replace /api/beeper /v1/local/beeper
+    reverse_proxy 127.0.0.1:7777
+  }
+
+  handle /api/* {
+    reverse_proxy https://api.edgerun.tech {
+      header_up Host api.edgerun.tech
+    }
+  }
+
+  @framework_host host framework.bengal-salary.ts.net
+  handle @framework_host {
+    root * /workspace/out/frontend/site
+    @framework_root path /
+    rewrite @framework_root /intent-ui/
+    header {
+      Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+      Pragma "no-cache"
+      Expires "0"
+    }
+    try_files {path} {path}/ /intent-ui/index.html
+    file_server
+  }
+
+  handle {
+    root * /workspace/out/frontend/site
+    header {
+      Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+      Pragma "no-cache"
+      Expires "0"
+    }
+    try_files {path} {path}/ /index.html
+    file_server
+  }
+}

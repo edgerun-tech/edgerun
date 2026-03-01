@@ -35,8 +35,7 @@ cp config/cloudflared/node-manager-tunnel.yml.example config/cloudflared/node-ma
 Edit `config/cloudflared/node-manager-tunnel.yml`:
 - set `tunnel` to `<TUNNEL_ID>`
 - set `ingress[0].hostname` to `<YOUR_NODE_HOSTNAME>`
-- optionally set `ingress[1].hostname` to `osdev.edgerun.tech` (or your dev hostname)
-- optionally set `ingress[2].hostname` to `osdeve2e.edgerun.tech` (or your e2e hostname)
+- optionally set `ingress[1].hostname` to `osdeve2e.edgerun.tech` (or your e2e hostname)
 
 3) Start tunnel profile:
 
@@ -50,11 +49,10 @@ This starts:
 - `osdev-frontend` dev service (rebuilds Intent UI when source files change)
 - `osdeve2e-manager` dev/e2e manager service (rebuilds Intent UI into `out/frontend/osdeve2e` and runs Cypress on file changes)
 - `opencode-cli` container as the execution target for node-manager `docker exec ... opencode ...`
-- `caddy` ingress service on `127.0.0.1:4175` serving generated output from `out/frontend/osdev` + proxying `/v1/local/*`, `/api/assistant` -> local backend, and `/api/*`
+- `caddy` ingress service on `127.0.0.1:4175` serving generated output from `out/frontend/site` + proxying `/v1/local/*`, `/api/assistant` -> local backend, and `/api/*`
 
 Host mapping through the same Caddy listener:
-- `osdev.edgerun.tech` -> `/workspace/out/frontend/osdev`
-- `osdeve2e.edgerun.tech` -> `/workspace/out/frontend/osdeve2e`
+- `framework.bengal-salary.ts.net` -> `/workspace/out/frontend/site`
 
 ## 3) Pair device (one-time)
 
@@ -71,6 +69,12 @@ curl -fsS http://127.0.0.1:7777/v1/local/node/info.pb -o /tmp/node-info.pb
 Expected outcome:
 - command exits `0`
 - local bridge is reachable by browser UI on the same host
+
+Optional full local stack verification:
+
+```bash
+scripts/verify-local-stack.sh
+```
 
 ## 5) Enable Swarm and deploy services (optional)
 
@@ -117,7 +121,7 @@ GET  http://127.0.0.1:7777/v1/local/google/photos
 POST http://127.0.0.1:7777/v1/local/google/refresh
 ```
 
-`/api/google/*` on the osdev Caddy listener rewrites to these local bridge routes.
+`/api/google/*` on the Caddy listener rewrites to these local bridge routes.
 
 Default MCP image mappings in node-manager include:
 - `github` -> `ghcr.io/github/github-mcp-server:latest`

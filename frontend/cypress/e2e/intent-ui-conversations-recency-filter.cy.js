@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-describe('intent ui conversations recency and source filter', () => {
-  it('sorts threads by recency and filters by source', () => {
+describe('intent ui conversations recency and filters', () => {
+  it('sorts by recency and applies source+search filters with persistence and shortcut', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         win.sessionStorage.setItem('intent-ui-profile-mode-v1', 'profile')
@@ -82,6 +82,23 @@ describe('intent ui conversations recency and source filter', () => {
     cy.get('[data-testid="conversation-thread-item"]').each(($row) => {
       expect($row.attr('data-conversation-channel')).to.eq('call')
     })
+    cy.get('[data-testid="conversation-thread-item"]').eq(0).should('contain.text', 'Recent Call Thread')
+
+    cy.get('[data-testid="conversation-thread-search-input"]').clear().type('older')
+    cy.get('[data-testid="conversation-thread-item"]').should('have.length', 1)
+    cy.get('[data-testid="conversation-thread-item"]').eq(0).should('contain.text', 'Older Call Thread')
+
+    cy.reload()
+    cy.get('button[title="Conversations"]').first().click({ force: true })
+    cy.get('[data-testid="conversation-thread-search-input"]').should('have.value', 'older')
+    cy.get('[data-testid="conversation-thread-item"]').should('have.length', 1)
+    cy.get('[data-testid="conversation-thread-item"]').eq(0).should('contain.text', 'Older Call Thread')
+
+    cy.get('body').click(0, 0)
+    cy.get('body').type('/')
+    cy.focused().should('have.attr', 'data-testid', 'conversation-thread-search-input')
+
+    cy.get('[data-testid="conversation-thread-search-clear"]').click({ force: true })
     cy.get('[data-testid="conversation-thread-item"]').eq(0).should('contain.text', 'Recent Call Thread')
   })
 })

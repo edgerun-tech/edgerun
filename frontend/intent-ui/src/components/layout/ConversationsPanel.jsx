@@ -115,6 +115,29 @@ export default function ConversationsPanel(props) {
         <div class="min-h-0 flex-1 overflow-auto p-3">
           <Show when={props.conversationTab() === "threads"}>
             <div class="space-y-1.5">
+              <div class="flex items-center gap-1.5" data-testid="conversation-thread-search">
+                <input
+                  type="text"
+                  value={props.threadSearchQuery()}
+                  onInput={(event) => props.setThreadSearchQuery(event.currentTarget.value)}
+                  placeholder="Search threads..."
+                  class="h-7 min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900/60 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-[hsl(var(--primary)/0.45)] focus:outline-none"
+                  data-testid="conversation-thread-search-input"
+                  ref={(el) => {
+                    if (typeof props.threadSearchInputRef === "function") props.threadSearchInputRef(el);
+                  }}
+                />
+                <Show when={props.threadSearchQuery().trim().length > 0}>
+                  <button
+                    type="button"
+                    class={DRAWER_SMALL_BUTTON_CLASS}
+                    onClick={() => props.setThreadSearchQuery("")}
+                    data-testid="conversation-thread-search-clear"
+                  >
+                    Clear
+                  </button>
+                </Show>
+              </div>
               <Show when={props.threadSourceOptions().length > 1}>
                 <div class="mb-1.5 flex flex-wrap gap-1.5" data-testid="conversation-thread-source-filter">
                   <For each={props.threadSourceOptions()}>
@@ -223,7 +246,7 @@ export default function ConversationsPanel(props) {
                 </div>
               </Show>
               <Show when={props.hasConversationContent() && props.threadConversations().length === 0}>
-                <p class={DRAWER_STATE_BLOCK_CLASS}>No threads match this source filter.</p>
+                <p class={DRAWER_STATE_BLOCK_CLASS}>No threads match current filters.</p>
               </Show>
             </div>
           </Show>

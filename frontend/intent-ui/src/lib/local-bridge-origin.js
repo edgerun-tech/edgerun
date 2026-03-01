@@ -7,8 +7,8 @@ function normalizePath(pathname = "") {
 function resolveBridgeOrigin() {
   if (typeof window === "undefined") {
     return {
-      httpOrigin: "https://osdev.edgerun.tech",
-      wsOrigin: "wss://osdev.edgerun.tech"
+      httpOrigin: "http://127.0.0.1:7777",
+      wsOrigin: "ws://127.0.0.1:7777"
     };
   }
   const protocol = window.location.protocol === "https:" ? "https:" : "http:";

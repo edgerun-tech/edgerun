@@ -4,8 +4,6 @@ credentials-file: /etc/cloudflared/creds/node-manager-tunnel-credentials.json
 ingress:
   - hostname: node.edgerun.tech
     service: http://127.0.0.1:7777
-  - hostname: osdev.edgerun.tech
-    service: http://127.0.0.1:4175
   - hostname: osdeve2e.edgerun.tech
     service: http://127.0.0.1:4175
   - service: http_status:404

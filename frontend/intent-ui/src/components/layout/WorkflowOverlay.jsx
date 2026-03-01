@@ -1,4 +1,4 @@
-import { Show, For, createMemo, createSignal, createEffect, onMount, onCleanup } from "solid-js";
+import { Show, For, createMemo, createSignal, createEffect } from "solid-js";
 import { Motion } from "solid-motionone";
 import { Portal } from "solid-js/web";
 import { clsx } from "clsx";
@@ -35,10 +35,21 @@ import {
 } from "./workflow-overlay.events";
 import { useWorkflowDeviceConnect } from "./use-workflow-device-connect";
 import { useWorkflowConversationSources } from "./use-workflow-conversation-sources";
+import { useWorkflowThreadModel } from "./use-workflow-thread-model";
+import { useWorkflowOverlayEvents } from "./use-workflow-overlay-events";
 import { pushClipboardEntry } from "../../stores/clipboard-history";
 
-const SUPER_V_SHORTCUT_EVENT = "intent-ui-super-v";
-const CALL_LINK_READY_EVENT = "intent-ui-call-link-ready";
+const THREAD_SOURCE_FILTER_KEY = "intent-ui-thread-source-filter-v1";
+const THREAD_SEARCH_QUERY_KEY = "intent-ui-thread-search-query-v1";
+
+function readStoredValue(key, fallback = "") {
+  try {
+    const value = localStorage.getItem(key);
+    return typeof value === "string" ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 function cn(...classes) {
   return twMerge(clsx(classes));
@@ -62,7 +73,8 @@ function WorkflowOverlay() {
   const shortSessionId = createMemo(() => state().sessionId ? `${state().sessionId.slice(0, 8)}...` : "new");
   const newestFirstMessages = createMemo(() => [...(state().messages || [])].reverse());
   const [conversationTab, setConversationTab] = createSignal("threads");
-  const [threadSourceFilter, setThreadSourceFilter] = createSignal("all");
+  const [threadSourceFilter, setThreadSourceFilter] = createSignal(readStoredValue(THREAD_SOURCE_FILTER_KEY, "all") || "all");
+  const [threadSearchQuery, setThreadSearchQuery] = createSignal(readStoredValue(THREAD_SEARCH_QUERY_KEY, ""));
   const [selectedConversationId, setSelectedConversationId] = createSignal("");
   const [showConversationList, setShowConversationList] = createSignal(true);
   const [contactOnlyThreads, setContactOnlyThreads] = createSignal([]);
@@ -75,6 +87,7 @@ function WorkflowOverlay() {
   const [draftMessage, setDraftMessage] = createSignal("");
   const [previousConversationId, setPreviousConversationId] = createSignal("");
   let conversationDraftInputRef;
+  let threadSearchInputRef;
   const [localMessagesByConversation, setLocalMessagesByConversation] = createSignal((() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(LOCAL_CONVERSATION_MESSAGES_KEY) || "{}");
@@ -119,69 +132,6 @@ function WorkflowOverlay() {
     const baseY = (typeof window === "undefined" ? 900 : window.innerHeight) - bubbleHeight - 110;
     return clampBubblePosition(baseX - (count % 4) * 20, baseY - (count % 4) * 26);
   };
-  const aiConversation = createMemo(() => {
-    const latestMessage = state().messages[state().messages.length - 1];
-    return {
-      id: "ai-active",
-      kind: "ai",
-      channel: "ai",
-      title: state().prompt || "Active AI session",
-      subtitle: state().provider || "opencode",
-      sessionId: state().sessionId || "",
-      updatedAt: latestMessage?.createdAt || (state().streaming ? new Date().toISOString() : ""),
-      preview: (latestMessage?.text || "").trim() || (state().streaming ? "Streaming..." : "No response yet"),
-      messages: (state().messages || []).map((message) => ({
-        id: message.id,
-        role: message.role === "user" ? "user" : "assistant",
-        text: message.text || "",
-        createdAt: message.createdAt,
-        channel: "ai",
-        author: message.role === "user" ? "You" : "Assistant"
-      }))
-    };
-  });
-  const callPendingThreads = createMemo(() => {
-    const entries = Object.entries(localMessagesByConversation() || {});
-    const threads = entries
-      .filter(([conversationId, messages]) => (
-        String(conversationId || "").startsWith("call-link-")
-        && Array.isArray(messages)
-        && messages.length > 0
-      ))
-      .map(([conversationId, messages]) => {
-        const last = messages[messages.length - 1] || {};
-        const title = String(last.threadTitle || "").trim() || "Pending call";
-        const subtitle = String(last.threadSubtitle || "").trim() || "Awaiting recipient";
-        const updatedAt = String(last.createdAt || "").trim() || new Date().toISOString();
-        const preview = String(last.text || "").trim() || "Call link copied";
-        return {
-          id: conversationId,
-          kind: "call",
-          channel: "call",
-          title,
-          subtitle,
-          updatedAt,
-          preview,
-          messages: []
-        };
-      })
-      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
-    return threads;
-  });
-  const sessionConversations = createMemo(() => (state().sessionHistory || [])
-    .filter((session) => session?.sessionId && session.sessionId !== state().sessionId)
-    .map((session) => ({
-      id: `session-${session.sessionId}`,
-      kind: "session",
-      channel: "ai",
-      title: session.preview || "Codex session",
-      subtitle: session.provider || "opencode",
-      sessionId: session.sessionId,
-      updatedAt: session.updatedAt || "",
-      preview: session.preview || "Open to load this thread",
-      messages: []
-    }))
-  );
   const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => (
     integration.id === "email" || isOfficialBridgeId(integration.id)
   )));
@@ -194,71 +144,24 @@ function WorkflowOverlay() {
     messageProviderIntegrations,
     localMessagesByConversation
   });
-  const parseConversationTime = (value) => {
-    const ts = new Date(value || 0).getTime();
-    return Number.isFinite(ts) ? ts : 0;
-  };
-  const allThreadConversations = createMemo(() => [
-    ...callPendingThreads(),
-    aiConversation(),
-    ...sessionConversations(),
-    ...bridgeThreads(),
-    ...emailThreads(),
-    ...contactOnlyThreads()
-  ].map((thread) => {
-    const localMessages = Array.isArray(localMessagesByConversation()[thread.id])
-      ? localMessagesByConversation()[thread.id]
-      : [];
-    const localLast = localMessages[localMessages.length - 1] || null;
-    const threadMessages = Array.isArray(thread.messages) ? thread.messages : [];
-    const threadLast = threadMessages[threadMessages.length - 1] || null;
-    const activityTs = Math.max(
-      parseConversationTime(thread.updatedAt),
-      parseConversationTime(threadLast?.createdAt),
-      parseConversationTime(localLast?.createdAt)
-    );
-    return {
-      ...thread,
-      updatedAt: activityTs > 0 ? new Date(activityTs).toISOString() : (thread.updatedAt || ""),
-      preview: String(localLast?.text || "").trim() || thread.preview || thread.subtitle || "No messages yet",
-      activityTs
-    };
-  }).sort((a, b) => {
-    if (b.activityTs !== a.activityTs) return b.activityTs - a.activityTs;
-    return String(a.title || "").localeCompare(String(b.title || ""));
-  }));
-  const threadSourceOptions = createMemo(() => {
-    const channels = new Set();
-    for (const thread of allThreadConversations()) {
-      const value = String(thread?.channel || "").trim();
-      if (value) channels.add(value);
-    }
-    return ["all", ...Array.from(channels).sort((a, b) => a.localeCompare(b))];
-  });
-  const threadConversations = createMemo(() => {
-    const filter = String(threadSourceFilter() || "all").trim().toLowerCase();
-    if (!filter || filter === "all") return allThreadConversations();
-    return allThreadConversations().filter((thread) => String(thread.channel || "").toLowerCase() === filter);
-  });
-  const hasConversationContent = createMemo(() => {
-    const threads = allThreadConversations();
-    if (threads.length === 0) return false;
-    return threads.some((thread) => {
-      if (thread.id === "ai-active") return Boolean((thread.messages || []).length || state().prompt?.trim());
-      return Boolean((thread.messages || []).length || thread.preview?.trim());
-    });
-  });
-  const activeConversation = createMemo(() => {
-    const selected = selectedConversationId();
-    const all = threadConversations();
-    if (!selected && all.length > 0) return all[0];
-    return all.find((item) => item.id === selected) || all[0] || null;
-  });
-  const activeConversationMessages = createMemo(() => {
-    const active = activeConversation();
-    if (!active) return [];
-    const local = localMessagesByConversation()[active.id] || [];
-    return [...(active.messages || []), ...local];
+  const {
+    allThreadConversations,
+    threadSourceOptions,
+    threadConversations,
+    hasConversationContent,
+    activeConversation,
+    activeConversationMessages
+  } = useWorkflowThreadModel({
+    state,
+    localMessagesByConversation,
+    contactOnlyThreads,
+    bridgeThreads,
+    emailThreads,
+    threadSourceFilter,
+    setThreadSourceFilter,
+    threadSearchQuery,
+    selectedConversationId,
+    setSelectedConversationId
   });
   const chatHeadForConversation = (conversation) => {
     if (!conversation) return { emoji: "💬", color: CHAT_HEAD_PRESET_COLORS[0], label: "C" };
@@ -441,88 +344,29 @@ function WorkflowOverlay() {
     setDraftMessage("");
     setShowEmojiPalette(false);
   };
-  let handleSuperVShortcut;
-  let handleCallLinkReady;
-  let handleBubblePointerMove;
-  let handleBubblePointerUp;
-  onMount(() => {
-    handleSuperVShortcut = () => {
-      if (!(state().rightOpen && state().rightPanel === "conversations")) {
-        toggleWorkflowDrawer({ side: "right", panel: "conversations" });
-      }
-      setConversationTab("threads");
-      setShowConversationList(false);
-      setShowConversationSettings(false);
-      setShowEmojiPalette(true);
-      setSelectedConversationId("ai-active");
-      queueMicrotask(() => {
-        if (conversationDraftInputRef instanceof HTMLElement) conversationDraftInputRef.focus();
+  useWorkflowOverlayEvents({
+    state,
+    activeBubbleDrag,
+    setChatBubbles,
+    setActiveBubbleDrag,
+    clampBubblePosition,
+    toggleConversationsPanel: () => toggleWorkflowDrawer({ side: "right", panel: "conversations" }),
+    setConversationTab,
+    setShowConversationList,
+    setShowConversationSettings,
+    setShowEmojiPalette,
+    setSelectedConversationId,
+    conversationDraftInputRef: () => conversationDraftInputRef,
+    threadSearchInputRef: () => threadSearchInputRef,
+    setLocalMessagesByConversation,
+    onSuperVPaste: () => {
+      if (!navigator.clipboard?.readText) return;
+      void navigator.clipboard.readText().then((text) => {
+        if (!String(text || "").trim()) return;
+        pushClipboardEntry(text, "super-v");
+      }).catch(() => {
+        // ignore clipboard permission or availability failures
       });
-      if (navigator.clipboard?.readText) {
-        void navigator.clipboard.readText().then((text) => {
-          if (!String(text || "").trim()) return;
-          pushClipboardEntry(text, "super-v");
-        }).catch(() => {
-          // ignore clipboard permission or availability failures
-        });
-      }
-    };
-    handleBubblePointerMove = (event) => {
-      const drag = activeBubbleDrag();
-      if (!drag) return;
-      const nextX = event.clientX - drag.offsetX;
-      const nextY = event.clientY - drag.offsetY;
-      const clamped = clampBubblePosition(nextX, nextY);
-      setChatBubbles((prev) => prev.map((bubble) => bubble.id === drag.id
-        ? { ...bubble, x: clamped.x, y: clamped.y, updatedAt: Date.now() }
-        : bubble
-      ));
-    };
-    handleBubblePointerUp = () => {
-      setActiveBubbleDrag(null);
-    };
-    handleCallLinkReady = (event) => {
-      const detail = event?.detail || {};
-      const threadId = String(detail.threadId || "").trim();
-      const link = String(detail.link || "").trim();
-      const title = String(detail.title || "Pending call").trim();
-      const subtitle = String(detail.subtitle || "Awaiting recipient").trim();
-      if (!threadId || !link) return;
-      const now = new Date().toISOString();
-      const pendingEntry = {
-        id: `local-${threadId}-${Date.now()}`,
-        role: "assistant",
-        text: `Pending call link copied: ${link}`,
-        createdAt: now,
-        channel: "call",
-        author: "Call Studio",
-        threadTitle: title,
-        threadSubtitle: subtitle,
-        callStatus: "pending"
-      };
-      setLocalMessagesByConversation((prev) => ({
-        ...prev,
-        [threadId]: [...(prev[threadId] || []), pendingEntry]
-      }));
-      setSelectedConversationId(threadId);
-    };
-    window.addEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
-    window.addEventListener(CALL_LINK_READY_EVENT, handleCallLinkReady);
-    window.addEventListener("pointermove", handleBubblePointerMove);
-    window.addEventListener("pointerup", handleBubblePointerUp);
-  });
-  onCleanup(() => {
-    if (handleSuperVShortcut) {
-      window.removeEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
-    }
-    if (handleBubblePointerMove) {
-      window.removeEventListener("pointermove", handleBubblePointerMove);
-    }
-    if (handleCallLinkReady) {
-      window.removeEventListener(CALL_LINK_READY_EVENT, handleCallLinkReady);
-    }
-    if (handleBubblePointerUp) {
-      window.removeEventListener("pointerup", handleBubblePointerUp);
     }
   });
   createEffect(() => {
@@ -534,25 +378,8 @@ function WorkflowOverlay() {
     setLoadedThreadCount((prev) => Math.min(Math.max(prev, THREAD_PAGE_SIZE), total));
   });
   createEffect(() => {
-    const options = threadSourceOptions();
-    if (!options.includes(threadSourceFilter())) {
-      setThreadSourceFilter("all");
-    }
-  });
-  createEffect(() => {
-    const current = activeConversation();
-    if (!current) return;
-    if (selectedConversationId()) return;
-    setSelectedConversationId(current.id);
-  });
-  createEffect(() => {
-    const selectedId = selectedConversationId();
-    if (!selectedId) return;
-    const existsInFiltered = threadConversations().some((thread) => thread.id === selectedId);
-    if (existsInFiltered) return;
-    const fallback = threadConversations()[0];
-    if (fallback?.id) {
-      setSelectedConversationId(fallback.id);
+    if (conversationTab() !== "threads" && threadSearchQuery()) {
+      setThreadSearchQuery("");
     }
   });
   createEffect(() => {
@@ -573,6 +400,20 @@ function WorkflowOverlay() {
   createEffect(() => {
     try {
       localStorage.setItem(LOCAL_CONVERSATION_MESSAGES_KEY, JSON.stringify(localMessagesByConversation()));
+    } catch {
+      // ignore storage failures
+    }
+  });
+  createEffect(() => {
+    try {
+      localStorage.setItem(THREAD_SOURCE_FILTER_KEY, threadSourceFilter());
+    } catch {
+      // ignore storage failures
+    }
+  });
+  createEffect(() => {
+    try {
+      localStorage.setItem(THREAD_SEARCH_QUERY_KEY, threadSearchQuery());
     } catch {
       // ignore storage failures
     }
@@ -770,6 +611,11 @@ function WorkflowOverlay() {
                         setConversationTab={setConversationTab}
                         threadSourceFilter={threadSourceFilter}
                         setThreadSourceFilter={setThreadSourceFilter}
+                        threadSearchQuery={threadSearchQuery}
+                        setThreadSearchQuery={setThreadSearchQuery}
+                        threadSearchInputRef={(el) => {
+                          threadSearchInputRef = el;
+                        }}
                         threadSourceOptions={threadSourceOptions}
                         showConversationList={showConversationList}
                         setShowConversationList={setShowConversationList}
