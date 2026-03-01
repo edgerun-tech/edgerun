@@ -22,7 +22,7 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fatalf("usage: edgertool <nats-pub|agent-diff-proposed|agent-diff-accept|code-update-pub|agent-launch> [...]")
+		fatalf("usage: edgertool <nats-pub|agent-diff-proposed|agent-diff-accept|code-update-pub|agent-launch|storage-proposal-submit|storage-proposal-apply> [...]")
 	}
 
 	var err error
@@ -37,6 +37,10 @@ func main() {
 		err = cmdCodeUpdatePub(os.Args[2:])
 	case "agent-launch":
 		err = cmdAgentLaunch(os.Args[2:])
+	case "storage-proposal-submit":
+		err = cmdStorageProposalSubmit(os.Args[2:])
+	case "storage-proposal-apply":
+		err = cmdStorageProposalApply(os.Args[2:])
 	default:
 		err = fmt.Errorf("unknown command: %s", os.Args[1])
 	}
@@ -195,7 +199,7 @@ func emitDiffProposed(repoRoot, runDir string, cfg natsConfig) error {
 	}
 
 	patchPath := filepath.Join(eventsDir, "proposal.patch")
-	diffCmd := exec.Command("diff", "-ruN", "--exclude=.agent-meta", baseDir, workDir)
+	diffCmd := exec.Command("diff", "-ruN", "--no-dereference", "--exclude=.agent-meta", baseDir, workDir)
 	var diffOut bytes.Buffer
 	diffCmd.Stdout = &diffOut
 	diffCmd.Stderr = os.Stderr
@@ -209,7 +213,11 @@ func emitDiffProposed(repoRoot, runDir string, cfg natsConfig) error {
 	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 		return fmt.Errorf("diff command failed: %w", err)
 	}
-	if err := os.WriteFile(patchPath, diffOut.Bytes(), 0o644); err != nil {
+	rewritten, err := rewriteRunDiffToGitPatch(diffOut.Bytes(), baseDir, workDir)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(patchPath, rewritten, 0o644); err != nil {
 		return err
 	}
 
@@ -341,15 +349,26 @@ func cmdAgentLaunch(args []string) error {
 	fs := flag.NewFlagSet("agent-launch", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		agentID   = fs.String("agent-id", "", "agent id")
-		prompt    = fs.String("prompt", "", "task prompt")
-		repoRoot  = fs.String("repo-root", "", "repo root")
-		runsRoot  = fs.String("runs-root", "", "runs root")
-		mcpURL    = fs.String("mcp-syscall-url", envOr("MCP_SYSCALL_URL", "http://127.0.0.1:7047"), "mcp syscall url")
-		codexBin  = fs.String("codex-bin", "/usr/lib/node_modules/@openai/codex/bin/codex.js", "codex js entrypoint")
-		codexMod  = fs.String("codex-module", "/usr/lib/node_modules/@openai/codex", "codex module mount")
-		nodeImage = fs.String("node-image", "node:22-bookworm", "docker node image")
-		natsURL   = fs.String("nats-url", defaultNATSURL(), "nats url")
+		agentID                      = fs.String("agent-id", "", "agent id")
+		prompt                       = fs.String("prompt", "", "task prompt")
+		repoRoot                     = fs.String("repo-root", "", "repo root")
+		runsRoot                     = fs.String("runs-root", "", "runs root")
+		mcpURL                       = fs.String("mcp-syscall-url", envOr("MCP_SYSCALL_URL", "http://127.0.0.1:7047"), "mcp syscall url")
+		codexBin                     = fs.String("codex-bin", "/usr/lib/node_modules/@openai/codex/bin/codex.js", "codex js entrypoint")
+		codexMod                     = fs.String("codex-module", "/usr/lib/node_modules/@openai/codex", "codex module mount")
+		nodeImage                    = fs.String("node-image", "node:22-bookworm", "docker node image")
+		natsURL                      = fs.String("nats-url", defaultNATSURL(), "nats url")
+		storageAutoSubmit            = fs.Bool("storage-auto-submit", envBool("EDGERUN_AGENT_STORAGE_AUTOSUBMIT", false), "auto submit produced diff to storage proposal queue")
+		storageAutoDryRun            = fs.Bool("storage-auto-dry-run", envBool("EDGERUN_AGENT_STORAGE_AUTO_DRY_RUN", true), "run gatekeeper dry-run after auto submit")
+		storageDataDir               = fs.String("storage-data-dir", envOr("EDGERUN_AGENT_STORAGE_DATA_DIR", ""), "storage data dir for proposal queue")
+		storageRepoID                = fs.String("storage-repo-id", envOr("EDGERUN_AGENT_STORAGE_REPO_ID", ""), "storage repo id")
+		storageBranch                = fs.String("storage-branch", envOr("EDGERUN_AGENT_STORAGE_BRANCH", "main"), "storage branch id")
+		storageIntent                = fs.String("storage-intent", envOr("EDGERUN_AGENT_STORAGE_INTENT", "agent proposed diff"), "storage proposal intent")
+		storageVFSOperatorBin        = fs.String("storage-vfs-operator-bin", envOr("EDGERUN_AGENT_STORAGE_VFS_OPERATOR_BIN", defaultStorageBin("vfs_operator")), "path to vfs_operator binary")
+		storageProposalGatekeeperBin = fs.String("storage-proposal-gatekeeper-bin", envOr("EDGERUN_AGENT_STORAGE_GATEKEEPER_BIN", defaultStorageBin("proposal_gatekeeper")), "path to proposal_gatekeeper binary")
+		storageGatekeeperFmtCmd      = fs.String("storage-fmt-cmd", envOr("EDGERUN_AGENT_STORAGE_FMT_CMD", "cargo fmt --all"), "gatekeeper format command")
+		storageGatekeeperCheckCmd    = fs.String("storage-check-cmd", envOr("EDGERUN_AGENT_STORAGE_CHECK_CMD", "cargo check -p edgerun-storage"), "gatekeeper validation command")
+		storageGatekeeperTimeoutSecs = fs.Int("storage-timeout-secs", envInt("EDGERUN_AGENT_STORAGE_TIMEOUT_SECS", 300), "gatekeeper timeout seconds")
 	)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -396,6 +415,11 @@ func cmdAgentLaunch(args []string) error {
 		"You are operating on a virtualized workspace copy without git metadata.",
 		"- Do not run git commands.",
 		"- Gather context with /edgerun-agent-tools/mcp-context.sh.",
+		"- Tool usage contract:",
+		"  1) Run /edgerun-agent-tools/mcp-context.sh pack <path> before edits.",
+		"  2) Use /edgerun-agent-tools/mcp-context.sh symbols <path> for symbol map.",
+		"  3) Use /edgerun-agent-tools/mcp-context.sh refs <name> for cross-file references.",
+		"  4) If MCP returns tool errors, continue with local grep/find/sed fallback and report it.",
 		"- Edit files in /workspace/virtual.",
 		"- Keep changes minimal and coherent.",
 	}, "\n")
@@ -435,6 +459,36 @@ func cmdAgentLaunch(args []string) error {
 	if err := emitDiffProposed(root, runDir, cfg); err != nil {
 		return err
 	}
+	if *storageAutoSubmit {
+		if strings.TrimSpace(*storageDataDir) == "" || strings.TrimSpace(*storageRepoID) == "" {
+			return errors.New("storage auto-submit requires --storage-data-dir and --storage-repo-id (or env overrides)")
+		}
+		patchPath := filepath.Join(eventsDir, "proposal.patch")
+		if !fileExists(patchPath) {
+			fmt.Println("storage auto-submit skipped: no patch produced by agent run")
+		} else {
+			proposalID, err := submitAndMaybeGateStorageProposal(storageIntegratedOptions{
+				PatchPath:              patchPath,
+				DataDir:                *storageDataDir,
+				RepoID:                 *storageRepoID,
+				Branch:                 *storageBranch,
+				ProposalID:             runID,
+				AgentID:                safeAgentID,
+				Intent:                 *storageIntent,
+				RepoRoot:               root,
+				FmtCmd:                 *storageGatekeeperFmtCmd,
+				CheckCmd:               *storageGatekeeperCheckCmd,
+				TimeoutSecs:            *storageGatekeeperTimeoutSecs,
+				DryRun:                 *storageAutoDryRun,
+				ProposalGatekeeperBin:  *storageProposalGatekeeperBin,
+				LegacyVFSOperatorBin:   *storageVFSOperatorBin,
+			})
+			if err != nil {
+				return err
+			}
+			_ = proposalID
+		}
+	}
 
 	fmt.Println("agent run complete")
 	fmt.Printf("run_id: %s\n", runID)
@@ -442,8 +496,272 @@ func cmdAgentLaunch(args []string) error {
 	fmt.Printf("workspace: %s\n", workDir)
 	fmt.Printf("proposed patch: %s\n", filepath.Join(eventsDir, "proposal.patch"))
 	fmt.Printf("next test: %s/scripts/agents/test-executor.sh %s quick\n", root, workDir)
+	fmt.Printf("next storage submit: %s/scripts/agents/storage-proposal-submit.sh %s <DATA_DIR> <REPO_ID> <BRANCH>\n", root, runDir)
 	fmt.Printf("next accept event: %s/scripts/agents/apply-accepted-diff.sh %s\n", root, runDir)
 	fmt.Printf("next local apply (explicit): %s/scripts/agents/apply-accepted-diff.sh --apply %s\n", root, runDir)
+	return nil
+}
+
+func cmdStorageProposalSubmit(args []string) error {
+	fs := flag.NewFlagSet("storage-proposal-submit", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var (
+		input          = fs.String("input", "", "run dir or patch path")
+		dataDir        = fs.String("data-dir", "", "storage data dir")
+		repoID         = fs.String("repo-id", "", "repo id")
+		branch         = fs.String("branch", "main", "branch id")
+		proposalID     = fs.String("proposal-id", "", "proposal id (default: run id)")
+		agentID        = fs.String("agent-id", "", "agent id (default from run id)")
+		intent         = fs.String("intent", "agent proposed diff", "proposal intent")
+		vfsOperatorBin = fs.String("vfs-operator-bin", defaultStorageBin("vfs_operator"), "path to vfs_operator binary")
+	)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*input) == "" {
+		return errors.New("storage-proposal-submit requires --input")
+	}
+	if strings.TrimSpace(*dataDir) == "" || strings.TrimSpace(*repoID) == "" {
+		return errors.New("storage-proposal-submit requires --data-dir and --repo-id")
+	}
+	_, err := submitStorageProposal(storageProposalSubmitOptions{
+		Input:          *input,
+		DataDir:        *dataDir,
+		RepoID:         *repoID,
+		Branch:         *branch,
+		ProposalID:     *proposalID,
+		AgentID:        *agentID,
+		Intent:         *intent,
+		VFSOperatorBin: *vfsOperatorBin,
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func cmdStorageProposalApply(args []string) error {
+	fs := flag.NewFlagSet("storage-proposal-apply", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var (
+		dataDir            = fs.String("data-dir", "", "storage data dir")
+		repoID             = fs.String("repo-id", "", "repo id")
+		branch             = fs.String("branch", "main", "branch id")
+		proposalID         = fs.String("proposal-id", "", "proposal id")
+		repoRoot           = fs.String("repo-root", "", "repo root")
+		fmtCmd             = fs.String("fmt-cmd", "cargo fmt --all", "format command")
+		checkCmd           = fs.String("check-cmd", "cargo check -p edgerun-storage", "validation command")
+		timeoutSecs        = fs.Int("timeout-secs", 300, "gatekeeper timeout seconds")
+		dryRun             = fs.Bool("dry-run", false, "dry run mode")
+		proposalGatekeeper = fs.String("proposal-gatekeeper-bin", defaultStorageBin("proposal_gatekeeper"), "path to proposal_gatekeeper binary")
+	)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if strings.TrimSpace(*dataDir) == "" || strings.TrimSpace(*repoID) == "" || strings.TrimSpace(*proposalID) == "" {
+		return errors.New("storage-proposal-apply requires --data-dir, --repo-id, and --proposal-id")
+	}
+	return applyStorageProposal(storageProposalApplyOptions{
+		DataDir:               *dataDir,
+		RepoID:                *repoID,
+		Branch:                *branch,
+		ProposalID:            *proposalID,
+		RepoRoot:              *repoRoot,
+		FmtCmd:                *fmtCmd,
+		CheckCmd:              *checkCmd,
+		TimeoutSecs:           *timeoutSecs,
+		DryRun:                *dryRun,
+		ProposalGatekeeperBin: *proposalGatekeeper,
+	})
+}
+
+type storageProposalSubmitOptions struct {
+	Input          string
+	DataDir        string
+	RepoID         string
+	Branch         string
+	ProposalID     string
+	AgentID        string
+	Intent         string
+	VFSOperatorBin string
+}
+
+func submitStorageProposal(opts storageProposalSubmitOptions) (string, error) {
+	patchPath, runID, derivedAgentID, err := resolvePatchInput(opts.Input)
+	if err != nil {
+		return "", err
+	}
+	normalizedPatchPath, cleanup, err := normalizePatchForStorage(patchPath)
+	if err != nil {
+		return "", err
+	}
+	if cleanup != nil {
+		defer cleanup()
+	}
+	pID := strings.TrimSpace(opts.ProposalID)
+	if pID == "" {
+		pID = runID
+	}
+	aID := strings.TrimSpace(opts.AgentID)
+	if aID == "" {
+		aID = derivedAgentID
+	}
+	bin := strings.TrimSpace(opts.VFSOperatorBin)
+	if bin == "" {
+		return "", errors.New("vfs operator binary path is empty")
+	}
+	cmd := exec.Command(
+		bin,
+		"propose-diff",
+		"--data-dir", opts.DataDir,
+		"--repo-id", opts.RepoID,
+		"--branch", opts.Branch,
+		"--proposal-id", pID,
+		"--agent-id", aID,
+		"--intent", opts.Intent,
+		"--diff-file", normalizedPatchPath,
+	)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("storage proposal submit failed: %w", err)
+	}
+	fmt.Printf("storage proposal submitted: proposal_id=%s agent_id=%s branch=%s patch=%s\n", pID, aID, opts.Branch, normalizedPatchPath)
+	return pID, nil
+}
+
+type storageProposalApplyOptions struct {
+	DataDir               string
+	RepoID                string
+	Branch                string
+	ProposalID            string
+	RepoRoot              string
+	FmtCmd                string
+	CheckCmd              string
+	TimeoutSecs           int
+	DryRun                bool
+	ProposalGatekeeperBin string
+}
+
+type storageIntegratedOptions struct {
+	PatchPath             string
+	DataDir               string
+	RepoID                string
+	Branch                string
+	ProposalID            string
+	AgentID               string
+	Intent                string
+	RepoRoot              string
+	FmtCmd                string
+	CheckCmd              string
+	TimeoutSecs           int
+	DryRun                bool
+	ProposalGatekeeperBin string
+	LegacyVFSOperatorBin  string
+}
+
+func submitAndMaybeGateStorageProposal(opts storageIntegratedOptions) (string, error) {
+	bin := strings.TrimSpace(opts.ProposalGatekeeperBin)
+	if bin == "" {
+		// Fallback to legacy split path if no gatekeeper binary is configured.
+		proposalID, err := submitStorageProposal(storageProposalSubmitOptions{
+			Input:          opts.PatchPath,
+			DataDir:        opts.DataDir,
+			RepoID:         opts.RepoID,
+			Branch:         opts.Branch,
+			ProposalID:     opts.ProposalID,
+			AgentID:        opts.AgentID,
+			Intent:         opts.Intent,
+			VFSOperatorBin: opts.LegacyVFSOperatorBin,
+		})
+		if err != nil {
+			return "", err
+		}
+		if opts.DryRun {
+			legacyGatekeeper := defaultStorageBin("proposal_gatekeeper")
+			if err := applyStorageProposal(storageProposalApplyOptions{
+				DataDir:               opts.DataDir,
+				RepoID:                opts.RepoID,
+				Branch:                opts.Branch,
+				ProposalID:            proposalID,
+				RepoRoot:              opts.RepoRoot,
+				FmtCmd:                opts.FmtCmd,
+				CheckCmd:              opts.CheckCmd,
+				TimeoutSecs:           opts.TimeoutSecs,
+				DryRun:                true,
+				ProposalGatekeeperBin: legacyGatekeeper,
+			}); err != nil {
+				return "", err
+			}
+		}
+		return proposalID, nil
+	}
+
+	argsv := []string{
+		"--data-dir", opts.DataDir,
+		"--repo-id", opts.RepoID,
+		"--branch", opts.Branch,
+		"--proposal-id", opts.ProposalID,
+		"--repo-root", opts.RepoRoot,
+		"--diff-file", opts.PatchPath,
+		"--agent-id", opts.AgentID,
+		"--intent", opts.Intent,
+		"--fmt-cmd", opts.FmtCmd,
+		"--check-cmd", opts.CheckCmd,
+		"--timeout-secs", fmt.Sprintf("%d", opts.TimeoutSecs),
+	}
+	if opts.DryRun {
+		argsv = append(argsv, "--dry-run")
+	} else {
+		argsv = append(argsv, "--submit-only")
+	}
+	cmd := exec.Command(bin, argsv...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("storage proposal integrated submit/gate failed: %w", err)
+	}
+	if opts.DryRun {
+		fmt.Printf("storage proposal dry-run passed: proposal_id=%s branch=%s\n", opts.ProposalID, opts.Branch)
+	} else {
+		fmt.Printf("storage proposal submitted: proposal_id=%s agent_id=%s branch=%s patch=%s\n", opts.ProposalID, opts.AgentID, opts.Branch, opts.PatchPath)
+	}
+	return opts.ProposalID, nil
+}
+
+func applyStorageProposal(opts storageProposalApplyOptions) error {
+	root, err := resolveRepoRoot(opts.RepoRoot)
+	if err != nil {
+		return err
+	}
+	bin := strings.TrimSpace(opts.ProposalGatekeeperBin)
+	if bin == "" {
+		return errors.New("proposal gatekeeper binary path is empty")
+	}
+	argsv := []string{
+		"--data-dir", opts.DataDir,
+		"--repo-id", opts.RepoID,
+		"--branch", opts.Branch,
+		"--proposal-id", opts.ProposalID,
+		"--repo-root", root,
+		"--fmt-cmd", opts.FmtCmd,
+		"--check-cmd", opts.CheckCmd,
+		"--timeout-secs", fmt.Sprintf("%d", opts.TimeoutSecs),
+	}
+	if opts.DryRun {
+		argsv = append(argsv, "--dry-run")
+	}
+	cmd := exec.Command(bin, argsv...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("storage proposal apply failed: %w", err)
+	}
+	if opts.DryRun {
+		fmt.Printf("storage proposal dry-run passed: proposal_id=%s branch=%s\n", opts.ProposalID, opts.Branch)
+	} else {
+		fmt.Printf("storage proposal applied: proposal_id=%s branch=%s\n", opts.ProposalID, opts.Branch)
+	}
 	return nil
 }
 
@@ -624,6 +942,114 @@ func rewritePatchForRepo(patchPath, repoRoot string) (string, error) {
 	return tmp.Name(), nil
 }
 
+func normalizePatchForStorage(patchPath string) (string, func(), error) {
+	// For agent run diffs, enforce git-style headers with repo-relative paths.
+	runDir := filepath.Clean(filepath.Join(filepath.Dir(patchPath), ".."))
+	baseDir := filepath.Join(runDir, "base")
+	workDir := filepath.Join(runDir, "work")
+	if !isDir(baseDir) || !isDir(workDir) {
+		return patchPath, nil, nil
+	}
+	b, err := os.ReadFile(patchPath)
+	if err != nil {
+		return "", nil, err
+	}
+	rewritten, err := rewriteRunDiffToGitPatch(b, baseDir, workDir)
+	if err != nil {
+		return "", nil, err
+	}
+	tmp, err := os.CreateTemp("", "storage-proposal-*.patch")
+	if err != nil {
+		return "", nil, err
+	}
+	if _, err := tmp.Write(rewritten); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", nil, err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", nil, err
+	}
+	return tmp.Name(), func() { _ = os.Remove(tmp.Name()) }, nil
+}
+
+func rewriteRunDiffToGitPatch(raw []byte, baseDir, workDir string) ([]byte, error) {
+	basePrefix := filepath.ToSlash(baseDir) + "/"
+	workPrefix := filepath.ToSlash(workDir) + "/"
+
+	var out []string
+	s := bufio.NewScanner(bytes.NewReader(raw))
+	for s.Scan() {
+		line := s.Text()
+		switch {
+		case strings.HasPrefix(line, "diff -ruN "):
+			parts := strings.Fields(line)
+			if len(parts) >= 3 {
+				oldPath := stripRunPathPrefix(parts[len(parts)-2], basePrefix, workPrefix)
+				newPath := stripRunPathPrefix(parts[len(parts)-1], basePrefix, workPrefix)
+				rel := oldPath
+				if rel == "" || rel == "/dev/null" {
+					rel = newPath
+				}
+				if rel != "" && rel != "/dev/null" {
+					out = append(out, fmt.Sprintf("diff --git a/%s b/%s", rel, rel))
+					continue
+				}
+			}
+			out = append(out, line)
+		case strings.HasPrefix(line, "--- "):
+			out = append(out, rewritePatchMarker(line, "--- ", basePrefix, workPrefix, "a/"))
+		case strings.HasPrefix(line, "+++ "):
+			out = append(out, rewritePatchMarker(line, "+++ ", basePrefix, workPrefix, "b/"))
+		default:
+			out = append(out, line)
+		}
+	}
+	if err := s.Err(); err != nil {
+		return nil, err
+	}
+	return []byte(strings.Join(out, "\n") + "\n"), nil
+}
+
+func rewritePatchMarker(line, marker, basePrefix, workPrefix, abPrefix string) string {
+	rest := strings.TrimPrefix(line, marker)
+	pathPart := rest
+	suffix := ""
+	if i := strings.Index(rest, "\t"); i >= 0 {
+		pathPart = rest[:i]
+		suffix = rest[i:]
+	}
+	normalized := stripRunPathPrefix(pathPart, basePrefix, workPrefix)
+	if normalized == "" {
+		return line
+	}
+	if normalized == "/dev/null" {
+		return marker + "/dev/null" + suffix
+	}
+	return marker + abPrefix + normalized + suffix
+}
+
+func stripRunPathPrefix(path, basePrefix, workPrefix string) string {
+	p := strings.Trim(path, "'")
+	p = filepath.ToSlash(strings.TrimSpace(p))
+	if p == "" {
+		return ""
+	}
+	if p == "/dev/null" {
+		return p
+	}
+	if strings.HasPrefix(p, basePrefix) {
+		p = strings.TrimPrefix(p, basePrefix)
+	}
+	if strings.HasPrefix(p, workPrefix) {
+		p = strings.TrimPrefix(p, workPrefix)
+	}
+	p = strings.TrimPrefix(p, "./")
+	p = strings.TrimPrefix(p, "/")
+	return p
+}
+
 func resolveRepoRoot(explicit string) (string, error) {
 	if strings.TrimSpace(explicit) != "" {
 		return explicit, nil
@@ -770,11 +1196,33 @@ func envDurationSec(name string, d int) time.Duration {
 	return time.Duration(envInt(name, d)) * time.Second
 }
 
+func envBool(name string, d bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
+	if v == "" {
+		return d
+	}
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return d
+	}
+}
+
 func envOr(name, d string) string {
 	if v := strings.TrimSpace(os.Getenv(name)); v != "" {
 		return v
 	}
 	return d
+}
+
+func defaultStorageBin(name string) string {
+	if dir := strings.TrimSpace(os.Getenv("EDGERUN_STORAGE_BIN_DIR")); dir != "" {
+		return filepath.Join(dir, name)
+	}
+	return filepath.Join("/var/cache/build/rust/target/release", name)
 }
 
 func fatalf(format string, args ...any) {

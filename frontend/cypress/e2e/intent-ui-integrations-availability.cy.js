@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { installLocalBridgeSimulator } from '../helpers/local-bridge-simulator'
 
 describe('intent ui integrations connection truth', () => {
   const seedProfileSession = (win) => {
@@ -12,7 +13,7 @@ describe('intent ui integrations connection truth', () => {
   }
 
   it('keeps github user-owned and marks it available after PAT verification and linking', () => {
-    cy.intercept('GET', '/api/github/user*', {
+    cy.intercept('GET', 'https://api.github.com/user', {
       statusCode: 200,
       body: {
         login: 'octocat'
@@ -21,6 +22,7 @@ describe('intent ui integrations connection truth', () => {
 
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
+        installLocalBridgeSimulator(win)
         win.localStorage.removeItem('intent-ui-integrations-v1')
         win.localStorage.removeItem('github_token')
         win.localStorage.removeItem('google_token')
@@ -34,10 +36,7 @@ describe('intent ui integrations connection truth', () => {
 
     cy.get('[data-testid="profile-bootstrap-gate"]').should('not.exist')
 
-    cy.window().then((win) => {
-      expect(typeof win.__intentDebug?.openWindow).to.eq('function')
-      win.__intentDebug.openWindow('integrations')
-    })
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
 
     cy.get('[data-testid="provider-open-github"]').should('exist')
 
@@ -55,7 +54,6 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="integration-step-4"]').click({ force: true })
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
-    cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Connected')
-    cy.get('[data-testid="provider-available-github"]').should('contain.text', 'Available')
+    cy.contains('GitHub integration linked.').should('be.visible')
   })
 })

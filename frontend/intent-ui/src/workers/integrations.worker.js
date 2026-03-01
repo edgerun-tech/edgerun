@@ -212,6 +212,9 @@ class IntegrationLifecycle {
       if (!wallet.startsWith("0x")) return { ok: false, message: "Connect EVM wallet first." };
       return { ok: true, message: "Wallet is connected and ready.", capabilities: this.defaultCapabilities.slice() };
     }
+    if (this.id === "flipper") {
+      return { ok: false, message: "Flipper verification must run in browser main thread." };
+    }
     const resolvedToken = String(details?.token || "").trim() || String(token || "").trim();
     if (this.requiresToken && resolvedToken.length < 8) {
       return { ok: false, message: `${this.name} token missing or invalid.` };
@@ -234,7 +237,8 @@ const integrationDefinitions = [
   { id: "codex_cli", name: "Codex CLI", authMethod: "local_cli", supportsPlatformConnector: false, requiresToken: false, tokenKey: "", defaultCapabilities: ["assistant.local_cli.execute"], tags: ["ai", "code", "workflows"] },
   { id: "tailscale", name: "Tailscale", authMethod: "token", supportsPlatformConnector: true, defaultConnectorMode: "user_owned", tokenKey: "tailscale_api_key", defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"], tags: ["network", "devices", "workflows"] },
   { id: "hetzner", name: "Hetzner", authMethod: "token", supportsPlatformConnector: true, tokenKey: "hetzner_token", defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"], tags: ["compute", "network", "storage", "workflows"] },
-  { id: "web3", name: "Web3", authMethod: "wallet", supportsPlatformConnector: false, tokenKey: "web3_wallet", defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"], tags: ["identity", "security", "workflows"] }
+  { id: "web3", name: "Web3", authMethod: "wallet", supportsPlatformConnector: false, tokenKey: "web3_wallet", defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"], tags: ["identity", "security", "workflows"] },
+  { id: "flipper", name: "Flipper", authMethod: "web_bluetooth", supportsPlatformConnector: false, requiresToken: false, tokenKey: "flipper_device_id", defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.flipper.interact"], tags: ["devices", "security", "workflows"] }
 ];
 
 const catalog = Object.fromEntries(integrationDefinitions.map((definition) => [definition.id, new IntegrationLifecycle(definition)]));

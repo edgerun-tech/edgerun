@@ -5,6 +5,7 @@ pub mod block;
 pub mod context_engine;
 pub mod crash_test;
 pub mod crdt;
+pub mod docker_logger;
 pub mod durability;
 pub mod encryption;
 pub mod event;
@@ -253,15 +254,38 @@ impl StorageEngine {
         max_segment_size: u64,
         durability: durability::DurabilityLevel,
     ) -> Result<u64, StorageError> {
+        let mut offsets = self.append_batch_to_segmented_journal(
+            journal_base,
+            std::slice::from_ref(event),
+            max_segment_size,
+            durability,
+        )?;
+        Ok(offsets.remove(0))
+    }
+
+    /// Append a batch of events into a single storage-managed segment and seal once.
+    ///
+    /// This keeps reader compatibility (sealed segments only) while amortizing
+    /// segment creation and seal cost across the whole batch.
+    pub fn append_batch_to_segmented_journal(
+        &self,
+        journal_base: &str,
+        events: &[event::Event],
+        max_segment_size: u64,
+        durability: durability::DurabilityLevel,
+    ) -> Result<Vec<u64>, StorageError> {
+        if events.is_empty() {
+            return Ok(Vec::new());
+        }
         let mut segments = self.load_segmented_journal_registry(journal_base)?;
         let next_idx = segments.len().saturating_add(1);
         let segment_file = format!("{}.part-{:020}.seg", journal_base, next_idx);
         let mut session = self.create_append_session(&segment_file, max_segment_size)?;
-        let offset = session.append_with_durability(event, durability)?;
+        let offsets = session.append_batch_with_durability(events, durability)?;
         let _ = session.seal_now()?;
         segments.push(segment_file);
         self.save_segmented_journal_registry(journal_base, &segments)?;
-        Ok(offset)
+        Ok(offsets)
     }
 
     /// Query all raw events from a storage-managed segmented journal.
@@ -1601,6 +1625,48 @@ mod tests {
         );
         let _ = session.append_with_durability(&event, DurabilityLevel::AckDurable)?;
         session.flush(DurabilityLevel::AckDurable)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_append_batch_to_segmented_journal_writes_single_segment() -> Result<(), StorageError> {
+        let temp_dir = TempDir::new().unwrap();
+        let engine = StorageEngine::new(temp_dir.path().to_path_buf())?;
+        let events = vec![
+            event::Event::new(
+                event::StreamId::new(),
+                event::ActorId::new(),
+                b"batch-a".to_vec(),
+            ),
+            event::Event::new(
+                event::StreamId::new(),
+                event::ActorId::new(),
+                b"batch-b".to_vec(),
+            ),
+            event::Event::new(
+                event::StreamId::new(),
+                event::ActorId::new(),
+                b"batch-c".to_vec(),
+            ),
+        ];
+
+        let offsets = engine.append_batch_to_segmented_journal(
+            "journal-batch",
+            &events,
+            1024 * 1024,
+            DurabilityLevel::AckDurable,
+        )?;
+        assert_eq!(offsets.len(), 3);
+
+        let registry = std::fs::read_to_string(temp_dir.path().join("journal-batch.segments"))?;
+        let lines: Vec<&str> = registry.lines().filter(|l| !l.trim().is_empty()).collect();
+        assert_eq!(lines.len(), 1);
+
+        let rows = engine.query_segmented_journal_raw("journal-batch")?;
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].event.payload, b"batch-a");
+        assert_eq!(rows[1].event.payload, b"batch-b");
+        assert_eq!(rows[2].event.payload, b"batch-c");
         Ok(())
     }
 }

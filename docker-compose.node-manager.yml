@@ -118,7 +118,7 @@ services:
     container_name: edgerun-osdeve2e-manager
     image: oven/bun:1.3.9
     restart: unless-stopped
-    profiles: ["tunnel"]
+    profiles: ["e2e"]
     network_mode: host
     working_dir: /workspace/frontend
     command:

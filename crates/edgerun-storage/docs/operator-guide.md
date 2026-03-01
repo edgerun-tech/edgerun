@@ -22,6 +22,8 @@ Binaries used by this guide:
 - `/var/cache/build/rust/target/release/vfs_operator`
 - `/var/cache/build/rust/target/release/proposal_gatekeeper`
 - `/var/cache/build/rust/target/release/proposal_batch_gatekeeper`
+- `/var/cache/build/rust/target/release/docker_log_ingest`
+- `/var/cache/build/rust/target/release/docker_log_driver`
 
 ## Operator Environment
 Set once per session:
@@ -218,7 +220,115 @@ Printed metrics:
 - `latency_p50_ms`, `latency_p95_ms`, `latency_p99_ms`
 - `events_proposed`, `events_applied`
 
-## 8) Daily Verification Checklist
+## 8) Docker Logger Plugin (Non-JSON)
+`docker_log_ingest` accepts stdin lines with this frame:
+
+`container_id|container_name|stream|ts_unix_ms|message`
+
+Example:
+
+```bash
+cat <<'LOGS' | /var/cache/build/rust/target/release/docker_log_ingest \
+  --data-dir "$DATA_DIR" \
+  --repo-id "$REPO_ID" \
+  --branch "$BRANCH" \
+  --declared-by docker-plugin \
+  --partition-prefix docker \
+  --batch-lines 1000 \
+  --ensure-log-source
+cid-a|api|stdout|1709251200001|boot ok
+cid-a|api|stdout|1709251200002|listening :8081
+cid-b|worker|stderr|1709251200003|retrying job
+LOGS
+```
+
+Then inspect storage-backed docker log events:
+
+```bash
+/var/cache/build/rust/target/release/vfs_operator list-events \
+  --data-dir "$DATA_DIR" \
+  --repo-id "$REPO_ID" \
+  --branch "$BRANCH" \
+  --event-type log_entry_appended \
+  --limit 200
+```
+
+Batching guidance:
+- Prefer larger `--batch-lines` for throughput (for example `500` to `2000`).
+- Storage now appends each ingest batch into one sealed segment, so larger batches reduce segment churn.
+- Tradeoff: larger batches increase per-batch latency but raise total lines/sec.
+
+### Docker Log-Driver Endpoint (Unix Socket)
+`docker_log_driver` exposes Docker log-driver plugin endpoints over Unix socket:
+- `POST /Plugin.Activate`
+- `POST /LogDriver.Capabilities`
+- `POST /LogDriver.StartLogging`
+- `POST /LogDriver.StopLogging`
+
+Run:
+
+```bash
+mkdir -p /run/edgerun
+/var/cache/build/rust/target/release/docker_log_driver \
+  --data-dir "$DATA_DIR" \
+  --repo-id "$REPO_ID" \
+  --branch "$BRANCH" \
+  --socket-path /run/edgerun/docker-log-driver.sock \
+  --partition-prefix docker \
+  --batch-lines 1000 \
+  --ensure-log-source
+```
+
+Quick protocol check:
+
+```bash
+curl --unix-socket /run/edgerun/docker-log-driver.sock \
+  -X POST http://localhost/Plugin.Activate
+```
+
+Notes:
+- Docker log-driver control payloads are JSON (Docker protocol requirement).
+- Log stream payloads are decoded from Docker-style length-delimited protobuf entries with line fallback mode.
+
+### Docker Managed Plugin Packaging
+Build plugin bundle (`config.json` + `rootfs`) under `out/`:
+
+```bash
+cd /home/ken/src/edgerun/crates/edgerun-storage
+./tools/build_docker_log_driver_plugin.sh
+```
+
+Create and enable plugin:
+
+```bash
+sudo mkdir -p /var/lib/edgerun/docker-log-driver /run/docker/plugins
+sudo docker plugin rm -f edgerun/docker-log-driver:local || true
+sudo docker plugin create edgerun/docker-log-driver:local /home/ken/src/edgerun/out/docker-log-driver-plugin
+sudo docker plugin set edgerun/docker-log-driver:local \
+  DATA_DIR=/var/lib/edgerun/docker-log-driver \
+  REPO_ID=docker-logs \
+  BRANCH=main \
+  BATCH_LINES=1000 \
+  MAX_STREAM_BUFFER_BYTES=8388608
+sudo docker plugin enable edgerun/docker-log-driver:local
+```
+
+Use as log-driver for a container:
+
+```bash
+docker run --rm \
+  --log-driver=edgerun/docker-log-driver:local \
+  alpine sh -c 'echo hello-from-plugin'
+```
+
+Disable/remove:
+
+```bash
+sudo docker plugin disable edgerun/docker-log-driver:local
+sudo docker plugin rm edgerun/docker-log-driver:local
+```
+
+## 9) Daily Verification Checklist
 From `crates/edgerun-storage`:
 
 ```bash
@@ -227,4 +337,3 @@ cargo check -p edgerun-storage
 cargo test -p edgerun-storage
 cargo clippy -p edgerun-storage --lib -- -D warnings
 ```
-

@@ -26,7 +26,7 @@ import {
   SiWeb3dotjs
 } from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
-import { setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
+import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
 import { profileRuntime } from "../../stores/profile-runtime";
 import { getProfileSecret, setProfileSecret } from "../../stores/profile-secrets";
 
@@ -44,7 +44,8 @@ const providerMeta = {
   codex_cli: { id: "codex_cli", name: "Codex CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false },
   tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },
   hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true },
-  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false }
+  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false },
+  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false }
 };
 
 function IntegrationsPanel(props) {
@@ -57,6 +58,7 @@ function IntegrationsPanel(props) {
   const [dialogProviderId, setDialogProviderId] = createSignal("");
   const [step, setStep] = createSignal(1);
   const [busy, setBusy] = createSignal(false);
+  const [verifiedForDialog, setVerifiedForDialog] = createSignal(false);
 
   const [connectorMode, setConnectorMode] = createSignal("platform");
   const [accountLabel, setAccountLabel] = createSignal("");
@@ -64,6 +66,10 @@ function IntegrationsPanel(props) {
   const [tailscaleTailnet, setTailscaleTailnet] = createSignal("");
   const [tailscaleAuthKey, setTailscaleAuthKey] = createSignal("");
   const [web3Wallet, setWeb3Wallet] = createSignal("");
+  const [flipperDeviceName, setFlipperDeviceName] = createSignal("");
+  const [flipperProbeSummary, setFlipperProbeSummary] = createSignal("");
+  const [flipperKnownDevices, setFlipperKnownDevices] = createSignal([]);
+  const [flipperKnownLoading, setFlipperKnownLoading] = createSignal(false);
 
   const assistantProvider = createMemo(() => workflowUi().provider || "codex");
 
@@ -105,9 +111,11 @@ function IntegrationsPanel(props) {
     if (!provider) return;
 
     setDialogProviderId(provider.id);
-    setStep(provider.id === "github" ? 2 : 1);
+    setStep(2);
     setStatus("");
     setBusy(false);
+    setVerifiedForDialog(false);
+    setFlipperProbeSummary("");
     setConnectorMode(provider.connectorMode || (provider.supportsPlatformConnector ? "platform" : "user_owned"));
     setAccountLabel(provider.accountLabel || `${provider.name} Session`);
 
@@ -131,6 +139,13 @@ function IntegrationsPanel(props) {
       return;
     }
 
+    if (provider.id === "flipper" && typeof window !== "undefined") {
+      setTokenInput(String(localStorage.getItem("flipper_device_id") || "").trim());
+      setFlipperDeviceName(String(localStorage.getItem("flipper_device_name") || "").trim());
+      void refreshKnownFlipperDevices();
+      return;
+    }
+
     if (provider.tokenKey && typeof window !== "undefined") {
       const runtime = profileRuntime();
       const value = runtime.mode === "profile" && runtime.profileLoaded
@@ -146,6 +161,8 @@ function IntegrationsPanel(props) {
     setDialogProviderId("");
     setStep(1);
     setBusy(false);
+    setVerifiedForDialog(false);
+    setFlipperProbeSummary("");
   }
 
   function requiredInputsReady(provider) {
@@ -153,6 +170,7 @@ function IntegrationsPanel(props) {
     if (connectorMode() === "platform") return true;
     if (provider.id === "tailscale") return tokenInput().trim().length > 8 && tailscaleTailnet().trim().length > 0;
     if (provider.id === "web3") return web3Wallet().trim().startsWith("0x");
+    if (provider.id === "flipper") return tokenInput().trim().length > 0;
     if (provider.oauthRedirect) return true;
     if (!provider.useToken) return true;
     return tokenInput().trim().length > 7;
@@ -192,17 +210,98 @@ function IntegrationsPanel(props) {
       tailnet: tailscaleTailnet().trim(),
       apiKey: tokenInput().trim(),
       authKey: tailscaleAuthKey().trim(),
-      wallet: web3Wallet().trim()
+      wallet: web3Wallet().trim(),
+      flipperDeviceId: tokenInput().trim(),
+      flipperDeviceName: flipperDeviceName().trim()
     });
 
     setBusy(false);
     if (!result.ok) {
+      setVerifiedForDialog(false);
       setStatus(result.message || "Verification failed.");
       return;
     }
 
+    if (provider.id === "flipper") {
+      const resolvedId = String(result.deviceId || "").trim();
+      const resolvedName = String(result.deviceName || "").trim();
+      if (resolvedId) setTokenInput(resolvedId);
+      if (resolvedName) {
+        setFlipperDeviceName(resolvedName);
+        setAccountLabel(resolvedName);
+      }
+    }
+    setVerifiedForDialog(true);
     setStatus(result.message || "Verification succeeded.");
     setStep(4);
+  }
+
+  async function selectFlipperDevice() {
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      setStatus("Web Bluetooth requires HTTPS and a secure browser context.");
+      return;
+    }
+    const bluetooth = navigator?.bluetooth;
+    if (!bluetooth?.requestDevice) {
+      setStatus("Web Bluetooth API is unavailable in this browser.");
+      return;
+    }
+    try {
+      const device = await bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: ["device_information", "battery_service"]
+      });
+      const deviceId = String(device?.id || "").trim();
+      const deviceName = String(device?.name || "Flipper").trim();
+      if (!deviceId) throw new Error("Selected device did not return an id.");
+      setTokenInput(deviceId);
+      setFlipperDeviceName(deviceName);
+      setAccountLabel(deviceName);
+      setStatus(`Selected ${deviceName} via Web Bluetooth.`);
+      void refreshKnownFlipperDevices();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Failed to select Flipper device.");
+    }
+  }
+
+  async function refreshKnownFlipperDevices() {
+    if (typeof window === "undefined" || !window.isSecureContext) {
+      setFlipperKnownDevices([]);
+      return;
+    }
+    const bluetooth = navigator?.bluetooth;
+    if (!bluetooth?.getDevices) {
+      setFlipperKnownDevices([]);
+      return;
+    }
+    setFlipperKnownLoading(true);
+    try {
+      const devices = await bluetooth.getDevices();
+      setFlipperKnownDevices((Array.isArray(devices) ? devices : []).map((device) => ({
+        id: String(device?.id || "").trim(),
+        name: String(device?.name || "").trim() || "Unknown BLE device"
+      })).filter((device) => device.id));
+    } catch {
+      setFlipperKnownDevices([]);
+    } finally {
+      setFlipperKnownLoading(false);
+    }
+  }
+
+  function chooseKnownFlipperDevice(device) {
+    const id = String(device?.id || "").trim();
+    if (!id) return;
+    const name = String(device?.name || "Flipper").trim();
+    setTokenInput(id);
+    setFlipperDeviceName(name);
+    setAccountLabel(name);
+    setStatus(`Selected known device: ${name}.`);
+  }
+
+  async function selectAndVerifyFlipper(provider) {
+    await selectFlipperDevice();
+    if (!tokenInput().trim()) return;
+    await runVerification(provider);
   }
 
   async function saveProvider(provider) {
@@ -225,6 +324,12 @@ function IntegrationsPanel(props) {
     if (provider.id === "web3") {
       payload.token = `evm:${web3Wallet().trim()}`;
     }
+    if (provider.id === "flipper" && typeof window !== "undefined") {
+      payload.token = tokenInput().trim();
+      payload.accountLabel = accountLabel().trim() || flipperDeviceName().trim() || "Flipper";
+      localStorage.setItem("flipper_device_id", tokenInput().trim());
+      localStorage.setItem("flipper_device_name", flipperDeviceName().trim());
+    }
 
     const linked = await integrationStore.connect(provider.id, payload);
     if (!linked) {
@@ -233,6 +338,26 @@ function IntegrationsPanel(props) {
     }
     setStatus(`${provider.name} integration linked.`);
     closeDialog();
+  }
+
+  async function runFlipperProbe() {
+    setBusy(true);
+    const result = await integrationStore.probeFlipper({
+      flipperDeviceId: tokenInput().trim(),
+      flipperDeviceName: flipperDeviceName().trim()
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setFlipperProbeSummary(result.message || "Flipper probe failed.");
+      return;
+    }
+    setVerifiedForDialog(true);
+    const battery = Number.isFinite(result.batteryLevel) ? `${result.batteryLevel}%` : "n/a";
+    const model = String(result.deviceInfo?.model || result.deviceInfo?.hardware || result.deviceName || "").trim() || "unknown";
+    const serviceCount = Array.isArray(result.services) ? result.services.length : 0;
+    const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+    const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
+    setFlipperProbeSummary(`Probe ok · battery ${battery} · model ${model} · services ${serviceCount}${warningText}`);
   }
 
   function disconnectProvider(provider) {
@@ -250,11 +375,10 @@ function IntegrationsPanel(props) {
 
   function stepFlow(provider) {
     if (!provider) return [1, 2, 3, 4];
-    return provider.id === "github" ? [2, 3, 4] : [1, 2, 3, 4];
+    return [2, 3, 4];
   }
 
   function stepTitle(value) {
-    if (value === 1) return "Mode";
     if (value === 2) return "Values";
     if (value === 3) return "Verify";
     return "Success";
@@ -298,7 +422,7 @@ function IntegrationsPanel(props) {
         />
       </div>
 
-      <Show when={status()}>
+      <Show when={status() && !activeProvider()}>
         <div class="mx-3 mb-3 rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-300">{status()}</div>
       </Show>
 
@@ -343,20 +467,28 @@ function IntegrationsPanel(props) {
       <Show when={activeProvider()}>
         {(providerAccessor) => {
           const provider = providerAccessor();
-          const verified = () => Boolean(verification()?.ok);
-          const verificationMessage = () => String(verification()?.message || "");
+          const lifecycleStatus = () => String(integrationStore.get(provider.id)?.lifecycleStatus || "idle").trim() || "idle";
+          const verified = () => integrationStore.isConnected(provider.id) || lifecycleStatus() === "verified" || Boolean(verification()?.ok) || verifiedForDialog();
+          const verificationMessage = () => String(
+            integrationStore.get(provider.id)?.lifecycleMessage
+            || verification()?.message
+            || ""
+          );
           const ProviderIcon = provider.icon || FiCloud;
           const flow = () => stepFlow(provider);
           const stepIndex = () => Math.max(0, flow().indexOf(step()));
           return (
             <Portal>
               <div class="fixed inset-0 z-[12000] flex items-center justify-center bg-black/70 px-4 py-6">
-                <div class="h-[min(88vh,980px)] w-[min(1120px,96vw)] overflow-auto rounded-xl border border-neutral-700 bg-[#101216] p-5 shadow-2xl" data-testid={`provider-dialog-${provider.id}`}>
+                <div class="h-[min(489px,60vh)] w-[min(748px,92vw)] overflow-auto rounded-xl border border-neutral-700 bg-[#101216] p-5 shadow-2xl" data-testid={`provider-dialog-${provider.id}`}>
                 <div class="mb-3 flex items-start justify-between gap-2">
                   <div>
                     <h4 class="flex items-center gap-2 text-sm font-semibold text-white">
                       <ProviderIcon size={16} class="text-[hsl(var(--primary))]" />
                       <span>{provider.name} Setup</span>
+                      <span class="rounded border border-neutral-700 bg-neutral-900/80 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-300">
+                        {lifecycleStatus()}
+                      </span>
                     </h4>
                     <p class="mt-0.5 text-xs text-neutral-500">Intent-driven setup flow with verification gate.</p>
                   </div>
@@ -365,6 +497,9 @@ function IntegrationsPanel(props) {
                     Close
                   </button>
                 </div>
+                <Show when={status()}>
+                  <div class="mb-3 rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-300">{status()}</div>
+                </Show>
 
                 <div class={`mb-3 grid gap-1 ${provider.id === "github" ? "grid-cols-3" : "grid-cols-4"}`}>
                   <For each={flow()}>
@@ -380,49 +515,6 @@ function IntegrationsPanel(props) {
                     )}
                   </For>
                 </div>
-
-                <Show when={step() === 1}>
-                  <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid="integration-stepper-mode">
-                    <Show when={provider.supportsPlatformConnector} fallback={
-                      <div class="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-xs text-neutral-300">
-                        <p class="text-xs text-neutral-400">Connector ownership mode.</p>
-                        <div class="mt-2 rounded-md border border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] px-2 py-2 text-[hsl(var(--primary))]" data-testid={`provider-ownership-user-${provider.id}`}>
-                          User-owned only
-                        </div>
-                        <p class="mt-2 text-[11px] text-neutral-500">Credentials stay with your encrypted profile.</p>
-                      </div>
-                    }>
-                      <p class="text-xs text-neutral-400">Select connector ownership mode.</p>
-                      <div class="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "platform" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
-                          disabled={!provider.supportsPlatformConnector}
-                          onClick={() => setConnectorMode("platform")}
-                          data-testid={`provider-ownership-platform-${provider.id}`}
-                        >
-                          Platform
-                        </button>
-                        <button
-                          type="button"
-                          class={`rounded-md border px-2 py-2 text-xs ${connectorMode() === "user_owned" ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]" : "border-neutral-700 bg-neutral-900 text-neutral-300"}`}
-                          onClick={() => setConnectorMode("user_owned")}
-                          data-testid={`provider-ownership-user-${provider.id}`}
-                        >
-                          User-owned
-                        </button>
-                      </div>
-                      <div class="text-[11px] text-neutral-500">
-                        <Show when={connectorMode() === "platform"} fallback="You provide credentials and keep direct ownership.">
-                          Platform connector requires a loaded profile session.
-                        </Show>
-                      </div>
-                    </Show>
-                    <Show when={provider.id === "github"}>
-                      <p class="text-[11px] text-neutral-500">Use a GitHub PAT (fine-grained recommended).</p>
-                    </Show>
-                  </section>
-                </Show>
 
                 <Show when={step() === 2}>
                   <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid="integration-stepper-values">
@@ -485,6 +577,60 @@ function IntegrationsPanel(props) {
                       </div>
                     </Show>
 
+                    <Show when={provider.id === "flipper"}>
+                      <div class="space-y-2 rounded border border-neutral-800 bg-[#0b0c0f] p-2">
+                        <p class="text-[11px] text-neutral-400">Device: {flipperDeviceName() || "Not selected"}</p>
+                        <p class="text-[11px] text-neutral-500">
+                          Pairing PIN/passkey is handled by your browser + OS + device. Edgerun does not store BLE passkeys.
+                        </p>
+                        <div class="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            class={buttonClass}
+                            onClick={selectFlipperDevice}
+                            data-testid="flipper-select-device"
+                          >
+                            Select Device
+                          </button>
+                          <button
+                            type="button"
+                            class={buttonClass}
+                            onClick={() => { void refreshKnownFlipperDevices(); }}
+                            disabled={flipperKnownLoading()}
+                            data-testid="flipper-refresh-known"
+                          >
+                            {flipperKnownLoading() ? "Refreshing..." : "Refresh Known"}
+                          </button>
+                          <button
+                            type="button"
+                            class={primaryClass}
+                            onClick={() => { void selectAndVerifyFlipper(provider); }}
+                            disabled={busy()}
+                            data-testid="flipper-select-verify"
+                          >
+                            Select + Verify
+                          </button>
+                        </div>
+                        <Show when={flipperKnownDevices().length > 0}>
+                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5">
+                            <For each={flipperKnownDevices()}>
+                              {(device) => (
+                                <button
+                                  type="button"
+                                  class="mb-1 flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
+                                  onClick={() => chooseKnownFlipperDevice(device)}
+                                  data-testid={`flipper-known-${device.id}`}
+                                >
+                                  <span class="truncate">{device.name}</span>
+                                  <span class="ml-2 truncate text-neutral-500">{device.id.slice(0, 8)}...</span>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </Show>
+                      </div>
+                    </Show>
+
                     <Show when={provider.oauthRedirect && connectorMode() === "user_owned"}>
                       <p class="text-[11px] text-neutral-500">OAuth integrations redirect on Verify step to complete login.</p>
                     </Show>
@@ -508,7 +654,7 @@ function IntegrationsPanel(props) {
                       <p class="text-[11px] text-amber-300">Fill required values in Step 2 first.</p>
                     </Show>
                     <Show when={verificationMessage()}>
-                      <p class={`text-[11px] ${verified() ? "text-emerald-300" : "text-red-300"}`}>{verificationMessage()}</p>
+                      <p class={`text-[11px] ${verified() ? "text-emerald-300" : lifecycleStatus() === "verifying" ? "text-amber-300" : "text-red-300"}`}>{verificationMessage()}</p>
                     </Show>
                   </section>
                 </Show>
@@ -525,6 +671,23 @@ function IntegrationsPanel(props) {
                         {(capability) => <li>• {capability}</li>}
                       </For>
                     </ul>
+                    <Show when={provider.id === "flipper"}>
+                      <div class="mt-2 rounded border border-neutral-700 bg-neutral-950/55 p-2">
+                        <button
+                          type="button"
+                          class={buttonClass}
+                          onClick={() => { void runFlipperProbe(); }}
+                          disabled={busy()}
+                          data-testid="flipper-run-probe"
+                        >
+                          <FiZap size={12} />
+                          {busy() ? "Probing..." : "Probe Device"}
+                        </button>
+                        <Show when={flipperProbeSummary()}>
+                          <p class="mt-2 text-[11px] text-neutral-200" data-testid="flipper-probe-summary">{flipperProbeSummary()}</p>
+                        </Show>
+                      </div>
+                    </Show>
                   </section>
                 </Show>
 
@@ -561,6 +724,17 @@ function IntegrationsPanel(props) {
                     <button type="button" class={buttonClass} onClick={() => disconnectProvider(provider)}>
                       <FiXCircle size={12} />
                       Disconnect
+                    </button>
+                  </Show>
+                  <Show when={provider.id === "flipper" && verified()}>
+                    <button
+                      type="button"
+                      class={buttonClass}
+                      onClick={() => openWorkflowFlipper(accountLabel().trim() || flipperDeviceName().trim() || "Flipper")}
+                      data-testid="flipper-create-workflow"
+                    >
+                      <FiZap size={12} />
+                      Create Flipper Workflow
                     </button>
                   </Show>
                 </div>

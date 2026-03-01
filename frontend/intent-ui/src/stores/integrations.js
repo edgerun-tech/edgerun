@@ -7,6 +7,7 @@ import { knownDevices } from "./devices";
 import { getProfileSecret, removeProfileSecret, setProfileSecret } from "./profile-secrets";
 import { callIntegrationWorker, initializeIntegrationWorker } from "./integrations-worker";
 import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
+import { probeFlipper, verifyFlipperBluetooth } from "../lib/integrations/flipper-ble";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
@@ -141,6 +142,42 @@ async function hydrateStateInWorker() {
 
 const [connections, setConnections] = createSignal(hydrateState());
 const [integrationVerification, setIntegrationVerification] = createSignal({});
+const [integrationLifecycle, setIntegrationLifecycle] = createSignal({});
+
+function setLifecycleState(id, status, message = "", extras = {}) {
+  const integrationId = String(id || "").trim();
+  if (!integrationId) return;
+  const next = {
+    integrationId,
+    status: String(status || "idle").trim() || "idle",
+    message: String(message || "").trim(),
+    updatedAt: new Date().toISOString(),
+    ...extras
+  };
+  setIntegrationLifecycle((prev) => ({
+    ...prev,
+    [integrationId]: next
+  }));
+  publishEvent(
+    UI_EVENT_TOPICS.integration.lifecycleChanged,
+    next,
+    uiIntentMeta("integrations.reducer")
+  );
+}
+
+function syncLifecycleFromConnections(state = connections()) {
+  const nextLifecycle = {};
+  for (const [id, connection] of Object.entries(state || {})) {
+    const connected = Boolean(connection?.connected);
+    nextLifecycle[id] = {
+      integrationId: id,
+      status: connected ? "connected" : "disconnected",
+      message: connected ? "Integration connected." : "Integration not connected.",
+      updatedAt: new Date().toISOString()
+    };
+  }
+  setIntegrationLifecycle((prev) => ({ ...prev, ...nextLifecycle }));
+}
 
 function emitIntegrationStateChanged(id, reason) {
   publishEvent(
@@ -155,6 +192,7 @@ async function applyCheckAll() {
     const next = await hydrateStateInWorker();
     setConnections(next);
     persistState(next);
+    syncLifecycleFromConnections(next);
     publishEvent(UI_EVENT_TOPICS.integration.stateChanged, { integrationId: "*", reason: "check_all" }, uiIntentMeta("integrations.reducer"));
   } catch {
     // keep last known state if worker is unavailable
@@ -191,6 +229,7 @@ async function applyConnectIntent(payload = {}) {
   };
   setConnections(next);
   persistState(next);
+  setLifecycleState(id, nextConnection?.connected ? "connected" : "error", nextConnection?.connected ? "Integration connected." : "Failed to connect integration.");
   emitIntegrationStateChanged(id, "connect");
 }
 
@@ -224,6 +263,7 @@ async function applyDisconnectIntent(payload = {}) {
       }
     }
   }
+  setLifecycleState(id, "disconnected", "Integration disconnected.");
   emitIntegrationStateChanged(id, "disconnect");
 }
 
@@ -258,6 +298,7 @@ async function applySetConnectorModeIntent(payload = {}) {
   };
   setConnections(next);
   persistState(next);
+  setLifecycleState(id, nextConnection?.connected ? "connected" : "disconnected", "Connector mode updated.");
   emitIntegrationStateChanged(id, "connector_mode");
 }
 
@@ -273,6 +314,14 @@ function applyVerificationEvent(payload = {}, ok) {
       capabilities: Array.isArray(payload?.capabilities) ? payload.capabilities : []
     }
   }));
+  setLifecycleState(
+    id,
+    ok ? "verified" : "error",
+    String(payload?.message || "").trim() || (ok ? "Verification succeeded." : "Verification failed."),
+    {
+      capabilities: Array.isArray(payload?.capabilities) ? payload.capabilities : []
+    }
+  );
 }
 
 function ensureSubscriptions() {
@@ -301,6 +350,14 @@ function ensureSubscriptions() {
   });
 
   subscribeEvent(UI_INTENT_TOPICS.integration.verifyFailed, (event) => {
+    applyVerificationEvent(event?.payload || {}, false);
+  });
+
+  subscribeEvent(UI_EVENT_TOPICS.integration.verified, (event) => {
+    applyVerificationEvent(event?.payload || {}, true);
+  });
+
+  subscribeEvent(UI_EVENT_TOPICS.integration.verifyFailed, (event) => {
     applyVerificationEvent(event?.payload || {}, false);
   });
 }
@@ -349,6 +406,21 @@ async function stopIntegrationMcp(integrationId) {
   return { ok: true, data: payload };
 }
 
+async function verifyFlipperWebBluetooth(integration, details = {}) {
+  try {
+    const verified = await verifyFlipperBluetooth(details);
+    return {
+      ok: true,
+      message: `Verified Web Bluetooth access to ${verified.deviceName}.`,
+      capabilities: integration.defaultCapabilities.slice(),
+      deviceId: verified.deviceId,
+      deviceName: verified.deviceName
+    };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Failed to verify Flipper over Web Bluetooth." };
+  }
+}
+
 const integrationStore = {
   checkAll() {
     publishEvent(UI_INTENT_TOPICS.integration.checkAll, {}, uiIntentMeta("integrations.store"));
@@ -361,6 +433,12 @@ const integrationStore = {
     const state = connections();
     return Object.values(catalog).map((integration) => {
       const connection = state[integration.id];
+      const lifecycleState = integrationLifecycle()[integration.id] || {
+        integrationId: integration.id,
+        status: connection?.connected ? "connected" : "idle",
+        message: "",
+        updatedAt: null
+      };
       const lifecycle = integration.listConnectionView({
         connection,
         profileReady,
@@ -368,7 +446,10 @@ const integrationStore = {
       });
       return {
         ...integration,
-        ...lifecycle
+        ...lifecycle,
+        lifecycleStatus: lifecycleState.status,
+        lifecycleMessage: lifecycleState.message,
+        lifecycleUpdatedAt: lifecycleState.updatedAt
       };
     });
   },
@@ -416,6 +497,7 @@ const integrationStore = {
       void syncIntegrationTokenToVault(integration, details);
     }
 
+    setLifecycleState(id, "linking", "Linking integration...");
     publishEvent(
       UI_INTENT_TOPICS.integration.connect,
       {
@@ -431,12 +513,14 @@ const integrationStore = {
       try {
         const result = await startIntegrationMcp(id, token);
         if (!result.ok) {
+          setLifecycleState(id, "error", `MCP runtime failed to start: ${result.message || "unknown error"}`);
           publishEvent(
             UI_EVENT_TOPICS.integration.verifyFailed,
             { integrationId: id, message: `MCP runtime failed to start: ${result.message || "unknown error"}` },
             uiIntentMeta("integrations.store")
           );
         } else {
+          setLifecycleState(id, "connected", "Integration linked and MCP runtime started.");
           publishEvent(
             UI_EVENT_TOPICS.integration.stateChanged,
             { integrationId: id, reason: "mcp_started" },
@@ -444,6 +528,7 @@ const integrationStore = {
           );
         }
       } catch (error) {
+        setLifecycleState(id, "error", `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}`);
         publishEvent(
           UI_EVENT_TOPICS.integration.verifyFailed,
           { integrationId: id, message: `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}` },
@@ -454,6 +539,7 @@ const integrationStore = {
     return true;
   },
   disconnect(id) {
+    setLifecycleState(id, "disconnecting", "Disconnecting integration...");
     publishEvent(UI_INTENT_TOPICS.integration.disconnect, { id }, uiIntentMeta("integrations.store"));
     void stopIntegrationMcp(id);
   },
@@ -471,7 +557,9 @@ const integrationStore = {
     if (!integration) {
       return { ok: false, message: `Unknown integration: ${id}` };
     }
+    setLifecycleState(id, "verifying", "Running integration verification...");
     publishEvent(UI_INTENT_TOPICS.integration.verifyStarted, { id }, uiIntentMeta("integrations.store"));
+    publishEvent(UI_EVENT_TOPICS.integration.verifyStarted, { integrationId: id }, uiIntentMeta("integrations.store"));
 
     const connectorMode = String(
       details.connectorMode
@@ -485,24 +573,28 @@ const integrationStore = {
       const deviceReady = knownDevices().some((device) => Boolean(device?.online));
       const token = String(details.token || "").trim() || getRuntimeToken(integration);
       let result = null;
-      try {
-        result = await callIntegrationWorker("verify_integration", {
-          integrationId: id,
-          details,
-          connectorMode,
-          profileReady,
-          deviceReady,
-          token
-        });
-      } catch {
-        result = await integration.verifyConnection({
-          details,
-          connectorMode,
-          profileReady,
-          deviceReady,
-          token,
-          fetchImpl: fetch
-        });
+      if (id === "flipper") {
+        result = await verifyFlipperWebBluetooth(integration, details);
+      } else {
+        try {
+          result = await callIntegrationWorker("verify_integration", {
+            integrationId: id,
+            details,
+            connectorMode,
+            profileReady,
+            deviceReady,
+            token
+          });
+        } catch {
+          result = await integration.verifyConnection({
+            details,
+            connectorMode,
+            profileReady,
+            deviceReady,
+            token,
+            fetchImpl: fetch
+          });
+        }
       }
       if (!result?.ok) {
         const message = String(result?.message || `Failed to verify ${integration.name}.`);
@@ -516,7 +608,15 @@ const integrationStore = {
         { id, message, capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities },
         uiIntentMeta("integrations.store")
       );
-      publishEvent(UI_EVENT_TOPICS.integration.verified, { integrationId: id, message }, uiIntentMeta("integrations.store"));
+      publishEvent(
+        UI_EVENT_TOPICS.integration.verified,
+        {
+          integrationId: id,
+          message,
+          capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities
+        },
+        uiIntentMeta("integrations.store")
+      );
       return { ok: true, message, devices: Array.isArray(result?.devices) ? result.devices : [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to verify ${integration.name}.`;
@@ -525,9 +625,24 @@ const integrationStore = {
       return { ok: false, message };
     }
   }
+  ,
+  async probeFlipper(details = {}) {
+    try {
+      const result = await probeFlipper(details);
+      publishEvent(
+        UI_EVENT_TOPICS.integration.flipperProbed,
+        result,
+        uiIntentMeta("integrations.store")
+      );
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : "Failed to probe Flipper." };
+    }
+  }
 };
 
 export {
   integrationStore,
-  integrationVerification
+  integrationVerification,
+  integrationLifecycle
 };

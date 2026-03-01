@@ -16,6 +16,27 @@ This command:
 - runs Codex CLI in Docker against that virtual workspace
 - emits a proposed diff patch + event under `out/agents/runs/<run_id>/events`
 
+Optional auto storage wiring (fail-closed):
+
+```bash
+export EDGERUN_AGENT_STORAGE_AUTOSUBMIT=1
+export EDGERUN_AGENT_STORAGE_AUTO_DRY_RUN=1
+export EDGERUN_AGENT_STORAGE_DATA_DIR=/home/ken/src/edgerun/out/vfs-ops/storage
+export EDGERUN_AGENT_STORAGE_REPO_ID=repo-main
+export EDGERUN_AGENT_STORAGE_BRANCH=main
+scripts/agents/launch-agent.sh github-lane "implement GitHub integration list/read/create routes"
+```
+
+When enabled, `agent-launch` submits the run patch to storage and runs gatekeeper dry-run automatically.
+
+## Canonical Operator Entry
+
+```bash
+scripts/agents/run-task.sh github-lane "implement GitHub integration list/read/create routes"
+```
+
+This is the canonical entrypoint. It enables storage autosubmit + gate dry-run by default and delegates to `edgertool agent-launch`.
+
 ## Context tools (via mcp-syscall)
 
 ```bash
@@ -48,8 +69,41 @@ If NATS is unavailable, the command fails (fail-closed).
 scripts/agents/apply-accepted-diff.sh --apply out/agents/runs/<run_id>
 ```
 
-Compatibility mode (legacy branch merge) still works:
+## Submit proposal to storage queue
+
+Requires `vfs_operator` from `edgerun-storage` release build.
 
 ```bash
-scripts/agents/merge-agent.sh agent/github-lane-20260301093000 main
+scripts/agents/storage-proposal-submit.sh \
+  out/agents/runs/<run_id> \
+  /home/ken/src/edgerun/out/vfs-ops/storage \
+  repo-main \
+  main
 ```
+
+This submits the run patch as a `propose-diff` event with `proposal_id=<run_id>`.
+
+## Gatekeeper dry-run and apply
+
+Requires `proposal_gatekeeper` from `edgerun-storage` release build.
+
+```bash
+scripts/agents/storage-proposal-apply.sh \
+  /home/ken/src/edgerun/out/vfs-ops/storage \
+  repo-main \
+  main \
+  <proposal_id> \
+  --dry-run
+```
+
+```bash
+scripts/agents/storage-proposal-apply.sh \
+  /home/ken/src/edgerun/out/vfs-ops/storage \
+  repo-main \
+  main \
+  <proposal_id>
+```
+
+The dry-run performs isolated patch/fmt/check validation without writing apply/reject events.
+Use `--repo-root <PATH>` when validating proposals against a different repository root.
+Use `--fmt-cmd`, `--check-cmd`, and `--timeout-secs` to override default gatekeeper validation commands.

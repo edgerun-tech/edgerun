@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use prost::Message;
 
 use crate::context_engine::StorageBackedContextEngine;
+use crate::docker_logger::{DockerLogAdapter, DockerLogDecoder};
 use crate::durability::DurabilityLevel;
 use crate::event::{ActorId, Event as StorageEvent, StreamId};
 use crate::{StorageEngine, StorageError};
@@ -199,7 +200,13 @@ pub struct StorageBackedVirtualFs {
     actor_id: ActorId,
     envelopes_cache: RwLock<Option<Vec<VfsEventEnvelopeV1>>>,
     branch_envelopes_cache: RwLock<HashMap<String, Vec<VfsEventEnvelopeV1>>>,
+    log_partition_cache: RwLock<HashMap<String, ExistingLogState>>,
     proposal_cache: RwLock<HashMap<String, FsDeltaProposedV1>>,
+    proposed_payload_cache: RwLock<HashMap<String, FsDeltaProposedV1>>,
+    partition_declared_payload_cache: RwLock<HashMap<String, PartitionDeclaredV1>>,
+    log_entry_payload_cache: RwLock<HashMap<String, LogEntryAppendedV1>>,
+    snapshot_payload_cache: RwLock<HashMap<String, SnapshotCheckpointedV1>>,
+    append_cursor_state: RwLock<Option<AppendCursorState>>,
     snapshot_policy: VfsSnapshotPolicy,
     snapshot_progress: RwLock<Option<SnapshotProgress>>,
 }
@@ -224,7 +231,13 @@ impl StorageBackedVirtualFs {
             actor_id: actor_id_for_seed(&format!("edgerun-vfs-actor:{normalized}")),
             envelopes_cache: RwLock::new(None),
             branch_envelopes_cache: RwLock::new(HashMap::new()),
+            log_partition_cache: RwLock::new(HashMap::new()),
             proposal_cache: RwLock::new(HashMap::new()),
+            proposed_payload_cache: RwLock::new(HashMap::new()),
+            partition_declared_payload_cache: RwLock::new(HashMap::new()),
+            log_entry_payload_cache: RwLock::new(HashMap::new()),
+            snapshot_payload_cache: RwLock::new(HashMap::new()),
+            append_cursor_state: RwLock::new(None),
             snapshot_policy,
             snapshot_progress: RwLock::new(None),
         })
@@ -435,16 +448,44 @@ impl StorageBackedVirtualFs {
             ));
         }
 
-        let envelopes = self.load_repo_envelopes()?;
-        let existing = collect_existing_log_state(&envelopes, branch_id, partition)?;
-        let mut known_idempotency = existing.idempotency_keys;
+        let state_key = log_partition_state_key(branch_id, partition);
+        let existing = {
+            let cached = {
+                let cache = self.log_partition_cache.read().unwrap();
+                cache.get(&state_key).cloned()
+            };
+            if let Some(found) = cached {
+                found
+            } else {
+                let envelopes = self.load_repo_envelopes()?;
+                let rebuilt = self.collect_existing_log_state(&envelopes, branch_id, partition)?;
+                {
+                    let mut cache = self.log_partition_cache.write().unwrap();
+                    cache.insert(state_key.clone(), rebuilt.clone());
+                }
+                rebuilt
+            }
+        };
+        let mut known_idempotency = existing.idempotency_keys.clone();
         let mut max_partition_offset = existing.max_partition_offset;
+        let mut partition_declared = existing.partition_declared;
+        let mut pending = Vec::with_capacity(entries.len().saturating_add(1));
 
-        if !existing.partition_declared {
-            let off = self.append_partition_declared(branch_id, partition, declared_by)?;
+        if !partition_declared {
             outcome.declared_partition = true;
-            outcome.first_event_offset = Some(off);
-            outcome.last_event_offset = Some(off);
+            partition_declared = true;
+            pending.push(PendingTypedEvent {
+                event_type: VfsEventTypeV1::VfsEventTypePartitionDeclared,
+                payload_type: "storage.vfs.partition_declared.v1",
+                payload: PartitionDeclaredV1 {
+                    schema_version: 1,
+                    repo_id: self.repo_id.clone(),
+                    branch_id: branch_id.to_string(),
+                    partition: partition.to_string(),
+                    declared_by: declared_by.to_string(),
+                }
+                .encode_to_vec(),
+            });
         }
 
         for item in entries {
@@ -470,23 +511,99 @@ impl StorageBackedVirtualFs {
             }
             .encode_to_vec();
 
-            let off = self.append_typed_event(
-                branch_id,
-                VfsEventTypeV1::VfsEventTypeLogEntryAppended,
-                "storage.vfs.log_entry_appended.v1",
+            pending.push(PendingTypedEvent {
+                event_type: VfsEventTypeV1::VfsEventTypeLogEntryAppended,
+                payload_type: "storage.vfs.log_entry_appended.v1",
                 payload,
-            )?;
+            });
             outcome.appended = outcome.appended.saturating_add(1);
-            if outcome.first_event_offset.is_none() {
-                outcome.first_event_offset = Some(off);
-            }
-            outcome.last_event_offset = Some(off);
             if !item.idempotency_key.is_empty() {
                 known_idempotency.insert(item.idempotency_key.clone());
             }
         }
 
+        if !pending.is_empty() {
+            let offsets = self.append_typed_events(branch_id, &pending)?;
+            outcome.first_event_offset = offsets.first().copied();
+            outcome.last_event_offset = offsets.last().copied();
+        }
+
+        self.log_partition_cache.write().unwrap().insert(
+            state_key,
+            ExistingLogState {
+                partition_declared,
+                max_partition_offset,
+                idempotency_keys: known_idempotency,
+            },
+        );
+
         Ok(outcome)
+    }
+
+    /// Ingest docker/runtime logs using pluggable decoder+adapter components.
+    /// This path stays source-agnostic by mapping records into log-mode entries.
+    pub fn ingest_docker_log_lines<D, A>(
+        &mut self,
+        branch_id: &str,
+        lines: &[String],
+        declared_by: &str,
+        decoder: &mut D,
+        adapter: &A,
+    ) -> Result<LogIngestOutcome, StorageError>
+    where
+        D: DockerLogDecoder,
+        A: DockerLogAdapter,
+    {
+        self.ingest_docker_log_lines_batched(
+            branch_id,
+            lines,
+            declared_by,
+            decoder,
+            adapter,
+            usize::MAX,
+        )
+    }
+
+    /// Batched ingestion variant for long streams (bounds memory and smooths latency).
+    pub fn ingest_docker_log_lines_batched<D, A>(
+        &mut self,
+        branch_id: &str,
+        lines: &[String],
+        declared_by: &str,
+        decoder: &mut D,
+        adapter: &A,
+        max_partition_batch_entries: usize,
+    ) -> Result<LogIngestOutcome, StorageError>
+    where
+        D: DockerLogDecoder,
+        A: DockerLogAdapter,
+    {
+        let batch_limit = max_partition_batch_entries.max(1);
+        let mut by_partition: BTreeMap<String, Vec<LogIngestEntry>> = BTreeMap::new();
+        let mut total = LogIngestOutcome::default();
+        for line in lines {
+            let Some(record) = decoder.decode_line(line)? else {
+                continue;
+            };
+            let partition = adapter.partition_for(&record);
+            let entry = adapter.to_log_ingest_entry(&record);
+            let buf = by_partition.entry(partition.clone()).or_default();
+            buf.push(entry);
+            if buf.len() >= batch_limit {
+                let batch = by_partition.remove(&partition).unwrap_or_default();
+                if !batch.is_empty() {
+                    let out =
+                        self.ingest_log_entries(branch_id, &partition, &batch, declared_by)?;
+                    merge_log_outcome(&mut total, out);
+                }
+            }
+        }
+
+        for (partition, entries) in by_partition {
+            let out = self.ingest_log_entries(branch_id, &partition, &entries, declared_by)?;
+            merge_log_outcome(&mut total, out);
+        }
+        Ok(total)
     }
 
     pub fn create_branch(&mut self, branch: &BranchCreatedV1) -> Result<u64, StorageError> {
@@ -632,7 +749,7 @@ impl StorageBackedVirtualFs {
 
         let mut state = VirtualRepoState::new(self.repo_id.clone());
         let mut start_seq = 1u64;
-        if let Some((snapshot_event_seq, snapshot)) = latest_snapshot(&envelopes)? {
+        if let Some((snapshot_event_seq, snapshot)) = self.latest_snapshot(&envelopes)? {
             let mut snap_state =
                 MaterializedRepoStateV1::decode(snapshot.snapshot_payload.as_slice())
                     .map_err(|e| {
@@ -719,9 +836,7 @@ impl StorageBackedVirtualFs {
             if envelope.event_type != VfsEventTypeV1::VfsEventTypeFsDeltaProposed as i32 {
                 continue;
             }
-            let proposal = FsDeltaProposedV1::decode(envelope.payload.as_slice()).map_err(|e| {
-                StorageError::InvalidData(format!("invalid FsDeltaProposedV1 payload: {e}"))
-            })?;
+            let proposal = self.decode_proposed_cached(envelope)?;
             let pkey = proposal_cache_key(&proposal.branch_id, &proposal.proposal_id);
             // Keep latest append-order winner for each key.
             rebuilt.entry(pkey).or_insert(proposal);
@@ -763,28 +878,6 @@ impl StorageBackedVirtualFs {
         )
     }
 
-    fn append_partition_declared(
-        &mut self,
-        branch_id: &str,
-        partition: &str,
-        declared_by: &str,
-    ) -> Result<u64, StorageError> {
-        let payload = PartitionDeclaredV1 {
-            schema_version: 1,
-            repo_id: self.repo_id.clone(),
-            branch_id: branch_id.to_string(),
-            partition: partition.to_string(),
-            declared_by: declared_by.to_string(),
-        }
-        .encode_to_vec();
-        self.append_typed_event(
-            branch_id,
-            VfsEventTypeV1::VfsEventTypePartitionDeclared,
-            "storage.vfs.partition_declared.v1",
-            payload,
-        )
-    }
-
     fn append_typed_event(
         &mut self,
         branch_id: &str,
@@ -792,16 +885,50 @@ impl StorageBackedVirtualFs {
         payload_type: &str,
         payload: Vec<u8>,
     ) -> Result<u64, StorageError> {
-        let mut envelope = self.build_envelope(branch_id, event_type, payload_type, payload);
-        let all = self.load_repo_envelopes()?;
-        envelope.seq = all.len() as u64 + 1;
-        if let Some(last) = all.last() {
-            envelope.prev_event_hash = last.event_hash.clone();
+        let mut offsets = self.append_typed_events(
+            branch_id,
+            &[PendingTypedEvent {
+                event_type,
+                payload_type,
+                payload,
+            }],
+        )?;
+        Ok(offsets.remove(0))
+    }
+
+    fn append_typed_events(
+        &mut self,
+        branch_id: &str,
+        pending: &[PendingTypedEvent],
+    ) -> Result<Vec<u64>, StorageError> {
+        if pending.is_empty() {
+            return Ok(Vec::new());
         }
-        envelope.event_hash = compute_envelope_hash(&envelope);
-        let offset = self.append_raw_event(&envelope)?;
-        self.record_appended_envelope(envelope);
-        Ok(offset)
+        let cursor = self.ensure_append_cursor_state()?;
+        let mut next_seq = cursor.next_seq;
+        let mut prev_event_hash = cursor.prev_event_hash;
+        let mut envelopes = Vec::with_capacity(pending.len());
+        for item in pending {
+            let mut envelope = self.build_envelope(
+                branch_id,
+                item.event_type,
+                item.payload_type,
+                item.payload.clone(),
+            );
+            envelope.seq = next_seq;
+            if !prev_event_hash.is_empty() {
+                envelope.prev_event_hash = prev_event_hash;
+            }
+            envelope.event_hash = compute_envelope_hash(&envelope);
+            prev_event_hash = envelope.event_hash.clone();
+            next_seq = next_seq.saturating_add(1);
+            envelopes.push(envelope);
+        }
+        let offsets = self.append_raw_events(&envelopes)?;
+        for envelope in envelopes {
+            self.record_appended_envelope(envelope);
+        }
+        Ok(offsets)
     }
 
     fn build_envelope(
@@ -837,13 +964,26 @@ impl StorageBackedVirtualFs {
         envelope
     }
 
-    fn append_raw_event(&mut self, envelope: &VfsEventEnvelopeV1) -> Result<u64, StorageError> {
-        validate_envelope(envelope)?;
-        let payload = envelope.encode_to_vec();
-        let event = StorageEvent::new(self.stream_id.clone(), self.actor_id.clone(), payload);
-        self.engine.append_event_to_segmented_journal(
+    fn append_raw_events(
+        &mut self,
+        envelopes: &[VfsEventEnvelopeV1],
+    ) -> Result<Vec<u64>, StorageError> {
+        if envelopes.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut events = Vec::with_capacity(envelopes.len());
+        for envelope in envelopes {
+            validate_envelope(envelope)?;
+            let payload = envelope.encode_to_vec();
+            events.push(StorageEvent::new(
+                self.stream_id.clone(),
+                self.actor_id.clone(),
+                payload,
+            ));
+        }
+        self.engine.append_batch_to_segmented_journal(
             &self.segment,
-            &event,
+            &events,
             8 * 1024 * 1024,
             DurabilityLevel::AckDurable,
         )
@@ -893,6 +1033,14 @@ impl StorageBackedVirtualFs {
     }
 
     fn record_appended_envelope(&self, envelope: VfsEventEnvelopeV1) {
+        self.update_log_partition_cache_from_envelope(&envelope);
+        {
+            let mut cursor = self.append_cursor_state.write().unwrap();
+            *cursor = Some(AppendCursorState {
+                next_seq: envelope.seq.saturating_add(1),
+                prev_event_hash: envelope.event_hash.clone(),
+            });
+        }
         if let Some(all) = self.envelopes_cache.write().unwrap().as_mut() {
             all.push(envelope.clone());
         }
@@ -903,6 +1051,51 @@ impl StorageBackedVirtualFs {
             .get_mut(&envelope.branch_id)
         {
             branch_rows.push(envelope);
+        }
+    }
+
+    fn ensure_append_cursor_state(&self) -> Result<AppendCursorState, StorageError> {
+        if let Some(found) = self.append_cursor_state.read().unwrap().as_ref().cloned() {
+            return Ok(found);
+        }
+        let all = self.load_repo_envelopes()?;
+        let state = if let Some(last) = all.last() {
+            AppendCursorState {
+                next_seq: last.seq.saturating_add(1),
+                prev_event_hash: last.event_hash.clone(),
+            }
+        } else {
+            AppendCursorState {
+                next_seq: 1,
+                prev_event_hash: Vec::new(),
+            }
+        };
+        *self.append_cursor_state.write().unwrap() = Some(state.clone());
+        Ok(state)
+    }
+
+    fn update_log_partition_cache_from_envelope(&self, envelope: &VfsEventEnvelopeV1) {
+        if envelope.event_type == VfsEventTypeV1::VfsEventTypePartitionDeclared as i32 {
+            if let Ok(declared) = self.decode_partition_declared_cached(envelope) {
+                let key = log_partition_state_key(&declared.branch_id, &declared.partition);
+                let mut cache = self.log_partition_cache.write().unwrap();
+                let state = cache.entry(key).or_default();
+                state.partition_declared = true;
+            }
+            return;
+        }
+
+        if envelope.event_type == VfsEventTypeV1::VfsEventTypeLogEntryAppended as i32 {
+            if let Ok(entry) = self.decode_log_entry_cached(envelope) {
+                let key = log_partition_state_key(&entry.branch_id, &entry.partition);
+                let mut cache = self.log_partition_cache.write().unwrap();
+                let state = cache.entry(key).or_default();
+                state.partition_declared = true;
+                state.max_partition_offset = state.max_partition_offset.max(entry.offset);
+                if !entry.idempotency_key.is_empty() {
+                    state.idempotency_keys.insert(entry.idempotency_key);
+                }
+            }
         }
     }
 
@@ -956,6 +1149,144 @@ impl StorageBackedVirtualFs {
         Ok(progress)
     }
 
+    fn collect_existing_log_state(
+        &self,
+        envelopes: &[VfsEventEnvelopeV1],
+        branch_id: &str,
+        partition: &str,
+    ) -> Result<ExistingLogState, StorageError> {
+        let mut state = ExistingLogState::default();
+        for envelope in envelopes {
+            if envelope.branch_id != branch_id {
+                continue;
+            }
+            if envelope.event_type == VfsEventTypeV1::VfsEventTypePartitionDeclared as i32 {
+                let declared = self.decode_partition_declared_cached(envelope)?;
+                if declared.partition == partition {
+                    state.partition_declared = true;
+                }
+            }
+            if envelope.event_type == VfsEventTypeV1::VfsEventTypeLogEntryAppended as i32 {
+                let entry = self.decode_log_entry_cached(envelope)?;
+                if entry.partition != partition {
+                    continue;
+                }
+                state.max_partition_offset = state.max_partition_offset.max(entry.offset);
+                if !entry.idempotency_key.is_empty() {
+                    state.idempotency_keys.insert(entry.idempotency_key);
+                }
+            }
+        }
+        Ok(state)
+    }
+
+    fn latest_snapshot(
+        &self,
+        envelopes: &[VfsEventEnvelopeV1],
+    ) -> Result<Option<(u64, SnapshotCheckpointedV1)>, StorageError> {
+        let mut latest: Option<(u64, SnapshotCheckpointedV1)> = None;
+        for envelope in envelopes {
+            if envelope.event_type != VfsEventTypeV1::VfsEventTypeSnapshotCheckpointed as i32 {
+                continue;
+            }
+            let snap = self.decode_snapshot_cached(envelope)?;
+            latest = Some((envelope.seq, snap));
+        }
+        Ok(latest)
+    }
+
+    fn decode_proposed_cached(
+        &self,
+        envelope: &VfsEventEnvelopeV1,
+    ) -> Result<FsDeltaProposedV1, StorageError> {
+        if let Some(found) = self
+            .proposed_payload_cache
+            .read()
+            .unwrap()
+            .get(&envelope.event_id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let decoded = FsDeltaProposedV1::decode(envelope.payload.as_slice()).map_err(|e| {
+            StorageError::InvalidData(format!("invalid FsDeltaProposedV1 payload: {e}"))
+        })?;
+        self.proposed_payload_cache
+            .write()
+            .unwrap()
+            .insert(envelope.event_id.clone(), decoded.clone());
+        Ok(decoded)
+    }
+
+    fn decode_partition_declared_cached(
+        &self,
+        envelope: &VfsEventEnvelopeV1,
+    ) -> Result<PartitionDeclaredV1, StorageError> {
+        if let Some(found) = self
+            .partition_declared_payload_cache
+            .read()
+            .unwrap()
+            .get(&envelope.event_id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let decoded = PartitionDeclaredV1::decode(envelope.payload.as_slice()).map_err(|e| {
+            StorageError::InvalidData(format!("invalid PartitionDeclaredV1 payload: {e}"))
+        })?;
+        self.partition_declared_payload_cache
+            .write()
+            .unwrap()
+            .insert(envelope.event_id.clone(), decoded.clone());
+        Ok(decoded)
+    }
+
+    fn decode_log_entry_cached(
+        &self,
+        envelope: &VfsEventEnvelopeV1,
+    ) -> Result<LogEntryAppendedV1, StorageError> {
+        if let Some(found) = self
+            .log_entry_payload_cache
+            .read()
+            .unwrap()
+            .get(&envelope.event_id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let decoded = LogEntryAppendedV1::decode(envelope.payload.as_slice()).map_err(|e| {
+            StorageError::InvalidData(format!("invalid LogEntryAppendedV1 payload: {e}"))
+        })?;
+        self.log_entry_payload_cache
+            .write()
+            .unwrap()
+            .insert(envelope.event_id.clone(), decoded.clone());
+        Ok(decoded)
+    }
+
+    fn decode_snapshot_cached(
+        &self,
+        envelope: &VfsEventEnvelopeV1,
+    ) -> Result<SnapshotCheckpointedV1, StorageError> {
+        if let Some(found) = self
+            .snapshot_payload_cache
+            .read()
+            .unwrap()
+            .get(&envelope.event_id)
+            .cloned()
+        {
+            return Ok(found);
+        }
+        let decoded = SnapshotCheckpointedV1::decode(envelope.payload.as_slice()).map_err(|e| {
+            StorageError::InvalidData(format!("invalid snapshot checkpoint protobuf payload: {e}"))
+        })?;
+        self.snapshot_payload_cache
+            .write()
+            .unwrap()
+            .insert(envelope.event_id.clone(), decoded.clone());
+        Ok(decoded)
+    }
+
     fn resolve_proposal_diff_unified(
         &self,
         branch_id: &str,
@@ -967,7 +1298,7 @@ impl StorageBackedVirtualFs {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 struct ExistingLogState {
     partition_declared: bool,
     max_partition_offset: u64,
@@ -980,41 +1311,29 @@ struct SnapshotProgress {
     applied_since_snapshot: u64,
 }
 
-fn collect_existing_log_state(
-    envelopes: &[VfsEventEnvelopeV1],
-    branch_id: &str,
-    partition: &str,
-) -> Result<ExistingLogState, StorageError> {
-    let mut state = ExistingLogState::default();
+#[derive(Debug, Clone, Default)]
+struct AppendCursorState {
+    next_seq: u64,
+    prev_event_hash: Vec<u8>,
+}
 
-    for envelope in envelopes {
-        if envelope.branch_id != branch_id {
-            continue;
-        }
-        if envelope.event_type == VfsEventTypeV1::VfsEventTypePartitionDeclared as i32 {
-            let declared =
-                PartitionDeclaredV1::decode(envelope.payload.as_slice()).map_err(|e| {
-                    StorageError::InvalidData(format!("invalid PartitionDeclaredV1 payload: {e}"))
-                })?;
-            if declared.partition == partition {
-                state.partition_declared = true;
-            }
-        }
-        if envelope.event_type == VfsEventTypeV1::VfsEventTypeLogEntryAppended as i32 {
-            let entry = LogEntryAppendedV1::decode(envelope.payload.as_slice()).map_err(|e| {
-                StorageError::InvalidData(format!("invalid LogEntryAppendedV1 payload: {e}"))
-            })?;
-            if entry.partition != partition {
-                continue;
-            }
-            state.max_partition_offset = state.max_partition_offset.max(entry.offset);
-            if !entry.idempotency_key.is_empty() {
-                state.idempotency_keys.insert(entry.idempotency_key);
-            }
-        }
+#[derive(Debug, Clone)]
+struct PendingTypedEvent<'a> {
+    event_type: VfsEventTypeV1,
+    payload_type: &'a str,
+    payload: Vec<u8>,
+}
+
+fn merge_log_outcome(total: &mut LogIngestOutcome, out: LogIngestOutcome) {
+    total.appended = total.appended.saturating_add(out.appended);
+    total.skipped_idempotent = total
+        .skipped_idempotent
+        .saturating_add(out.skipped_idempotent);
+    total.declared_partition = total.declared_partition || out.declared_partition;
+    if total.first_event_offset.is_none() {
+        total.first_event_offset = out.first_event_offset;
     }
-
-    Ok(state)
+    total.last_event_offset = out.last_event_offset.or(total.last_event_offset);
 }
 
 fn collect_snapshot_files(
@@ -1153,22 +1472,6 @@ fn compute_root_projection_hash(path_hashes: &[(String, Vec<u8>)]) -> Vec<u8> {
         hasher.update(&[0]);
     }
     hasher.finalize().as_bytes().to_vec()
-}
-
-fn latest_snapshot(
-    envelopes: &[VfsEventEnvelopeV1],
-) -> Result<Option<(u64, SnapshotCheckpointedV1)>, StorageError> {
-    let mut latest: Option<(u64, SnapshotCheckpointedV1)> = None;
-    for envelope in envelopes {
-        if envelope.event_type != VfsEventTypeV1::VfsEventTypeSnapshotCheckpointed as i32 {
-            continue;
-        }
-        let snap = SnapshotCheckpointedV1::decode(envelope.payload.as_slice()).map_err(|e| {
-            StorageError::InvalidData(format!("invalid snapshot checkpoint protobuf payload: {e}"))
-        })?;
-        latest = Some((envelope.seq, snap));
-    }
-    Ok(latest)
 }
 
 fn apply_envelope_to_state(
@@ -1377,10 +1680,15 @@ fn proposal_cache_key(branch_id: &str, proposal_id: &str) -> String {
     format!("{branch_id}\u{1f}{proposal_id}")
 }
 
+fn log_partition_state_key(branch_id: &str, partition: &str) -> String {
+    format!("{branch_id}\u{1f}{partition}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::context_engine::StorageBackedContextEngine;
+    use crate::docker_logger::{DefaultDockerLogAdapter, PipeDockerLogDecoder};
     use tempfile::TempDir;
 
     #[test]
@@ -1528,6 +1836,173 @@ mod tests {
             .find(|b| b.branch_id == "main")
             .expect("main");
         assert_eq!(main.log_entry_count, 2);
+    }
+
+    #[test]
+    fn ingest_docker_log_lines_is_pluggable_and_idempotent() {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut vfs = StorageBackedVirtualFs::open_writer(tmp.path().to_path_buf(), "repo-docker")
+            .expect("open");
+
+        let req = SourceImportRequestV1 {
+            schema_version: 1,
+            repo_id: "repo-docker".to_string(),
+            source_kind: VfsSourceKindV1::VfsSourceKindLogStream as i32,
+            mode: VfsModeV1::VfsModeLog as i32,
+            source_locator: "docker://local".to_string(),
+            source_ref: "events".to_string(),
+            initiated_by: "tester".to_string(),
+        };
+        let _ = vfs
+            .import_source(&req, 0, 0, vec![0u8; 32], "{}".to_string())
+            .expect("import");
+
+        let lines = vec![
+            "cid1|api|stdout|1709251200001|hello".to_string(),
+            "cid1|api|stdout|1709251200001|hello".to_string(),
+            "cid2|worker|stderr|1709251200002|boom".to_string(),
+        ];
+        let mut decoder = PipeDockerLogDecoder;
+        let adapter = DefaultDockerLogAdapter::default();
+        let out1 = vfs
+            .ingest_docker_log_lines("main", &lines, "docker-plugin", &mut decoder, &adapter)
+            .expect("ingest docker lines");
+        assert_eq!(out1.appended, 2);
+        assert_eq!(out1.skipped_idempotent, 1);
+        assert!(out1.declared_partition);
+
+        let mut decoder2 = PipeDockerLogDecoder;
+        let out2 = vfs
+            .ingest_docker_log_lines("main", &lines, "docker-plugin", &mut decoder2, &adapter)
+            .expect("ingest docker lines again");
+        assert_eq!(out2.appended, 0);
+        assert_eq!(out2.skipped_idempotent, 3);
+        assert!(!out2.declared_partition);
+
+        let state = vfs.materialize().expect("materialize");
+        let main = state
+            .branches
+            .iter()
+            .find(|b| b.branch_id == "main")
+            .expect("main");
+        assert_eq!(main.log_entry_count, 2);
+    }
+
+    #[test]
+    fn ingest_docker_log_lines_batched_handles_small_flush_windows() {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut vfs =
+            StorageBackedVirtualFs::open_writer(tmp.path().to_path_buf(), "repo-docker-b")
+                .expect("open");
+
+        let req = SourceImportRequestV1 {
+            schema_version: 1,
+            repo_id: "repo-docker-b".to_string(),
+            source_kind: VfsSourceKindV1::VfsSourceKindLogStream as i32,
+            mode: VfsModeV1::VfsModeLog as i32,
+            source_locator: "docker://local".to_string(),
+            source_ref: "events".to_string(),
+            initiated_by: "tester".to_string(),
+        };
+        let _ = vfs
+            .import_source(&req, 0, 0, vec![0u8; 32], "{}".to_string())
+            .expect("import");
+
+        let lines = vec![
+            "cid1|api|stdout|1709251200001|hello".to_string(),
+            "cid1|api|stdout|1709251200001|hello".to_string(),
+            "cid2|worker|stderr|1709251200002|boom".to_string(),
+        ];
+        let mut decoder = PipeDockerLogDecoder;
+        let adapter = DefaultDockerLogAdapter::default();
+        let out = vfs
+            .ingest_docker_log_lines_batched(
+                "main",
+                &lines,
+                "docker-plugin",
+                &mut decoder,
+                &adapter,
+                1,
+            )
+            .expect("batched ingest");
+        assert_eq!(out.appended, 2);
+        assert_eq!(out.skipped_idempotent, 1);
+    }
+
+    #[test]
+    fn log_partition_cache_tracks_direct_log_appends() {
+        let tmp = TempDir::new().expect("tempdir");
+        let mut vfs =
+            StorageBackedVirtualFs::open_writer(tmp.path().to_path_buf(), "repo-log-cache")
+                .expect("open");
+
+        let req = SourceImportRequestV1 {
+            schema_version: 1,
+            repo_id: "repo-log-cache".to_string(),
+            source_kind: VfsSourceKindV1::VfsSourceKindLogStream as i32,
+            mode: VfsModeV1::VfsModeLog as i32,
+            source_locator: "log://cache".to_string(),
+            source_ref: "p=jobs".to_string(),
+            initiated_by: "tester".to_string(),
+        };
+        let _ = vfs
+            .import_source(&req, 0, 0, vec![0u8; 32], "{}".to_string())
+            .expect("import");
+
+        let batch_a = vec![LogIngestEntry {
+            entry_key: "k1".to_string(),
+            entry_payload: b"one".to_vec(),
+            idempotency_key: "id-1".to_string(),
+            offset: None,
+        }];
+        let _ = vfs
+            .ingest_log_entries("main", "jobs", &batch_a, "tester")
+            .expect("ingest a");
+
+        let direct = LogEntryAppendedV1 {
+            schema_version: 1,
+            repo_id: "repo-log-cache".to_string(),
+            branch_id: "main".to_string(),
+            partition: "jobs".to_string(),
+            offset: 10,
+            entry_key: "k-direct".to_string(),
+            entry_payload: b"direct".to_vec(),
+            idempotency_key: "id-direct".to_string(),
+        };
+        let _ = vfs.append_log_entry(&direct).expect("direct append");
+
+        let batch_b = vec![LogIngestEntry {
+            entry_key: "k2".to_string(),
+            entry_payload: b"two".to_vec(),
+            idempotency_key: "id-2".to_string(),
+            offset: None,
+        }];
+        let _ = vfs
+            .ingest_log_entries("main", "jobs", &batch_b, "tester")
+            .expect("ingest b");
+
+        let all = vfs
+            .query(
+                100,
+                0,
+                VirtualFsQueryFilter {
+                    event_type: Some(VfsEventTypeV1::VfsEventTypeLogEntryAppended),
+                    branch_id: Some("main".to_string()),
+                },
+            )
+            .expect("query");
+        let mut offsets = Vec::new();
+        for row in all.events {
+            let event =
+                LogEntryAppendedV1::decode(row.envelope.payload.as_slice()).expect("decode");
+            if event.partition == "jobs" {
+                offsets.push(event.offset);
+            }
+        }
+        offsets.sort_unstable();
+        assert!(offsets.contains(&1));
+        assert!(offsets.contains(&10));
+        assert!(offsets.contains(&11));
     }
 
     #[test]

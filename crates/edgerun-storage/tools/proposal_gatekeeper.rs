@@ -11,7 +11,9 @@ use edgerun_storage::virtual_fs::{
 
 fn usage() {
     eprintln!(
-        "Usage: proposal_gatekeeper --data-dir PATH --repo-id ID --branch ID --proposal-id ID --repo-root PATH [--fmt-cmd \"cargo fmt --all\"] [--check-cmd \"cargo check --workspace\"] [--timeout-secs N] [--dry-run]"
+        "Usage:
+  proposal_gatekeeper --data-dir PATH --repo-id ID --branch ID --proposal-id ID --repo-root PATH [--fmt-cmd \"cargo fmt --all\"] [--check-cmd \"cargo check --workspace\"] [--timeout-secs N] [--dry-run]
+  proposal_gatekeeper --data-dir PATH --repo-id ID --branch ID --repo-root PATH --diff-file PATH --agent-id ID --intent TEXT [--proposal-id ID] [--submit-only] [--fmt-cmd \"cargo fmt --all\"] [--check-cmd \"cargo check --workspace\"] [--timeout-secs N] [--dry-run]"
     );
 }
 
@@ -20,11 +22,15 @@ fn main() {
     let mut repo_id: Option<String> = None;
     let mut branch_id: Option<String> = None;
     let mut proposal_id: Option<String> = None;
+    let mut agent_id: Option<String> = None;
+    let mut intent: Option<String> = None;
+    let mut diff_file: Option<PathBuf> = None;
     let mut repo_root: Option<PathBuf> = None;
     let mut fmt_cmd: String = "cargo fmt --all".to_string();
     let mut check_cmd: String = "cargo check --workspace".to_string();
     let mut timeout_secs: u64 = 300;
     let mut dry_run = false;
+    let mut submit_only = false;
 
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -33,6 +39,9 @@ fn main() {
             "--repo-id" => repo_id = args.next(),
             "--branch" => branch_id = args.next(),
             "--proposal-id" => proposal_id = args.next(),
+            "--agent-id" => agent_id = args.next(),
+            "--intent" => intent = args.next(),
+            "--diff-file" => diff_file = args.next().map(PathBuf::from),
             "--repo-root" => repo_root = args.next().map(PathBuf::from),
             "--fmt-cmd" => fmt_cmd = args.next().unwrap_or_else(|| "cargo fmt --all".to_string()),
             "--check-cmd" => {
@@ -45,6 +54,7 @@ fn main() {
                 timeout_secs = raw.parse::<u64>().unwrap_or(300).max(1);
             }
             "--dry-run" => dry_run = true,
+            "--submit-only" => submit_only = true,
             "--help" | "-h" => {
                 usage();
                 return;
@@ -69,10 +79,6 @@ fn main() {
         usage();
         std::process::exit(2);
     };
-    let Some(proposal_id) = proposal_id else {
-        usage();
-        std::process::exit(2);
-    };
     let Some(repo_root) = repo_root else {
         usage();
         std::process::exit(2);
@@ -86,15 +92,64 @@ fn main() {
         }
     };
 
-    let Some(proposal) = (match vfs.find_proposal(&branch_id, &proposal_id) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("failed to read proposal: {e}");
+    let ingest_mode = diff_file.is_some();
+    let (proposal_id, proposal) = if ingest_mode {
+        let Some(diff_path) = diff_file else {
+            usage();
+            std::process::exit(2);
+        };
+        let Some(agent_id) = agent_id else {
+            usage();
+            std::process::exit(2);
+        };
+        let Some(intent) = intent else {
+            usage();
+            std::process::exit(2);
+        };
+        let proposal_id = proposal_id.unwrap_or_else(|| format!("agent-{}", now_unix_ms()));
+        let diff_unified = match std::fs::read(&diff_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("failed to read diff file {}: {e}", diff_path.display());
+                std::process::exit(1);
+            }
+        };
+        let proposal = FsDeltaProposedV1 {
+            schema_version: 1,
+            repo_id: repo_id.clone(),
+            proposal_id: proposal_id.clone(),
+            branch_id: branch_id.clone(),
+            base_cursor: None,
+            agent_id,
+            intent,
+            diff_unified,
+        };
+        if let Err(e) = vfs.propose_delta(&proposal) {
+            eprintln!("failed to append proposal event: {e}");
             std::process::exit(1);
         }
-    }) else {
-        eprintln!("proposal not found: branch={branch_id} proposal_id={proposal_id}");
-        std::process::exit(1);
+        println!("proposal_id={proposal_id}");
+        if submit_only {
+            println!("submitted_only=true");
+            return;
+        }
+        (proposal_id, proposal)
+    } else {
+        let Some(proposal_id) = proposal_id else {
+            usage();
+            std::process::exit(2);
+        };
+        let Some(proposal) = (match vfs.find_proposal(&branch_id, &proposal_id) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("failed to read proposal: {e}");
+                std::process::exit(1);
+            }
+        }) else {
+            eprintln!("proposal not found: branch={branch_id} proposal_id={proposal_id}");
+            std::process::exit(1);
+        };
+        (proposal_id, proposal)
     };
 
     let worktree_path = match make_temp_worktree_path(&repo_root) {
@@ -126,6 +181,15 @@ fn main() {
             &branch_id,
             &proposal_id,
             &format!("failed to create detached worktree: {e}"),
+        );
+    }
+    if let Err(e) = sync_workspace_into_worktree(&repo_root, &worktree_path) {
+        reject_and_exit(
+            &mut vfs,
+            &repo_id,
+            &branch_id,
+            &proposal_id,
+            &format!("failed to sync workspace into detached worktree: {e}"),
         );
     }
 
@@ -340,6 +404,23 @@ fn run_cmd_timeout(root: &Path, bin: &str, args: &[&str], timeout: Duration) -> 
             }
             Err(e) => return Err(e.to_string()),
         }
+    }
+}
+
+fn sync_workspace_into_worktree(repo_root: &Path, worktree_path: &Path) -> Result<(), String> {
+    let out = Command::new("rsync")
+        .arg("-a")
+        .arg("--delete")
+        .arg("--exclude")
+        .arg(".git/")
+        .arg(format!("{}/", repo_root.display()))
+        .arg(format!("{}/", worktree_path.display()))
+        .output()
+        .map_err(|e| format!("failed to spawn rsync: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
     }
 }
 

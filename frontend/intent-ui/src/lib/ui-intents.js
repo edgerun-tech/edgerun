@@ -60,8 +60,11 @@ const UI_EVENT_TOPICS = {
   },
   integration: {
     stateChanged: "ui.integration.state_changed",
+    lifecycleChanged: "ui.integration.lifecycle.changed",
+    verifyStarted: "ui.integration.verify_started",
     verified: "ui.integration.verified",
-    verifyFailed: "ui.integration.verify_failed"
+    verifyFailed: "ui.integration.verify_failed",
+    flipperProbed: "ui.integration.flipper.probed"
   }
 };
 

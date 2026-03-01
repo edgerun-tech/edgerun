@@ -16,6 +16,7 @@ hex.workspace = true
 prost = "0.13"
 edgerun-crypto = { path = "../edgerun-crypto" }
 serde.workspace = true
+serde_json = "1"
 uuid = { version = "1.8", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 thiserror.workspace = true
@@ -153,6 +154,21 @@ bench = false
 [[bin]]
 name = "vfs_operator"
 path = "tools/vfs_operator.rs"
+bench = false
+
+[[bin]]
+name = "docker_log_ingest"
+path = "tools/docker_log_ingest.rs"
+bench = false
+
+[[bin]]
+name = "docker_log_ingest_benchmark"
+path = "tools/docker_log_ingest_benchmark.rs"
+bench = false
+
+[[bin]]
+name = "docker_log_driver"
+path = "tools/docker_log_driver.rs"
 bench = false
 
 [package.metadata.cargo-machete]

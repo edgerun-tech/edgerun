@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down agent-launch agent-merge agent-test agent-context swarm-add-worker swarm-generate-executors-stack swarm-deploy-executors-stack code-update-event tool-build
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down agent-launch agent-task agent-accept agent-test agent-context swarm-add-worker swarm-generate-executors-stack swarm-deploy-executors-stack code-update-event tool-build
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -110,9 +110,14 @@ agent-launch:
 	@test -n "$(PROMPT)" || (echo "PROMPT is required"; exit 1)
 	./scripts/agents/launch-agent.sh "$(AGENT_ID)" "$(PROMPT)"
 
-agent-merge:
-	@test -n "$(AGENT_BRANCH)" || (echo "AGENT_BRANCH is required"; exit 1)
-	./scripts/agents/merge-agent.sh "$(AGENT_BRANCH)" "$(TARGET_BRANCH)"
+agent-task:
+	@test -n "$(AGENT_ID)" || (echo "AGENT_ID is required"; exit 1)
+	@test -n "$(PROMPT)" || (echo "PROMPT is required"; exit 1)
+	./scripts/agents/run-task.sh "$(AGENT_ID)" "$(PROMPT)"
+
+agent-accept:
+	@test -n "$(INPUT)" || (echo "INPUT is required (run dir or patch path)"; exit 1)
+	./scripts/agents/apply-accepted-diff.sh "$(INPUT)"
 
 agent-test:
 	@test -n "$(WORKSPACE_DIR)" || (echo "WORKSPACE_DIR is required"; exit 1)

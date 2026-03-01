@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { installLocalBridgeSimulator } from '../helpers/local-bridge-simulator'
 
 describe('intent ui integrations ownership mode', () => {
   const seedProfileSession = (win) => {
@@ -14,6 +15,7 @@ describe('intent ui integrations ownership mode', () => {
   it('keeps github in user-owned mode and removes mode step from the dialog', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
+        installLocalBridgeSimulator(win)
         win.localStorage.removeItem('intent-ui-integrations-v1')
         win.localStorage.removeItem('github_token')
         win.localStorage.removeItem('google_token')
@@ -26,11 +28,7 @@ describe('intent ui integrations ownership mode', () => {
     })
 
     cy.get('[data-testid="profile-bootstrap-gate"]').should('not.exist')
-
-    cy.window().then((win) => {
-      expect(typeof win.__intentDebug?.openWindow).to.eq('function')
-      win.__intentDebug.openWindow('integrations')
-    })
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
 
     cy.get('[data-testid="provider-open-github"]').should('exist')
 

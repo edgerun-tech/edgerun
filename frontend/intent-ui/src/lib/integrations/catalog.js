@@ -129,6 +129,16 @@ const integrationDefinitions = [
     tokenKey: "web3_wallet",
     defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"],
     tags: ["identity", "security", "workflows"]
+  },
+  {
+    id: "flipper",
+    name: "Flipper",
+    authMethod: "web_bluetooth",
+    supportsPlatformConnector: false,
+    requiresToken: false,
+    tokenKey: "flipper_device_id",
+    defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.flipper.interact"],
+    tags: ["devices", "security", "workflows"]
   }
 ];
 

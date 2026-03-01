@@ -403,6 +403,23 @@ function openWorkflowIntegrations(providerId = "github") {
   }));
 }
 
+function openWorkflowFlipper(deviceName = "Flipper") {
+  const normalizedDeviceName = String(deviceName || "Flipper").trim() || "Flipper";
+  openWorkflowDemo(`flipper workflow: inspect ${normalizedDeviceName} over web bluetooth and propose next actions`);
+  setWorkflowUi((prev) => ({
+    ...prev,
+    isOpen: true,
+    visible: true,
+    leftOpen: true,
+    leftPanel: "integrations",
+    selectedIntegrationId: "flipper",
+    statusEvents: [
+      ...prev.statusEvents,
+      { type: "phase", label: "flipper", detail: `Workflow bootstrapped for ${normalizedDeviceName}.` }
+    ]
+  }));
+}
+
 function useWorkflowSession(session) {
   if (!session?.sessionId) return;
   const sessionMessages = getSessionMessages(session.sessionId);
@@ -834,6 +851,7 @@ export {
   openWorkflowDemo,
   openCodexResponse,
   openWorkflowIntegrations,
+  openWorkflowFlipper,
   startNewCodexSession,
   setAssistantProvider,
   setWorkflowCode,

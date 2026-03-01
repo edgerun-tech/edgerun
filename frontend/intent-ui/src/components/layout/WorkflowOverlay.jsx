@@ -89,6 +89,7 @@ function WorkflowOverlay() {
   const rightInset = createMemo(() => isVisible() && state().rightOpen ? 360 : 44);
   const topInset = createMemo(() => 40);
   const shortSessionId = createMemo(() => state().sessionId ? `${state().sessionId.slice(0, 8)}...` : "new");
+  const newestFirstMessages = createMemo(() => [...(state().messages || [])].reverse());
   const [conversationTab, setConversationTab] = createSignal("threads");
   const [selectedConversationId, setSelectedConversationId] = createSignal("");
   const [showConversationList, setShowConversationList] = createSignal(true);
@@ -215,6 +216,8 @@ function WorkflowOverlay() {
       label: String(pref.label || fallbackLabel).slice(0, 2).toUpperCase()
     };
   };
+  const fallbackChatHead = { emoji: "💬", color: CHAT_HEAD_PRESET_COLORS[0], label: "C" };
+  const activeChatHead = createMemo(() => chatHeadForConversation(activeConversation()) || fallbackChatHead);
   const persistChatHeadPref = (conversationId, patch) => {
     if (!conversationId) return;
     setChatHeadPrefs((prev) => {
@@ -1054,9 +1057,12 @@ function WorkflowOverlay() {
                                     <div class="flex min-w-0 items-center gap-2">
                                       <span
                                         class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
-                                        style={{ "background-color": `${chatHeadForConversation(thread).color}33`, color: chatHeadForConversation(thread).color }}
+                                        style={{
+                                          "background-color": `${(chatHeadForConversation(thread)?.color || fallbackChatHead.color)}33`,
+                                          color: chatHeadForConversation(thread)?.color || fallbackChatHead.color
+                                        }}
                                       >
-                                        {chatHeadForConversation(thread).emoji || chatHeadForConversation(thread).label}
+                                        {chatHeadForConversation(thread)?.emoji || chatHeadForConversation(thread)?.label || fallbackChatHead.label}
                                       </span>
                                       <p class={cn("truncate text-[11px] text-neutral-200", activeConversation()?.id === thread.id ? "font-semibold text-[hsl(var(--primary))]" : "font-medium")}>{thread.title}</p>
                                     </div>
@@ -1173,9 +1179,9 @@ function WorkflowOverlay() {
                         <div class="flex min-w-0 items-center gap-2">
                           <span
                             class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
-                            style={{ "background-color": `${chatHeadForConversation(activeConversation()).color}33`, color: chatHeadForConversation(activeConversation()).color }}
+                            style={{ "background-color": `${activeChatHead().color}33`, color: activeChatHead().color }}
                           >
-                            {chatHeadForConversation(activeConversation()).emoji || chatHeadForConversation(activeConversation()).label}
+                            {activeChatHead().emoji || activeChatHead().label}
                           </span>
                           <p class="truncate text-[11px] font-medium text-neutral-200">{activeConversation()?.title || "Conversation"}</p>
                           <span class={cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(activeConversation()?.channel || "ai"))}>
@@ -1211,7 +1217,7 @@ function WorkflowOverlay() {
                                   type="button"
                                   class={cn(
                                     "h-6 rounded border",
-                                    chatHeadForConversation(activeConversation()).color === color ? "border-[hsl(var(--primary))]" : "border-neutral-700"
+                                    activeChatHead().color === color ? "border-[hsl(var(--primary))]" : "border-neutral-700"
                                   )}
                                   style={{ "background-color": color }}
                                   onClick={() => persistChatHeadPref(activeConversation()?.id, { color })}

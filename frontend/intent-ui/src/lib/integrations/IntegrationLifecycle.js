@@ -240,6 +240,9 @@ class IntegrationLifecycle {
       if (!wallet.startsWith("0x")) return { ok: false, message: "Connect EVM wallet first." };
       return { ok: true, message: "Wallet is connected and ready.", capabilities: this.defaultCapabilities.slice() };
     }
+    if (this.id === "flipper") {
+      return { ok: false, message: "Select a Flipper device from Step 2 before verification." };
+    }
     const resolvedToken = String(details?.token || "").trim() || String(token || "").trim();
     if (this.requiresToken && resolvedToken.length < 8) {
       return { ok: false, message: `${this.name} token missing or invalid.` };

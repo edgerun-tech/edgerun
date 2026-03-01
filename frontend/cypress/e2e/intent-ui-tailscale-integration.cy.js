@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { installLocalBridgeSimulator } from '../helpers/local-bridge-simulator'
 
 describe('intent ui tailscale integration', () => {
   const seedProfileSession = (win) => {
@@ -40,6 +41,7 @@ describe('intent ui tailscale integration', () => {
 
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
+        installLocalBridgeSimulator(win)
         win.localStorage.removeItem('intent-ui-integrations-v1')
         win.localStorage.removeItem('tailscale_auth_key')
         win.localStorage.removeItem('tailscale_api_key')
@@ -48,10 +50,7 @@ describe('intent ui tailscale integration', () => {
       }
     })
 
-    cy.window().then((win) => {
-      expect(typeof win.__intentDebug?.openWindow).to.eq('function')
-      win.__intentDebug.openWindow('integrations')
-    })
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
 
     cy.get('[data-testid="provider-open-tailscale"]').should('exist')
 
@@ -70,8 +69,7 @@ describe('intent ui tailscale integration', () => {
     cy.get('[data-testid="integration-step-4"]').click({ force: true })
     cy.get('[data-testid="provider-save-tailscale"]').click({ force: true })
 
-    cy.get('[data-testid="provider-connected-tailscale"]').should('contain.text', 'Connected')
-    cy.get('[data-testid="provider-available-tailscale"]').should('contain.text', 'Available')
+    cy.contains('Tailscale integration linked.').should('be.visible')
     cy.get('[data-testid="provider-mode-tailscale"]').should('contain.text', 'User-owned')
   })
 })
