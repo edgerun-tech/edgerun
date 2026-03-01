@@ -51,6 +51,55 @@ const topicListeners = new Map();
 let localBridgeSocket = null;
 let initialized = false;
 let localBridgeConnectTimer = null;
+const LOCAL_FIRST_TOPIC_PREFIXES = ["intent.ui.", "ui."];
+const RECENT_EVENT_ID_TTL_MS = 30 * 1000;
+const RECENT_EVENT_ID_LIMIT = 1024;
+const recentPublishedEventIds = new Map();
+
+function pruneRecentPublishedEventIds(now = Date.now()) {
+  for (const [eventId, seenAt] of recentPublishedEventIds.entries()) {
+    if (now - seenAt > RECENT_EVENT_ID_TTL_MS) {
+      recentPublishedEventIds.delete(eventId);
+    }
+  }
+  while (recentPublishedEventIds.size > RECENT_EVENT_ID_LIMIT) {
+    const oldestKey = recentPublishedEventIds.keys().next().value;
+    if (!oldestKey) break;
+    recentPublishedEventIds.delete(oldestKey);
+  }
+}
+
+function rememberPublishedEventId(eventId) {
+  if (!eventId) return;
+  const now = Date.now();
+  recentPublishedEventIds.set(eventId, now);
+  pruneRecentPublishedEventIds(now);
+}
+
+function wasPublishedLocally(eventId) {
+  if (!eventId) return false;
+  const seenAt = recentPublishedEventIds.get(eventId);
+  if (!seenAt) return false;
+  if (Date.now() - seenAt > RECENT_EVENT_ID_TTL_MS) {
+    recentPublishedEventIds.delete(eventId);
+    return false;
+  }
+  return true;
+}
+
+function isLocalFirstTopic(topic) {
+  return LOCAL_FIRST_TOPIC_PREFIXES.some((prefix) => topic.startsWith(prefix));
+}
+
+function recordAndNotify(event) {
+  if (!event || typeof event !== "object") return;
+  setEventTimeline((prev) => {
+    const next = [...prev, event].slice(-EVENTBUS_MAX_EVENTS);
+    persistTimeline(next);
+    return next;
+  });
+  notifyListeners(event);
+}
 
 function decodeEnvelopePayload(payloadBytes) {
   if (!(payloadBytes instanceof Uint8Array) || payloadBytes.length === 0) return {};
@@ -85,25 +134,45 @@ function notifyListeners(event) {
 
 function publishEvent(topic, payload = {}, meta = {}) {
   const normalizedTopic = String(topic || "").trim() || "event.unknown";
+  const eventId = `local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  const normalizedPayload = payload && typeof payload === "object" ? payload : {};
+  const normalizedMeta = meta && typeof meta === "object" ? meta : {};
+  const localEvent = {
+    id: eventId,
+    topic: normalizedTopic,
+    payload: normalizedPayload,
+    meta: {
+      ...normalizedMeta,
+      source: String(normalizedMeta.source || "browser")
+    },
+    createdAt: new Date().toISOString()
+  };
+  rememberPublishedEventId(eventId);
+  recordAndNotify(localEvent);
+
+  if (isLocalFirstTopic(normalizedTopic)) {
+    return true;
+  }
+
   const canUseBridge = Boolean(localBridgeSocket) && localBridgeSocket.readyState === WebSocket.OPEN;
   if (!canUseBridge) {
-    return false;
+    return true;
   }
   try {
     const payloadBytes = new TextEncoder().encode(JSON.stringify({
-      payload: payload && typeof payload === "object" ? payload : {},
-      meta: meta && typeof meta === "object" ? meta : {}
+      payload: normalizedPayload,
+      meta: normalizedMeta
     }));
     const envelope = encodeLocalEventEnvelope({
-      eventId: `local-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
+      eventId,
       topic: normalizedTopic,
-      source: String(meta?.source || "browser"),
+      source: String(normalizedMeta.source || "browser"),
       tsUnixMs: Date.now(),
       payloadBytes
     });
     localBridgeSocket.send(envelope);
   } catch {
-    return false;
+    return true;
   }
   return true;
 }
@@ -217,6 +286,9 @@ function initializeLocalBridgeSocket() {
           return;
         }
         if (String(envelope.topic || "").trim()) {
+          if (wasPublishedLocally(envelope.eventId)) {
+            return;
+          }
           const envelopeData = decodeEnvelopePayload(envelope.payloadBytes);
           const bridgeEvent = {
             id: envelope.eventId || `evt-bridge-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`,
@@ -228,12 +300,7 @@ function initializeLocalBridgeSocket() {
             },
             createdAt: envelope.tsUnixMs ? new Date(envelope.tsUnixMs).toISOString() : new Date().toISOString()
           };
-          setEventTimeline((prev) => {
-            const next = [...prev, bridgeEvent].slice(-EVENTBUS_MAX_EVENTS);
-            persistTimeline(next);
-            return next;
-          });
-          notifyListeners(bridgeEvent);
+          recordAndNotify(bridgeEvent);
         }
         return;
       }

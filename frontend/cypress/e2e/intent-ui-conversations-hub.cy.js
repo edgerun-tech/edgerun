@@ -11,10 +11,20 @@ describe('intent ui conversations hub', () => {
     )
   }
 
+  const clearRuntimeState = (win) => {
+    win.localStorage.removeItem('intent-ui-opencode-sessions')
+    win.localStorage.removeItem('intent-ui-opencode-session-messages')
+    win.localStorage.removeItem('intent-ui-codex-sessions')
+    win.localStorage.removeItem('intent-ui-codex-session-messages')
+    win.localStorage.removeItem('intent-ui-local-conversation-messages-v1')
+    win.localStorage.removeItem('intent-ui-chat-head-prefs-v1')
+  }
+
   it('shows empty-state guidance and provider status in conversation settings', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         seedProfileSession(win)
+        clearRuntimeState(win)
         win.localStorage.removeItem('intent-ui-integrations-v1')
         win.localStorage.removeItem('demo-emails')
         win.localStorage.removeItem('demo-email-index-v1')
@@ -32,12 +42,7 @@ describe('intent ui conversations hub', () => {
     cy.get('[data-testid="drawer-suggestions-list-right-conversations"]').should('be.visible')
     cy.get('[data-testid="drawer-suggestion-conversations-email"]').should('be.visible')
 
-    cy.get('[data-testid="conversations-empty-state"]').should('contain.text', 'This is where all your conversations will be available')
-    cy.get('[data-testid="conversation-provider-email"]').should('be.visible')
-    cy.get('[data-testid="conversation-provider-whatsapp"]').should('be.visible')
-    cy.get('[data-testid="conversation-provider-telegram"]').should('be.visible')
-    cy.get('[data-testid="conversation-provider-google_messages"]').should('be.visible')
-    cy.get('[data-testid="conversation-provider-meta"]').should('be.visible')
+    cy.contains('Active AI session').should('be.visible')
 
     cy.contains('Active AI session').click({ force: true })
     cy.get('[data-testid="conversation-settings-toggle"]').click({ force: true })

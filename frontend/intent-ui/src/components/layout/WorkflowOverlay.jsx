@@ -1,4 +1,4 @@
-import { Show, For, createMemo, createSignal, createEffect } from "solid-js";
+import { Show, For, createMemo, createSignal, createEffect, onMount, onCleanup } from "solid-js";
 import { Motion } from "solid-motionone";
 import { Portal } from "solid-js/web";
 import { clsx } from "clsx";
@@ -41,6 +41,9 @@ import {
 } from "./workflow-overlay.events";
 import { useWorkflowDeviceConnect } from "./use-workflow-device-connect";
 import { useWorkflowConversationSources } from "./use-workflow-conversation-sources";
+import { pushClipboardEntry } from "../../stores/clipboard-history";
+
+const SUPER_V_SHORTCUT_EVENT = "intent-ui-super-v";
 
 function cn(...classes) {
   return twMerge(clsx(classes));
@@ -330,6 +333,37 @@ function WorkflowOverlay() {
     setDraftMessage("");
     setShowEmojiPalette(false);
   };
+  let handleSuperVShortcut;
+  onMount(() => {
+    handleSuperVShortcut = () => {
+      if (!(state().rightOpen && state().rightPanel === "conversations")) {
+        toggleWorkflowDrawer({ side: "right", panel: "conversations" });
+      }
+      setConversationTab("threads");
+      setShowConversationList(false);
+      setShowConversationSettings(false);
+      setShowEmojiPalette(true);
+      setSelectedConversationId("ai-active");
+      queueMicrotask(() => {
+        const draftInput = document.querySelector('[data-testid="conversation-draft-input"]');
+        if (draftInput instanceof HTMLElement) draftInput.focus();
+      });
+      if (navigator.clipboard?.readText) {
+        void navigator.clipboard.readText().then((text) => {
+          if (!String(text || "").trim()) return;
+          pushClipboardEntry(text, "super-v");
+        }).catch(() => {
+          // ignore clipboard permission or availability failures
+        });
+      }
+    };
+    window.addEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
+  });
+  onCleanup(() => {
+    if (handleSuperVShortcut) {
+      window.removeEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
+    }
+  });
   createEffect(() => {
     const total = activeConversationMessages().length;
     if (total <= THREAD_PAGE_SIZE) {

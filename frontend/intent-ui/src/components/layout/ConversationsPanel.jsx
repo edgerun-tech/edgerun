@@ -403,6 +403,7 @@ export default function ConversationsPanel(props) {
                   if (!clip?.text) return;
                   props.setDraftMessage((prev) => `${prev}${prev ? "\n" : ""}${clip.text}`);
                 }}
+                data-testid="conversation-clipboard-insert"
               >
                 <TbOutlineClipboard size={11} />
                 Clipboard
@@ -414,7 +415,7 @@ export default function ConversationsPanel(props) {
             </button>
           </div>
           <Show when={props.showEmojiPalette()}>
-            <div class="mb-1 flex flex-wrap gap-1 rounded border border-neutral-800 bg-neutral-900/60 p-1">
+            <div class="mb-1 flex flex-wrap gap-1 rounded border border-neutral-800 bg-neutral-900/60 p-1" data-testid="conversation-emoji-palette">
               <For each={EMOJI_QUICK_SET}>
                 {(emoji) => (
                   <button

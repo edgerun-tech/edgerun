@@ -50,6 +50,8 @@ function publishRuntimeStarted() {
   publishEvent("browser.runtime.started", { app: "intent-ui" }, { source: "browser" });
 }
 
+const SUPER_V_SHORTCUT_EVENT = "intent-ui-super-v";
+
 function setupIntentDebugApi() {
   if (typeof window === "undefined") return;
   window.__intentDebug = window.__intentDebug || {};
@@ -122,6 +124,21 @@ export function useIntentUiLifecycle(params) {
         (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) &&
         event.key !== "Meta"
       ) {
+        return;
+      }
+
+      const isSuperV =
+        !event.repeat &&
+        event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        String(event.key || "").toLowerCase() === "v";
+
+      if (isSuperV) {
+        event.preventDefault();
+        event.stopPropagation();
+        window.dispatchEvent(new CustomEvent(SUPER_V_SHORTCUT_EVENT));
         return;
       }
 

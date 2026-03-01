@@ -1,15 +1,15 @@
 # Active Specs Index
 
-Generated: 2026-03-01 04:42:37Z
+Generated: 2026-03-01 05:16:01Z
 
 ## Summary
 
-- Total specs: 165
-- Cataloged: 31
-- Active: 17
+- Total specs: 167
+- Cataloged: 32
+- Active: 18
 - Superseded: 10
 - Historical: 4
-- Uncataloged: 134
+- Uncataloged: 135
 
 ## Active
 
@@ -25,6 +25,7 @@ Generated: 2026-03-01 04:42:37Z
 | [2026-03-01-opencode-mcp-config-sync-v1.md](./2026-03-01-opencode-mcp-config-sync-v1.md) | node-manager | Deterministic OpenCode MCP managed-entry sync from node-manager lifecycle events. |
 | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
+| [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |
 | [CLOUDFLARE_FRONTEND_TARGETS_V1.md](./CLOUDFLARE_FRONTEND_TARGETS_V1.md) | frontend-delivery | Frontend deploy target pinning policy remains active. |
 | [DOCS_CONTEXT_CONSOLIDATION_V1.md](./DOCS_CONTEXT_CONSOLIDATION_V1.md) | docs | Compact context docs are current operator baseline. |
@@ -112,4 +113,4 @@ These specs exist but do not yet have status metadata in `spec-status.tsv`.
 - [2026-02-28-linux-node-manager-installer-service-v1.md](./2026-02-28-linux-node-manager-installer-service-v1.md)
 - [2026-02-28-local-first-solana-removal-phase1-v1.md](./2026-02-28-local-first-solana-removal-phase1-v1.md)
 
-- ... and 84 more uncataloged specs
+- ... and 85 more uncataloged specs
