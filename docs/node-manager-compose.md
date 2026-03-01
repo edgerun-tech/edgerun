@@ -35,7 +35,7 @@ cp config/cloudflared/node-manager-tunnel.yml.example config/cloudflared/node-ma
 Edit `config/cloudflared/node-manager-tunnel.yml`:
 - set `tunnel` to `<TUNNEL_ID>`
 - set `ingress[0].hostname` to `<YOUR_NODE_HOSTNAME>`
-- optionally set `ingress[1].hostname` to `osdeve2e.edgerun.tech` (or your e2e hostname)
+- optionally set `ingress[1].hostname` to `framework.bengal-salary.ts.net` (or your framework hostname)
 
 3) Start tunnel profile:
 
@@ -46,8 +46,8 @@ scripts/node-manager-compose.sh up-tunnel
 This starts:
 - `node-manager` local bridge on `127.0.0.1:7777`
 - `cloudflared` tunnel ingress
-- `osdev-frontend` dev service (rebuilds Intent UI when source files change)
-- `osdeve2e-manager` dev/e2e manager service (rebuilds Intent UI into `out/frontend/osdeve2e` and runs Cypress on file changes)
+- `framework-frontend` dev service (rebuilds Intent UI when source files change)
+- `framework-e2e-manager` dev/e2e manager service (rebuilds Intent UI into `out/frontend/framework-e2e` and runs Cypress on file changes)
 - `opencode-cli` container as the execution target for node-manager `docker exec ... opencode ...`
 - `caddy` ingress service on `127.0.0.1:4175` serving generated output from `out/frontend/site` + proxying `/v1/local/*`, `/api/assistant` -> local backend, and `/api/*`
 

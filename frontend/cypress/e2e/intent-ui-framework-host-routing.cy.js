@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 describe('intent ui framework host routing', () => {
-  it('serves intent-ui shell at framework host root', () => {
+  it('serves intent-ui shell at framework host root and forwards bridge path', () => {
     cy.request({
       url: 'http://127.0.0.1:4175/',
       headers: {
@@ -13,6 +13,16 @@ describe('intent ui framework host routing', () => {
       expect(response.body).to.include('<title>Intent UI</title>')
       expect(response.body).to.include('<main id="root"></main>')
       expect(response.body).to.include('/intent-ui/client/main.js')
+    })
+
+    cy.request({
+      url: 'http://127.0.0.1:4175/v1/local/node/info.pb',
+      failOnStatusCode: false,
+      headers: {
+        Host: 'framework.bengal-salary.ts.net'
+      }
+    }).then((response) => {
+      expect(response.status, 'bridge route should not 5xx').to.be.lessThan(500)
     })
   })
 })

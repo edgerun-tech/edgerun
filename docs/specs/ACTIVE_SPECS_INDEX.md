@@ -1,51 +1,20 @@
 # Active Specs Index
 
-Generated: 2026-03-01 08:14:17Z
+Generated: 2026-03-01 18:42:11Z
 
 ## Summary
 
-- Total specs: 193
-- Cataloged: 52
-- Active: 38
-- Superseded: 10
-- Historical: 4
-- Uncataloged: 141
+- Total specs: 65
+- Cataloged: 12
+- Active: 7
+- Superseded: 3
+- Historical: 2
+- Uncataloged: 53
 
 ## Active
 
 | Spec | Domain | Note |
 |---|---|---|
-| [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
-| [2026-03-01-beeper-desktop-api-replace-self-hosted-bridges-v1.md](./2026-03-01-beeper-desktop-api-replace-self-hosted-bridges-v1.md) | intent-ui | Replaces self-hosted messaging bridge integrations with Beeper Desktop API token flow. |
-| [2026-03-01-beeper-sync-backend-flow-v1.md](./2026-03-01-beeper-sync-backend-flow-v1.md) | node-manager | Moves Beeper chat synchronization through backend local bridge endpoint. |
-| [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
-| [2026-03-01-cloudflare-account-token-verification-v1.md](./2026-03-01-cloudflare-account-token-verification-v1.md) | node-manager | Verifies Cloudflare account API tokens via local bridge endpoint for integrations. |
-| [2026-03-01-cloudflare-auth-assist-flow-v1.md](./2026-03-01-cloudflare-auth-assist-flow-v1.md) | intent-ui | Adds Cloudflare sign-in assist flow and logged-in identity label after verify. |
-| [2026-03-01-connected-devices-ip-flag-widget-v1.md](./2026-03-01-connected-devices-ip-flag-widget-v1.md) | intent-ui | Adds centered widget showing connected devices with IP and country flags. |
-| [2026-03-01-contacts-merge-multi-channel-import-v1.md](./2026-03-01-contacts-merge-multi-channel-import-v1.md) | intent-ui | Merges imported and live contact sources while preserving known channels. |
-| [2026-03-01-conversation-composer-enter-send-v1.md](./2026-03-01-conversation-composer-enter-send-v1.md) | intent-ui | Adds Enter-to-send and Shift+Enter newline behavior in conversation composer. |
-| [2026-03-01-google-contacts-intent-ui-normalization-v1.md](./2026-03-01-google-contacts-intent-ui-normalization-v1.md) | intent-ui | Normalizes People API contacts payloads for Intent UI conversations. |
-| [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
-| [2026-03-01-google-oauth-local-bridge-fix-v1.md](./2026-03-01-google-oauth-local-bridge-fix-v1.md) | node-manager | Routes Google OAuth start/callback through local bridge and hydrates token client-side. |
-| [2026-03-01-google-photos-native-panel-v2.md](./2026-03-01-google-photos-native-panel-v2.md) | intent-ui | Replaces browser embed with native Google Photos panel backed by local API. |
-| [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |
-| [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
-| [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |
-| [2026-03-01-integrations-dedup-unified-flow-v1.md](./2026-03-01-integrations-dedup-unified-flow-v1.md) | intent-ui | Removes duplicated integration lifecycle/catalog logic and unifies auth flow flags. |
-| [2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md](./2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md) | intent-ui | Current hardening direction for lifecycle logic. |
-| [2026-03-01-matrix-bridge-auto-secret-v1.md](./2026-03-01-matrix-bridge-auto-secret-v1.md) | intent-ui | Auto-generates matrix bridge secret so users do not manually enter token. |
-| [2026-03-01-matrix-integration-token-guidance-v1.md](./2026-03-01-matrix-integration-token-guidance-v1.md) | intent-ui | Adds explicit matrix bridge token origin guidance in Integrations dialog. |
-| [2026-03-01-mcp-runtime-health-and-preflight-v1.md](./2026-03-01-mcp-runtime-health-and-preflight-v1.md) | intent-ui | Treats restarting MCP containers as unhealthy and surfaces runtime preflight mapping metadata. |
-| [2026-03-01-opencode-mcp-config-sync-v1.md](./2026-03-01-opencode-mcp-config-sync-v1.md) | node-manager | Deterministic OpenCode MCP managed-entry sync from node-manager lifecycle events. |
-| [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
-| [2026-03-01-remove-platform-connector-mode-v1.md](./2026-03-01-remove-platform-connector-mode-v1.md) | intent-ui | Removes platform connector mode and standardizes integrations on user-owned flow. |
-| [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
-| [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
-| [2026-03-01-tailscale-integration-quickstart-v2.md](./2026-03-01-tailscale-integration-quickstart-v2.md) | intent-ui | Generates Tailscale join/funnel/app-connector setup artifacts from integration inputs. |
-| [2026-03-01-tailscale-local-bridge-routing-fix-v1.md](./2026-03-01-tailscale-local-bridge-routing-fix-v1.md) | node-manager | Routes Tailscale device verification through local bridge to eliminate /api 404. |
-| [2026-03-01-telemetry-panel-minimize-dock-v1.md](./2026-03-01-telemetry-panel-minimize-dock-v1.md) | intent-ui | Adds minimize controls and restore dock tray for telemetry floating panels. |
-| [2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md](./2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md) | intent-ui | Removes suggested-integration strips from workflow drawers. |
-| [2026-03-01-workflow-modal-gating-v1.md](./2026-03-01-workflow-modal-gating-v1.md) | intent-ui | Gates code-edit modal to explicit demo flow so integrations do not trigger it. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |
 | [CLOUDFLARE_FRONTEND_TARGETS_V1.md](./CLOUDFLARE_FRONTEND_TARGETS_V1.md) | frontend-delivery | Frontend deploy target pinning policy remains active. |
 | [DOCS_CONTEXT_CONSOLIDATION_V1.md](./DOCS_CONTEXT_CONSOLIDATION_V1.md) | docs | Compact context docs are current operator baseline. |
@@ -58,13 +27,6 @@ Generated: 2026-03-01 08:14:17Z
 
 | Spec | Replaced By | Note |
 |---|---|---|
-| [2026-02-28-agentic-runtime-minimal-architecture-v1.md](./2026-02-28-agentic-runtime-minimal-architecture-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Runtime entrypoints referenced removed tooling wrappers. |
-| [2026-02-28-agent-storage-native-proposal-flow-v1.md](./2026-02-28-agent-storage-native-proposal-flow-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Storage proposal wrapper flow removed with tooling surface cleanup. |
-| [2026-03-01-agent-virtualized-context-diff-events-and-test-executors-v1.md](./2026-03-01-agent-virtualized-context-diff-events-and-test-executors-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Defined flows via removed agent script surface. |
-| [2026-03-01-ai-native-storage-agent-workflow-v1.md](./2026-03-01-ai-native-storage-agent-workflow-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Assumed edgertool-based autosubmit path. |
-| [2026-03-01-codex-assistant-direct-local-backend-v1.md](./2026-03-01-codex-assistant-direct-local-backend-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Codex-specific backend wiring replaced by OpenCode-only path. |
-| [2026-03-01-codex-session-persistence-and-resume-v1.md](./2026-03-01-codex-session-persistence-and-resume-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Session persistence now follows OpenCode assistant execution. |
-| [2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md](./2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Codex CLI availability policy replaced by OpenCode CLI policy. |
 | [AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md](./AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Acceptance flow depended on removed scripts. |
 | [AGENT_WORKFLOW_SCRIPT_RESILIENCE_V1.md](./AGENT_WORKFLOW_SCRIPT_RESILIENCE_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Referenced scripts were removed. |
 | [GO_TOOLING_EVENT_WORKFLOW_V1.md](./GO_TOOLING_EVENT_WORKFLOW_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | edgertool-based workflow removed. |
@@ -73,8 +35,6 @@ Generated: 2026-03-01 08:14:17Z
 
 | Spec | Domain | Note |
 |---|---|---|
-| [2026-02-24-cloud-os-eslint-config.md](./2026-02-24-cloud-os-eslint-config.md) | cloud-os | Cloud-os scope removed from current repo surface. |
-| [2026-03-01-nats-jetstream-central-eventbus-and-container-agents-v1.md](./2026-03-01-nats-jetstream-central-eventbus-and-container-agents-v1.md) | eventbus | Aspirational architecture; current implementation diverged. |
 | [CLOUD_OS_CODEX_CLI_PIPELINE_V1.md](./CLOUD_OS_CODEX_CLI_PIPELINE_V1.md) | cloud-os | Cloud-os pipeline is not in current active tree. |
 | [CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md](./CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md) | cloud-os | Cloud-os dev loop no longer active in current repository layout. |
 
@@ -82,55 +42,55 @@ Generated: 2026-03-01 08:14:17Z
 
 These specs exist but do not yet have status metadata in `spec-status.tsv`.
 
-- [2026-02-24-dashboard-chain-metrics-deterministic-cypress-v1.md](./2026-02-24-dashboard-chain-metrics-deterministic-cypress-v1.md)
-- [2026-02-24-frontend-bun-only-build-pipeline-v1.md](./2026-02-24-frontend-bun-only-build-pipeline-v1.md)
-- [2026-02-24-frontend-email-collection-cloudflare-kv-v1.md](./2026-02-24-frontend-email-collection-cloudflare-kv-v1.md)
-- [2026-02-24-mock-surface-elimination-v1.md](./2026-02-24-mock-surface-elimination-v1.md)
-- [2026-02-24-remove-remaining-runtime-mocks-v1.md](./2026-02-24-remove-remaining-runtime-mocks-v1.md)
-- [2026-02-24-scheduler-ingestion-and-dialing-enforcement.md](./2026-02-24-scheduler-ingestion-and-dialing-enforcement.md)
-- [2026-02-25-frontend-landing-mystic-hero-stats-v1.md](./2026-02-25-frontend-landing-mystic-hero-stats-v1.md)
-- [2026-02-26-ci-ground-up-rebuild-v1.md](./2026-02-26-ci-ground-up-rebuild-v1.md)
-- [2026-02-26-edgerun-containerd-shim-and-eventstream-snapshotter-v1.md](./2026-02-26-edgerun-containerd-shim-and-eventstream-snapshotter-v1.md)
-- [2026-02-26-edgerun-snapshotter-decommission-v1.md](./2026-02-26-edgerun-snapshotter-decommission-v1.md)
-- [2026-02-26-rbi-state-stream-protocol-v1.md](./2026-02-26-rbi-state-stream-protocol-v1.md)
-- [2026-02-26-remove-serde-json-completely-v1.md](./2026-02-26-remove-serde-json-completely-v1.md)
-- [2026-02-26-remove-vanity-generator-v1.md](./2026-02-26-remove-vanity-generator-v1.md)
-- [2026-02-26-route-candidates-control-plane-v1.md](./2026-02-26-route-candidates-control-plane-v1.md)
-- [2026-02-26-route-candidate-scoring-v1.md](./2026-02-26-route-candidate-scoring-v1.md)
-- [2026-02-26-route-stun-reflexive-candidate-v1.md](./2026-02-26-route-stun-reflexive-candidate-v1.md)
-- [2026-02-26-scheduler-worker-remove-solana-deps-v1.md](./2026-02-26-scheduler-worker-remove-solana-deps-v1.md)
-- [2026-02-26-serde-json-removal-eventbus-rpc-v1.md](./2026-02-26-serde-json-removal-eventbus-rpc-v1.md)
-- [2026-02-26-worker-policy-refresh-404-fallback-v1.md](./2026-02-26-worker-policy-refresh-404-fallback-v1.md)
-- [2026-02-27-ci-subminute-cache-lane-v1.md](./2026-02-27-ci-subminute-cache-lane-v1.md)
-- [2026-02-27-intent-ui-obsolete-artifacts-cleanup-v1.md](./2026-02-27-intent-ui-obsolete-artifacts-cleanup-v1.md)
-- [2026-02-27-intent-ui-pipeline-unification-v1.md](./2026-02-27-intent-ui-pipeline-unification-v1.md)
-- [2026-02-27-intent-ui-route-integration-v1.md](./2026-02-27-intent-ui-route-integration-v1.md)
-- [2026-02-27-local-subminute-rust-build-v1.md](./2026-02-27-local-subminute-rust-build-v1.md)
-- [2026-02-28-device-capability-bluetooth-nfc-v1.md](./2026-02-28-device-capability-bluetooth-nfc-v1.md)
-- [2026-02-28-device-capability-effective-availability-benchmarks-v1.md](./2026-02-28-device-capability-effective-availability-benchmarks-v1.md)
-- [2026-02-28-device-capability-host-android-windows-v1.md](./2026-02-28-device-capability-host-android-windows-v1.md)
-- [2026-02-28-device-capability-host-linux-v1.md](./2026-02-28-device-capability-host-linux-v1.md)
-- [2026-02-28-device-capability-probing-core-v1.md](./2026-02-28-device-capability-probing-core-v1.md)
-- [2026-02-28-device-capability-protobuf-contracts-v1.md](./2026-02-28-device-capability-protobuf-contracts-v1.md)
-- [2026-02-28-device-capability-scheduler-eligibility-v1.md](./2026-02-28-device-capability-scheduler-eligibility-v1.md)
-- [2026-02-28-efi-network-boot-policy-v1.md](./2026-02-28-efi-network-boot-policy-v1.md)
-- [2026-02-28-integrations-mcp-runtime-and-github-direct-v1.md](./2026-02-28-integrations-mcp-runtime-and-github-direct-v1.md)
-- [2026-02-28-intent-pipeline-contracts-v1.md](./2026-02-28-intent-pipeline-contracts-v1.md)
-- [2026-02-28-intent-ui-device-connect-dialog-v1.md](./2026-02-28-intent-ui-device-connect-dialog-v1.md)
-- [2026-02-28-intent-ui-device-pairing-code-issue-v1.md](./2026-02-28-intent-ui-device-pairing-code-issue-v1.md)
-- [2026-02-28-intent-ui-file-manager-node-targeting-v1.md](./2026-02-28-intent-ui-file-manager-node-targeting-v1.md)
-- [2026-02-28-intent-ui-frontend-consolidation-v1.md](./2026-02-28-intent-ui-frontend-consolidation-v1.md)
-- [2026-02-28-intent-ui-integration-secrets-encrypted-profile-v1.md](./2026-02-28-intent-ui-integration-secrets-encrypted-profile-v1.md)
-- [2026-02-28-intent-ui-integrations-event-intent-stepper-v1.md](./2026-02-28-intent-ui-integrations-event-intent-stepper-v1.md)
-- [2026-02-28-intent-ui-linux-first-device-connection-v1.md](./2026-02-28-intent-ui-linux-first-device-connection-v1.md)
-- [2026-02-28-intent-ui-local-bridge-strict-mode-v1.md](./2026-02-28-intent-ui-local-bridge-strict-mode-v1.md)
-- [2026-02-28-intent-ui-remove-profile-onboarding-v1.md](./2026-02-28-intent-ui-remove-profile-onboarding-v1.md)
-- [2026-02-28-intent-ui-tailscale-api-routing-v1.md](./2026-02-28-intent-ui-tailscale-api-routing-v1.md)
-- [2026-02-28-intent-ui-tailscale-app-connector-setup-v1.md](./2026-02-28-intent-ui-tailscale-app-connector-setup-v1.md)
-- [2026-02-28-intent-ui-tailscale-integration-v1.md](./2026-02-28-intent-ui-tailscale-integration-v1.md)
-- [2026-02-28-intent-ui-tailscale-stepper-ux-v1.md](./2026-02-28-intent-ui-tailscale-stepper-ux-v1.md)
-- [2026-02-28-libp2p-unification-plan-v1.md](./2026-02-28-libp2p-unification-plan-v1.md)
-- [2026-02-28-linux-node-manager-installer-service-v1.md](./2026-02-28-linux-node-manager-installer-service-v1.md)
-- [2026-02-28-local-first-solana-removal-phase1-v1.md](./2026-02-28-local-first-solana-removal-phase1-v1.md)
+- [2026-03-01-intent-ui-conversations-recency-sort-and-source-filter-v1.md](./2026-03-01-intent-ui-conversations-recency-sort-and-source-filter-v1.md)
+- [2026-03-01-intent-ui-conversations-thread-search-v1.md](./2026-03-01-intent-ui-conversations-thread-search-v1.md)
+- [2026-03-01-local-stack-quick-wins-v1.md](./2026-03-01-local-stack-quick-wins-v1.md)
+- [2026-03-01-remove-osdev-tunnel-host-v1.md](./2026-03-01-remove-osdev-tunnel-host-v1.md)
+- [2026-03-01-workflow-overlay-modularization-v1.md](./2026-03-01-workflow-overlay-modularization-v1.md)
+- [ACTIVE_SPECS_INDEX.md](./ACTIVE_SPECS_INDEX.md)
+- [ANCHOR_VERIFY_BUN_COMPAT_V1.md](./ANCHOR_VERIFY_BUN_COMPAT_V1.md)
+- [CI_CD_VISIBILITY_PHASE2_PIPELINE_HEALTH_V1.md](./CI_CD_VISIBILITY_PHASE2_PIPELINE_HEALTH_V1.md)
+- [CI_CD_VISIBILITY_SEAMLESSNESS_V1.md](./CI_CD_VISIBILITY_SEAMLESSNESS_V1.md)
+- [CI_RUNTIME_SMART_GATING_V1.md](./CI_RUNTIME_SMART_GATING_V1.md)
+- [DASHBOARD_CONTROL_PLANE_HEALTH_V1.md](./DASHBOARD_CONTROL_PLANE_HEALTH_V1.md)
+- [EVENT_LOG_CODE_FILE_INGESTION_V1.md](./EVENT_LOG_CODE_FILE_INGESTION_V1.md)
+- [FRONTEND_BLOG_SEO_A11Y_FOUNDATION_V1.md](./FRONTEND_BLOG_SEO_A11Y_FOUNDATION_V1.md)
+- [FRONTEND_CI_PRODUCTION_GATES_V1.md](./FRONTEND_CI_PRODUCTION_GATES_V1.md)
+- [FRONTEND_CONTROL_WS_MOCK_OPT_IN_V1.md](./FRONTEND_CONTROL_WS_MOCK_OPT_IN_V1.md)
+- [FRONTEND_DEVICES_DEMO_DASHBOARD_V1.md](./FRONTEND_DEVICES_DEMO_DASHBOARD_V1.md)
+- [FRONTEND_DEVICES_PAGE_TV_RELIABILITY_BLING_V1.md](./FRONTEND_DEVICES_PAGE_TV_RELIABILITY_BLING_V1.md)
+- [FRONTEND_E2E_FULL_COVERAGE_WORKFLOW_V1.md](./FRONTEND_E2E_FULL_COVERAGE_WORKFLOW_V1.md)
+- [FRONTEND_ECONOMICS_MODELS_AND_SCREENS_V1.md](./FRONTEND_ECONOMICS_MODELS_AND_SCREENS_V1.md)
+- [FRONTEND_EMOJI_FAVICON_V1.md](./FRONTEND_EMOJI_FAVICON_V1.md)
+- [FRONTEND_FAVICON_BRAND_REFRESH_V1.md](./FRONTEND_FAVICON_BRAND_REFRESH_V1.md)
+- [FRONTEND_JOB_LIFECYCLE_REAL_PATH_V1.md](./FRONTEND_JOB_LIFECYCLE_REAL_PATH_V1.md)
+- [FRONTEND_LANDING_CTA_AND_DEMO_FOOTGUN_FIXES_V1.md](./FRONTEND_LANDING_CTA_AND_DEMO_FOOTGUN_FIXES_V1.md)
+- [FRONTEND_LEGAL_PAGES_GENERATED_CONTENT_V1.md](./FRONTEND_LEGAL_PAGES_GENERATED_CONTENT_V1.md)
+- [FRONTEND_NAV_DIAGNOSTICS_SIGNAL_DECOUPLING_V1.md](./FRONTEND_NAV_DIAGNOSTICS_SIGNAL_DECOUPLING_V1.md)
+- [FRONTEND_NAV_FULL_WIDTH_STATS_LAYOUT_V1.md](./FRONTEND_NAV_FULL_WIDTH_STATS_LAYOUT_V1.md)
+- [FRONTEND_NAV_REMOVE_ROUTE_DIAGNOSTIC_BLOCKS_V1.md](./FRONTEND_NAV_REMOVE_ROUTE_DIAGNOSTIC_BLOCKS_V1.md)
+- [FRONTEND_RUN_PRICE_PRECALC_V1.md](./FRONTEND_RUN_PRICE_PRECALC_V1.md)
+- [INTENT_UI_BROWSER_ONLY_DEVICES_PANEL_V1.md](./INTENT_UI_BROWSER_ONLY_DEVICES_PANEL_V1.md)
+- [INTENT_UI_CONNECTOR_OWNERSHIP_MODE_V1.md](./INTENT_UI_CONNECTOR_OWNERSHIP_MODE_V1.md)
+- [INTENT_UI_CONVERSATIONS_HUB_AND_BROWSER_EVENTBUS_V1.md](./INTENT_UI_CONVERSATIONS_HUB_AND_BROWSER_EVENTBUS_V1.md)
+- [INTENT_UI_EVENTBUS_SYSTEM_STATE_PANEL_V1.md](./INTENT_UI_EVENTBUS_SYSTEM_STATE_PANEL_V1.md)
+- [INTENT_UI_EVENTBUS_SYSTEM_STATE_PANEL_V2.md](./INTENT_UI_EVENTBUS_SYSTEM_STATE_PANEL_V2.md)
+- [INTENT_UI_EVENTBUS_WASM_WORKER_V1.md](./INTENT_UI_EVENTBUS_WASM_WORKER_V1.md)
+- [INTENT_UI_FLOATING_TELEMETRY_PANELS_V1.md](./INTENT_UI_FLOATING_TELEMETRY_PANELS_V1.md)
+- [INTENT_UI_INTEGRATION_CONNECTION_TRUTH_V1.md](./INTENT_UI_INTEGRATION_CONNECTION_TRUTH_V1.md)
+- [INTENT_UI_LOCAL_BRIDGE_RETRY_THROTTLE_V1.md](./INTENT_UI_LOCAL_BRIDGE_RETRY_THROTTLE_V1.md)
+- [INTENT_UI_ONBOARDING_TASKS_AND_ASSISTANT_INTEGRATION_GATING_V1.md](./INTENT_UI_ONBOARDING_TASKS_AND_ASSISTANT_INTEGRATION_GATING_V1.md)
+- [INTENT_UI_PROFILE_BOOTSTRAP_GATE_V1.md](./INTENT_UI_PROFILE_BOOTSTRAP_GATE_V1.md)
+- [INTENT_UI_SETTINGS_DECLUTTER_AND_WIDGETS_UNIFICATION_V1.md](./INTENT_UI_SETTINGS_DECLUTTER_AND_WIDGETS_UNIFICATION_V1.md)
+- [INTENT_UI_SUGGESTED_INTEGRATIONS_ICON_STRIP_V1.md](./INTENT_UI_SUGGESTED_INTEGRATIONS_ICON_STRIP_V1.md)
+- [LOCAL_ACTION_RUNNER_V1.md](./LOCAL_ACTION_RUNNER_V1.md)
+- [NODE_BOOT_INITRAMFS_INTEGRATION_V1.md](./NODE_BOOT_INITRAMFS_INTEGRATION_V1.md)
+- [NODE_MANAGER_DOCKER_LOGS_STORAGE_BACKEND_V1.md](./NODE_MANAGER_DOCKER_LOGS_STORAGE_BACKEND_V1.md)
+- [NODE_MANAGER_INTEGRATION_V1.md](./NODE_MANAGER_INTEGRATION_V1.md)
+- [NODE_MANAGER_LOCAL_DOCKER_SWARM_STATUS_V1.md](./NODE_MANAGER_LOCAL_DOCKER_SWARM_STATUS_V1.md)
+- [NODE_SECURE_BOOT_SIGNED_UKI_V1.md](./NODE_SECURE_BOOT_SIGNED_UKI_V1.md)
+- [OIDC_SCOPE_CANONICALS_AND_INTENT_GATE_V1.md](./OIDC_SCOPE_CANONICALS_AND_INTENT_GATE_V1.md)
+- [PROFILE_ENCRYPTED_CONTROL_PROFILE_PROTO_V1.md](./PROFILE_ENCRYPTED_CONTROL_PROFILE_PROTO_V1.md)
+- [ROUTED_TERMINAL_CONNECT_RESILIENCE_V1.md](./ROUTED_TERMINAL_CONNECT_RESILIENCE_V1.md)
 
-- ... and 91 more uncataloged specs
+- ... and 3 more uncataloged specs

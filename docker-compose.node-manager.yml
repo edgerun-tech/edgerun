@@ -106,8 +106,8 @@ services:
       - ./config/cloudflared/node-manager-tunnel.yml:/etc/cloudflared/config.yml:ro
       - ./config/cloudflared/node-manager-tunnel-credentials.json:/etc/cloudflared/creds/node-manager-tunnel-credentials.json:ro
 
-  osdev-frontend:
-    container_name: edgerun-osdev-frontend
+  framework-frontend:
+    container_name: edgerun-framework-frontend
     image: oven/bun:1.3.9
     restart: unless-stopped
     profiles: ["tunnel"]
@@ -132,8 +132,8 @@ services:
     volumes:
       - ./:/workspace
 
-  osdeve2e-manager:
-    container_name: edgerun-osdeve2e-manager
+  framework-e2e-manager:
+    container_name: edgerun-framework-e2e-manager
     image: oven/bun:1.3.9
     restart: unless-stopped
     profiles: ["e2e"]
@@ -148,11 +148,11 @@ services:
         while true; do
           sig="$$(find /workspace/frontend/intent-ui /workspace/frontend/public /workspace/frontend/scripts /workspace/frontend/cypress/e2e -type f -printf '%p %T@ %s\n' 2>/dev/null | LC_ALL=C sort | sha256sum | awk '{print $$1}')"
           if [ "$$sig" != "$$last_sig" ]; then
-            echo "[osdeve2e-manager] change detected, rebuilding and running checks"
-            INTENT_UI_DEV_OUT_DIR=/workspace/out/frontend/osdeve2e bun scripts/build-intent-ui-dev.mjs || true
+            echo "[framework-e2e-manager] change detected, rebuilding and running checks"
+            INTENT_UI_DEV_OUT_DIR=/workspace/out/frontend/framework-e2e bun scripts/build-intent-ui-dev.mjs || true
             bun run check || true
             PORT=4199
-            bunx --bun serve /workspace/out/frontend/osdeve2e -p "$$PORT" >/tmp/osdeve2e-serve.log 2>&1 &
+            bunx --bun serve /workspace/out/frontend/framework-e2e -p "$$PORT" >/tmp/framework-e2e-serve.log 2>&1 &
             SERVER_PID=$$!
             sleep 1
             bunx --bun cypress run --config-file cypress.config.ts --config baseUrl=http://127.0.0.1:$$PORT --browser electron --spec cypress/e2e/intent-ui-file-manager-node-selector.cy.js || true
