@@ -21,7 +21,6 @@ describe('intent ui integrations ownership mode', () => {
         win.localStorage.removeItem('google_token')
         win.localStorage.removeItem('cloudflare_token')
         win.localStorage.removeItem('vercel_token')
-        win.localStorage.removeItem('qwen_token')
         win.localStorage.removeItem('hetzner_token')
         seedProfileSession(win)
       }

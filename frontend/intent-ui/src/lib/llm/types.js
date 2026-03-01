@@ -1,5 +1,5 @@
 /**
- * @typedef {"openai" | "anthropic" | "qwen" | "ollama" | "custom"} LLMProviderType
+ * @typedef {"openai" | "anthropic" | "ollama" | "custom"} LLMProviderType
  */
 
 /**

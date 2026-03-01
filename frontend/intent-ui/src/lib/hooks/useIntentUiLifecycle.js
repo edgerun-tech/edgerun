@@ -3,7 +3,7 @@ import { closeTopWindow, openWindow } from "../../stores/windows";
 import {
   closeWorkflowDemo,
   hydrateWorkflowUiFromStorage,
-  openCodexResponse,
+  openAssistantResponse,
   switchWorkflowSession,
   workflowUi
 } from "../../stores/workflow-ui";
@@ -53,7 +53,7 @@ function setupIntentDebugApi() {
   if (typeof window === "undefined") return;
   window.__intentDebug = window.__intentDebug || {};
   window.__intentDebug.openWindow = (id) => openWindow(id);
-  window.__intentDebug.askAssistant = (prompt, options = {}) => openCodexResponse(prompt, options);
+  window.__intentDebug.askAssistant = (prompt, options = {}) => openAssistantResponse(prompt, options);
   window.__intentDebug.switchSession = (selector) => switchWorkflowSession(selector);
   window.__intentDebug.getWorkflowUi = () => workflowUi();
   window.__intentDebug.getEventBusRuntime = () => eventBusRuntime();

@@ -28,19 +28,6 @@ const providerPresets = [
     bg: "bg-orange-500/10"
   },
   {
-    id: "qwen",
-    name: "Qwen Code",
-    icon: "code",
-    description: "Requires DashScope API key (not OAuth)",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    defaultModel: "qwen-plus",
-    models: ["qwen-plus", "qwen-turbo", "qwen-max"],
-    requiresApiKey: true,
-    requiresOAuth: false,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10"
-  },
-  {
     id: "ollama",
     name: "Ollama (Local)",
     icon: "server",
@@ -98,10 +85,6 @@ function LLMSetupOnboarding() {
       setCustomName("Anthropic");
       setCustomBaseUrl("https://api.anthropic.com");
       setCustomModel("claude-3-5-sonnet-20241022");
-    } else if (preset.id === "qwen") {
-      setCustomName("Qwen Code");
-      setCustomBaseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1");
-      setCustomModel("qwen-plus");
     } else if (preset.id === "ollama") {
       setCustomName("Ollama Local");
       setCustomBaseUrl("http://localhost:11434");
@@ -116,49 +99,9 @@ function LLMSetupOnboarding() {
     setTesting(true);
     setError(null);
     try {
-      const deviceResponse = await fetch("/api/qwen", {
-        method: "GET",
-        redirect: "manual"
-      });
-      if (deviceResponse.type === "opaqueredirect") {
-        const authWindow = window.open("/api/qwen", "qwen-auth", "width=500,height=600");
-        setTestSuccess("Please complete authentication in the popup window...");
-        const pollInterval = setInterval(async () => {
-          try {
-            const pollResponse = await fetch("/api/qwen/poll", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ check_token: true })
-            });
-            const data = await pollResponse.json();
-            if (pollResponse.ok && data.access_token) {
-              clearInterval(pollInterval);
-              if (authWindow) authWindow.close();
-              localStorage.setItem("qwen_token", JSON.stringify(data));
-              const provider = {
-                id: `qwen-oauth-${Date.now()}`,
-                name: "Qwen Code",
-                type: "qwen",
-                baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                apiKey: data.access_token,
-                defaultModel: "qwen-plus",
-                availableModels: ["qwen-plus", "qwen-turbo", "qwen-max"],
-                enabled: true,
-                priority: 5
-              };
-              llmRouter.addProvider(provider);
-              setConfigured(true);
-              setTestSuccess("Qwen connected successfully!");
-            }
-          } catch (e) {
-            console.log("[Qwen] Polling...", e);
-          }
-        }, 3e3);
-        setTimeout(() => clearInterval(pollInterval), 6e5);
-      }
+      setError("OAuth setup is not available in this build. Use API key providers.");
       setTesting(false);
-    } catch (error2) {
-      console.error("[LLMSetup] Device flow error:", error2);
+    } catch {
       setError("Failed to start device flow");
       setTesting(false);
     }

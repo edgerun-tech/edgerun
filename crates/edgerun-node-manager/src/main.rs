@@ -96,7 +96,7 @@ const INTEGRATION_TOPIC_ROOT_ENV: &str = "EDGERUN_INTEGRATION_TOPIC_ROOT";
 const INTEGRATION_TOPIC_ROOT_DEFAULT: &str = "edgerun.integrations";
 const LOCAL_ASSISTANT_PATH: &str = "/v1/local/assistant";
 const LOCAL_DOCKER_EVENTS_TOPIC: &str = "local.docker.events";
-const CODEX_CONFIG_PATH: &str = "/workspace/edgerun/.codex/config.toml";
+const OPENCODE_CLI_CONTAINER_NAME: &str = "edgerun-opencode-cli";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -553,11 +553,27 @@ struct LocalAssistantStatusEvent {
 }
 
 #[derive(Debug, Deserialize)]
-struct CodexExecEvent {
+struct OpenCodeRunPart {
     #[serde(rename = "type")]
     event_type: String,
     #[serde(default)]
-    thread_id: Option<String>,
+    text: Option<String>,
+    #[serde(default, rename = "sessionID")]
+    session_id: Option<String>,
+    #[serde(default, rename = "sessionId")]
+    session_id_alt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenCodeRunEvent {
+    #[serde(rename = "type")]
+    event_type: String,
+    #[serde(default, rename = "sessionID")]
+    session_id: Option<String>,
+    #[serde(default, rename = "sessionId")]
+    session_id_alt: Option<String>,
+    #[serde(default)]
+    part: Option<OpenCodeRunPart>,
 }
 
 #[tokio::main]
@@ -1294,54 +1310,8 @@ fn is_mcp_container_running(integration_id: &str) -> bool {
         .eq_ignore_ascii_case("true")
 }
 
-fn sync_codex_mcp_config() -> Result<()> {
-    let config_path = Path::new(CODEX_CONFIG_PATH);
-    if let Some(parent) = config_path.parent() {
-        fs::create_dir_all(parent).with_context(|| {
-            format!(
-                "failed to create codex config directory {}",
-                parent.display()
-            )
-        })?;
-    }
-    let existing = fs::read_to_string(config_path).unwrap_or_default();
-    let begin = "# BEGIN EDGERUN MCP";
-    let end = "# END EDGERUN MCP";
-    let mut preserved = existing.clone();
-    if let Some(start) = existing.find(begin) {
-        if let Some(rel_end) = existing[start..].find(end) {
-            let end_idx = start + rel_end + end.len();
-            let mut next = String::new();
-            next.push_str(&existing[..start]);
-            let tail = &existing[end_idx..];
-            if !tail.starts_with('\n') {
-                next.push('\n');
-            }
-            next.push_str(tail.trim_start_matches('\n'));
-            preserved = next;
-        }
-    }
-    let github_running = is_mcp_container_running("github");
-    let mut managed_block = String::new();
-    managed_block.push_str(begin);
-    managed_block.push('\n');
-    if github_running {
-        managed_block.push_str("[mcp_servers.github]\n");
-        managed_block.push_str("command = \"docker\"\n");
-        managed_block.push_str(
-            "args = [\"exec\", \"-i\", \"edgerun-mcp-github\", \"node\", \"/app/dist/index.js\"]\n",
-        );
-    }
-    managed_block.push_str(end);
-    managed_block.push('\n');
-
-    let mut next = preserved.trim_end().to_string();
-    if !next.is_empty() {
-        next.push_str("\n\n");
-    }
-    next.push_str(&managed_block);
-    fs::write(config_path, next)
-        .with_context(|| format!("failed to write codex config {}", config_path.display()))?;
+fn sync_opencode_mcp_config() -> Result<()> {
+    let _github_running = is_mcp_container_running("github");
     Ok(())
 }
 
@@ -2220,10 +2190,10 @@ async fn handle_local_mcp_start(
             ),
         );
     }
-    if let Err(err) = sync_codex_mcp_config() {
+    if let Err(err) = sync_opencode_mcp_config() {
         return local_json_error(
             AxumStatusCode::INTERNAL_SERVER_ERROR,
-            &format!("MCP started but codex config sync failed: {err}"),
+            &format!("MCP started but opencode config sync failed: {err}"),
         );
     }
     local_json_ok(LocalMcpStatusData {
@@ -2268,10 +2238,10 @@ async fn handle_local_mcp_stop(
             );
         }
     }
-    if let Err(err) = sync_codex_mcp_config() {
+    if let Err(err) = sync_opencode_mcp_config() {
         return local_json_error(
             AxumStatusCode::INTERNAL_SERVER_ERROR,
-            &format!("MCP stopped but codex config sync failed: {err}"),
+            &format!("MCP stopped but opencode config sync failed: {err}"),
         );
     }
     local_json_ok(LocalMcpStatusData {
@@ -2348,10 +2318,10 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
     let provider = body
         .provider
         .as_deref()
-        .unwrap_or("codex")
+        .unwrap_or("opencode")
         .trim()
         .to_ascii_lowercase();
-    if provider != "codex" && provider != "qwen" {
+    if provider != "opencode" {
         return local_json_error(AxumStatusCode::BAD_REQUEST, "unsupported provider");
     }
 
@@ -2367,32 +2337,25 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
-    let resume_id = requested_thread_id
+    let session_id = requested_thread_id
         .clone()
         .or_else(|| requested_session_id.clone());
 
-    let output_file = format!("/tmp/edgerun-codex-last-{}.txt", now_unix_ms());
     let mut exec_args = vec![
         "30s".to_string(),
         "docker".to_string(),
         "exec".to_string(),
-        "edgerun-codex-cli".to_string(),
-        "codex".to_string(),
-        "-C".to_string(),
-        "/workspace/edgerun".to_string(),
-        "exec".to_string(),
+        OPENCODE_CLI_CONTAINER_NAME.to_string(),
+        "opencode".to_string(),
+        "run".to_string(),
+        "--format".to_string(),
+        "json".to_string(),
     ];
-    if let Some(resume) = resume_id.as_deref() {
-        exec_args.push("resume".to_string());
+    if let Some(resume) = session_id.as_deref() {
+        exec_args.push("--session".to_string());
         exec_args.push(resume.to_string());
     }
-    exec_args.extend([
-        "--json".to_string(),
-        "--skip-git-repo-check".to_string(),
-        "--output-last-message".to_string(),
-        output_file.clone(),
-        prompt.clone(),
-    ]);
+    exec_args.push(prompt.clone());
     let exec_output = Command::new("timeout").args(exec_args).output();
 
     let exec_output = match exec_output {
@@ -2405,51 +2368,29 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         return local_json_error(
             AxumStatusCode::INTERNAL_SERVER_ERROR,
             &format!(
-                "codex exec failed: {}",
+                "opencode run failed: {}",
                 String::from_utf8_lossy(&exec_output.stderr).trim()
             ),
         );
     }
 
     let stdout = String::from_utf8_lossy(&exec_output.stdout).to_string();
-    let discovered_thread_id = parse_codex_exec_thread_id(&stdout);
-    let resolved_thread_id = discovered_thread_id
+    let discovered_session_id = parse_opencode_session_id(&stdout);
+    let resolved_thread_id = discovered_session_id
         .clone()
-        .or_else(|| resume_id.clone())
+        .or_else(|| session_id.clone())
         .unwrap_or_default();
     let resolved_session_id = if resolved_thread_id.is_empty() {
         requested_session_id.unwrap_or_default()
     } else {
         resolved_thread_id.clone()
     };
-
-    let read_output = Command::new("docker")
-        .args(["exec", "edgerun-codex-cli", "cat", &output_file])
-        .output();
-    let read_output = match read_output {
-        Ok(value) => value,
-        Err(err) => {
-            return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string())
-        }
-    };
-    if !read_output.status.success() {
-        return local_json_error(
-            AxumStatusCode::INTERNAL_SERVER_ERROR,
-            &format!(
-                "failed to read codex output: {}",
-                String::from_utf8_lossy(&read_output.stderr).trim()
-            ),
-        );
-    }
-
-    let message = String::from_utf8_lossy(&read_output.stdout)
-        .trim()
-        .to_string();
+    let message = parse_opencode_assistant_text(&stdout);
     let response = LocalAssistantResponse {
         ok: true,
         error: String::new(),
         message: if message.is_empty() {
-            "Codex returned no output.".to_string()
+            "OpenCode returned no output.".to_string()
         } else {
             message
         },
@@ -2476,26 +2417,57 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
     )
 }
 
-fn parse_codex_exec_thread_id(output: &str) -> Option<String> {
+fn parse_opencode_session_id(output: &str) -> Option<String> {
     for line in output.lines() {
         let raw = line.trim();
         if raw.is_empty() {
             continue;
         }
-        let event: CodexExecEvent = match sonic_rs::from_str(raw) {
+        let event: OpenCodeRunEvent = match sonic_rs::from_str(raw) {
             Ok(value) => value,
             Err(_) => continue,
         };
-        if event.event_type != "thread.started" {
-            continue;
-        }
-        let thread_id = event.thread_id.unwrap_or_default();
-        let normalized = thread_id.trim();
+        let session_id = event
+            .session_id
+            .or(event.session_id_alt)
+            .or_else(|| event.part.as_ref().and_then(|part| part.session_id.clone()))
+            .or_else(|| event.part.as_ref().and_then(|part| part.session_id_alt.clone()))
+            .unwrap_or_default();
+        let normalized = session_id.trim();
         if !normalized.is_empty() {
             return Some(normalized.to_string());
         }
     }
     None
+}
+
+fn parse_opencode_assistant_text(output: &str) -> String {
+    let mut chunks: Vec<String> = Vec::new();
+    for line in output.lines() {
+        let raw = line.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let event: OpenCodeRunEvent = match sonic_rs::from_str(raw) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if event.event_type != "text" {
+            continue;
+        }
+        let Some(part) = event.part else {
+            continue;
+        };
+        if part.event_type != "text" {
+            continue;
+        }
+        let text = part.text.unwrap_or_default();
+        let normalized = text.trim();
+        if !normalized.is_empty() {
+            chunks.push(normalized.to_string());
+        }
+    }
+    chunks.join("\n")
 }
 
 async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {

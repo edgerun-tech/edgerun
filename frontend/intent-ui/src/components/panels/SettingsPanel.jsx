@@ -170,7 +170,7 @@ function SettingsPanel(props) {
           <button
             type="button"
             class="inline-flex h-7 items-center rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
-            onClick={() => openWorkflowIntegrations("qwen")}
+            onClick={() => openWorkflowIntegrations("opencode_cli")}
             data-testid="settings-open-integrations"
           >
             Open Integrations

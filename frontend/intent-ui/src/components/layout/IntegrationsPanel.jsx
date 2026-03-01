@@ -11,7 +11,8 @@ import {
   FiArrowRight,
   FiArrowLeft,
   FiZap,
-  FiLock
+  FiLock,
+  FiHash
 } from "solid-icons/fi";
 import {
   SiGithub,
@@ -22,10 +23,18 @@ import {
   SiWhatsapp,
   SiMessenger,
   SiTailscale,
-  SiWeb3dotjs
+  SiWeb3dotjs,
+  SiDiscord,
+  SiSignal,
+  SiGooglechat,
+  SiBluesky,
+  SiX,
+  SiImessage,
+  SiApple
 } from "solid-icons/si";
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
+import { canonicalBridgeId } from "../../lib/integrations/official-bridges";
 
 const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -38,24 +47,46 @@ const DALY_OPTIONAL_SERVICE_UUIDS = [
 ];
 
 const providerMeta = {
-  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true },
-  cloudflare: { id: "cloudflare", name: "Cloudflare", icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true },
-  vercel: { id: "vercel", name: "Vercel", icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true },
-  google: { id: "google", name: "Google", icon: SiGoogle, tone: "text-blue-300", useToken: false, oauthRedirect: true },
-  google_photos: { id: "google_photos", name: "Google Photos", icon: SiGoogle, tone: "text-sky-300", useToken: false, oauthRedirect: true },
-  email: { id: "email", name: "Email", icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", useToken: true },
-  whatsapp: { id: "whatsapp", name: "WhatsApp", icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true },
-  messenger: { id: "messenger", name: "Messenger", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true },
-  telegram: { id: "telegram", name: "Telegram", icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true },
-  google_messages: { id: "google_messages", name: "Google Messages", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Messages bridge token", useToken: true },
-  meta: { id: "meta", name: "Meta", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Mautrix Meta bridge token", useToken: true },
-  qwen: { id: "qwen", name: "Qwen", icon: FiCpu, tone: "text-cyan-300", tokenHint: "Qwen token", useToken: true },
-  codex_cli: { id: "codex_cli", name: "Codex CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false },
-  tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },
-  hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true },
-  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false },
-  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false },
-  daly_bms: { id: "daly_bms", name: "Daly BMS", icon: FiZap, tone: "text-emerald-300", useToken: false }
+  github: { id: "github", name: "GitHub", icon: SiGithub, tone: "text-neutral-100", tokenHint: "GitHub Personal Access Token", useToken: true, category: "development" },
+  cloudflare: { id: "cloudflare", name: "Cloudflare", icon: SiCloudflare, tone: "text-orange-300", tokenHint: "Cloudflare token", useToken: true, category: "cloud" },
+  vercel: { id: "vercel", name: "Vercel", icon: SiVercel, tone: "text-neutral-100", tokenHint: "Vercel token", useToken: true, category: "cloud" },
+  google: { id: "google", name: "Google", icon: SiGoogle, tone: "text-blue-300", useToken: false, oauthRedirect: true, category: "productivity" },
+  google_photos: { id: "google_photos", name: "Google Photos", icon: SiGoogle, tone: "text-sky-300", useToken: false, oauthRedirect: true, category: "productivity" },
+  email: { id: "email", name: "Email", icon: SiGoogle, tone: "text-indigo-300", tokenHint: "Email provider token", useToken: true, category: "messaging" },
+  whatsapp: { id: "whatsapp", name: "WhatsApp", icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true, category: "messaging" },
+  messenger: { id: "messenger", name: "Messenger", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true, category: "messaging" },
+  telegram: { id: "telegram", name: "Telegram", icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true, category: "messaging" },
+  google_messages: { id: "google_messages", name: "Google Messages", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Messages bridge token", useToken: true, category: "messaging" },
+  meta: { id: "meta", name: "Meta", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Mautrix Meta bridge token", useToken: true, category: "messaging" },
+  signal: { id: "signal", name: "Signal", icon: SiSignal, tone: "text-sky-300", tokenHint: "Mautrix Signal bridge token", useToken: true, category: "messaging" },
+  discord: { id: "discord", name: "Discord", icon: SiDiscord, tone: "text-indigo-300", tokenHint: "Mautrix Discord bridge token", useToken: true, category: "messaging" },
+  slack: { id: "slack", name: "Slack", icon: FiHash, tone: "text-emerald-300", tokenHint: "Mautrix Slack bridge token", useToken: true, category: "messaging" },
+  gvoice: { id: "gvoice", name: "Google Voice", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Voice bridge token", useToken: true, category: "messaging" },
+  googlechat: { id: "googlechat", name: "Google Chat", icon: SiGooglechat, tone: "text-blue-300", tokenHint: "Mautrix Google Chat bridge token", useToken: true, category: "messaging" },
+  twitter: { id: "twitter", name: "X / Twitter", icon: SiX, tone: "text-neutral-200", tokenHint: "Mautrix Twitter bridge token", useToken: true, category: "messaging" },
+  bluesky: { id: "bluesky", name: "Bluesky", icon: SiBluesky, tone: "text-sky-300", tokenHint: "Mautrix Bluesky bridge token", useToken: true, category: "messaging" },
+  imessage: { id: "imessage", name: "iMessage", icon: SiImessage, tone: "text-blue-300", tokenHint: "Mautrix iMessage bridge token", useToken: true, category: "messaging" },
+  imessagego: { id: "imessagego", name: "iMessage (Go)", icon: SiApple, tone: "text-blue-300", tokenHint: "Beeper iMessage Go bridge token", useToken: true, category: "messaging" },
+  linkedin: { id: "linkedin", name: "LinkedIn", icon: FiLink2, tone: "text-blue-300", tokenHint: "Mautrix LinkedIn bridge token", useToken: true, category: "messaging" },
+  heisenbridge: { id: "heisenbridge", name: "IRC (Heisenbridge)", icon: FiDatabase, tone: "text-neutral-300", tokenHint: "Heisenbridge token", useToken: true, category: "messaging" },
+  opencode_cli: { id: "opencode_cli", name: "OpenCode CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false, category: "ai" },
+  tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true, category: "cloud" },
+  hetzner: { id: "hetzner", name: "Hetzner", icon: FiDatabase, tone: "text-emerald-300", tokenHint: "Hetzner token", useToken: true, category: "cloud" },
+  web3: { id: "web3", name: "Web3", icon: SiWeb3dotjs, tone: "text-fuchsia-300", useToken: false, category: "identity" },
+  flipper: { id: "flipper", name: "Flipper", icon: FiZap, tone: "text-amber-300", useToken: false, category: "devices" },
+  daly_bms: { id: "daly_bms", name: "Daly BMS", icon: FiZap, tone: "text-emerald-300", useToken: false, category: "devices" }
+};
+
+const CATEGORY_ORDER = ["ai", "messaging", "cloud", "development", "productivity", "identity", "devices", "other"];
+const CATEGORY_LABEL = {
+  ai: "AI",
+  messaging: "Messaging Bridges",
+  cloud: "Cloud & Network",
+  development: "Development",
+  productivity: "Productivity",
+  identity: "Identity",
+  devices: "Devices",
+  other: "Other"
 };
 
 function IntegrationsPanel(props) {
@@ -89,13 +120,14 @@ function IntegrationsPanel(props) {
   const [testRunning, setTestRunning] = createSignal(false);
   const [testCompleted, setTestCompleted] = createSignal(false);
   const [testStageIndex, setTestStageIndex] = createSignal(0);
+  const [runtimeState, setRuntimeState] = createSignal({ state: "unknown", message: "" });
   let testLoaderTimer = null;
 
-  const assistantProvider = createMemo(() => workflowUi().provider || "codex");
+  const assistantProvider = createMemo(() => workflowUi().provider || "opencode");
 
   onMount(() => {
     integrationStore.checkAll();
-    if (props.preselectProviderId) openProviderDialog(props.preselectProviderId);
+    if (props.preselectProviderId) openProviderDialog(canonicalBridgeId(props.preselectProviderId) || props.preselectProviderId);
   });
 
   createEffect(() => {
@@ -106,7 +138,8 @@ function IntegrationsPanel(props) {
 
   const providers = createMemo(() => integrationStore.list().map((integration) => ({
     ...integration,
-    ...providerMeta[integration.id]
+    ...providerMeta[integration.id],
+    category: providerMeta[integration.id]?.category || "other"
   })));
 
   const filteredProviders = createMemo(() => {
@@ -115,8 +148,41 @@ function IntegrationsPanel(props) {
     return providers().filter((provider) => provider.name.toLowerCase().includes(q) || provider.id.toLowerCase().includes(q));
   });
 
+  const groupedProviders = createMemo(() => {
+    const groups = new Map(CATEGORY_ORDER.map((category) => [category, []]));
+    for (const provider of filteredProviders()) {
+      const category = CATEGORY_ORDER.includes(provider.category) ? provider.category : "other";
+      groups.get(category).push(provider);
+    }
+    return CATEGORY_ORDER
+      .map((category) => ({
+        id: category,
+        label: CATEGORY_LABEL[category] || category,
+        providers: groups.get(category) || []
+      }))
+      .filter((group) => group.providers.length > 0);
+  });
+
   const activeProvider = createMemo(() => providers().find((provider) => provider.id === dialogProviderId()) || null);
   const verification = createMemo(() => integrationVerification()[dialogProviderId()] || null);
+
+  function usesRuntimeContainer(provider) {
+    if (!provider) return false;
+    if (provider.id === "github") return true;
+    return Array.isArray(provider.tags) && provider.tags.includes("matrix-bridge");
+  }
+
+  async function refreshRuntimeState(provider) {
+    if (!provider || !usesRuntimeContainer(provider)) {
+      setRuntimeState({ state: "not_applicable", message: "No runtime container for this integration." });
+      return;
+    }
+    const result = await integrationStore.runtimeStatus(provider.id);
+    setRuntimeState({
+      state: String(result?.state || "unknown"),
+      message: String(result?.message || "").trim()
+    });
+  }
 
   function getLoadingStates(provider) {
     const providerName = provider?.name || "Integration";
@@ -155,8 +221,11 @@ function IntegrationsPanel(props) {
   }
 
   function openProviderDialog(providerOrId) {
+    const normalizedId = typeof providerOrId === "string"
+      ? (canonicalBridgeId(providerOrId) || providerOrId)
+      : "";
     const provider = typeof providerOrId === "string"
-      ? providers().find((entry) => entry.id === providerOrId)
+      ? providers().find((entry) => entry.id === normalizedId)
       : providerOrId;
     if (!provider) return;
 
@@ -207,6 +276,7 @@ function IntegrationsPanel(props) {
     } else {
       setTokenInput("");
     }
+    void refreshRuntimeState(provider);
   }
 
   function closeDialog() {
@@ -219,6 +289,7 @@ function IntegrationsPanel(props) {
     setFlipperProbeDetails(null);
     setDalyProbeSummary("");
     setDalyProbeDetails(null);
+    setRuntimeState({ state: "unknown", message: "" });
   }
 
   function requiredInputsReady(provider) {
@@ -286,6 +357,7 @@ function IntegrationsPanel(props) {
     if (!result.ok) {
       setVerifiedForDialog(false);
       setStatus(result.message || "Verification failed.");
+      await refreshRuntimeState(provider);
       return;
     }
 
@@ -311,6 +383,7 @@ function IntegrationsPanel(props) {
     setTestCompleted(true);
     setStatus(result.message || "Verification succeeded.");
     setStep(2);
+    await refreshRuntimeState(provider);
   }
 
   async function selectFlipperDevice() {
@@ -486,9 +559,11 @@ function IntegrationsPanel(props) {
     const linked = await integrationStore.connect(provider.id, payload);
     if (!linked) {
       setStatus(`Unable to link ${provider.name}. Load profile and retry.`);
+      await refreshRuntimeState(provider);
       return;
     }
     setStatus(`${provider.name} integration linked.`);
+    await refreshRuntimeState(provider);
     closeDialog();
   }
 
@@ -541,6 +616,7 @@ function IntegrationsPanel(props) {
     if (!provider) return;
     integrationStore.disconnect(provider.id);
     setStatus(`${provider.name} disconnected.`);
+    void refreshRuntimeState(provider);
     closeDialog();
   }
 
@@ -572,20 +648,13 @@ function IntegrationsPanel(props) {
           <span>Integrations</span>
         </h3>
         <p class="mt-1 text-xs text-neutral-400">Icons are providers. Hover for details, click Connect to launch stepper.</p>
-        <div class="mt-2 grid grid-cols-2 gap-1 rounded-md border border-neutral-800 bg-neutral-900/60 p-1">
+        <div class="mt-2 grid grid-cols-1 gap-1 rounded-md border border-neutral-800 bg-neutral-900/60 p-1">
           <button
             type="button"
-            class={`rounded px-2 py-1 text-[11px] transition-colors ${assistantProvider() === "codex" ? "font-semibold text-[hsl(var(--primary))]" : "text-neutral-400 hover:bg-neutral-800"}`}
-            onClick={() => setAssistantProvider("codex")}
+            class={`rounded px-2 py-1 text-[11px] transition-colors ${assistantProvider() === "opencode" ? "font-semibold text-[hsl(var(--primary))]" : "text-neutral-400 hover:bg-neutral-800"}`}
+            onClick={() => setAssistantProvider("opencode")}
           >
-            Codex active
-          </button>
-          <button
-            type="button"
-            class={`rounded px-2 py-1 text-[11px] transition-colors ${assistantProvider() === "qwen" ? "font-semibold text-[hsl(var(--primary))]" : "text-neutral-400 hover:bg-neutral-800"}`}
-            onClick={() => setAssistantProvider("qwen")}
-          >
-            Qwen active
+            OpenCode active
           </button>
         </div>
       </div>
@@ -606,41 +675,50 @@ function IntegrationsPanel(props) {
         <div class="mx-3 mb-3 rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-300">{status()}</div>
       </Show>
 
-      <div class="grid grid-cols-4 gap-2 px-3 pb-3 sm:grid-cols-5" data-testid="integrations-icon-grid">
-        <For each={filteredProviders()}>
-          {(provider) => {
-            const Icon = provider.icon || FiCloud;
-            const connected = () => Boolean(provider.connected);
-            return (
-              <div class="group relative flex flex-col items-center gap-1">
-                <button
-                  type="button"
-                  class={`relative inline-flex h-12 w-12 items-center justify-center rounded-xl border transition ${connected() ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.12)]" : "border-neutral-700 bg-neutral-900 hover:border-neutral-500"}`}
-                  onClick={() => openProviderDialog(provider)}
-                  title={`${provider.name} • ${provider.connected ? "Connected" : "Not connected"} • ${provider.available ? "Available" : "Unavailable"}`}
-                  data-testid={`provider-open-${provider.id}`}
-                >
-                  <Icon size={18} class={connected() ? "text-[hsl(var(--primary))]" : "text-neutral-300"} />
-                  <span class={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ${provider.available ? "bg-emerald-400" : provider.connected ? "bg-amber-400" : "bg-neutral-600"}`} />
-                </button>
-                <button
-                  type="button"
-                  class="max-w-[84px] truncate text-[10px] text-neutral-300 transition hover:text-[hsl(var(--primary))]"
-                  onClick={() => openProviderDialog(provider)}
-                  data-testid={`provider-connect-${provider.id}`}
-                >
-                  {provider.name}
-                </button>
-                <div class="pointer-events-none absolute -bottom-9 z-10 hidden whitespace-nowrap rounded border border-neutral-700 bg-[#0b0c0f] px-2 py-1 text-[10px] text-neutral-200 shadow-xl group-hover:block">
-                  {provider.name} • {provider.availabilityReason}
-                </div>
+      <div class="space-y-3 px-3 pb-3" data-testid="integrations-icon-grid">
+        <For each={groupedProviders()}>
+          {(group) => (
+            <section>
+              <p class="mb-2 text-[10px] font-medium uppercase tracking-wide text-neutral-500">{group.label}</p>
+              <div class="grid grid-cols-4 gap-2 sm:grid-cols-5">
+                <For each={group.providers}>
+                  {(provider) => {
+                    const Icon = provider.icon || FiCloud;
+                    const connected = () => Boolean(provider.connected);
+                    return (
+                      <div class="group relative flex flex-col items-center gap-1">
+                        <button
+                          type="button"
+                          class={`relative inline-flex h-12 w-12 items-center justify-center rounded-xl border transition ${connected() ? "border-[hsl(var(--primary)/0.45)] bg-[hsl(var(--primary)/0.12)]" : "border-neutral-700 bg-neutral-900 hover:border-neutral-500"}`}
+                          onClick={() => openProviderDialog(provider)}
+                          title={`${provider.name} • ${provider.connected ? "Connected" : "Not connected"} • ${provider.available ? "Available" : "Unavailable"}`}
+                          data-testid={`provider-open-${provider.id}`}
+                        >
+                          <Icon size={18} class={connected() ? "text-[hsl(var(--primary))]" : "text-neutral-300"} />
+                          <span class={`absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full ${provider.available ? "bg-emerald-400" : provider.connected ? "bg-amber-400" : "bg-neutral-600"}`} />
+                        </button>
+                        <button
+                          type="button"
+                          class="max-w-[84px] truncate text-[10px] text-neutral-300 transition hover:text-[hsl(var(--primary))]"
+                          onClick={() => openProviderDialog(provider)}
+                          data-testid={`provider-connect-${provider.id}`}
+                        >
+                          {provider.name}
+                        </button>
+                        <div class="pointer-events-none absolute -bottom-9 z-10 hidden whitespace-nowrap rounded border border-neutral-700 bg-[#0b0c0f] px-2 py-1 text-[10px] text-neutral-200 shadow-xl group-hover:block">
+                          {provider.name} • {provider.availabilityReason}
+                        </div>
 
-                <span class="sr-only" data-testid={`provider-connected-${provider.id}`}>{provider.connected ? "Connected" : "Not connected"}</span>
-                <span class="sr-only" data-testid={`provider-available-${provider.id}`}>{provider.available ? "Available" : "Unavailable"}</span>
-                <span class="sr-only" data-testid={`provider-mode-${provider.id}`}>{provider.connectorMode === "platform" ? "Platform" : "User-owned"}</span>
+                        <span class="sr-only" data-testid={`provider-connected-${provider.id}`}>{provider.connected ? "Connected" : "Not connected"}</span>
+                        <span class="sr-only" data-testid={`provider-available-${provider.id}`}>{provider.available ? "Available" : "Unavailable"}</span>
+                        <span class="sr-only" data-testid={`provider-mode-${provider.id}`}>{provider.connectorMode === "platform" ? "Platform" : "User-owned"}</span>
+                      </div>
+                    );
+                  }}
+                </For>
               </div>
-            );
-          }}
+            </section>
+          )}
         </For>
       </div>
 
@@ -892,6 +970,27 @@ function IntegrationsPanel(props) {
                     </button>
                     <Show when={!requiredInputsReady(provider)}>
                       <p class="text-[11px] text-amber-300">Fill required values in Step 1 first.</p>
+                    </Show>
+                    <Show when={usesRuntimeContainer(provider)}>
+                      <div class="rounded-md border border-neutral-800 bg-black/25 px-2 py-1.5 text-[11px]" data-testid={`integration-runtime-state-${provider.id}`}>
+                        <p class="text-neutral-400">Runtime container</p>
+                        <p class={`mt-0.5 ${
+                          runtimeState().state === "running"
+                            ? "text-emerald-300"
+                            : runtimeState().state === "error"
+                              ? "text-red-300"
+                              : "text-amber-300"
+                        }`}>
+                          {runtimeState().state === "running"
+                            ? "Running"
+                            : runtimeState().state === "error"
+                              ? "Error"
+                              : "Not started"}
+                        </p>
+                        <Show when={runtimeState().message}>
+                          <p class="mt-0.5 text-[10px] text-neutral-500">{runtimeState().message}</p>
+                        </Show>
+                      </div>
                     </Show>
                     <Show when={testRunning()}>
                       <div class="rounded-md border border-neutral-700 bg-black/20 p-2" data-testid="integration-test-loader">

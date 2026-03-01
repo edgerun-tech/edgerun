@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import { installLocalBridgeSimulator } from '../helpers/local-bridge-simulator'
 
-describe('intent ui codex session persistence and resume', () => {
+describe('intent ui opencode session persistence and resume', () => {
   const clearRuntimeState = (win) => {
     win.localStorage.removeItem('intent-ui-integrations-v1')
-    win.localStorage.removeItem('intent-ui-codex-sessions')
-    win.localStorage.removeItem('intent-ui-codex-session-messages')
-    win.localStorage.removeItem('qwen_token')
+    win.localStorage.removeItem('intent-ui-opencode-sessions')
+    win.localStorage.removeItem('intent-ui-opencode-session-messages')
   }
 
   it('persists sessions, hydrates after reload, and resumes from selected session', () => {
@@ -53,30 +52,30 @@ describe('intent ui codex session persistence and resume', () => {
         installLocalBridgeSimulator(win)
         clearRuntimeState(win)
         win.localStorage.setItem('intent-ui-integrations-v1', JSON.stringify({
-          codex_cli: {
+          opencode_cli: {
             connected: true,
             linked: true,
             connectorMode: 'user_owned',
-            accountLabel: 'Codex CLI Session',
+            accountLabel: 'OpenCode CLI Session',
             capabilities: ['assistant.local_cli.execute']
           }
         }))
       }
     })
 
-    cy.window().then((win) => win.__intentDebug.askAssistant('first prompt', { provider: 'codex' }))
+    cy.window().then((win) => win.__intentDebug.askAssistant('first prompt', { provider: 'opencode' }))
     cy.wait('@assistantCall').its('request.body').should((body) => {
       expect(body.threadId).to.eq('')
-      expect(body.provider).to.eq('codex')
+      expect(body.provider).to.eq('opencode')
     })
 
-    cy.window().then((win) => win.__intentDebug.askAssistant('second prompt', { provider: 'codex' }))
+    cy.window().then((win) => win.__intentDebug.askAssistant('second prompt', { provider: 'opencode' }))
     cy.wait('@assistantCall').its('request.body').should((body) => {
       expect(body.threadId).to.eq('thread-a')
     })
 
     cy.window().then((win) => {
-      const history = JSON.parse(win.localStorage.getItem('intent-ui-codex-sessions') || '[]')
+      const history = JSON.parse(win.localStorage.getItem('intent-ui-opencode-sessions') || '[]')
       expect(history.map((entry) => entry.sessionId)).to.deep.equal(['thread-b', 'thread-a'])
       expect(typeof win.__intentDebug.switchSession).to.eq('function')
       expect(win.__intentDebug.switchSession('2')).to.eq(true)
@@ -85,7 +84,7 @@ describe('intent ui codex session persistence and resume', () => {
       expect(state.threadId).to.eq('thread-a')
     })
 
-    cy.window().then((win) => win.__intentDebug.askAssistant('resume first session', { provider: 'codex' }))
+    cy.window().then((win) => win.__intentDebug.askAssistant('resume first session', { provider: 'opencode' }))
     cy.wait('@assistantCall').its('request.body').should((body) => {
       expect(body.threadId).to.eq('thread-a')
       expect(body.sessionId).to.eq('thread-a')

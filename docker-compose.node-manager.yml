@@ -61,6 +61,21 @@ services:
     environment:
       EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL: ${EDGERUN_BOOT_POLICY_VERIFY_KEY_B64URL:-}
       EDGERUN_MCP_GITHUB_IMAGE: ${EDGERUN_MCP_GITHUB_IMAGE:-}
+      EDGERUN_MCP_WHATSAPP_IMAGE: ${EDGERUN_MCP_WHATSAPP_IMAGE:-}
+      EDGERUN_MCP_TELEGRAM_IMAGE: ${EDGERUN_MCP_TELEGRAM_IMAGE:-}
+      EDGERUN_MCP_SIGNAL_IMAGE: ${EDGERUN_MCP_SIGNAL_IMAGE:-}
+      EDGERUN_MCP_DISCORD_IMAGE: ${EDGERUN_MCP_DISCORD_IMAGE:-}
+      EDGERUN_MCP_SLACK_IMAGE: ${EDGERUN_MCP_SLACK_IMAGE:-}
+      EDGERUN_MCP_GOOGLE_MESSAGES_IMAGE: ${EDGERUN_MCP_GOOGLE_MESSAGES_IMAGE:-}
+      EDGERUN_MCP_GVOICE_IMAGE: ${EDGERUN_MCP_GVOICE_IMAGE:-}
+      EDGERUN_MCP_META_IMAGE: ${EDGERUN_MCP_META_IMAGE:-}
+      EDGERUN_MCP_GOOGLECHAT_IMAGE: ${EDGERUN_MCP_GOOGLECHAT_IMAGE:-}
+      EDGERUN_MCP_TWITTER_IMAGE: ${EDGERUN_MCP_TWITTER_IMAGE:-}
+      EDGERUN_MCP_BLUESKY_IMAGE: ${EDGERUN_MCP_BLUESKY_IMAGE:-}
+      EDGERUN_MCP_IMESSAGE_IMAGE: ${EDGERUN_MCP_IMESSAGE_IMAGE:-}
+      EDGERUN_MCP_IMESSAGEGO_IMAGE: ${EDGERUN_MCP_IMESSAGEGO_IMAGE:-}
+      EDGERUN_MCP_LINKEDIN_IMAGE: ${EDGERUN_MCP_LINKEDIN_IMAGE:-}
+      EDGERUN_MCP_HEISENBRIDGE_IMAGE: ${EDGERUN_MCP_HEISENBRIDGE_IMAGE:-}
       EDGERUN_EVENTBUS_NATS_URL: ${EDGERUN_EVENTBUS_NATS_URL:-nats://127.0.0.1:4222}
       EDGERUN_INTEGRATION_TOPIC_ROOT: ${EDGERUN_INTEGRATION_TOPIC_ROOT:-edgerun.integrations}
     volumes:
@@ -149,26 +164,26 @@ services:
     volumes:
       - ./:/workspace
 
-  codex-cli:
-    container_name: edgerun-codex-cli
+  opencode-cli:
+    container_name: edgerun-opencode-cli
     image: node:22-bookworm
     restart: unless-stopped
     profiles: ["tunnel"]
     network_mode: host
     working_dir: /workspace/edgerun
     environment:
-      HOME: /workspace/edgerun
+      HOME: /home/ken
     command:
       - /bin/sh
       - -lc
       - |
-        ln -sf /usr/lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
         exec tail -f /dev/null
     volumes:
       - /home/ken/src/edgerun:/workspace/edgerun
-      - /home/ken/.codex:/workspace/edgerun/.codex
-      - /home/ken/.codex:/home/ken/.codex
-      - /usr/lib/node_modules/@openai/codex:/usr/lib/node_modules/@openai/codex:ro
+      - /usr/bin/opencode:/usr/local/bin/opencode:ro
+      - /home/ken/.config/opencode:/home/ken/.config/opencode
+      - /home/ken/.local/share/opencode:/home/ken/.local/share/opencode
+      - /home/ken/.local/state/opencode:/home/ken/.local/state/opencode
 
   caddy:
     container_name: edgerun-osdev-caddy

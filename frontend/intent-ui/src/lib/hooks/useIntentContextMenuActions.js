@@ -16,7 +16,7 @@ import { publishEvent } from "../../stores/eventbus";
 import { pushClipboardEntry } from "../../stores/clipboard-history";
 import { toggleIntentBar } from "../../stores/ui-actions";
 import { openWindow } from "../../stores/windows";
-import { startNewCodexSession } from "../../stores/workflow-ui";
+import { startNewAssistantSession } from "../../stores/workflow-ui";
 
 function resolveCopyText(target) {
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
@@ -77,10 +77,10 @@ export function useIntentContextMenuActions() {
     { label: "Open ONVIF", icon: TbOutlineDeviceDesktop, run: () => openWindow("onvif") },
     { label: "Open Settings", icon: TbOutlineApps, run: () => openWindow("settings") },
     {
-      label: "New Codex Session",
+      label: "New Assistant Session",
       icon: TbOutlineHistory,
       run: () => {
-        startNewCodexSession();
+        startNewAssistantSession();
         toggleIntentBar();
       }
     },

@@ -9,16 +9,73 @@ class IntegrationLifecycle {
     this.requiresToken = definition.requiresToken === false ? false : true;
     this.defaultCapabilities = Array.isArray(definition.defaultCapabilities) ? definition.defaultCapabilities.slice() : [];
     this.tags = Array.isArray(definition.tags) ? definition.tags.slice() : [];
+    this.aliases = Array.isArray(definition.aliases) ? definition.aliases.slice() : [];
+    this.forceUserOwned = Boolean(definition.forceUserOwned) || this.tags.includes("matrix-bridge");
   }
 
   getDefaultConnectorMode() {
+    if (this.forceUserOwned) return "user_owned";
     return this.defaultConnectorMode || (this.supportsPlatformConnector ? "platform" : "user_owned");
   }
 
   resolveConnectorMode(mode) {
+    if (this.forceUserOwned) return "user_owned";
     const requested = String(mode || "").trim();
     if (requested === "platform" && this.supportsPlatformConnector) return "platform";
     return "user_owned";
+  }
+
+  isMatrixBridgeIntegration() {
+    return this.tags.includes("matrix-bridge");
+  }
+
+  async verifyMatrixBridgeRuntime({ details = {}, token = "", fetchImpl = fetch } = {}) {
+    const bridgeToken = String(details?.token || "").trim() || String(token || "").trim();
+    if (bridgeToken.length < 8) {
+      return { ok: false, message: `${this.name} bridge token missing or invalid.` };
+    }
+
+    const nodeId = String(details?.nodeId || details?.node_id || "").trim();
+    const query = new URLSearchParams({ integration_id: this.id });
+    if (nodeId) query.set("node_id", nodeId);
+
+    const readRuntimeStatus = async () => {
+      try {
+        const response = await fetchImpl(`/v1/local/mcp/integration/status?${query.toString()}`, { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          return {
+            ok: false,
+            running: false,
+            message: String(payload?.error || `bridge status request failed (${response.status})`)
+          };
+        }
+        const running = Boolean(payload?.data?.running);
+        const status = String(payload?.data?.status || (running ? "running" : "stopped")).trim();
+        return { ok: true, running, status };
+      } catch (error) {
+        return {
+          ok: false,
+          running: false,
+          message: error instanceof Error ? error.message : "Failed to query bridge runtime status."
+        };
+      }
+    };
+
+    const status = await readRuntimeStatus();
+    if (status.ok && status.running) {
+      return {
+        ok: true,
+        message: `${this.name} Matrix bridge runtime is running (${status.status || "running"}).`,
+        capabilities: this.defaultCapabilities.slice()
+      };
+    }
+
+    return {
+      ok: true,
+      message: `${this.name} credentials accepted. Runtime starts on Link Integration.`,
+      capabilities: this.defaultCapabilities.slice()
+    };
   }
 
   hasUsableToken(token, fallbackConnected = false) {
@@ -138,15 +195,15 @@ class IntegrationLifecycle {
 
   listConnectionView({ connection = {}, profileReady = false, deviceReady = true } = {}) {
     const connected = Boolean(connection?.connected);
-    const requiresProfileSession = this.id !== "codex_cli";
+    const requiresProfileSession = this.id !== "opencode_cli";
     const available = connected
       && (requiresProfileSession ? profileReady : true)
-      && (this.id === "codex_cli" ? deviceReady : true);
+      && (this.id === "opencode_cli" ? deviceReady : true);
     const availabilityReason = this.id === "tailscale" && !connected
       ? "Provide Tailscale API key and link integration"
       : !connected
         ? "Not connected"
-        : this.id === "codex_cli" && !deviceReady
+        : this.id === "opencode_cli" && !deviceReady
           ? "Connected device required"
           : requiresProfileSession && !profileReady
             ? "Profile session required"
@@ -164,7 +221,8 @@ class IntegrationLifecycle {
       accountLabel: connection?.accountLabel || "",
       capabilities: available
         ? (Array.isArray(connection?.capabilities) ? connection.capabilities.slice() : this.defaultCapabilities.slice())
-        : []
+        : [],
+      aliases: this.aliases.slice()
     };
   }
 
@@ -177,6 +235,9 @@ class IntegrationLifecycle {
     fetchImpl = fetch
   } = {}) {
     const mode = this.resolveConnectorMode(connectorMode || this.getDefaultConnectorMode());
+    if (this.isMatrixBridgeIntegration()) {
+      return this.verifyMatrixBridgeRuntime({ details, token, fetchImpl });
+    }
     if (this.id === "github") {
       const pat = String(details?.token || "").trim() || String(token || "").trim();
       if (pat.length < 8) {
@@ -209,7 +270,7 @@ class IntegrationLifecycle {
       if (!profileReady) return { ok: false, message: "Profile session required for platform connector." };
       return { ok: true, message: "Platform connector session is active.", capabilities: this.defaultCapabilities.slice() };
     }
-    if (this.id === "codex_cli") {
+    if (this.id === "opencode_cli") {
       if (!deviceReady) return { ok: false, message: "No connected node manager device is online." };
       return { ok: true, message: "Connected device is online for local CLI execution.", capabilities: this.defaultCapabilities.slice() };
     }

@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { knownDevices } from "./devices";
 import { integrationStore } from "./integrations";
+import { canonicalBridgeId } from "../lib/integrations/official-bridges";
 
 const DEFAULT_CODE = `export function sumLatency(samples) {
   if (!samples.length) return 0
@@ -8,15 +9,17 @@ const DEFAULT_CODE = `export function sumLatency(samples) {
 }`;
 const APP_VERSION = "v0.10";
 const BUILD_NUMBER_KEY = "intent-ui-build-number";
-const SESSION_HISTORY_KEY = "intent-ui-codex-sessions";
-const SESSION_MESSAGES_KEY = "intent-ui-codex-session-messages";
+const SESSION_HISTORY_KEY = "intent-ui-opencode-sessions";
+const SESSION_MESSAGES_KEY = "intent-ui-opencode-session-messages";
+const LEGACY_SESSION_HISTORY_KEY = "intent-ui-codex-sessions";
+const LEGACY_SESSION_MESSAGES_KEY = "intent-ui-codex-session-messages";
 const MAX_SESSIONS = 24;
 const MAX_SESSION_MESSAGES = 200;
 
 function loadSessionHistory() {
   if (typeof localStorage === "undefined") return [];
   try {
-    const raw = localStorage.getItem(SESSION_HISTORY_KEY);
+    const raw = localStorage.getItem(SESSION_HISTORY_KEY) || localStorage.getItem(LEGACY_SESSION_HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.slice(0, MAX_SESSIONS) : [];
@@ -49,7 +52,7 @@ function normalizeMessage(item, index) {
 function loadSessionMessageMap() {
   if (typeof localStorage === "undefined") return {};
   try {
-    const raw = localStorage.getItem(SESSION_MESSAGES_KEY);
+    const raw = localStorage.getItem(SESSION_MESSAGES_KEY) || localStorage.getItem(LEGACY_SESSION_MESSAGES_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
@@ -103,7 +106,7 @@ function buildSessionHistoryEntry(sessionId, threadId, provider, preview) {
   return {
     sessionId,
     threadId: threadId || "",
-    provider: provider || "codex",
+    provider: provider || "opencode",
     preview: preview || "Current session",
     updatedAt: new Date().toISOString()
   };
@@ -189,14 +192,14 @@ const [workflowUi, setWorkflowUi] = createSignal({
   leftOpen: false,
   rightOpen: false,
   topOpen: false,
-  topPanel: "codex",
+  topPanel: "assistant",
   leftPanel: "files",
   rightPanel: "conversations",
   streaming: false,
   streamText: "",
   responseText: "",
   statusEvents: [],
-  provider: "codex",
+  provider: "opencode",
   appVersion: APP_VERSION,
   buildNumber: 1,
   sessionId: "",
@@ -204,9 +207,9 @@ const [workflowUi, setWorkflowUi] = createSignal({
   selectedIntegrationId: "",
   sessionHistory: [],
   messages: [],
-  codexPhase: "idle",
-  codexStepIndex: 0,
-  codexTotalSteps: 0,
+  assistantPhase: "idle",
+  assistantStepIndex: 0,
+  assistantTotalSteps: 0,
   code: DEFAULT_CODE,
   commitPending: false,
   committed: false,
@@ -216,7 +219,7 @@ const [workflowUi, setWorkflowUi] = createSignal({
 let streamTimer = null;
 let commitTimer = null;
 let closeTimer = null;
-let codexTimer = null;
+let assistantTimer = null;
 
 function clearWorkflowTimers() {
   if (streamTimer) {
@@ -231,9 +234,9 @@ function clearWorkflowTimers() {
     clearTimeout(closeTimer);
     closeTimer = null;
   }
-  if (codexTimer) {
-    clearInterval(codexTimer);
-    codexTimer = null;
+  if (assistantTimer) {
+    clearInterval(assistantTimer);
+    assistantTimer = null;
   }
 }
 
@@ -259,9 +262,9 @@ function openWorkflowDemo(promptText) {
     responseText: "",
     messages: appendChatMessage([], "assistant", ""),
     statusEvents: [],
-    codexPhase: "idle",
-    codexStepIndex: 0,
-    codexTotalSteps: 0,
+    assistantPhase: "idle",
+    assistantStepIndex: 0,
+    assistantTotalSteps: 0,
     commitPending: false,
     committed: false,
     prompt: promptText || "code edit workflow"
@@ -348,7 +351,7 @@ function toggleWorkflowDrawer(side) {
     }
 
     if (sideId === "top") {
-      next.topPanel = "codex";
+      next.topPanel = "assistant";
       next.topOpen = !prev.topOpen;
     }
 
@@ -356,8 +359,8 @@ function toggleWorkflowDrawer(side) {
   });
 }
 
-function setAssistantProvider(provider) {
-  const normalized = provider === "qwen" ? "qwen" : "codex";
+function setAssistantProvider() {
+  const normalized = "opencode";
   setWorkflowUi((prev) => ({ ...prev, provider: normalized }));
 }
 
@@ -374,7 +377,7 @@ function hydrateWorkflowUiFromStorage() {
     sessionHistory: prev.sessionHistory.length > 0 ? prev.sessionHistory : history,
     sessionId: prev.sessionId || first?.sessionId || "",
     threadId: prev.threadId || first?.threadId || "",
-    provider: prev.provider || first?.provider || "codex",
+    provider: prev.provider || first?.provider || "opencode",
     prompt: prev.prompt || first?.preview || "",
     messages: prev.messages.length > 0 ? prev.messages : restoredMessages,
     streamText: prev.streamText || restoredResponse,
@@ -383,6 +386,7 @@ function hydrateWorkflowUiFromStorage() {
 }
 
 function openWorkflowIntegrations(providerId = "github") {
+  const normalizedProviderId = canonicalBridgeId(providerId) || providerId;
   if (closeTimer) {
     clearTimeout(closeTimer);
     closeTimer = null;
@@ -394,11 +398,11 @@ function openWorkflowIntegrations(providerId = "github") {
     leftOpen: true,
     leftPanel: "integrations",
     topOpen: true,
-    topPanel: "codex",
-    selectedIntegrationId: providerId || prev.selectedIntegrationId || "github",
+    topPanel: "assistant",
+    selectedIntegrationId: normalizedProviderId || prev.selectedIntegrationId || "github",
     statusEvents: [
       ...prev.statusEvents,
-      { type: "phase", label: "integrations", detail: `Open ${providerId || "integration"} configuration.` }
+      { type: "phase", label: "integrations", detail: `Open ${normalizedProviderId || "integration"} configuration.` }
     ]
   }));
 }
@@ -434,7 +438,7 @@ function useWorkflowSession(session) {
     streamText: latestResponse,
     responseText: latestResponse,
     topOpen: true,
-    topPanel: "codex"
+    topPanel: "assistant"
   }));
 }
 
@@ -451,7 +455,7 @@ function switchWorkflowSession(selector) {
   return true;
 }
 
-function startNewCodexSession() {
+function startNewAssistantSession() {
   setWorkflowUi((prev) => ({
     ...prev,
     sessionId: "",
@@ -463,22 +467,22 @@ function startNewCodexSession() {
     statusEvents: [
       { type: "phase", label: "new", detail: "Started a new Codex session." }
     ],
-    codexPhase: "idle",
-    codexStepIndex: 0
+    assistantPhase: "idle",
+    assistantStepIndex: 0
   }));
 }
 
-function assistantIntegrationId(provider) {
-  return provider === "qwen" ? "qwen" : "codex_cli";
+function assistantIntegrationId() {
+  return "opencode_cli";
 }
 
 function anyDeviceConnected() {
   return knownDevices().some((device) => Boolean(device?.online));
 }
 
-async function openCodexResponse(queryText, options = {}) {
+async function openAssistantResponse(queryText, options = {}) {
   const prompt = queryText?.trim() || "No prompt";
-  const provider = options.provider === "qwen" ? "qwen" : "codex";
+  const provider = "opencode";
   const requiredIntegrationId = assistantIntegrationId(provider);
   integrationStore.checkAll();
   const requiredIntegration = integrationStore.get(requiredIntegrationId);
@@ -491,9 +495,9 @@ async function openCodexResponse(queryText, options = {}) {
     clearTimeout(closeTimer);
     closeTimer = null;
   }
-  if (codexTimer) {
-    clearInterval(codexTimer);
-    codexTimer = null;
+  if (assistantTimer) {
+    clearInterval(assistantTimer);
+    assistantTimer = null;
   }
 
   const currentState = workflowUi();
@@ -502,11 +506,11 @@ async function openCodexResponse(queryText, options = {}) {
     setWorkflowUi((prev) => ({
       ...prev,
       topOpen: true,
-      topPanel: "codex",
+      topPanel: "assistant",
       streaming: false,
-      codexPhase: "error",
-      codexStepIndex: 0,
-      codexTotalSteps: 0,
+      assistantPhase: "error",
+      assistantStepIndex: 0,
+      assistantTotalSteps: 0,
       prompt,
       statusEvents: [
         ...prev.statusEvents,
@@ -523,11 +527,11 @@ async function openCodexResponse(queryText, options = {}) {
     setWorkflowUi((prev) => ({
       ...prev,
       topOpen: true,
-      topPanel: "codex",
+      topPanel: "assistant",
       streaming: false,
-      codexPhase: "error",
-      codexStepIndex: 0,
-      codexTotalSteps: 0,
+      assistantPhase: "error",
+      assistantStepIndex: 0,
+      assistantTotalSteps: 0,
       prompt,
       selectedIntegrationId: requiredIntegrationId,
       statusEvents: [
@@ -548,15 +552,15 @@ async function openCodexResponse(queryText, options = {}) {
   setWorkflowUi((prev) => ({
     ...prev,
     topOpen: true,
-    topPanel: "codex",
+    topPanel: "assistant",
     streaming: true,
     streamText: "",
     responseText: "",
     messages: draftMessages,
     statusEvents: initialEvents,
-    codexPhase: "thinking",
-    codexStepIndex: 0,
-    codexTotalSteps: 0,
+    assistantPhase: "thinking",
+    assistantStepIndex: 0,
+    assistantTotalSteps: 0,
     prompt
   }));
   try {
@@ -568,24 +572,11 @@ async function openCodexResponse(queryText, options = {}) {
     if (currentState.sessionId) {
       requestBody.sessionId = currentState.sessionId;
     }
-    if (provider === "qwen") {
-      const qwenTokenRaw = typeof localStorage !== "undefined" ? localStorage.getItem("qwen_token") : null;
-      const qwenToken = qwenTokenRaw ? (() => {
-        try {
-          const parsed = JSON.parse(qwenTokenRaw);
-          return parsed?.access_token ?? "";
-        } catch {
-          return "";
-        }
-      })() : "";
-      requestBody.qwenToken = qwenToken;
-    }
-
     setWorkflowUi((prev) => ({
       ...prev,
       statusEvents: [...prev.statusEvents, { type: "phase", label: "executing", detail: `Calling ${provider}...` }],
-      codexPhase: "executing",
-      codexStepIndex: 0
+      assistantPhase: "executing",
+      assistantStepIndex: 0
     }));
 
     const response = await fetch("/api/assistant", {
@@ -602,8 +593,8 @@ async function openCodexResponse(queryText, options = {}) {
       setWorkflowUi((prev) => ({
         ...prev,
         streaming: false,
-        codexPhase: "error",
-        codexStepIndex: 0,
+        assistantPhase: "error",
+        assistantStepIndex: 0,
         responseText: "",
         statusEvents: [
           ...prev.statusEvents,
@@ -621,8 +612,8 @@ async function openCodexResponse(queryText, options = {}) {
         setWorkflowUi((prev) => ({
           ...prev,
           streaming: false,
-          codexPhase: "error",
-          codexStepIndex: 0,
+          assistantPhase: "error",
+          assistantStepIndex: 0,
           responseText: "",
           statusEvents: [
             ...prev.statusEvents,
@@ -654,8 +645,8 @@ async function openCodexResponse(queryText, options = {}) {
         return {
           ...prev,
           streaming: false,
-          codexPhase: "done",
-          codexStepIndex: 0,
+          assistantPhase: "done",
+          assistantStepIndex: 0,
           responseText: finalText,
           streamText: finalText,
           messages: nextMessages,
@@ -719,7 +710,7 @@ async function openCodexResponse(queryText, options = {}) {
       if (event.type === "status" && event.event) {
         setWorkflowUi((prev) => ({
           ...prev,
-          codexPhase: event.event.label || prev.codexPhase,
+          assistantPhase: event.event.label || prev.assistantPhase,
           statusEvents: [...prev.statusEvents, event.event]
         }));
         return;
@@ -807,8 +798,8 @@ async function openCodexResponse(queryText, options = {}) {
       return {
         ...prev,
         streaming: false,
-        codexPhase: finalEvent?.error ? "error" : "done",
-        codexStepIndex: 0,
+        assistantPhase: finalEvent?.error ? "error" : "done",
+        assistantStepIndex: 0,
         streamText: finalText,
         responseText: finalText,
         messages: nextMessages,
@@ -827,8 +818,8 @@ async function openCodexResponse(queryText, options = {}) {
     setWorkflowUi((prev) => ({
       ...prev,
       streaming: false,
-      codexPhase: "error",
-      codexStepIndex: 0,
+      assistantPhase: "error",
+      assistantStepIndex: 0,
       responseText: "",
       statusEvents: [...prev.statusEvents, { type: "error", label: "error", detail }]
     }));
@@ -871,10 +862,10 @@ export {
   closeWorkflowDemo,
   hydrateWorkflowUiFromStorage,
   openWorkflowDemo,
-  openCodexResponse,
+  openAssistantResponse,
   openWorkflowIntegrations,
   openWorkflowFlipper,
-  startNewCodexSession,
+  startNewAssistantSession,
   switchWorkflowSession,
   setAssistantProvider,
   setWorkflowCode,

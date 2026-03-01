@@ -49,7 +49,7 @@ This starts:
 - `cloudflared` tunnel ingress
 - `osdev-frontend` dev service (rebuilds Intent UI when source files change)
 - `osdeve2e-manager` dev/e2e manager service (rebuilds Intent UI into `out/frontend/osdeve2e` and runs Cypress on file changes)
-- `codex-cli` container as the execution target for node-manager `docker exec ... codex ...`
+- `opencode-cli` container as the execution target for node-manager `docker exec ... opencode ...`
 - `caddy` ingress service on `127.0.0.1:4175` serving generated output from `out/frontend/osdev` + proxying `/v1/local/*`, `/api/assistant` -> local backend, and `/api/*`
 
 Host mapping through the same Caddy listener:

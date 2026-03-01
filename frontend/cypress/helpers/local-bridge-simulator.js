@@ -2,6 +2,7 @@
 
 export function installLocalBridgeSimulator(win) {
   const CREDENTIALS_STORAGE_KEY = 'intent-ui-local-bridge-credentials-sim-v1'
+  const MCP_RUNTIME_STORAGE_KEY = 'intent-ui-local-bridge-mcp-sim-v1'
 
   const readCredentials = () => {
     try {
@@ -14,6 +15,20 @@ export function installLocalBridgeSimulator(win) {
 
   const writeCredentials = (entries) => {
     win.localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(Array.isArray(entries) ? entries : []))
+  }
+
+  const readMcpRuntime = () => {
+    try {
+      const parsed = JSON.parse(String(win.localStorage.getItem(MCP_RUNTIME_STORAGE_KEY) || '{}'))
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+
+  const writeMcpRuntime = (state) => {
+    const next = state && typeof state === 'object' ? state : {}
+    win.localStorage.setItem(MCP_RUNTIME_STORAGE_KEY, JSON.stringify(next))
   }
 
   class FakeBridgeWebSocket {
@@ -159,6 +174,109 @@ export function installLocalBridgeSimulator(win) {
           ok: true,
           integration_id: integrationId,
           token: String(entry?.secret || '')
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/mcp/integration/start' && String(init?.method || 'GET').toUpperCase() === 'POST') {
+      const body = JSON.parse(String(init?.body || '{}'))
+      const integrationId = String(body?.integration_id || '').trim().toLowerCase()
+      const token = String(body?.token || '').trim()
+      if (!integrationId) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'integration_id is required' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      if (token.length < 8) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'integration token is missing or invalid' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const runtimes = readMcpRuntime()
+      runtimes[integrationId] = {
+        integration_id: integrationId,
+        container_name: `edgerun-mcp-${integrationId.replace(/[^a-z0-9-]/g, '-')}`,
+        running: true,
+        status: 'running'
+      }
+      writeMcpRuntime(runtimes)
+      return Promise.resolve(
+        new win.Response(JSON.stringify({
+          ok: true,
+          error: '',
+          data: runtimes[integrationId]
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/mcp/integration/stop' && String(init?.method || 'GET').toUpperCase() === 'POST') {
+      const body = JSON.parse(String(init?.body || '{}'))
+      const integrationId = String(body?.integration_id || '').trim().toLowerCase()
+      if (!integrationId) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'integration_id is required' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const runtimes = readMcpRuntime()
+      runtimes[integrationId] = {
+        integration_id: integrationId,
+        container_name: `edgerun-mcp-${integrationId.replace(/[^a-z0-9-]/g, '-')}`,
+        running: false,
+        status: 'stopped'
+      }
+      writeMcpRuntime(runtimes)
+      return Promise.resolve(
+        new win.Response(JSON.stringify({
+          ok: true,
+          error: '',
+          data: runtimes[integrationId]
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/mcp/integration/status') {
+      const integrationId = (() => {
+        try {
+          return String(new URL(url, win.location.origin).searchParams.get('integration_id') || '').trim().toLowerCase()
+        } catch {
+          return ''
+        }
+      })()
+      if (!integrationId) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'integration_id is required' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const runtimes = readMcpRuntime()
+      const runtime = runtimes[integrationId] || {
+        integration_id: integrationId,
+        container_name: `edgerun-mcp-${integrationId.replace(/[^a-z0-9-]/g, '-')}`,
+        running: false,
+        status: 'not_found'
+      }
+      return Promise.resolve(
+        new win.Response(JSON.stringify({
+          ok: true,
+          error: '',
+          data: runtime
         }), {
           status: 200,
           headers: { 'content-type': 'application/json; charset=utf-8' }

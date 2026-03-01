@@ -22,3 +22,8 @@ AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md	superseded	agent-tooling	2026-03-01-agen
 2026-02-24-cloud-os-eslint-config.md	historical	cloud-os		Cloud-os scope removed from current repo surface.
 CLOUD_OS_CODEX_CLI_PIPELINE_V1.md	historical	cloud-os		Cloud-os pipeline is not in current active tree.
 CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os dev loop no longer active in current repository layout.
+2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md	active	ci		Batches high-impact CI/build determinism and hygiene fixes.
+2026-03-01-opencode-only-assistant-integration-v1.md	active	intent-ui		OpenCode is the sole assistant provider and integration path.
+2026-03-01-codex-assistant-direct-local-backend-v1.md	superseded	intent-ui	2026-03-01-opencode-only-assistant-integration-v1.md	Codex-specific backend wiring replaced by OpenCode-only path.
+2026-03-01-codex-session-persistence-and-resume-v1.md	superseded	intent-ui	2026-03-01-opencode-only-assistant-integration-v1.md	Session persistence now follows OpenCode assistant execution.
+2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md	superseded	intent-ui	2026-03-01-opencode-only-assistant-integration-v1.md	Codex CLI availability policy replaced by OpenCode CLI policy.

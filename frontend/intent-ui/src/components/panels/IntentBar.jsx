@@ -27,7 +27,6 @@ import {
 import { FiSettings, FiGithub, FiGlobe } from "solid-icons/fi";
 import { mcpManager } from "../../lib/mcp/client";
 import { llmRouter, defaultProviders } from "../../lib/llm/router";
-import { intentProcessor } from "../../lib/intent/processor";
 import { intentExecutor } from "../../lib/intent/executor";
 import { context, addRecentCommand, addOpenWindow, getRecentCommands, removeOpenWindow } from "../../stores/context";
 import { openWindow, closeWindow } from "../../stores/windows";
@@ -52,11 +51,11 @@ import {
 } from "../../lib/stores/results";
 import { ResultRenderer } from "../results/ResultRenderer";
 import {
-  openCodexResponse,
+  openAssistantResponse,
   openWorkflowDemo,
   openWorkflowIntegrations,
   setAssistantProvider,
-  startNewCodexSession,
+  startNewAssistantSession,
   useWorkflowSession,
   workflowUi
 } from "../../stores/workflow-ui";
@@ -194,8 +193,7 @@ const googleCommandCatalog = [
 const systemCommandCatalog = [
   "/help",
   "/guide",
-  "set provider codex",
-  "set provider qwen",
+  "set provider opencode",
   "open credentials",
   "open onvif",
   "onvif",
@@ -209,8 +207,7 @@ const helpCommandCatalog = [
     items: [
       { command: "/help", description: "Open command explorer" },
       { command: "/guide", description: "Open interactive onboarding guide" },
-      { command: "set provider codex", description: "Switch assistant provider" },
-      { command: "set provider qwen", description: "Switch assistant provider" },
+      { command: "set provider opencode", description: "Switch assistant provider" },
       { command: "set accent blue", description: "Change accent theme" },
       { command: "open credentials", description: "Open credentials vault panel" },
       { command: "open onvif", description: "Open ONVIF cameras panel" },
@@ -362,7 +359,7 @@ function IntentBar() {
     if (!trimmed.startsWith("set provider")) return null;
     const value = trimmed.replace(/^set\s+provider\s*/, "").trim();
     if (!value) return { provider: "" };
-    if (value === "codex" || value === "qwen") return { provider: value };
+    if (value === "opencode") return { provider: value };
     return { provider: "invalid" };
   };
   const parseMediaCommand = (raw) => {
@@ -727,28 +724,6 @@ function IntentBar() {
           workerScript: "/workers/mcp/cloudflare.js",
           enabled: true
         });
-      }
-      const qwenToken = localStorage.getItem("qwen_token");
-      if (qwenToken) {
-        try {
-          const tokenData = JSON.parse(qwenToken);
-          if (tokenData.access_token && Date.now() < tokenData.expiry_date) {
-            await mcpManager.connectServer({
-              id: "qwen",
-              name: "Qwen Code",
-              type: "builtin",
-              workerScript: "/workers/mcp/qwen.js",
-              enabled: true,
-              auth: {
-                type: "oauth",
-                oauthProvider: "qwen",
-                tokenKey: "qwen_token"
-              }
-            });
-          }
-        } catch (e) {
-          console.warn("[IntentBar] Qwen token parse error:", e);
-        }
       }
       await mcpManager.connectServer({
         id: "terminal",
@@ -1320,7 +1295,7 @@ function IntentBar() {
     if (isProviderIntentQuery(q)) {
       const parsed = parseProviderCommand(q);
       if (!parsed || !parsed.provider || parsed.provider === "invalid") {
-        setError("Use: set provider codex|qwen");
+        setError("Use: set provider opencode");
         return;
       }
       setAssistantProvider(parsed.provider);
@@ -1520,7 +1495,7 @@ function IntentBar() {
       return;
     }
     if (/^session\s+new$/i.test(trimmed)) {
-      startNewCodexSession();
+      startNewAssistantSession();
       setError(null);
       addRecentCommand(trimmed);
       setQuery("");
@@ -1533,7 +1508,7 @@ function IntentBar() {
         index: index + 1,
         sessionId: session.sessionId,
         preview: session.preview || "",
-        provider: session.provider || "codex"
+        provider: session.provider || "opencode"
       }));
       addResult({
         query: trimmed,
@@ -1542,7 +1517,7 @@ function IntentBar() {
           data: lines,
           ui: {
             viewType: "table",
-            title: "Codex Sessions",
+            title: "OpenCode Sessions",
             description: `Loaded ${lines.length} sessions`,
             metadata: {
               source: "Session Store",
@@ -1595,93 +1570,14 @@ function IntentBar() {
       setQuery("");
       return;
     }
-    const provider = workflowUi().provider || "codex";
-    openCodexResponse(q, { provider });
+    const provider = workflowUi().provider || "opencode";
+    openAssistantResponse(q, { provider });
     addRecentCommand(trimmed);
     setQuery("");
     setMode("intent");
     setError(null);
     setPlan(null);
     return;
-    setLoading(true);
-    setError(null);
-    try {
-      const appCtx = {
-        currentRepo: context.currentRepo,
-        currentBranch: context.currentBranch,
-        currentHost: context.currentHost,
-        currentProject: context.currentProject,
-        recentFiles: context.recentFiles,
-        recentCommands: context.recentCommands,
-        activeIntegrations: context.activeIntegrations,
-        environment: context.environment,
-        openWindows: context.openWindows
-      };
-      const result = await intentProcessor.process(q, appCtx);
-      setPlan(result);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Processing failed";
-      if (msg.includes("LLM provider") || msg.includes("No LLM")) {
-        const qwenToken = localStorage.getItem("qwen_token");
-        const hasQwen = qwenToken && (() => {
-          try {
-            const data = JSON.parse(qwenToken);
-            return data.access_token && Date.now() < data.expiry_date;
-          } catch {
-            return false;
-          }
-        })();
-        if (hasQwen) {
-          setError("Qwen connected. Processing with Qwen...");
-          try {
-            const qwenProvider = {
-              id: "qwen-oauth",
-              name: "Qwen Code",
-              type: "qwen",
-              baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-              apiKey: JSON.parse(qwenToken).access_token,
-              defaultModel: "qwen-plus",
-              availableModels: ["qwen-plus", "qwen-turbo", "qwen-max"],
-              enabled: true,
-              priority: 1
-            };
-            llmRouter.addProvider(qwenProvider);
-            const appCtx = {
-              currentRepo: context.currentRepo,
-              currentBranch: context.currentBranch,
-              currentHost: context.currentHost,
-              currentProject: context.currentProject,
-              recentFiles: context.recentFiles,
-              recentCommands: context.recentCommands,
-              activeIntegrations: context.activeIntegrations,
-              environment: context.environment,
-              openWindows: context.openWindows
-            };
-            const result = await intentProcessor.process(q, appCtx);
-            setPlan(result);
-            return;
-          } catch (retryError) {
-            setError("Qwen request failed. Please try again.");
-          }
-        } else {
-          setError("AI commands require an LLM. Use Qwen OAuth or configure in integrations.");
-        }
-        setPlan({
-          id: "llm-prompt",
-          intent: { raw: q, verb: "", target: "", modifiers: [], context, confidence: 0 },
-          steps: [],
-          risk: "low",
-          preview: [],
-          requiresAuth: true,
-          predictedResult: "Configure LLM in integrations"
-        });
-      } else {
-        setError(msg);
-        setPlan(null);
-      }
-    } finally {
-      setLoading(false);
-    }
   };
   const handleExecute = async () => {
     const p = plan();

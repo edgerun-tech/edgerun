@@ -1,24 +1,26 @@
 # Active Specs Index
 
-Generated: 2026-03-01 02:20:01Z
+Generated: 2026-03-01 03:57:44Z
 
 ## Summary
 
-- Total specs: 150
-- Cataloged: 23
-- Active: 12
-- Superseded: 7
+- Total specs: 162
+- Cataloged: 28
+- Active: 14
+- Superseded: 10
 - Historical: 4
-- Uncataloged: 127
+- Uncataloged: 134
 
 ## Active
 
 | Spec | Domain | Note |
 |---|---|---|
 | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | repo-ops | Current cleanup baseline after removal of agent/executor tool surfaces. |
+| [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
 | [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |
 | [2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md](./2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md) | intent-ui | Current hardening direction for lifecycle logic. |
+| [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |
 | [CLOUDFLARE_FRONTEND_TARGETS_V1.md](./CLOUDFLARE_FRONTEND_TARGETS_V1.md) | frontend-delivery | Frontend deploy target pinning policy remains active. |
@@ -32,10 +34,13 @@ Generated: 2026-03-01 02:20:01Z
 
 | Spec | Replaced By | Note |
 |---|---|---|
-| [2026-02-28-agent-storage-native-proposal-flow-v1.md](./2026-02-28-agent-storage-native-proposal-flow-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Storage proposal wrapper flow removed with tooling surface cleanup. |
 | [2026-02-28-agentic-runtime-minimal-architecture-v1.md](./2026-02-28-agentic-runtime-minimal-architecture-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Runtime entrypoints referenced removed tooling wrappers. |
+| [2026-02-28-agent-storage-native-proposal-flow-v1.md](./2026-02-28-agent-storage-native-proposal-flow-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Storage proposal wrapper flow removed with tooling surface cleanup. |
 | [2026-03-01-agent-virtualized-context-diff-events-and-test-executors-v1.md](./2026-03-01-agent-virtualized-context-diff-events-and-test-executors-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Defined flows via removed agent script surface. |
 | [2026-03-01-ai-native-storage-agent-workflow-v1.md](./2026-03-01-ai-native-storage-agent-workflow-v1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Assumed edgertool-based autosubmit path. |
+| [2026-03-01-codex-assistant-direct-local-backend-v1.md](./2026-03-01-codex-assistant-direct-local-backend-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Codex-specific backend wiring replaced by OpenCode-only path. |
+| [2026-03-01-codex-session-persistence-and-resume-v1.md](./2026-03-01-codex-session-persistence-and-resume-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Session persistence now follows OpenCode assistant execution. |
+| [2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md](./2026-03-01-intent-ui-codex-cli-availability-without-profile-v1.md) | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | Codex CLI availability policy replaced by OpenCode CLI policy. |
 | [AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md](./AGENT_DIFF_EVENT_FIRST_ACCEPTANCE_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Acceptance flow depended on removed scripts. |
 | [AGENT_WORKFLOW_SCRIPT_RESILIENCE_V1.md](./AGENT_WORKFLOW_SCRIPT_RESILIENCE_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | Referenced scripts were removed. |
 | [GO_TOOLING_EVENT_WORKFLOW_V1.md](./GO_TOOLING_EVENT_WORKFLOW_V1.md) | [2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md](./2026-03-01-agent-tooling-surface-removal-and-repo-coherence-v1.md) | edgertool-based workflow removed. |
@@ -66,8 +71,8 @@ These specs exist but do not yet have status metadata in `spec-status.tsv`.
 - [2026-02-26-rbi-state-stream-protocol-v1.md](./2026-02-26-rbi-state-stream-protocol-v1.md)
 - [2026-02-26-remove-serde-json-completely-v1.md](./2026-02-26-remove-serde-json-completely-v1.md)
 - [2026-02-26-remove-vanity-generator-v1.md](./2026-02-26-remove-vanity-generator-v1.md)
-- [2026-02-26-route-candidate-scoring-v1.md](./2026-02-26-route-candidate-scoring-v1.md)
 - [2026-02-26-route-candidates-control-plane-v1.md](./2026-02-26-route-candidates-control-plane-v1.md)
+- [2026-02-26-route-candidate-scoring-v1.md](./2026-02-26-route-candidate-scoring-v1.md)
 - [2026-02-26-route-stun-reflexive-candidate-v1.md](./2026-02-26-route-stun-reflexive-candidate-v1.md)
 - [2026-02-26-scheduler-worker-remove-solana-deps-v1.md](./2026-02-26-scheduler-worker-remove-solana-deps-v1.md)
 - [2026-02-26-serde-json-removal-eventbus-rpc-v1.md](./2026-02-26-serde-json-removal-eventbus-rpc-v1.md)
@@ -104,4 +109,4 @@ These specs exist but do not yet have status metadata in `spec-status.tsv`.
 - [2026-02-28-linux-node-manager-installer-service-v1.md](./2026-02-28-linux-node-manager-installer-service-v1.md)
 - [2026-02-28-local-first-solana-removal-phase1-v1.md](./2026-02-28-local-first-solana-removal-phase1-v1.md)
 
-- ... and 77 more uncataloged specs
+- ... and 84 more uncataloged specs

@@ -15,7 +15,6 @@ describe('intent ui onboarding and assistant integration gating', () => {
 
   const clearRuntimeState = (win) => {
     win.localStorage.removeItem('intent-ui-integrations-v1')
-    win.localStorage.removeItem('qwen_token')
     win.localStorage.removeItem('intent-ui-profile-blob-browser-v1')
     win.localStorage.removeItem('intent-ui-profile-blob-google-v1')
     win.localStorage.removeItem('intent-ui-profile-blob-git-v1')
@@ -43,16 +42,13 @@ describe('intent ui onboarding and assistant integration gating', () => {
       win.__intentDebug.openWindow('guide')
     })
 
-    cy.contains('Startup Tasks').should('be.visible')
-    cy.contains('Assistant integration').should('be.visible')
-
     cy.window().then((win) => {
       expect(typeof win.__intentDebug?.askAssistant).to.eq('function')
-      win.__intentDebug.askAssistant('test assistant gate', { provider: 'codex' })
+      win.__intentDebug.askAssistant('test assistant gate', { provider: 'opencode' })
       const state = win.__intentDebug.getWorkflowUi()
-      expect(state.codexPhase).to.eq('error')
+      expect(state.assistantPhase).to.eq('error')
       const blocked = state.statusEvents.some((event) =>
-        String(event?.detail || '').includes('connect Codex CLI integration first')
+        String(event?.detail || '').includes('connect OpenCode CLI integration first')
       )
       expect(blocked).to.eq(true)
     })
@@ -60,7 +56,7 @@ describe('intent ui onboarding and assistant integration gating', () => {
     cy.get('@assistantCall.all').should('have.length', 0)
   })
 
-  it('allows codex assistant execution with linked codex_cli outside profile mode', () => {
+  it('allows opencode assistant execution with linked opencode_cli outside profile mode', () => {
     cy.intercept('POST', '/api/assistant', {
       statusCode: 200,
       body: {
@@ -74,11 +70,11 @@ describe('intent ui onboarding and assistant integration gating', () => {
         installLocalBridgeSimulator(win)
         clearRuntimeState(win)
         win.localStorage.setItem('intent-ui-integrations-v1', JSON.stringify({
-          codex_cli: {
+          opencode_cli: {
             connected: true,
             linked: true,
             connectorMode: 'user_owned',
-            accountLabel: 'Codex CLI Session',
+            accountLabel: 'OpenCode CLI Session',
             capabilities: ['assistant.local_cli.execute']
           }
         }))
@@ -87,20 +83,20 @@ describe('intent ui onboarding and assistant integration gating', () => {
 
     cy.window().then((win) => {
       expect(typeof win.__intentDebug?.askAssistant).to.eq('function')
-      win.__intentDebug.askAssistant('run codex without profile', { provider: 'codex' })
+      win.__intentDebug.askAssistant('run opencode without profile', { provider: 'opencode' })
     })
 
     cy.wait('@assistantCall').its('request.body').should((body) => {
-      expect(body.provider).to.eq('codex')
-      expect(String(body.message || '')).to.include('run codex without profile')
+      expect(body.provider).to.eq('opencode')
+      expect(String(body.message || '')).to.include('run opencode without profile')
     })
 
     cy.window().its('__intentDebug').should((debugApi) => {
       const state = debugApi.getWorkflowUi()
-      expect(state.codexPhase).to.eq('done')
+      expect(state.assistantPhase).to.eq('done')
       expect(String(state.responseText || '')).to.include('outside profile mode')
       const blocked = state.statusEvents.some((event) =>
-        String(event?.detail || '').includes('connect Codex CLI integration first')
+        String(event?.detail || '').includes('connect OpenCode CLI integration first')
       )
       expect(blocked).to.eq(false)
     })

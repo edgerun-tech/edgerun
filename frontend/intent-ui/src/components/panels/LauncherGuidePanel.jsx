@@ -46,7 +46,7 @@ const guideSteps = [
   { id: "open-intent", title: "Open command explorer", detail: "Type /help in IntentBar.", actionLabel: "Focus Intent", action: () => toggleIntentBar() },
   { id: "open-onboarding", title: "Review onboarding", detail: "Reopen profile onboarding and verify session mode.", actionLabel: "Open Onboarding", action: () => openProfileBootstrap() },
   { id: "connect-github", title: "Connect GitHub", detail: "Link GitHub token in Integrations.", actionLabel: "Open GitHub Link", action: () => openWorkflowIntegrations("github") },
-  { id: "connect-assistant", title: "Connect assistant integration", detail: "Link Codex CLI or Qwen before running assistant tasks.", actionLabel: "Open AI Integration", action: () => openWorkflowIntegrations(workflowUi().provider === "qwen" ? "qwen" : "codex_cli") },
+  { id: "connect-assistant", title: "Connect assistant integration", detail: "Link OpenCode CLI before running assistant tasks.", actionLabel: "Open AI Integration", action: () => openWorkflowIntegrations("opencode_cli") },
   { id: "open-devices", title: "Check devices", detail: "Verify a connected device is online.", actionLabel: "Open Devices", action: () => toggleWorkflowDrawer({ side: "right", panel: "devices" }) },
   { id: "open-terminal", title: "Run commands", detail: "Open terminal and run a quick command.", actionLabel: "Open Terminal", action: () => openWindow("terminal") }
 ];
@@ -75,12 +75,12 @@ function LauncherGuidePanel(props) {
   const [progress, setProgress] = createSignal({});
   const compact = () => Boolean(props.compact);
   const completedCount = createMemo(() => guideSteps.filter((step) => Boolean(progress()[step.id])).length);
-  const activeProvider = createMemo(() => workflowUi().provider || "codex");
-  const assistantIntegrationId = createMemo(() => activeProvider() === "qwen" ? "qwen" : "codex_cli");
+  const activeProvider = createMemo(() => workflowUi().provider || "opencode");
+  const assistantIntegrationId = createMemo(() => activeProvider() === "opencode" ? "opencode_cli" : "opencode_cli");
   const assistantIntegration = createMemo(() => integrationStore.get(assistantIntegrationId()));
   const anyConnectedDevice = createMemo(() => knownDevices().some((device) => Boolean(device?.online)));
   const hasConnectedToolingIntegration = createMemo(() => integrationStore.list()
-    .filter((integration) => integration.id !== "codex_cli" && integration.id !== "qwen")
+    .filter((integration) => integration.id !== "opencode_cli")
     .some((integration) => integration.connected));
 
   const startupTasks = createMemo(() => {

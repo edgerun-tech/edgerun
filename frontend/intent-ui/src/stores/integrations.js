@@ -8,15 +8,24 @@ import { callIntegrationWorker, initializeIntegrationWorker } from "./integratio
 import { localBridgeHttpUrl } from "../lib/local-bridge-origin";
 import { probeFlipper, verifyFlipperBluetooth } from "../lib/integrations/flipper-ble";
 import { probeDalyBms, verifyDalyBmsBluetooth } from "../lib/integrations/daly-bms-ble";
+import { OFFICIAL_BRIDGES, canonicalBridgeId, isOfficialBridgeId } from "../lib/integrations/official-bridges";
 
 const STORAGE_KEY = "intent-ui-integrations-v1";
 let cachedVaultStatus = null;
 let vaultStatusCheckedAt = 0;
 const VAULT_STATUS_TTL_MS = 30 * 1000;
 let subscriptionsInitialized = false;
-const MCP_ENABLED_INTEGRATIONS = new Set(["github"]);
+const MCP_ENABLED_INTEGRATIONS = new Set(["github", ...OFFICIAL_BRIDGES.map((bridge) => bridge.id)]);
 
 const catalog = createIntegrationCatalog();
+
+function normalizeIntegrationId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const bridgeCanonical = canonicalBridgeId(raw);
+  if (bridgeCanonical && catalog[bridgeCanonical]) return bridgeCanonical;
+  return raw;
+}
 
 function safeParse(raw) {
   try {
@@ -224,7 +233,8 @@ async function applyCheckAll() {
       if (!integration?.tokenKey) continue;
       await hydrateIntegrationTokenFromVault(integration);
     }
-    const next = await hydrateStateInWorker();
+    const hydrated = await hydrateStateInWorker();
+    const next = await syncRuntimeBackedConnectionTruth(hydrated);
     setConnections(next);
     persistState(next);
     syncLifecycleFromConnections(next);
@@ -235,7 +245,7 @@ async function applyCheckAll() {
 }
 
 async function applyConnectIntent(payload = {}) {
-  const id = String(payload?.id || "").trim();
+  const id = normalizeIntegrationId(payload?.id);
   const integration = catalog[id];
   if (!integration) return;
   const runtime = profileRuntime();
@@ -269,7 +279,7 @@ async function applyConnectIntent(payload = {}) {
 }
 
 async function applyDisconnectIntent(payload = {}) {
-  const id = String(payload?.id || "").trim();
+  const id = normalizeIntegrationId(payload?.id);
   const integration = catalog[id];
   if (!integration) return;
   let nextConnection = null;
@@ -298,7 +308,7 @@ async function applyDisconnectIntent(payload = {}) {
 }
 
 async function applySetConnectorModeIntent(payload = {}) {
-  const id = String(payload?.id || "").trim();
+  const id = normalizeIntegrationId(payload?.id);
   const integration = catalog[id];
   if (!integration) return;
   const runtime = profileRuntime();
@@ -333,7 +343,7 @@ async function applySetConnectorModeIntent(payload = {}) {
 }
 
 function applyVerificationEvent(payload = {}, ok) {
-  const id = String(payload?.id || payload?.integrationId || "").trim();
+  const id = normalizeIntegrationId(payload?.id || payload?.integrationId);
   if (!id) return;
   setIntegrationVerification((prev) => ({
     ...prev,
@@ -436,6 +446,95 @@ async function stopIntegrationMcp(integrationId) {
   return { ok: true, data: payload };
 }
 
+async function getIntegrationMcpStatus(integrationId) {
+  if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) return { ok: true, skipped: true, running: false, status: "not_applicable" };
+  const params = new URLSearchParams({
+    integration_id: integrationId,
+    node_id: resolveLocalNodeManagerId()
+  });
+  const response = await fetch(localBridgeHttpUrl(`/v1/local/mcp/integration/status?${params.toString()}`), {
+    cache: "no-store"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload?.ok === false) {
+    return {
+      ok: false,
+      running: false,
+      status: "error",
+      message: String(payload?.error || `mcp status failed (${response.status})`)
+    };
+  }
+  return {
+    ok: true,
+    running: Boolean(payload?.data?.running),
+    status: String(payload?.data?.status || "").trim() || (payload?.data?.running ? "running" : "stopped"),
+    data: payload?.data || {}
+  };
+}
+
+async function syncRuntimeBackedConnectionTruth(state) {
+  const next = { ...(state || {}) };
+  for (const integration of Object.values(catalog)) {
+    if (!MCP_ENABLED_INTEGRATIONS.has(integration.id)) continue;
+    const current = next[integration.id] || {};
+    const mode = String(current?.connectorMode || integration.getDefaultConnectorMode() || "user_owned").trim();
+    const token = getRuntimeToken(integration);
+    if (mode !== "user_owned" || token.length < 8) {
+      void stopIntegrationMcp(integration.id);
+      next[integration.id] = {
+        ...current,
+        connectorMode: "user_owned",
+        connected: false,
+        linked: false,
+        capabilities: []
+      };
+      continue;
+    }
+    try {
+      const status = await getIntegrationMcpStatus(integration.id);
+      if (!status.ok || !status.running) {
+        next[integration.id] = {
+          ...current,
+          connectorMode: "user_owned",
+          connected: false,
+          linked: false,
+          capabilities: []
+        };
+        continue;
+      }
+      if (!Boolean(current?.connected)) {
+        void stopIntegrationMcp(integration.id);
+        next[integration.id] = {
+          ...current,
+          connectorMode: "user_owned",
+          connected: false,
+          linked: false,
+          capabilities: []
+        };
+        continue;
+      }
+      next[integration.id] = {
+        ...current,
+        connectorMode: "user_owned",
+        connected: true,
+        linked: true,
+        capabilities: Array.isArray(current?.capabilities) && current.capabilities.length > 0
+          ? current.capabilities.slice()
+          : integration.defaultCapabilities.slice()
+      };
+    } catch {
+      next[integration.id] = {
+        ...current,
+        connectorMode: "user_owned",
+        connected: false,
+        linked: false,
+        capabilities: []
+      };
+    }
+  }
+  return next;
+}
+
 async function verifyFlipperWebBluetooth(integration, details = {}) {
   const resolveErrorMessage = (error, fallback) => {
     if (error instanceof Error && String(error.message || "").trim()) return error.message;
@@ -519,10 +618,12 @@ const integrationStore = {
     });
   },
   get(id) {
-    return this.list().find((integration) => integration.id === id);
+    const normalizedId = normalizeIntegrationId(id);
+    return this.list().find((integration) => integration.id === normalizedId);
   },
   isConnected(id) {
-    return Boolean(connections()[id]?.connected);
+    const normalizedId = normalizeIntegrationId(id);
+    return Boolean(connections()[normalizedId]?.connected);
   },
   getCapabilities(id) {
     const integration = this.get(id);
@@ -535,16 +636,18 @@ const integrationStore = {
     return false;
   },
   getToken(id) {
-    const integration = catalog[id];
+    const normalizedId = normalizeIntegrationId(id);
+    const integration = catalog[normalizedId];
     if (!integration) return "";
     return getRuntimeToken(integration);
   },
   async connect(id, details = {}) {
-    const integration = catalog[id];
+    const normalizedId = normalizeIntegrationId(id);
+    const integration = catalog[normalizedId];
     if (!integration) return false;
     const connectorMode = String(
       details.connectorMode
-      || connections()[id]?.connectorMode
+      || connections()[normalizedId]?.connectorMode
       || integration.getDefaultConnectorMode()
       || "user_owned"
     );
@@ -555,11 +658,45 @@ const integrationStore = {
       await syncIntegrationTokenToVault(integration, details);
     }
 
-    setLifecycleState(id, "linking", "Linking integration...");
+    setLifecycleState(normalizedId, "linking", "Linking integration...");
+    if (token && MCP_ENABLED_INTEGRATIONS.has(normalizedId)) {
+      try {
+        const result = await startIntegrationMcp(normalizedId, token);
+        if (!result.ok) {
+          setLifecycleState(normalizedId, "error", `MCP runtime failed to start: ${result.message || "unknown error"}`);
+          publishEvent(
+            UI_EVENT_TOPICS.integration.verifyFailed,
+            { integrationId: normalizedId, message: `MCP runtime failed to start: ${result.message || "unknown error"}` },
+            uiIntentMeta("integrations.store")
+          );
+          return false;
+        }
+        const status = await getIntegrationMcpStatus(normalizedId);
+        if (!status.ok || !status.running) {
+          setLifecycleState(normalizedId, "error", `MCP runtime not healthy: ${status.message || status.status || "not running"}`);
+          publishEvent(
+            UI_EVENT_TOPICS.integration.verifyFailed,
+            { integrationId: normalizedId, message: `MCP runtime not healthy: ${status.message || status.status || "not running"}` },
+            uiIntentMeta("integrations.store")
+          );
+          return false;
+        } else {
+          setLifecycleState(normalizedId, "connected", "Integration linked and MCP runtime started.");
+        }
+      } catch (error) {
+        setLifecycleState(normalizedId, "error", `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        publishEvent(
+          UI_EVENT_TOPICS.integration.verifyFailed,
+          { integrationId: normalizedId, message: `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}` },
+          uiIntentMeta("integrations.store")
+        );
+        return false;
+      }
+    }
     publishEvent(
       UI_INTENT_TOPICS.integration.connect,
       {
-        id,
+        id: normalizedId,
         connectorMode,
         accountLabel: String(details.accountLabel || "").trim(),
         capabilities: Array.isArray(details.capabilities) ? details.capabilities : undefined,
@@ -567,61 +704,76 @@ const integrationStore = {
       },
       uiIntentMeta("integrations.store")
     );
-    if (token && MCP_ENABLED_INTEGRATIONS.has(id)) {
-      try {
-        const result = await startIntegrationMcp(id, token);
-        if (!result.ok) {
-          setLifecycleState(id, "error", `MCP runtime failed to start: ${result.message || "unknown error"}`);
-          publishEvent(
-            UI_EVENT_TOPICS.integration.verifyFailed,
-            { integrationId: id, message: `MCP runtime failed to start: ${result.message || "unknown error"}` },
-            uiIntentMeta("integrations.store")
-          );
-        } else {
-          setLifecycleState(id, "connected", "Integration linked and MCP runtime started.");
-          publishEvent(
-            UI_EVENT_TOPICS.integration.stateChanged,
-            { integrationId: id, reason: "mcp_started" },
-            uiIntentMeta("integrations.store")
-          );
-        }
-      } catch (error) {
-        setLifecycleState(id, "error", `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}`);
-        publishEvent(
-          UI_EVENT_TOPICS.integration.verifyFailed,
-          { integrationId: id, message: `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}` },
-          uiIntentMeta("integrations.store")
-        );
-      }
+    if (token && MCP_ENABLED_INTEGRATIONS.has(normalizedId)) {
+      publishEvent(
+        UI_EVENT_TOPICS.integration.stateChanged,
+        { integrationId: normalizedId, reason: "mcp_started" },
+        uiIntentMeta("integrations.store")
+      );
     }
     return true;
   },
   disconnect(id) {
-    setLifecycleState(id, "disconnecting", "Disconnecting integration...");
-    publishEvent(UI_INTENT_TOPICS.integration.disconnect, { id }, uiIntentMeta("integrations.store"));
-    void stopIntegrationMcp(id);
+    const normalizedId = normalizeIntegrationId(id);
+    setLifecycleState(normalizedId, "disconnecting", "Disconnecting integration...");
+    publishEvent(UI_INTENT_TOPICS.integration.disconnect, { id: normalizedId }, uiIntentMeta("integrations.store"));
+    void stopIntegrationMcp(normalizedId);
   },
   setConnectorMode(id, mode) {
-    const integration = catalog[id];
+    const normalizedId = normalizeIntegrationId(id);
+    const integration = catalog[normalizedId];
     if (!integration) return false;
-    publishEvent(UI_INTENT_TOPICS.integration.setConnectorMode, { id, mode }, uiIntentMeta("integrations.store"));
+    publishEvent(UI_INTENT_TOPICS.integration.setConnectorMode, { id: normalizedId, mode }, uiIntentMeta("integrations.store"));
     return true;
   },
   verification() {
     return integrationVerification();
   },
+  async runtimeStatus(id) {
+    const normalizedId = normalizeIntegrationId(id);
+    if (!normalizedId) return { ok: false, state: "unknown", message: "integration id is required" };
+    if (!MCP_ENABLED_INTEGRATIONS.has(normalizedId)) {
+      return { ok: true, state: "not_applicable", running: false, message: "No runtime container for this integration." };
+    }
+    try {
+      const status = await getIntegrationMcpStatus(normalizedId);
+      if (!status.ok) {
+        return {
+          ok: false,
+          state: "error",
+          running: false,
+          message: String(status.message || "failed to read runtime status")
+        };
+      }
+      return {
+        ok: true,
+        state: status.running ? "running" : "stopped",
+        running: Boolean(status.running),
+        status: String(status.status || ""),
+        message: status.running ? "Runtime container is running." : "Runtime container is not started."
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        state: "error",
+        running: false,
+        message: error instanceof Error ? error.message : "Failed to query runtime status."
+      };
+    }
+  },
   async verify(id, details = {}) {
-    const integration = catalog[id];
+    const normalizedId = normalizeIntegrationId(id);
+    const integration = catalog[normalizedId];
     if (!integration) {
       return { ok: false, message: `Unknown integration: ${id}` };
     }
-    setLifecycleState(id, "verifying", "Running integration verification...");
-    publishEvent(UI_INTENT_TOPICS.integration.verifyStarted, { id }, uiIntentMeta("integrations.store"));
-    publishEvent(UI_EVENT_TOPICS.integration.verifyStarted, { integrationId: id }, uiIntentMeta("integrations.store"));
+    setLifecycleState(normalizedId, "verifying", "Running integration verification...");
+    publishEvent(UI_INTENT_TOPICS.integration.verifyStarted, { id: normalizedId }, uiIntentMeta("integrations.store"));
+    publishEvent(UI_EVENT_TOPICS.integration.verifyStarted, { integrationId: normalizedId }, uiIntentMeta("integrations.store"));
 
     const connectorMode = String(
       details.connectorMode
-      || connections()[id]?.connectorMode
+      || connections()[normalizedId]?.connectorMode
       || integration.getDefaultConnectorMode()
     );
 
@@ -631,14 +783,33 @@ const integrationStore = {
       const deviceReady = knownDevices().some((device) => Boolean(device?.online));
       const token = String(details.token || "").trim() || getRuntimeToken(integration);
       let result = null;
-      if (id === "flipper") {
+      if (normalizedId === "flipper") {
         result = await verifyFlipperWebBluetooth(integration, details);
-      } else if (id === "daly_bms") {
+      } else if (normalizedId === "daly_bms") {
         result = await verifyDalyBmsWebBluetooth(integration, details);
+      } else if (isOfficialBridgeId(normalizedId)) {
+        if (token.length < 8) {
+          result = { ok: false, message: `${integration.name} bridge token missing or invalid.` };
+        } else {
+          const statusBefore = await getIntegrationMcpStatus(normalizedId);
+          if (statusBefore.ok && statusBefore.running) {
+            result = {
+              ok: true,
+              message: `${integration.name} Matrix bridge runtime is running (${statusBefore.status}).`,
+              capabilities: integration.defaultCapabilities.slice()
+            };
+          } else {
+            result = {
+              ok: true,
+              message: `${integration.name} credentials accepted. Runtime starts on Link Integration.`,
+              capabilities: integration.defaultCapabilities.slice()
+            };
+          }
+        }
       } else {
         try {
           result = await callIntegrationWorker("verify_integration", {
-            integrationId: id,
+            integrationId: normalizedId,
             details,
             connectorMode,
             profileReady,
@@ -658,20 +829,20 @@ const integrationStore = {
       }
       if (!result?.ok) {
         const message = String(result?.message || `Failed to verify ${integration.name}.`);
-        publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id, message }, uiIntentMeta("integrations.store"));
-        publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: id, message }, uiIntentMeta("integrations.store"));
+        publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id: normalizedId, message }, uiIntentMeta("integrations.store"));
+        publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: normalizedId, message }, uiIntentMeta("integrations.store"));
         return { ok: false, message };
       }
       const message = String(result?.message || `${integration.name} credentials accepted.`);
       publishEvent(
         UI_INTENT_TOPICS.integration.verifySucceeded,
-        { id, message, capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities },
+        { id: normalizedId, message, capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities },
         uiIntentMeta("integrations.store")
       );
       publishEvent(
         UI_EVENT_TOPICS.integration.verified,
         {
-          integrationId: id,
+          integrationId: normalizedId,
           message,
           capabilities: Array.isArray(result?.capabilities) ? result.capabilities : integration.defaultCapabilities
         },
@@ -680,8 +851,8 @@ const integrationStore = {
       return { ok: true, message, devices: Array.isArray(result?.devices) ? result.devices : [] };
     } catch (error) {
       const message = error instanceof Error ? error.message : `Failed to verify ${integration.name}.`;
-      publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id, message }, uiIntentMeta("integrations.store"));
-      publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: id, message }, uiIntentMeta("integrations.store"));
+      publishEvent(UI_INTENT_TOPICS.integration.verifyFailed, { id: normalizedId, message }, uiIntentMeta("integrations.store"));
+      publishEvent(UI_EVENT_TOPICS.integration.verifyFailed, { integrationId: normalizedId, message }, uiIntentMeta("integrations.store"));
       return { ok: false, message };
     }
   }
