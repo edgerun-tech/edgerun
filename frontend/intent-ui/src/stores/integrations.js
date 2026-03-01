@@ -448,7 +448,9 @@ async function verifyFlipperWebBluetooth(integration, details = {}) {
     const verified = await verifyFlipperBluetooth(details);
     return {
       ok: true,
-      message: `Verified Web Bluetooth access to ${verified.deviceName}.`,
+      message: verified.warning
+        ? `Verified Web Bluetooth access to ${verified.deviceName} (warning: ${verified.warning}).`
+        : `Verified Web Bluetooth access to ${verified.deviceName}.`,
       capabilities: integration.defaultCapabilities.slice(),
       deviceId: verified.deviceId,
       deviceName: verified.deviceName

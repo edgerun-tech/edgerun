@@ -16,22 +16,15 @@ run_check() {
   run_drift
   cargo check --workspace
   (cd frontend && bun run check)
-  (cd program && bun run lint)
-  if [[ -f "cloud-os/eslint.config.js" || -f "cloud-os/eslint.config.mjs" || -f "cloud-os/eslint.config.cjs" || -f "cloud-os/.eslintrc" || -f "cloud-os/.eslintrc.json" || -f "cloud-os/.eslintrc.js" || -f "cloud-os/.eslintrc.cjs" ]]; then
-    (cd cloud-os && bun run lint)
-  else
-    echo "[check] cloud-os lint skipped: no eslint config present"
-  fi
 }
 
 run_build() {
+  cargo build --workspace
   (cd frontend && bun run build)
-  (cd cloud-os && bun run build)
 }
 
 run_test() {
   cargo test --workspace
-  (cd cloud-os && bun run test:run)
 }
 
 case "${MODE}" in

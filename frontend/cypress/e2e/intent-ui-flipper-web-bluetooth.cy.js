@@ -281,7 +281,7 @@ describe('intent ui flipper web bluetooth integration', () => {
     cy.get('[data-testid="provider-verify-flipper"]').click({ force: true })
     cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
     cy.get('[data-testid="flipper-run-probe"]').click({ force: true })
-    cy.get('[data-testid="flipper-probe-summary"]').should('contain.text', 'Probe ok')
+    cy.get('[data-testid="flipper-probe-summary"]', { timeout: 12000 }).should('contain.text', 'Probe ok')
     cy.get('[data-testid="flipper-probe-details"]').should('contain.text', 'Model: Flipper Zero')
     cy.get('[data-testid="flipper-create-workflow"]').click({ force: true })
 

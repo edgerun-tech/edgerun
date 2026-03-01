@@ -52,6 +52,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), timeoutMs))
+  ]);
+}
+
 function encodeVarint(value) {
   let n = Number(value || 0);
   if (!Number.isFinite(n) || n < 0) n = 0;
@@ -597,11 +604,18 @@ function buildDeviceInfoSummary(deviceInfo = {}, fallbackDeviceName = "") {
 async function verifyFlipperBluetooth(details = {}) {
   const { device, session, characteristics } = await openFlipperSerialSession(details);
   try {
-    const ping = await session.ping();
+    let ping = null;
+    let warning = "";
+    try {
+      ping = await withTimeout(session.ping(), 1500, "Flipper RPC ping timed out during verify.");
+    } catch (error) {
+      warning = String(error?.message || "").trim() || "Flipper RPC ping did not complete during verify.";
+    }
     return {
       deviceId: String(device.id || "").trim(),
       deviceName: String(device.name || details?.flipperDeviceName || "Flipper").trim(),
       ping,
+      warning,
       characteristics
     };
   } finally {
@@ -632,13 +646,21 @@ async function probeFlipper(details = {}) {
     let deviceInfo = {};
 
     try {
-      ping = await session.ping(`edgerun-probe-${Date.now()}`);
+      ping = await withTimeout(
+        session.ping(`edgerun-probe-${Date.now()}`),
+        2000,
+        "Flipper RPC ping timed out during probe."
+      );
     } catch (error) {
       diagnostics.push(error instanceof Error ? `ping rpc failed: ${error.message}` : "ping rpc failed");
     }
 
     try {
-      deviceInfoEntries = await session.readDeviceInfo(24);
+      deviceInfoEntries = await withTimeout(
+        session.readDeviceInfo(24),
+        2500,
+        "Flipper device info RPC timed out during probe."
+      );
       deviceInfo = mapDeviceInfoEntries(deviceInfoEntries);
     } catch (error) {
       diagnostics.push(error instanceof Error ? `device info rpc failed: ${error.message}` : "device info rpc failed");
