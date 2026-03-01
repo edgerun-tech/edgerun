@@ -158,6 +158,7 @@ function decodeD2CellMetricsFromSample(sample) {
     cellVoltageMinV: roundNumber(cellMinMv / 1000, 3),
     cellVoltageMaxV: roundNumber(cellMaxMv / 1000, 3),
     cellVoltageAvgV: roundNumber(cellAvgMv / 1000, 3),
+    cellSpreadMv: Math.max(0, cellMaxMv - cellMinMv),
     packVoltageV: roundNumber(packVoltageV, 2)
   };
 }
@@ -177,7 +178,8 @@ function decodeDalyTelemetry(samples) {
     cellCount: d2?.cellCount ?? null,
     cellVoltageMinV: d2?.cellVoltageMinV ?? null,
     cellVoltageMaxV: d2?.cellVoltageMaxV ?? null,
-    cellVoltageAvgV: d2?.cellVoltageAvgV ?? null
+    cellVoltageAvgV: d2?.cellVoltageAvgV ?? null,
+    cellSpreadMv: d2?.cellSpreadMv ?? null
   };
 }
 

@@ -697,6 +697,15 @@ function IntegrationsPanel(props) {
     setFlipperProbeSummary(`Probe ok · battery ${battery} · model ${model} · services ${serviceCount}${latency}${warningText}`);
   }
 
+  function dalyWarningsForDisplay(probeResult) {
+    const warnings = Array.isArray(probeResult?.diagnostics) ? probeResult.diagnostics : [];
+    const hasDecodedTelemetry = Number.isFinite(probeResult?.decoded?.packVoltageV)
+      || Number.isFinite(probeResult?.decoded?.stateOfChargePct)
+      || Number.isFinite(probeResult?.decoded?.cellCount);
+    if (!hasDecodedTelemetry) return warnings;
+    return warnings.filter((warning) => String(warning || "").trim().toLowerCase() !== "battery characteristic unavailable");
+  }
+
   async function runDalyProbe() {
     setBusy(true);
     const result = await integrationStore.probeDalyBms({
@@ -719,7 +728,7 @@ function IntegrationsPanel(props) {
     const decodedVoltage = Number.isFinite(result?.decoded?.packVoltageV) ? ` · ${result.decoded.packVoltageV}V` : "";
     const decodedSoc = Number.isFinite(result?.decoded?.stateOfChargePct) ? ` · soc ${result.decoded.stateOfChargePct}%` : "";
     const elapsed = Number.isFinite(result?.stats?.elapsedMs) ? ` · ${result.stats.elapsedMs}ms` : "";
-    const warnings = Array.isArray(result.diagnostics) ? result.diagnostics : [];
+    const warnings = dalyWarningsForDisplay(result);
     const warningText = warnings.length > 0 ? ` · ${warnings.join(", ")}` : "";
     setDalyProbeSummary(`Probe ok · battery ${battery} · protocol ${protocol} · packets ${packets}${decodedVoltage}${decodedSoc}${elapsed}${warningText}`);
   }
@@ -1284,7 +1293,7 @@ function IntegrationsPanel(props) {
                             <Show when={dalyProbeDetails()}>
                               {(probeAccessor) => {
                                 const probe = probeAccessor();
-                                const warnings = Array.isArray(probe?.diagnostics) ? probe.diagnostics : [];
+                                const warnings = dalyWarningsForDisplay(probe);
                                 const packets = Array.isArray(probe?.packetSamplesHex) ? probe.packetSamplesHex.slice(0, 3) : [];
                                 const stats = probe?.stats || {};
                                 const decoded = probe?.decoded || {};
@@ -1311,6 +1320,9 @@ function IntegrationsPanel(props) {
                                         </Show>
                                         <Show when={Number.isFinite(decoded?.cellVoltageMinV) || Number.isFinite(decoded?.cellVoltageMaxV) || Number.isFinite(decoded?.cellVoltageAvgV)}>
                                           <p>Cell volts min/max/avg: {Number.isFinite(decoded?.cellVoltageMinV) ? decoded.cellVoltageMinV : 0}/{Number.isFinite(decoded?.cellVoltageMaxV) ? decoded.cellVoltageMaxV : 0}/{Number.isFinite(decoded?.cellVoltageAvgV) ? decoded.cellVoltageAvgV : 0}</p>
+                                        </Show>
+                                        <Show when={Number.isFinite(decoded?.cellSpreadMv)}>
+                                          <p>Pack health delta: {decoded.cellSpreadMv}mV</p>
                                         </Show>
                                       </div>
                                     </Show>
