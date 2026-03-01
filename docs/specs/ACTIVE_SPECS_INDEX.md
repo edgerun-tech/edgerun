@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 05:40:31Z
+Generated: 2026-03-01 05:46:03Z
 
 ## Summary
 
-- Total specs: 169
-- Cataloged: 34
-- Active: 20
+- Total specs: 171
+- Cataloged: 36
+- Active: 22
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 135
@@ -27,6 +27,8 @@ Generated: 2026-03-01 05:40:31Z
 | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [2026-03-01-super-v-conversation-composer-launch-v1.md](./2026-03-01-super-v-conversation-composer-launch-v1.md) | intent-ui | Adds Super+V launcher for conversation composer with emoji and clipboard affordances. |
+| [2026-03-01-tailscale-integration-quickstart-v2.md](./2026-03-01-tailscale-integration-quickstart-v2.md) | intent-ui | Generates Tailscale join/funnel/app-connector setup artifacts from integration inputs. |
+| [2026-03-01-telemetry-panel-minimize-dock-v1.md](./2026-03-01-telemetry-panel-minimize-dock-v1.md) | intent-ui | Adds minimize controls and restore dock tray for telemetry floating panels. |
 | [2026-03-01-workflow-modal-gating-v1.md](./2026-03-01-workflow-modal-gating-v1.md) | intent-ui | Gates code-edit modal to explicit demo flow so integrations do not trigger it. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |
 | [CLOUDFLARE_FRONTEND_TARGETS_V1.md](./CLOUDFLARE_FRONTEND_TARGETS_V1.md) | frontend-delivery | Frontend deploy target pinning policy remains active. |

@@ -31,6 +31,7 @@ function FloatingFeedPanel(props) {
     const list = props.entries ? props.entries() : [];
     return Array.isArray(list) ? list.slice(0, maxItems) : [];
   });
+  const onMinimize = typeof props.onMinimize === "function" ? props.onMinimize : null;
 
   let dragStartMouseX = 0;
   let dragStartMouseY = 0;
@@ -123,21 +124,35 @@ function FloatingFeedPanel(props) {
       data-testid={`floating-feed-panel-${panelId}`}
     >
       <div class="pointer-events-auto flex h-full flex-col overflow-hidden rounded-xl border border-neutral-800/85 bg-[#101116]/84 shadow-[0_18px_38px_rgba(0,0,0,0.42)] backdrop-blur-xl">
-        <button
-          type="button"
-          class="cursor-move border-b border-neutral-800/80 px-3 py-2 text-left text-[10px] uppercase tracking-wide text-white"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            setDragging(true);
-            dragStartMouseX = event.clientX;
-            dragStartMouseY = event.clientY;
-            dragStartX = layout().x;
-            dragStartY = layout().y;
-          }}
-          data-testid={`floating-feed-panel-header-${panelId}`}
-        >
-          {String(props.title || "").toUpperCase()}
-        </button>
+        <div class="flex items-center border-b border-neutral-800/80" data-testid={`floating-feed-panel-header-${panelId}`}>
+          <button
+            type="button"
+            class="min-w-0 flex-1 cursor-move px-3 py-2 text-left text-[10px] uppercase tracking-wide text-white"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setDragging(true);
+              dragStartMouseX = event.clientX;
+              dragStartMouseY = event.clientY;
+              dragStartX = layout().x;
+              dragStartY = layout().y;
+            }}
+            data-testid={`floating-feed-panel-drag-${panelId}`}
+          >
+            {String(props.title || "").toUpperCase()}
+          </button>
+          <Show when={onMinimize}>
+            <button
+              type="button"
+              class="mr-1 rounded border border-neutral-700 bg-neutral-900/70 px-1.5 py-0.5 text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+              title="Minimize panel"
+              aria-label={`Minimize ${panelId} panel`}
+              onClick={() => onMinimize?.(panelId)}
+              data-testid={`floating-feed-panel-minimize-${panelId}`}
+            >
+              _
+            </button>
+          </Show>
+        </div>
         <div
           class="h-full overflow-y-auto px-2 py-2 text-white"
           style={{

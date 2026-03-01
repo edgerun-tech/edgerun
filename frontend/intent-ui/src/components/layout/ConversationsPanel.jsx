@@ -323,6 +323,7 @@ export default function ConversationsPanel(props) {
             }
           }}
           class="min-h-0 flex-1 overflow-auto p-3"
+          data-testid="conversation-thread-scroll"
           onScroll={(event) => {
             const target = event.currentTarget;
             const scrollTop = target.scrollTop;
@@ -331,8 +332,20 @@ export default function ConversationsPanel(props) {
             props.setThreadViewportHeight(Math.max(1, target.clientHeight));
             props.setFollowThreadBottom(scrollBottomGap < 80);
             if (scrollTop < 160) {
+              const previousHeight = target.scrollHeight;
               const total = props.activeConversationMessages().length;
-              props.setLoadedThreadCount((prev) => Math.min(total, prev + THREAD_PAGE_SIZE));
+              props.setLoadedThreadCount((prev) => {
+                const next = Math.min(total, prev + THREAD_PAGE_SIZE);
+                if (next === prev) return prev;
+                queueMicrotask(() => {
+                  if (!threadScrollRef) return;
+                  const delta = threadScrollRef.scrollHeight - previousHeight;
+                  if (delta <= 0) return;
+                  threadScrollRef.scrollTop += delta;
+                  props.setThreadScrollTop(threadScrollRef.scrollTop);
+                });
+                return next;
+              });
             }
           }}
         >

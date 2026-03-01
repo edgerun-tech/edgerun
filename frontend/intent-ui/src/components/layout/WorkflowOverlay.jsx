@@ -77,6 +77,7 @@ function WorkflowOverlay() {
   const [showConversationSettings, setShowConversationSettings] = createSignal(false);
   const [showEmojiPalette, setShowEmojiPalette] = createSignal(false);
   const [draftMessage, setDraftMessage] = createSignal("");
+  let previousConversationId = "";
   const [localMessagesByConversation, setLocalMessagesByConversation] = createSignal((() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(LOCAL_CONVERSATION_MESSAGES_KEY) || "{}");
@@ -377,6 +378,15 @@ function WorkflowOverlay() {
     if (!current) return;
     if (selectedConversationId()) return;
     setSelectedConversationId(current.id);
+  });
+  createEffect(() => {
+    const conversationId = activeConversation()?.id;
+    if (!conversationId) return;
+    if (conversationId === previousConversationId) return;
+    previousConversationId = conversationId;
+    setFollowThreadBottom(true);
+    setThreadScrollTop(0);
+    setLoadedThreadCount(THREAD_PAGE_SIZE);
   });
   createEffect(() => {
     if (showConversationList()) {

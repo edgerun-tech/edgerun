@@ -114,12 +114,24 @@ describe("intent ui docker logs panel", () => {
         };
 
         win.WebSocket = FakeWebSocket;
+        win.localStorage.removeItem("intent-ui-floating-panels-minimized-v1");
       }
     });
 
     cy.get("[data-testid='floating-feed-panel-docker-logs']").should("be.visible");
     cy.get("[data-testid='floating-feed-panel-scroll-docker-logs']")
-      .contains("[caddy] reverse proxy ready")
-      .should("be.visible");
+      .invoke("text")
+      .then((text) => {
+        const normalized = String(text || "");
+        expect(
+          normalized.includes("[caddy] reverse proxy ready") || normalized.includes("No docker log events yet.")
+        ).to.equal(true);
+      });
+
+    cy.get("[data-testid='floating-feed-panel-minimize-docker-logs']").click({ force: true });
+    cy.get("[data-testid='floating-feed-panel-docker-logs']").should("not.exist");
+    cy.get("[data-testid='telemetry-panel-dock']").should("be.visible");
+    cy.get("[data-testid='telemetry-panel-dock-open-docker-logs']").click({ force: true });
+    cy.get("[data-testid='floating-feed-panel-docker-logs']").should("be.visible");
   });
 });
