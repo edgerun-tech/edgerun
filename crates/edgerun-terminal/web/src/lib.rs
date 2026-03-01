@@ -398,6 +398,172 @@ mod wasm {
         None
     }
 
+    fn message_string(value: &JsValue, key: &str) -> Option<String> {
+        js_sys::Reflect::get(value, &JsValue::from_str(key))
+            .ok()
+            .and_then(|raw| raw.as_string())
+    }
+
+    fn message_bool(value: &JsValue, key: &str) -> Option<bool> {
+        js_sys::Reflect::get(value, &JsValue::from_str(key))
+            .ok()
+            .and_then(|raw| raw.as_bool())
+    }
+
+    fn post_parent_payload(window: &web_sys::Window, payload: &js_sys::Object) {
+        let Ok(Some(parent)) = window.parent() else {
+            return;
+        };
+        let _ = parent.post_message(payload, "*");
+    }
+
+    fn post_stdin_ack(
+        window: &web_sys::Window,
+        pane_id: Option<&str>,
+        command_id: Option<&str>,
+        accepted: bool,
+        error: Option<&str>,
+    ) {
+        let payload = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("source"),
+            &JsValue::from_str("edgerun-term-web"),
+        );
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("type"),
+            &JsValue::from_str("stdin-ack"),
+        );
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("accepted"),
+            &JsValue::from_bool(accepted),
+        );
+        if let Some(pane_id) = pane_id {
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("sid"),
+                &JsValue::from_str(pane_id),
+            );
+        }
+        if let Some(command_id) = command_id {
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("commandId"),
+                &JsValue::from_str(command_id),
+            );
+        }
+        if let Some(error) = error {
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("error"),
+                &JsValue::from_str(error),
+            );
+        }
+        post_parent_payload(window, &payload);
+    }
+
+    fn post_term_ready(window: &web_sys::Window, pane_id: Option<&str>) {
+        let payload = js_sys::Object::new();
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("source"),
+            &JsValue::from_str("edgerun-term-web"),
+        );
+        let _ = js_sys::Reflect::set(
+            &payload,
+            &JsValue::from_str("type"),
+            &JsValue::from_str("ready"),
+        );
+        if let Some(pane_id) = pane_id {
+            let _ = js_sys::Reflect::set(
+                &payload,
+                &JsValue::from_str("sid"),
+                &JsValue::from_str(pane_id),
+            );
+        }
+        post_parent_payload(window, &payload);
+    }
+
+    fn setup_parent_command_bridge(
+        window: &web_sys::Window,
+        state: Rc<RefCell<AppState>>,
+    ) -> Result<(), JsValue> {
+        let window = window.clone();
+        let handler = Closure::<dyn FnMut(MessageEvent)>::new(move |event: MessageEvent| {
+            let data = event.data();
+            if !data.is_object() {
+                return;
+            }
+
+            let source = message_string(&data, "source").unwrap_or_default();
+            if source != "intent-ui-terminal" && source != "edgerun-terminal-host" {
+                return;
+            }
+
+            let message_type = message_string(&data, "type").unwrap_or_default();
+            if message_type != "stdin" {
+                return;
+            }
+
+            let command_id = message_string(&data, "commandId");
+            let pane_id = state.borrow().pane_id.clone();
+            if let Some(expected_sid) = pane_id.as_deref() {
+                if let Some(incoming_sid) = message_string(&data, "sid")
+                    && incoming_sid != expected_sid
+                {
+                    post_stdin_ack(
+                        &window,
+                        pane_id.as_deref(),
+                        command_id.as_deref(),
+                        false,
+                        Some("sid mismatch"),
+                    );
+                    return;
+                }
+            }
+
+            let Some(text) = message_string(&data, "text") else {
+                post_stdin_ack(
+                    &window,
+                    pane_id.as_deref(),
+                    command_id.as_deref(),
+                    false,
+                    Some("missing text"),
+                );
+                return;
+            };
+            if text.trim().is_empty() {
+                post_stdin_ack(
+                    &window,
+                    pane_id.as_deref(),
+                    command_id.as_deref(),
+                    false,
+                    Some("empty text"),
+                );
+                return;
+            }
+
+            let execute = message_bool(&data, "execute").unwrap_or(false);
+            let mut bytes = text.into_bytes();
+            if execute && !bytes.ends_with(b"\n") {
+                bytes.push(b'\n');
+            }
+            queue_or_send(&state, &bytes);
+            post_stdin_ack(
+                &window,
+                pane_id.as_deref(),
+                command_id.as_deref(),
+                true,
+                None,
+            );
+        });
+        window.add_event_listener_with_callback("message", handler.as_ref().unchecked_ref())?;
+        handler.forget();
+        Ok(())
+    }
+
     fn send_mux_request(ws: &WebSocket, request: ShellRequest) {
         if let Ok(encoded) = encode_shell_request(&request) {
             let mut frame = Vec::with_capacity(1 + encoded.len());
@@ -907,12 +1073,14 @@ mod wasm {
         setup_keyboard(&window, app_state.clone())?;
         setup_paste(&window, app_state.clone())?;
         setup_text_input(&window, &document, app_state.clone())?;
+        setup_parent_command_bridge(&window, app_state.clone())?;
         setup_resize(
             &window,
             canvas.clone(),
             app_state.clone(),
             render_backend.clone(),
         )?;
+        post_term_ready(&window, pane_id.as_deref());
 
         start_render_loop(window, app_state, render_backend);
 

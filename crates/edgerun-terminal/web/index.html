@@ -7,11 +7,11 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0b0c10;
-      --fg: #c5c8d3;
-      --accent: #3fa9f5;
-      --status: #141722;
-      --status-border: #223049;
+      --bg: #0b1118;
+      --fg: #c8d2de;
+      --accent: #34d399;
+      --status: rgba(9, 16, 24, 0.85);
+      --status-border: rgba(52, 211, 153, 0.28);
     }
     * { box-sizing: border-box; }
     html, body {
@@ -23,6 +23,9 @@
       color: var(--fg);
       font-family: "JetBrains Mono", "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       overflow: hidden;
+      background-image:
+        radial-gradient(1200px 500px at 12% -20%, rgba(52, 211, 153, 0.09), transparent),
+        radial-gradient(1000px 560px at 95% 120%, rgba(59, 130, 246, 0.08), transparent);
     }
     #app {
       position: fixed;
@@ -48,6 +51,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      backdrop-filter: blur(6px);
     }
     #status[hidden] { display: none; }
     #status .dot {
@@ -56,7 +60,7 @@
       border-radius: 999px;
       background: var(--accent);
       display: inline-block;
-      box-shadow: 0 0 10px rgba(63, 169, 245, 0.6);
+      box-shadow: 0 0 10px rgba(52, 211, 153, 0.55);
     }
     #term-input {
       position: absolute;

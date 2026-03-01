@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { UI_EVENT_TOPICS } from "../../lib/ui-intents";
 import { subscribeEvent } from "../../stores/eventbus";
 import { sendTerminalInput } from "../../stores/ui-actions";
@@ -6,6 +6,8 @@ import { sendTerminalInput } from "../../stores/ui-actions";
 const TARGET_KEY = "intent-ui-terminal-target-v1";
 const DEFAULT_TARGET = "http://127.0.0.1:8081";
 const MAX_QUEUE = 8;
+const COMMAND_SOURCE = "intent-ui-terminal";
+const ACK_TIMEOUT_MS = 1200;
 
 function randomSessionId() {
   if (typeof window !== "undefined" && window.crypto?.randomUUID) {
@@ -49,43 +51,171 @@ function readSavedTarget() {
 
 function TerminalComponent() {
   let unsubscribeTerminalInput;
+  let removeMessageListener;
+  let iframeRef;
+  let frameReadyFallbackTimer;
+  const pendingAckTimers = new Map();
   const sessionId = randomSessionId();
   const initialTarget = readSavedTarget();
   const [targetInput, setTargetInput] = createSignal(initialTarget);
   const [activeTarget, setActiveTarget] = createSignal(initialTarget);
+  const [frameLoaded, setFrameLoaded] = createSignal(false);
+  const [iframeReady, setIframeReady] = createSignal(false);
   const [queuedCommands, setQueuedCommands] = createSignal([]);
 
   const termWebUrl = createMemo(() => toTermWebUrl(activeTarget(), sessionId));
+  const canInjectCommands = createMemo(() => Boolean(termWebUrl()) && iframeReady());
+
+  const clearAckTimer = (id) => {
+    const timer = pendingAckTimers.get(id);
+    if (!timer) return;
+    window.clearTimeout(timer);
+    pendingAckTimers.delete(id);
+  };
+
+  const clearFrameReadyFallback = () => {
+    if (frameReadyFallbackTimer == null) return;
+    window.clearTimeout(frameReadyFallbackTimer);
+    frameReadyFallbackTimer = undefined;
+  };
+
+  const updateCommandStatus = (id, status, error = "") => {
+    const sentAt = status === "sent" ? new Date().toISOString() : undefined;
+    setQueuedCommands((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      return {
+        ...item,
+        status,
+        error,
+        sentAt: sentAt || item.sentAt
+      };
+    }));
+  };
+
+  const postCommandToIframe = (item) => {
+    if (!canInjectCommands()) return false;
+    const frameWindow = iframeRef?.contentWindow;
+    if (!frameWindow) return false;
+    let targetOrigin = "*";
+    try {
+      targetOrigin = new URL(termWebUrl()).origin;
+    } catch {
+      targetOrigin = "*";
+    }
+    try {
+      frameWindow.postMessage({
+        source: COMMAND_SOURCE,
+        type: "stdin",
+        sid: sessionId,
+        commandId: item.id,
+        text: item.text,
+        execute: item.execute
+      }, targetOrigin);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const flushPendingCommands = () => {
+    if (!canInjectCommands()) return;
+    const pendingIds = queuedCommands()
+      .filter((item) => item.status === "pending" || item.status === "error")
+      .map((item) => item.id);
+    for (const commandId of pendingIds) {
+      const command = queuedCommands().find((item) => item.id === commandId);
+      if (!command) continue;
+      if (!postCommandToIframe(command)) continue;
+      updateCommandStatus(command.id, "posted");
+      clearAckTimer(command.id);
+      const timeout = window.setTimeout(() => {
+        updateCommandStatus(command.id, "sent");
+        clearAckTimer(command.id);
+      }, ACK_TIMEOUT_MS);
+      pendingAckTimers.set(command.id, timeout);
+    }
+  };
 
   const handleForwardedInput = (event) => {
     const detail = event?.payload || {};
     const text = typeof detail.text === "string" ? detail.text : "";
     if (!text.trim()) return;
 
+    const command = {
+      id: randomSessionId(),
+      text: text.trim(),
+      execute: Boolean(detail.execute),
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
+
     setQueuedCommands((prev) => {
-      const next = [{
-        id: randomSessionId(),
-        text: text.trim(),
-        execute: Boolean(detail.execute)
-      }, ...prev];
+      const next = [command, ...prev];
       return next.slice(0, MAX_QUEUE);
+    });
+
+    queueMicrotask(() => {
+      flushPendingCommands();
     });
   };
 
   const connectTarget = () => {
     const next = targetInput().trim();
     if (!next) return;
+    clearFrameReadyFallback();
     setActiveTarget(next);
+    setFrameLoaded(false);
+    setIframeReady(false);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(TARGET_KEY, next);
     }
   };
 
+  const retryCommand = (commandId) => {
+    const command = queuedCommands().find((item) => item.id === commandId && item.status !== "sent");
+    if (!command) return;
+    updateCommandStatus(command.id, "pending", "");
+    flushPendingCommands();
+  };
+
+  createEffect(() => {
+    termWebUrl();
+    if (!iframeReady()) return;
+    flushPendingCommands();
+  });
+
   onMount(() => {
     unsubscribeTerminalInput = subscribeEvent(UI_EVENT_TOPICS.action.terminalInputSent, handleForwardedInput);
+    const onWindowMessage = (event) => {
+      const data = event?.data;
+      if (!data || typeof data !== "object") return;
+      if (data.source !== "edgerun-term-web") return;
+      if (typeof data.sid === "string" && data.sid !== sessionId) return;
+      if (data.type === "ready") {
+        clearFrameReadyFallback();
+        setIframeReady(true);
+        flushPendingCommands();
+        return;
+      }
+      if (data.type !== "stdin-ack") return;
+      if (typeof data.commandId !== "string") return;
+      clearAckTimer(data.commandId);
+      if (data.accepted === false) {
+        updateCommandStatus(data.commandId, "error", String(data.error || "Rejected by terminal"));
+        return;
+      }
+      updateCommandStatus(data.commandId, "sent", "");
+    };
+    window.addEventListener("message", onWindowMessage);
+    removeMessageListener = () => window.removeEventListener("message", onWindowMessage);
   });
 
   onCleanup(() => {
+    for (const id of pendingAckTimers.keys()) {
+      clearAckTimer(id);
+    }
+    clearFrameReadyFallback();
+    if (removeMessageListener) removeMessageListener();
     if (unsubscribeTerminalInput) unsubscribeTerminalInput();
   });
 
@@ -114,10 +244,22 @@ function TerminalComponent() {
 
       <Show when={queuedCommands().length > 0}>
         <div class="rounded-md border border-neutral-700/80 bg-neutral-900/50 p-2">
-          <p class="text-[11px] uppercase tracking-wide text-neutral-400">Queued Commands</p>
-          <p class="mt-1 text-[11px] text-neutral-500">Commands sent from IntentBar are shown here for manual paste into term-web.</p>
-          <div class="mt-2 max-h-20 overflow-auto space-y-1 font-mono text-[11px] text-neutral-300">
-            <For each={queuedCommands()}>{(item) => <div class="truncate" title={item.text}>{item.execute ? "$ " : ""}{item.text}</div>}</For>
+          <p class="text-[11px] uppercase tracking-wide text-neutral-400">Forwarded Commands</p>
+          <p class="mt-1 text-[11px] text-neutral-500">Commands are auto-injected when the terminal is ready and remain visible for audit/retry.</p>
+          <div class="mt-2 max-h-24 overflow-auto space-y-1 font-mono text-[11px] text-neutral-300" data-testid="intent-ui-forwarded-commands">
+            <For each={queuedCommands()}>{(item) => <div class="flex items-center gap-2" data-testid="intent-ui-forwarded-command">
+                <span class={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${item.status === "sent" ? "border-emerald-500/40 text-emerald-300" : item.status === "error" ? "border-red-500/40 text-red-300" : "border-amber-500/40 text-amber-300"}`}>{item.status}</span>
+                <span class="min-w-0 flex-1 truncate" title={item.text}>{item.execute ? "$ " : ""}{item.text}</span>
+                <Show when={item.status !== "sent"}>
+                  <button
+                    type="button"
+                    class="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200 hover:bg-amber-500/20"
+                    onClick={() => retryCommand(item.id)}
+                  >
+                    Retry
+                  </button>
+                </Show>
+              </div>}</For>
           </div>
         </div>
       </Show>
@@ -137,12 +279,26 @@ function TerminalComponent() {
             referrerPolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
             data-testid="intent-ui-terminal-iframe"
+            ref={iframeRef}
+            onLoad={() => {
+              clearFrameReadyFallback();
+              setFrameLoaded(true);
+              frameReadyFallbackTimer = window.setTimeout(() => {
+                setIframeReady(true);
+                flushPendingCommands();
+                clearFrameReadyFallback();
+              }, 600);
+              flushPendingCommands();
+            }}
           />
         </div>
       </Show>
 
       <div class="flex items-center justify-between text-[11px] text-neutral-500">
         <p class="truncate">Active: {termWebUrl() || "not connected"}</p>
+        <span class={`rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide ${iframeReady() ? "border-emerald-500/40 text-emerald-300" : frameLoaded() ? "border-amber-500/40 text-amber-300" : "border-neutral-700 text-neutral-400"}`} data-testid="intent-ui-terminal-ready-state">
+          {iframeReady() ? "ready" : frameLoaded() ? "loading-shell" : "loading-frame"}
+        </span>
         <p class="ml-2 shrink-0">sid: {sessionId.slice(0, 8)}</p>
       </div>
     </div>;

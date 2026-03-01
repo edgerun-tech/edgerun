@@ -53,12 +53,25 @@ describe('intent ui terminal term-web', () => {
     cy.get('input[placeholder*="What do you want to do?"]').first().type('$ pwd{enter}', { force: true })
     cy.get('[aria-label="Terminal window"]').should('exist')
 
-    cy.get('[data-testid="intent-ui-terminal-target-input"]').clear().type('http://127.0.0.1:5577')
+    cy.get('[data-testid="intent-ui-terminal-target-input"]').clear().type('http://127.0.0.1:4173')
     cy.get('[data-testid="intent-ui-terminal-connect"]').click({ force: true })
 
     cy.get('[data-testid="intent-ui-terminal-iframe"]', { timeout: 10000 })
       .should('exist')
       .should('have.attr', 'src')
-      .and('include', 'http://127.0.0.1:5577/term?sid=')
+      .and('include', 'http://127.0.0.1:4173/term?sid=')
+
+    cy.get('[data-testid="intent-ui-terminal-ready-state"]', { timeout: 10000 })
+      .invoke('text')
+      .should((value) => {
+        const normalized = String(value || '').trim()
+        expect(['ready', 'loading-shell']).to.include(normalized)
+      })
+
+    cy.get('input[placeholder*="What do you want to do?"]').first().type('$ whoami{enter}', { force: true })
+
+    cy.get('[data-testid="intent-ui-forwarded-commands"]').within(() => {
+      cy.contains('[data-testid="intent-ui-forwarded-command"]', '$ whoami').should('contain.text', 'sent')
+    })
   })
 })
