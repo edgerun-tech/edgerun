@@ -51,6 +51,7 @@ import {
   clearResults
 } from "../../lib/stores/results";
 import { ResultRenderer } from "../results/ResultRenderer";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 import {
   openAssistantResponse,
   openWorkflowDemo,
@@ -272,6 +273,7 @@ const accentOptions = [
 function IntentBar() {
   let inputRef;
   let responseScrollRef;
+  let filterResultsListRef;
   let timeInterval;
   let responseLineTimer;
   let peekCloseTimer;
@@ -2460,9 +2462,14 @@ function IntentBar() {
               <TbOutlineSearch size={14} class="text-blue-400" />
               <span class="text-xs text-neutral-400">Found {filterResults().length} results</span>
             </div>
-            <div class="space-y-1 max-h-40 overflow-y-auto">
-              <For each={filterResults()}>
-                {(result) => <div class="flex items-center gap-2 text-sm p-2 hover:bg-neutral-800 rounded-lg cursor-pointer transition-colors">
+            <div class="space-y-1 max-h-40 overflow-y-auto" ref={filterResultsListRef}>
+              <VirtualAnimatedList
+                items={filterResults}
+                estimateSize={36}
+                overscan={4}
+                containerRef={() => filterResultsListRef}
+                animateRows
+                renderItem={(result) => <div class="flex items-center gap-2 text-sm p-2 hover:bg-neutral-800 rounded-lg cursor-pointer transition-colors">
                     <Show
     when={result.type === "files"}
     fallback={<TbOutlineFolder size={16} class="text-neutral-400" />}
@@ -2472,7 +2479,7 @@ function IntentBar() {
                     <span class="text-neutral-300 flex-1 truncate">{result.name}</span>
                     <span class="text-xs text-neutral-500">{result.path}</span>
                   </div>}
-              </For>
+              />
             </div>
           </Motion.div>
         </Show>
@@ -2670,8 +2677,12 @@ function IntentBar() {
                   <div class="rounded-lg border border-neutral-800 bg-neutral-900/40 p-2">
                     <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">{group.section}</p>
                     <div class="space-y-1.5">
-                      <For each={group.items}>
-                        {(item) => (
+                      <VirtualAnimatedList
+                        items={() => group.items}
+                        estimateSize={34}
+                        overscan={2}
+                        animateRows
+                        renderItem={(item) => (
                           <div class="flex items-center gap-2 rounded-md border border-neutral-800 bg-neutral-900/60 px-2 py-1.5">
                             <button
                               type="button"
@@ -2698,7 +2709,7 @@ function IntentBar() {
                             </button>
                           </div>
                         )}
-                      </For>
+                      />
                     </div>
                   </div>
                 )}
@@ -2754,11 +2765,14 @@ function IntentBar() {
               {
     /* Pinned Results First */
   }
-              <For each={pinnedResults()}>
-                {(result, index) => <Motion.div
+              <VirtualAnimatedList
+                items={pinnedResults}
+                estimateSize={120}
+                overscan={2}
+                renderItem={(result, index) => <Motion.div
     initial={{ opacity: 0, y: 10, scale: 0.985 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.26, delay: index() * 0.14, easing: [0.22, 1, 0.36, 1] }}
+    transition={{ duration: 0.26, delay: index * 0.14, easing: [0.22, 1, 0.36, 1] }}
     class="relative group"
   >
                     <ResultRenderer
@@ -2793,16 +2807,19 @@ function IntentBar() {
                       </button>
                     </div>
                   </Motion.div>}
-              </For>
+              />
 
               {
     /* Regular Results */
   }
-              <For each={results().filter((r) => !r.isPinned)}>
-                {(result, index) => <Motion.div
+              <VirtualAnimatedList
+                items={() => results().filter((r) => !r.isPinned)}
+                estimateSize={120}
+                overscan={2}
+                renderItem={(result, index) => <Motion.div
     initial={{ opacity: 0, y: 10, scale: 0.985 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.26, delay: pinnedResults().length * 0.14 + index() * 0.14, easing: [0.22, 1, 0.36, 1] }}
+    transition={{ duration: 0.26, delay: pinnedResults().length * 0.14 + index * 0.14, easing: [0.22, 1, 0.36, 1] }}
     class="relative group"
   >
                     <ResultRenderer
@@ -2837,7 +2854,7 @@ function IntentBar() {
                       </button>
                     </div>
                   </Motion.div>}
-              </For>
+              />
 
               {
     /* Empty State */
