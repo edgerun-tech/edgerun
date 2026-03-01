@@ -65,6 +65,7 @@ function CloudPanel(props) {
   const [actionLoading, setActionLoading] = createSignal(null);
   const [stats, setStats] = createSignal({});
   const [localDocker, setLocalDocker] = createSignal({ available: false, swarmActive: false });
+  const [workflowRunnerLoading, setWorkflowRunnerLoading] = createSignal(false);
   const [notice, setNotice] = createSignal("");
   const [contextMenuState, setContextMenuState] = createSignal({
     open: false,
@@ -281,57 +282,35 @@ function CloudPanel(props) {
       }
       if (githubToken) {
         try {
-          const reposRes = await fetch(`/api/github/repos?token=${encodeURIComponent(githubToken)}`);
-          if (reposRes.ok) {
-            const repos = await reposRes.json();
-            newStats.repositories = (newStats.repositories || 0) + repos.length;
-            for (const repo of repos.slice(0, 10)) {
+          const runsRes = await fetch(
+            localBridgeHttpUrl(`/v1/local/github/workflow/runs?token=${encodeURIComponent(githubToken)}&per_page=24`),
+            { cache: "no-store" }
+          );
+          if (runsRes.ok) {
+            const payload = await runsRes.json().catch(() => ({}));
+            const runs = Array.isArray(payload?.runs) ? payload.runs : [];
+            newStats.workflowRuns = runs.length;
+            for (const run of runs) {
+              const repoName = String(run?.repo_full_name || run?.repository?.full_name || "github/workflow").trim();
+              const workflowName = String(run?.name || run?.display_title || "Workflow").trim();
               allResources.push({
-                id: `gh-repo-${repo.id}`,
-                name: repo.full_name,
-                type: "repository",
+                id: `gh-run-${run.id || `${repoName}-${workflowName}`}`,
+                name: `${repoName} · ${workflowName}`,
+                type: "workflow",
                 provider: "github",
-                status: "active",
-                url: repo.html_url,
-                description: repo.description,
-                metadata: { stars: repo.stargazers_count, private: repo.private }
-              });
-            }
-            const actionRepoSet = repos.slice(0, 5);
-            for (const repo of actionRepoSet) {
-              const owner = repo?.owner?.login;
-              const name = repo?.name;
-              if (!owner || !name) continue;
-              try {
-                const runsRes = await fetch(
-                  `/api/github/actions/runs?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(name)}&per_page=3&token=${encodeURIComponent(githubToken)}`
-                );
-                if (!runsRes.ok) continue;
-                const runsPayload = await runsRes.json().catch(() => ({}));
-                const runs = Array.isArray(runsPayload?.workflow_runs) ? runsPayload.workflow_runs : [];
-                newStats.workflowRuns = (newStats.workflowRuns || 0) + runs.length;
-                for (const run of runs.slice(0, 2)) {
-                  allResources.push({
-                    id: `gh-run-${run.id}`,
-                    name: `${repo.full_name} · ${run.name || run.display_title || "Workflow"}`,
-                    type: "workflow",
-                    provider: "github",
-                    status: run.conclusion || run.status || "unknown",
-                    url: run.html_url,
-                    metadata: {
-                      branch: run.head_branch,
-                      event: run.event,
-                      actor: run.actor?.login
-                    }
-                  });
+                status: run.conclusion || run.status || "unknown",
+                url: run.html_url,
+                metadata: {
+                  source: "github",
+                  branch: run.head_branch,
+                  event: run.event,
+                  actor: run.actor?.login
                 }
-              } catch (e) {
-                logError("GitHub actions:", e);
-              }
+              });
             }
           }
         } catch (e) {
-          logError("GitHub repos:", e);
+          logError("GitHub workflow runs:", e);
         }
         try {
           const userRes = await fetch(`/api/github/user?token=${encodeURIComponent(githubToken)}`);
@@ -343,6 +322,34 @@ function CloudPanel(props) {
           }
         } catch (e) {
         }
+      }
+      try {
+        const localRunsRes = await fetch(localBridgeHttpUrl("/v1/local/github/workflow/runner/runs"), {
+          cache: "no-store"
+        });
+        if (localRunsRes.ok) {
+          const payload = await localRunsRes.json().catch(() => ({}));
+          const localRuns = Array.isArray(payload?.runs) ? payload.runs : [];
+          newStats.localWorkflowRuns = localRuns.length;
+          for (const run of localRuns.slice(0, 12)) {
+            allResources.push({
+              id: `local-run-${run.id || run.started_unix_ms}`,
+              name: `local · ${run.workflow_id || "intent-ui-ci"}`,
+              type: "workflow",
+              provider: "github",
+              status: run.status || "unknown",
+              metadata: {
+                source: "local",
+                duration: typeof run.duration_ms === "number" ? `${Math.round(run.duration_ms / 1000)}s` : "",
+                actor: "local-runner",
+                event: "workflow_dispatch"
+              },
+              description: String(run.message || "").trim()
+            });
+          }
+        }
+      } catch (e) {
+        logError("Local workflow runner runs:", e);
       }
       if (googleToken) {
         try {
@@ -476,6 +483,28 @@ function CloudPanel(props) {
     const panel = panelMap[provider];
     if (panel) openWindow(panel);
   };
+  const runLocalCiWorkflow = async () => {
+    setWorkflowRunnerLoading(true);
+    setError(null);
+    setNotice("");
+    try {
+      const response = await fetch(localBridgeHttpUrl("/v1/local/github/workflow/runner/run"), {
+        method: "POST",
+        headers: { "content-type": "application/json; charset=utf-8" },
+        body: JSON.stringify({ workflow_id: "intent-ui-ci" })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        throw new Error(String(payload?.error || `local workflow runner failed (${response.status})`));
+      }
+      setNotice("Local CI workflow run completed. Refreshed workflow list.");
+      await fetchAllResources();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run local CI workflow");
+    } finally {
+      setWorkflowRunnerLoading(false);
+    }
+  };
   onMount(() => {
     fetchAllResources();
     const dismiss = () => closeContextMenu();
@@ -586,6 +615,16 @@ function CloudPanel(props) {
   >
               <FiSettings size={12} class="text-neutral-400" />
               <span>Manage</span>
+            </button>
+            <button
+    type="button"
+    onClick={runLocalCiWorkflow}
+    disabled={workflowRunnerLoading()}
+    class={panelButtonClass}
+    data-testid="cloud-panel-run-local-ci"
+  >
+              <FiActivity size={12} class={workflowRunnerLoading() ? "animate-spin" : ""} />
+              <span>{workflowRunnerLoading() ? "Running..." : "Run Local CI"}</span>
             </button>
           </div>
         </Show>
@@ -710,6 +749,8 @@ function CloudPanel(props) {
                                 <Show when={resource.metadata?.private}> • private</Show>
                                 <Show when={resource.metadata?.image}> • {resource.metadata?.image}</Show>
                                 <Show when={resource.metadata?.ports}> • {resource.metadata?.ports}</Show>
+                                <Show when={resource.metadata?.source}> • {resource.metadata?.source}</Show>
+                                <Show when={resource.metadata?.duration}> • {resource.metadata?.duration}</Show>
                               </p>
                             </div>
                           </div>

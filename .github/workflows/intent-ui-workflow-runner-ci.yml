@@ -1,0 +1,27 @@
+name: intent-ui-workflow-runner-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - prod-sync
+
+permissions:
+  contents: read
+
+jobs:
+  intent-ui-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.9"
+
+      - name: Run shared Intent UI workflow runner
+        run: bash ./scripts/workflow-runner-intent-ui-ci.sh

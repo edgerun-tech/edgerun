@@ -106,6 +106,10 @@ const LOCAL_CLOUDFLARE_WORKERS_PATH: &str = "/v1/local/cloudflare/workers";
 const LOCAL_CLOUDFLARE_PAGES_PATH: &str = "/v1/local/cloudflare/pages";
 const LOCAL_CLOUDFLARE_DNS_RECORDS_PATH: &str = "/v1/local/cloudflare/dns/records";
 const LOCAL_CLOUDFLARE_DNS_UPSERT_PATH: &str = "/v1/local/cloudflare/dns/records/upsert";
+const LOCAL_GITHUB_WORKFLOW_RUNS_PATH: &str = "/v1/local/github/workflow/runs";
+const LOCAL_GITHUB_WORKFLOW_RUNNER_RUNS_PATH: &str = "/v1/local/github/workflow/runner/runs";
+const LOCAL_GITHUB_WORKFLOW_RUNNER_RUN_PATH: &str = "/v1/local/github/workflow/runner/run";
+const WORKFLOW_RUNNER_RECORDS_PATH: &str = "/var/lib/edgerun/workflow-runner/runs.json";
 const LOCAL_BEEPER_VERIFY_PATH: &str = "/v1/local/beeper/verify";
 const LOCAL_BEEPER_CHATS_PATH: &str = "/v1/local/beeper/chats";
 const LOCAL_BEEPER_MESSAGES_PATH: &str = "/v1/local/beeper/messages";
@@ -658,6 +662,29 @@ struct LocalCloudflareDnsUpsertRequest {
     proxied: Option<bool>,
     #[serde(default)]
     ttl: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGithubWorkflowRunsQuery {
+    token: String,
+    #[serde(default)]
+    per_page: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGithubWorkflowRunnerRunRequest {
+    workflow_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LocalWorkflowRunnerRunRecord {
+    id: String,
+    workflow_id: String,
+    status: String,
+    started_unix_ms: u64,
+    completed_unix_ms: u64,
+    duration_ms: u64,
+    message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1720,6 +1747,155 @@ async fn cloudflare_resolve_account_id(token: &str, requested: Option<&str>) -> 
         return Err(anyhow!("cloudflare account membership not found for token"));
     }
     Ok(account_id)
+}
+
+fn github_token_from(raw: &str) -> Result<String> {
+    let token = raw.trim();
+    if token.len() < 20 {
+        return Err(anyhow!("github personal access token is missing or invalid"));
+    }
+    Ok(token.to_string())
+}
+
+fn github_runner_records_path() -> PathBuf {
+    PathBuf::from(WORKFLOW_RUNNER_RECORDS_PATH)
+}
+
+fn load_github_runner_records() -> Vec<LocalWorkflowRunnerRunRecord> {
+    let path = github_runner_records_path();
+    let content = fs::read_to_string(path).ok().unwrap_or_default();
+    sonic_rs::from_str::<Vec<LocalWorkflowRunnerRunRecord>>(&content)
+        .ok()
+        .unwrap_or_default()
+}
+
+fn save_github_runner_records(records: &[LocalWorkflowRunnerRunRecord]) -> Result<()> {
+    let path = github_runner_records_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create workflow runner directory {}", parent.display()))?;
+    }
+    let encoded = sonic_rs::to_string(records)
+        .context("failed to encode workflow runner records")?;
+    fs::write(&path, encoded)
+        .with_context(|| format!("failed to write workflow runner records {}", path.display()))?;
+    Ok(())
+}
+
+fn append_github_runner_record(record: LocalWorkflowRunnerRunRecord) -> Result<()> {
+    let mut records = load_github_runner_records();
+    records.insert(0, record);
+    if records.len() > 120 {
+        records.truncate(120);
+    }
+    save_github_runner_records(&records)
+}
+
+fn workflow_runner_command_for(workflow_id: &str) -> Option<&'static str> {
+    match workflow_id {
+        "intent-ui-ci" => Some("cd /workspace && ./scripts/workflow-runner-intent-ui-ci.sh"),
+        _ => None,
+    }
+}
+
+async fn github_api_request(token: &str, url: &str) -> Result<Value> {
+    let client = Client::new();
+    let response = client
+        .get(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
+        .send()
+        .await
+        .with_context(|| format!("github request failed: {url}"))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read github response: {url}"))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("github request failed ({status}): {detail}"));
+    }
+    sonic_rs::from_slice(&bytes)
+        .with_context(|| format!("failed to parse github response: {url}"))
+}
+
+async fn collect_github_workflow_runs(token: &str, per_page: usize) -> Result<Vec<Value>> {
+    let repos_url = "https://api.github.com/user/repos?sort=updated&per_page=8";
+    let repos_payload = github_api_request(token, repos_url).await?;
+    let repos = repos_payload.as_array().cloned().unwrap_or_default();
+    let mut runs = Vec::new();
+    let per_repo = per_page.clamp(1, 10).min(5);
+    for repo in repos.iter().take(6) {
+        let owner = repo["owner"]["login"].as_str().unwrap_or_default().trim();
+        let name = repo["name"].as_str().unwrap_or_default().trim();
+        let full_name = repo["full_name"].as_str().unwrap_or_default().trim();
+        if owner.is_empty() || name.is_empty() {
+            continue;
+        }
+        let url = format!(
+            "https://api.github.com/repos/{owner}/{name}/actions/runs?per_page={per_repo}"
+        );
+        let payload = match github_api_request(token, &url).await {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let repo_runs = payload["workflow_runs"].as_array().cloned().unwrap_or_default();
+        for run in repo_runs {
+            let mut next = run.clone();
+            if let Some(obj) = next.as_object_mut() {
+                obj.insert("repo_full_name", sonic_rs::json!(full_name));
+            }
+            runs.push(next);
+        }
+    }
+    runs.sort_by(|a, b| {
+        let left = a["created_at"].as_str().unwrap_or_default();
+        let right = b["created_at"].as_str().unwrap_or_default();
+        right.cmp(left)
+    });
+    runs.truncate(per_page.clamp(1, 60));
+    Ok(runs)
+}
+
+async fn execute_local_workflow_runner(workflow_id: &str) -> LocalWorkflowRunnerRunRecord {
+    let started_unix_ms = now_unix_ms();
+    let run_id = format!("local-{}-{}", workflow_id, started_unix_ms);
+    let mut status = "success".to_string();
+    let mut message = "local workflow runner completed".to_string();
+    let command = match workflow_runner_command_for(workflow_id) {
+        Some(value) => value,
+        None => {
+            return LocalWorkflowRunnerRunRecord {
+                id: run_id,
+                workflow_id: workflow_id.to_string(),
+                status: "error".to_string(),
+                started_unix_ms,
+                completed_unix_ms: now_unix_ms(),
+                duration_ms: 0,
+                message: "unsupported workflow id".to_string(),
+            }
+        }
+    };
+    let exec_result = run_command_capture(
+        "docker",
+        &["exec", "edgerun-osdev-frontend", "/bin/sh", "-lc", command],
+    );
+    if let Err(err) = exec_result {
+        status = "failure".to_string();
+        message = err.to_string();
+    }
+    let completed_unix_ms = now_unix_ms();
+    LocalWorkflowRunnerRunRecord {
+        id: run_id,
+        workflow_id: workflow_id.to_string(),
+        status,
+        started_unix_ms,
+        completed_unix_ms,
+        duration_ms: completed_unix_ms.saturating_sub(started_unix_ms),
+        message,
+    }
 }
 
 fn beeper_token_from(raw: &str) -> Result<String> {
@@ -2847,6 +3023,30 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         )
         .route(
             LOCAL_CLOUDFLARE_DNS_UPSERT_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNS_PATH,
+            get(handle_local_github_workflow_runs),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNS_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNNER_RUNS_PATH,
+            get(handle_local_github_workflow_runner_runs),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNNER_RUNS_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNNER_RUN_PATH,
+            post(handle_local_github_workflow_runner_run),
+        )
+        .route(
+            LOCAL_GITHUB_WORKFLOW_RUNNER_RUN_PATH,
             options(handle_local_options),
         )
         .route(LOCAL_BEEPER_VERIFY_PATH, post(handle_local_beeper_verify))
@@ -4267,6 +4467,60 @@ async fn handle_local_cloudflare_dns_upsert(
             "zone_id": zone_id,
             "action": action,
             "record": result["result"],
+        }),
+    )
+}
+
+async fn handle_local_github_workflow_runs(
+    Query(query): Query<LocalGithubWorkflowRunsQuery>,
+) -> Response {
+    let token = match github_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let per_page = query.per_page.unwrap_or(20).clamp(1, 60);
+    let runs = match collect_github_workflow_runs(&token, per_page).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "runs": runs,
+            "count": runs.len(),
+        }),
+    )
+}
+
+async fn handle_local_github_workflow_runner_runs() -> Response {
+    let runs = load_github_runner_records();
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "runs": runs,
+            "count": runs.len(),
+        }),
+    )
+}
+
+async fn handle_local_github_workflow_runner_run(
+    Json(body): Json<LocalGithubWorkflowRunnerRunRequest>,
+) -> Response {
+    let workflow_id = body.workflow_id.trim().to_string();
+    if workflow_runner_command_for(&workflow_id).is_none() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "unsupported workflow_id");
+    }
+    let run = execute_local_workflow_runner(&workflow_id).await;
+    if let Err(err) = append_github_runner_record(run.clone()) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "run": run,
         }),
     )
 }

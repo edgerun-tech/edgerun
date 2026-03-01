@@ -5,6 +5,7 @@ export function installLocalBridgeSimulator(win) {
   const MCP_RUNTIME_STORAGE_KEY = 'intent-ui-local-bridge-mcp-sim-v1'
   const CLOUDFLARE_STORAGE_KEY = 'intent-ui-local-bridge-cloudflare-sim-v1'
   const DOCKER_STORAGE_KEY = 'intent-ui-local-bridge-docker-sim-v1'
+  const GITHUB_WORKFLOW_STORAGE_KEY = 'intent-ui-local-bridge-github-workflow-sim-v1'
   const STRICT_NODE_CHECK_STORAGE_KEY = 'intent-ui-local-bridge-strict-node-sim-v1'
   const DISABLE_HOST_INFO_STORAGE_KEY = 'intent-ui-local-bridge-disable-host-info-sim-v1'
 
@@ -144,6 +145,48 @@ export function installLocalBridgeSimulator(win) {
 
   const writeDockerState = (state) => {
     win.localStorage.setItem(DOCKER_STORAGE_KEY, JSON.stringify(state && typeof state === 'object' ? state : defaultDockerState()))
+  }
+
+  const defaultGithubWorkflowState = () => ({
+    remoteRuns: [
+      {
+        id: 101,
+        repo_full_name: 'ken/edgerun',
+        name: 'ci',
+        status: 'completed',
+        conclusion: 'success',
+        event: 'push',
+        head_branch: 'prod-sync',
+        actor: { login: 'ken' },
+        html_url: 'https://github.com/ken/edgerun/actions/runs/101'
+      }
+    ],
+    localRuns: []
+  })
+
+  const readGithubWorkflowState = () => {
+    try {
+      const parsed = JSON.parse(String(win.localStorage.getItem(GITHUB_WORKFLOW_STORAGE_KEY) || '{}'))
+      if (parsed && typeof parsed === 'object') {
+        const fallback = defaultGithubWorkflowState()
+        return {
+          ...fallback,
+          ...parsed,
+          remoteRuns: Array.isArray(parsed.remoteRuns) ? parsed.remoteRuns : fallback.remoteRuns,
+          localRuns: Array.isArray(parsed.localRuns) ? parsed.localRuns : fallback.localRuns
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+    return defaultGithubWorkflowState()
+  }
+
+  const writeGithubWorkflowState = (state) => {
+    win.localStorage.setItem(
+      GITHUB_WORKFLOW_STORAGE_KEY,
+      JSON.stringify(state && typeof state === 'object' ? state : defaultGithubWorkflowState())
+    )
   }
 
   class FakeBridgeWebSocket {
@@ -375,6 +418,69 @@ export function installLocalBridgeSimulator(win) {
           state: next.state,
           message: 'container state updated'
         }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/github/workflow/runs') {
+      const token = (() => {
+        try {
+          return String(new URL(url, win.location.origin).searchParams.get('token') || '').trim()
+        } catch {
+          return ''
+        }
+      })()
+      if (token.length < 20) {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'github personal access token is missing or invalid' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const state = readGithubWorkflowState()
+      return Promise.resolve(
+        new win.Response(JSON.stringify({ ok: true, runs: state.remoteRuns, count: state.remoteRuns.length }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/github/workflow/runner/runs') {
+      const state = readGithubWorkflowState()
+      return Promise.resolve(
+        new win.Response(JSON.stringify({ ok: true, runs: state.localRuns, count: state.localRuns.length }), {
+          status: 200,
+          headers: { 'content-type': 'application/json; charset=utf-8' }
+        })
+      )
+    }
+    if (pathname === '/v1/local/github/workflow/runner/run' && String(init?.method || 'GET').toUpperCase() === 'POST') {
+      const body = JSON.parse(String(init?.body || '{}'))
+      const workflowId = String(body?.workflow_id || '').trim()
+      if (workflowId !== 'intent-ui-ci') {
+        return Promise.resolve(
+          new win.Response(JSON.stringify({ ok: false, error: 'unsupported workflow_id' }), {
+            status: 400,
+            headers: { 'content-type': 'application/json; charset=utf-8' }
+          })
+        )
+      }
+      const state = readGithubWorkflowState()
+      const run = {
+        id: `local-${Date.now()}`,
+        workflow_id: workflowId,
+        status: 'success',
+        started_unix_ms: Date.now() - 1200,
+        completed_unix_ms: Date.now(),
+        duration_ms: 1200,
+        message: 'local workflow runner completed'
+      }
+      state.localRuns = [run, ...(Array.isArray(state.localRuns) ? state.localRuns : [])].slice(0, 20)
+      writeGithubWorkflowState(state)
+      return Promise.resolve(
+        new win.Response(JSON.stringify({ ok: true, run }), {
           status: 200,
           headers: { 'content-type': 'application/json; charset=utf-8' }
         })

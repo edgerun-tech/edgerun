@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down swarm-add-worker spec-index
+.PHONY: clean check fmt clippy test verify matrix-check tree docker-binaries drift workflow-refs-check required-checks-check cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run workflow-runner-intent-ui-ci nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki nodeos-bootloader-efi nm-up nm-up-dev nm-status nm-logs nm-logs-nats nm-logs-mcp nm-down swarm-add-worker spec-index
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -65,6 +65,9 @@ actions-local-dry-run:
 
 actions-local-runtime-dry-run:
 	./scripts/actions-local-run.sh --workflow ci.yml --event pull_request --job runtime-slo --dry-run
+
+workflow-runner-intent-ui-ci:
+	bash ./scripts/workflow-runner-intent-ui-ci.sh
 
 nodeos-initramfs:
 	./scripts/nodeos/build-initramfs.sh
