@@ -12,6 +12,7 @@ import {
   loadLocalWorkflowRunnerProvider
 } from "../../lib/cloud/cloud-panel-providers";
 import { createCloudPanelClients } from "../../lib/cloud/cloud-clients";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 import IntentContextMenu from "../layout/IntentContextMenu";
 function logError(message, error) {
   if (import.meta.env?.DEV) {
@@ -597,8 +598,12 @@ function CloudPanel(props) {
                     </button>
                   </div>
                   <div class="space-y-1.5">
-                    <For each={providerResources}>
-                      {(resource) => <div class="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 hover:bg-neutral-800/70 transition-colors">
+                    <VirtualAnimatedList
+                      items={() => providerResources}
+                      estimateSize={58}
+                      overscan={4}
+                      animateRows
+                      renderItem={(resource) => <div class="flex items-center justify-between rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 hover:bg-neutral-800/70 transition-colors">
                           <div class="flex items-center gap-3 min-w-0">
                             <div class="rounded-md bg-neutral-800 p-1.5 flex-shrink-0">
                               {(() => {
@@ -663,7 +668,7 @@ function CloudPanel(props) {
                             </Show>
                           </div>
                         </div>}
-                    </For>
+                    />
                   </div>
                 </div>}
             </For>

@@ -65,8 +65,8 @@ function WorkflowOverlay() {
   const [showConversationList, setShowConversationList] = createSignal(true);
   const [contactOnlyThreads, setContactOnlyThreads] = createSignal([]);
   const [loadedThreadCount, setLoadedThreadCount] = createSignal(THREAD_PAGE_SIZE);
-  const [, setThreadScrollTop] = createSignal(0);
-  const [, setThreadViewportHeight] = createSignal(560);
+  const [threadScrollTop, setThreadScrollTop] = createSignal(0);
+  const [threadViewportHeight, setThreadViewportHeight] = createSignal(560);
   const [followThreadBottom, setFollowThreadBottom] = createSignal(true);
   const [showConversationSettings, setShowConversationSettings] = createSignal(false);
   const [showEmojiPalette, setShowEmojiPalette] = createSignal(false);
@@ -269,10 +269,12 @@ function WorkflowOverlay() {
     return all.slice(Math.max(0, all.length - loadedThreadCount()));
   });
   const virtualThreadRows = createMemo(() => {
-    return visibleThreadMessages().map((message, index) => ({
-      message,
-      key: `${message?.id || "msg"}-${index}`
-    }));
+    return visibleThreadMessages().map((message, index) => {
+      return {
+        message,
+        key: `${message?.id || "msg"}-${index}`
+      };
+    });
   });
   const virtualTopPad = createMemo(() => 0);
   const virtualBottomPad = createMemo(() => 0);
@@ -679,6 +681,8 @@ function WorkflowOverlay() {
                         virtualTopPad={virtualTopPad}
                         virtualBottomPad={virtualBottomPad}
                         virtualThreadRows={virtualThreadRows}
+                        threadScrollTop={threadScrollTop}
+                        threadViewportHeight={threadViewportHeight}
                         setThreadViewportHeight={setThreadViewportHeight}
                         setThreadScrollTop={setThreadScrollTop}
                         followThreadBottom={followThreadBottom}

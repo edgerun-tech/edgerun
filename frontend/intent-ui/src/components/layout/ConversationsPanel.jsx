@@ -19,6 +19,7 @@ import {
 import { channelBadgeClass } from "./workflow-overlay.utils";
 import { clipboardHistory, clearClipboardHistory } from "../../stores/clipboard-history";
 import { emitClipboardHistoryCleared } from "./workflow-overlay.events";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 export default function ConversationsPanel(props) {
   let threadScrollRef;
@@ -391,9 +392,14 @@ export default function ConversationsPanel(props) {
                   Scroll up to load older messages ({props.visibleThreadMessages().length}/{props.activeConversationMessages().length})
                 </p>
               </Show>
-              <div style={{ height: `${props.virtualTopPad()}px` }} />
-              <For each={props.virtualThreadRows()}>
-                {(row) => (
+              <VirtualAnimatedList
+                items={props.virtualThreadRows}
+                estimateSize={112}
+                overscan={6}
+                scrollTop={props.threadScrollTop}
+                viewportHeight={props.threadViewportHeight}
+                animateRows
+                renderItem={(row) => (
                   <article
                     class={props.cn(
                       "mb-2 rounded-md border p-2",
@@ -454,8 +460,7 @@ export default function ConversationsPanel(props) {
                     </Show>
                   </article>
                 )}
-              </For>
-              <div style={{ height: `${props.virtualBottomPad()}px` }} />
+              />
             </>
           </Show>
         </div>

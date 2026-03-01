@@ -1,6 +1,6 @@
 import { TbOutlineArrowLeft, TbOutlineRefresh, TbOutlineMail, TbOutlineSettings, TbOutlineCheck, TbOutlineSearch } from "solid-icons/tb";
 import { createSignal, For, Show, onMount, onCleanup, createEffect, createMemo } from "solid-js";
-import { createVirtualList } from "../../lib/hooks/useVirtualList";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
 const GOOGLE_TOKEN_KEY = "google_token";
 const GOOGLE_REFRESH_KEY = "google_refresh";
@@ -39,12 +39,6 @@ function GmailPanel() {
   let onFocusHandler = null;
   let listRef;
   const visibleEmails = createMemo(() => searchQuery().trim() ? filteredEmails() : emails());
-  const { virtualItems, totalHeight } = createVirtualList({
-    count: () => visibleEmails().length,
-    estimateSize: 88,
-    overscan: 5,
-    containerRef: () => listRef
-  });
   const token = () => googleToken();
   const refreshToken = () => googleRefresh();
   const refreshAuthState = () => {
@@ -462,34 +456,29 @@ function GmailPanel() {
             </Show>
 
             <Show when={!loading() && visibleEmails().length > 0}>
-              <div
-    class="divide-y divide-neutral-800 relative"
-    style={{ height: `${totalHeight()}px` }}
-  >
-                <For each={virtualItems()}>
-                  {(virtualRow) => {
-    const email = visibleEmails()[virtualRow.index];
-    return <div
-      data-index={virtualRow.index}
-      class="absolute w-full"
-      style={{ transform: `translateY(${virtualRow.offset}px)` }}
-    >
-                        <button
-      type="button"
-      onClick={() => loadEmailDetail(email.id)}
-      class="w-full p-3 hover:bg-neutral-800 transition-colors text-left"
-    >
-                          <div class="flex items-center justify-between mb-1">
-                            <span class="font-medium text-sm truncate">{email.subject}</span>
-                            <span class="text-xs text-neutral-500">{formatDate(email.date)}</span>
-                          </div>
-                          <div class="text-xs text-neutral-400 truncate">{email.from}</div>
-                          <div class="text-xs text-neutral-500 truncate mt-1">{email.snippet}</div>
-                        </button>
-                      </div>;
-  }}
-                </For>
-              </div>
+              <VirtualAnimatedList
+                items={visibleEmails}
+                estimateSize={88}
+                overscan={5}
+                containerRef={() => listRef}
+                layout="absolute"
+                class="divide-y divide-neutral-800 relative"
+                rowClass="absolute w-full"
+                renderItem={(email) => (
+                  <button
+                    type="button"
+                    onClick={() => loadEmailDetail(email.id)}
+                    class="w-full p-3 hover:bg-neutral-800 transition-colors text-left"
+                  >
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="font-medium text-sm truncate">{email.subject}</span>
+                      <span class="text-xs text-neutral-500">{formatDate(email.date)}</span>
+                    </div>
+                    <div class="text-xs text-neutral-400 truncate">{email.from}</div>
+                    <div class="text-xs text-neutral-500 truncate mt-1">{email.snippet}</div>
+                  </button>
+                )}
+              />
             </Show>
             
             <Show when={visibleEmails().length === 0 && !loading()}>

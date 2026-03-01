@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show, onMount } from "solid-js";
 import { FiExternalLink, FiRefreshCw, FiSave } from "solid-icons/fi";
 import { integrationStore } from "../../stores/integrations";
 import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 function tokenValue() {
   if (typeof window === "undefined") return "";
@@ -19,6 +20,13 @@ function zoneLabel(zone) {
 }
 
 export default function CloudflarePanel() {
+  let zonesListRef;
+  let tunnelsListRef;
+  let appsListRef;
+  let workersListRef;
+  let pagesListRef;
+  let recordsListRef;
+
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
   const [notice, setNotice] = createSignal("");
@@ -248,12 +256,17 @@ export default function CloudflarePanel() {
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-zones-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Domains (Zones)</p>
           <p class="mt-1 text-[10px] text-neutral-500">{zones().length} zones</p>
-          <div class="mt-2 max-h-48 space-y-1 overflow-auto">
-            <For each={zones()}>
-              {(zone) => (
+          <div class="mt-2 max-h-48 overflow-auto" ref={zonesListRef}>
+            <VirtualAnimatedList
+              items={zones}
+              estimateSize={30}
+              overscan={5}
+              containerRef={() => zonesListRef}
+              animateRows
+              renderItem={(zone) => (
                 <button
                   type="button"
-                  class={`w-full rounded border px-2 py-1 text-left text-[10px] ${zoneId() === zone.id ? "border-orange-500 bg-orange-500/10 text-orange-100" : "border-neutral-800 bg-black/20 text-neutral-200 hover:border-neutral-700"}`}
+                  class={`mt-1 w-full rounded border px-2 py-1 text-left text-[10px] ${zoneId() === zone.id ? "border-orange-500 bg-orange-500/10 text-orange-100" : "border-neutral-800 bg-black/20 text-neutral-200 hover:border-neutral-700"}`}
                   onClick={() => {
                     const nextZoneId = String(zone?.id || "").trim();
                     setZoneId(nextZoneId);
@@ -263,7 +276,7 @@ export default function CloudflarePanel() {
                   {zoneLabel(zone)}
                 </button>
               )}
-            </For>
+            />
             <Show when={zones().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No zones found.</p>
             </Show>
@@ -273,15 +286,20 @@ export default function CloudflarePanel() {
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-tunnels-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Tunnels</p>
           <p class="mt-1 text-[10px] text-neutral-500">{tunnels().length} tunnels {accountId() ? `on account ${accountId()}` : ""}</p>
-          <div class="mt-2 max-h-48 space-y-1 overflow-auto">
-            <For each={tunnels()}>
-              {(tunnel) => (
-                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+          <div class="mt-2 max-h-48 overflow-auto" ref={tunnelsListRef}>
+            <VirtualAnimatedList
+              items={tunnels}
+              estimateSize={34}
+              overscan={4}
+              containerRef={() => tunnelsListRef}
+              animateRows
+              renderItem={(tunnel) => (
+                <div class="mt-1 rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
                   <p class="truncate">{String(tunnel?.name || tunnel?.id || "Tunnel")}</p>
                   <p class="truncate text-neutral-500">{String(tunnel?.status || "unknown")}</p>
                 </div>
               )}
-            </For>
+            />
             <Show when={tunnels().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No tunnels found.</p>
             </Show>
@@ -291,15 +309,20 @@ export default function CloudflarePanel() {
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-access-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Access Apps</p>
           <p class="mt-1 text-[10px] text-neutral-500">{apps().length} apps</p>
-          <div class="mt-2 max-h-52 space-y-1 overflow-auto">
-            <For each={apps()}>
-              {(app) => (
-                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+          <div class="mt-2 max-h-52 overflow-auto" ref={appsListRef}>
+            <VirtualAnimatedList
+              items={apps}
+              estimateSize={34}
+              overscan={4}
+              containerRef={() => appsListRef}
+              animateRows
+              renderItem={(app) => (
+                <div class="mt-1 rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
                   <p class="truncate">{String(app?.name || app?.id || "Access App")}</p>
                   <p class="truncate text-neutral-500">{String(app?.domain || app?.aud || "")}</p>
                 </div>
               )}
-            </For>
+            />
             <Show when={apps().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No access apps found.</p>
             </Show>
@@ -309,15 +332,20 @@ export default function CloudflarePanel() {
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-workers-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Workers</p>
           <p class="mt-1 text-[10px] text-neutral-500">{workers().length} scripts</p>
-          <div class="mt-2 max-h-52 space-y-1 overflow-auto">
-            <For each={workers()}>
-              {(worker) => (
-                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+          <div class="mt-2 max-h-52 overflow-auto" ref={workersListRef}>
+            <VirtualAnimatedList
+              items={workers}
+              estimateSize={34}
+              overscan={4}
+              containerRef={() => workersListRef}
+              animateRows
+              renderItem={(worker) => (
+                <div class="mt-1 rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
                   <p class="truncate">{String(worker?.id || worker?.name || "Worker")}</p>
                   <p class="truncate text-neutral-500">{String(worker?.modified_on || worker?.created_on || "")}</p>
                 </div>
               )}
-            </For>
+            />
             <Show when={workers().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No workers found.</p>
             </Show>
@@ -327,15 +355,20 @@ export default function CloudflarePanel() {
         <section class="rounded border border-neutral-800 bg-neutral-950/50 p-3" data-testid="cloudflare-pages-list">
           <p class="text-[11px] font-medium uppercase tracking-wide text-neutral-300">Pages</p>
           <p class="mt-1 text-[10px] text-neutral-500">{pages().length} projects</p>
-          <div class="mt-2 max-h-52 space-y-1 overflow-auto">
-            <For each={pages()}>
-              {(page) => (
-                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+          <div class="mt-2 max-h-52 overflow-auto" ref={pagesListRef}>
+            <VirtualAnimatedList
+              items={pages}
+              estimateSize={34}
+              overscan={4}
+              containerRef={() => pagesListRef}
+              animateRows
+              renderItem={(page) => (
+                <div class="mt-1 rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
                   <p class="truncate">{String(page?.name || page?.id || "Page Project")}</p>
                   <p class="truncate text-neutral-500">{String(page?.subdomain || page?.domains?.[0] || "")}</p>
                 </div>
               )}
-            </For>
+            />
             <Show when={pages().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No pages projects found.</p>
             </Show>
@@ -403,17 +436,22 @@ export default function CloudflarePanel() {
             </button>
           </div>
 
-          <div class="mt-2 max-h-48 space-y-1 overflow-auto">
-            <For each={records()}>
-              {(record) => (
-                <div class="rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
+          <div class="mt-2 max-h-48 overflow-auto" ref={recordsListRef}>
+            <VirtualAnimatedList
+              items={records}
+              estimateSize={34}
+              overscan={6}
+              containerRef={() => recordsListRef}
+              animateRows
+              renderItem={(record) => (
+                <div class="mt-1 rounded border border-neutral-800 bg-black/20 px-2 py-1 text-[10px] text-neutral-200">
                   <p class="truncate">
                     {String(record?.type || "?")} {String(record?.name || "")}
                   </p>
                   <p class="truncate text-neutral-500">{String(record?.content || "")}</p>
                 </div>
               )}
-            </For>
+            />
             <Show when={records().length === 0 && !loading()}>
               <p class="text-[10px] text-neutral-500">No DNS records found for selected zone.</p>
             </Show>

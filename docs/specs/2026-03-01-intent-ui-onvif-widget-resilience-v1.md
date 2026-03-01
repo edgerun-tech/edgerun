@@ -5,6 +5,8 @@
   - Make ONVIF panel scan behavior deterministic by providing a node-local ONVIF discovery backend and explicit UI fallback behavior.
   - Prefer node-local bridge discovery path for scan attempts while preserving legacy API compatibility.
   - Keep manual camera add flow fully functional even when scan endpoint is missing.
+  - Resolve discovered ONVIF service endpoints to operator-usable stream URLs (default `stream1` path).
+  - Allow operator-defined default ONVIF stream auth settings (username/password) without persisting credentials inside per-camera URLs.
 - Non-goals:
   - Implement a full ONVIF discovery service in this change.
   - Add ONVIF auth/session management or PTZ control.
@@ -13,6 +15,7 @@
 - Do not persist embedded credentials from user-entered camera URLs.
 - Keep ONVIF scan calls read-only and bounded to explicit endpoints.
 - Surface explicit operator-facing error/status text for unavailable scan backends.
+ - Keep default credentials isolated in ONVIF panel defaults storage and apply them only at runtime for preview/open actions.
 
 ## Acceptance criteria
 1. ONVIF scan attempts node-local discovery first (`/v1/local/onvif/discover`) and then legacy `/api/onvif/discover` fallback.
@@ -22,7 +25,8 @@
 5. Add/update Cypress coverage that opens ONVIF panel, runs scan with mocked response, and adds a scanned camera.
 6. Backend validation passes:
 - `cargo check -p edgerun-node-manager`
-7. Frontend validation passes:
+7. ONVIF panel maps scanned `/onvif/device_service` URLs to stream URLs using configurable defaults (`protocol`, `stream path`, optional auth) and stores camera entries without embedded credentials.
+8. Frontend validation passes:
 - `cd frontend && bun run check`
 - `cd frontend && bun run build`
 
@@ -30,6 +34,7 @@
 - Rollout:
   - Add node-local ONVIF WS-Discovery endpoint.
   - Update ONVIF panel scan path + status behavior.
+  - Add ONVIF stream defaults controls and runtime stream URL/auth mapping.
   - Add ONVIF panel E2E regression coverage.
 - Rollback:
   - Revert node-local ONVIF discovery endpoint, ONVIF panel scan fallback/status changes, and ONVIF Cypress spec.

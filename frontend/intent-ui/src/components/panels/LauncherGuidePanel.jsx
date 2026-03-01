@@ -23,6 +23,7 @@ import { knownDevices } from "../../stores/devices";
 import { integrationStore } from "../../stores/integrations";
 import { profileRuntime } from "../../stores/profile-runtime";
 import { openProfileBootstrap, toggleIntentBar } from "../../stores/ui-actions";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 const GUIDE_KEY = "intent-ui-guide-progress-v1";
 
@@ -169,32 +170,34 @@ function LauncherGuidePanel(props) {
         <div class="min-h-0 flex-1 overflow-auto space-y-1.5 pr-1">
           <div class="rounded-md border border-neutral-800 bg-neutral-900/55 p-2.5">
             <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Startup Tasks</p>
-            <div class="space-y-1.5">
-              <For each={startupTasks()}>
-                {(task) => (
-                  <div class="rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5">
-                    <div class="flex items-start justify-between gap-2">
-                      <div class="min-w-0">
-                        <p class="flex items-center gap-1 text-[11px] font-medium text-neutral-100">
-                          <Show when={task.done} fallback={<TbOutlineUser size={12} class="text-neutral-500" />}>
-                            <TbOutlineCheck size={12} class="text-[hsl(var(--primary))]" />
-                          </Show>
-                          {task.title}
-                        </p>
-                        <p class="mt-0.5 text-[10px] text-neutral-500">{task.detail}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={task.action}
-                        class="shrink-0 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
-                      >
-                        {task.actionLabel}
-                      </button>
+            <VirtualAnimatedList
+              items={startupTasks}
+              estimateSize={52}
+              overscan={3}
+              animateRows
+              renderItem={(task) => (
+                <div class="mt-1.5 rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1.5">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <p class="flex items-center gap-1 text-[11px] font-medium text-neutral-100">
+                        <Show when={task.done} fallback={<TbOutlineUser size={12} class="text-neutral-500" />}>
+                          <TbOutlineCheck size={12} class="text-[hsl(var(--primary))]" />
+                        </Show>
+                        {task.title}
+                      </p>
+                      <p class="mt-0.5 text-[10px] text-neutral-500">{task.detail}</p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={task.action}
+                      class="shrink-0 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]"
+                    >
+                      {task.actionLabel}
+                    </button>
                   </div>
-                )}
-              </For>
-            </div>
+                </div>
+              )}
+            />
           </div>
 
           <div class="rounded-md border border-neutral-800 bg-neutral-900/55 p-2.5">
@@ -235,9 +238,13 @@ function LauncherGuidePanel(props) {
             <p class="text-xs text-neutral-400">{completedCount()} / {guideSteps.length} completed</p>
           </div>
 
-          <For each={guideSteps}>
-            {(step) => (
-              <div class="rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5">
+          <VirtualAnimatedList
+            items={() => guideSteps}
+            estimateSize={88}
+            overscan={3}
+            animateRows
+            renderItem={(step) => (
+              <div class="mt-1.5 rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5">
                 <label class="flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -263,7 +270,7 @@ function LauncherGuidePanel(props) {
                 </button>
               </div>
             )}
-          </For>
+          />
         </div>
       </Show>
     </div>
