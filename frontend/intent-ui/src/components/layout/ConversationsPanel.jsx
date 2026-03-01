@@ -115,6 +115,27 @@ export default function ConversationsPanel(props) {
         <div class="min-h-0 flex-1 overflow-auto p-3">
           <Show when={props.conversationTab() === "threads"}>
             <div class="space-y-1.5">
+              <Show when={props.threadSourceOptions().length > 1}>
+                <div class="mb-1.5 flex flex-wrap gap-1.5" data-testid="conversation-thread-source-filter">
+                  <For each={props.threadSourceOptions()}>
+                    {(source) => (
+                      <button
+                        type="button"
+                        onClick={() => props.setThreadSourceFilter(source)}
+                        class={props.cn(
+                          "rounded border px-2 py-0.5 text-[10px] uppercase tracking-wide transition-colors",
+                          props.threadSourceFilter() === source
+                            ? "border-[hsl(var(--primary)/0.5)] bg-[hsl(var(--primary)/0.12)] text-[hsl(var(--primary))]"
+                            : "border-neutral-700 bg-neutral-900/50 text-neutral-400 hover:bg-neutral-800"
+                        )}
+                        data-testid={`conversation-thread-source-option-${source}`}
+                      >
+                        {source === "all" ? "All" : source}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
               <VirtualAnimatedList
                 items={props.threadConversations}
                 estimateSize={52}
@@ -135,6 +156,8 @@ export default function ConversationsPanel(props) {
                       props.cn(DRAWER_LIST_ROW_CLASS, "text-left"),
                       props.activeConversation()?.id === thread.id ? "border-neutral-700 bg-neutral-900/85" : ""
                     )}
+                    data-testid="conversation-thread-item"
+                    data-conversation-channel={thread.channel}
                   >
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex min-w-0 items-center gap-2">
@@ -199,6 +222,9 @@ export default function ConversationsPanel(props) {
                   </div>
                 </div>
               </Show>
+              <Show when={props.hasConversationContent() && props.threadConversations().length === 0}>
+                <p class={DRAWER_STATE_BLOCK_CLASS}>No threads match this source filter.</p>
+              </Show>
             </div>
           </Show>
           <Show when={props.conversationTab() === "contacts"}>
@@ -214,12 +240,13 @@ export default function ConversationsPanel(props) {
                       type="button"
                       onClick={() => {
                         const emailThreadId = contact.email ? `email-${contact.email}` : "";
-                        const existing = emailThreadId ? props.threadConversations().find((thread) => thread.id === emailThreadId) : null;
+                        const allThreads = props.allThreadConversations();
+                        const existing = emailThreadId ? allThreads.find((thread) => thread.id === emailThreadId) : null;
                         const linkedThreadId = Array.isArray(contact.threadIds)
-                          ? contact.threadIds.find((threadId) => props.threadConversations().some((thread) => thread.id === threadId))
+                          ? contact.threadIds.find((threadId) => allThreads.some((thread) => thread.id === threadId))
                           : "";
                         const linkedThread = linkedThreadId
-                          ? props.threadConversations().find((thread) => thread.id === linkedThreadId)
+                          ? allThreads.find((thread) => thread.id === linkedThreadId)
                           : null;
                         if (existing) {
                           props.setConversationTab("threads");
