@@ -178,8 +178,7 @@ function WorkflowOverlay() {
     "whatsapp",
     "telegram",
     "google_messages",
-    "meta",
-    "messenger"
+    "meta"
   ].includes(integration.id)));
   const panelSuggestionTags = {
     launcher: ["workflows", "ai", "messages", "storage", "code"],

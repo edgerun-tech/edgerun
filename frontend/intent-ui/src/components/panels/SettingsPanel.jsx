@@ -77,7 +77,7 @@ function SettingsPanel(props) {
         </p>
       </header>
 
-      <div class="mt-3 grid gap-3 xl:grid-cols-2">
+      <div class="mt-3 space-y-3">
         <section class="rounded-lg border border-neutral-800 bg-neutral-900/60 p-3">
           <div class="mb-2 flex items-center gap-2">
             <TbOutlineClock size={15} class="text-neutral-300" />

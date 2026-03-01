@@ -21,7 +21,6 @@ describe('intent ui conversations hub', () => {
         win.localStorage.removeItem('google_token')
         win.localStorage.removeItem('google_messages_token')
         win.localStorage.removeItem('whatsapp_token')
-        win.localStorage.removeItem('messenger_token')
         win.localStorage.removeItem('meta_token')
         win.localStorage.removeItem('telegram_token')
       }
@@ -36,7 +35,6 @@ describe('intent ui conversations hub', () => {
     cy.get('[data-testid="conversations-empty-state"]').should('contain.text', 'This is where all your conversations will be available')
     cy.get('[data-testid="conversation-provider-email"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-whatsapp"]').should('be.visible')
-    cy.get('[data-testid="conversation-provider-messenger"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-telegram"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-google_messages"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-meta"]').should('be.visible')
