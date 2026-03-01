@@ -9,16 +9,73 @@ class IntegrationLifecycle {
     this.requiresToken = definition.requiresToken === false ? false : true;
     this.defaultCapabilities = Array.isArray(definition.defaultCapabilities) ? definition.defaultCapabilities.slice() : [];
     this.tags = Array.isArray(definition.tags) ? definition.tags.slice() : [];
+    this.aliases = Array.isArray(definition.aliases) ? definition.aliases.slice() : [];
+    this.forceUserOwned = Boolean(definition.forceUserOwned) || this.tags.includes("matrix-bridge");
   }
 
   getDefaultConnectorMode() {
+    if (this.forceUserOwned) return "user_owned";
     return this.defaultConnectorMode || (this.supportsPlatformConnector ? "platform" : "user_owned");
   }
 
   resolveConnectorMode(mode) {
+    if (this.forceUserOwned) return "user_owned";
     const requested = String(mode || "").trim();
     if (requested === "platform" && this.supportsPlatformConnector) return "platform";
     return "user_owned";
+  }
+
+  isMatrixBridgeIntegration() {
+    return this.tags.includes("matrix-bridge");
+  }
+
+  async verifyMatrixBridgeRuntime({ details = {}, token = "", fetchImpl = fetch } = {}) {
+    const bridgeToken = String(details?.token || "").trim() || String(token || "").trim();
+    if (bridgeToken.length < 8) {
+      return { ok: false, message: `${this.name} bridge token missing or invalid.` };
+    }
+
+    const nodeId = String(details?.nodeId || details?.node_id || "").trim();
+    const query = new URLSearchParams({ integration_id: this.id });
+    if (nodeId) query.set("node_id", nodeId);
+
+    const readRuntimeStatus = async () => {
+      try {
+        const response = await fetchImpl(`/v1/local/mcp/integration/status?${query.toString()}`, { cache: "no-store" });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          return {
+            ok: false,
+            running: false,
+            message: String(payload?.error || `bridge status request failed (${response.status})`)
+          };
+        }
+        const running = Boolean(payload?.data?.running);
+        const status = String(payload?.data?.status || (running ? "running" : "stopped")).trim();
+        return { ok: true, running, status };
+      } catch (error) {
+        return {
+          ok: false,
+          running: false,
+          message: error instanceof Error ? error.message : "Failed to query bridge runtime status."
+        };
+      }
+    };
+
+    const status = await readRuntimeStatus();
+    if (status.ok && status.running) {
+      return {
+        ok: true,
+        message: `${this.name} Matrix bridge runtime is running (${status.status || "running"}).`,
+        capabilities: this.defaultCapabilities.slice()
+      };
+    }
+
+    return {
+      ok: true,
+      message: `${this.name} credentials accepted. Runtime starts on Link Integration.`,
+      capabilities: this.defaultCapabilities.slice()
+    };
   }
 
   hasUsableToken(token, fallbackConnected = false) {
@@ -117,15 +174,15 @@ class IntegrationLifecycle {
 
   listConnectionView({ connection = {}, profileReady = false, deviceReady = true } = {}) {
     const connected = Boolean(connection?.connected);
-    const requiresProfileSession = this.id !== "codex_cli";
+    const requiresProfileSession = this.id !== "opencode_cli";
     const available = connected
       && (requiresProfileSession ? profileReady : true)
-      && (this.id === "codex_cli" ? deviceReady : true);
+      && (this.id === "opencode_cli" ? deviceReady : true);
     const availabilityReason = this.id === "tailscale" && !connected
       ? "Provide Tailscale API key and link integration"
       : !connected
         ? "Not connected"
-        : this.id === "codex_cli" && !deviceReady
+        : this.id === "opencode_cli" && !deviceReady
           ? "Connected device required"
           : requiresProfileSession && !profileReady
             ? "Profile session required"
@@ -143,12 +200,16 @@ class IntegrationLifecycle {
       accountLabel: connection?.accountLabel || "",
       capabilities: available
         ? (Array.isArray(connection?.capabilities) ? connection.capabilities.slice() : this.defaultCapabilities.slice())
-        : []
+        : [],
+      aliases: this.aliases.slice()
     };
   }
 
   async verifyConnection({ details = {}, connectorMode = "", profileReady = false, deviceReady = false, token = "", fetchImpl = fetch } = {}) {
     const mode = this.resolveConnectorMode(connectorMode || this.getDefaultConnectorMode());
+    if (this.isMatrixBridgeIntegration()) {
+      return this.verifyMatrixBridgeRuntime({ details, token, fetchImpl });
+    }
     if (this.id === "github") {
       const pat = String(details?.token || "").trim() || String(token || "").trim();
       if (pat.length < 8) {
@@ -181,7 +242,7 @@ class IntegrationLifecycle {
       if (!profileReady) return { ok: false, message: "Profile session required for platform connector." };
       return { ok: true, message: "Platform connector session is active.", capabilities: this.defaultCapabilities.slice() };
     }
-    if (this.id === "codex_cli") {
+    if (this.id === "opencode_cli") {
       if (!deviceReady) return { ok: false, message: "No connected node manager device is online." };
       return { ok: true, message: "Connected device is online for local CLI execution.", capabilities: this.defaultCapabilities.slice() };
     }
@@ -233,13 +294,23 @@ const integrationDefinitions = [
   { id: "google", name: "Google", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "google_token", defaultCapabilities: ["drive.read", "gmail.read", "calendar.read", "contacts.read", "messages.read"], tags: ["messages", "storage", "workflows", "productivity"] },
   { id: "google_photos", name: "Google Photos", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "google_token", defaultCapabilities: ["photos.read"], tags: ["media", "storage"] },
   { id: "email", name: "Email", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "google_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows"] },
-  { id: "whatsapp", name: "WhatsApp", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "whatsapp_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows"] },
+  { id: "whatsapp", name: "WhatsApp", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "whatsapp_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["whatsapp"] },
   { id: "messenger", name: "Messenger", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "messenger_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows"] },
-  { id: "telegram", name: "Telegram", authMethod: "token", supportsPlatformConnector: true, tokenKey: "telegram_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows"] },
-  { id: "google_messages", name: "Google Messages", authMethod: "token", supportsPlatformConnector: true, tokenKey: "google_messages_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge", "sms", "rcs"] },
-  { id: "meta", name: "Meta", authMethod: "token", supportsPlatformConnector: true, tokenKey: "meta_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge", "facebook", "instagram"] },
-  { id: "qwen", name: "Qwen", authMethod: "oauth", supportsPlatformConnector: true, tokenKey: "qwen_token", defaultCapabilities: ["chat.completions"], tags: ["ai", "code", "workflows"] },
-  { id: "codex_cli", name: "Codex CLI", authMethod: "local_cli", supportsPlatformConnector: false, requiresToken: false, tokenKey: "", defaultCapabilities: ["assistant.local_cli.execute"], tags: ["ai", "code", "workflows"] },
+  { id: "telegram", name: "Telegram", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "telegram_token", defaultCapabilities: ["messages.read", "messages.send"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["telegram"] },
+  { id: "google_messages", name: "Google Messages", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "google_messages_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge", "sms", "rcs"], aliases: ["gmessages", "googlemessages", "rcs", "sms"] },
+  { id: "meta", name: "Meta", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "meta_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge", "facebook", "instagram"], aliases: ["meta", "instagram", "facebook"] },
+  { id: "signal", name: "Signal", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "signal_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["signal"] },
+  { id: "discord", name: "Discord", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "discord_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["discord"] },
+  { id: "slack", name: "Slack", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "slack_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["slack"] },
+  { id: "gvoice", name: "Google Voice", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "gvoice_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["gvoice", "googlevoice"] },
+  { id: "googlechat", name: "Google Chat", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "googlechat_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["googlechat", "gchat"] },
+  { id: "twitter", name: "X / Twitter", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "twitter_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["twitter"] },
+  { id: "bluesky", name: "Bluesky", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "bluesky_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["bluesky", "bsky"] },
+  { id: "imessage", name: "iMessage", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "imessage_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["imessage"] },
+  { id: "imessagego", name: "iMessage (Go)", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "imessagego_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["imessagego"] },
+  { id: "linkedin", name: "LinkedIn", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "linkedin_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge"], aliases: ["linkedin"] },
+  { id: "heisenbridge", name: "IRC (Heisenbridge)", authMethod: "token", supportsPlatformConnector: false, defaultConnectorMode: "user_owned", forceUserOwned: true, tokenKey: "heisenbridge_token", defaultCapabilities: ["messages.read", "messages.send", "messages.sync"], tags: ["messages", "workflows", "matrix-bridge", "irc"], aliases: ["heisenbridge", "irc"] },
+  { id: "opencode_cli", name: "OpenCode CLI", authMethod: "local_cli", supportsPlatformConnector: false, requiresToken: false, tokenKey: "", defaultCapabilities: ["assistant.local_cli.execute"], tags: ["ai", "code", "workflows"] },
   { id: "tailscale", name: "Tailscale", authMethod: "token", supportsPlatformConnector: true, defaultConnectorMode: "user_owned", tokenKey: "tailscale_api_key", defaultCapabilities: ["network.overlay.join", "network.overlay.funnel", "network.overlay.ssh"], tags: ["network", "devices", "workflows"] },
   { id: "hetzner", name: "Hetzner", authMethod: "token", supportsPlatformConnector: true, tokenKey: "hetzner_token", defaultCapabilities: ["servers.read", "servers.write", "firewalls.read"], tags: ["compute", "network", "storage", "workflows"] },
   { id: "web3", name: "Web3", authMethod: "wallet", supportsPlatformConnector: false, tokenKey: "web3_wallet", defaultCapabilities: ["wallet.connect", "profile.encrypt", "backup.local"], tags: ["identity", "security", "workflows"] },
@@ -263,7 +334,7 @@ function reply(ok, id, result, error = "") {
   });
 }
 
-onmessage = async (event) => {
+self.onmessage = async (event) => {
   const data = event?.data || {};
   const requestId = String(data.id || "").trim();
   const type = String(data.type || "").trim();

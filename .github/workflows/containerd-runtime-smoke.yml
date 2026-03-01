@@ -6,7 +6,6 @@ on:
     paths:
       - "crates/edgerun-containerd-shim/**"
       - "crates/edgerun-runtime-proto/**"
-      - "crates/edgerun-snapshotter/**"
       - "scripts/containerd-runtime-matrix-smoke.sh"
       - "scripts/containerd-runtime-wasm-smoke.sh"
       - "scripts/containerd-runtime-soak.sh"
@@ -21,7 +20,6 @@ on:
     paths:
       - "crates/edgerun-containerd-shim/**"
       - "crates/edgerun-runtime-proto/**"
-      - "crates/edgerun-snapshotter/**"
       - "scripts/containerd-runtime-matrix-smoke.sh"
       - "scripts/containerd-runtime-wasm-smoke.sh"
       - "scripts/containerd-runtime-soak.sh"
@@ -47,6 +45,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
 
       - name: Setup sccache
         if: ${{ env.ACT != 'true' }}
@@ -69,7 +69,6 @@ jobs:
           export CARGO_TARGET_DIR=out/target
           cargo build --locked --release \
             -p edgerun-containerd-shim \
-            -p edgerun-snapshotter \
             -p edgerun-runtime \
             --features edgerun-runtime/cli
 

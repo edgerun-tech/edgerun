@@ -20,7 +20,7 @@ const integrationsWorkerSource = path.join(intentRoot, 'src', 'workers', 'integr
 const integrationsWorkerTarget = path.join(targetWorkerRoot, 'integrations.worker.js')
 const tailwindBin = path.join(frontendRoot, 'node_modules', '.bin', 'tailwindcss')
 const repoRoot = path.resolve(frontendRoot, '..')
-const buildVersion = Date.now().toString()
+const buildVersion = process.env.EDGERUN_BUILD_NUMBER || process.env.GITHUB_SHA || 'dev'
 
 function run(cmd, cwd) {
   const proc = spawnSync(cmd[0], cmd.slice(1), {
@@ -82,7 +82,7 @@ run(
   frontendRoot
 )
 
-const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'target')
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'out', 'target')
 const eventBusWasmArtifact = path.join(
   cargoTargetDir,
   'wasm32-unknown-unknown',

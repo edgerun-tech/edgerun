@@ -136,7 +136,7 @@ journalctl --user -u edgerun-cloudflared-term.service -f
 
 ## System Services (Containerd Runtime Path)
 
-For host-level containerd integration, install EdgeRun snapshotter + shim backend units:
+For host-level containerd integration, install the EdgeRun shim backend unit:
 
 ```bash
 sudo ./scripts/systemd/install-system-containerd-services.sh
@@ -151,7 +151,6 @@ sudo INSTALL_BINARIES=0 ./scripts/systemd/install-system-containerd-services.sh
 ```
 
 Installed system units:
-- `/etc/systemd/system/edgerun-snapshotter.service`
 - `/etc/systemd/system/edgerun-shim-backend.service`
 
 Binary layout for containerd compatibility:
@@ -161,8 +160,7 @@ Binary layout for containerd compatibility:
 Status checks:
 
 ```bash
-systemctl --no-pager --full status edgerun-snapshotter.service edgerun-shim-backend.service
-journalctl -u edgerun-snapshotter.service -f
+systemctl --no-pager --full status edgerun-shim-backend.service
 journalctl -u edgerun-shim-backend.service -f
 ```
 

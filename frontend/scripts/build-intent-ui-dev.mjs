@@ -25,7 +25,7 @@ const eventBusWorkerSource = path.join(intentRoot, 'src', 'workers', 'eventbus.w
 const eventBusWorkerTarget = path.join(targetWorkerRoot, 'eventbus.worker.js')
 const integrationsWorkerSource = path.join(intentRoot, 'src', 'workers', 'integrations.worker.js')
 const integrationsWorkerTarget = path.join(targetWorkerRoot, 'integrations.worker.js')
-const buildVersion = Date.now().toString()
+const buildVersion = process.env.EDGERUN_BUILD_NUMBER || process.env.GITHUB_SHA || 'dev'
 
 function run(cmd, cwd) {
   const proc = spawnSync(cmd[0], cmd.slice(1), { cwd, stdio: 'inherit' })
@@ -78,7 +78,7 @@ run(
   frontendRoot
 )
 
-const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'target')
+const cargoTargetDir = process.env.CARGO_TARGET_DIR || path.join(repoRoot, 'out', 'target')
 const wasmFromCargo = path.join(
   cargoTargetDir,
   'wasm32-unknown-unknown',

@@ -1,54 +1,16 @@
-import { Show, For, createMemo, createSignal, createEffect, onCleanup } from "solid-js";
+import { Show, For, createMemo, createSignal, createEffect } from "solid-js";
 import { Motion } from "solid-motionone";
 import { Portal } from "solid-js/web";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-import {
-  TbOutlineFileText,
-  TbOutlineCloud,
-  TbOutlineSettings,
-  TbOutlineBook2,
-  TbOutlineCommand,
-  TbOutlinePlus,
-  TbOutlineUser,
-  TbOutlineDeviceDesktop,
-  TbOutlineKey,
-  TbOutlineServer,
-  TbOutlineWifi,
-  TbOutlineWifiOff,
-  TbOutlineMoodSmile,
-  TbOutlineAdjustments,
-  TbOutlineSend,
-  TbOutlineClipboard
-} from "solid-icons/tb";
-import {
-  FiLink2,
-  FiCloud,
-  FiCpu,
-  FiDatabase
-} from "solid-icons/fi";
-import {
-  SiGithub,
-  SiGoogle,
-  SiCloudflare,
-  SiVercel,
-  SiTelegram,
-  SiWhatsapp,
-  SiMessenger,
-  SiTailscale,
-  SiWeb3dotjs
-} from "solid-icons/si";
 import { CodeDiffViewer } from "../results/CodeDiffViewer";
-import FileManager from "./FileManager";
-import IntegrationsPanel from "./IntegrationsPanel";
-import CloudPanel from "../panels/CloudPanel";
-import CredentialsPanel from "../panels/CredentialsPanel";
-import LauncherGuidePanel from "../panels/LauncherGuidePanel";
-import SettingsPanel from "../panels/SettingsPanel";
+import ConversationsPanel from "./ConversationsPanel";
+import DevicesPanel from "./DevicesPanel";
+import LeftDrawer from "./LeftDrawer";
 import {
   closeWorkflowDemo,
   openWorkflowIntegrations,
-  startNewCodexSession,
+  startNewAssistantSession,
   setWorkflowCode,
   toggleWorkflowDrawer,
   triggerWorkflowCommit,
@@ -56,13 +18,29 @@ import {
   workflowUi
 } from "../../stores/workflow-ui";
 import { integrationStore } from "../../stores/integrations";
-import { clipboardHistory, clearClipboardHistory } from "../../stores/clipboard-history";
-import { publishEvent } from "../../stores/eventbus";
-import {
-  CURRENT_DEVICE_ID,
-  knownDevices
-} from "../../stores/devices";
 import { openWindow } from "../../stores/windows";
+import { isOfficialBridgeId } from "../../lib/integrations/official-bridges";
+import {
+  CHAT_HEAD_PREFS_KEY,
+  CHAT_HEAD_PRESET_COLORS,
+  DRAWER_ICON_BUTTON_CLASS,
+  DRAWER_SUGGESTION_ICON_BUTTON_CLASS,
+  LEFT_DRAWER_PANEL_ITEMS,
+  PANEL_SUGGESTION_TAGS,
+  RIGHT_DRAWER_PANEL_ITEMS,
+  THREAD_OVERSCAN,
+  THREAD_PAGE_SIZE,
+  THREAD_ROW_ESTIMATE
+} from "./workflow-overlay.constants";
+import {
+  integrationIconForSuggestion,
+} from "./workflow-overlay.utils";
+import {
+  emitConversationChatHeadUpdated,
+  emitConversationMessageSent
+} from "./workflow-overlay.events";
+import { useWorkflowDeviceConnect } from "./use-workflow-device-connect";
+import { useWorkflowConversationSources } from "./use-workflow-conversation-sources";
 
 function cn(...classes) {
   return twMerge(clsx(classes));
@@ -70,12 +48,7 @@ function cn(...classes) {
 
 function WorkflowOverlay() {
   if (typeof window === "undefined") return null;
-  const CHAT_HEAD_PREFS_KEY = "intent-ui-chat-head-prefs-v1";
-  const CHAT_HEAD_PRESET_COLORS = ["#1d4ed8", "#0f766e", "#6d28d9", "#b45309", "#be123c", "#374151"];
-  const EMOJI_QUICK_SET = ["😀", "🚀", "🔥", "💬", "✅", "🧠", "📌", "👀", "🎯", "🤝", "❤️", "⚡"];
-  const THREAD_PAGE_SIZE = 80;
-  const THREAD_ROW_ESTIMATE = 92;
-  const THREAD_OVERSCAN = 6;
+  const LOCAL_CONVERSATION_MESSAGES_KEY = "intent-ui-local-conversation-messages-v1";
   const state = workflowUi;
   const isVisible = createMemo(() => state().visible);
   const unifiedStatus = createMemo(() => {
@@ -93,10 +66,7 @@ function WorkflowOverlay() {
   const [conversationTab, setConversationTab] = createSignal("threads");
   const [selectedConversationId, setSelectedConversationId] = createSignal("");
   const [showConversationList, setShowConversationList] = createSignal(true);
-  const [emailThreads, setEmailThreads] = createSignal([]);
   const [contactOnlyThreads, setContactOnlyThreads] = createSignal([]);
-  const [contacts, setContacts] = createSignal([]);
-  const [contactsLoading, setContactsLoading] = createSignal(false);
   const [loadedThreadCount, setLoadedThreadCount] = createSignal(THREAD_PAGE_SIZE);
   const [threadScrollTop, setThreadScrollTop] = createSignal(0);
   const [threadViewportHeight, setThreadViewportHeight] = createSignal(560);
@@ -104,7 +74,14 @@ function WorkflowOverlay() {
   const [showConversationSettings, setShowConversationSettings] = createSignal(false);
   const [showEmojiPalette, setShowEmojiPalette] = createSignal(false);
   const [draftMessage, setDraftMessage] = createSignal("");
-  const [localMessagesByConversation, setLocalMessagesByConversation] = createSignal({});
+  const [localMessagesByConversation, setLocalMessagesByConversation] = createSignal((() => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(LOCAL_CONVERSATION_MESSAGES_KEY) || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  })());
   const [chatHeadPrefs, setChatHeadPrefs] = createSignal((() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(CHAT_HEAD_PREFS_KEY) || "{}");
@@ -113,14 +90,12 @@ function WorkflowOverlay() {
       return {};
     }
   })());
-  let threadScrollRef;
-  let threadResizeObserver;
   const aiConversation = createMemo(() => ({
     id: "ai-active",
     kind: "ai",
     channel: "ai",
     title: state().prompt || "Active AI session",
-    subtitle: state().provider || "codex",
+    subtitle: state().provider || "opencode",
     sessionId: state().sessionId || "",
     updatedAt: (state().messages[state().messages.length - 1]?.createdAt || new Date().toISOString()),
     preview: (state().messages[state().messages.length - 1]?.text || "").trim() || (state().streaming ? "Streaming..." : "No response yet"),
@@ -140,16 +115,29 @@ function WorkflowOverlay() {
       kind: "session",
       channel: "ai",
       title: session.preview || "Codex session",
-      subtitle: session.provider || "codex",
+      subtitle: session.provider || "opencode",
       sessionId: session.sessionId,
       updatedAt: session.updatedAt || "",
       preview: session.preview || "Open to load this thread",
       messages: []
     }))
   );
+  const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => (
+    integration.id === "email" || isOfficialBridgeId(integration.id)
+  )));
+  const {
+    emailThreads,
+    bridgeThreads,
+    contacts,
+    contactsLoading
+  } = useWorkflowConversationSources({
+    messageProviderIntegrations,
+    localMessagesByConversation
+  });
   const threadConversations = createMemo(() => [
     aiConversation(),
     ...sessionConversations(),
+    ...bridgeThreads(),
     ...emailThreads(),
     ...contactOnlyThreads()
   ]);
@@ -173,25 +161,8 @@ function WorkflowOverlay() {
     const local = localMessagesByConversation()[active.id] || [];
     return [...(active.messages || []), ...local];
   });
-  const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => [
-    "email",
-    "whatsapp",
-    "telegram",
-    "google_messages",
-    "meta"
-  ].includes(integration.id)));
-  const panelSuggestionTags = {
-    launcher: ["workflows", "ai", "messages", "storage", "code"],
-    files: ["storage", "code"],
-    cloud: ["workflows", "network", "compute", "deploy"],
-    integrations: ["messages", "storage", "code", "workflows", "network", "compute", "ai", "security"],
-    credentials: ["security", "identity"],
-    settings: ["workflows", "devices", "network"],
-    conversations: ["messages", "ai"],
-    devices: ["devices", "network", "workflows"]
-  };
   const suggestIntegrationsForPanel = (panelId) => {
-    const wantedTags = panelSuggestionTags[panelId] || [];
+    const wantedTags = PANEL_SUGGESTION_TAGS[panelId] || [];
     if (wantedTags.length === 0) return [];
     return integrationStore.list()
       .map((integration) => {
@@ -239,7 +210,7 @@ function WorkflowOverlay() {
       } catch {
         // ignore storage failures
       }
-      publishEvent("conversation.chat_head.updated", { conversationId, ...next[conversationId] }, { source: "browser" });
+      emitConversationChatHeadUpdated(conversationId, next[conversationId]);
       return next;
     });
   };
@@ -263,54 +234,8 @@ function WorkflowOverlay() {
   });
   const virtualTopPad = createMemo(() => virtualWindow().start * THREAD_ROW_ESTIMATE);
   const virtualBottomPad = createMemo(() => Math.max(0, (virtualWindow().count - virtualWindow().end) * THREAD_ROW_ESTIMATE));
-  const drawerPanelShellClass = "flex h-full min-h-0 flex-col";
-  const drawerIconButtonClass = "inline-flex h-9 w-9 items-center justify-center rounded-md text-neutral-300 transition-colors hover:bg-neutral-800/35 hover:text-[hsl(var(--primary))]";
-  const drawerSmallButtonClass = "inline-flex h-7 items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 px-2 text-[10px] text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]";
-  const drawerListRowClass = "w-full rounded-md border border-neutral-800 bg-neutral-900/70 px-2.5 py-2 text-left transition-colors hover:bg-neutral-800/80";
-  const drawerStateBlockClass = "rounded-md border border-neutral-800 bg-neutral-900/55 px-2.5 py-2 text-xs text-neutral-500";
-  const drawerSuggestionIconButtonClass = "inline-flex h-8 w-8 items-center justify-center rounded-md border border-neutral-800 bg-neutral-900/70 text-neutral-200 transition-colors hover:border-[hsl(var(--primary)/0.45)] hover:text-[hsl(var(--primary))]";
-  const channelBadgeClass = (channel) => {
-    if (channel === "ai") return "border-[hsl(var(--primary)/0.42)] bg-[hsl(var(--primary)/0.14)] text-[hsl(var(--primary))]";
-    if (channel === "email") return "border-neutral-700 bg-neutral-800/80 text-neutral-300";
-    if (channel === "contact") return "border-neutral-700 bg-neutral-800/70 text-neutral-400";
-    return "border-neutral-700 bg-neutral-800/70 text-neutral-300";
-  };
-  const parseEmailAddress = (value) => {
-    const raw = String(value || "").trim();
-    const match = raw.match(/<([^>]+)>/);
-    if (match) return match[1].trim().toLowerCase();
-    const emailMatch = raw.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i);
-    return emailMatch ? emailMatch[0].toLowerCase() : raw.toLowerCase();
-  };
-  const parseEmailName = (value) => {
-    const raw = String(value || "").trim();
-    const stripped = raw.replace(/<[^>]+>/g, "").replace(/"/g, "").trim();
-    if (stripped) return stripped;
-    return parseEmailAddress(raw);
-  };
   const openIntegrationSuggestion = (integrationId) => {
     openWorkflowIntegrations(integrationId);
-  };
-  const integrationIconForSuggestion = (integrationId) => {
-    const map = {
-      github: SiGithub,
-      cloudflare: SiCloudflare,
-      vercel: SiVercel,
-      google: SiGoogle,
-      google_photos: SiGoogle,
-      email: SiGoogle,
-      whatsapp: SiWhatsapp,
-      messenger: SiMessenger,
-      telegram: SiTelegram,
-      google_messages: SiGoogle,
-      meta: SiMessenger,
-      qwen: FiCpu,
-      codex_cli: FiCpu,
-      tailscale: SiTailscale,
-      hetzner: FiDatabase,
-      web3: SiWeb3dotjs
-    };
-    return map[integrationId] || FiCloud;
   };
   const DrawerIntegrationSuggestions = (props) => (
     <div class="shrink-0 border-t border-neutral-800 bg-[#0d0e12]/95 px-3 py-2" data-testid={`drawer-suggestions-${props.side}-${props.panel}`}>
@@ -338,7 +263,7 @@ function WorkflowOverlay() {
               return (
                 <button
                   type="button"
-                  class={drawerSuggestionIconButtonClass}
+                  class={DRAWER_SUGGESTION_ICON_BUTTON_CLASS}
                   onClick={() => openIntegrationSuggestion(integration.id)}
                   data-testid={`drawer-suggestion-${props.panel}-${integration.id}`}
                   title={`${integration.name} · ${integration.available ? "available" : integration.availabilityReason || "not ready"}`}
@@ -353,208 +278,38 @@ function WorkflowOverlay() {
       </Show>
     </div>
   );
-  const ensureThreadBottom = () => {
-    if (!threadScrollRef) return;
-    threadScrollRef.scrollTop = threadScrollRef.scrollHeight;
-  };
-  const [selectedDeviceId, setSelectedDeviceId] = createSignal("");
-  const devices = createMemo(() => knownDevices());
-  const fleetDevices = createMemo(() => {
-    const grouped = new Map();
-    for (const device of devices()) {
-      const isHost = device.type === "host";
-      const isLocalBrowser = device.id === CURRENT_DEVICE_ID;
-      const key = isHost
-        ? `host:${device.metadata?.host || device.ip || device.id}`
-        : isLocalBrowser
-          ? "local-browser"
-          : `device:${device.id}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          id: key,
-          name: isHost ? "Connected Host" : isLocalBrowser ? "This Device" : (device.name || device.id),
-          type: isHost ? "host" : isLocalBrowser ? "local" : (device.type || "device"),
-          online: Boolean(device.online),
-          primary: device,
-          members: [device],
-          localAvailable: isLocalBrowser && Boolean(device.online)
-        });
-        continue;
-      }
-      const entry = grouped.get(key);
-      entry.members.push(device);
-      entry.online = entry.online || Boolean(device.online);
-      entry.localAvailable = entry.localAvailable || (device.id === CURRENT_DEVICE_ID && Boolean(device.online));
-      const prevSeen = new Date(entry.primary?.lastSeenAt || 0).getTime();
-      const nextSeen = new Date(device.lastSeenAt || 0).getTime();
-      const preferHost = entry.primary?.type !== "host" && device.type === "host";
-      if (preferHost || nextSeen > prevSeen) entry.primary = device;
-    }
-    return Array.from(grouped.values()).sort((a, b) => {
-      if (a.online !== b.online) return a.online ? -1 : 1;
-      const aSeen = new Date(a.primary?.lastSeenAt || 0).getTime();
-      const bSeen = new Date(b.primary?.lastSeenAt || 0).getTime();
-      return bSeen - aSeen;
-    });
-  });
-  const selectedDevice = createMemo(() => fleetDevices().find((item) => item.id === selectedDeviceId()) || null);
-  const [connectPlatform, setConnectPlatform] = createSignal("linux");
-  const initialPairingCode = typeof window === "undefined"
-    ? ""
-    : String(window.localStorage.getItem("intent-ui-device-pairing-code-v1") || "").trim();
-  const [pairingCodeInput, setPairingCodeInput] = createSignal(initialPairingCode);
-  const [deviceConnectCopied, setDeviceConnectCopied] = createSignal(false);
-  const readDomainReservation = () => {
-    if (typeof window === "undefined") return { domain: "", registrationToken: "" };
-    const keys = [
-      "intent-ui-domain-reservation-v1",
-      "intent-ui-domain-v1",
-      "intent-ui-user-domain-v1",
-      "edgerun_user_domain"
-    ];
-    let domain = "";
-    let registrationToken = "";
-    for (const key of keys) {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      const text = String(raw).trim();
-      if (!text) continue;
-      if (text.startsWith("{")) {
-        try {
-          const parsed = JSON.parse(text);
-          domain = domain || String(parsed?.domain || parsed?.assignedDomain || parsed?.fqdn || "").trim();
-          registrationToken = registrationToken || String(parsed?.registrationToken || parsed?.registration_token || parsed?.token || "").trim();
-        } catch {
-          // ignore parse failures
-        }
-      } else if (text.includes(".")) {
-        domain = domain || text;
-      }
-    }
-    domain = domain || String(localStorage.getItem("intent-ui-device-connect-domain-v1") || "").trim();
-    registrationToken = registrationToken || String(localStorage.getItem("intent-ui-device-connect-registration-token-v1") || "").trim();
-    return { domain, registrationToken };
-  };
-  const initialReservation = readDomainReservation();
-  const [profilePublicKeyInput, setProfilePublicKeyInput] = createSignal(
-    typeof window === "undefined"
-      ? ""
-      : String(window.localStorage.getItem("intent-ui-profile-public-key-v1") || "").trim()
-  );
-  const [requestedLabelInput, setRequestedLabelInput] = createSignal("");
-  const [connectDomain, setConnectDomain] = createSignal(initialReservation.domain);
-  const [connectRegistrationToken, setConnectRegistrationToken] = createSignal(initialReservation.registrationToken);
-  const [reserveBusy, setReserveBusy] = createSignal(false);
-  const [reserveError, setReserveError] = createSignal("");
-  const [reserveStatus, setReserveStatus] = createSignal("");
-  const [pairingBusy, setPairingBusy] = createSignal(false);
-  const [pairingError, setPairingError] = createSignal("");
-  const [pairingStatus, setPairingStatus] = createSignal("");
-  const [pairingExpiresAt, setPairingExpiresAt] = createSignal("");
-  const [showDeviceConnectDialog, setShowDeviceConnectDialog] = createSignal(false);
-  const localBridgeListen = "127.0.0.1:7777";
-  const linuxConnectScript = createMemo(() => {
-    const pairingCode = pairingCodeInput().trim() || "<PAIRING_CODE>";
-    return [
-      "# 1) Install node manager",
-      "curl -fsSL https://downloads.edgerun.tech/install-node-manager.sh | sh -s -- --bridge-listen 127.0.0.1:7777",
-      "",
-      "# 2) Pair this machine to your EdgeRun domain",
-      `edgerun-node-manager tunnel-connect --relay-control-base https://relay.edgerun.tech --pairing-code \"${pairingCode}\"`,
-      "",
-      "# 3) Start node manager with local bridge for browser eventbus",
-      `edgerun-node-manager run --local-bridge-listen ${localBridgeListen}`,
-      "",
-      "# 4) Optional: keep it running on boot (if package installs service unit)",
-      "sudo systemctl enable --now edgerun-node-manager.service"
-    ].join("\\n");
-  });
-  const copyConnectScript = async () => {
-    try {
-      await navigator.clipboard.writeText(linuxConnectScript());
-      setDeviceConnectCopied(true);
-      window.setTimeout(() => setDeviceConnectCopied(false), 1200);
-    } catch {
-      setDeviceConnectCopied(false);
-    }
-  };
-  const issuePairingCode = async () => {
-    if (pairingBusy()) return;
-    const domain = connectDomain().trim();
-    const registrationToken = connectRegistrationToken().trim();
-    if (!domain || !registrationToken) {
-      setPairingError("Domain and registration token are required.");
-      setPairingStatus("");
-      return;
-    }
-    setPairingBusy(true);
-    setPairingError("");
-    setPairingStatus("");
-    try {
-      const response = await fetch("/api/tunnel/create-pairing-code", {
-        method: "POST",
-        headers: { "content-type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ domain, registrationToken, ttlSeconds: 300 })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok || !body?.ok) {
-        throw new Error(String(body?.error || `pairing request failed (${response.status})`));
-      }
-      const code = String(body?.pairingCode || "").trim();
-      if (!code) throw new Error("Pairing code was empty in relay response.");
-      setPairingCodeInput(code);
-      const expiresMs = Number(body?.expiresUnixMs || 0);
-      setPairingExpiresAt(expiresMs > 0 ? new Date(expiresMs).toISOString() : "");
-      setPairingStatus("Pairing code issued.");
-    } catch (err) {
-      setPairingError(err instanceof Error ? err.message : "Failed to issue pairing code.");
-    } finally {
-      setPairingBusy(false);
-    }
-  };
-  const reserveDomain = async () => {
-    if (reserveBusy()) return;
-    const profilePublicKeyB64url = profilePublicKeyInput().trim();
-    const requestedLabel = requestedLabelInput().trim();
-    if (!profilePublicKeyB64url) {
-      setReserveError("Profile public key is required.");
-      setReserveStatus("");
-      return;
-    }
-    setReserveBusy(true);
-    setReserveError("");
-    setReserveStatus("");
-    try {
-      const response = await fetch("/api/tunnel/reserve-domain", {
-        method: "POST",
-        headers: { "content-type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ profilePublicKeyB64url, requestedLabel })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok || !body?.ok) {
-        throw new Error(String(body?.error || `domain reserve failed (${response.status})`));
-      }
-      const domain = String(body?.domain || "").trim();
-      const token = String(body?.registrationToken || "").trim();
-      if (!domain || !token) throw new Error("Relay response missing domain or registration token.");
-      setConnectDomain(domain);
-      setConnectRegistrationToken(token);
-      setReserveStatus(String(body?.status || "reserved"));
-      localStorage.setItem(
-        "intent-ui-domain-reservation-v1",
-        JSON.stringify({
-          domain,
-          registrationToken: token,
-          status: String(body?.status || "reserved"),
-          userId: String(body?.userId || "")
-        })
-      );
-    } catch (err) {
-      setReserveError(err instanceof Error ? err.message : "Failed to reserve domain.");
-    } finally {
-      setReserveBusy(false);
-    }
-  };
+  const {
+    selectedDeviceId,
+    setSelectedDeviceId,
+    fleetDevices,
+    selectedDevice,
+    connectPlatform,
+    setConnectPlatform,
+    pairingCodeInput,
+    setPairingCodeInput,
+    deviceConnectCopied,
+    showDeviceConnectDialog,
+    setShowDeviceConnectDialog,
+    profilePublicKeyInput,
+    setProfilePublicKeyInput,
+    requestedLabelInput,
+    setRequestedLabelInput,
+    connectDomain,
+    setConnectDomain,
+    connectRegistrationToken,
+    setConnectRegistrationToken,
+    reserveBusy,
+    reserveError,
+    reserveStatus,
+    pairingBusy,
+    pairingError,
+    pairingStatus,
+    pairingExpiresAt,
+    linuxConnectScript,
+    copyConnectScript,
+    issuePairingCode,
+    reserveDomain
+  } = useWorkflowDeviceConnect({ state });
   const sendDraftMessage = async () => {
     const text = draftMessage().trim();
     const conversation = activeConversation();
@@ -571,42 +326,10 @@ function WorkflowOverlay() {
       ...prev,
       [conversation.id]: [...(prev[conversation.id] || []), entry]
     }));
-    publishEvent("conversation.message.sent", { conversationId: conversation.id, text, channel: conversation.channel || "chat" }, { source: "browser" });
+    emitConversationMessageSent(conversation.id, text, conversation.channel || "chat");
     setDraftMessage("");
     setShowEmojiPalette(false);
   };
-  createEffect(() => {
-    const list = fleetDevices();
-    if (list.length === 0) return;
-    if (!selectedDeviceId() || !list.some((item) => item.id === selectedDeviceId())) {
-      setSelectedDeviceId(list[0].id);
-    }
-  });
-  createEffect(() => {
-    if (typeof window === "undefined") return;
-    const value = pairingCodeInput().trim();
-    if (!value) {
-      window.localStorage.removeItem("intent-ui-device-pairing-code-v1");
-      return;
-    }
-    window.localStorage.setItem("intent-ui-device-pairing-code-v1", value);
-  });
-  createEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("intent-ui-device-connect-domain-v1", connectDomain().trim());
-  });
-  createEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("intent-ui-profile-public-key-v1", profilePublicKeyInput().trim());
-  });
-  createEffect(() => {
-    if (typeof window === "undefined") return;
-    localStorage.setItem("intent-ui-device-connect-registration-token-v1", connectRegistrationToken().trim());
-  });
-  createEffect(() => {
-    if (state().rightOpen && state().rightPanel === "devices") return;
-    setShowDeviceConnectDialog(false);
-  });
   createEffect(() => {
     const total = activeConversationMessages().length;
     if (total <= THREAD_PAGE_SIZE) {
@@ -614,23 +337,6 @@ function WorkflowOverlay() {
       return;
     }
     setLoadedThreadCount((prev) => Math.min(Math.max(prev, THREAD_PAGE_SIZE), total));
-  });
-  createEffect(() => {
-    const messages = activeConversationMessages();
-    const last = messages[messages.length - 1];
-    const signature = `${messages.length}:${last?.id || ""}:${String(last?.text || "").length}:${state().streaming ? "1" : "0"}`;
-    if (!signature) return;
-    if (!state().rightOpen || state().rightPanel !== "conversations" || showConversationList()) return;
-    if (!followThreadBottom()) return;
-    queueMicrotask(() => ensureThreadBottom());
-  });
-  createEffect(() => {
-    if (!state().rightOpen || state().rightPanel !== "conversations" || showConversationList()) return;
-    queueMicrotask(() => {
-      if (!threadScrollRef) return;
-      setThreadViewportHeight(Math.max(1, threadScrollRef.clientHeight));
-      if (followThreadBottom()) ensureThreadBottom();
-    });
   });
   createEffect(() => {
     const current = activeConversation();
@@ -645,91 +351,12 @@ function WorkflowOverlay() {
     }
   });
   createEffect(() => {
-    if (typeof window === "undefined") return;
-    const loadConversationSources = async () => {
-      const { getAllEmails } = await import("../../lib/db");
-      const emails = await getAllEmails();
-      const groups = new Map();
-      for (const email of emails) {
-        const senderEmail = parseEmailAddress(email.from || "");
-        if (!senderEmail) continue;
-        const senderName = parseEmailName(email.from || senderEmail);
-        const groupId = `email-${senderEmail}`;
-        if (!groups.has(groupId)) {
-          groups.set(groupId, {
-            id: groupId,
-            kind: "email",
-            channel: "email",
-            title: senderName,
-            subtitle: senderEmail,
-            updatedAt: email.date || "",
-            preview: email.snippet || "",
-            messages: []
-          });
-        }
-        const group = groups.get(groupId);
-        const createdAt = email.date || new Date().toISOString();
-        group.messages.push({
-          id: email.id || `${groupId}-${group.messages.length}`,
-          role: "contact",
-          text: email.snippet || email.subject || "(No Subject)",
-          createdAt,
-          channel: "email",
-          author: senderName
-        });
-        if (!group.updatedAt || new Date(createdAt).getTime() > new Date(group.updatedAt).getTime()) {
-          group.updatedAt = createdAt;
-          group.preview = email.snippet || email.subject || "(No Subject)";
-        }
-      }
-      const sortedThreads = Array.from(groups.values())
-        .map((group) => ({
-          ...group,
-          messages: group.messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        }))
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        .slice(0, 80);
-      setEmailThreads(sortedThreads);
-
-      const googleToken = window.localStorage.getItem("google_token");
-      if (!googleToken) {
-        setContacts([]);
-        return;
-      }
-      setContactsLoading(true);
-      try {
-        const response = await fetch(`/api/google/contacts?limit=100&token=${encodeURIComponent(googleToken)}`);
-        const payload = await response.json().catch(() => ({}));
-        const items = Array.isArray(payload?.items) ? payload.items : [];
-        setContacts(items.map((item, index) => {
-          const rawEmailValue = Array.isArray(item.emails) ? item.emails[0] : item.email;
-          const emailValue = typeof rawEmailValue === "object" && rawEmailValue
-            ? (rawEmailValue.value || rawEmailValue.email || rawEmailValue.address || "")
-            : rawEmailValue;
-          const email = parseEmailAddress(emailValue || "");
-          const id = email ? `contact-${email}` : `contact-${item.id || index}`;
-          return {
-            id,
-            name: item.name || email || "Unnamed",
-            email,
-            source: "Google Contacts"
-          };
-        }));
-      } catch {
-        setContacts([]);
-      } finally {
-        setContactsLoading(false);
-      }
-    };
-    loadConversationSources();
-  });
-  onCleanup(() => {
-    if (threadResizeObserver) {
-      threadResizeObserver.disconnect();
-      threadResizeObserver = null;
+    try {
+      localStorage.setItem(LOCAL_CONVERSATION_MESSAGES_KEY, JSON.stringify(localMessagesByConversation()));
+    } catch {
+      // ignore storage failures
     }
   });
-
   const workflowDiffResponse = createMemo(() => ({
     success: true,
     data: `diff --git a/src/lib/latency.ts b/src/lib/latency.ts
@@ -859,52 +486,7 @@ function WorkflowOverlay() {
             <div class="flex h-full">
               <div class="min-w-0 flex-1 p-0">
                 <div class="flex h-full min-h-0 flex-col">
-                  <div class="min-h-0 flex-1 overflow-hidden">
-                    <Show when={state().leftPanel === "settings"}>
-                      <div class={drawerPanelShellClass}>
-                        <SettingsPanel compact />
-                      </div>
-                    </Show>
-                    <Show when={state().leftPanel === "launcher"}>
-                      <div class={drawerPanelShellClass}>
-                        <div class="border-b border-neutral-800 px-3 py-2">
-                          <div class="flex items-center justify-between gap-2">
-                            <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Launcher</p>
-                            <button
-                              type="button"
-                              class="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-[10px] text-neutral-200 transition-colors hover:bg-neutral-800"
-                              onClick={() => openWindow("guide")}
-                            >
-                              Open Guide
-                            </button>
-                          </div>
-                        </div>
-                        <div class="min-h-0 flex-1 overflow-auto p-2">
-                          <LauncherGuidePanel compact />
-                        </div>
-                      </div>
-                    </Show>
-                    <Show when={state().leftPanel === "files"}>
-                      <div class={drawerPanelShellClass}>
-                        <FileManager compact />
-                      </div>
-                    </Show>
-                    <Show when={state().leftPanel === "cloud"}>
-                      <div class={drawerPanelShellClass}>
-                        <CloudPanel compact />
-                      </div>
-                    </Show>
-                    <Show when={state().leftPanel === "integrations"}>
-                      <div class={drawerPanelShellClass}>
-                        <IntegrationsPanel compact preselectProviderId={state().selectedIntegrationId || ""} />
-                      </div>
-                    </Show>
-                    <Show when={state().leftPanel === "credentials"}>
-                      <div class={drawerPanelShellClass}>
-                        <CredentialsPanel compact />
-                      </div>
-                    </Show>
-                  </div>
+                  <LeftDrawer state={state} onOpenGuide={() => openWindow("guide")} />
                   <DrawerIntegrationSuggestions
                     side="left"
                     panel={state().leftPanel}
@@ -914,54 +496,18 @@ function WorkflowOverlay() {
               </div>
               <div class="hidden">
                 <div class="flex h-full flex-col items-center justify-center gap-1">
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "launcher" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "launcher" && "text-[hsl(var(--primary))]")}
-    title="Launcher panel"
-  >
-                    <TbOutlineBook2 size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "files" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "files" && "text-[hsl(var(--primary))]")}
-    title="Files panel"
-  >
-                    <TbOutlineFileText size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "cloud" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "cloud" && "text-[hsl(var(--primary))]")}
-    title="Cloud panel"
-  >
-                    <TbOutlineCloud size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "integrations" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "integrations" && "text-[hsl(var(--primary))]")}
-    title="Integrations panel"
-  >
-                    <FiLink2 size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "credentials" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "credentials" && "text-[hsl(var(--primary))]")}
-    title="Credentials panel"
-  >
-                    <TbOutlineKey size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "left", panel: "settings" })}
-    class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "settings" && "text-[hsl(var(--primary))]")}
-    title="Settings panel"
-  >
-                    <TbOutlineSettings size={16} />
-                  </button>
+                  <For each={LEFT_DRAWER_PANEL_ITEMS}>
+                    {(item) => (
+                      <button
+                        type="button"
+                        onClick={() => toggleWorkflowDrawer({ side: "left", panel: item.id })}
+                        class={cn(DRAWER_ICON_BUTTON_CLASS, state().leftOpen && state().leftPanel === item.id && "text-[hsl(var(--primary))]")}
+                        title={item.title}
+                      >
+                        <item.Icon size={16} />
+                      </button>
+                    )}
+                  </For>
                 </div>
               </div>
             </div>
@@ -977,741 +523,107 @@ function WorkflowOverlay() {
             <div class="flex h-full">
               <div class="hidden">
                 <div class="flex h-full flex-col items-center justify-center gap-1">
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "right", panel: "conversations" })}
-    class={cn(drawerIconButtonClass, state().rightOpen && state().rightPanel === "conversations" && "text-[hsl(var(--primary))]")}
-    title="Conversations"
-  >
-                    <TbOutlineCommand size={16} />
-                  </button>
-                  <button
-    type="button"
-    onClick={() => toggleWorkflowDrawer({ side: "right", panel: "devices" })}
-    class={cn(drawerIconButtonClass, state().rightOpen && state().rightPanel === "devices" && "text-[hsl(var(--primary))]")}
-    title="Devices panel"
-  >
-                    <TbOutlineDeviceDesktop size={16} />
-                  </button>
+                  <For each={RIGHT_DRAWER_PANEL_ITEMS}>
+                    {(item) => (
+                      <button
+                        type="button"
+                        onClick={() => toggleWorkflowDrawer({ side: "right", panel: item.id })}
+                        class={cn(DRAWER_ICON_BUTTON_CLASS, state().rightOpen && state().rightPanel === item.id && "text-[hsl(var(--primary))]")}
+                        title={item.title}
+                      >
+                        <item.Icon size={16} />
+                      </button>
+                    )}
+                  </For>
                 </div>
               </div>
               <div class="min-w-0 flex-1 p-0">
                 <div class="flex h-full min-h-0 flex-col">
                   <div class="min-h-0 flex-1 overflow-hidden">
                     <Show when={state().rightPanel === "conversations"}>
-                      <div class={drawerPanelShellClass}>
-                    <Show when={showConversationList()}>
-                      <div class="border-b border-neutral-800 px-3 py-2">
-                        <div class="flex items-center justify-between gap-2">
-                          <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Conversations</p>
-                          <button
-                            type="button"
-                            onClick={startNewCodexSession}
-                            class={drawerSmallButtonClass}
-                          >
-                            <TbOutlinePlus size={11} />
-                            New
-                          </button>
-                        </div>
-                        <div class="mt-2 grid grid-cols-2 gap-1 rounded-md border border-neutral-800 bg-neutral-900/60 p-1">
-                          <button
-                            type="button"
-                            onClick={() => setConversationTab("threads")}
-                            class={cn(
-                              "rounded px-2 py-1 text-[11px] transition-colors",
-                              conversationTab() === "threads" ? "font-semibold text-[hsl(var(--primary))]" : "text-neutral-400 hover:bg-neutral-800"
-                            )}
-                          >
-                            Threads
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConversationTab("contacts")}
-                            class={cn(
-                              "rounded px-2 py-1 text-[11px] transition-colors",
-                              conversationTab() === "contacts" ? "font-semibold text-[hsl(var(--primary))]" : "text-neutral-400 hover:bg-neutral-800"
-                            )}
-                          >
-                            Contacts
-                          </button>
-                        </div>
-                      </div>
-                      <div class="min-h-0 flex-1 overflow-auto p-3">
-                        <Show when={conversationTab() === "threads"}>
-                          <div class="space-y-1.5">
-                            <For each={threadConversations()}>
-                              {(thread) => (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (thread.kind === "session") {
-                                      const session = state().sessionHistory.find((item) => item.sessionId === thread.sessionId);
-                                      if (session) useWorkflowSession(session);
-                                      setSelectedConversationId("ai-active");
-                                      setShowConversationList(false);
-                                      return;
-                                    }
-                                    setSelectedConversationId(thread.id);
-                                    setShowConversationList(false);
-                                  }}
-                                  class={cn(
-                                    cn(drawerListRowClass, "text-left"),
-                                    activeConversation()?.id === thread.id
-                                      ? "border-neutral-700 bg-neutral-900/85"
-                                      : ""
-                                  )}
-                                >
-                                  <div class="flex items-center justify-between gap-2">
-                                    <div class="flex min-w-0 items-center gap-2">
-                                      <span
-                                        class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
-                                        style={{
-                                          "background-color": `${(chatHeadForConversation(thread)?.color || fallbackChatHead.color)}33`,
-                                          color: chatHeadForConversation(thread)?.color || fallbackChatHead.color
-                                        }}
-                                      >
-                                        {chatHeadForConversation(thread)?.emoji || chatHeadForConversation(thread)?.label || fallbackChatHead.label}
-                                      </span>
-                                      <p class={cn("truncate text-[11px] text-neutral-200", activeConversation()?.id === thread.id ? "font-semibold text-[hsl(var(--primary))]" : "font-medium")}>{thread.title}</p>
-                                    </div>
-                                    <span class={cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(thread.channel))}>
-                                      {thread.channel}
-                                    </span>
-                                  </div>
-                                  <p class="mt-1 truncate text-[10px] text-neutral-500">{thread.preview || thread.subtitle || "No messages yet"}</p>
-                                </button>
-                              )}
-                            </For>
-                            <Show when={!hasConversationContent()}>
-                              <div class={drawerStateBlockClass} data-testid="conversations-empty-state">
-                                <p class="text-neutral-300">This is where all your conversations will be available.</p>
-                                <p class="mt-1">Connect message provider integrations to unlock threads.</p>
-                                <div class="mt-2 space-y-1">
-                                  <For each={messageProviderIntegrations()}>
-                                    {(provider) => (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          toggleWorkflowDrawer({ side: "left", panel: "integrations" });
-                                        }}
-                                        class="flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
-                                        data-testid={`conversation-provider-${provider.id}`}
-                                      >
-                                        <span>{provider.name}</span>
-                                        <span class={provider.available ? "text-emerald-300" : "text-amber-300"}>
-                                          {provider.available ? "available" : "not ready"}
-                                        </span>
-                                      </button>
-                                    )}
-                                  </For>
-                                </div>
-                              </div>
-                            </Show>
-                          </div>
-                        </Show>
-                        <Show when={conversationTab() === "contacts"}>
-                          <div class="space-y-1.5">
-                            <Show when={!contactsLoading()} fallback={<p class={drawerStateBlockClass}>Loading contacts...</p>}>
-                              <For each={contacts()}>
-                                {(contact) => (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const emailThreadId = contact.email ? `email-${contact.email}` : "";
-                                      const existing = emailThreadId ? threadConversations().find((thread) => thread.id === emailThreadId) : null;
-                                      if (existing) {
-                                        setConversationTab("threads");
-                                        setSelectedConversationId(existing.id);
-                                        setShowConversationList(false);
-                                        return;
-                                      }
-                                      const fallbackId = contact.email ? `contact-${contact.email}` : contact.id;
-                                      setContactOnlyThreads((prev) => {
-                                        if (prev.some((item) => item.id === fallbackId)) return prev;
-                                        return [
-                                          ...prev,
-                                          {
-                                            id: fallbackId,
-                                            kind: "contact",
-                                            channel: "contact",
-                                            title: contact.name,
-                                            subtitle: contact.email || "No email",
-                                            updatedAt: new Date().toISOString(),
-                                            preview: "No messages yet",
-                                            messages: []
-                                          }
-                                        ];
-                                      });
-                                      setConversationTab("threads");
-                                      setSelectedConversationId(fallbackId);
-                                      setShowConversationList(false);
-                                    }}
-                                    class={drawerListRowClass}
-                                  >
-                                    <div class="flex items-center gap-2">
-                                      <TbOutlineUser size={12} class="text-[hsl(var(--primary))]" />
-                                      <p class="truncate text-[11px] font-medium text-neutral-200">{contact.name}</p>
-                                    </div>
-                                    <p class="mt-1 truncate text-[10px] text-neutral-500">{contact.email || "No email"}</p>
-                                  </button>
-                                )}
-                              </For>
-                              <Show when={contacts().length === 0}>
-                                <p class={drawerStateBlockClass}>No contacts loaded.</p>
-                              </Show>
-                            </Show>
-                          </div>
-                        </Show>
-                      </div>
-                    </Show>
-                    <Show when={!showConversationList()}>
-                      <div class="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
-                        <div class="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setShowConversationList(true)}
-                            class={drawerSmallButtonClass}
-                          >
-                            Back
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setShowConversationSettings((prev) => !prev)}
-                            class={drawerSmallButtonClass}
-                            data-testid="conversation-settings-toggle"
-                          >
-                            <TbOutlineAdjustments size={11} />
-                            Settings
-                          </button>
-                        </div>
-                        <div class="flex min-w-0 items-center gap-2">
-                          <span
-                            class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
-                            style={{ "background-color": `${activeChatHead().color}33`, color: activeChatHead().color }}
-                          >
-                            {activeChatHead().emoji || activeChatHead().label}
-                          </span>
-                          <p class="truncate text-[11px] font-medium text-neutral-200">{activeConversation()?.title || "Conversation"}</p>
-                          <span class={cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(activeConversation()?.channel || "ai"))}>
-                            {activeConversation()?.channel || "ai"}
-                          </span>
-                        </div>
-                      </div>
-                      <Show when={showConversationSettings()}>
-                        <div class="space-y-2 border-b border-neutral-800 bg-neutral-950/40 px-3 py-2" data-testid="conversation-settings-popup">
-                          <p class="text-[10px] uppercase tracking-wide text-neutral-500">Message Providers</p>
-                          <div class="space-y-1">
-                            <For each={messageProviderIntegrations()}>
-                              {(provider) => (
-                                <button
-                                  type="button"
-                                  class="flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
-                                  onClick={() => toggleWorkflowDrawer({ side: "left", panel: "integrations" })}
-                                  data-testid={`conversation-settings-provider-${provider.id}`}
-                                >
-                                  <span>{provider.name}</span>
-                                  <span class={provider.available ? "text-emerald-300" : "text-amber-300"}>
-                                    {provider.available ? "available" : provider.availabilityReason}
-                                  </span>
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                          <p class="pt-1 text-[10px] uppercase tracking-wide text-neutral-500">Chat Head</p>
-                          <div class="grid grid-cols-6 gap-1">
-                            <For each={CHAT_HEAD_PRESET_COLORS}>
-                              {(color) => (
-                                <button
-                                  type="button"
-                                  class={cn(
-                                    "h-6 rounded border",
-                                    activeChatHead().color === color ? "border-[hsl(var(--primary))]" : "border-neutral-700"
-                                  )}
-                                  style={{ "background-color": color }}
-                                  onClick={() => persistChatHeadPref(activeConversation()?.id, { color })}
-                                  data-testid={`chat-head-color-${color.replace("#", "")}`}
-                                />
-                              )}
-                            </For>
-                          </div>
-                          <div class="flex flex-wrap gap-1">
-                            <For each={EMOJI_QUICK_SET.slice(0, 8)}>
-                              {(emoji) => (
-                                <button
-                                  type="button"
-                                  class="inline-flex h-7 w-7 items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-sm hover:border-[hsl(var(--primary)/0.45)]"
-                                  onClick={() => persistChatHeadPref(activeConversation()?.id, { emoji })}
-                                >
-                                  {emoji}
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </div>
-                      </Show>
-                      <div
-                        ref={(el) => {
-                          threadScrollRef = el;
-                          setThreadViewportHeight(Math.max(1, el.clientHeight));
-                          if (typeof ResizeObserver !== "undefined") {
-                            if (threadResizeObserver) threadResizeObserver.disconnect();
-                            threadResizeObserver = new ResizeObserver(() => {
-                              setThreadViewportHeight(Math.max(1, el.clientHeight));
-                            });
-                            threadResizeObserver.observe(el);
-                          }
+                      <ConversationsPanel
+                        state={state}
+                        cn={cn}
+                        conversationTab={conversationTab}
+                        setConversationTab={setConversationTab}
+                        showConversationList={showConversationList}
+                        setShowConversationList={setShowConversationList}
+                        threadConversations={threadConversations}
+                        activeConversation={activeConversation}
+                        hasConversationContent={hasConversationContent}
+                        messageProviderIntegrations={messageProviderIntegrations}
+                        contacts={contacts}
+                        contactsLoading={contactsLoading}
+                        setContactOnlyThreads={setContactOnlyThreads}
+                        setSelectedConversationId={setSelectedConversationId}
+                        onSelectSessionThread={(sessionId) => {
+                          const session = state().sessionHistory.find((item) => item.sessionId === sessionId);
+                          if (session) useWorkflowSession(session);
+                          setSelectedConversationId("ai-active");
+                          setShowConversationList(false);
                         }}
-                        class="min-h-0 flex-1 overflow-auto p-3"
-                        onScroll={(event) => {
-                          const target = event.currentTarget;
-                          const scrollTop = target.scrollTop;
-                          const scrollBottomGap = target.scrollHeight - target.clientHeight - scrollTop;
-                          setThreadScrollTop(scrollTop);
-                          setThreadViewportHeight(Math.max(1, target.clientHeight));
-                          setFollowThreadBottom(scrollBottomGap < 80);
-                          if (scrollTop < 160) {
-                            const total = activeConversationMessages().length;
-                            setLoadedThreadCount((prev) => Math.min(total, prev + THREAD_PAGE_SIZE));
-                          }
-                        }}
-                      >
-                        <Show
-                          when={activeConversationMessages().length > 0}
-                          fallback={<p class={drawerStateBlockClass}>{state().streaming ? "Streaming response..." : "No messages in this thread."}</p>}
-                        >
-                          <>
-                            <Show when={loadedThreadCount() < activeConversationMessages().length}>
-                              <p class="mb-2 px-1 text-[10px] uppercase tracking-wide text-neutral-500">
-                                Scroll up to load older messages ({visibleThreadMessages().length}/{activeConversationMessages().length})
-                              </p>
-                            </Show>
-                            <div style={{ height: `${virtualTopPad()}px` }} />
-                            <For each={virtualThreadRows()}>
-                              {(row) => (
-                                <article
-                                  class={cn(
-                                    "mb-2 rounded-md border p-2",
-                                    row.message?.role === "user"
-                                      ? "ml-6 border-[hsl(var(--primary)/0.38)] bg-[hsl(var(--primary)/0.12)]"
-                                      : "mr-6 border-neutral-700 bg-neutral-900/70"
-                                  )}
-                                >
-                                  <div class="mb-1 flex items-center justify-between gap-2">
-                                    <div class="flex items-center gap-1.5">
-                                      <p class={cn("text-[10px] uppercase tracking-wide", row.message?.role === "user" ? "text-[hsl(var(--primary))]" : "text-neutral-300")}>
-                                        {row.message?.author || (row.message?.role === "user" ? "You" : "Assistant")}
-                                      </p>
-                                      <span class={cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(row.message?.channel || "ai"))}>
-                                        {row.message?.channel || "ai"}
-                                      </span>
-                                    </div>
-                                    <p class="text-[10px] text-neutral-500">
-                                      {row.message?.createdAt
-                                        ? new Date(row.message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-                                        : ""}
-                                    </p>
-                                  </div>
-                                  <p class="font-mono text-[11px] leading-5 text-neutral-200 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                                    {row.message?.text || (state().streaming && row.message?.role !== "user" ? "..." : "")}
-                                  </p>
-                                </article>
-                              )}
-                            </For>
-                            <div style={{ height: `${virtualBottomPad()}px` }} />
-                          </>
-                        </Show>
-                      </div>
-                      <div class="border-t border-neutral-800 px-3 py-2">
-                        <div class="mb-1 flex items-center justify-between">
-                          <div class="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              class={drawerSmallButtonClass}
-                              onClick={() => setShowEmojiPalette((prev) => !prev)}
-                              data-testid="conversation-emoji-toggle"
-                            >
-                              <TbOutlineMoodSmile size={11} />
-                              Emoji
-                            </button>
-                            <button
-                              type="button"
-                              class={drawerSmallButtonClass}
-                              onClick={() => {
-                                const clip = clipboardHistory()[0];
-                                if (!clip?.text) return;
-                                setDraftMessage((prev) => `${prev}${prev ? "\n" : ""}${clip.text}`);
-                              }}
-                            >
-                              <TbOutlineClipboard size={11} />
-                              Clipboard
-                            </button>
-                          </div>
-                          <button
-                            type="button"
-                            class={drawerSmallButtonClass}
-                            onClick={sendDraftMessage}
-                            data-testid="conversation-send-message"
-                          >
-                            <TbOutlineSend size={11} />
-                            Send
-                          </button>
-                        </div>
-                        <Show when={showEmojiPalette()}>
-                          <div class="mb-1 flex flex-wrap gap-1 rounded border border-neutral-800 bg-neutral-900/60 p-1">
-                            <For each={EMOJI_QUICK_SET}>
-                              {(emoji) => (
-                                <button
-                                  type="button"
-                                  class="inline-flex h-7 w-7 items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-sm hover:border-[hsl(var(--primary)/0.45)]"
-                                  onClick={() => setDraftMessage((prev) => `${prev}${emoji}`)}
-                                >
-                                  {emoji}
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                        <textarea
-                          value={draftMessage()}
-                          onInput={(event) => setDraftMessage(event.currentTarget.value)}
-                          placeholder="Type a message..."
-                          class="h-20 w-full resize-none rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                          data-testid="conversation-draft-input"
-                        />
-                        <Show when={clipboardHistory().length > 0}>
-                          <div class="mt-1 flex items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900/50 px-2 py-1 text-[10px] text-neutral-400">
-                            <span class="truncate">Clipboard history: {clipboardHistory()[0]?.text || ""}</span>
-                            <button
-                              type="button"
-                              class="rounded border border-neutral-700 px-1.5 py-0.5 text-neutral-300 hover:border-[hsl(var(--primary)/0.45)]"
-                              onClick={() => {
-                                clearClipboardHistory();
-                                publishEvent("clipboard.history.cleared", {}, { source: "browser" });
-                              }}
-                            >
-                              Clear
-                            </button>
-                          </div>
-                        </Show>
-                      </div>
-                    </Show>
-                      </div>
+                        onNewSession={startNewAssistantSession}
+                        onOpenIntegrations={() => toggleWorkflowDrawer({ side: "left", panel: "integrations" })}
+                        chatHeadForConversation={chatHeadForConversation}
+                        fallbackChatHead={fallbackChatHead}
+                        activeChatHead={activeChatHead}
+                        showConversationSettings={showConversationSettings}
+                        setShowConversationSettings={setShowConversationSettings}
+                        persistChatHeadPref={persistChatHeadPref}
+                        activeConversationMessages={activeConversationMessages}
+                        loadedThreadCount={loadedThreadCount}
+                        setLoadedThreadCount={setLoadedThreadCount}
+                        visibleThreadMessages={visibleThreadMessages}
+                        virtualTopPad={virtualTopPad}
+                        virtualBottomPad={virtualBottomPad}
+                        virtualThreadRows={virtualThreadRows}
+                        setThreadViewportHeight={setThreadViewportHeight}
+                        setThreadScrollTop={setThreadScrollTop}
+                        followThreadBottom={followThreadBottom}
+                        setFollowThreadBottom={setFollowThreadBottom}
+                        showEmojiPalette={showEmojiPalette}
+                        setShowEmojiPalette={setShowEmojiPalette}
+                        draftMessage={draftMessage}
+                        setDraftMessage={setDraftMessage}
+                        sendDraftMessage={sendDraftMessage}
+                      />
                     </Show>
                     <Show when={state().rightPanel === "devices"}>
-                      <div class={drawerPanelShellClass}>
-                    <div class="border-b border-neutral-800 px-3 py-2">
-                      <p class="text-xs font-medium uppercase tracking-wide text-neutral-300">Devices</p>
-                      <p class="mt-1 text-[10px] text-neutral-500">
-                        Browser runtime mode reports only real, active browser-connected devices.
-                      </p>
-                    </div>
-                    <div class="min-h-0 flex-1 overflow-auto p-3">
-                      <div class="mb-3 flex items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900/45 p-2.5">
-                        <div class="min-w-0">
-                          <p class="text-[10px] uppercase tracking-wide text-neutral-500">Device onboarding</p>
-                          <p class="mt-1 truncate text-[10px] text-neutral-500">Add a machine and generate its connect command.</p>
-                        </div>
-                        <button
-                          type="button"
-                          class={drawerSmallButtonClass}
-                          onClick={() => setShowDeviceConnectDialog(true)}
-                          data-testid="device-open-connect-dialog"
-                        >
-                          <TbOutlinePlus size={11} />
-                          Add device
-                        </button>
-                      </div>
-                      <Show when={showDeviceConnectDialog()}>
-                        <div
-                          class="fixed inset-0 z-[10040] flex items-center justify-center bg-black/50 px-4"
-                          data-testid="device-connect-dialog-backdrop"
-                          onClick={(event) => {
-                            if (event.target === event.currentTarget) setShowDeviceConnectDialog(false);
-                          }}
-                        >
-                          <div
-                            class="w-full max-w-xl rounded-xl border border-neutral-700 bg-[#101216] p-3 shadow-2xl"
-                            data-testid="device-connect-dialog"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <div class="mb-2 flex items-start justify-between gap-2">
-                              <div>
-                                <p class="text-[11px] font-semibold uppercase tracking-wide text-neutral-200">Connect device</p>
-                                <p class="mt-1 text-[10px] text-neutral-500">Choose platform and run the generated command on the target machine.</p>
-                              </div>
-                              <button
-                                type="button"
-                                class={drawerSmallButtonClass}
-                                onClick={() => setShowDeviceConnectDialog(false)}
-                                data-testid="device-connect-dialog-close"
-                              >
-                                Close
-                              </button>
-                            </div>
-                            <div class="max-h-[72vh] overflow-auto pr-1">
-                              <div class="rounded-md border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="device-connect-block">
-                                <div class="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    class={cn(
-                                      drawerSmallButtonClass,
-                                      connectPlatform() === "linux" && "border-[hsl(var(--primary)/0.45)] text-[hsl(var(--primary))]"
-                                    )}
-                                    onClick={() => setConnectPlatform("linux")}
-                                    data-testid="device-platform-linux"
-                                  >
-                                    Linux
-                                  </button>
-                                  <button
-                                    type="button"
-                                    class={cn(drawerSmallButtonClass, "opacity-60")}
-                                    disabled
-                                    data-testid="device-platform-macos"
-                                  >
-                                    macOS (soon)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    class={cn(drawerSmallButtonClass, "opacity-60")}
-                                    disabled
-                                    data-testid="device-platform-windows"
-                                  >
-                                    Windows (soon)
-                                  </button>
-                                </div>
-                                <Show when={connectPlatform() === "linux"}>
-                                  <label class="mt-2 block text-[10px] text-neutral-500">
-                                    Profile public key (base64url)
-                                    <input
-                                      type="text"
-                                      value={profilePublicKeyInput()}
-                                      onInput={(event) => setProfilePublicKeyInput(event.currentTarget.value)}
-                                      placeholder="paste profile public key"
-                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                                      data-testid="device-profile-public-key-input"
-                                    />
-                                  </label>
-                                  <label class="mt-2 block text-[10px] text-neutral-500">
-                                    Requested label (optional)
-                                    <input
-                                      type="text"
-                                      value={requestedLabelInput()}
-                                      onInput={(event) => setRequestedLabelInput(event.currentTarget.value)}
-                                      placeholder="alice"
-                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                                      data-testid="device-requested-label-input"
-                                    />
-                                  </label>
-                                  <div class="mt-2 flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      class={drawerSmallButtonClass}
-                                      onClick={reserveDomain}
-                                      disabled={reserveBusy()}
-                                      data-testid="device-reserve-domain"
-                                    >
-                                      {reserveBusy() ? "Reserving..." : "Reserve domain"}
-                                    </button>
-                                    <Show when={reserveStatus()}>
-                                      <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-reserve-status">{reserveStatus()}</span>
-                                    </Show>
-                                  </div>
-                                  <Show when={reserveError()}>
-                                    <p class="mt-1 text-[10px] text-red-300" data-testid="device-reserve-error">{reserveError()}</p>
-                                  </Show>
-                                  <label class="mt-2 block text-[10px] text-neutral-500">
-                                    Domain
-                                    <input
-                                      type="text"
-                                      value={connectDomain()}
-                                      onInput={(event) => setConnectDomain(event.currentTarget.value)}
-                                      placeholder="alice.users.edgerun.tech"
-                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                                      data-testid="device-domain-input"
-                                    />
-                                  </label>
-                                  <label class="mt-2 block text-[10px] text-neutral-500">
-                                    Registration token
-                                    <input
-                                      type="text"
-                                      value={connectRegistrationToken()}
-                                      onInput={(event) => setConnectRegistrationToken(event.currentTarget.value)}
-                                      placeholder="paste registration token"
-                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                                      data-testid="device-registration-token-input"
-                                    />
-                                  </label>
-                                  <div class="mt-2 flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      class={drawerSmallButtonClass}
-                                      onClick={issuePairingCode}
-                                      disabled={pairingBusy()}
-                                      data-testid="device-issue-pairing-code"
-                                    >
-                                      {pairingBusy() ? "Issuing..." : "Issue pairing code"}
-                                    </button>
-                                    <Show when={pairingStatus()}>
-                                      <span class="text-[10px] text-[hsl(var(--primary))]" data-testid="device-pairing-status">{pairingStatus()}</span>
-                                    </Show>
-                                  </div>
-                                  <Show when={pairingError()}>
-                                    <p class="mt-1 text-[10px] text-red-300" data-testid="device-pairing-error">{pairingError()}</p>
-                                  </Show>
-                                  <Show when={pairingExpiresAt()}>
-                                    <p class="mt-1 text-[10px] text-neutral-500" data-testid="device-pairing-expiry">Expires: {pairingExpiresAt()}</p>
-                                  </Show>
-                                  <label class="mt-2 block text-[10px] text-neutral-500">
-                                    Pairing code
-                                    <input
-                                      type="text"
-                                      value={pairingCodeInput()}
-                                      onInput={(event) => setPairingCodeInput(event.currentTarget.value)}
-                                      placeholder="paste pairing code"
-                                      class="mt-1 h-8 w-full rounded border border-neutral-700 bg-neutral-900 px-2 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
-                                      data-testid="device-pairing-code-input"
-                                    />
-                                  </label>
-                                  <pre
-                                    class="mt-2 overflow-x-auto rounded border border-neutral-800 bg-[#0c0c12] p-2 text-[10px] text-neutral-200"
-                                    data-testid="device-linux-script"
-                                  >
-{linuxConnectScript()}
-                                  </pre>
-                                  <div class="mt-2 flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      class={drawerSmallButtonClass}
-                                      onClick={copyConnectScript}
-                                      data-testid="device-copy-script"
-                                    >
-                                      <TbOutlineClipboard size={11} />
-                                      {deviceConnectCopied() ? "Copied" : "Copy script"}
-                                    </button>
-                                    <span class="text-[10px] text-neutral-500">Local bridge: {localBridgeListen}</span>
-                                  </div>
-                                </Show>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </Show>
-                      <Show when={fleetDevices().length > 0} fallback={<p class={drawerStateBlockClass}>No connected devices yet.</p>}>
-                        <div class="space-y-1.5">
-                          <For each={fleetDevices()}>
-                            {(device) => (
-                              <button
-                                type="button"
-                                onClick={() => setSelectedDeviceId(device.id)}
-                                class={cn(
-                                  cn(drawerListRowClass, "text-left"),
-                                  selectedDeviceId() === device.id
-                                    ? "border-neutral-700 bg-neutral-900/85"
-                                    : ""
-                                )}
-                              >
-                                <div class="flex items-center justify-between gap-2">
-                                  <div class="flex items-center gap-2 min-w-0">
-                                    <Show
-                                      when={device.type === "host"}
-                                      fallback={<TbOutlineDeviceDesktop size={13} class="text-neutral-300" />}
-                                    >
-                                      <TbOutlineServer size={13} class="text-[hsl(var(--primary))]" />
-                                    </Show>
-                                    <p class={cn("truncate text-[11px] text-neutral-200", selectedDeviceId() === device.id ? "font-semibold text-[hsl(var(--primary))]" : "font-medium")}>{device.name || device.id}</p>
-                                  </div>
-                                  <div class="flex items-center gap-1">
-                                    <Show when={device.localAvailable} fallback={<TbOutlineWifiOff size={12} class={device.online ? "text-[hsl(var(--primary))]" : "text-neutral-500"} />}>
-                                      <TbOutlineWifi size={12} class="text-[hsl(var(--primary))]" />
-                                    </Show>
-                                    <span class={cn("inline-block h-2.5 w-2.5 rounded-full", device.online ? "bg-[hsl(var(--primary))]" : "bg-neutral-600")} />
-                                  </div>
-                                </div>
-                                <p class="mt-1 truncate text-[10px] text-neutral-500">
-                                  {device.primary?.ip || device.primary?.metadata?.host || "unknown"} · {device.members.length} source{device.members.length === 1 ? "" : "s"}
-                                </p>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-
-                        <Show when={selectedDevice()}>
-                          {(deviceAccessor) => {
-                            const device = deviceAccessor();
-                            const detail = device.primary || {};
-                            return (
-                              <div class="mt-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-2 text-[11px] text-neutral-300">
-                                <p class="mb-2 text-[10px] uppercase tracking-wide text-neutral-500">Details</p>
-                                <div class="mb-2 flex flex-wrap items-center gap-2">
-                                  <button
-                                    type="button"
-                                    class={drawerSmallButtonClass}
-                                    onClick={() => openWindow("terminal")}
-                                  >
-                                    Open Terminal
-                                  </button>
-                                  <button
-                                    type="button"
-                                    class={drawerSmallButtonClass}
-                                    onClick={() => openWindow("files")}
-                                  >
-                                    Open Files
-                                  </button>
-                                </div>
-                                <p><span class="text-neutral-500">ID:</span> {detail.id || device.id}</p>
-                                <p><span class="text-neutral-500">Type:</span> {device.type || detail.type || "unknown"}</p>
-                                <p><span class="text-neutral-500">OS:</span> {detail.os || "unknown"}</p>
-                                <p><span class="text-neutral-500">IP:</span> {detail.ip || "unknown"}</p>
-                                <p><span class="text-neutral-500">Connected:</span> {detail.connectedAt || "unknown"}</p>
-                                <p><span class="text-neutral-500">Last seen:</span> {detail.lastSeenAt || "unknown"}</p>
-                                <Show when={detail.metadata?.viewport}>
-                                  <p><span class="text-neutral-500">Viewport:</span> {detail.metadata.viewport}</p>
-                                </Show>
-                                <Show when={detail.metadata?.resources?.cpu}>
-                                  <p>
-                                    <span class="text-neutral-500">CPU:</span>{" "}
-                                    {detail.metadata.resources.cpu.cores || 0} cores · load{" "}
-                                    {(detail.metadata.resources.cpu.loadAvg || []).join(" / ")}
-                                  </p>
-                                </Show>
-                                <Show when={detail.metadata?.resources?.memory}>
-                                  <p>
-                                    <span class="text-neutral-500">Memory:</span>{" "}
-                                    {Math.round((Number(detail.metadata.resources.memory.used || 0) / 1024 / 1024 / 1024) * 10) / 10}G /{" "}
-                                    {Math.round((Number(detail.metadata.resources.memory.total || 0) / 1024 / 1024 / 1024) * 10) / 10}G
-                                  </p>
-                                </Show>
-                                <Show when={detail.metadata?.resources?.disk?.total}>
-                                  <p>
-                                    <span class="text-neutral-500">Disk:</span>{" "}
-                                    {Math.round((Number(detail.metadata.resources.disk.used || 0) / 1024 / 1024 / 1024) * 10) / 10}G /{" "}
-                                    {Math.round((Number(detail.metadata.resources.disk.total || 0) / 1024 / 1024 / 1024) * 10) / 10}G
-                                  </p>
-                                </Show>
-                                <Show when={detail.metadata?.capabilities}>
-                                  <div class="mt-2">
-                                    <p class="mb-1"><span class="text-neutral-500">Capabilities:</span></p>
-                                    <div class="flex flex-wrap gap-1">
-                                      <For each={Object.entries(detail.metadata.capabilities).filter(([, enabled]) => Boolean(enabled))}>
-                                        {([name]) => (
-                                          <span class="inline-flex items-center rounded border border-neutral-700 bg-neutral-800/70 px-1.5 py-0.5 text-[10px] text-neutral-200">
-                                            {name}
-                                          </span>
-                                        )}
-                                      </For>
-                                      <Show when={Object.entries(detail.metadata.capabilities).filter(([, enabled]) => Boolean(enabled)).length === 0}>
-                                        <span class="text-[10px] text-neutral-500">none</span>
-                                      </Show>
-                                    </div>
-                                  </div>
-                                </Show>
-                              </div>
-                            );
-                          }}
-                        </Show>
-                      </Show>
-                    </div>
-                      </div>
+                      <DevicesPanel
+                        cn={cn}
+                        showDeviceConnectDialog={showDeviceConnectDialog}
+                        setShowDeviceConnectDialog={setShowDeviceConnectDialog}
+                        connectPlatform={connectPlatform}
+                        setConnectPlatform={setConnectPlatform}
+                        profilePublicKeyInput={profilePublicKeyInput}
+                        setProfilePublicKeyInput={setProfilePublicKeyInput}
+                        requestedLabelInput={requestedLabelInput}
+                        setRequestedLabelInput={setRequestedLabelInput}
+                        reserveDomain={reserveDomain}
+                        reserveBusy={reserveBusy}
+                        reserveStatus={reserveStatus}
+                        reserveError={reserveError}
+                        connectDomain={connectDomain}
+                        setConnectDomain={setConnectDomain}
+                        connectRegistrationToken={connectRegistrationToken}
+                        setConnectRegistrationToken={setConnectRegistrationToken}
+                        issuePairingCode={issuePairingCode}
+                        pairingBusy={pairingBusy}
+                        pairingStatus={pairingStatus}
+                        pairingError={pairingError}
+                        pairingExpiresAt={pairingExpiresAt}
+                        pairingCodeInput={pairingCodeInput}
+                        setPairingCodeInput={setPairingCodeInput}
+                        linuxConnectScript={linuxConnectScript}
+                        copyConnectScript={copyConnectScript}
+                        deviceConnectCopied={deviceConnectCopied}
+                        fleetDevices={fleetDevices}
+                        selectedDevice={selectedDevice}
+                        selectedDeviceId={selectedDeviceId}
+                        setSelectedDeviceId={setSelectedDeviceId}
+                        onOpenTerminal={() => openWindow("terminal")}
+                        onOpenFiles={() => openWindow("files")}
+                      />
                     </Show>
                   </div>
                   <DrawerIntegrationSuggestions
@@ -1731,54 +643,18 @@ function WorkflowOverlay() {
           class="fixed left-0 top-1/2 z-[10034] -translate-y-1/2 rounded-r-xl p-1"
         >
           <div class="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "launcher" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "launcher" && "text-[hsl(var(--primary))]")}
-              title="Launcher panel"
-            >
-              <TbOutlineBook2 size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "files" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "files" && "text-[hsl(var(--primary))]")}
-              title="Files panel"
-            >
-              <TbOutlineFileText size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "cloud" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "cloud" && "text-[hsl(var(--primary))]")}
-              title="Cloud panel"
-            >
-              <TbOutlineCloud size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "integrations" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "integrations" && "text-[hsl(var(--primary))]")}
-              title="Integrations panel"
-            >
-              <FiLink2 size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "credentials" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "credentials" && "text-[hsl(var(--primary))]")}
-              title="Credentials panel"
-            >
-              <TbOutlineKey size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "left", panel: "settings" })}
-              class={cn(drawerIconButtonClass, state().leftOpen && state().leftPanel === "settings" && "text-[hsl(var(--primary))]")}
-              title="Settings panel"
-            >
-              <TbOutlineSettings size={16} />
-            </button>
+            <For each={LEFT_DRAWER_PANEL_ITEMS}>
+              {(item) => (
+                <button
+                  type="button"
+                  onClick={() => toggleWorkflowDrawer({ side: "left", panel: item.id })}
+                  class={cn(DRAWER_ICON_BUTTON_CLASS, state().leftOpen && state().leftPanel === item.id && "text-[hsl(var(--primary))]")}
+                  title={item.title}
+                >
+                  <item.Icon size={16} />
+                </button>
+              )}
+            </For>
           </div>
         </Motion.div>
 
@@ -1789,22 +665,18 @@ function WorkflowOverlay() {
           class="fixed right-0 top-1/2 z-[10034] -translate-y-1/2 rounded-l-xl p-1"
         >
           <div class="flex flex-col items-center gap-1">
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "right", panel: "conversations" })}
-              class={cn(drawerIconButtonClass, state().rightOpen && state().rightPanel === "conversations" && "text-[hsl(var(--primary))]")}
-              title="Conversations"
-            >
-              <TbOutlineCommand size={16} />
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleWorkflowDrawer({ side: "right", panel: "devices" })}
-              class={cn(drawerIconButtonClass, state().rightOpen && state().rightPanel === "devices" && "text-[hsl(var(--primary))]")}
-              title="Devices panel"
-            >
-              <TbOutlineDeviceDesktop size={16} />
-            </button>
+            <For each={RIGHT_DRAWER_PANEL_ITEMS}>
+              {(item) => (
+                <button
+                  type="button"
+                  onClick={() => toggleWorkflowDrawer({ side: "right", panel: item.id })}
+                  class={cn(DRAWER_ICON_BUTTON_CLASS, state().rightOpen && state().rightPanel === item.id && "text-[hsl(var(--primary))]")}
+                  title={item.title}
+                >
+                  <item.Icon size={16} />
+                </button>
+              )}
+            </For>
           </div>
         </Motion.div>
 

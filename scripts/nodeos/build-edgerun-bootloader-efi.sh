@@ -13,7 +13,7 @@ rustup target add "$target"
 
 cargo build -p edgerun-bootloader-efi --release --features efi-app --target "$target"
 
-target_dir="${CARGO_TARGET_DIR:-$repo_root/target}"
+target_dir="${CARGO_TARGET_DIR:-$repo_root/out/target}"
 src="$target_dir/$target/release/edgerun-bootloader-efi.efi"
 dst="$out_dir/edgerun-bootloader.unsigned.efi"
 cp "$src" "$dst"

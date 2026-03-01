@@ -12,7 +12,11 @@ if [[ ! -f "${CATALOG}" ]]; then
   exit 1
 fi
 
-mapfile -t all_specs < <(find "${SPEC_DIR}" -maxdepth 1 -type f -name '*.md' -printf '%f\n' | sort)
+mapfile -t all_spec_paths < <(find "${SPEC_DIR}" -maxdepth 1 -type f -name '*.md' | sort)
+all_specs=()
+for spec_path in "${all_spec_paths[@]}"; do
+  all_specs+=("$(basename "${spec_path}")")
+done
 
 declare -A status_by_spec=()
 declare -A domain_by_spec=()

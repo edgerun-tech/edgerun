@@ -18,7 +18,6 @@ WORKFLOWS=(
   "frontend-release.yml:push"
   "pipeline-health.yml:workflow_dispatch"
   "push-scheduler.yml:workflow_dispatch"
-  "release.yml:push"
   "runtime-compliance-matrix.yml:workflow_dispatch"
   "runtime-provenance.yml:push"
   "workflow-hygiene.yml:workflow_dispatch"

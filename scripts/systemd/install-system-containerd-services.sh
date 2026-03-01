@@ -17,28 +17,25 @@ fi
 if [[ "${INSTALL_BINARIES}" == "1" ]]; then
   export CARGO_TARGET_DIR="${ROOT_DIR}/out/target"
   cargo build --locked --release \
-    -p edgerun-containerd-shim \
-    -p edgerun-snapshotter
+    -p edgerun-containerd-shim
 
   install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v1" /usr/lib/edgerun/containerd-shim-edgerun-backend
   install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v2
   install -Dm0755 "${CARGO_TARGET_DIR}/release/containerd-shim-edgerun-v2" /usr/bin/containerd-shim-edgerun-v1
-  install -Dm0755 "${CARGO_TARGET_DIR}/release/edgerun-snapshotterd" /usr/bin/edgerun-snapshotterd
 fi
 
-install -Dm0644 "${ROOT_DIR}/scripts/systemd/system/edgerun-snapshotter.service" /etc/systemd/system/edgerun-snapshotter.service
 install -Dm0644 "${ROOT_DIR}/scripts/systemd/system/edgerun-shim-backend.service" /etc/systemd/system/edgerun-shim-backend.service
 install -Dm0644 "${ROOT_DIR}/config/containerd/edgerun-runtime-snippet.toml" /etc/containerd/edgerun-runtime-snippet.toml
 
-mkdir -p /var/lib/edgerun/snapshotter /run/edgerun-snapshotter /run/edgerun-shim
+mkdir -p /run/edgerun-shim
 
 systemctl daemon-reload
 
 if [[ "${ENABLE_SERVICES}" == "1" ]]; then
-  systemctl enable --now edgerun-snapshotter.service edgerun-shim-backend.service
+  systemctl enable --now edgerun-shim-backend.service
 else
   echo "Units installed. Start manually with:"
-  echo "  systemctl enable --now edgerun-snapshotter.service edgerun-shim-backend.service"
+  echo "  systemctl enable --now edgerun-shim-backend.service"
 fi
 
 if [[ "${RESTART_CONTAINERD}" == "1" ]]; then
@@ -50,8 +47,6 @@ echo "Installed:"
 echo "  /usr/lib/edgerun/containerd-shim-edgerun-backend"
 echo "  /usr/bin/containerd-shim-edgerun-v2"
 echo "  /usr/bin/containerd-shim-edgerun-v1 (shim compatibility alias)"
-echo "  /usr/bin/edgerun-snapshotterd"
-echo "  /etc/systemd/system/edgerun-snapshotter.service"
 echo "  /etc/systemd/system/edgerun-shim-backend.service"
 echo "  /etc/containerd/edgerun-runtime-snippet.toml"
 echo

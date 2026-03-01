@@ -129,6 +129,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.90.0
           components: rustfmt, clippy
 
       - name: Setup sccache
@@ -147,11 +148,41 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Rust workspace check
-        run: cargo check --workspace --all-targets
+        run: cargo check --locked --workspace --all-targets
 
       - name: Rust clippy check
-        if: ${{ github.event_name != 'pull_request' || startsWith(github.ref, 'refs/tags/v') }}
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+  rust-tests:
+    name: Rust Tests
+    needs: [changes]
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || needs.changes.outputs.rust == 'true' || needs.changes.outputs.ci == 'true' }}
+    runs-on: [self-hosted, linux, x64, proxmox, edgerun]
+    timeout-minutes: 20
+    env:
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: "v1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-rust-shared-v1
+          cache-all-crates: true
+
+      - name: Rust workspace tests
+        run: cargo test --locked --workspace
 
   ci-summary:
     name: CI Summary
@@ -160,6 +191,7 @@ jobs:
       - changes
       - frontend-gates
       - rust-checks
+      - rust-tests
     runs-on: ubuntu-24.04
     steps:
       - name: Publish CI run summary
@@ -174,6 +206,7 @@ jobs:
             echo "| Job | Result |"
             echo "| --- | --- |"
             echo "| Detect Changed Scopes | ${{ needs.changes.result }} |"
-            echo "| Frontend Production Gates | ${{ needs.frontend-gates.result }} |"
-            echo "| Rust Checks | ${{ needs.rust-checks.result }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+             echo "| Frontend Production Gates | ${{ needs.frontend-gates.result }} |"
+             echo "| Rust Checks | ${{ needs.rust-checks.result }} |"
+             echo "| Rust Tests | ${{ needs.rust-tests.result }} |"
+           } >> "$GITHUB_STEP_SUMMARY"
