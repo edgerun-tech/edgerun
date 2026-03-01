@@ -139,6 +139,16 @@ const integrationDefinitions = [
     tokenKey: "flipper_device_id",
     defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.flipper.interact"],
     tags: ["devices", "security", "workflows"]
+  },
+  {
+    id: "daly_bms",
+    name: "Daly BMS",
+    authMethod: "web_bluetooth",
+    supportsPlatformConnector: false,
+    requiresToken: false,
+    tokenKey: "daly_bms_device_id",
+    defaultCapabilities: ["bluetooth.connect", "bluetooth.gatt", "hardware.bms.read"],
+    tags: ["devices", "energy", "workflows"]
   }
 ];
 

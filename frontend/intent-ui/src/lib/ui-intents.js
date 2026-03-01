@@ -64,7 +64,8 @@ const UI_EVENT_TOPICS = {
     verifyStarted: "ui.integration.verify_started",
     verified: "ui.integration.verified",
     verifyFailed: "ui.integration.verify_failed",
-    flipperProbed: "ui.integration.flipper.probed"
+    flipperProbed: "ui.integration.flipper.probed",
+    dalyBmsProbed: "ui.integration.daly_bms.probed"
   }
 };
 
