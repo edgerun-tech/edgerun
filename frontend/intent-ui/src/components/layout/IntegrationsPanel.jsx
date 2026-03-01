@@ -1207,18 +1207,22 @@ function IntegrationsPanel(props) {
                       <div class="rounded-md border border-neutral-700 bg-black/20 p-2" data-testid="integration-test-loader">
                         <p class="text-[11px] text-neutral-300">{activeLoadingText()}</p>
                         <div class="mt-2 space-y-1">
-                          <For each={loadingStates()}>
-                            {(state, index) => {
-                              const done = () => index() < visibleLoadingStage();
-                              const active = () => index() === visibleLoadingStage();
+                          <VirtualAnimatedList
+                            items={loadingStates}
+                            estimateSize={22}
+                            overscan={3}
+                            animateRows
+                            renderItem={(state, index) => {
+                              const done = index < visibleLoadingStage();
+                              const active = index === visibleLoadingStage();
                               return (
                                 <div class="flex items-center gap-2 text-[10px]">
-                                  <span class={`h-2 w-2 rounded-full ${done() ? "bg-emerald-400" : active() ? "bg-cyan-300 animate-pulse" : "bg-neutral-700"}`} />
-                                  <span class={`${done() ? "text-emerald-200" : active() ? "text-cyan-200" : "text-neutral-500"}`}>{state.text}</span>
+                                  <span class={`h-2 w-2 rounded-full ${done ? "bg-emerald-400" : active ? "bg-cyan-300 animate-pulse" : "bg-neutral-700"}`} />
+                                  <span class={`${done ? "text-emerald-200" : active ? "text-cyan-200" : "text-neutral-500"}`}>{state.text}</span>
                                 </div>
                               );
                             }}
-                          </For>
+                          />
                         </div>
                       </div>
                     </Show>
@@ -1269,17 +1273,25 @@ function IntegrationsPanel(props) {
                                     <Show when={entries.length > 0}>
                                       <div class="space-y-0.5">
                                         <p class="text-neutral-400">Device info sample:</p>
-                                        <For each={entries}>
-                                          {(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
-                                        </For>
+                                        <VirtualAnimatedList
+                                          items={() => entries}
+                                          estimateSize={18}
+                                          overscan={2}
+                                          animateRows
+                                          renderItem={(entry) => <p>{entry.key}: {entry.value || "n/a"}</p>}
+                                        />
                                       </div>
                                     </Show>
                                     <Show when={warnings.length > 0}>
                                       <div class="space-y-0.5 text-amber-300">
                                         <p>Warnings:</p>
-                                        <For each={warnings}>
-                                          {(warning) => <p>• {warning}</p>}
-                                        </For>
+                                        <VirtualAnimatedList
+                                          items={() => warnings}
+                                          estimateSize={18}
+                                          overscan={2}
+                                          animateRows
+                                          renderItem={(warning) => <p>• {warning}</p>}
+                                        />
                                       </div>
                                     </Show>
                                   </div>
@@ -1365,17 +1377,25 @@ function IntegrationsPanel(props) {
                                     <Show when={packets.length > 0}>
                                       <div class="space-y-0.5">
                                         <p class="text-neutral-400">Packet samples:</p>
-                                        <For each={packets}>
-                                          {(sample) => <p>{sample}</p>}
-                                        </For>
+                                        <VirtualAnimatedList
+                                          items={() => packets}
+                                          estimateSize={18}
+                                          overscan={2}
+                                          animateRows
+                                          renderItem={(sample) => <p>{sample}</p>}
+                                        />
                                       </div>
                                     </Show>
                                     <Show when={warnings.length > 0}>
                                       <div class="space-y-0.5 text-amber-300">
                                         <p>Warnings:</p>
-                                        <For each={warnings}>
-                                          {(warning) => <p>• {warning}</p>}
-                                        </For>
+                                        <VirtualAnimatedList
+                                          items={() => warnings}
+                                          estimateSize={18}
+                                          overscan={2}
+                                          animateRows
+                                          renderItem={(warning) => <p>• {warning}</p>}
+                                        />
                                       </div>
                                     </Show>
                                   </div>

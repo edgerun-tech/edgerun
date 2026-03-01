@@ -115,8 +115,12 @@ export default function ConversationsPanel(props) {
         <div class="min-h-0 flex-1 overflow-auto p-3">
           <Show when={props.conversationTab() === "threads"}>
             <div class="space-y-1.5">
-              <For each={props.threadConversations()}>
-                {(thread) => (
+              <VirtualAnimatedList
+                items={props.threadConversations}
+                estimateSize={52}
+                overscan={5}
+                animateRows
+                renderItem={(thread) => (
                   <button
                     type="button"
                     onClick={() => {
@@ -167,14 +171,18 @@ export default function ConversationsPanel(props) {
                     <p class="mt-1 truncate text-[10px] text-neutral-500">{thread.preview || thread.subtitle || "No messages yet"}</p>
                   </button>
                 )}
-              </For>
+              />
               <Show when={!props.hasConversationContent()}>
                 <div class={DRAWER_STATE_BLOCK_CLASS} data-testid="conversations-empty-state">
                   <p class="text-neutral-300">This is where all your conversations will be available.</p>
                   <p class="mt-1">Connect message provider integrations to unlock threads.</p>
                   <div class="mt-2 space-y-1">
-                    <For each={props.messageProviderIntegrations()}>
-                      {(provider) => (
+                    <VirtualAnimatedList
+                      items={props.messageProviderIntegrations}
+                      estimateSize={28}
+                      overscan={3}
+                      animateRows
+                      renderItem={(provider) => (
                         <button
                           type="button"
                           onClick={props.onOpenIntegrations}
@@ -187,7 +195,7 @@ export default function ConversationsPanel(props) {
                           </span>
                         </button>
                       )}
-                    </For>
+                    />
                   </div>
                 </div>
               </Show>
@@ -196,8 +204,12 @@ export default function ConversationsPanel(props) {
           <Show when={props.conversationTab() === "contacts"}>
             <div class="space-y-1.5">
               <Show when={!props.contactsLoading()} fallback={<p class={DRAWER_STATE_BLOCK_CLASS}>Loading contacts...</p>}>
-                <For each={props.contacts()}>
-                  {(contact) => (
+                <VirtualAnimatedList
+                  items={props.contacts}
+                  estimateSize={60}
+                  overscan={4}
+                  animateRows
+                  renderItem={(contact) => (
                     <button
                       type="button"
                       onClick={() => {
@@ -256,7 +268,7 @@ export default function ConversationsPanel(props) {
                       </Show>
                     </button>
                   )}
-                </For>
+                />
                 <Show when={props.contacts().length === 0}>
                   <p class={DRAWER_STATE_BLOCK_CLASS}>No contacts loaded.</p>
                 </Show>
@@ -297,8 +309,12 @@ export default function ConversationsPanel(props) {
           <div class="space-y-2 border-b border-neutral-800 bg-neutral-950/40 px-3 py-2" data-testid="conversation-settings-popup">
             <p class="text-[10px] uppercase tracking-wide text-neutral-500">Message Providers</p>
             <div class="space-y-1">
-              <For each={props.messageProviderIntegrations()}>
-                {(provider) => (
+              <VirtualAnimatedList
+                items={props.messageProviderIntegrations}
+                estimateSize={28}
+                overscan={3}
+                animateRows
+                renderItem={(provider) => (
                   <button
                     type="button"
                     class="flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
@@ -311,7 +327,7 @@ export default function ConversationsPanel(props) {
                     </span>
                   </button>
                 )}
-              </For>
+              />
             </div>
             <p class="pt-1 text-[10px] uppercase tracking-wide text-neutral-500">Chat Head</p>
             <div class="grid grid-cols-6 gap-1">

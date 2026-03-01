@@ -38,6 +38,7 @@ import { useWorkflowConversationSources } from "./use-workflow-conversation-sour
 import { pushClipboardEntry } from "../../stores/clipboard-history";
 
 const SUPER_V_SHORTCUT_EVENT = "intent-ui-super-v";
+const CALL_LINK_READY_EVENT = "intent-ui-call-link-ready";
 
 function cn(...classes) {
   return twMerge(clsx(classes));
@@ -134,6 +135,34 @@ function WorkflowOverlay() {
       author: message.role === "user" ? "You" : "Assistant"
     }))
   }));
+  const callPendingThreads = createMemo(() => {
+    const entries = Object.entries(localMessagesByConversation() || {});
+    const threads = entries
+      .filter(([conversationId, messages]) => (
+        String(conversationId || "").startsWith("call-link-")
+        && Array.isArray(messages)
+        && messages.length > 0
+      ))
+      .map(([conversationId, messages]) => {
+        const last = messages[messages.length - 1] || {};
+        const title = String(last.threadTitle || "").trim() || "Pending call";
+        const subtitle = String(last.threadSubtitle || "").trim() || "Awaiting recipient";
+        const updatedAt = String(last.createdAt || "").trim() || new Date().toISOString();
+        const preview = String(last.text || "").trim() || "Call link copied";
+        return {
+          id: conversationId,
+          kind: "call",
+          channel: "call",
+          title,
+          subtitle,
+          updatedAt,
+          preview,
+          messages: []
+        };
+      })
+      .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+    return threads;
+  });
   const sessionConversations = createMemo(() => (state().sessionHistory || [])
     .filter((session) => session?.sessionId && session.sessionId !== state().sessionId)
     .map((session) => ({
@@ -161,6 +190,7 @@ function WorkflowOverlay() {
     localMessagesByConversation
   });
   const threadConversations = createMemo(() => [
+    ...callPendingThreads(),
     aiConversation(),
     ...sessionConversations(),
     ...bridgeThreads(),
@@ -369,6 +399,7 @@ function WorkflowOverlay() {
     setShowEmojiPalette(false);
   };
   let handleSuperVShortcut;
+  let handleCallLinkReady;
   let handleBubblePointerMove;
   let handleBubblePointerUp;
   onMount(() => {
@@ -407,7 +438,33 @@ function WorkflowOverlay() {
     handleBubblePointerUp = () => {
       activeBubbleDrag = null;
     };
+    handleCallLinkReady = (event) => {
+      const detail = event?.detail || {};
+      const threadId = String(detail.threadId || "").trim();
+      const link = String(detail.link || "").trim();
+      const title = String(detail.title || "Pending call").trim();
+      const subtitle = String(detail.subtitle || "Awaiting recipient").trim();
+      if (!threadId || !link) return;
+      const now = new Date().toISOString();
+      const pendingEntry = {
+        id: `local-${threadId}-${Date.now()}`,
+        role: "assistant",
+        text: `Pending call link copied: ${link}`,
+        createdAt: now,
+        channel: "call",
+        author: "Call Studio",
+        threadTitle: title,
+        threadSubtitle: subtitle,
+        callStatus: "pending"
+      };
+      setLocalMessagesByConversation((prev) => ({
+        ...prev,
+        [threadId]: [...(prev[threadId] || []), pendingEntry]
+      }));
+      setSelectedConversationId(threadId);
+    };
     window.addEventListener(SUPER_V_SHORTCUT_EVENT, handleSuperVShortcut);
+    window.addEventListener(CALL_LINK_READY_EVENT, handleCallLinkReady);
     window.addEventListener("pointermove", handleBubblePointerMove);
     window.addEventListener("pointerup", handleBubblePointerUp);
   });
@@ -417,6 +474,9 @@ function WorkflowOverlay() {
     }
     if (handleBubblePointerMove) {
       window.removeEventListener("pointermove", handleBubblePointerMove);
+    }
+    if (handleCallLinkReady) {
+      window.removeEventListener(CALL_LINK_READY_EVENT, handleCallLinkReady);
     }
     if (handleBubblePointerUp) {
       window.removeEventListener("pointerup", handleBubblePointerUp);

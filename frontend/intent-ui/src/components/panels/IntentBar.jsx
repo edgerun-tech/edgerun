@@ -24,6 +24,7 @@ import {
   TbOutlineSparkles,
   TbOutlineKey,
   TbOutlinePhoto,
+  TbOutlinePhone,
 } from "solid-icons/tb";
 import { FiSettings, FiGithub, FiGlobe } from "solid-icons/fi";
 import { mcpManager } from "../../lib/mcp/client";
@@ -141,12 +142,6 @@ const [currentTime, setCurrentTime] = createSignal(/* @__PURE__ */ new Date());
 const [peekOpen, setPeekOpen] = createSignal(false);
 const [hotkeyExpanded, setHotkeyExpanded] = createSignal(false);
 const [hotkeyCollapsed, setHotkeyCollapsed] = createSignal(false);
-const [showCalendar, setShowCalendar] = createSignal(false);
-const [calendarMonth, setCalendarMonth] = createSignal((() => {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
-})());
-const [selectedCalendarDate, setSelectedCalendarDate] = createSignal(/* @__PURE__ */ new Date());
 const [weather, setWeather] = createSignal(DEFAULT_WEATHER_STATE);
 const [responseLines, setResponseLines] = createSignal([]);
 const [responseNowTick, setResponseNowTick] = createSignal(Date.now());
@@ -281,10 +276,7 @@ function IntentBar() {
   let weatherTimer;
   let nyanTimer;
   let nyanFlightTimer;
-  let clockButtonRef;
-  let calendarPopoverRef;
   let handleIntentBarToggle;
-  let handleCalendarOutside;
   let unsubscribeIntentbarToggle;
   let mcpMessageHandler;
   let weatherUpdating = false;
@@ -333,35 +325,6 @@ function IntentBar() {
   const accentHoverButtonClass = "hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/12";
   const accentIndex = createMemo(() => uiRuntime().accentIndex);
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const calendarMonthLabel = createMemo(() =>
-    calendarMonth().toLocaleDateString("en-US", { month: "long", year: "numeric" })
-  );
-  const calendarDays = createMemo(() => {
-    const monthStart = calendarMonth();
-    const year = monthStart.getFullYear();
-    const month = monthStart.getMonth();
-    const firstWeekday = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const cells = [];
-    for (let index = 0; index < firstWeekday; index += 1) {
-      cells.push({ kind: "pad", key: `pad-${index}` });
-    }
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const date = new Date(year, month, day);
-      const today = new Date();
-      const isToday = date.toDateString() === today.toDateString();
-      const isSelected = date.toDateString() === selectedCalendarDate().toDateString();
-      cells.push({
-        kind: "day",
-        key: `day-${day}`,
-        day,
-        date,
-        isToday,
-        isSelected
-      });
-    }
-    return cells;
-  });
   const parseAccentCommand = (raw) => {
     const trimmed = raw.trim().toLowerCase();
     if (!trimmed.startsWith("set accent")) return null;
@@ -784,13 +747,6 @@ function IntentBar() {
       queueMicrotask(() => inputRef?.focus());
     };
     unsubscribeIntentbarToggle = subscribeEvent(UI_EVENT_TOPICS.action.intentBarToggled, handleIntentBarToggle);
-    handleCalendarOutside = (event) => {
-      if (!showCalendar()) return;
-      const target = event.target;
-      if (calendarPopoverRef?.contains(target) || clockButtonRef?.contains(target)) return;
-      setShowCalendar(false);
-    };
-    window.addEventListener("pointerdown", handleCalendarOutside);
     if (typeof window !== "undefined") {
       window.__intentDebug = window.__intentDebug || {};
       window.__intentDebug.triggerNyanCat = () => {
@@ -812,9 +768,6 @@ function IntentBar() {
     }
     clearTimeout(debounceTimer);
     if (unsubscribeIntentbarToggle) unsubscribeIntentbarToggle();
-    if (handleCalendarOutside) {
-      window.removeEventListener("pointerdown", handleCalendarOutside);
-    }
     if (mcpMessageHandler) {
       window.removeEventListener("message", mcpMessageHandler);
     }
@@ -1009,11 +962,6 @@ function IntentBar() {
   });
   const handleKeyDown = async (e) => {
     if (e.key === "Escape") {
-      if (showCalendar()) {
-        e.preventDefault();
-        setShowCalendar(false);
-        return;
-      }
       if (showCommandExplorer()) {
         e.preventDefault();
         setShowCommandExplorer(false);
@@ -2035,78 +1983,15 @@ function IntentBar() {
     transition={{ delay: 0.1 }}
   >
             <button
-    ref={clockButtonRef}
     type="button"
     class="flex items-center gap-2 rounded-md px-1 py-0.5 text-white hover:bg-neutral-800/70"
-    onClick={(event) => {
-      event.stopPropagation();
-      setShowCalendar((prev) => !prev);
-    }}
-    aria-label="Open calendar"
-    aria-expanded={showCalendar()}
+    onClick={() => openWindow("calendar")}
+    aria-label="Open calendar window"
   >
               <TbOutlineClock size={16} class="text-neutral-400" />
               <span class="text-sm font-medium tabular-nums">{formatTime(currentTime())}</span>
               <span class="text-xs text-neutral-500">{formatDate(currentTime())}</span>
             </button>
-            <Show when={showCalendar()}>
-              <div
-    ref={calendarPopoverRef}
-    class="absolute bottom-full left-0 z-30 mb-2 w-72 rounded-xl border border-neutral-700 bg-[#121318] p-3 shadow-[0_18px_38px_rgba(0,0,0,0.45)]"
-    onClick={(event) => event.stopPropagation()}
-  >
-                <div class="mb-2 flex items-center justify-between">
-                  <button
-      type="button"
-      class="rounded px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
-      onClick={() => {
-        const current = calendarMonth();
-        setCalendarMonth(new Date(current.getFullYear(), current.getMonth() - 1, 1));
-      }}
-    >
-                    Prev
-                  </button>
-                  <p class="text-xs font-medium text-neutral-200">{calendarMonthLabel()}</p>
-                  <button
-      type="button"
-      class="rounded px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
-      onClick={() => {
-        const current = calendarMonth();
-        setCalendarMonth(new Date(current.getFullYear(), current.getMonth() + 1, 1));
-      }}
-    >
-                    Next
-                  </button>
-                </div>
-                <div class="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] uppercase tracking-wide text-neutral-500">
-                  <For each={["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]}>
-                    {(label) => <span>{label}</span>}
-                  </For>
-                </div>
-                <div class="grid grid-cols-7 gap-1">
-                  <For each={calendarDays()}>
-                    {(cell) => (
-                      <Show
-                        when={cell.kind === "day"}
-                        fallback={<span class="h-8 rounded" />}
-                      >
-                        <button
-      type="button"
-      class={cn(
-        "h-8 rounded text-xs transition-colors",
-        cell.isSelected ? "text-white" : cell.isToday ? "text-neutral-100" : "text-neutral-300 hover:bg-neutral-800"
-      )}
-      style={cell.isSelected ? accentActiveButtonStyle : void 0}
-      onClick={() => setSelectedCalendarDate(cell.date)}
-    >
-                          {cell.day}
-                        </button>
-                      </Show>
-                    )}
-                  </For>
-                </div>
-              </div>
-            </Show>
           </Motion.div>
 
           {
@@ -2270,6 +2155,19 @@ function IntentBar() {
     aria-pressed={listening()}
   >
               <TbOutlineMicrophone size={18} />
+            </Motion.button>
+
+            <Motion.button
+    type="button"
+    onClick={quickStartCall}
+    hover={{ scale: 1.1 }}
+    press={{ scale: 0.95 }}
+    class={`p-2 text-neutral-400 ${accentHoverButtonClass} rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-900`}
+    title="Quick call link"
+    aria-label="Quick call link"
+    data-testid="intentbar-quick-call"
+  >
+              <TbOutlinePhone size={18} />
             </Motion.button>
 
             <Motion.button
@@ -2872,3 +2770,19 @@ function IntentBar() {
 export {
   IntentBar as default
 };
+  const quickStartCall = () => {
+    openWindow("call");
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.setItem("intent-ui-call-quickstart-pending", "1");
+      } catch {
+        // ignore storage failures
+      }
+      window.dispatchEvent(new CustomEvent("intent-ui-call-quickstart", {
+        detail: {
+          source: "intentbar",
+          createdAt: new Date().toISOString()
+        }
+      }));
+    }
+  };

@@ -12,9 +12,14 @@ function createPeerClient(options) {
   return new Peer(options || {});
 }
 
+const CALL_QUICKSTART_EVENT = "intent-ui-call-quickstart";
+const CALL_LINK_READY_EVENT = "intent-ui-call-link-ready";
+const CALL_QUICKSTART_PENDING_KEY = "intent-ui-call-quickstart-pending";
+
 function CallApp() {
   let localVideoRef;
   let remoteVideoRef;
+  let remoteStageRef;
   let messagesEndRef;
   const [peerId, setPeerId] = createSignal(null);
   const [callId, setCallId] = createSignal("");
@@ -34,16 +39,14 @@ function CallApp() {
   const [ringMode, setRingMode] = createSignal("call");
   const [autoJoinTarget, setAutoJoinTarget] = createSignal("");
   const [autoJoinAttemptKey, setAutoJoinAttemptKey] = createSignal("");
+  const [quickStartRequested, setQuickStartRequested] = createSignal(false);
+  const [copiedLink, setCopiedLink] = createSignal("");
   let handleIntentCallRing;
   let unsubscribeCallRing;
   let peer = null;
   let localStream = null;
   let ringTimeout = null;
-  const generateCallId = () => {
-    const id = Math.random().toString(36).substring(2, 10);
-    setCallId(id);
-    return id;
-  };
+  let handleCallQuickStart;
   const initPeer = async () => {
     setStatus("Connecting to signaling server...");
     try {
@@ -175,10 +178,39 @@ function CallApp() {
       setAudioEnabled(!audioEnabled());
     }
   };
-  const copyLink = () => {
-    const link = `${window.location.origin}/call/${peerId()}`;
-    navigator.clipboard.writeText(link);
-    setStatus("Link copied to clipboard!");
+  const shareLink = async () => {
+    const id = String(peerId() || "").trim();
+    if (!id) {
+      setStatus("Preparing call link...");
+      return false;
+    }
+    const link = `${window.location.origin}/call/${id}`;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      }
+    } catch {
+      // best effort: we still publish link so user can continue.
+    }
+    setCopiedLink(link);
+    setStatus("Link copied to clipboard. Waiting for recipient...");
+    try {
+      sessionStorage.removeItem(CALL_QUICKSTART_PENDING_KEY);
+    } catch {
+      // ignore storage failures
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CALL_LINK_READY_EVENT, {
+        detail: {
+          threadId: `call-link-${id}`,
+          title: `Call ${id.slice(0, 8)}`,
+          subtitle: "Pending recipient",
+          link,
+          createdAt: new Date().toISOString()
+        }
+      }));
+    }
+    return true;
   };
   const setupDataConnection = (conn) => {
     conn.on("data", (data) => {
@@ -275,6 +307,18 @@ function CallApp() {
       setStatus("No answer yet");
     }, 1e4);
   };
+  const toggleFullscreen = async () => {
+    if (typeof document === "undefined" || !remoteStageRef) return;
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (typeof remoteStageRef.requestFullscreen === "function") {
+        await remoteStageRef.requestFullscreen();
+      }
+    } catch {
+      // ignore fullscreen API failures
+    }
+  };
   onMount(async () => {
     await initPeer();
     joinFromUrl();
@@ -283,6 +327,25 @@ function CallApp() {
       startRinging(detail.contact, detail.mode);
     };
     unsubscribeCallRing = subscribeEvent(UI_EVENT_TOPICS.action.callRinging, handleIntentCallRing);
+    handleCallQuickStart = () => {
+      setQuickStartRequested(true);
+      setStatus("Preparing call link...");
+    };
+    try {
+      if (sessionStorage.getItem(CALL_QUICKSTART_PENDING_KEY) === "1") {
+        setQuickStartRequested(true);
+      }
+    } catch {
+      // ignore storage failures
+    }
+    window.addEventListener(CALL_QUICKSTART_EVENT, handleCallQuickStart);
+  });
+  createEffect(() => {
+    if (!quickStartRequested()) return;
+    if (!peerId()) return;
+    void shareLink().then(() => {
+      setQuickStartRequested(false);
+    });
   });
   createEffect(() => {
     const target = autoJoinTarget();
@@ -321,6 +384,9 @@ function CallApp() {
     }
     if (peer) {
       peer.destroy();
+    }
+    if (handleCallQuickStart) {
+      window.removeEventListener(CALL_QUICKSTART_EVENT, handleCallQuickStart);
     }
   });
   createEffect(() => {
@@ -443,7 +509,7 @@ function CallApp() {
         </Show>
 
         <div class="mx-4 my-3 grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div class="relative min-h-[300px] overflow-hidden rounded-xl border border-border bg-background/70">
+          <div class="relative min-h-[300px] overflow-hidden rounded-xl border border-border bg-background/70" ref={remoteStageRef}>
             <Show when={callConnected()} fallback={<div class="absolute inset-0 flex flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
                 <div class="rounded-full border border-border bg-card p-3 text-foreground">
                   {ringMode() === "video" ? <TbOutlineVideo size={20} /> : <TbOutlinePhone size={20} />}
@@ -492,18 +558,16 @@ function CallApp() {
             <div class="mt-3 flex flex-wrap gap-2">
               <button
     type="button"
-    onClick={copyLink}
+    onClick={() => {
+      void shareLink();
+    }}
     class="rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
   >
                 Copy Link
               </button>
-              <button
-    type="button"
-    onClick={generateCallId}
-    class="rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-  >
-                New Call ID
-              </button>
+              <Show when={copiedLink()}>
+                <p class="max-w-[220px] truncate text-[10px] text-muted-foreground">{copiedLink()}</p>
+              </Show>
             </div>
           </div>
         </div>
@@ -518,6 +582,14 @@ function CallApp() {
     title={audioEnabled() ? "Mute microphone" : "Unmute microphone"}
   >
                 {audioEnabled() ? <BiRegularMicrophone size={20} /> : <BiRegularMicrophoneOff size={20} />}
+              </button>
+              <button
+    type="button"
+    onClick={toggleFullscreen}
+    class="rounded-full bg-secondary p-3 text-secondary-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+    title="Fullscreen"
+  >
+                <span class="text-xs font-semibold">FS</span>
               </button>
               <button
     type="button"

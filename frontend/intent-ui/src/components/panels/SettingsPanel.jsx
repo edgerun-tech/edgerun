@@ -16,6 +16,7 @@ import {
 } from "../../stores/preferences";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
 import WidgetSettingsSection from "./WidgetSettingsSection";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 const timezoneOptions = [
   { value: "local", label: "System default" },
@@ -31,6 +32,7 @@ const timezoneOptions = [
 
 function SettingsPanel(props) {
   const compact = () => Boolean(props?.compact);
+  let bookmarkListRef;
   const [bookmarkLabel, setBookmarkLabel] = createSignal("");
   const [bookmarkUrl, setBookmarkUrl] = createSignal("");
   const [status, setStatus] = createSignal("");
@@ -140,10 +142,15 @@ function SettingsPanel(props) {
               Add bookmark
             </button>
           </div>
-          <div class="max-h-40 space-y-1 overflow-auto pr-1" data-testid="settings-bookmark-list">
-            <For each={preferences().bookmarks}>
-              {(item) => (
-                <div class="flex items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-xs">
+          <div class="max-h-40 overflow-auto pr-1" data-testid="settings-bookmark-list" ref={bookmarkListRef}>
+            <VirtualAnimatedList
+              items={() => preferences().bookmarks}
+              estimateSize={34}
+              overscan={4}
+              containerRef={() => bookmarkListRef}
+              animateRows
+              renderItem={(item) => (
+                <div class="mt-1 flex items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-xs">
                   <div class="min-w-0">
                     <p class="truncate text-neutral-200">{item.label}</p>
                     <p class="truncate text-neutral-500">{item.url}</p>
@@ -157,7 +164,7 @@ function SettingsPanel(props) {
                   </button>
                 </div>
               )}
-            </For>
+            />
           </div>
         </section>
 

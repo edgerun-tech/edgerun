@@ -31,9 +31,12 @@ Introduce a reusable list primitive with virtual scrolling and optional row anim
   - `IntentBar` filter/help/history list blocks (stack layout, row animation enabled)
   - `FloatingFeedPanel` event rows (stack layout, row animation enabled)
   - `GooglePhotosPanel` media tiles via reusable virtualized grid primitive
+  - `ConversationsPanel` thread/contact/provider side lists (stack layout, row animation enabled)
+  - `SettingsPanel` bookmark list (stack layout, row animation enabled)
+  - `IntegrationsPanel` loader/probe diagnostics sublists (stack layout, row animation enabled)
 
 ## Acceptance Criteria
-1. Gmail, conversation thread, Cloudflare inventory, Cloud provider resource rows, launcher task lists, integration device selectors, IntentBar list blocks, and floating feed rows use the same reusable list primitive, and Google Photos uses the reusable virtualized grid variant.
+1. Gmail, conversation thread, Conversations side lists, Cloudflare inventory, Cloud provider resource rows, launcher task lists, integration device selectors, Integrations diagnostics lists, IntentBar list blocks, Settings bookmarks, and floating feed rows use the same reusable list primitive, and Google Photos uses the reusable virtualized grid variant.
 2. List rendering remains stable while scrolling and loading additional rows.
 3. Frontend check/build pass.
 
