@@ -4,6 +4,7 @@
 - Goal:
   - Replace the current generic GATT probe with Flipper-specific BLE serial transport behavior in `intent-ui`.
   - Verify control readiness using Flipper serial service characteristics, flow-control notifications, and protobuf-delimited RPC exchange.
+  - Harden connection establishment for real devices by adapting TX/RX role mapping from characteristic capabilities and by surfacing explicit ping diagnostics during verification.
   - Keep user-visible verification and probe outcomes in the integration dialog flow.
 - Non-goals:
   - Full implementation of every Flipper RPC domain and command.
@@ -21,7 +22,8 @@
 1. Flipper verify step checks:
 - Serial service + required characteristics are present.
 - TX indication and flow-control notifications can be subscribed.
-- Ping RPC round-trip succeeds over protobuf-delimited framing.
+- Write path is selected from characteristics that are actually writable on the connected firmware/profile (including swapped TX/RX role mapping).
+- Ping RPC round-trip is attempted over protobuf-delimited framing, and verification reports an explicit warning when ping cannot be completed.
 2. Flipper probe step returns:
 - BLE identity (`deviceId`, `deviceName`).
 - Serial transport diagnostics (`flowBudget`, characteristic/service list).

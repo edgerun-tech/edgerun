@@ -163,7 +163,9 @@ describe('intent ui flipper web bluetooth integration', () => {
         const txListeners = new Set()
         const emitTx = (bytes) => {
           const event = { target: { value: asDataView(bytes) } }
-          txListeners.forEach((listener) => listener(event))
+          txListeners.forEach((listener) => {
+            listener(event)
+          })
         }
         const txCharacteristic = {
           properties: { read: true, indicate: true },
@@ -279,9 +281,9 @@ describe('intent ui flipper web bluetooth integration', () => {
 
     cy.get('[data-testid="integration-step-2"]').click({ force: true })
     cy.get('[data-testid="provider-verify-flipper"]').click({ force: true })
-    cy.get('[data-testid="integration-stepper-success"]').should('be.visible')
+    cy.get('[data-testid="integration-stepper-success"]', { timeout: 12000 }).should('be.visible')
     cy.get('[data-testid="flipper-run-probe"]').click({ force: true })
-    cy.get('[data-testid="flipper-probe-summary"]', { timeout: 12000 }).should('contain.text', 'Probe ok')
+    cy.get('[data-testid="flipper-probe-summary"]', { timeout: 25000 }).should('contain.text', 'Probe ok')
     cy.get('[data-testid="flipper-probe-details"]').should('contain.text', 'Model: Flipper Zero')
     cy.get('[data-testid="flipper-create-workflow"]').click({ force: true })
 

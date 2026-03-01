@@ -13,6 +13,8 @@ const MAX_CHAR_WRITE = 243;
 const DEFAULT_FLOW_BUDGET = MAX_CHAR_WRITE;
 const FLOW_WAIT_MS = 120;
 const RPC_TIMEOUT_MS = 8000;
+const VERIFY_PING_TIMEOUT_MS = 4500;
+const PROBE_PING_TIMEOUT_MS = 5000;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
@@ -288,12 +290,77 @@ async function readPrimaryServiceUuids(server) {
 function readCharacteristicPropertySummary(characteristic) {
   const p = characteristic?.properties || {};
   return {
+    uuid: normalizeUuid(characteristic?.uuid),
     read: Boolean(p.read),
     write: Boolean(p.write),
     writeWithoutResponse: Boolean(p.writeWithoutResponse),
     notify: Boolean(p.notify),
     indicate: Boolean(p.indicate)
   };
+}
+
+function characteristicSupportsNotify(characteristic) {
+  const p = characteristic?.properties || {};
+  return Boolean(p.notify || p.indicate || typeof characteristic?.startNotifications === "function");
+}
+
+function characteristicSupportsWrite(characteristic) {
+  const p = characteristic?.properties || {};
+  return Boolean(
+    p.write
+    || p.writeWithoutResponse
+    || typeof characteristic?.writeValueWithoutResponse === "function"
+    || typeof characteristic?.writeValue === "function"
+  );
+}
+
+function resolveSerialDataPath(txCharacteristic, rxCharacteristic) {
+  const txNotify = characteristicSupportsNotify(txCharacteristic);
+  const txWrite = characteristicSupportsWrite(txCharacteristic);
+  const rxNotify = characteristicSupportsNotify(rxCharacteristic);
+  const rxWrite = characteristicSupportsWrite(rxCharacteristic);
+
+  const notifyChar = txNotify ? txCharacteristic : (rxNotify ? rxCharacteristic : null);
+  const writeChar = rxWrite ? rxCharacteristic : (txWrite ? txCharacteristic : null);
+
+  if (!notifyChar) {
+    throw new Error("Flipper serial transport is missing a notify/indicate characteristic.");
+  }
+  if (!writeChar) {
+    throw new Error("Flipper serial transport is missing a writable characteristic.");
+  }
+
+  return {
+    notifyChar,
+    writeChar,
+    txRole: notifyChar === txCharacteristic ? "notify" : (writeChar === txCharacteristic ? "write" : "unused"),
+    rxRole: notifyChar === rxCharacteristic ? "notify" : (writeChar === rxCharacteristic ? "write" : "unused"),
+    declared: {
+      tx: readCharacteristicPropertySummary(txCharacteristic),
+      rx: readCharacteristicPropertySummary(rxCharacteristic)
+    }
+  };
+}
+
+async function pingWithRetries(session, {
+  attempts = 2,
+  timeoutMs = VERIFY_PING_TIMEOUT_MS,
+  payloadPrefix = "edgerun-flipper-ping"
+} = {}) {
+  let lastError = null;
+  const count = Math.max(1, Math.floor(attempts));
+  for (let index = 0; index < count; index += 1) {
+    const payload = `${payloadPrefix}-${Date.now()}-${index + 1}`;
+    try {
+      return await withTimeout(session.ping(payload), timeoutMs, "Flipper RPC ping timed out.");
+    } catch (error) {
+      lastError = error;
+      if (index < count - 1) {
+        await sleep(120);
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Flipper RPC ping failed.");
 }
 
 class FlipperSerialSession {
@@ -313,17 +380,31 @@ class FlipperSerialSession {
 
     this.onTxNotification = this.onTxNotification.bind(this);
     this.onFlowNotification = this.onFlowNotification.bind(this);
+    this.onRpcStatusNotification = this.onRpcStatusNotification.bind(this);
   }
 
   async start() {
-    if (typeof this.txChar.startNotifications === "function") {
-      await this.txChar.startNotifications();
-      this.txChar.addEventListener("characteristicvaluechanged", this.onTxNotification);
+    if (!characteristicSupportsNotify(this.txChar) || typeof this.txChar.startNotifications !== "function") {
+      throw new Error("Flipper serial notify characteristic cannot subscribe to notifications.");
     }
-    if (typeof this.flowChar.startNotifications === "function") {
-      await this.flowChar.startNotifications();
-      this.flowChar.addEventListener("characteristicvaluechanged", this.onFlowNotification);
+    await this.txChar.startNotifications();
+    this.txChar.addEventListener("characteristicvaluechanged", this.onTxNotification);
+
+    if (!characteristicSupportsNotify(this.flowChar) || typeof this.flowChar.startNotifications !== "function") {
+      throw new Error("Flipper flow-control characteristic cannot subscribe to notifications.");
     }
+    await this.flowChar.startNotifications();
+    this.flowChar.addEventListener("characteristicvaluechanged", this.onFlowNotification);
+
+    if (typeof this.rpcStatusChar?.startNotifications === "function") {
+      try {
+        await this.rpcStatusChar.startNotifications();
+        this.rpcStatusChar.addEventListener("characteristicvaluechanged", this.onRpcStatusNotification);
+      } catch {
+        // best effort
+      }
+    }
+
     if (typeof this.flowChar.readValue === "function") {
       try {
         const value = await this.flowChar.readValue();
@@ -332,12 +413,15 @@ class FlipperSerialSession {
         this.flowBudget = DEFAULT_FLOW_BUDGET;
       }
     }
+
+    await this.enableRpcStatus();
   }
 
   async stop() {
     try {
       this.txChar.removeEventListener("characteristicvaluechanged", this.onTxNotification);
       this.flowChar.removeEventListener("characteristicvaluechanged", this.onFlowNotification);
+      this.rpcStatusChar?.removeEventListener("characteristicvaluechanged", this.onRpcStatusNotification);
     } catch {
       // best effort
     }
@@ -351,6 +435,13 @@ class FlipperSerialSession {
     try {
       if (typeof this.flowChar.stopNotifications === "function") {
         await this.flowChar.stopNotifications();
+      }
+    } catch {
+      // best effort
+    }
+    try {
+      if (typeof this.rpcStatusChar?.stopNotifications === "function") {
+        await this.rpcStatusChar.stopNotifications();
       }
     } catch {
       // best effort
@@ -384,6 +475,24 @@ class FlipperSerialSession {
       } catch {
         // Ignore malformed frame and continue stream.
       }
+    }
+  }
+
+  onRpcStatusNotification(_event) {
+    // Some firmware versions emit status updates here; ping probing remains source of truth.
+  }
+
+  async enableRpcStatus() {
+    if (!this.rpcStatusChar) return;
+    const payload = Uint8Array.from([1]);
+    try {
+      if (typeof this.rpcStatusChar.writeValueWithoutResponse === "function") {
+        await this.rpcStatusChar.writeValueWithoutResponse(payload);
+      } else if (typeof this.rpcStatusChar.writeValue === "function") {
+        await this.rpcStatusChar.writeValue(payload);
+      }
+    } catch {
+      // best effort; not all firmware paths require explicit status toggling.
     }
   }
 
@@ -485,9 +594,7 @@ async function openFlipperSerialSession(details = {}) {
   let server = null;
   let serialService = null;
   try {
-    const resolved = await flipperBluetooth.getService(device, SERIAL_SERVICE_UUID, {
-      optionalServices: [SERIAL_SERVICE_UUID]
-    });
+    const resolved = await flipperBluetooth.getService(device, SERIAL_SERVICE_UUID);
     device = resolved.device;
     server = resolved.server;
     serialService = resolved.service;
@@ -532,12 +639,14 @@ async function openFlipperSerialSession(details = {}) {
     throw new Error("Flipper serial service is missing required characteristics.");
   }
 
+  const dataPath = resolveSerialDataPath(txChar, rxChar);
+
   const session = new FlipperSerialSession({
     device,
     server,
     serialService,
-    txChar,
-    rxChar,
+    txChar: dataPath.notifyChar,
+    rxChar: dataPath.writeChar,
     flowChar,
     rpcStatusChar
   });
@@ -550,6 +659,10 @@ async function openFlipperSerialSession(details = {}) {
     characteristics: {
       tx: readCharacteristicPropertySummary(txChar),
       rx: readCharacteristicPropertySummary(rxChar),
+      txRole: dataPath.txRole,
+      rxRole: dataPath.rxRole,
+      notify: readCharacteristicPropertySummary(dataPath.notifyChar),
+      write: readCharacteristicPropertySummary(dataPath.writeChar),
       flow: readCharacteristicPropertySummary(flowChar),
       rpcStatus: readCharacteristicPropertySummary(rpcStatusChar)
     }
@@ -607,7 +720,11 @@ async function verifyFlipperBluetooth(details = {}) {
     let ping = null;
     let warning = "";
     try {
-      ping = await withTimeout(session.ping(), 1500, "Flipper RPC ping timed out during verify.");
+      ping = await pingWithRetries(session, {
+        attempts: 2,
+        timeoutMs: VERIFY_PING_TIMEOUT_MS,
+        payloadPrefix: "edgerun-flipper-verify"
+      });
     } catch (error) {
       warning = String(error?.message || "").trim() || "Flipper RPC ping did not complete during verify.";
     }
@@ -646,11 +763,11 @@ async function probeFlipper(details = {}) {
     let deviceInfo = {};
 
     try {
-      ping = await withTimeout(
-        session.ping(`edgerun-probe-${Date.now()}`),
-        2000,
-        "Flipper RPC ping timed out during probe."
-      );
+      ping = await pingWithRetries(session, {
+        attempts: 2,
+        timeoutMs: PROBE_PING_TIMEOUT_MS,
+        payloadPrefix: "edgerun-probe"
+      });
     } catch (error) {
       diagnostics.push(error instanceof Error ? `ping rpc failed: ${error.message}` : "ping rpc failed");
     }
