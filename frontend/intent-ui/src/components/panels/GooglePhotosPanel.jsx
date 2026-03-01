@@ -1,6 +1,7 @@
-import { createSignal, For, Show, onMount } from "solid-js";
+import { createSignal, Show, onMount } from "solid-js";
 import { FiExternalLink, FiRefreshCw } from "solid-icons/fi";
 import { integrationStore } from "../../stores/integrations";
+import VirtualAnimatedGrid from "../common/VirtualAnimatedGrid";
 
 const GOOGLE_PHOTOS_PAGE_SIZE = 40;
 
@@ -18,6 +19,7 @@ function imageUrlFor(item) {
 }
 
 export default function GooglePhotosPanel() {
+  let photosListRef;
   const [items, setItems] = createSignal([]);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
@@ -89,12 +91,19 @@ export default function GooglePhotosPanel() {
         </div>
       </Show>
 
-      <div class="min-h-0 flex-1 overflow-auto p-3">
+      <div class="min-h-0 flex-1 overflow-auto p-3" ref={photosListRef}>
         <Show when={!loading()} fallback={<p class="text-[11px] text-neutral-400">Loading photos...</p>}>
           <Show when={items().length > 0} fallback={<p class="text-[11px] text-neutral-500">No photos to display.</p>}>
-            <div class="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4" data-testid="google-photos-grid">
-              <For each={items()}>
-                {(item) => (
+            <div data-testid="google-photos-grid">
+              <VirtualAnimatedGrid
+                items={items}
+                estimateRowHeight={190}
+                overscan={2}
+                minColumnWidth={180}
+                gap={8}
+                containerRef={() => photosListRef}
+                animateRows
+                renderItem={(item) => (
                   <article class="overflow-hidden rounded border border-neutral-800 bg-neutral-900/60" data-testid="google-photos-item">
                     <img
                       src={imageUrlFor(item)}
@@ -109,7 +118,7 @@ export default function GooglePhotosPanel() {
                     </div>
                   </article>
                 )}
-              </For>
+              />
             </div>
           </Show>
         </Show>

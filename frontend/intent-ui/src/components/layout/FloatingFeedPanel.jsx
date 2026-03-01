@@ -1,4 +1,5 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 const DEFAULT_MIN_WIDTH = 260;
 const DEFAULT_MIN_HEIGHT = 150;
@@ -41,6 +42,7 @@ function FloatingFeedPanel(props) {
   let resizeStartMouseY = 0;
   let resizeStartWidth = 0;
   let resizeStartHeight = 0;
+  let scrollAreaRef;
 
   const persistLayout = (next) => {
     try {
@@ -155,6 +157,7 @@ function FloatingFeedPanel(props) {
         </div>
         <div
           class="h-full overflow-y-auto px-2 py-2 text-white"
+          ref={scrollAreaRef}
           style={{
             "mask-image": "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 32%, rgba(0,0,0,0) 100%)",
             "-webkit-mask-image": "linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 32%, rgba(0,0,0,0) 100%)"
@@ -163,13 +166,18 @@ function FloatingFeedPanel(props) {
         >
           <Show when={entries().length > 0} fallback={<p class="text-[11px] text-white">{props.emptyLabel || "No events yet."}</p>}>
             <div class="space-y-1">
-              <For each={entries()}>
-                {(entry) => (
+              <VirtualAnimatedList
+                items={entries}
+                estimateSize={24}
+                overscan={5}
+                containerRef={() => scrollAreaRef}
+                animateRows
+                renderItem={(entry) => (
                   <div class="text-white">
                     {props.renderEntry ? props.renderEntry(entry) : <p class="truncate text-[10px] text-white">{String(entry)}</p>}
                   </div>
                 )}
-              </For>
+              />
             </div>
           </Show>
         </div>

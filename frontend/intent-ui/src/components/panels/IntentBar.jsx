@@ -52,6 +52,7 @@ import {
 } from "../../lib/stores/results";
 import { ResultRenderer } from "../results/ResultRenderer";
 import VirtualAnimatedList from "../common/VirtualAnimatedList";
+import VirtualAnimatedResultList from "../common/VirtualAnimatedResultList";
 import {
   openAssistantResponse,
   openWorkflowDemo,
@@ -2765,16 +2766,12 @@ function IntentBar() {
               {
     /* Pinned Results First */
   }
-              <VirtualAnimatedList
+              <VirtualAnimatedResultList
                 items={pinnedResults}
                 estimateSize={120}
                 overscan={2}
-                renderItem={(result, index) => <Motion.div
-    initial={{ opacity: 0, y: 10, scale: 0.985 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.26, delay: index * 0.14, easing: [0.22, 1, 0.36, 1] }}
-    class="relative group"
-  >
+                renderItem={(result) => (
+                  <>
                     <ResultRenderer
     response={result.response}
     onAction={(intent, action) => {
@@ -2806,22 +2803,20 @@ function IntentBar() {
                         <TbOutlineTrash size={14} />
                       </button>
                     </div>
-                  </Motion.div>}
+                  </>
+                  )}
               />
 
               {
     /* Regular Results */
   }
-              <VirtualAnimatedList
+              <VirtualAnimatedResultList
                 items={() => results().filter((r) => !r.isPinned)}
                 estimateSize={120}
                 overscan={2}
-                renderItem={(result, index) => <Motion.div
-    initial={{ opacity: 0, y: 10, scale: 0.985 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    transition={{ duration: 0.26, delay: pinnedResults().length * 0.14 + index * 0.14, easing: [0.22, 1, 0.36, 1] }}
-    class="relative group"
-  >
+                pinnedOffset={pinnedResults().length}
+                renderItem={(result) => (
+                  <>
                     <ResultRenderer
     response={result.response}
     onAction={(intent, action) => {
@@ -2853,7 +2848,8 @@ function IntentBar() {
                         <TbOutlineTrash size={14} />
                       </button>
                     </div>
-                  </Motion.div>}
+                  </>
+                  )}
               />
 
               {
