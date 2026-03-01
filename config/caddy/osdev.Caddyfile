@@ -11,7 +11,8 @@
 
   @assistant path /api/assistant /api/assistant/*
   handle @assistant {
-    reverse_proxy 127.0.0.1:7788
+    rewrite * /v1/local/assistant
+    reverse_proxy 127.0.0.1:7777
   }
 
   handle /api/* {
