@@ -109,7 +109,7 @@ const OPENCODE_CLI_CONTAINER_NAME: &str = "edgerun-opencode-cli";
 const OPENCODE_CONFIG_PATH: &str = "/home/ken/.config/opencode/opencode.jsonb";
 const OPENCODE_MCP_SCHEMA_URL: &str = "https://opencode.ai/config.json";
 const OPENCODE_MANAGED_MCP_PREFIX: &str = "edgerun-";
-const MCP_IMAGE_GITHUB_DEFAULT: &str = "ghcr.io/modelcontextprotocol/server-github:latest";
+const MCP_IMAGE_GITHUB_DEFAULT: &str = "ghcr.io/github/github-mcp-server:latest";
 const MCP_IMAGE_GOOGLE_MESSAGES_DEFAULT: &str = "dock.mau.dev/mautrix/gmessages:latest";
 const MCP_IMAGE_GVOICE_DEFAULT: &str = "dock.mau.dev/mautrix/gvoice:latest";
 const MCP_IMAGE_GOOGLECHAT_DEFAULT: &str = "dock.mau.dev/mautrix/googlechat:latest";
@@ -1547,6 +1547,26 @@ fn read_opencode_config_text() -> Result<String> {
     ))
 }
 
+fn opencode_cli_container_available() -> bool {
+    let output = Command::new("docker")
+        .args(["inspect", OPENCODE_CLI_CONTAINER_NAME])
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    output.status.success()
+}
+
+fn require_opencode_cli_container() -> Result<()> {
+    if opencode_cli_container_available() {
+        return Ok(());
+    }
+    Err(anyhow!(
+        "OpenCode runtime is unavailable: container {} is not running",
+        OPENCODE_CLI_CONTAINER_NAME
+    ))
+}
+
 fn write_opencode_config_text(config: &str) -> Result<()> {
     let mkdir_output = Command::new("docker")
         .args([
@@ -1666,6 +1686,13 @@ fn apply_managed_opencode_mcp_entries(
 }
 
 fn sync_opencode_mcp_config() -> Result<()> {
+    if !opencode_cli_container_available() {
+        eprintln!(
+            "opencode MCP sync skipped: container {} is not running",
+            OPENCODE_CLI_CONTAINER_NAME
+        );
+        return Ok(());
+    }
     let running_integrations = list_running_mcp_integrations()?;
     let existing = read_opencode_config_text()?;
     let updated = apply_managed_opencode_mcp_entries(&existing, &running_integrations)?;
@@ -2977,6 +3004,9 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         .to_ascii_lowercase();
     if provider != "opencode" {
         return local_json_error(AxumStatusCode::BAD_REQUEST, "unsupported provider");
+    }
+    if let Err(err) = require_opencode_cli_container() {
+        return local_json_error(AxumStatusCode::SERVICE_UNAVAILABLE, &err.to_string());
     }
 
     let requested_session_id = body

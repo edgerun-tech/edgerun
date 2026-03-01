@@ -17,8 +17,7 @@
 
   @google path /api/google /api/google/*
   handle @google {
-    uri strip_prefix /api/google
-    rewrite * /v1/local/google{uri}
+    uri replace /api/google /v1/local/google
     reverse_proxy 127.0.0.1:7777
   }
 

@@ -11,6 +11,7 @@ pub enum ExecutorKind {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ExecutionRequest {
     pub run_id: String,
     pub step_id: String,
@@ -19,6 +20,7 @@ pub struct ExecutionRequest {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ExecutionResult {
     pub ok: bool,
     pub message: String,
@@ -27,6 +29,7 @@ pub struct ExecutionResult {
 pub trait ExecutorPlugin: Send + Sync {
     fn kind(&self) -> ExecutorKind;
     fn name(&self) -> &'static str;
+    #[allow(dead_code)]
     fn execute(&self, req: &ExecutionRequest) -> ExecutionResult;
 }
 
@@ -45,10 +48,12 @@ impl ExecutorRegistry {
         self.plugins.insert(plugin.kind(), plugin);
     }
 
+    #[allow(dead_code)]
     pub fn contains(&self, kind: &ExecutorKind) -> bool {
         self.plugins.contains_key(kind)
     }
 
+    #[allow(dead_code)]
     pub fn execute(&self, kind: &ExecutorKind, req: &ExecutionRequest) -> Option<ExecutionResult> {
         self.plugins.get(kind).map(|plugin| plugin.execute(req))
     }

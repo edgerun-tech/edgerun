@@ -170,7 +170,6 @@ services:
     container_name: edgerun-opencode-cli
     image: node:22-bookworm
     restart: unless-stopped
-    profiles: ["tunnel"]
     network_mode: host
     working_dir: /workspace/edgerun
     environment:

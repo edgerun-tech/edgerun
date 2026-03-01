@@ -120,7 +120,7 @@ POST http://127.0.0.1:7777/v1/local/google/refresh
 `/api/google/*` on the osdev Caddy listener rewrites to these local bridge routes.
 
 Default MCP image mappings in node-manager include:
-- `github` -> `ghcr.io/modelcontextprotocol/server-github:latest`
+- `github` -> `ghcr.io/github/github-mcp-server:latest`
 - `google_messages` -> `dock.mau.dev/mautrix/gmessages:latest`
 - `gvoice` -> `dock.mau.dev/mautrix/gvoice:latest`
 - `googlechat` -> `dock.mau.dev/mautrix/googlechat:latest`
