@@ -438,6 +438,19 @@ function useWorkflowSession(session) {
   }));
 }
 
+function switchWorkflowSession(selector) {
+  const value = String(selector || "").trim();
+  if (!value) return false;
+  const sessions = workflowUi().sessionHistory || [];
+  const byPrefix = sessions.find((session) => String(session?.sessionId || "").startsWith(value));
+  const parsed = Number.parseInt(value, 10);
+  const byIndex = Number.isFinite(parsed) && parsed > 0 ? sessions[Math.max(0, parsed - 1)] : null;
+  const target = byPrefix || byIndex || null;
+  if (!target?.sessionId) return false;
+  useWorkflowSession(target);
+  return true;
+}
+
 function startNewCodexSession() {
   setWorkflowUi((prev) => ({
     ...prev,
@@ -624,8 +637,10 @@ async function openCodexResponse(queryText, options = {}) {
         : "";
       const finalText = `${responseText || "No assistant response."}${actionLines}`;
       setWorkflowUi((prev) => {
-        const nextSessionId = typeof payload.sessionId === "string" ? payload.sessionId : prev.sessionId;
-        const nextThreadId = typeof payload.threadId === "string" ? payload.threadId : prev.threadId;
+        const payloadSessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
+        const payloadThreadId = typeof payload.threadId === "string" ? payload.threadId.trim() : "";
+        const nextSessionId = payloadSessionId || payloadThreadId || prev.sessionId;
+        const nextThreadId = payloadThreadId || payloadSessionId || prev.threadId;
         const nextHistory = nextSessionId
           ? upsertSessionHistory(prev.sessionHistory, buildSessionHistoryEntry(nextSessionId, nextThreadId, provider, prompt))
           : prev.sessionHistory;
@@ -689,10 +704,15 @@ async function openCodexResponse(queryText, options = {}) {
       if (!event || typeof event !== "object") return;
       if (event.type === "meta") {
         setWorkflowUi((prev) => ({
+          // backend may return only one of sessionId/threadId; normalize both for resumability
           ...prev,
           provider: event.provider || prev.provider,
-          sessionId: typeof event.sessionId === "string" ? event.sessionId : prev.sessionId,
-          threadId: typeof event.threadId === "string" ? event.threadId : prev.threadId
+          sessionId: (typeof event.sessionId === "string" ? event.sessionId.trim() : "")
+            || (typeof event.threadId === "string" ? event.threadId.trim() : "")
+            || prev.sessionId,
+          threadId: (typeof event.threadId === "string" ? event.threadId.trim() : "")
+            || (typeof event.sessionId === "string" ? event.sessionId.trim() : "")
+            || prev.threadId
         }));
         return;
       }
@@ -767,8 +787,10 @@ async function openCodexResponse(queryText, options = {}) {
         : getLatestAssistantText(prev.messages);
       const finalMessage = streamedMessage || (finalEvent?.error ? "" : "No assistant response.");
       const finalText = `${finalMessage}${actionLines}`;
-      const nextSessionId = typeof finalEvent?.sessionId === "string" ? finalEvent.sessionId : prev.sessionId;
-      const nextThreadId = typeof finalEvent?.threadId === "string" ? finalEvent.threadId : prev.threadId;
+      const finalSessionId = typeof finalEvent?.sessionId === "string" ? finalEvent.sessionId.trim() : "";
+      const finalThreadId = typeof finalEvent?.threadId === "string" ? finalEvent.threadId.trim() : "";
+      const nextSessionId = finalSessionId || finalThreadId || prev.sessionId;
+      const nextThreadId = finalThreadId || finalSessionId || prev.threadId;
       const finalProvider = finalEvent?.provider || provider;
       const doneDetail = finalEvent?.error ? finalEvent.error : "Response ready.";
       const doneLabel = finalEvent?.error ? "error" : "done";
@@ -853,6 +875,7 @@ export {
   openWorkflowIntegrations,
   openWorkflowFlipper,
   startNewCodexSession,
+  switchWorkflowSession,
   setAssistantProvider,
   setWorkflowCode,
   toggleWorkflowDrawer,

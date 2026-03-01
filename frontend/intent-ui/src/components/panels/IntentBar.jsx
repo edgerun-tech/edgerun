@@ -23,7 +23,6 @@ import {
   TbOutlineHistory,
   TbOutlineSparkles,
   TbOutlineKey,
-  TbOutlineApps
 } from "solid-icons/tb";
 import { FiSettings, FiGithub, FiGlobe } from "solid-icons/fi";
 import { mcpManager } from "../../lib/mcp/client";
@@ -2624,18 +2623,6 @@ function IntentBar() {
     title="Credentials"
   >
             <TbOutlineKey size={14} />
-          </Motion.button>
-
-          <Motion.button
-    type="button"
-    onClick={() => openWindow("widgets")}
-    hover={{ scale: 1.05 }}
-    press={{ scale: 0.95 }}
-    class={`flex items-center justify-center px-2.5 py-1.5 text-xs text-neutral-400 ${accentHoverButtonClass} rounded-lg transition-colors whitespace-nowrap cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-neutral-900`}
-    aria-label="Open widgets"
-    title="Widgets"
-  >
-            <TbOutlineApps size={14} />
           </Motion.button>
 
           <Motion.button

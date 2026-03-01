@@ -21,7 +21,6 @@ const CalendarPanel = lazy(() => import("./CalendarPanel"));
 const CloudflarePanel = lazy(() => import("./CloudflarePanel"));
 const IntegrationsPanel = lazy(() => import("./IntegrationsPanel"));
 const SettingsPanel = lazy(() => import("../panels/SettingsPanel"));
-const WidgetsPanel = lazy(() => import("../panels/WidgetsPanel"));
 const OnvifPanel = lazy(() => import("../panels/OnvifPanel"));
 const CloudPanel = lazy(() => import("../panels/CloudPanel"));
 const CredentialsPanel = lazy(() => import("../panels/CredentialsPanel"));
@@ -142,7 +141,7 @@ function getWindowContent(id) {
         </Suspense>;
     case "widgets":
       return <Suspense fallback={<LoadingFallback />}>
-          <WidgetsPanel />
+          <SettingsPanel />
         </Suspense>;
     case "onvif":
       return <Suspense fallback={<LoadingFallback />}>

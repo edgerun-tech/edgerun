@@ -4,6 +4,7 @@ import {
   closeWorkflowDemo,
   hydrateWorkflowUiFromStorage,
   openCodexResponse,
+  switchWorkflowSession,
   workflowUi
 } from "../../stores/workflow-ui";
 import {
@@ -53,6 +54,7 @@ function setupIntentDebugApi() {
   window.__intentDebug = window.__intentDebug || {};
   window.__intentDebug.openWindow = (id) => openWindow(id);
   window.__intentDebug.askAssistant = (prompt, options = {}) => openCodexResponse(prompt, options);
+  window.__intentDebug.switchSession = (selector) => switchWorkflowSession(selector);
   window.__intentDebug.getWorkflowUi = () => workflowUi();
   window.__intentDebug.getEventBusRuntime = () => eventBusRuntime();
   window.__intentDebug.getEventBusTimeline = () => eventTimeline();
@@ -63,6 +65,7 @@ function cleanupIntentDebugApi() {
   if (typeof window === "undefined" || !window.__intentDebug?.openWindow) return;
   delete window.__intentDebug.openWindow;
   delete window.__intentDebug.askAssistant;
+  delete window.__intentDebug.switchSession;
   delete window.__intentDebug.getWorkflowUi;
   delete window.__intentDebug.getEventBusRuntime;
   delete window.__intentDebug.getEventBusTimeline;

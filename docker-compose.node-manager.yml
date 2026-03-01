@@ -166,6 +166,8 @@ services:
         exec tail -f /dev/null
     volumes:
       - /home/ken/src/edgerun:/workspace/edgerun
+      - /home/ken/.codex:/workspace/edgerun/.codex
+      - /home/ken/.codex:/home/ken/.codex
       - /usr/lib/node_modules/@openai/codex:/usr/lib/node_modules/@openai/codex:ro
 
   caddy:

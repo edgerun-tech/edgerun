@@ -552,6 +552,14 @@ struct LocalAssistantStatusEvent {
     detail: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct CodexExecEvent {
+    #[serde(rename = "type")]
+    event_type: String,
+    #[serde(default)]
+    thread_id: Option<String>,
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(err) = run_main().await {
@@ -2347,23 +2355,45 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         return local_json_error(AxumStatusCode::BAD_REQUEST, "unsupported provider");
     }
 
+    let requested_session_id = body
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let requested_thread_id = body
+        .thread_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let resume_id = requested_thread_id
+        .clone()
+        .or_else(|| requested_session_id.clone());
+
     let output_file = format!("/tmp/edgerun-codex-last-{}.txt", now_unix_ms());
-    let exec_output = Command::new("timeout")
-        .args([
-            "30s",
-            "docker",
-            "exec",
-            "edgerun-codex-cli",
-            "codex",
-            "exec",
-            "--skip-git-repo-check",
-            "-C",
-            "/workspace/edgerun",
-            "--output-last-message",
-            &output_file,
-            &prompt,
-        ])
-        .output();
+    let mut exec_args = vec![
+        "30s".to_string(),
+        "docker".to_string(),
+        "exec".to_string(),
+        "edgerun-codex-cli".to_string(),
+        "codex".to_string(),
+        "-C".to_string(),
+        "/workspace/edgerun".to_string(),
+        "exec".to_string(),
+    ];
+    if let Some(resume) = resume_id.as_deref() {
+        exec_args.push("resume".to_string());
+        exec_args.push(resume.to_string());
+    }
+    exec_args.extend([
+        "--json".to_string(),
+        "--skip-git-repo-check".to_string(),
+        "--output-last-message".to_string(),
+        output_file.clone(),
+        prompt.clone(),
+    ]);
+    let exec_output = Command::new("timeout").args(exec_args).output();
 
     let exec_output = match exec_output {
         Ok(value) => value,
@@ -2380,6 +2410,18 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
             ),
         );
     }
+
+    let stdout = String::from_utf8_lossy(&exec_output.stdout).to_string();
+    let discovered_thread_id = parse_codex_exec_thread_id(&stdout);
+    let resolved_thread_id = discovered_thread_id
+        .clone()
+        .or_else(|| resume_id.clone())
+        .unwrap_or_default();
+    let resolved_session_id = if resolved_thread_id.is_empty() {
+        requested_session_id.unwrap_or_default()
+    } else {
+        resolved_thread_id.clone()
+    };
 
     let read_output = Command::new("docker")
         .args(["exec", "edgerun-codex-cli", "cat", &output_file])
@@ -2417,8 +2459,8 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
             label: "done".to_string(),
             detail: "Response ready.".to_string(),
         }],
-        session_id: body.session_id.unwrap_or_default(),
-        thread_id: body.thread_id.unwrap_or_default(),
+        session_id: resolved_session_id,
+        thread_id: resolved_thread_id,
     };
     with_local_cors_headers(
         (
@@ -2432,6 +2474,28 @@ async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Resp
         )
             .into_response(),
     )
+}
+
+fn parse_codex_exec_thread_id(output: &str) -> Option<String> {
+    for line in output.lines() {
+        let raw = line.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let event: CodexExecEvent = match sonic_rs::from_str(raw) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if event.event_type != "thread.started" {
+            continue;
+        }
+        let thread_id = event.thread_id.unwrap_or_default();
+        let normalized = thread_id.trim();
+        if !normalized.is_empty() {
+            return Some(normalized.to_string());
+        }
+    }
+    None
 }
 
 async fn local_eventbus_session(socket: WebSocket, state: Arc<LocalBridgeState>) {

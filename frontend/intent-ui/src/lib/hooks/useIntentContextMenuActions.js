@@ -75,7 +75,7 @@ export function useIntentContextMenuActions() {
     { label: "Open Terminal", icon: TbOutlineTerminal, run: () => openWindow("terminal") },
     { label: "Open Credentials", icon: TbOutlineKey, run: () => openWindow("credentials") },
     { label: "Open ONVIF", icon: TbOutlineDeviceDesktop, run: () => openWindow("onvif") },
-    { label: "Open Widgets", icon: TbOutlineApps, run: () => openWindow("widgets") },
+    { label: "Open Settings", icon: TbOutlineApps, run: () => openWindow("settings") },
     {
       label: "New Codex Session",
       icon: TbOutlineHistory,
