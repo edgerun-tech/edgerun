@@ -27,9 +27,10 @@ Introduce a reusable list primitive with virtual scrolling and optional row anim
   - `CloudflarePanel` inventory lists (stack layout, row animation enabled)
   - `CloudPanel` provider resource rows (stack layout, row animation enabled)
   - `LauncherGuidePanel` startup/guide task lists (stack layout, row animation enabled)
+  - `IntegrationsPanel` known BLE device selectors (stack layout, row animation enabled)
 
 ## Acceptance Criteria
-1. Gmail, conversation thread, Cloudflare inventory, Cloud provider resource rows, and launcher task lists use the same reusable list primitive.
+1. Gmail, conversation thread, Cloudflare inventory, Cloud provider resource rows, launcher task lists, and integration device selectors use the same reusable list primitive.
 2. List rendering remains stable while scrolling and loading additional rows.
 3. Frontend check/build pass.
 

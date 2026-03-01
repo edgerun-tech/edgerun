@@ -35,6 +35,7 @@ import {
 import { integrationStore, integrationVerification } from "../../stores/integrations";
 import { openWorkflowFlipper, setAssistantProvider, workflowUi } from "../../stores/workflow-ui";
 import { canonicalBridgeId } from "../../lib/integrations/official-bridges";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 const FLIPPER_SERIAL_SERVICE_UUID = "8fe5b3d5-2e7f-4a98-2a48-7acc60fe0000";
 const DALY_NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -137,6 +138,8 @@ function IntegrationsPanel(props) {
   const [runtimeState, setRuntimeState] = createSignal({ state: "unknown", message: "" });
   const [runtimePreflight, setRuntimePreflight] = createSignal({ ok: true, imageResolved: true, image: "", tokenEnv: "", message: "" });
   let testLoaderTimer = null;
+  let flipperKnownListRef;
+  let dalyKnownListRef;
 
   const assistantProvider = createMemo(() => workflowUi().provider || "opencode");
 
@@ -1054,9 +1057,14 @@ function IntegrationsPanel(props) {
                           </button>
                         </div>
                         <Show when={flipperKnownDevices().length > 0}>
-                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5">
-                            <For each={flipperKnownDevices()}>
-                              {(device) => (
+                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5" ref={flipperKnownListRef}>
+                            <VirtualAnimatedList
+                              items={flipperKnownDevices}
+                              estimateSize={28}
+                              overscan={4}
+                              containerRef={() => flipperKnownListRef}
+                              animateRows
+                              renderItem={(device) => (
                                 <button
                                   type="button"
                                   class="mb-1 flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
@@ -1067,7 +1075,7 @@ function IntegrationsPanel(props) {
                                   <span class="ml-2 truncate text-neutral-500">{device.id.slice(0, 8)}...</span>
                                 </button>
                               )}
-                            </For>
+                            />
                           </div>
                         </Show>
                       </div>
@@ -1107,9 +1115,14 @@ function IntegrationsPanel(props) {
                           </button>
                         </div>
                         <Show when={dalyKnownDevices().length > 0}>
-                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5">
-                            <For each={dalyKnownDevices()}>
-                              {(device) => (
+                          <div class="max-h-20 overflow-auto rounded border border-neutral-800 bg-neutral-950/50 p-1.5" ref={dalyKnownListRef}>
+                            <VirtualAnimatedList
+                              items={dalyKnownDevices}
+                              estimateSize={28}
+                              overscan={4}
+                              containerRef={() => dalyKnownListRef}
+                              animateRows
+                              renderItem={(device) => (
                                 <button
                                   type="button"
                                   class="mb-1 flex w-full items-center justify-between rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800"
@@ -1120,7 +1133,7 @@ function IntegrationsPanel(props) {
                                   <span class="ml-2 truncate text-neutral-500">{device.id.slice(0, 8)}...</span>
                                 </button>
                               )}
-                            </For>
+                            />
                           </div>
                         </Show>
                       </div>
