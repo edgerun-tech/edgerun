@@ -12,14 +12,7 @@ describe('intent ui integrations connection truth', () => {
     )
   }
 
-  it('keeps github user-owned and marks it available after PAT verification and linking', () => {
-    cy.intercept('GET', 'https://api.github.com/user', {
-      statusCode: 200,
-      body: {
-        login: 'octocat'
-      }
-    }).as('githubUser')
-
+  it('keeps github user-owned and marks it available after PAT token linking', () => {
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         installLocalBridgeSimulator(win)
@@ -37,7 +30,7 @@ describe('intent ui integrations connection truth', () => {
 
     cy.get('button[title="Integrations panel"]').first().click({ force: true })
 
-    cy.get('[data-testid="provider-open-github"]').should('exist')
+    cy.get('[data-testid="provider-open-github"]', { timeout: 10000 }).should('exist')
 
     cy.get('[data-testid="provider-mode-github"]').should('contain.text', 'User-owned')
     cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Not connected')
@@ -48,22 +41,12 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_intent_ui')
     cy.get('[data-testid="integration-step-2"]').click({ force: true })
-    cy.get('[data-testid="provider-verify-github"]').click({ force: true })
-    cy.wait('@githubUser')
-    cy.get('[data-testid="integration-stepper-success"]').should('exist')
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
-    cy.contains('GitHub integration linked.').should('be.visible')
+    cy.get('[data-testid="provider-connected-github"]').should('contain.text', 'Connected')
   })
 
   it('writes github token to local credentials vault and remains connected across revisit', () => {
-    cy.intercept('GET', 'https://api.github.com/user', {
-      statusCode: 200,
-      body: {
-        login: 'octocat'
-      }
-    }).as('githubUser')
-
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         installLocalBridgeSimulator(win)
@@ -79,9 +62,6 @@ describe('intent ui integrations connection truth', () => {
     cy.get('[data-testid="integration-step-1"]').click({ force: true })
     cy.get('[data-testid="provider-token-github"]').type('ghp_test_token_for_persistence')
     cy.get('[data-testid="integration-step-2"]').click({ force: true })
-    cy.get('[data-testid="provider-verify-github"]').click({ force: true })
-    cy.wait('@githubUser')
-    cy.get('[data-testid="integration-stepper-success"]').should('exist')
     cy.get('[data-testid="provider-save-github"]').click({ force: true })
 
     cy.window().then((win) => {

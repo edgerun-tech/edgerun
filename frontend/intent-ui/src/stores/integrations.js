@@ -406,7 +406,16 @@ ensureSubscriptions();
 
 function resolveLocalNodeManagerId() {
   const host = knownDevices().find((device) => device?.type === "host" && device?.online);
-  return String(host?.id || "local-node-manager").trim();
+  return String(host?.id || "").trim();
+}
+
+function withLocalNodeId(payload = {}) {
+  const nodeId = resolveLocalNodeManagerId();
+  if (!nodeId) return { ...payload };
+  return {
+    ...payload,
+    node_id: nodeId
+  };
 }
 
 async function startIntegrationMcp(integrationId, token) {
@@ -416,11 +425,10 @@ async function startIntegrationMcp(integrationId, token) {
   const response = await fetch(localBridgeHttpUrl("/v1/local/mcp/integration/start"), {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
+    body: JSON.stringify(withLocalNodeId({
       integration_id: integrationId,
-      token: trimmed,
-      node_id: resolveLocalNodeManagerId()
-    })
+      token: trimmed
+    }))
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) {
@@ -434,10 +442,7 @@ async function stopIntegrationMcp(integrationId) {
   const response = await fetch(localBridgeHttpUrl("/v1/local/mcp/integration/stop"), {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify({
-      integration_id: integrationId,
-      node_id: resolveLocalNodeManagerId()
-    })
+    body: JSON.stringify(withLocalNodeId({ integration_id: integrationId }))
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload?.ok === false) {
@@ -448,10 +453,9 @@ async function stopIntegrationMcp(integrationId) {
 
 async function getIntegrationMcpStatus(integrationId) {
   if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) return { ok: true, skipped: true, running: false, status: "not_applicable" };
-  const params = new URLSearchParams({
-    integration_id: integrationId,
-    node_id: resolveLocalNodeManagerId()
-  });
+  const params = new URLSearchParams({ integration_id: integrationId });
+  const nodeId = resolveLocalNodeManagerId();
+  if (nodeId) params.set("node_id", nodeId);
   const response = await fetch(localBridgeHttpUrl(`/v1/local/mcp/integration/status?${params.toString()}`), {
     cache: "no-store"
   });
@@ -472,6 +476,17 @@ async function getIntegrationMcpStatus(integrationId) {
   };
 }
 
+async function waitForIntegrationMcpHealthy(integrationId, attempts = 30, delayMs = 500) {
+  for (let index = 0; index < attempts; index += 1) {
+    const status = await getIntegrationMcpStatus(integrationId);
+    if (status.ok && status.running && status.status === "running") return status;
+    if (index < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  return getIntegrationMcpStatus(integrationId);
+}
+
 async function getIntegrationMcpPreflight(integrationId) {
   if (!MCP_ENABLED_INTEGRATIONS.has(integrationId)) {
     return {
@@ -482,10 +497,9 @@ async function getIntegrationMcpPreflight(integrationId) {
       message: "No runtime container for this integration."
     };
   }
-  const params = new URLSearchParams({
-    integration_id: integrationId,
-    node_id: resolveLocalNodeManagerId()
-  });
+  const params = new URLSearchParams({ integration_id: integrationId });
+  const nodeId = resolveLocalNodeManagerId();
+  if (nodeId) params.set("node_id", nodeId);
   const response = await fetch(localBridgeHttpUrl(`/v1/local/mcp/integration/preflight?${params.toString()}`), {
     cache: "no-store"
   });
@@ -530,7 +544,41 @@ async function syncRuntimeBackedConnectionTruth(state) {
     }
     try {
       const status = await getIntegrationMcpStatus(integration.id);
-      if (!status.ok || !status.running) {
+      if (!status.ok) {
+        if (integration.id === "github" && Boolean(current?.connected)) {
+          next[integration.id] = {
+            ...current,
+            connectorMode: "user_owned",
+            connected: true,
+            linked: true,
+            capabilities: Array.isArray(current?.capabilities) && current.capabilities.length > 0
+              ? current.capabilities.slice()
+              : integration.defaultCapabilities.slice()
+          };
+          continue;
+        }
+        next[integration.id] = {
+          ...current,
+          connectorMode: "user_owned",
+          connected: false,
+          linked: false,
+          capabilities: []
+        };
+        continue;
+      }
+      if (!status.running) {
+        if (integration.id === "github" && Boolean(current?.connected)) {
+          next[integration.id] = {
+            ...current,
+            connectorMode: "user_owned",
+            connected: true,
+            linked: true,
+            capabilities: Array.isArray(current?.capabilities) && current.capabilities.length > 0
+              ? current.capabilities.slice()
+              : integration.defaultCapabilities.slice()
+          };
+          continue;
+        }
         next[integration.id] = {
           ...current,
           connectorMode: "user_owned",
@@ -697,40 +745,55 @@ const integrationStore = {
     }
 
     setLifecycleState(normalizedId, "linking", "Linking integration...");
+    let mcpWarning = "";
     if (token && MCP_ENABLED_INTEGRATIONS.has(normalizedId)) {
       try {
         const result = await startIntegrationMcp(normalizedId, token);
         if (!result.ok) {
-          setLifecycleState(normalizedId, "error", `MCP runtime failed to start: ${result.message || "unknown error"}`);
+          const detail = `MCP runtime failed to start: ${result.message || "unknown error"}`;
+          if (normalizedId === "github") {
+            mcpWarning = detail;
+          } else {
+            setLifecycleState(normalizedId, "error", detail);
+          }
           publishEvent(
             UI_EVENT_TOPICS.integration.verifyFailed,
-            { integrationId: normalizedId, message: `MCP runtime failed to start: ${result.message || "unknown error"}` },
+            { integrationId: normalizedId, message: detail },
             uiIntentMeta("integrations.store")
           );
-          return false;
+          if (normalizedId !== "github") return false;
         }
-        const status = await getIntegrationMcpStatus(normalizedId);
-        const healthy = Boolean(status.ok && status.running && status.status === "running");
-        if (!healthy) {
-          const detail = status.message || status.status || "not running";
-          setLifecycleState(normalizedId, "error", `MCP runtime not healthy: ${detail}`);
-          publishEvent(
-            UI_EVENT_TOPICS.integration.verifyFailed,
-            { integrationId: normalizedId, message: `MCP runtime not healthy: ${detail}` },
-            uiIntentMeta("integrations.store")
-          );
-          return false;
-        } else {
-          setLifecycleState(normalizedId, "connected", "Integration linked and MCP runtime started.");
+        if (result.ok) {
+          const status = await waitForIntegrationMcpHealthy(normalizedId);
+          const healthy = Boolean(status.ok && status.running && status.status === "running");
+          if (!healthy) {
+            const detail = `MCP runtime not healthy: ${status.message || status.status || "not running"}`;
+            if (normalizedId === "github") {
+              mcpWarning = detail;
+            } else {
+              setLifecycleState(normalizedId, "error", detail);
+            }
+            publishEvent(
+              UI_EVENT_TOPICS.integration.verifyFailed,
+              { integrationId: normalizedId, message: detail },
+              uiIntentMeta("integrations.store")
+            );
+            if (normalizedId !== "github") return false;
+          }
         }
       } catch (error) {
-        setLifecycleState(normalizedId, "error", `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}`);
+        const detail = `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}`;
+        if (normalizedId === "github") {
+          mcpWarning = detail;
+        } else {
+          setLifecycleState(normalizedId, "error", detail);
+        }
         publishEvent(
           UI_EVENT_TOPICS.integration.verifyFailed,
-          { integrationId: normalizedId, message: `MCP runtime start failed: ${error instanceof Error ? error.message : "unknown error"}` },
+          { integrationId: normalizedId, message: detail },
           uiIntentMeta("integrations.store")
         );
-        return false;
+        if (normalizedId !== "github") return false;
       }
     }
     publishEvent(
@@ -751,6 +814,15 @@ const integrationStore = {
         uiIntentMeta("integrations.store")
       );
     }
+
+    if (mcpWarning) {
+      setLifecycleState(normalizedId, "connected", `Integration linked. ${mcpWarning}`);
+    } else if (token && MCP_ENABLED_INTEGRATIONS.has(normalizedId)) {
+      setLifecycleState(normalizedId, "connected", "Integration linked and MCP runtime started.");
+    } else {
+      setLifecycleState(normalizedId, "connected", "Integration linked.");
+    }
+
     return true;
   },
   disconnect(id) {

@@ -2,6 +2,8 @@ import { createSignal, For, Show, onMount } from "solid-js";
 import { FiExternalLink, FiRefreshCw } from "solid-icons/fi";
 import { integrationStore } from "../../stores/integrations";
 
+const GOOGLE_PHOTOS_PAGE_SIZE = 40;
+
 function formatTimestamp(value) {
   if (!value) return "";
   const time = new Date(value);
@@ -30,14 +32,16 @@ export default function GooglePhotosPanel() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/google/photos?page_size=80&token=${encodeURIComponent(token)}`, { cache: "no-store" });
+      const response = await fetch(`/api/google/photos?page_size=${GOOGLE_PHOTOS_PAGE_SIZE}&token=${encodeURIComponent(token)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload?.ok === false) {
         throw new Error(payload?.error || `google photos request failed (${response.status})`);
       }
       const next = Array.isArray(payload?.items) ? payload.items : [];
       setItems(next);
-      if (next.length === 0) setError("No Google Photos items found.");
+      if (next.length === 0) {
+        setError(String(payload?.hint || "No Google Photos items found."));
+      }
     } catch (loadError) {
       setItems([]);
       setError(loadError instanceof Error ? loadError.message : "Failed to load Google Photos.");

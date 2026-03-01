@@ -3,6 +3,30 @@
 export function installLocalBridgeSimulator(win) {
   const CREDENTIALS_STORAGE_KEY = 'intent-ui-local-bridge-credentials-sim-v1'
   const MCP_RUNTIME_STORAGE_KEY = 'intent-ui-local-bridge-mcp-sim-v1'
+  const STRICT_NODE_CHECK_STORAGE_KEY = 'intent-ui-local-bridge-strict-node-sim-v1'
+  const DISABLE_HOST_INFO_STORAGE_KEY = 'intent-ui-local-bridge-disable-host-info-sim-v1'
+
+  const strictNodeCheckEnabled = () => {
+    const raw = String(win.localStorage.getItem(STRICT_NODE_CHECK_STORAGE_KEY) || '').trim().toLowerCase()
+    return raw === '1' || raw === 'true' || raw === 'yes'
+  }
+
+  const hostInfoDisabled = () => {
+    const raw = String(win.localStorage.getItem(DISABLE_HOST_INFO_STORAGE_KEY) || '').trim().toLowerCase()
+    return raw === '1' || raw === 'true' || raw === 'yes'
+  }
+
+  const rejectIfNodeIdProvided = (nodeId) => {
+    if (!strictNodeCheckEnabled()) return null
+    if (!String(nodeId || '').trim()) return null
+    return new win.Response(JSON.stringify({
+      ok: false,
+      error: 'selected node is not local; local bridge filesystem is only available for node node-sim'
+    }), {
+      status: 403,
+      headers: { 'content-type': 'application/json; charset=utf-8' }
+    })
+  }
 
   const readCredentials = () => {
     try {
@@ -68,6 +92,14 @@ export function installLocalBridgeSimulator(win) {
       }
     })()
     if (url.includes('/v1/local/node/info.pb')) {
+      if (hostInfoDisabled()) {
+        return Promise.resolve(
+          new win.Response(new Uint8Array(), {
+            status: 503,
+            headers: { 'content-type': 'application/octet-stream' }
+          })
+        )
+      }
       return Promise.resolve(
         new win.Response(new Uint8Array([8, 1]), {
           status: 200,
@@ -182,6 +214,8 @@ export function installLocalBridgeSimulator(win) {
     }
     if (pathname === '/v1/local/mcp/integration/start' && String(init?.method || 'GET').toUpperCase() === 'POST') {
       const body = JSON.parse(String(init?.body || '{}'))
+      const nodeError = rejectIfNodeIdProvided(body?.node_id)
+      if (nodeError) return Promise.resolve(nodeError)
       const integrationId = String(body?.integration_id || '').trim().toLowerCase()
       const token = String(body?.token || '').trim()
       if (!integrationId) {
@@ -221,6 +255,8 @@ export function installLocalBridgeSimulator(win) {
     }
     if (pathname === '/v1/local/mcp/integration/stop' && String(init?.method || 'GET').toUpperCase() === 'POST') {
       const body = JSON.parse(String(init?.body || '{}'))
+      const nodeError = rejectIfNodeIdProvided(body?.node_id)
+      if (nodeError) return Promise.resolve(nodeError)
       const integrationId = String(body?.integration_id || '').trim().toLowerCase()
       if (!integrationId) {
         return Promise.resolve(
@@ -250,6 +286,15 @@ export function installLocalBridgeSimulator(win) {
       )
     }
     if (pathname === '/v1/local/mcp/integration/status') {
+      const requestedNodeId = (() => {
+        try {
+          return String(new URL(url, win.location.origin).searchParams.get('node_id') || '').trim()
+        } catch {
+          return ''
+        }
+      })()
+      const nodeError = rejectIfNodeIdProvided(requestedNodeId)
+      if (nodeError) return Promise.resolve(nodeError)
       const integrationId = (() => {
         try {
           return String(new URL(url, win.location.origin).searchParams.get('integration_id') || '').trim().toLowerCase()

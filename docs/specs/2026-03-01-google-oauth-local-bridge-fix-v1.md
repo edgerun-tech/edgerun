@@ -21,7 +21,8 @@ Fix Google OAuth start/callback in osdev by routing `/api/google/oauth/*` throug
 1. `GET /api/google/oauth/start` no longer returns 404 in osdev.
 2. OAuth callback exchanges code for token and redirects back to app.
 3. Frontend captures callback token params, stores `google_token`, and cleans URL.
-4. Node-manager and frontend checks pass.
+4. OAuth start requests provider-appropriate Google scopes (for example Google Photos scopes for `google_photos`).
+5. Node-manager and frontend checks pass.
 
 ## Rollout
 

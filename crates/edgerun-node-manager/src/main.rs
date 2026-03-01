@@ -51,6 +51,8 @@ const CONFIG_TPM_NV_INDEX: u32 = 0x0150_0026;
 const CONFIG_TPM_NV_SIZE: usize = 1024;
 const CREDENTIALS_TPM_NV_INDEX: u32 = 0x0150_0027;
 const CREDENTIALS_TPM_NV_SIZE: usize = 1024;
+const GOOGLE_OAUTH_TPM_NV_INDEX: u32 = 0x0150_0028;
+const GOOGLE_OAUTH_TPM_NV_SIZE: usize = 1024;
 const DEFAULT_API_BASE: &str = "https://api.edgerun.tech";
 const DEFAULT_RPC_URL: &str = "local://edgerun";
 const DEFAULT_WORKER_BIN: &str = "/usr/bin/edgerun-worker";
@@ -90,6 +92,7 @@ const LOCAL_CREDENTIALS_DELETE_PATH: &str = "/v1/local/credentials/delete";
 const LOCAL_CREDENTIALS_LOCK_PATH: &str = "/v1/local/credentials/lock";
 const LOCAL_CREDENTIALS_UNLOCK_PATH: &str = "/v1/local/credentials/unlock";
 const LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH: &str = "/v1/local/credentials/integration-token";
+const LOCAL_CREDENTIALS_GOOGLE_OAUTH_PATH: &str = "/v1/local/credentials/google-oauth";
 const LOCAL_MCP_START_PATH: &str = "/v1/local/mcp/integration/start";
 const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
@@ -136,7 +139,12 @@ const GOOGLE_OAUTH_CLIENT_ID_ENV: &str = "GOOGLE_OAUTH_CLIENT_ID";
 const GOOGLE_OAUTH_CLIENT_SECRET_ENV: &str = "GOOGLE_OAUTH_CLIENT_SECRET";
 const GOOGLE_OAUTH_REDIRECT_ORIGIN_ENV: &str = "GOOGLE_OAUTH_REDIRECT_ORIGIN";
 const GOOGLE_OAUTH_REDIRECT_ORIGIN_DEFAULT: &str = "https://osdev.edgerun.tech";
-const GOOGLE_OAUTH_SCOPES: &str = "openid profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/photoslibrary.readonly";
+const GOOGLE_OAUTH_SCOPES_BASE: &str = "openid profile https://www.googleapis.com/auth/userinfo.email";
+const GOOGLE_OAUTH_SCOPES_PRODUCTIVITY: &str = "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly";
+const GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY: &str = "https://www.googleapis.com/auth/photoslibrary.readonly";
+const GOOGLE_OAUTH_SCOPES_PHOTOS_APPEND: &str = "https://www.googleapis.com/auth/photoslibrary.appendonly";
+const GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY_APPCREATED: &str = "https://www.googleapis.com/auth/photoslibrary.readonly.appcreateddata";
+const GOOGLE_OAUTH_SCOPES_PHOTOS_EDIT_APPCREATED: &str = "https://www.googleapis.com/auth/photoslibrary.edit.appcreateddata";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -531,6 +539,20 @@ struct LocalCredentialUnlockRequest {
 }
 
 #[derive(Debug, Deserialize)]
+struct LocalGoogleOauthCredentialStoreRequest {
+    client_id: String,
+    client_secret: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct GoogleOauthStoredSecrets {
+    #[serde(default)]
+    client_id: String,
+    #[serde(default)]
+    client_secret: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct LocalCredentialTokenQuery {
     #[serde(default, alias = "integrationId")]
     integration_id: Option<String>,
@@ -722,6 +744,8 @@ struct LocalGoogleRefreshRequest {
 struct LocalGoogleOauthStartQuery {
     #[serde(default, alias = "returnTo")]
     return_to: Option<String>,
+    #[serde(default, alias = "integrationId")]
+    integration_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -972,6 +996,19 @@ fn save_credentials_to_nv(credentials: &[LocalCredentialEntry]) -> Result<()> {
     let blob = encode_nv_json_blob(credentials, CREDENTIALS_TPM_NV_SIZE, "credentials")?;
     tpm_nv_write_blob(CREDENTIALS_TPM_NV_INDEX, &blob, CREDENTIALS_TPM_NV_SIZE)
         .context("failed to store credentials in TPM NV")?;
+    Ok(())
+}
+
+fn load_google_oauth_secrets_from_nv() -> Result<GoogleOauthStoredSecrets> {
+    let blob = tpm_nv_read_blob(GOOGLE_OAUTH_TPM_NV_INDEX, GOOGLE_OAUTH_TPM_NV_SIZE)
+        .context("failed to read google oauth secrets from TPM NV")?;
+    decode_nv_json_blob(&blob, GOOGLE_OAUTH_TPM_NV_SIZE, "google oauth secrets")
+}
+
+fn save_google_oauth_secrets_to_nv(secrets: &GoogleOauthStoredSecrets) -> Result<()> {
+    let blob = encode_nv_json_blob(secrets, GOOGLE_OAUTH_TPM_NV_SIZE, "google oauth secrets")?;
+    tpm_nv_write_blob(GOOGLE_OAUTH_TPM_NV_INDEX, &blob, GOOGLE_OAUTH_TPM_NV_SIZE)
+        .context("failed to store google oauth secrets in TPM NV")?;
     Ok(())
 }
 
@@ -1389,6 +1426,30 @@ fn google_oauth_redirect_origin() -> String {
 
 fn google_oauth_redirect_uri() -> String {
     format!("{}/api/google/oauth/callback", google_oauth_redirect_origin())
+}
+
+fn google_oauth_scopes_for(integration_id: Option<&str>) -> String {
+    let id = integration_id.unwrap_or("google").trim().to_ascii_lowercase();
+    let mut scopes = vec![GOOGLE_OAUTH_SCOPES_BASE.to_string()];
+    match id.as_str() {
+        "google_photos" => {
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_APPEND.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY_APPCREATED.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_EDIT_APPCREATED.to_string());
+        }
+        "email" => {
+            scopes.push("https://www.googleapis.com/auth/gmail.readonly".to_string());
+        }
+        _ => {
+            scopes.push(GOOGLE_OAUTH_SCOPES_PRODUCTIVITY.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_APPEND.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_READONLY_APPCREATED.to_string());
+            scopes.push(GOOGLE_OAUTH_SCOPES_PHOTOS_EDIT_APPCREATED.to_string());
+        }
+    }
+    scopes.join(" ")
 }
 
 fn sanitize_return_to(raw: Option<&str>) -> String {
@@ -2234,6 +2295,13 @@ fn mcp_token_env_for(integration_id: &str) -> &'static str {
     }
 }
 
+fn mcp_container_command_for(integration_id: &str) -> Vec<String> {
+    match integration_id.trim() {
+        "github" => vec!["http".to_string(), "--port".to_string(), "8082".to_string()],
+        _ => Vec::new(),
+    }
+}
+
 fn integration_topic_root() -> String {
     std::env::var(INTEGRATION_TOPIC_ROOT_ENV)
         .ok()
@@ -2441,7 +2509,7 @@ fn apply_managed_opencode_mcp_entries(
             "edgerun-github",
             sonic_rs::json!({
                 "command": "docker",
-                "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+                "args": ["exec", "-i", "edgerun-mcp-github", "server", "stdio"],
                 "enabled": true,
             }),
         );
@@ -2555,6 +2623,14 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         )
         .route(
             LOCAL_CREDENTIALS_INTEGRATION_TOKEN_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_CREDENTIALS_GOOGLE_OAUTH_PATH,
+            post(handle_local_credentials_google_oauth_store),
+        )
+        .route(
+            LOCAL_CREDENTIALS_GOOGLE_OAUTH_PATH,
             options(handle_local_options),
         )
         .route(LOCAL_MCP_START_PATH, post(handle_local_mcp_start))
@@ -3144,6 +3220,56 @@ fn find_integration_token_entry<'a>(
     })
 }
 
+fn find_credential_secret_by_name(cfg: &ManagerConfig, name: &str) -> Option<String> {
+    let target = name.trim();
+    if target.is_empty() {
+        return None;
+    }
+    cfg.credentials
+        .iter()
+        .find(|entry| {
+            entry.name.eq_ignore_ascii_case(target) || entry.entry_id.eq_ignore_ascii_case(target)
+        })
+        .map(|entry| entry.secret.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn google_oauth_client_id() -> Option<String> {
+    let from_env = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if from_env.is_some() {
+        return from_env;
+    }
+    if let Ok(secrets) = load_google_oauth_secrets_from_nv() {
+        let value = secrets.client_id.trim().to_string();
+        if !value.is_empty() {
+            return Some(value);
+        }
+    }
+    let cfg = load_config().ok()?;
+    find_credential_secret_by_name(&cfg, "google/oauth/client_id")
+}
+
+fn google_oauth_client_secret() -> Option<String> {
+    let from_env = std::env::var(GOOGLE_OAUTH_CLIENT_SECRET_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if from_env.is_some() {
+        return from_env;
+    }
+    if let Ok(secrets) = load_google_oauth_secrets_from_nv() {
+        let value = secrets.client_secret.trim().to_string();
+        if !value.is_empty() {
+            return Some(value);
+        }
+    }
+    let cfg = load_config().ok()?;
+    find_credential_secret_by_name(&cfg, "google/oauth/client_secret")
+}
+
 async fn handle_local_credentials_status(State(state): State<Arc<LocalBridgeState>>) -> Response {
     let _guard = state.credentials_lock.lock().await;
     let cfg = load_config().unwrap_or_else(|_| default_manager_config());
@@ -3275,6 +3401,29 @@ async fn handle_local_credentials_unlock(
     })
 }
 
+async fn handle_local_credentials_google_oauth_store(
+    State(state): State<Arc<LocalBridgeState>>,
+    Json(body): Json<LocalGoogleOauthCredentialStoreRequest>,
+) -> Response {
+    let client_id = body.client_id.trim().to_string();
+    let client_secret = body.client_secret.trim().to_string();
+    if client_id.len() < 16 || client_secret.len() < 12 {
+        return local_json_error(
+            AxumStatusCode::BAD_REQUEST,
+            "google oauth client_id/client_secret are missing or invalid",
+        );
+    }
+    let _guard = state.credentials_lock.lock().await;
+    let secrets = GoogleOauthStoredSecrets {
+        client_id,
+        client_secret,
+    };
+    if let Err(err) = save_google_oauth_secrets_to_nv(&secrets) {
+        return local_json_error(AxumStatusCode::INTERNAL_SERVER_ERROR, &err.to_string());
+    }
+    local_json_ok(LocalFsEmptyData {})
+}
+
 async fn handle_local_credentials_integration_token(
     State(state): State<Arc<LocalBridgeState>>,
     Query(query): Query<LocalCredentialTokenQuery>,
@@ -3368,6 +3517,7 @@ async fn handle_local_mcp_start(
         ),
         image.clone(),
     ];
+    args.extend(mcp_container_command_for(&integration_id));
     let output = match Command::new("docker").args(args.drain(..)).output() {
         Ok(value) => value,
         Err(err) => {
@@ -3734,7 +3884,16 @@ async fn handle_local_google_messages(Query(query): Query<LocalGoogleMessagesQue
     }
     let payload = match google_api_get_json(&token, &url).await {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+        Err(err) => {
+            let detail = err.to_string();
+            if detail.to_ascii_lowercase().contains("insufficient authentication scopes") {
+                return local_json_error(
+                    AxumStatusCode::FORBIDDEN,
+                    "Google Photos scope missing. Reconnect Google with Photos consent (prompt=consent) and retry.",
+                );
+            }
+            return local_json_error(AxumStatusCode::BAD_GATEWAY, &detail);
+        }
     };
     local_json_value(
         AxumStatusCode::OK,
@@ -3764,7 +3923,19 @@ async fn handle_local_google_message(
     );
     let payload = match google_api_get_json(&token, &url).await {
         Ok(value) => value,
-        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+        Err(err) => {
+            let detail = err.to_string();
+            if detail
+                .to_ascii_lowercase()
+                .contains("insufficient authentication scopes")
+            {
+                return local_json_error(
+                    AxumStatusCode::FORBIDDEN,
+                    "Google Photos scope missing. Reconnect Google with Photos consent and retry.",
+                );
+            }
+            return local_json_error(AxumStatusCode::BAD_GATEWAY, &detail);
+        }
     };
     let gmail_payload = &payload["payload"];
     let (body, html) = extract_gmail_text(gmail_payload);
@@ -3913,11 +4084,43 @@ async fn handle_local_google_photos(Query(query): Query<LocalGooglePhotosQuery>)
         Ok(value) => value,
         Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
     };
+    let mut items = payload["mediaItems"].as_array().cloned().unwrap_or_default();
+    if items.is_empty() {
+        let client = Client::new();
+        let search_url = "https://photoslibrary.googleapis.com/v1/mediaItems:search";
+        let search_response = client
+            .post(search_url)
+            .bearer_auth(&token)
+            .header("Accept", "application/json")
+            .header(CONTENT_TYPE, "application/json")
+            .body(
+                sonic_rs::to_vec(&sonic_rs::json!({
+                    "pageSize": page_size,
+                }))
+                .unwrap_or_default(),
+            )
+            .send()
+            .await;
+        if let Ok(response) = search_response {
+            if response.status().is_success() {
+                if let Ok(bytes) = response.bytes().await {
+                    if let Ok(search_payload) = sonic_rs::from_slice::<sonic_rs::Value>(&bytes) {
+                        items = search_payload["mediaItems"].as_array().cloned().unwrap_or_default();
+                    }
+                }
+            }
+        }
+    }
     local_json_value(
         AxumStatusCode::OK,
         sonic_rs::json!({
             "ok": true,
-            "items": payload["mediaItems"].as_array().cloned().unwrap_or_default(),
+            "items": items,
+            "hint": if items.is_empty() {
+                "No items returned by Google Photos API. This OAuth client may only access app-created media unless additional API access is approved."
+            } else {
+                ""
+            },
         }),
     )
 }
@@ -3930,19 +4133,13 @@ async fn handle_local_google_refresh(Json(body): Json<LocalGoogleRefreshRequest>
             "google refresh_token is missing or invalid",
         );
     }
-    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let client_secret = std::env::var(GOOGLE_OAUTH_CLIENT_SECRET_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+    let client_id = google_oauth_client_id();
+    let client_secret = google_oauth_client_secret();
     let (Some(client_id), Some(client_secret)) = (client_id, client_secret) else {
         return local_json_error(
             AxumStatusCode::NOT_IMPLEMENTED,
             &format!(
-                "google refresh is not configured (set {} and {})",
+                "google refresh is not configured (set {} and {} or store in hwvault as google/oauth/client_id and google/oauth/client_secret)",
                 GOOGLE_OAUTH_CLIENT_ID_ENV, GOOGLE_OAUTH_CLIENT_SECRET_ENV
             ),
         );
@@ -4001,21 +4198,22 @@ async fn handle_local_google_refresh(Json(body): Json<LocalGoogleRefreshRequest>
 }
 
 async fn handle_local_google_oauth_start(Query(query): Query<LocalGoogleOauthStartQuery>) -> Response {
-    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+    let client_id = google_oauth_client_id();
     let Some(client_id) = client_id else {
         return google_oauth_redirect_with_result(
             &sanitize_return_to(query.return_to.as_deref()),
             false,
-            &format!("google oauth is not configured (set {})", GOOGLE_OAUTH_CLIENT_ID_ENV),
+            &format!(
+                "google oauth is not configured (set {} or store google/oauth/client_id in hwvault)",
+                GOOGLE_OAUTH_CLIENT_ID_ENV
+            ),
             "",
             "",
         );
     };
 
     let return_to = sanitize_return_to(query.return_to.as_deref());
+    let scopes = google_oauth_scopes_for(query.integration_id.as_deref());
     let state = encode_google_oauth_state(&return_to);
     let redirect_uri = google_oauth_redirect_uri();
     let mut url = match reqwest::Url::parse("https://accounts.google.com/o/oauth2/v2/auth") {
@@ -4034,7 +4232,7 @@ async fn handle_local_google_oauth_start(Query(query): Query<LocalGoogleOauthSta
         .append_pair("client_id", &client_id)
         .append_pair("redirect_uri", &redirect_uri)
         .append_pair("response_type", "code")
-        .append_pair("scope", GOOGLE_OAUTH_SCOPES)
+        .append_pair("scope", &scopes)
         .append_pair("access_type", "offline")
         .append_pair("include_granted_scopes", "true")
         .append_pair("prompt", "consent")
@@ -4059,19 +4257,17 @@ async fn handle_local_google_oauth_callback(Query(query): Query<LocalGoogleOauth
         return google_oauth_redirect_with_result(&return_to, false, "google oauth callback missing code", "", "");
     }
 
-    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let client_secret = std::env::var(GOOGLE_OAUTH_CLIENT_SECRET_ENV)
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+    let client_id = google_oauth_client_id();
+    let client_secret = google_oauth_client_secret();
     let (Some(client_id), Some(client_secret)) = (client_id, client_secret) else {
         return google_oauth_redirect_with_result(
             &return_to,
             false,
-            &format!("google oauth callback is not configured (set {} and {})", GOOGLE_OAUTH_CLIENT_ID_ENV, GOOGLE_OAUTH_CLIENT_SECRET_ENV),
+            &format!(
+                "google oauth callback is not configured (set {} and {} or store in hwvault as google/oauth/client_id and google/oauth/client_secret)",
+                GOOGLE_OAUTH_CLIENT_ID_ENV,
+                GOOGLE_OAUTH_CLIENT_SECRET_ENV
+            ),
             "",
             "",
         );
@@ -5327,7 +5523,7 @@ mod tests {
             },
             "edgerun-github": {
               "command": "docker",
-              "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+              "args": ["exec", "-i", "edgerun-mcp-github", "server", "stdio"],
               "enabled": false
             }
           },
@@ -5354,7 +5550,7 @@ mod tests {
           "mcp": {
             "edgerun-github": {
               "command": "docker",
-              "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+              "args": ["exec", "-i", "edgerun-mcp-github", "server", "stdio"],
               "enabled": true
             },
             "context7": {

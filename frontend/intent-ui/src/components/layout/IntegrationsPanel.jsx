@@ -240,6 +240,10 @@ function IntegrationsPanel(props) {
     return Boolean(provider && provider.authMethod === "oauth");
   }
 
+  function bypassVerificationGate(provider) {
+    return Boolean(provider && provider.id === "github");
+  }
+
   function matrixBridgeTokenGuide(provider) {
     if (!provider || !Array.isArray(provider.tags) || !provider.tags.includes("matrix-bridge")) return null;
     return MATRIX_BRIDGE_TOKEN_SOURCE[provider.id] || MATRIX_BRIDGE_TOKEN_SOURCE.default;
@@ -424,7 +428,8 @@ function IntegrationsPanel(props) {
     if (providerUsesOAuthRedirect(provider) && connectorMode() === "user_owned") {
       if (typeof window !== "undefined") {
         const returnTo = `${window.location.pathname}${window.location.search || ""}`;
-        window.location.assign(`/api/google/oauth/start?returnTo=${encodeURIComponent(returnTo)}`);
+        const integrationId = encodeURIComponent(provider.id || "google");
+        window.location.assign(`/api/google/oauth/start?returnTo=${encodeURIComponent(returnTo)}&integration_id=${integrationId}`);
       }
       setBusy(false);
       return;
@@ -450,6 +455,7 @@ function IntegrationsPanel(props) {
     if (!result.ok) {
       setVerifiedForDialog(false);
       setStatus(result.message || "Verification failed.");
+      await refreshRuntimePreflight(provider);
       await refreshRuntimeState(provider);
       return;
     }
@@ -479,6 +485,7 @@ function IntegrationsPanel(props) {
     }
     setStatus(result.message || "Verification succeeded.");
     setStep(2);
+    await refreshRuntimePreflight(provider);
     await refreshRuntimeState(provider);
   }
 
@@ -654,11 +661,15 @@ function IntegrationsPanel(props) {
 
     const linked = await integrationStore.connect(provider.id, payload);
     if (!linked) {
-      setStatus(`Unable to link ${provider.name}. Load profile and retry.`);
+      const detail = String(integrationStore.get(provider.id)?.lifecycleMessage || "").trim();
+      setStatus(detail || `Unable to link ${provider.name}.`);
+      await refreshRuntimePreflight(provider);
       await refreshRuntimeState(provider);
       return;
     }
-    setStatus(`${provider.name} integration linked.`);
+    const linkedDetail = String(integrationStore.get(provider.id)?.lifecycleMessage || "").trim();
+    setStatus(linkedDetail || `${provider.name} integration linked.`);
+    await refreshRuntimePreflight(provider);
     await refreshRuntimeState(provider);
     closeDialog();
   }
@@ -822,7 +833,11 @@ function IntegrationsPanel(props) {
         {(providerAccessor) => {
           const provider = providerAccessor();
           const lifecycleStatus = () => String(integrationStore.get(provider.id)?.lifecycleStatus || "idle").trim() || "idle";
-          const verified = () => integrationStore.isConnected(provider.id) || lifecycleStatus() === "verified" || Boolean(verification()?.ok) || verifiedForDialog();
+          const verified = () => bypassVerificationGate(provider)
+            || integrationStore.isConnected(provider.id)
+            || lifecycleStatus() === "verified"
+            || Boolean(verification()?.ok)
+            || verifiedForDialog();
           const verificationMessage = () => String(
             integrationStore.get(provider.id)?.lifecycleMessage
             || verification()?.message
@@ -1105,17 +1120,23 @@ function IntegrationsPanel(props) {
 
                 <Show when={step() === 2}>
                   <section class="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/50 p-3" data-testid={provider.id === "tailscale" ? "provider-tailscale-quickstart" : "integration-stepper-verify"}>
-                    <p class="text-xs text-neutral-400">Run integration tests before linking.</p>
-                    <button
-                      type="button"
-                      class={primaryClass}
-                      disabled={busy() || !requiredInputsReady(provider)}
-                      onClick={() => runVerification(provider)}
-                      data-testid={provider.id === "tailscale" ? "tailscale-load-devices" : `provider-verify-${provider.id}`}
-                    >
-                      <FiZap size={12} />
-                      {busy() ? "Verifying..." : "Run verification"}
-                    </button>
+                    <p class="text-xs text-neutral-400">
+                      {bypassVerificationGate(provider)
+                        ? "Verification is optional for this provider. Link directly with your token."
+                        : "Run integration tests before linking."}
+                    </p>
+                    <Show when={!bypassVerificationGate(provider)}>
+                      <button
+                        type="button"
+                        class={primaryClass}
+                        disabled={busy() || !requiredInputsReady(provider)}
+                        onClick={() => runVerification(provider)}
+                        data-testid={provider.id === "tailscale" ? "tailscale-load-devices" : `provider-verify-${provider.id}`}
+                      >
+                        <FiZap size={12} />
+                        {busy() ? "Verifying..." : "Run verification"}
+                      </button>
+                    </Show>
                     <Show when={!requiredInputsReady(provider)}>
                       <p class="text-[11px] text-amber-300">Fill required values in Step 1 first.</p>
                     </Show>
@@ -1177,7 +1198,7 @@ function IntegrationsPanel(props) {
                     <Show when={verificationMessage()}>
                       <p class={`text-[11px] ${verified() ? "text-emerald-300" : lifecycleStatus() === "verifying" ? "text-amber-300" : "text-red-300"}`}>{verificationMessage()}</p>
                     </Show>
-                    <Show when={verified() || testCompleted()}>
+                    <Show when={verified() || testCompleted() || bypassVerificationGate(provider)}>
                       <section class="space-y-2 rounded-md border border-emerald-500/35 bg-emerald-500/10 p-3" data-testid="integration-stepper-success">
                         <p class="flex items-center gap-1 text-xs font-medium text-emerald-200">
                           <FiCheckCircle size={12} />
@@ -1315,7 +1336,7 @@ function IntegrationsPanel(props) {
                   <button
                     type="button"
                     class={primaryClass}
-                    disabled={!verified() || busy()}
+                    disabled={(step() === 1 && !requiredInputsReady(provider)) || (!verified() && !bypassVerificationGate(provider)) || busy()}
                     onClick={() => { void saveProvider(provider); }}
                     data-testid={`provider-save-${provider.id}`}
                   >
