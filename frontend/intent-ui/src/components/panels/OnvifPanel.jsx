@@ -1,7 +1,8 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js";
+import { Show, createMemo, createSignal, onMount } from "solid-js";
 import { openWindow } from "../../stores/windows";
 import { navigateBrowser } from "../../stores/ui-actions";
 import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
+import VirtualAnimatedList from "../common/VirtualAnimatedList";
 
 const ONVIF_CAMERAS_KEY = "intent-ui-onvif-cameras-v1";
 const ONVIF_DEFAULTS_KEY = "intent-ui-onvif-defaults-v1";
@@ -161,10 +162,11 @@ function isVideoLike(url) {
 }
 
 function toScanItem(input, index = 0) {
-  const url = String(input?.url || input?.xaddr || input?.xAddr || input?.endpoint || "").trim();
+  const serviceUrl = String(input?.url || input?.xaddr || input?.xAddr || input?.endpoint || "").trim();
+  const streamUrl = String(input?.streamUrl || input?.stream_url || input?.stream || "").trim();
   const ip = String(input?.ip || input?.host || "").trim();
   const name = String(input?.name || input?.label || ip || "").trim();
-  const candidateUrl = url || (ip ? `http://${ip}/onvif/device_service` : "");
+  const candidateUrl = streamUrl || serviceUrl || (ip ? `http://${ip}/onvif/device_service` : "");
   if (!candidateUrl) return null;
   const normalized = normalizeCameraUrl(candidateUrl).url;
   if (!normalized) return null;
@@ -172,7 +174,8 @@ function toScanItem(input, index = 0) {
     id: String(input?.id || `scan-${Date.now()}-${index}`),
     name,
     ip,
-    url: normalized
+    url: normalized,
+    serviceUrl: normalizeCameraUrl(serviceUrl).url || ""
   };
 }
 
@@ -189,6 +192,141 @@ function normalizeScanItems(items) {
     results.push(next);
   });
   return results;
+}
+
+function xmlEscape(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function wsseHeader(defaults) {
+  const username = String(defaults?.username || "").trim();
+  if (!username) return "";
+  const password = String(defaults?.password || "");
+  const nonce = Math.random().toString(16).slice(2);
+  const created = new Date().toISOString();
+  return `<wsse:Security s:mustUnderstand="1"><wsse:UsernameToken><wsse:Username>${xmlEscape(username)}</wsse:Username><wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">${xmlEscape(password)}</wsse:Password><wsse:Nonce>${xmlEscape(nonce)}</wsse:Nonce><wsu:Created>${xmlEscape(created)}</wsu:Created></wsse:UsernameToken></wsse:Security>`;
+}
+
+function extractProfileTokens(xml) {
+  if (!xml) return [];
+  const tokenMatches = Array.from(xml.matchAll(/Profiles[^>]*token\s*=\s*"([^"]+)"/gi));
+  return tokenMatches
+    .map((match) => String(match?.[1] || "").trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function extractRtspUrls(text) {
+  if (!text) return [];
+  return Array.from(new Set(Array.from(text.matchAll(/rtsps?:\/\/[^\s<"']+/gi)).map((match) => String(match?.[0] || "").trim()).filter(Boolean)));
+}
+
+function serviceUrlForDirectQuery(item) {
+  const serviceUrl = String(item?.serviceUrl || "").trim();
+  if (serviceUrl) return serviceUrl;
+  const url = String(item?.url || "").trim();
+  return url.toLowerCase().includes("/onvif/device_service") ? url : "";
+}
+
+function canAttemptDirectOnvifQuery() {
+  if (typeof window === "undefined") return false;
+  if (window.Cypress) return false;
+  return true;
+}
+
+async function postOnvifSoap(serviceUrl, action, body, timeoutMs = 2200) {
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const response = await fetch(serviceUrl, {
+      method: "POST",
+      mode: "cors",
+      cache: "no-store",
+      signal: controller?.signal,
+      headers: {
+        "Content-Type": `application/soap+xml; charset=utf-8; action=\"${action}\"`,
+        Accept: "application/soap+xml, text/xml, */*"
+      },
+      body
+    });
+    const text = await response.text().catch(() => "");
+    if (!response.ok) {
+      throw new Error(text || `ONVIF request failed (${response.status}).`);
+    }
+    return text;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function onvifEnvelope(innerBody, defaults) {
+  const security = wsseHeader(defaults);
+  return `<?xml version="1.0" encoding="UTF-8"?><s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:trt="http://www.onvif.org/ver10/media/wsdl" xmlns:tt="http://www.onvif.org/ver10/schema" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"><s:Header>${security}</s:Header><s:Body>${innerBody}</s:Body></s:Envelope>`;
+}
+
+async function resolveOnvifStreamUrlDirect(item, defaults) {
+  const serviceUrl = serviceUrlForDirectQuery(item);
+  if (!serviceUrl) return null;
+
+  const profilesXml = await postOnvifSoap(
+    serviceUrl,
+    "http://www.onvif.org/ver10/media/wsdl/GetProfiles",
+    onvifEnvelope("<trt:GetProfiles/>", defaults)
+  );
+
+  const directFromProfiles = extractRtspUrls(profilesXml)[0] || null;
+  if (directFromProfiles) return directFromProfiles;
+
+  const tokens = extractProfileTokens(profilesXml);
+  for (const token of tokens.slice(0, 4)) {
+    const streamXml = await postOnvifSoap(
+      serviceUrl,
+      "http://www.onvif.org/ver10/media/wsdl/GetStreamUri",
+      onvifEnvelope(`<trt:GetStreamUri><trt:StreamSetup><tt:Stream>RTP-Unicast</tt:Stream><tt:Transport><tt:Protocol>RTSP</tt:Protocol></tt:Transport></trt:StreamSetup><trt:ProfileToken>${xmlEscape(token)}</trt:ProfileToken></trt:GetStreamUri>`, defaults)
+    );
+    const rtsp = extractRtspUrls(streamXml)[0] || null;
+    if (rtsp) return rtsp;
+  }
+
+  return null;
+}
+
+async function resolveScanStreamUrls(items, defaults) {
+  if (!canAttemptDirectOnvifQuery()) {
+    return { items, resolved: 0, attempted: 0 };
+  }
+  const source = Array.isArray(items) ? items : [];
+  const output = [];
+  let resolved = 0;
+  let attempted = 0;
+
+  for (const item of source) {
+    const serviceUrl = serviceUrlForDirectQuery(item);
+    if (!serviceUrl) {
+      output.push(item);
+      continue;
+    }
+    attempted += 1;
+    try {
+      const directStream = await resolveOnvifStreamUrlDirect(item, defaults);
+      if (directStream) {
+        const normalized = normalizeCameraUrl(directStream).url;
+        output.push({ ...item, url: normalized, streamUrl: normalized, serviceUrl });
+        resolved += 1;
+      } else {
+        output.push(item);
+      }
+    } catch {
+      output.push(item);
+    }
+  }
+
+  return { items: output, resolved, attempted };
 }
 
 async function requestOnvifDiscover() {
@@ -238,6 +376,8 @@ function getPreviewSrc(url) {
 }
 
 function OnvifPanel() {
+  let scanResultsListRef;
+  let camerasListRef;
   const [cameras, setCameras] = createSignal(readStoredCameras());
   const [defaults, setDefaults] = createSignal(readStoredOnvifDefaults());
   const [urlInput, setUrlInput] = createSignal("");
@@ -305,8 +445,15 @@ function OnvifPanel() {
     setStatus("");
     try {
       const items = await requestOnvifDiscover();
-      setScanResults(items);
-      setStatus(items.length > 0 ? `Found ${items.length} ONVIF candidates.` : "No ONVIF candidates found.");
+      const direct = await resolveScanStreamUrls(items, defaults());
+      setScanResults(direct.items);
+      if (direct.items.length === 0) {
+        setStatus("No ONVIF candidates found.");
+      } else if (direct.attempted > 0 && direct.resolved > 0) {
+        setStatus(`Found ${direct.items.length} ONVIF candidates · resolved ${direct.resolved}/${direct.attempted} direct stream URLs.`);
+      } else {
+        setStatus(`Found ${direct.items.length} ONVIF candidates.`);
+      }
     } catch (error) {
       setScanResults([]);
       setStatus(error instanceof Error ? error.message : "Failed to scan ONVIF cameras.");
@@ -415,13 +562,21 @@ function OnvifPanel() {
       <Show when={scanResults().length > 0}>
         <section class="mb-4 rounded-lg border border-neutral-800 bg-neutral-900/60 p-2.5" data-testid="onvif-scan-results">
           <p class="mb-2 text-xs uppercase tracking-wide text-neutral-500">Scan Results</p>
-          <div class="space-y-1.5">
-            <For each={scanResults()}>
-              {(item) => (
-                <div class="flex items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900/60 px-2 py-1.5 text-xs">
+          <div class="max-h-56 overflow-auto" ref={scanResultsListRef}>
+            <VirtualAnimatedList
+              items={scanResults}
+              estimateSize={56}
+              overscan={4}
+              containerRef={() => scanResultsListRef}
+              animateRows
+              renderItem={(item) => (
+                <div class="mt-1.5 flex items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900/60 px-2 py-1.5 text-xs">
                   <div class="min-w-0">
                     <p class="truncate text-neutral-200">{item.name || item.ip || item.url}</p>
                     <p class="truncate text-neutral-500">{item.url}</p>
+                    <Show when={item.serviceUrl && item.serviceUrl !== item.url}>
+                      <p class="truncate text-neutral-600">service: {item.serviceUrl}</p>
+                    </Show>
                   </div>
                   <button
                     type="button"
@@ -433,17 +588,22 @@ function OnvifPanel() {
                   </button>
                 </div>
               )}
-            </For>
+            />
           </div>
         </section>
       </Show>
 
       <Show when={cameraCards().length > 0} fallback={<p class="text-xs text-neutral-500">No cameras added yet.</p>}>
-        <div class="grid grid-cols-1 gap-3">
-          <For each={cameraCards()}>
-            {(camera) => (
+        <div class="max-h-[72vh] overflow-auto" ref={camerasListRef}>
+          <VirtualAnimatedList
+            items={cameraCards}
+            estimateSize={250}
+            overscan={2}
+            containerRef={() => camerasListRef}
+            animateRows
+            renderItem={(camera) => (
               <article
-                class="resize overflow-auto rounded-lg border border-neutral-800 bg-neutral-900/70 p-2 flex flex-col"
+                class="mt-3 resize overflow-auto rounded-lg border border-neutral-800 bg-neutral-900/70 p-2 flex flex-col"
                 style={{ "min-height": "220px", "min-width": "280px" }}
                 data-testid="onvif-camera-card"
               >
@@ -502,7 +662,7 @@ function OnvifPanel() {
                 </div>
               </article>
             )}
-          </For>
+          />
         </div>
       </Show>
     </div>

@@ -6,6 +6,7 @@
   - Prefer node-local bridge discovery path for scan attempts while preserving legacy API compatibility.
   - Keep manual camera add flow fully functional even when scan endpoint is missing.
   - Resolve discovered ONVIF service endpoints to operator-usable stream URLs (default `stream1` path).
+  - Prefer direct frontend ONVIF query for stream URI resolution after discovery (no stream relay/proxy in backend path).
   - Allow operator-defined default ONVIF stream auth settings (username/password) without persisting credentials inside per-camera URLs.
 - Non-goals:
   - Implement a full ONVIF discovery service in this change.
@@ -20,13 +21,15 @@
 ## Acceptance criteria
 1. ONVIF scan attempts node-local discovery first (`/v1/local/onvif/discover`) and then legacy `/api/onvif/discover` fallback.
 2. Local bridge provides `/v1/local/onvif/discover` via WS-Discovery probe and returns normalized candidate URLs.
-3. If neither discovery endpoint is available, panel shows actionable status text instead of generic failure.
-4. Manual camera add remains available and produces normalized URLs.
-5. Add/update Cypress coverage that opens ONVIF panel, runs scan with mocked response, and adds a scanned camera.
-6. Backend validation passes:
+3. When WS-Discovery payloads include `rtsp://...` stream URIs, local bridge includes `streamUrl` hints and ONVIF panel prefers those over default service-path mapping.
+4. ONVIF panel attempts direct frontend ONVIF Media query (`GetProfiles` + `GetStreamUri`) against discovered service URLs and uses returned RTSP URI when available.
+5. If neither discovery endpoint is available, panel shows actionable status text instead of generic failure.
+6. Manual camera add remains available and produces normalized URLs.
+7. Add/update Cypress coverage that opens ONVIF panel, runs scan with mocked response, and adds a scanned camera.
+8. Backend validation passes:
 - `cargo check -p edgerun-node-manager`
-7. ONVIF panel maps scanned `/onvif/device_service` URLs to stream URLs using configurable defaults (`protocol`, `stream path`, optional auth) and stores camera entries without embedded credentials.
-8. Frontend validation passes:
+9. ONVIF panel maps scanned `/onvif/device_service` URLs to stream URLs using configurable defaults (`protocol`, `stream path`, optional auth) and stores camera entries without embedded credentials.
+10. Frontend validation passes:
 - `cd frontend && bun run check`
 - `cd frontend && bun run build`
 

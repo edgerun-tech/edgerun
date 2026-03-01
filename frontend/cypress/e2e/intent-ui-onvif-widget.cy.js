@@ -25,7 +25,12 @@ describe('intent ui onvif widget', () => {
       body: {
         ok: true,
         items: [
-          { name: 'Front Gate', ip: '192.168.1.22', url: 'http://192.168.1.22/onvif/device_service' },
+          {
+            name: 'Front Gate',
+            ip: '192.168.1.22',
+            url: 'http://192.168.1.22/onvif/device_service',
+            streamUrl: 'rtsp://192.168.1.22/stream2'
+          },
           { name: 'Garage', ip: '192.168.1.23', url: 'http://192.168.1.23/onvif/device_service' }
         ]
       }
@@ -52,6 +57,6 @@ describe('intent ui onvif widget', () => {
 
     cy.get('[data-testid="onvif-camera-card"]').should('have.length', 1)
     cy.contains('Front Gate').should('exist')
-    cy.contains('rtsp://192.168.1.22/stream1').should('exist')
+    cy.contains('rtsp://192.168.1.22/stream2').should('exist')
   })
 })

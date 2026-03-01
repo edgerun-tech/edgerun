@@ -3833,6 +3833,22 @@ fn extract_http_urls(payload: &str) -> Vec<String> {
         .collect()
 }
 
+fn extract_rtsp_urls(payload: &str) -> Vec<String> {
+    payload
+        .split(|ch: char| ch.is_whitespace() || ch == '<' || ch == '>' || ch == '"' || ch == '\'')
+        .filter_map(|token| {
+            let candidate = token.trim_matches(|ch: char| {
+                matches!(ch, ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}' | '\\')
+            });
+            if candidate.starts_with("rtsp://") || candidate.starts_with("rtsps://") {
+                Some(candidate.to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 fn normalize_onvif_candidate_url(raw: &str) -> Option<String> {
     let value = raw.trim();
     if value.is_empty() {
@@ -3850,6 +3866,15 @@ fn normalize_onvif_candidate_url(raw: &str) -> Option<String> {
 fn onvif_host_from_url(url: &str) -> Option<String> {
     let parsed = reqwest::Url::parse(url).ok()?;
     parsed.host_str().map(|value| value.to_string())
+}
+
+fn normalize_discovered_url(raw: &str) -> Option<String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let parsed = reqwest::Url::parse(value).ok()?;
+    Some(parsed.to_string())
 }
 
 fn is_likely_onvif_service_url(url: &str) -> bool {
@@ -3908,6 +3933,10 @@ async fn discover_onvif_ws(wait_ms: u64) -> Result<Vec<sonic_rs::Value>> {
 
         let payload = String::from_utf8_lossy(&buffer[..size]);
         let name_hint = parse_onvif_name_hint(&payload);
+        let rtsp_urls: Vec<String> = extract_rtsp_urls(&payload)
+            .into_iter()
+            .filter_map(|item| normalize_discovered_url(&item))
+            .collect();
         let mut urls: Vec<String> = extract_http_urls(&payload)
             .into_iter()
             .filter_map(|item| normalize_onvif_candidate_url(&item))
@@ -3925,10 +3954,16 @@ async fn discover_onvif_ws(wait_ms: u64) -> Result<Vec<sonic_rs::Value>> {
             }
             let ip = onvif_host_from_url(&url).unwrap_or_else(|| source_addr.ip().to_string());
             let name = name_hint.clone().unwrap_or_else(|| ip.clone());
+            let stream_url = rtsp_urls
+                .iter()
+                .find(|candidate| onvif_host_from_url(candidate).as_deref() == Some(ip.as_str()))
+                .cloned()
+                .or_else(|| rtsp_urls.first().cloned());
             items.push(sonic_rs::json!({
                 "name": name,
                 "ip": ip,
                 "url": url,
+                "streamUrl": stream_url,
                 "source": "ws-discovery"
             }));
         }
