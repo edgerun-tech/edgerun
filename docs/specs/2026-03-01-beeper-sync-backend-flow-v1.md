@@ -3,6 +3,7 @@
 ## Goal
 
 Run Beeper chat synchronization through backend local bridge endpoints instead of browser-only integration worker logic.
+Also serve Beeper media/avatar assets through backend proxy routes so browser UI can render profile pictures and media previews reliably.
 
 ## Non-goals
 
@@ -20,9 +21,14 @@ Run Beeper chat synchronization through backend local bridge endpoints instead o
 
 1. Node-manager exposes a local Beeper chats endpoint.
 2. Caddy routes `/api/beeper/chats` to local bridge.
-3. Conversations source loader reads Beeper chat list from backend endpoint when Beeper is connected.
-4. UI no longer labels non-email providers as matrix bridge-specific.
-5. Required checks pass.
+3. Node-manager exposes a local Beeper chat-messages endpoint.
+4. Conversations source loader reads Beeper chats and per-chat recent messages from backend endpoints when Beeper is connected.
+5. Beeper conversation rows show human-readable preview text (not only message type labels).
+6. Conversation list can surface profile pictures when provided by Beeper participants data.
+7. Media messages include usable attachment indicators/URLs in thread content.
+8. Beeper `file://` and `mxc://` media URIs are resolved through backend proxy endpoints and render in browser UI.
+9. UI no longer labels non-email providers as matrix bridge-specific.
+10. Required checks pass.
 
 ## Rollout
 

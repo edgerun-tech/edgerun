@@ -133,15 +133,30 @@ export default function ConversationsPanel(props) {
                   >
                     <div class="flex items-center justify-between gap-2">
                       <div class="flex min-w-0 items-center gap-2">
-                        <span
-                          class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
-                          style={{
-                            "background-color": `${(props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color)}33`,
-                            color: props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color
-                          }}
+                        <Show
+                          when={typeof thread.avatarUrl === "string" && thread.avatarUrl.trim()}
+                          fallback={(
+                            <span
+                              class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-700 text-[11px]"
+                              style={{
+                                "background-color": `${(props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color)}33`,
+                                color: props.chatHeadForConversation(thread)?.color || safeFallbackChatHead().color
+                              }}
+                            >
+                              {props.chatHeadForConversation(thread)?.emoji || props.chatHeadForConversation(thread)?.label || safeFallbackChatHead().label}
+                            </span>
+                          )}
                         >
-                          {props.chatHeadForConversation(thread)?.emoji || props.chatHeadForConversation(thread)?.label || safeFallbackChatHead().label}
-                        </span>
+                          {(avatarUrl) => (
+                            <img
+                              src={avatarUrl()}
+                              alt={thread.title || "Conversation avatar"}
+                              class="h-6 w-6 rounded-full border border-neutral-700 object-cover"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                        </Show>
                         <p class={props.cn("truncate text-[11px] text-neutral-200", props.activeConversation()?.id === thread.id ? "font-semibold text-[hsl(var(--primary))]" : "font-medium")}>{thread.title}</p>
                       </div>
                       <span class={props.cn("rounded border px-1.5 py-0.5 text-[9px] uppercase tracking-wide", channelBadgeClass(thread.channel))}>
@@ -393,6 +408,33 @@ export default function ConversationsPanel(props) {
                     <p class="font-mono text-[11px] leading-5 text-neutral-200 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
                       {row.message?.text || (props.state().streaming && row.message?.role !== "user" ? "..." : "")}
                     </p>
+                    <Show when={typeof row.message?.attachmentUrl === "string" && row.message.attachmentUrl.trim()}>
+                      {(attachmentUrl) => (
+                        <div class="mt-2 overflow-hidden rounded border border-neutral-700/80 bg-black/25">
+                          <Show
+                            when={String(row.message?.attachmentType || "").toLowerCase() === "photo" || String(row.message?.attachmentType || "").toLowerCase() === "image"}
+                            fallback={
+                              <a
+                                class="block truncate px-2 py-1.5 text-[10px] text-[hsl(var(--primary))] underline-offset-2 hover:underline"
+                                href={attachmentUrl()}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Open attachment
+                              </a>
+                            }
+                          >
+                            <img
+                              src={attachmentUrl()}
+                              alt={String(row.message?.attachmentType || "Attachment")}
+                              class="max-h-56 w-full object-contain"
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                            />
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
                   </article>
                 )}
               </For>

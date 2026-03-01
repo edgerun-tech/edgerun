@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 07:10:29Z
+Generated: 2026-03-01 07:21:17Z
 
 ## Summary
 
-- Total specs: 188
-- Cataloged: 47
-- Active: 33
+- Total specs: 189
+- Cataloged: 48
+- Active: 34
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 141
@@ -21,6 +21,7 @@ Generated: 2026-03-01 07:10:29Z
 | [2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md](./2026-03-01-ci-build-determinism-and-hygiene-wins-v1.md) | ci | Batches high-impact CI/build determinism and hygiene fixes. |
 | [2026-03-01-cloudflare-account-token-verification-v1.md](./2026-03-01-cloudflare-account-token-verification-v1.md) | node-manager | Verifies Cloudflare account API tokens via local bridge endpoint for integrations. |
 | [2026-03-01-cloudflare-auth-assist-flow-v1.md](./2026-03-01-cloudflare-auth-assist-flow-v1.md) | intent-ui | Adds Cloudflare sign-in assist flow and logged-in identity label after verify. |
+| [2026-03-01-connected-devices-ip-flag-widget-v1.md](./2026-03-01-connected-devices-ip-flag-widget-v1.md) | intent-ui | Adds centered widget showing connected devices with IP and country flags. |
 | [2026-03-01-google-contacts-intent-ui-normalization-v1.md](./2026-03-01-google-contacts-intent-ui-normalization-v1.md) | intent-ui | Normalizes People API contacts payloads for Intent UI conversations. |
 | [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
 | [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |

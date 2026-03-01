@@ -97,6 +97,10 @@ const LOCAL_MCP_PREFLIGHT_PATH: &str = "/v1/local/mcp/integration/preflight";
 const LOCAL_CLOUDFLARE_VERIFY_PATH: &str = "/v1/local/cloudflare/verify";
 const LOCAL_BEEPER_VERIFY_PATH: &str = "/v1/local/beeper/verify";
 const LOCAL_BEEPER_CHATS_PATH: &str = "/v1/local/beeper/chats";
+const LOCAL_BEEPER_MESSAGES_PATH: &str = "/v1/local/beeper/messages";
+const LOCAL_BEEPER_IMPORTED_PATH: &str = "/v1/local/beeper/imported";
+const LOCAL_BEEPER_MEDIA_PATH: &str = "/v1/local/beeper/media";
+const LOCAL_BEEPER_SEND_PATH: &str = "/v1/local/beeper/send";
 const LOCAL_TAILSCALE_DEVICES_PATH: &str = "/v1/local/tailscale/devices";
 const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
 const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
@@ -122,6 +126,10 @@ const MCP_IMAGE_GVOICE_DEFAULT: &str = "dock.mau.dev/mautrix/gvoice:latest";
 const MCP_IMAGE_GOOGLECHAT_DEFAULT: &str = "dock.mau.dev/mautrix/googlechat:latest";
 const BEEPER_DESKTOP_API_BASE_ENV: &str = "BEEPER_DESKTOP_API_BASE";
 const BEEPER_DESKTOP_API_BASE_DEFAULT: &str = "http://127.0.0.1:23373";
+const BEEPER_IMPORT_DIR_ENV: &str = "BEEPER_IMPORT_DIR";
+const BEEPER_IMPORT_DIR_DEFAULT: &str = "/workspace/edgerun/out/imports/fbmessages";
+const BEEPER_MEDIA_ROOT_ENV: &str = "BEEPER_MEDIA_ROOT";
+const BEEPER_MEDIA_ROOT_DEFAULT: &str = "/home/ken/.config/BeeperTexts/media";
 const GOOGLE_OAUTH_CLIENT_ID_ENV: &str = "GOOGLE_OAUTH_CLIENT_ID";
 const GOOGLE_OAUTH_CLIENT_SECRET_ENV: &str = "GOOGLE_OAUTH_CLIENT_SECRET";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
@@ -561,6 +569,67 @@ struct LocalBeeperChatsQuery {
     token: String,
     #[serde(default)]
     limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperMessagesQuery {
+    token: String,
+    #[serde(default, alias = "chatId")]
+    chat_id: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperImportedQuery {
+    #[serde(default)]
+    limit_threads: Option<usize>,
+    #[serde(default)]
+    limit_messages: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperMediaQuery {
+    uri: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalBeeperSendRequest {
+    token: String,
+    #[serde(default, alias = "chatId")]
+    chat_id: Option<String>,
+    #[serde(default)]
+    text: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedFbThread {
+    #[serde(default)]
+    participants: Vec<String>,
+    #[serde(default, alias = "threadName")]
+    thread_name: String,
+    #[serde(default)]
+    messages: Vec<ImportedFbMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedFbMessage {
+    #[serde(default, alias = "senderName")]
+    sender_name: String,
+    #[serde(default)]
+    text: String,
+    #[serde(default)]
+    timestamp: i64,
+    #[serde(default, alias = "type")]
+    message_type: String,
+    #[serde(default)]
+    media: Vec<ImportedFbMedia>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedFbMedia {
+    #[serde(default)]
+    uri: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1377,6 +1446,23 @@ fn beeper_api_base() -> String {
         .unwrap_or_else(|| BEEPER_DESKTOP_API_BASE_DEFAULT.to_string())
 }
 
+fn beeper_import_dir() -> String {
+    std::env::var(BEEPER_IMPORT_DIR_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| BEEPER_IMPORT_DIR_DEFAULT.to_string())
+}
+
+fn beeper_media_root() -> PathBuf {
+    std::env::var(BEEPER_MEDIA_ROOT_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(BEEPER_MEDIA_ROOT_DEFAULT))
+}
+
 async fn beeper_api_verify_token(token: &str) -> Result<sonic_rs::Value> {
     let client = Client::new();
     let base = beeper_api_base();
@@ -1455,6 +1541,293 @@ async fn beeper_api_get_chats(token: &str, limit: usize) -> Result<sonic_rs::Val
         base,
         last_error
     ))
+}
+
+fn beeper_encode_path_segment(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| {
+            let ch = *byte as char;
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.' || ch == '~' {
+                ch.to_string()
+            } else {
+                format!("%{:02X}", byte)
+            }
+        })
+        .collect::<String>()
+}
+
+fn beeper_media_content_type(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("mov") => "video/quicktime",
+        Some("mp3") => "audio/mpeg",
+        Some("wav") => "audio/wav",
+        Some("ogg") => "audio/ogg",
+        Some("pdf") => "application/pdf",
+        _ => "application/octet-stream",
+    }
+}
+
+fn resolve_beeper_media_path(raw_uri: &str) -> Result<PathBuf> {
+    let uri = raw_uri.trim();
+    if uri.is_empty() {
+        return Err(anyhow!("uri is required"));
+    }
+    let media_root = beeper_media_root();
+    let candidate = if let Some(path) = uri.strip_prefix("file://") {
+        PathBuf::from(path)
+    } else if let Some(rest) = uri.strip_prefix("mxc://") {
+        let mut parts = rest.splitn(2, '/');
+        let host = parts.next().unwrap_or_default().trim();
+        let media_id = parts.next().unwrap_or_default().trim();
+        if host.is_empty() || media_id.is_empty() {
+            return Err(anyhow!("invalid mxc uri"));
+        }
+        media_root.join(host).join(media_id)
+    } else {
+        return Err(anyhow!("unsupported beeper media uri"));
+    };
+
+    let root_display = media_root.display().to_string();
+    let candidate_display = candidate.display().to_string();
+    if !candidate_display.starts_with(&root_display) {
+        return Err(anyhow!("media uri is outside allowed root"));
+    }
+    Ok(candidate)
+}
+
+async fn beeper_api_get_chat_messages(token: &str, chat_id: &str, limit: usize) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let base = beeper_api_base();
+    let encoded_chat = beeper_encode_path_segment(chat_id);
+    let candidates = [
+        format!("/v1/chats/{encoded_chat}/messages?limit={limit}"),
+        format!("/v0/chats/{encoded_chat}/messages?limit={limit}"),
+    ];
+    let mut last_error = String::new();
+    for path in candidates {
+        let url = format!("{base}{path}");
+        let response = match client
+            .get(&url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => {
+                last_error = format!("beeper messages request failed: {url}: {err}");
+                continue;
+            }
+        };
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("failed to read beeper messages response: {url}"))?;
+        if !status.is_success() {
+            let detail = String::from_utf8_lossy(&bytes).to_string();
+            last_error = format!("beeper messages request failed ({status}) at {url}: {detail}");
+            continue;
+        }
+        return sonic_rs::from_slice(&bytes)
+            .with_context(|| format!("failed to parse beeper messages json: {url}"));
+    }
+    Err(anyhow!(
+        "unable to fetch Beeper chat messages for {} at {}: {}",
+        chat_id,
+        base,
+        last_error
+    ))
+}
+
+async fn beeper_api_send_chat_message(token: &str, chat_id: &str, text: &str) -> Result<sonic_rs::Value> {
+    let client = Client::new();
+    let base = beeper_api_base();
+    let encoded_chat = beeper_encode_path_segment(chat_id);
+    let candidates = [
+        format!("/v1/chats/{encoded_chat}/messages"),
+        format!("/v0/chats/{encoded_chat}/messages"),
+    ];
+    let payload = sonic_rs::json!({ "text": text });
+    let mut last_error = String::new();
+    for path in candidates {
+        let url = format!("{base}{path}");
+        let response = match client
+            .post(&url)
+            .header("Authorization", format!("Bearer {token}"))
+            .header("Accept", "application/json")
+            .header(CONTENT_TYPE, "application/json")
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(resp) => resp,
+            Err(err) => {
+                last_error = format!("beeper send request failed: {url}: {err}");
+                continue;
+            }
+        };
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .with_context(|| format!("failed to read beeper send response: {url}"))?;
+        if !status.is_success() {
+            let detail = String::from_utf8_lossy(&bytes).to_string();
+            last_error = format!("beeper send failed ({status}) at {url}: {detail}");
+            continue;
+        }
+        return sonic_rs::from_slice(&bytes)
+            .with_context(|| format!("failed to parse beeper send json: {url}"));
+    }
+    Err(anyhow!(
+        "unable to send Beeper message for chat {} at {}: {}",
+        chat_id,
+        base,
+        last_error
+    ))
+}
+
+fn sanitize_import_thread_id(raw: &str) -> String {
+    let compact = raw
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' { ch } else { '-' })
+        .collect::<String>();
+    if compact.trim_matches('-').is_empty() {
+        "thread".to_string()
+    } else {
+        compact
+    }
+}
+
+fn load_imported_fb_threads(limit_threads: usize, limit_messages: usize) -> Result<Vec<sonic_rs::Value>> {
+    let dir = PathBuf::from(beeper_import_dir());
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut threads = Vec::new();
+    for entry in fs::read_dir(&dir).with_context(|| format!("failed to read beeper import dir {}", dir.display()))? {
+        let entry = match entry {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let raw = match fs::read(&path) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let thread: ImportedFbThread = match sonic_rs::from_slice(&raw) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let thread_name = if thread.thread_name.trim().is_empty() {
+            path.file_stem().and_then(|name| name.to_str()).unwrap_or("Imported Thread").to_string()
+        } else {
+            thread.thread_name.trim().to_string()
+        };
+        let participants = thread
+            .participants
+            .into_iter()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .collect::<Vec<_>>();
+        let subtitle = participants
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut messages = thread
+            .messages
+            .into_iter()
+            .map(|item| {
+                let first_media = item
+                    .media
+                    .iter()
+                    .find_map(|media| {
+                        let uri = media.uri.trim();
+                        if uri.is_empty() {
+                            None
+                        } else {
+                            Some(uri.to_string())
+                        }
+                    })
+                    .unwrap_or_default();
+                let body = if !item.text.trim().is_empty() {
+                    item.text.trim().to_string()
+                } else if !first_media.is_empty() {
+                    format!("[Media]\n{}", first_media)
+                } else {
+                    format!("[{}]", if item.message_type.trim().is_empty() { "message" } else { item.message_type.trim() })
+                };
+                sonic_rs::json!({
+                    "id": format!("{}-{}", sanitize_import_thread_id(&thread_name), item.timestamp),
+                    "role": "contact",
+                    "text": body,
+                    "createdAt": item.timestamp,
+                    "channel": "beeper",
+                    "author": if item.sender_name.trim().is_empty() { "Unknown" } else { item.sender_name.trim() },
+                })
+            })
+            .collect::<Vec<_>>();
+        messages.sort_by(|a, b| {
+            let a_ts = a["createdAt"].as_i64().unwrap_or_default();
+            let b_ts = b["createdAt"].as_i64().unwrap_or_default();
+            a_ts.cmp(&b_ts)
+        });
+        if messages.len() > limit_messages {
+            messages = messages[messages.len().saturating_sub(limit_messages)..].to_vec();
+        }
+        let updated_at = messages
+            .last()
+            .and_then(|message| message["createdAt"].as_i64())
+            .unwrap_or_default();
+        let preview = messages
+            .last()
+            .and_then(|message| message["text"].as_str())
+            .unwrap_or_default()
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        threads.push(sonic_rs::json!({
+            "id": format!("bridge-beeper-import-{}", sanitize_import_thread_id(&thread_name)),
+            "kind": "bridge",
+            "channel": "beeper",
+            "title": thread_name,
+            "subtitle": if subtitle.is_empty() { "Imported from Facebook export".to_string() } else { subtitle },
+            "updatedAt": updated_at,
+            "preview": preview,
+            "messages": messages,
+            "imported": true,
+        }));
+    }
+    threads.sort_by(|a, b| {
+        let a_ts = a["updatedAt"].as_i64().unwrap_or_default();
+        let b_ts = b["updatedAt"].as_i64().unwrap_or_default();
+        b_ts.cmp(&a_ts)
+    });
+    if threads.len() > limit_threads {
+        threads.truncate(limit_threads);
+    }
+    Ok(threads)
 }
 
 fn tailscale_api_key_from(raw: &str) -> Result<String> {
@@ -2118,6 +2491,14 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_BEEPER_VERIFY_PATH, options(handle_local_options))
         .route(LOCAL_BEEPER_CHATS_PATH, get(handle_local_beeper_chats))
         .route(LOCAL_BEEPER_CHATS_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_MESSAGES_PATH, get(handle_local_beeper_messages))
+        .route(LOCAL_BEEPER_MESSAGES_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_IMPORTED_PATH, get(handle_local_beeper_imported))
+        .route(LOCAL_BEEPER_IMPORTED_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_MEDIA_PATH, get(handle_local_beeper_media))
+        .route(LOCAL_BEEPER_MEDIA_PATH, options(handle_local_options))
+        .route(LOCAL_BEEPER_SEND_PATH, post(handle_local_beeper_send))
+        .route(LOCAL_BEEPER_SEND_PATH, options(handle_local_options))
         .route(
             LOCAL_TAILSCALE_DEVICES_PATH,
             post(handle_local_tailscale_devices),
@@ -3135,6 +3516,71 @@ async fn handle_local_beeper_chats(Query(query): Query<LocalBeeperChatsQuery>) -
             "items": payload["items"],
         }),
     )
+}
+
+async fn handle_local_beeper_messages(Query(query): Query<LocalBeeperMessagesQuery>) -> Response {
+    let token = match beeper_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let chat_id = match query.chat_id.as_deref().map(str::trim) {
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => return local_json_error(AxumStatusCode::BAD_REQUEST, "chat_id is required"),
+    };
+    let limit = query.limit.unwrap_or(40).clamp(1, 200);
+    let payload = match beeper_api_get_chat_messages(&token, &chat_id, limit).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "items": payload["items"],
+        }),
+    )
+}
+
+async fn handle_local_beeper_imported(Query(query): Query<LocalBeeperImportedQuery>) -> Response {
+    let limit_threads = query.limit_threads.unwrap_or(100).clamp(1, 500);
+    let limit_messages = query.limit_messages.unwrap_or(120).clamp(1, 1000);
+    let items = match load_imported_fb_threads(limit_threads, limit_messages) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "items": items,
+            "count": items.len(),
+            "source_dir": beeper_import_dir(),
+        }),
+    )
+}
+
+async fn handle_local_beeper_media(Query(query): Query<LocalBeeperMediaQuery>) -> Response {
+    let path = match resolve_beeper_media_path(&query.uri) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let bytes = match fs::read(&path) {
+        Ok(value) => value,
+        Err(err) => {
+            return local_json_error(
+                AxumStatusCode::NOT_FOUND,
+                &format!("failed to read media {}: {err}", path.display()),
+            )
+        }
+    };
+    let mut response = (AxumStatusCode::OK, bytes).into_response();
+    if let Ok(value) = HeaderValue::from_str(beeper_media_content_type(&path)) {
+        response.headers_mut().insert(AXUM_CONTENT_TYPE, value);
+    }
+    if let Ok(value) = HeaderValue::from_str("private, max-age=3600") {
+        response.headers_mut().insert(CACHE_CONTROL, value);
+    }
+    response
 }
 
 async fn handle_local_tailscale_devices(

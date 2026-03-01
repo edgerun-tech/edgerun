@@ -17,6 +17,7 @@ import {
   useWorkflowSession,
   workflowUi
 } from "../../stores/workflow-ui";
+import { knownDevices } from "../../stores/devices";
 import { integrationStore } from "../../stores/integrations";
 import { openWindow } from "../../stores/windows";
 import { isOfficialBridgeId } from "../../lib/integrations/official-bridges";
@@ -43,6 +44,29 @@ function cn(...classes) {
   return twMerge(clsx(classes));
 }
 
+function countryCodeFromDevice(device) {
+  const metadata = device?.metadata && typeof device.metadata === "object" ? device.metadata : {};
+  const candidates = [
+    metadata.countryCode,
+    metadata.country,
+    metadata.geo?.countryCode,
+    device?.countryCode,
+    device?.country
+  ];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim().toUpperCase();
+    if (/^[A-Z]{2}$/.test(value)) return value;
+  }
+  return "";
+}
+
+function flagFromCountryCode(countryCode) {
+  const code = String(countryCode || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "🏳️";
+  const chars = [...code].map((letter) => 0x1f1e6 + (letter.charCodeAt(0) - 65));
+  return String.fromCodePoint(...chars);
+}
+
 function WorkflowOverlay() {
   if (typeof window === "undefined") return null;
   const LOCAL_CONVERSATION_MESSAGES_KEY = "intent-ui-local-conversation-messages-v1";
@@ -60,6 +84,7 @@ function WorkflowOverlay() {
   const topInset = createMemo(() => 40);
   const shortSessionId = createMemo(() => state().sessionId ? `${state().sessionId.slice(0, 8)}...` : "new");
   const newestFirstMessages = createMemo(() => [...(state().messages || [])].reverse());
+  const onlineDevices = createMemo(() => knownDevices().filter((device) => Boolean(device?.online)));
   const [conversationTab, setConversationTab] = createSignal("threads");
   const [selectedConversationId, setSelectedConversationId] = createSignal("");
   const [showConversationList, setShowConversationList] = createSignal(true);
@@ -742,6 +767,37 @@ function WorkflowOverlay() {
       </>
 
       <Portal mount={document.body}>
+        <Show when={onlineDevices().length > 0}>
+          <div
+            class="pointer-events-none fixed left-1/2 top-1/2 z-[10035] w-[min(460px,92vw)] -translate-x-1/2 -translate-y-1/2"
+            data-testid="connected-devices-widget"
+          >
+            <div class="pointer-events-auto rounded-xl border border-neutral-700/90 bg-neutral-950/88 p-2 shadow-[0_20px_44px_rgba(0,0,0,0.45)] backdrop-blur">
+              <p class="px-1 text-[10px] uppercase tracking-wide text-neutral-400">Connected Devices</p>
+              <div class="mt-2 space-y-1" data-testid="connected-devices-widget-list">
+                <For each={onlineDevices()}>
+                  {(device) => {
+                    const countryCode = countryCodeFromDevice(device);
+                    const flag = flagFromCountryCode(countryCode);
+                    const ip = String(device?.ip || "").trim() || "Unknown";
+                    return (
+                      <div class="flex items-center justify-between gap-2 rounded border border-neutral-800 bg-neutral-900/70 px-2 py-1 text-[11px]" data-testid="connected-devices-widget-row">
+                        <div class="min-w-0">
+                          <p class="truncate text-neutral-100">{String(device?.name || device?.id || "Device")}</p>
+                          <p class="truncate text-[10px] text-neutral-400">{ip}</p>
+                        </div>
+                        <div class="shrink-0 text-right">
+                          <p class="text-base leading-none" title={countryCode || "unknown"}>{flag}</p>
+                          <p class="mt-0.5 text-[9px] uppercase tracking-wide text-neutral-500">{countryCode || "--"}</p>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </div>
+        </Show>
         <For each={chatBubbles()}>
           {(bubble) => (
             <div

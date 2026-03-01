@@ -84,6 +84,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /dev:/dev
       - /home/ken/src/edgerun:/workspace/edgerun
+      - /home/ken/.config/BeeperTexts/media:/home/ken/.config/BeeperTexts/media:ro
       - edgerun-var-lib:/var/lib/edgerun
       - edgerun-etc:/etc/edgerun
       - edgerun-run:/run/edgerun
