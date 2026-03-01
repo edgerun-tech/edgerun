@@ -26,6 +26,7 @@ const CloudPanel = lazy(() => import("../panels/CloudPanel"));
 const CredentialsPanel = lazy(() => import("../panels/CredentialsPanel"));
 const LauncherGuidePanel = lazy(() => import("../panels/LauncherGuidePanel"));
 const BrowserApp = lazy(() => import("../apps/BrowserApp"));
+const GooglePhotosPanel = lazy(() => import("../panels/GooglePhotosPanel"));
 
 function ProfileCapabilityLocked(props) {
   return <div class="h-full p-4" data-testid="profile-capability-locked">
@@ -157,7 +158,7 @@ function getWindowContent(id) {
         </Suspense>;
     case "photos":
       return <Suspense fallback={<LoadingFallback />}>
-          <BrowserApp windowId={id} initialUrl="https://photos.google.com" />
+          <GooglePhotosPanel />
         </Suspense>;
     case "credentials":
       return <Suspense fallback={<LoadingFallback />}>

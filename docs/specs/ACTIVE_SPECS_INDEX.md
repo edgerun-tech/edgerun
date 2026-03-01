@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 07:21:17Z
+Generated: 2026-03-01 08:14:17Z
 
 ## Summary
 
-- Total specs: 189
-- Cataloged: 48
-- Active: 34
+- Total specs: 193
+- Cataloged: 52
+- Active: 38
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 141
@@ -22,8 +22,12 @@ Generated: 2026-03-01 07:21:17Z
 | [2026-03-01-cloudflare-account-token-verification-v1.md](./2026-03-01-cloudflare-account-token-verification-v1.md) | node-manager | Verifies Cloudflare account API tokens via local bridge endpoint for integrations. |
 | [2026-03-01-cloudflare-auth-assist-flow-v1.md](./2026-03-01-cloudflare-auth-assist-flow-v1.md) | intent-ui | Adds Cloudflare sign-in assist flow and logged-in identity label after verify. |
 | [2026-03-01-connected-devices-ip-flag-widget-v1.md](./2026-03-01-connected-devices-ip-flag-widget-v1.md) | intent-ui | Adds centered widget showing connected devices with IP and country flags. |
+| [2026-03-01-contacts-merge-multi-channel-import-v1.md](./2026-03-01-contacts-merge-multi-channel-import-v1.md) | intent-ui | Merges imported and live contact sources while preserving known channels. |
+| [2026-03-01-conversation-composer-enter-send-v1.md](./2026-03-01-conversation-composer-enter-send-v1.md) | intent-ui | Adds Enter-to-send and Shift+Enter newline behavior in conversation composer. |
 | [2026-03-01-google-contacts-intent-ui-normalization-v1.md](./2026-03-01-google-contacts-intent-ui-normalization-v1.md) | intent-ui | Normalizes People API contacts payloads for Intent UI conversations. |
 | [2026-03-01-google-messaging-bridge-default-images-v1.md](./2026-03-01-google-messaging-bridge-default-images-v1.md) | node-manager | Adds deterministic default MCP image mappings for Google messaging bridge integrations. |
+| [2026-03-01-google-oauth-local-bridge-fix-v1.md](./2026-03-01-google-oauth-local-bridge-fix-v1.md) | node-manager | Routes Google OAuth start/callback through local bridge and hydrates token client-side. |
+| [2026-03-01-google-photos-native-panel-v2.md](./2026-03-01-google-photos-native-panel-v2.md) | intent-ui | Replaces browser embed with native Google Photos panel backed by local API. |
 | [2026-03-01-google-productivity-local-bridge-v1.md](./2026-03-01-google-productivity-local-bridge-v1.md) | node-manager | Routes Gmail/Drive/Photos and related Google productivity APIs through local bridge. |
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
 | [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |

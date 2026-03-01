@@ -75,6 +75,8 @@ describe('intent ui beeper conversations sync', () => {
             id: 'bridge-beeper-import-old-thread',
             title: 'Imported Legacy Chat',
             subtitle: 'Imported from Facebook export',
+            participants: ['Legacy Contact'],
+            channels: ['beeper', 'facebook_export'],
             preview: 'Imported message preview',
             updatedAt: '2025-12-01T00:00:00.000Z',
             messages: [
@@ -92,6 +94,14 @@ describe('intent ui beeper conversations sync', () => {
       }
     }).as('beeperImported')
 
+    cy.intercept('POST', '/api/beeper/send', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        item: { id: 'sent-1' }
+      }
+    }).as('beeperSend')
+
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         seedProfileSession(win)
@@ -107,8 +117,15 @@ describe('intent ui beeper conversations sync', () => {
     cy.contains('Beeper Team Chat').should('be.visible')
     cy.contains('Beeper Bot: [Photo]').should('be.visible')
     cy.contains('Imported Legacy Chat').should('be.visible')
+    cy.contains('button', 'Contacts').click({ force: true })
+    cy.contains('Legacy Contact').should('be.visible')
+    cy.contains('Channels: beeper, facebook_export').should('be.visible')
+    cy.contains('button', 'Threads').click({ force: true })
     cy.contains('Beeper Team Chat').click({ force: true })
     cy.contains('Welcome to Beeper Desktop API sync.').should('be.visible')
     cy.contains('https://example.com/photo.jpg').should('be.visible')
+    cy.get('[data-testid="conversation-draft-input"]').clear().type('Outbound check')
+    cy.get('[data-testid="conversation-send-message"]').click({ force: true })
+    cy.wait('@beeperSend')
   })
 })

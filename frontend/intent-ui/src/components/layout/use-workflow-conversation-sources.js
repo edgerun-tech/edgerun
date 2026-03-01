@@ -45,6 +45,44 @@ function normalizeGoogleContact(item, index) {
   };
 }
 
+function normalizeContactKey(name, email) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (normalizedEmail) return `email:${normalizedEmail}`;
+  return `name:${String(name || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+}
+
+function upsertMergedContact(map, contact) {
+  const name = firstNonEmptyString([contact?.name, "Unknown"]);
+  const email = firstNonEmptyString([contact?.email]);
+  const key = normalizeContactKey(name, email);
+  const existing = map.get(key) || {
+    id: `merged-contact-${map.size + 1}`,
+    name,
+    email,
+    source: "Merged",
+    channels: [],
+    threadIds: []
+  };
+  const channels = new Set(Array.isArray(existing.channels) ? existing.channels : []);
+  for (const channel of Array.isArray(contact?.channels) ? contact.channels : []) {
+    const value = String(channel || "").trim();
+    if (value) channels.add(value);
+  }
+  const threadIds = new Set(Array.isArray(existing.threadIds) ? existing.threadIds : []);
+  for (const threadId of Array.isArray(contact?.threadIds) ? contact.threadIds : []) {
+    const value = String(threadId || "").trim();
+    if (value) threadIds.add(value);
+  }
+  map.set(key, {
+    ...existing,
+    name: existing.name || name,
+    email: existing.email || email,
+    source: existing.source || contact?.source || "Merged",
+    channels: Array.from(channels),
+    threadIds: Array.from(threadIds)
+  });
+}
+
 function beeperMediaProxyUrl(uri) {
   const value = String(uri || "").trim();
   if (!value) return "";
@@ -97,6 +135,9 @@ function normalizeBeeperChat(chat, index) {
   ]);
   const participants = Array.isArray(chat?.participants?.items) ? chat.participants.items : [];
   const nonSelfParticipants = participants.filter((item) => !item?.isSelf);
+  const participantNames = nonSelfParticipants
+    .map((item) => firstNonEmptyString([item?.fullName, item?.displayText, item?.username]))
+    .filter(Boolean);
   const singleChat = String(chat?.type || "").toLowerCase() === "single";
   const candidateAvatar = firstNonEmptyString([
     singleChat && nonSelfParticipants.length === 1 && typeof nonSelfParticipants[0]?.imgURL === "string"
@@ -136,6 +177,8 @@ function normalizeBeeperChat(chat, index) {
     updatedAt,
     avatarUrl,
     sourceChatId: chatId,
+    participants: participantNames,
+    channels: ["beeper"],
     preview: previewText,
     messages: previewMessages
   };
@@ -357,7 +400,9 @@ export function useWorkflowConversationSources({ messageProviderIntegrations, lo
                 subtitle: String(thread.subtitle || "Imported from Facebook export"),
                 updatedAt: String(thread.updatedAt || ""),
                 preview: String(thread.preview || "Imported history"),
-                messages: Array.isArray(thread.messages) ? thread.messages : []
+                messages: Array.isArray(thread.messages) ? thread.messages : [],
+                participants: Array.isArray(thread.participants) ? thread.participants : [],
+                channels: Array.isArray(thread.channels) ? thread.channels : ["beeper", "facebook_export"]
               }))
               .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()));
           }
@@ -367,30 +412,73 @@ export function useWorkflowConversationSources({ messageProviderIntegrations, lo
       }
       setBridgeThreads(providerThreads);
 
-      const googleToken = window.localStorage.getItem("google_token");
-      if (!googleToken) {
-        setContacts([]);
-        return;
+      const mergedContactsMap = new Map();
+      for (const thread of sortedThreads) {
+        upsertMergedContact(mergedContactsMap, {
+          name: thread.title,
+          email: thread.subtitle,
+          channels: ["email"],
+          threadIds: [thread.id],
+          source: "Email"
+        });
+      }
+      for (const thread of providerThreads) {
+        if (!thread || thread.kind !== "bridge") continue;
+        const participants = Array.isArray(thread.participants) ? thread.participants : [];
+        if (participants.length > 0) {
+          for (const participant of participants) {
+            upsertMergedContact(mergedContactsMap, {
+              name: participant,
+              channels: Array.isArray(thread.channels) && thread.channels.length > 0 ? thread.channels : [thread.channel || "beeper"],
+              threadIds: [thread.id],
+              source: "Beeper"
+            });
+          }
+          continue;
+        }
+        upsertMergedContact(mergedContactsMap, {
+          name: thread.title,
+          channels: Array.isArray(thread.channels) && thread.channels.length > 0 ? thread.channels : [thread.channel || "chat"],
+          threadIds: [thread.id],
+          source: "Integration"
+        });
       }
 
-      setContactsLoading(true);
-      try {
-        const response = await fetch(`/api/google/contacts?limit=100&token=${encodeURIComponent(googleToken)}`);
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || payload?.ok === false) {
-          throw new Error(payload?.error || `Google contacts request failed (${response.status})`);
+      const googleToken = window.localStorage.getItem("google_token");
+      let googleContacts = [];
+      if (googleToken) {
+        setContactsLoading(true);
+        try {
+          const response = await fetch(`/api/google/contacts?limit=100&token=${encodeURIComponent(googleToken)}`);
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || payload?.ok === false) {
+            throw new Error(payload?.error || `Google contacts request failed (${response.status})`);
+          }
+          const items = Array.isArray(payload?.items) ? payload.items : [];
+          googleContacts = items
+            .map((item, index) => normalizeGoogleContact(item, index))
+            .filter((contact) => contact.name || contact.email)
+            .sort((a, b) => a.name.localeCompare(b.name));
+        } catch {
+          googleContacts = [];
+        } finally {
+          setContactsLoading(false);
         }
-        const items = Array.isArray(payload?.items) ? payload.items : [];
-        const normalized = items
-          .map((item, index) => normalizeGoogleContact(item, index))
-          .filter((contact) => contact.name || contact.email)
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setContacts(normalized);
-      } catch {
-        setContacts([]);
-      } finally {
-        setContactsLoading(false);
       }
+
+      for (const contact of googleContacts) {
+        upsertMergedContact(mergedContactsMap, {
+          ...contact,
+          channels: ["google_contacts", "email"],
+          threadIds: contact.email ? [`email-${contact.email}`] : [],
+          source: "Google Contacts"
+        });
+      }
+
+      const mergedContacts = Array.from(mergedContactsMap.values())
+        .filter((contact) => contact.name || contact.email)
+        .sort((a, b) => a.name.localeCompare(b.name));
+      setContacts(mergedContacts);
     };
 
     loadConversationSources();

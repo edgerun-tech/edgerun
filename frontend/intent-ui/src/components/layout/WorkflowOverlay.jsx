@@ -337,6 +337,44 @@ function WorkflowOverlay() {
     const text = draftMessage().trim();
     const conversation = activeConversation();
     if (!text || !conversation) return;
+
+    if (conversation.channel === "beeper") {
+      const beeperToken = integrationStore.getToken("beeper");
+      const chatId = String(conversation.sourceChatId || "").trim();
+      if (!beeperToken) {
+        return;
+      }
+      if (!chatId) {
+        return;
+      }
+      try {
+        const response = await fetch("/api/beeper/send", {
+          method: "POST",
+          headers: { "content-type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ token: beeperToken, chat_id: chatId, text })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          throw new Error(payload?.error || `Beeper send failed (${response.status})`);
+        }
+      } catch {
+        const failedEntry = {
+          id: `local-${conversation.id}-${Date.now()}-error`,
+          role: "assistant",
+          text: "Failed to send message to Beeper Desktop API.",
+          createdAt: new Date().toISOString(),
+          channel: conversation.channel || "chat",
+          author: "System"
+        };
+        setLocalMessagesByConversation((prev) => ({
+          ...prev,
+          [conversation.id]: [...(prev[conversation.id] || []), failedEntry]
+        }));
+        setShowEmojiPalette(false);
+        return;
+      }
+    }
+
     const entry = {
       id: `local-${conversation.id}-${Date.now()}`,
       role: "user",

@@ -48,9 +48,10 @@ describe('intent ui conversations hub', () => {
 
     cy.get('[data-testid="conversation-emoji-toggle"]').click({ force: true })
     cy.contains('button', '😀').click({ force: true })
-    cy.get('[data-testid="conversation-draft-input"]').type('hello from conversations hub', { force: true })
-    cy.get('[data-testid="conversation-send-message"]').click({ force: true })
+    cy.get('[data-testid="conversation-draft-input"]').type('line one{shift+enter}line two', { force: true })
+    cy.get('[data-testid="conversation-draft-input"]').type('{enter}', { force: true })
 
-    cy.contains('hello from conversations hub').should('exist')
+    cy.contains('line one').should('exist')
+    cy.contains('line two').should('exist')
   })
 })

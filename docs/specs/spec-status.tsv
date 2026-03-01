@@ -47,3 +47,7 @@ CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os
 2026-03-01-beeper-desktop-api-replace-self-hosted-bridges-v1.md	active	intent-ui		Replaces self-hosted messaging bridge integrations with Beeper Desktop API token flow.
 2026-03-01-beeper-sync-backend-flow-v1.md	active	node-manager		Moves Beeper chat synchronization through backend local bridge endpoint.
 2026-03-01-connected-devices-ip-flag-widget-v1.md	active	intent-ui		Adds centered widget showing connected devices with IP and country flags.
+2026-03-01-conversation-composer-enter-send-v1.md	active	intent-ui		Adds Enter-to-send and Shift+Enter newline behavior in conversation composer.
+2026-03-01-contacts-merge-multi-channel-import-v1.md	active	intent-ui		Merges imported and live contact sources while preserving known channels.
+2026-03-01-google-photos-native-panel-v2.md	active	intent-ui		Replaces browser embed with native Google Photos panel backed by local API.
+2026-03-01-google-oauth-local-bridge-fix-v1.md	active	node-manager		Routes Google OAuth start/callback through local bridge and hydrates token client-side.

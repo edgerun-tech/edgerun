@@ -202,9 +202,21 @@ export default function ConversationsPanel(props) {
                       onClick={() => {
                         const emailThreadId = contact.email ? `email-${contact.email}` : "";
                         const existing = emailThreadId ? props.threadConversations().find((thread) => thread.id === emailThreadId) : null;
+                        const linkedThreadId = Array.isArray(contact.threadIds)
+                          ? contact.threadIds.find((threadId) => props.threadConversations().some((thread) => thread.id === threadId))
+                          : "";
+                        const linkedThread = linkedThreadId
+                          ? props.threadConversations().find((thread) => thread.id === linkedThreadId)
+                          : null;
                         if (existing) {
                           props.setConversationTab("threads");
                           props.setSelectedConversationId(existing.id);
+                          props.setShowConversationList(false);
+                          return;
+                        }
+                        if (linkedThread) {
+                          props.setConversationTab("threads");
+                          props.setSelectedConversationId(linkedThread.id);
                           props.setShowConversationList(false);
                           return;
                         }
@@ -236,6 +248,11 @@ export default function ConversationsPanel(props) {
                         <p class="truncate text-[11px] font-medium text-neutral-200">{contact.name}</p>
                       </div>
                       <p class="mt-1 truncate text-[10px] text-neutral-500">{contact.email || "No email"}</p>
+                      <Show when={Array.isArray(contact.channels) && contact.channels.length > 0}>
+                        <p class="mt-1 truncate text-[10px] text-neutral-500">
+                          Channels: {contact.channels.join(", ")}
+                        </p>
+                      </Show>
                     </button>
                   )}
                 </For>
@@ -492,6 +509,13 @@ export default function ConversationsPanel(props) {
           <textarea
             value={props.draftMessage()}
             onInput={(event) => props.setDraftMessage(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.isComposing) return;
+              if (event.key !== "Enter") return;
+              if (event.shiftKey) return;
+              event.preventDefault();
+              props.sendDraftMessage();
+            }}
             placeholder="Type a message..."
             class="h-20 w-full resize-none rounded border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-[11px] text-neutral-200 placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none"
             data-testid="conversation-draft-input"

@@ -12,6 +12,21 @@ describe('intent ui google photos panel surfacing', () => {
   }
 
   it('opens photos from quick action and command', () => {
+    cy.intercept('GET', '/api/google/photos*', {
+      statusCode: 200,
+      body: {
+        ok: true,
+        items: [
+          {
+            id: 'photo-1',
+            filename: 'sample-photo.jpg',
+            baseUrl: 'https://example.com/photo-1',
+            mediaMetadata: { creationTime: '2026-03-01T00:00:00.000Z' }
+          }
+        ]
+      }
+    }).as('googlePhotos')
+
     cy.visit('/intent-ui/', {
       onBeforeLoad(win) {
         seedProfileSession(win)
@@ -20,10 +35,12 @@ describe('intent ui google photos panel surfacing', () => {
     })
 
     cy.get('button[title="Photos"]').first().click({ force: true })
-    cy.get('[aria-label="Photos window"]').should('exist')
-    cy.contains('https://photos.google.com').should('exist')
+    cy.wait('@googlePhotos')
+    cy.get('[data-testid="google-photos-panel"]').should('exist')
+    cy.get('[data-testid="google-photos-item"]').should('have.length.at.least', 1)
+    cy.contains('sample-photo.jpg').should('be.visible')
 
     cy.get('input[type="text"]').first().clear().type('google photos{enter}', { force: true })
-    cy.get('[aria-label="Photos window"]').should('exist')
+    cy.get('[data-testid="google-photos-panel"]').should('exist')
   })
 })

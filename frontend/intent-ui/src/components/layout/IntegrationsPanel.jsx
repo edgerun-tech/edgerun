@@ -141,6 +141,29 @@ function IntegrationsPanel(props) {
   const assistantProvider = createMemo(() => workflowUi().provider || "opencode");
 
   onMount(() => {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const params = url.searchParams;
+      const oauthStatus = String(params.get("google_oauth") || "").trim().toLowerCase();
+      const oauthMessage = String(params.get("google_oauth_message") || "").trim();
+      const oauthAccessToken = String(params.get("google_access_token") || "").trim();
+      const oauthRefreshToken = String(params.get("google_refresh_token") || "").trim();
+      if (oauthStatus || oauthMessage || oauthAccessToken || oauthRefreshToken) {
+        if (oauthAccessToken) localStorage.setItem("google_token", oauthAccessToken);
+        if (oauthRefreshToken) localStorage.setItem("google_refresh_token", oauthRefreshToken);
+        if (oauthStatus === "ok") {
+          setStatus(oauthMessage || "Google OAuth connected.");
+        } else if (oauthStatus === "error") {
+          setStatus(oauthMessage || "Google OAuth failed.");
+        }
+        params.delete("google_oauth");
+        params.delete("google_oauth_message");
+        params.delete("google_access_token");
+        params.delete("google_refresh_token");
+        const query = params.toString();
+        window.history.replaceState({}, "", `${url.pathname}${query ? `?${query}` : ""}${url.hash || ""}`);
+      }
+    }
     integrationStore.checkAll();
     if (props.preselectProviderId) openProviderDialog(canonicalBridgeId(props.preselectProviderId) || props.preselectProviderId);
   });

@@ -17,9 +17,8 @@
 
   @google_oauth path /api/google/oauth /api/google/oauth/*
   handle @google_oauth {
-    reverse_proxy https://api.edgerun.tech {
-      header_up Host api.edgerun.tech
-    }
+    uri replace /api/google/oauth /v1/local/google/oauth
+    reverse_proxy 127.0.0.1:7777
   }
 
   @google path /api/google /api/google/*

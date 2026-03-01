@@ -27,8 +27,9 @@ Also serve Beeper media/avatar assets through backend proxy routes so browser UI
 6. Conversation list can surface profile pictures when provided by Beeper participants data.
 7. Media messages include usable attachment indicators/URLs in thread content.
 8. Beeper `file://` and `mxc://` media URIs are resolved through backend proxy endpoints and render in browser UI.
-9. UI no longer labels non-email providers as matrix bridge-specific.
-10. Required checks pass.
+9. Sending a message in a Beeper conversation uses backend `/api/beeper/send` and fails visibly when delivery fails.
+10. UI no longer labels non-email providers as matrix bridge-specific.
+11. Required checks pass.
 
 ## Rollout
 

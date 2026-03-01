@@ -13,7 +13,7 @@ use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{Json, Path as AxumPath, Query, State};
 use axum::http::header::{
     ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS, ACCESS_CONTROL_ALLOW_ORIGIN,
-    CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE,
+    CACHE_CONTROL, CONTENT_TYPE as AXUM_CONTENT_TYPE, LOCATION,
 };
 use axum::http::{HeaderValue, StatusCode as AxumStatusCode};
 use axum::response::{IntoResponse, Response};
@@ -110,6 +110,8 @@ const LOCAL_GOOGLE_DRIVE_FILES_PATH: &str = "/v1/local/google/drive/files";
 const LOCAL_GOOGLE_DRIVE_FILE_PATH: &str = "/v1/local/google/drive/file/{id}";
 const LOCAL_GOOGLE_PHOTOS_PATH: &str = "/v1/local/google/photos";
 const LOCAL_GOOGLE_REFRESH_PATH: &str = "/v1/local/google/refresh";
+const LOCAL_GOOGLE_OAUTH_START_PATH: &str = "/v1/local/google/oauth/start";
+const LOCAL_GOOGLE_OAUTH_CALLBACK_PATH: &str = "/v1/local/google/oauth/callback";
 const EVENTBUS_NATS_URL_ENV: &str = "EDGERUN_EVENTBUS_NATS_URL";
 const EVENTBUS_NATS_URL_DEFAULT: &str = "nats://127.0.0.1:4222";
 const INTEGRATION_TOPIC_ROOT_ENV: &str = "EDGERUN_INTEGRATION_TOPIC_ROOT";
@@ -132,6 +134,9 @@ const BEEPER_MEDIA_ROOT_ENV: &str = "BEEPER_MEDIA_ROOT";
 const BEEPER_MEDIA_ROOT_DEFAULT: &str = "/home/ken/.config/BeeperTexts/media";
 const GOOGLE_OAUTH_CLIENT_ID_ENV: &str = "GOOGLE_OAUTH_CLIENT_ID";
 const GOOGLE_OAUTH_CLIENT_SECRET_ENV: &str = "GOOGLE_OAUTH_CLIENT_SECRET";
+const GOOGLE_OAUTH_REDIRECT_ORIGIN_ENV: &str = "GOOGLE_OAUTH_REDIRECT_ORIGIN";
+const GOOGLE_OAUTH_REDIRECT_ORIGIN_DEFAULT: &str = "https://osdev.edgerun.tech";
+const GOOGLE_OAUTH_SCOPES: &str = "openid profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/photoslibrary.readonly";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -711,6 +716,22 @@ struct LocalGooglePhotosQuery {
 #[derive(Debug, Deserialize)]
 struct LocalGoogleRefreshRequest {
     refresh_token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleOauthStartQuery {
+    #[serde(default, alias = "returnTo")]
+    return_to: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalGoogleOauthCallbackQuery {
+    #[serde(default)]
+    code: Option<String>,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1358,6 +1379,65 @@ fn google_token_from(raw: &str) -> Result<String> {
     Ok(token.to_string())
 }
 
+fn google_oauth_redirect_origin() -> String {
+    std::env::var(GOOGLE_OAUTH_REDIRECT_ORIGIN_ENV)
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| GOOGLE_OAUTH_REDIRECT_ORIGIN_DEFAULT.to_string())
+}
+
+fn google_oauth_redirect_uri() -> String {
+    format!("{}/api/google/oauth/callback", google_oauth_redirect_origin())
+}
+
+fn sanitize_return_to(raw: Option<&str>) -> String {
+    let value = raw.unwrap_or("/").trim();
+    if value.starts_with('/') {
+        value.to_string()
+    } else {
+        "/".to_string()
+    }
+}
+
+fn encode_google_oauth_state(return_to: &str) -> String {
+    URL_SAFE_NO_PAD.encode(return_to.as_bytes())
+}
+
+fn decode_google_oauth_state(state: Option<&str>) -> String {
+    let Some(raw) = state else { return "/".to_string(); };
+    let decoded = URL_SAFE_NO_PAD.decode(raw.as_bytes()).ok();
+    let text = decoded
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .unwrap_or_else(|| "/".to_string());
+    sanitize_return_to(Some(&text))
+}
+
+fn append_query_pair(url: &mut String, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+    let sep = if url.contains('?') { '&' } else { '?' };
+    let encoded = beeper_encode_path_segment(value).replace("%2F", "/");
+    url.push(sep);
+    url.push_str(key);
+    url.push('=');
+    url.push_str(&encoded);
+}
+
+fn google_oauth_redirect_with_result(return_to: &str, ok: bool, message: &str, access_token: &str, refresh_token: &str) -> Response {
+    let mut location = format!("{}{}", google_oauth_redirect_origin(), sanitize_return_to(Some(return_to)).as_str());
+    append_query_pair(&mut location, "google_oauth", if ok { "ok" } else { "error" });
+    append_query_pair(&mut location, "google_oauth_message", message);
+    append_query_pair(&mut location, "google_access_token", access_token);
+    append_query_pair(&mut location, "google_refresh_token", refresh_token);
+    let mut response = AxumStatusCode::FOUND.into_response();
+    if let Ok(value) = HeaderValue::from_str(&location) {
+        response.headers_mut().insert(LOCATION, value);
+    }
+    response
+}
+
 fn cloudflare_token_from(raw: &str) -> Result<String> {
     let token = raw.trim();
     if token.len() < 20 {
@@ -1662,7 +1742,8 @@ async fn beeper_api_send_chat_message(token: &str, chat_id: &str, text: &str) ->
         format!("/v1/chats/{encoded_chat}/messages"),
         format!("/v0/chats/{encoded_chat}/messages"),
     ];
-    let payload = sonic_rs::json!({ "text": text });
+    let payload = sonic_rs::to_vec(&sonic_rs::json!({ "text": text }))
+        .context("failed to encode beeper send payload")?;
     let mut last_error = String::new();
     for path in candidates {
         let url = format!("{base}{path}");
@@ -1671,7 +1752,7 @@ async fn beeper_api_send_chat_message(token: &str, chat_id: &str, text: &str) ->
             .header("Authorization", format!("Bearer {token}"))
             .header("Accept", "application/json")
             .header(CONTENT_TYPE, "application/json")
-            .json(&payload)
+            .body(payload.clone())
             .send()
             .await
         {
@@ -1811,11 +1892,13 @@ fn load_imported_fb_threads(limit_threads: usize, limit_messages: usize) -> Resu
             "id": format!("bridge-beeper-import-{}", sanitize_import_thread_id(&thread_name)),
             "kind": "bridge",
             "channel": "beeper",
+            "channels": ["beeper", "facebook_export"],
             "title": thread_name,
             "subtitle": if subtitle.is_empty() { "Imported from Facebook export".to_string() } else { subtitle },
             "updatedAt": updated_at,
             "preview": preview,
             "messages": messages,
+            "participants": participants,
             "imported": true,
         }));
     }
@@ -2520,6 +2603,10 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_GOOGLE_PHOTOS_PATH, options(handle_local_options))
         .route(LOCAL_GOOGLE_REFRESH_PATH, post(handle_local_google_refresh))
         .route(LOCAL_GOOGLE_REFRESH_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_OAUTH_START_PATH, get(handle_local_google_oauth_start))
+        .route(LOCAL_GOOGLE_OAUTH_START_PATH, options(handle_local_options))
+        .route(LOCAL_GOOGLE_OAUTH_CALLBACK_PATH, get(handle_local_google_oauth_callback))
+        .route(LOCAL_GOOGLE_OAUTH_CALLBACK_PATH, options(handle_local_options))
         .route(LOCAL_ASSISTANT_PATH, post(handle_local_assistant))
         .route(LOCAL_ASSISTANT_PATH, options(handle_local_options))
         .with_state(state);
@@ -3583,6 +3670,32 @@ async fn handle_local_beeper_media(Query(query): Query<LocalBeeperMediaQuery>) -
     response
 }
 
+async fn handle_local_beeper_send(Json(body): Json<LocalBeeperSendRequest>) -> Response {
+    let token = match beeper_token_from(&body.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let chat_id = match body.chat_id.as_deref().map(str::trim) {
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => return local_json_error(AxumStatusCode::BAD_REQUEST, "chat_id is required"),
+    };
+    let text = match body.text.as_deref().map(str::trim) {
+        Some(value) if !value.is_empty() => value.to_string(),
+        _ => return local_json_error(AxumStatusCode::BAD_REQUEST, "text is required"),
+    };
+    let payload = match beeper_api_send_chat_message(&token, &chat_id, &text).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "item": payload,
+        }),
+    )
+}
+
 async fn handle_local_tailscale_devices(
     Json(body): Json<LocalTailscaleDevicesRequest>,
 ) -> Response {
@@ -3885,6 +3998,132 @@ async fn handle_local_google_refresh(Json(body): Json<LocalGoogleRefreshRequest>
             "expires_at": expires_at,
         }),
     )
+}
+
+async fn handle_local_google_oauth_start(Query(query): Query<LocalGoogleOauthStartQuery>) -> Response {
+    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let Some(client_id) = client_id else {
+        return google_oauth_redirect_with_result(
+            &sanitize_return_to(query.return_to.as_deref()),
+            false,
+            &format!("google oauth is not configured (set {})", GOOGLE_OAUTH_CLIENT_ID_ENV),
+            "",
+            "",
+        );
+    };
+
+    let return_to = sanitize_return_to(query.return_to.as_deref());
+    let state = encode_google_oauth_state(&return_to);
+    let redirect_uri = google_oauth_redirect_uri();
+    let mut url = match reqwest::Url::parse("https://accounts.google.com/o/oauth2/v2/auth") {
+        Ok(value) => value,
+        Err(err) => {
+            return google_oauth_redirect_with_result(
+                &return_to,
+                false,
+                &format!("failed to build google oauth url: {err}"),
+                "",
+                "",
+            )
+        }
+    };
+    url.query_pairs_mut()
+        .append_pair("client_id", &client_id)
+        .append_pair("redirect_uri", &redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("scope", GOOGLE_OAUTH_SCOPES)
+        .append_pair("access_type", "offline")
+        .append_pair("include_granted_scopes", "true")
+        .append_pair("prompt", "consent")
+        .append_pair("state", &state);
+
+    let mut response = AxumStatusCode::FOUND.into_response();
+    if let Ok(value) = HeaderValue::from_str(url.as_str()) {
+        response.headers_mut().insert(LOCATION, value);
+    }
+    response
+}
+
+async fn handle_local_google_oauth_callback(Query(query): Query<LocalGoogleOauthCallbackQuery>) -> Response {
+    let return_to = decode_google_oauth_state(query.state.as_deref());
+
+    if let Some(error) = query.error.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        return google_oauth_redirect_with_result(&return_to, false, error, "", "");
+    }
+
+    let code = query.code.as_deref().map(str::trim).unwrap_or_default();
+    if code.is_empty() {
+        return google_oauth_redirect_with_result(&return_to, false, "google oauth callback missing code", "", "");
+    }
+
+    let client_id = std::env::var(GOOGLE_OAUTH_CLIENT_ID_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let client_secret = std::env::var(GOOGLE_OAUTH_CLIENT_SECRET_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let (Some(client_id), Some(client_secret)) = (client_id, client_secret) else {
+        return google_oauth_redirect_with_result(
+            &return_to,
+            false,
+            &format!("google oauth callback is not configured (set {} and {})", GOOGLE_OAUTH_CLIENT_ID_ENV, GOOGLE_OAUTH_CLIENT_SECRET_ENV),
+            "",
+            "",
+        );
+    };
+
+    let redirect_uri = google_oauth_redirect_uri();
+    let client = Client::new();
+    let response = match client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("client_secret", client_secret.as_str()),
+            ("code", code),
+            ("grant_type", "authorization_code"),
+            ("redirect_uri", redirect_uri.as_str()),
+        ])
+        .send()
+        .await
+    {
+        Ok(value) => value,
+        Err(err) => {
+            return google_oauth_redirect_with_result(&return_to, false, &format!("google token exchange failed: {err}"), "", "")
+        }
+    };
+    let status = response.status();
+    let bytes = match response.bytes().await {
+        Ok(value) => value,
+        Err(err) => {
+            return google_oauth_redirect_with_result(&return_to, false, &format!("failed to read token response: {err}"), "", "")
+        }
+    };
+    if !status.is_success() {
+        return google_oauth_redirect_with_result(
+            &return_to,
+            false,
+            &format!("google token exchange failed ({}): {}", status, String::from_utf8_lossy(&bytes)),
+            "",
+            "",
+        );
+    }
+    let payload: sonic_rs::Value = match sonic_rs::from_slice(&bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            return google_oauth_redirect_with_result(&return_to, false, &format!("failed to parse token response: {err}"), "", "")
+        }
+    };
+    let access_token = payload["access_token"].as_str().unwrap_or_default();
+    let refresh_token = payload["refresh_token"].as_str().unwrap_or_default();
+    if access_token.is_empty() {
+        return google_oauth_redirect_with_result(&return_to, false, "google token response missing access_token", "", "");
+    }
+    google_oauth_redirect_with_result(&return_to, true, "oauth complete", access_token, refresh_token)
 }
 
 async fn handle_local_assistant(Json(body): Json<LocalAssistantRequest>) -> Response {
