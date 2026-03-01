@@ -1,11 +1,8 @@
 name: intent-ui-workflow-runner-ci
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
-      - prod-sync
+  workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
