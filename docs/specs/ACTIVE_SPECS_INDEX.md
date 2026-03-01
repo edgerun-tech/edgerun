@@ -1,12 +1,12 @@
 # Active Specs Index
 
-Generated: 2026-03-01 03:57:44Z
+Generated: 2026-03-01 04:27:44Z
 
 ## Summary
 
-- Total specs: 162
-- Cataloged: 28
-- Active: 14
+- Total specs: 163
+- Cataloged: 29
+- Active: 15
 - Superseded: 10
 - Historical: 4
 - Uncataloged: 134
@@ -20,6 +20,7 @@ Generated: 2026-03-01 03:57:44Z
 | [2026-03-01-integration-lifecycle-class-template-v1.md](./2026-03-01-integration-lifecycle-class-template-v1.md) | integrations | Current integration lifecycle implementation template. |
 | [2026-03-01-integration-machine-workflow-contract-v1.md](./2026-03-01-integration-machine-workflow-contract-v1.md) | integrations | Current integration/workflow contract baseline. |
 | [2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md](./2026-03-01-intent-ui-integration-lifecycle-hardening-v1.md) | intent-ui | Current hardening direction for lifecycle logic. |
+| [2026-03-01-opencode-mcp-config-sync-v1.md](./2026-03-01-opencode-mcp-config-sync-v1.md) | node-manager | Deterministic OpenCode MCP managed-entry sync from node-manager lifecycle events. |
 | [2026-03-01-opencode-only-assistant-integration-v1.md](./2026-03-01-opencode-only-assistant-integration-v1.md) | intent-ui | OpenCode is the sole assistant provider and integration path. |
 | [2026-03-01-spec-catalog-and-active-index-v1.md](./2026-03-01-spec-catalog-and-active-index-v1.md) | docs | Introduces deterministic status catalog and generated active index. |
 | [CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md](./CI_CD_REQUIRED_CHECKS_WORKFLOW_HYGIENE_AND_DEPLOY_SMOKE_V1.md) | ci | Required checks policy remains enforced. |

@@ -38,6 +38,7 @@ use futures_util::StreamExt;
 use prost::Message;
 use reqwest::{header::CONTENT_TYPE, Client, StatusCode};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use sonic_rs::{JsonValueMutTrait, JsonValueTrait, Value};
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command as TokioCommand;
@@ -97,6 +98,9 @@ const INTEGRATION_TOPIC_ROOT_DEFAULT: &str = "edgerun.integrations";
 const LOCAL_ASSISTANT_PATH: &str = "/v1/local/assistant";
 const LOCAL_DOCKER_EVENTS_TOPIC: &str = "local.docker.events";
 const OPENCODE_CLI_CONTAINER_NAME: &str = "edgerun-opencode-cli";
+const OPENCODE_CONFIG_PATH: &str = "/home/ken/.config/opencode/opencode.jsonb";
+const OPENCODE_MCP_SCHEMA_URL: &str = "https://opencode.ai/config.json";
+const OPENCODE_MANAGED_MCP_PREFIX: &str = "edgerun-";
 const LOCAL_BRIDGE_VERSION: &str = "v1";
 
 #[derive(Parser, Debug)]
@@ -1294,24 +1298,185 @@ fn integration_topic_for(integration_id: &str, lane: &str) -> String {
     format!("{}.{}.{}", integration_topic_root(), integration_id, lane)
 }
 
-fn is_mcp_container_running(integration_id: &str) -> bool {
-    let name = mcp_container_name(integration_id);
+fn list_running_mcp_integrations() -> Result<Vec<String>> {
     let output = Command::new("docker")
-        .args(["inspect", "-f", "{{.State.Running}}", &name])
-        .output();
-    let Ok(output) = output else {
-        return false;
-    };
+        .args([
+            "ps",
+            "--filter",
+            "name=^edgerun-mcp-",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .context("failed to list MCP containers")?;
     if !output.status.success() {
-        return false;
+        return Err(anyhow!(
+            "failed to list MCP containers: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
-    String::from_utf8_lossy(&output.stdout)
+    let mut integrations: Vec<String> = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let container_name = line.trim();
+        if !container_name.starts_with("edgerun-mcp-") {
+            continue;
+        }
+        let integration = container_name
+            .trim_start_matches("edgerun-mcp-")
+            .trim()
+            .to_ascii_lowercase();
+        if integration.is_empty() {
+            continue;
+        }
+        integrations.push(integration);
+    }
+    integrations.sort();
+    integrations.dedup();
+    Ok(integrations)
+}
+
+fn read_opencode_config_text() -> Result<String> {
+    let output = Command::new("docker")
+        .args(["exec", OPENCODE_CLI_CONTAINER_NAME, "cat", OPENCODE_CONFIG_PATH])
+        .output()
+        .context("failed to read OpenCode config from container")?;
+    if output.status.success() {
+        return Ok(String::from_utf8_lossy(&output.stdout).to_string());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr).to_ascii_lowercase();
+    if stderr.contains("no such file") {
+        return Ok(String::new());
+    }
+    Err(anyhow!(
+        "failed to read OpenCode config from {}: {}",
+        OPENCODE_CLI_CONTAINER_NAME,
+        String::from_utf8_lossy(&output.stderr).trim()
+    ))
+}
+
+fn write_opencode_config_text(config: &str) -> Result<()> {
+    let mkdir_output = Command::new("docker")
+        .args([
+            "exec",
+            OPENCODE_CLI_CONTAINER_NAME,
+            "mkdir",
+            "-p",
+            "/home/ken/.config/opencode",
+        ])
+        .output()
+        .context("failed to ensure OpenCode config directory")?;
+    if !mkdir_output.status.success() {
+        return Err(anyhow!(
+            "failed to create OpenCode config directory: {}",
+            String::from_utf8_lossy(&mkdir_output.stderr).trim()
+        ));
+    }
+
+    let mut child = Command::new("docker")
+        .args([
+            "exec",
+            "-i",
+            OPENCODE_CLI_CONTAINER_NAME,
+            "sh",
+            "-lc",
+            &format!("cat > {}", OPENCODE_CONFIG_PATH),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("failed to launch OpenCode config write command")?;
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .ok_or_else(|| anyhow!("failed to open stdin for OpenCode config write"))?;
+        stdin
+            .write_all(config.as_bytes())
+            .context("failed to stream OpenCode config content")?;
+    }
+    let output = child
+        .wait_with_output()
+        .context("failed to complete OpenCode config write command")?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "failed to write OpenCode config in {}: {}",
+            OPENCODE_CLI_CONTAINER_NAME,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(())
+}
+
+fn apply_managed_opencode_mcp_entries(
+    existing: &str,
+    running_integrations: &[String],
+) -> Result<String> {
+    let mut config: Value = if existing.trim().is_empty() {
+        sonic_rs::json!({})
+    } else {
+        sonic_rs::from_str(existing).context("failed to parse existing OpenCode config")?
+    };
+
+    let root = config
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("OpenCode config root must be a JSON object"))?;
+    let schema = root
+        .get(&"$schema")
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
         .trim()
-        .eq_ignore_ascii_case("true")
+        .to_string();
+    if schema.is_empty() {
+        root.insert("$schema", OPENCODE_MCP_SCHEMA_URL);
+    }
+
+    if !root
+        .get(&"mcp")
+        .map(|value| value.is_object())
+        .unwrap_or(false)
+    {
+        root.insert("mcp", sonic_rs::json!({}));
+    }
+
+    let mcp = root
+        .get_mut(&"mcp")
+        .and_then(|value| value.as_object_mut())
+        .ok_or_else(|| anyhow!("OpenCode config mcp field must be a JSON object"))?;
+    let managed_keys: Vec<String> = mcp
+        .iter()
+        .filter_map(|(name, _)| {
+            let key = name.to_string();
+            if key.starts_with(OPENCODE_MANAGED_MCP_PREFIX) {
+                Some(key)
+            } else {
+                None
+            }
+        })
+        .collect();
+    for key in managed_keys {
+        mcp.remove(&key);
+    }
+
+    if running_integrations.iter().any(|id| id == "github") {
+        mcp.insert(
+            "edgerun-github",
+            sonic_rs::json!({
+                "command": "docker",
+                "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+                "enabled": true,
+            }),
+        );
+    }
+
+    sonic_rs::to_string_pretty(&config).context("failed to encode OpenCode config")
 }
 
 fn sync_opencode_mcp_config() -> Result<()> {
-    let _github_running = is_mcp_container_running("github");
+    let running_integrations = list_running_mcp_integrations()?;
+    let existing = read_opencode_config_text()?;
+    let updated = apply_managed_opencode_mcp_entries(&existing, &running_integrations)?;
+    write_opencode_config_text(&updated)?;
     Ok(())
 }
 
@@ -3488,4 +3653,68 @@ where
         .with_context(|| format!("failed to read protobuf response body: {url}"))?;
     Resp::decode(bytes.as_ref())
         .with_context(|| format!("failed to decode protobuf response: {url}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opencode_mcp_sync_preserves_user_entries() {
+        let existing = r#"{
+          "$schema": "https://opencode.ai/config.json",
+          "mcp": {
+            "context7": {
+              "type": "remote",
+              "url": "https://mcp.context7.com/mcp"
+            },
+            "edgerun-github": {
+              "command": "docker",
+              "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+              "enabled": false
+            }
+          },
+          "theme": "dark"
+        }"#;
+        let next = apply_managed_opencode_mcp_entries(existing, &["github".to_string()])
+            .expect("sync should succeed");
+        let parsed: Value = sonic_rs::from_str(&next).expect("synced config should parse");
+
+        assert!(parsed["mcp"].get("context7").is_object());
+        assert!(parsed["mcp"].get("edgerun-github").is_object());
+        assert_eq!(
+            parsed
+                .get("theme")
+                .and_then(|value| value.as_str())
+                .unwrap_or(""),
+            "dark"
+        );
+    }
+
+    #[test]
+    fn opencode_mcp_sync_removes_managed_entries_when_not_running() {
+        let existing = r#"{
+          "mcp": {
+            "edgerun-github": {
+              "command": "docker",
+              "args": ["exec", "-i", "edgerun-mcp-github", "node", "/app/dist/index.js"],
+              "enabled": true
+            },
+            "context7": {
+              "type": "remote",
+              "url": "https://mcp.context7.com/mcp"
+            }
+          }
+        }"#;
+        let next =
+            apply_managed_opencode_mcp_entries(existing, &[]).expect("sync should succeed");
+        let parsed: Value = sonic_rs::from_str(&next).expect("synced config should parse");
+
+        assert!(!parsed["mcp"].get("edgerun-github").is_object());
+        assert!(parsed["mcp"].get("context7").is_object());
+        assert_eq!(
+            parsed["$schema"].as_str().unwrap_or_default(),
+            OPENCODE_MCP_SCHEMA_URL
+        );
+    }
 }
