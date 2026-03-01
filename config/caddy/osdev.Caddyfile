@@ -33,9 +33,9 @@
     reverse_proxy 127.0.0.1:7777
   }
 
-  @cloudflare_verify path /api/cloudflare/verify /api/cloudflare/verify/*
-  handle @cloudflare_verify {
-    uri replace /api/cloudflare/verify /v1/local/cloudflare/verify
+  @cloudflare path /api/cloudflare /api/cloudflare/*
+  handle @cloudflare {
+    uri replace /api/cloudflare /v1/local/cloudflare
     reverse_proxy 127.0.0.1:7777
   }
 

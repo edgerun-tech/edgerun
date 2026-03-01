@@ -74,6 +74,7 @@ const DEFAULT_TUNNEL_CONTROL_BASE: &str = "https://relay.edgerun.tech";
 const DEFAULT_LOCAL_BRIDGE_LISTEN: &str = "127.0.0.1:7777";
 const LOCAL_BRIDGE_EVENTBUS_PATH: &str = "/v1/local/eventbus/ws";
 const LOCAL_DOCKER_SUMMARY_PATH: &str = "/v1/local/docker/summary";
+const LOCAL_DOCKER_CONTAINER_STATE_PATH: &str = "/v1/local/docker/container/state";
 const LOCAL_FS_ROOT_ENV: &str = "EDGERUN_LOCAL_FS_ROOT";
 const LOCAL_FS_META_PATH: &str = "/v1/local/fs/meta";
 const LOCAL_FS_LIST_PATH: &str = "/v1/local/fs/list";
@@ -98,6 +99,11 @@ const LOCAL_MCP_STOP_PATH: &str = "/v1/local/mcp/integration/stop";
 const LOCAL_MCP_STATUS_PATH: &str = "/v1/local/mcp/integration/status";
 const LOCAL_MCP_PREFLIGHT_PATH: &str = "/v1/local/mcp/integration/preflight";
 const LOCAL_CLOUDFLARE_VERIFY_PATH: &str = "/v1/local/cloudflare/verify";
+const LOCAL_CLOUDFLARE_ZONES_PATH: &str = "/v1/local/cloudflare/zones";
+const LOCAL_CLOUDFLARE_TUNNELS_PATH: &str = "/v1/local/cloudflare/tunnels";
+const LOCAL_CLOUDFLARE_ACCESS_APPS_PATH: &str = "/v1/local/cloudflare/access/apps";
+const LOCAL_CLOUDFLARE_DNS_RECORDS_PATH: &str = "/v1/local/cloudflare/dns/records";
+const LOCAL_CLOUDFLARE_DNS_UPSERT_PATH: &str = "/v1/local/cloudflare/dns/records/upsert";
 const LOCAL_BEEPER_VERIFY_PATH: &str = "/v1/local/beeper/verify";
 const LOCAL_BEEPER_CHATS_PATH: &str = "/v1/local/beeper/chats";
 const LOCAL_BEEPER_MESSAGES_PATH: &str = "/v1/local/beeper/messages";
@@ -373,6 +379,12 @@ struct LocalDockerContainer {
     ports: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct LocalDockerContainerStateRequest {
+    container: String,
+    action: String,
+}
+
 #[derive(Debug, Serialize)]
 struct LocalDockerEventPayload {
     event_type: String,
@@ -583,6 +595,53 @@ struct LocalMcpPreflightQuery {
 struct LocalCloudflareVerifyRequest {
     #[serde(default)]
     token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareZonesQuery {
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareTunnelsQuery {
+    token: String,
+    #[serde(default, alias = "accountId")]
+    account_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareAccessAppsQuery {
+    token: String,
+    #[serde(default, alias = "accountId")]
+    account_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareDnsRecordsQuery {
+    token: String,
+    #[serde(default, alias = "zoneId")]
+    zone_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    record_type: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalCloudflareDnsUpsertRequest {
+    token: String,
+    #[serde(alias = "zoneId")]
+    zone_id: String,
+    name: String,
+    content: String,
+    #[serde(default, alias = "recordType")]
+    record_type: Option<String>,
+    #[serde(default)]
+    proxied: Option<bool>,
+    #[serde(default)]
+    ttl: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1569,6 +1628,82 @@ async fn cloudflare_api_get_user(token: &str) -> Result<sonic_rs::Value> {
         .and_then(|error| error["message"].as_str())
         .unwrap_or("user request returned unsuccessful response");
     Err(anyhow!("cloudflare user lookup rejected token: {first_error}"))
+}
+
+fn cloudflare_payload_error(payload: &Value, fallback: &str) -> String {
+    payload["errors"]
+        .as_array()
+        .and_then(|errors| errors.first())
+        .and_then(|error| error["message"].as_str())
+        .map(|message| message.to_string())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+async fn cloudflare_api_request(
+    token: &str,
+    method: reqwest::Method,
+    url: &str,
+    body: Option<Value>,
+) -> Result<Value> {
+    let client = Client::new();
+    let mut request = client
+        .request(method, url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/json");
+    if let Some(payload) = body {
+        let encoded = sonic_rs::to_string(&payload)
+            .context("failed to encode cloudflare request body")?;
+        request = request
+            .header(CONTENT_TYPE, "application/json")
+            .body(encoded);
+    }
+    let response = request
+        .send()
+        .await
+        .with_context(|| format!("cloudflare request failed: {url}"))?;
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .with_context(|| format!("failed to read cloudflare response: {url}"))?;
+    if !status.is_success() {
+        let detail = String::from_utf8_lossy(&bytes).to_string();
+        return Err(anyhow!("cloudflare request failed ({status}): {detail}"));
+    }
+    let payload: Value =
+        sonic_rs::from_slice(&bytes).with_context(|| format!("failed to parse cloudflare response: {url}"))?;
+    if payload["success"].as_bool().unwrap_or(false) {
+        return Ok(payload);
+    }
+    Err(anyhow!(
+        "cloudflare request rejected: {}",
+        cloudflare_payload_error(&payload, "cloudflare API returned unsuccessful response")
+    ))
+}
+
+async fn cloudflare_resolve_account_id(token: &str, requested: Option<&str>) -> Result<String> {
+    let explicit = requested.unwrap_or_default().trim();
+    if !explicit.is_empty() {
+        return Ok(explicit.to_string());
+    }
+    let payload = cloudflare_api_request(
+        token,
+        reqwest::Method::GET,
+        "https://api.cloudflare.com/client/v4/memberships",
+        None,
+    )
+    .await?;
+    let account_id = payload["result"]
+        .as_array()
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry["account"]["id"].as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    if account_id.is_empty() {
+        return Err(anyhow!("cloudflare account membership not found for token"));
+    }
+    Ok(account_id)
 }
 
 fn beeper_token_from(raw: &str) -> Result<String> {
@@ -2567,6 +2702,14 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
         .route(LOCAL_BRIDGE_EVENTBUS_PATH, get(handle_local_eventbus_ws))
         .route(LOCAL_DOCKER_SUMMARY_PATH, get(handle_local_docker_summary))
         .route(LOCAL_DOCKER_SUMMARY_PATH, options(handle_local_options))
+        .route(
+            LOCAL_DOCKER_CONTAINER_STATE_PATH,
+            post(handle_local_docker_container_state),
+        )
+        .route(
+            LOCAL_DOCKER_CONTAINER_STATE_PATH,
+            options(handle_local_options),
+        )
         .route(LOCAL_FS_META_PATH, get(handle_local_fs_meta))
         .route(LOCAL_FS_META_PATH, options(handle_local_options))
         .route(LOCAL_FS_LIST_PATH, get(handle_local_fs_list))
@@ -2646,6 +2789,37 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
             post(handle_local_cloudflare_verify),
         )
         .route(LOCAL_CLOUDFLARE_VERIFY_PATH, options(handle_local_options))
+        .route(LOCAL_CLOUDFLARE_ZONES_PATH, get(handle_local_cloudflare_zones))
+        .route(LOCAL_CLOUDFLARE_ZONES_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CLOUDFLARE_TUNNELS_PATH,
+            get(handle_local_cloudflare_tunnels),
+        )
+        .route(LOCAL_CLOUDFLARE_TUNNELS_PATH, options(handle_local_options))
+        .route(
+            LOCAL_CLOUDFLARE_ACCESS_APPS_PATH,
+            get(handle_local_cloudflare_access_apps),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_ACCESS_APPS_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_DNS_RECORDS_PATH,
+            get(handle_local_cloudflare_dns_records),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_DNS_RECORDS_PATH,
+            options(handle_local_options),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_DNS_UPSERT_PATH,
+            post(handle_local_cloudflare_dns_upsert),
+        )
+        .route(
+            LOCAL_CLOUDFLARE_DNS_UPSERT_PATH,
+            options(handle_local_options),
+        )
         .route(LOCAL_BEEPER_VERIFY_PATH, post(handle_local_beeper_verify))
         .route(LOCAL_BEEPER_VERIFY_PATH, options(handle_local_options))
         .route(LOCAL_BEEPER_CHATS_PATH, get(handle_local_beeper_chats))
@@ -2795,6 +2969,68 @@ async fn handle_local_docker_summary() -> Response {
         payload,
     )
         .into_response()
+}
+
+fn docker_container_selector_from(raw: &str) -> Result<String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err(anyhow!("container selector is required"));
+    }
+    if value.len() > 128 {
+        return Err(anyhow!("container selector is too long"));
+    }
+    if !value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-'))
+    {
+        return Err(anyhow!(
+            "container selector contains invalid characters"
+        ));
+    }
+    Ok(value.to_string())
+}
+
+fn docker_container_action_from(raw: &str) -> Result<String> {
+    let action = raw.trim().to_ascii_lowercase();
+    match action.as_str() {
+        "start" | "stop" | "restart" => Ok(action),
+        _ => Err(anyhow!("action must be start, stop, or restart")),
+    }
+}
+
+fn docker_container_state(selector: &str) -> Result<String> {
+    let output = run_command_capture(
+        "docker",
+        &["inspect", selector, "--format", "{{.State.Status}}"],
+    )?;
+    Ok(output.lines().next().unwrap_or_default().trim().to_string())
+}
+
+async fn handle_local_docker_container_state(
+    Json(body): Json<LocalDockerContainerStateRequest>,
+) -> Response {
+    let selector = match docker_container_selector_from(&body.container) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let action = match docker_container_action_from(&body.action) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    if let Err(err) = run_command_capture("docker", &["container", &action, &selector]) {
+        return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string());
+    }
+    let state = docker_container_state(&selector).unwrap_or_default();
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "container": selector,
+            "action": action,
+            "state": state,
+            "message": "container state updated",
+        }),
+    )
 }
 
 async fn handle_local_fs_meta(
@@ -3707,6 +3943,239 @@ async fn handle_local_cloudflare_verify(
             "not_before": payload["result"]["not_before"].as_str().unwrap_or_default(),
             "user_email": user_email,
             "user_id": user_id,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_zones(Query(query): Query<LocalCloudflareZonesQuery>) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let payload = match cloudflare_api_request(
+        &token,
+        reqwest::Method::GET,
+        "https://api.cloudflare.com/client/v4/zones?per_page=100",
+        None,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let zones = payload["result"].clone();
+    let count = zones.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "zones": zones,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_tunnels(
+    Query(query): Query<LocalCloudflareTunnelsQuery>,
+) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let account_id = match cloudflare_resolve_account_id(&token, query.account_id.as_deref()).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{account_id}/cfd_tunnel?per_page=100"
+    );
+    let payload = match cloudflare_api_request(&token, reqwest::Method::GET, &url, None).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let tunnels = payload["result"].clone();
+    let count = tunnels.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "account_id": account_id,
+            "tunnels": tunnels,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_access_apps(
+    Query(query): Query<LocalCloudflareAccessAppsQuery>,
+) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let account_id = match cloudflare_resolve_account_id(&token, query.account_id.as_deref()).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let url = format!(
+        "https://api.cloudflare.com/client/v4/accounts/{account_id}/access/apps?per_page=100"
+    );
+    let payload = match cloudflare_api_request(&token, reqwest::Method::GET, &url, None).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let apps = payload["result"].clone();
+    let count = apps.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "account_id": account_id,
+            "apps": apps,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_dns_records(
+    Query(query): Query<LocalCloudflareDnsRecordsQuery>,
+) -> Response {
+    let token = match cloudflare_token_from(&query.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let zone_id = query.zone_id.unwrap_or_default().trim().to_string();
+    if zone_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "zone_id is required");
+    }
+    let mut url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{}/dns_records",
+        zone_id
+    );
+    append_query_pair(
+        &mut url,
+        "per_page",
+        &query.limit.unwrap_or(100).clamp(1, 200).to_string(),
+    );
+    append_query_pair(&mut url, "name", query.name.as_deref().unwrap_or_default());
+    append_query_pair(
+        &mut url,
+        "type",
+        query.record_type.as_deref().unwrap_or_default(),
+    );
+    let payload = match cloudflare_api_request(&token, reqwest::Method::GET, &url, None).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let records = payload["result"].clone();
+    let count = records.as_array().map(|items| items.len()).unwrap_or(0);
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "zone_id": zone_id,
+            "records": records,
+            "count": count,
+        }),
+    )
+}
+
+async fn handle_local_cloudflare_dns_upsert(
+    Json(body): Json<LocalCloudflareDnsUpsertRequest>,
+) -> Response {
+    let token = match cloudflare_token_from(&body.token) {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_REQUEST, &err.to_string()),
+    };
+    let zone_id = body.zone_id.trim();
+    if zone_id.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "zone_id is required");
+    }
+    let name = body.name.trim();
+    if name.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "name is required");
+    }
+    let content = body.content.trim();
+    if content.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "content is required");
+    }
+    let record_type = body
+        .record_type
+        .as_deref()
+        .unwrap_or("CNAME")
+        .trim()
+        .to_ascii_uppercase();
+    if record_type.is_empty() {
+        return local_json_error(AxumStatusCode::BAD_REQUEST, "record_type is required");
+    }
+    let supports_proxy = matches!(record_type.as_str(), "A" | "AAAA" | "CNAME");
+    let ttl = body.ttl.unwrap_or(1).clamp(1, 86_400);
+
+    let mut existing_url = format!(
+        "https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
+    );
+    append_query_pair(&mut existing_url, "name", name);
+    append_query_pair(&mut existing_url, "type", &record_type);
+    append_query_pair(&mut existing_url, "per_page", "1");
+
+    let existing_payload = match cloudflare_api_request(
+        &token,
+        reqwest::Method::GET,
+        &existing_url,
+        None,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    let existing_id = existing_payload["result"]
+        .as_array()
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry["id"].as_str())
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+
+    let mut payload = sonic_rs::json!({
+        "type": record_type,
+        "name": name,
+        "content": content,
+        "ttl": ttl,
+    });
+    if supports_proxy {
+        let proxied = body.proxied.unwrap_or(false);
+        if let Some(object) = payload.as_object_mut() {
+            object.insert("proxied", sonic_rs::json!(proxied));
+        }
+    }
+
+    let (method, url, action) = if existing_id.is_empty() {
+        (
+            reqwest::Method::POST,
+            format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"),
+            "created",
+        )
+    } else {
+        (
+            reqwest::Method::PUT,
+            format!(
+                "https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{existing_id}"
+            ),
+            "updated",
+        )
+    };
+    let result = match cloudflare_api_request(&token, method, &url, Some(payload)).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "zone_id": zone_id,
+            "action": action,
+            "record": result["result"],
         }),
     )
 }

@@ -43,6 +43,6 @@ describe('intent ui cloudflare account token', () => {
     cy.wait('@cfVerify')
     cy.get('[data-testid="integration-stepper-success"]').should('exist')
     cy.get('[data-testid="provider-save-cloudflare"]').click({ force: true })
-    cy.contains('Cloudflare integration linked.').should('be.visible')
+    cy.get('[data-testid="provider-connected-cloudflare"]').should('contain.text', 'Connected')
   })
 })

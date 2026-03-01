@@ -1,10 +1,11 @@
 import { FiCloud, FiServer, FiGlobe, FiShield, FiActivity, FiRefreshCw, FiSearch, FiExternalLink, FiBox, FiFolder, FiGitPullRequest, FiMail, FiCalendar, FiHardDrive, FiSettings, FiArrowRight } from "solid-icons/fi";
-import { createSignal, For, Show, onMount, createMemo } from "solid-js";
+import { createSignal, For, Show, onMount, onCleanup, createMemo } from "solid-js";
 import { getToken } from "../../lib/auth";
 import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 import { openWindow } from "../../stores/windows";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
 import { integrationStore } from "../../stores/integrations";
+import IntentContextMenu from "../layout/IntentContextMenu";
 function logError(message, error) {
   if (import.meta.env?.DEV) {
     console.warn(message, error);
@@ -64,6 +65,13 @@ function CloudPanel(props) {
   const [actionLoading, setActionLoading] = createSignal(null);
   const [stats, setStats] = createSignal({});
   const [localDocker, setLocalDocker] = createSignal({ available: false, swarmActive: false });
+  const [notice, setNotice] = createSignal("");
+  const [contextMenuState, setContextMenuState] = createSignal({
+    open: false,
+    x: 0,
+    y: 0,
+    resource: null
+  });
   const fetchAllResources = async () => {
     setLoading(true);
     setError(null);
@@ -112,6 +120,8 @@ function CloudPanel(props) {
                 provider: "docker",
                 status: ctr.state || ctr.status || "unknown",
                 metadata: {
+                  containerId: ctr.id || "",
+                  containerName: ctr.name || ctr.id || "",
                   image: ctr.image || "",
                   status: ctr.status || "",
                   ports: ctr.ports || ""
@@ -384,26 +394,76 @@ function CloudPanel(props) {
     setLoading(false);
   };
   const handleAction = async (resource, action) => {
-    if (resource.provider !== "hetzner" || resource.type !== "server") return;
-    const token = getToken("hetzner");
-    if (!token) return;
-    const serverId = resource.id.replace("hetzner-", "");
+    if (!resource || !action) return;
     setActionLoading(`${resource.id}-${action}`);
+    setNotice("");
     try {
-      const res = await fetch(`/api/hetzner/servers?token=${encodeURIComponent(token)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, serverId })
-      });
-      if (res.ok) {
+      if (resource.provider === "hetzner" && resource.type === "server") {
+        const token = getToken("hetzner");
+        if (!token) throw new Error("Hetzner token missing");
+        const serverId = resource.id.replace("hetzner-", "");
+        const res = await fetch(`/api/hetzner/servers?token=${encodeURIComponent(token)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, serverId })
+        });
+        if (!res.ok) {
+          throw new Error(`Hetzner action failed (${res.status})`);
+        }
+        setNotice(`Hetzner action '${action}' sent for ${resource.name}.`);
         setTimeout(fetchAllResources, 1500);
+        return;
+      }
+      if (resource.provider === "docker" && resource.type === "container") {
+        const selector = String(resource?.metadata?.containerName || resource?.metadata?.containerId || resource.name || "").trim();
+        if (!selector) throw new Error("Container selector missing");
+        const response = await fetch(localBridgeHttpUrl("/v1/local/docker/container/state"), {
+          method: "POST",
+          headers: { "content-type": "application/json; charset=utf-8" },
+          body: JSON.stringify({ container: selector, action })
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          throw new Error(String(payload?.error || `Docker container action failed (${response.status})`));
+        }
+        setNotice(`Container ${selector}: ${action} complete${payload?.state ? ` (${payload.state})` : ""}.`);
+        setTimeout(fetchAllResources, 500);
       }
     } catch (e) {
-      console.error("Action failed:", e);
+      setError(e instanceof Error ? e.message : "Action failed");
     } finally {
       setActionLoading(null);
     }
   };
+  const openContainerContextMenu = (resource, event) => {
+    if (!resource || resource.provider !== "docker" || resource.type !== "container") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenuState({
+      open: true,
+      x: event.clientX,
+      y: event.clientY,
+      resource
+    });
+  };
+  const closeContextMenu = () => {
+    setContextMenuState((prev) => ({
+      ...prev,
+      open: false,
+      resource: null
+    }));
+  };
+  const containerContextActions = createMemo(() => {
+    const resource = contextMenuState().resource;
+    if (!resource || resource.provider !== "docker" || resource.type !== "container") return [];
+    return [
+      { label: "Start Container", icon: FiActivity, run: () => handleAction(resource, "start") },
+      { label: "Stop Container", icon: FiShield, run: () => handleAction(resource, "stop") },
+      { label: "Restart Container", icon: FiRefreshCw, run: () => handleAction(resource, "restart") },
+      { label: "__sep__" },
+      { label: "Refresh Resources", icon: FiRefreshCw, run: fetchAllResources }
+    ];
+  });
   const openProviderPanel = (provider) => {
     const panelMap = {
       cloudflare: "cloudflare",
@@ -418,6 +478,13 @@ function CloudPanel(props) {
   };
   onMount(() => {
     fetchAllResources();
+    const dismiss = () => closeContextMenu();
+    window.addEventListener("pointerdown", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    onCleanup(() => {
+      window.removeEventListener("pointerdown", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    });
   });
   const filteredResources = createMemo(() => {
     let result = resources();
@@ -564,6 +631,11 @@ function CloudPanel(props) {
           <p class="text-red-200 text-sm">{error()}</p>
         </div>
       </Show>
+      <Show when={notice()}>
+        <div class="p-3 border-b border-emerald-800 bg-emerald-900/25">
+          <p class="text-emerald-200 text-xs">{notice()}</p>
+        </div>
+      </Show>
 
       <div class="flex-1 overflow-auto p-3">
         <Show when={loading()}>
@@ -642,9 +714,16 @@ function CloudPanel(props) {
                             </div>
                           </div>
                           <div class="flex items-center gap-2 flex-shrink-0">
-                            <span class={`rounded px-2 py-0.5 text-[10px] ${getStatusColor(resource.status)}`}>
+                            <button
+    type="button"
+    class={`rounded px-2 py-0.5 text-[10px] ${getStatusColor(resource.status)} ${resource.provider === "docker" && resource.type === "container" ? "cursor-context-menu" : "cursor-default"}`}
+    title={resource.provider === "docker" && resource.type === "container" ? "Right-click for container actions" : "Status"}
+    onClick={(event) => event.preventDefault()}
+    onContextMenu={(event) => openContainerContextMenu(resource, event)}
+    data-testid={`cloud-resource-status-${resource.id}`}
+  >
                               {resource.status}
-                            </span>
+                            </button>
                             <Show when={resource.url}>
                               <a
     href={resource.url?.startsWith("http") ? resource.url : `https://${resource.url}`}
@@ -680,6 +759,12 @@ function CloudPanel(props) {
           </div>
         </Show>
       </div>
+      <IntentContextMenu
+        open={contextMenuState().open}
+        position={{ x: contextMenuState().x, y: contextMenuState().y }}
+        actions={containerContextActions()}
+        onClose={closeContextMenu}
+      />
     </div>;
 }
 export {
