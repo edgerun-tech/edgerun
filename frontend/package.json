@@ -19,12 +19,13 @@
     "build": "bun run clean && bun run brand:generate && bun run font:sync && bun run docs:generate && bun run intent-ui:sync && bun run build:css && bun run build:js && bun run build:html",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "test:e2e": "bun run e2e:run",
-    "e2e:run": "bash ../scripts/e2e-frontend-all.sh",
-    "e2e:core": "bash ../scripts/e2e-frontend-core.sh",
+    "e2e": "bash ../scripts/e2e-frontend-runner.sh all",
+    "test:e2e": "bun run e2e",
+    "e2e:run": "bun run e2e",
+    "e2e:core": "bash ../scripts/e2e-frontend-runner.sh core",
     "check": "bun run typecheck && bun run lint && bun run style-guide:check",
     "style-guide:check": "bun scripts/enforce-style-guide.mjs",
-    "e2e:compose": "bash ../scripts/e2e-local-terminal.sh"
+    "e2e:compose": "bash ../scripts/e2e-frontend-runner.sh compose"
   },
   "dependencies": {
     "@ark-ui/solid": "^5.32.0",

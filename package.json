@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "bun@1.3.9",
   "scripts": {
+    "e2e": "cd frontend && bun run e2e",
     "drift:check": "./scripts/check-workflow-drift.sh",
     "cloudflare:targets:check": "./scripts/verify-cloudflare-targets.sh",
     "deploy:site": "./scripts/deploy-frontends.sh site",

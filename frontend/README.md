@@ -55,11 +55,12 @@ This runs:
 Run full frontend E2E coverage (core + routed terminal stack):
 
 ```bash
-bun run e2e:run
+bun run e2e
 ```
 
 Notes:
-- `e2e:run` requires an existing frontend build in `../out/frontend/site/index.html`.
+- `e2e` requires an existing frontend build in `../out/frontend/site/index.html`.
+- Runner hint: Cypress/Electron is launched in software rendering mode (`ELECTRON_DISABLE_GPU=1`, `LIBGL_ALWAYS_SOFTWARE=1`), so NVIDIA GPU/CUDA is not required.
 - The workflow runs:
 - core specs against static output on `http://127.0.0.1:4173`
 - routed terminal compose/local stack spec via scheduler + term-server harness

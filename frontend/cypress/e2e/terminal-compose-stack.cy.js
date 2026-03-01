@@ -27,6 +27,11 @@ describe('terminal docker compose stack', () => {
 
       cy.visit('/', {
         onBeforeLoad(win) {
+          try {
+            win.indexedDB.deleteDatabase('edgerun-frontend-ui')
+          } catch {
+            // ignore cleanup errors
+          }
           win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
             connected: true,
             address: activeDeviceId,
@@ -44,8 +49,8 @@ describe('terminal docker compose stack', () => {
         .click({ force: true })
       cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
-      cy.get('input[placeholder="Device name"]').clear().type('Compose Routed Device')
-      cy.get('input[placeholder="route://device-id"]').clear().type(`route://${activeDeviceId}`)
+      cy.get('[data-testid="terminal-device-name-input"]').clear().type('Compose Routed Device')
+      cy.get('[data-testid="terminal-device-url-input"]').clear().type(`route://${activeDeviceId}`)
       cy.contains('button', /^Add Device$/).click({ force: true })
       cy.contains('p', 'Compose Routed Device')
         .parents('.rounded-md.border')

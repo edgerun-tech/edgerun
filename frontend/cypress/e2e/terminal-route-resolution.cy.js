@@ -3,6 +3,11 @@ describe('terminal route device resolution', () => {
   it('keeps route:// targets in the in-app terminal surface (never iframe fallback)', () => {
     cy.visit('/', {
       onBeforeLoad(win) {
+        try {
+          win.indexedDB.deleteDatabase('edgerun-frontend-ui')
+        } catch {
+          // ignore cleanup errors
+        }
         win.localStorage.setItem('edgerun.wallet.session.v1', JSON.stringify({
           connected: true,
           address: 'Cypresstest111111111111111111111111111111',
@@ -19,8 +24,8 @@ describe('terminal route device resolution', () => {
       .click({ force: true })
     cy.get('#edgerun-terminal-drawer', { timeout: 10000 }).should('be.visible')
 
-    cy.get('input[placeholder="Device name"]').clear().type('Broken Route Device')
-    cy.get('input[placeholder="route://device-id"]').clear().type('route://deadbeef')
+    cy.get('[data-testid="terminal-device-name-input"]').clear().type('Broken Route Device')
+    cy.get('[data-testid="terminal-device-url-input"]').clear().type('route://deadbeef')
     cy.contains('button', /^Add Device$/).click({ force: true })
     cy.contains('p', 'Broken Route Device')
       .parents('.rounded-md.border')
