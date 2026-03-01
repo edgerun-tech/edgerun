@@ -47,6 +47,8 @@ const providerMeta = {
   whatsapp: { id: "whatsapp", name: "WhatsApp", icon: SiWhatsapp, tone: "text-emerald-300", tokenHint: "WhatsApp token", useToken: true },
   messenger: { id: "messenger", name: "Messenger", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Messenger token", useToken: true },
   telegram: { id: "telegram", name: "Telegram", icon: SiTelegram, tone: "text-cyan-300", tokenHint: "Telegram token", useToken: true },
+  google_messages: { id: "google_messages", name: "Google Messages", icon: SiGoogle, tone: "text-blue-300", tokenHint: "Mautrix Google Messages bridge token", useToken: true },
+  meta: { id: "meta", name: "Meta", icon: SiMessenger, tone: "text-blue-300", tokenHint: "Mautrix Meta bridge token", useToken: true },
   qwen: { id: "qwen", name: "Qwen", icon: FiCpu, tone: "text-cyan-300", tokenHint: "Qwen token", useToken: true },
   codex_cli: { id: "codex_cli", name: "Codex CLI", icon: FiCpu, tone: "text-emerald-300", useToken: false },
   tailscale: { id: "tailscale", name: "Tailscale", icon: SiTailscale, tone: "text-blue-300", tokenHint: "Tailscale API key", useToken: true },

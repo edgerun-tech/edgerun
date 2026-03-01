@@ -173,7 +173,14 @@ function WorkflowOverlay() {
     const local = localMessagesByConversation()[active.id] || [];
     return [...(active.messages || []), ...local];
   });
-  const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => ["email", "whatsapp", "messenger", "telegram"].includes(integration.id)));
+  const messageProviderIntegrations = createMemo(() => integrationStore.list().filter((integration) => [
+    "email",
+    "whatsapp",
+    "telegram",
+    "google_messages",
+    "meta",
+    "messenger"
+  ].includes(integration.id)));
   const panelSuggestionTags = {
     launcher: ["workflows", "ai", "messages", "storage", "code"],
     files: ["storage", "code"],
@@ -296,6 +303,8 @@ function WorkflowOverlay() {
       whatsapp: SiWhatsapp,
       messenger: SiMessenger,
       telegram: SiTelegram,
+      google_messages: SiGoogle,
+      meta: SiMessenger,
       qwen: FiCpu,
       codex_cli: FiCpu,
       tailscale: SiTailscale,

@@ -11,7 +11,6 @@ export default [
       'node_modules/**',
       '.next/**',
       '../out/**',
-      'control-panel/**',
       'public/wasm/**',
       'intent-ui/**',
       'public/intent-ui/**'

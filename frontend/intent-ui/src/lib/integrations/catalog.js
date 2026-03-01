@@ -77,11 +77,29 @@ const integrationDefinitions = [
   {
     id: "telegram",
     name: "Telegram",
-    authMethod: "oauth",
+    authMethod: "token",
     supportsPlatformConnector: true,
     tokenKey: "telegram_token",
     defaultCapabilities: ["messages.read", "messages.send"],
     tags: ["messages", "workflows"]
+  },
+  {
+    id: "google_messages",
+    name: "Google Messages",
+    authMethod: "token",
+    supportsPlatformConnector: true,
+    tokenKey: "google_messages_token",
+    defaultCapabilities: ["messages.read", "messages.send", "messages.sync"],
+    tags: ["messages", "workflows", "matrix-bridge", "sms", "rcs"]
+  },
+  {
+    id: "meta",
+    name: "Meta",
+    authMethod: "token",
+    supportsPlatformConnector: true,
+    tokenKey: "meta_token",
+    defaultCapabilities: ["messages.read", "messages.send", "messages.sync"],
+    tags: ["messages", "workflows", "matrix-bridge", "facebook", "instagram"]
   },
   {
     id: "qwen",

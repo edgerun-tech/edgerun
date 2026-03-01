@@ -19,8 +19,10 @@ describe('intent ui conversations hub', () => {
         win.localStorage.removeItem('demo-emails')
         win.localStorage.removeItem('demo-email-index-v1')
         win.localStorage.removeItem('google_token')
+        win.localStorage.removeItem('google_messages_token')
         win.localStorage.removeItem('whatsapp_token')
         win.localStorage.removeItem('messenger_token')
+        win.localStorage.removeItem('meta_token')
         win.localStorage.removeItem('telegram_token')
       }
     })
@@ -36,6 +38,8 @@ describe('intent ui conversations hub', () => {
     cy.get('[data-testid="conversation-provider-whatsapp"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-messenger"]').should('be.visible')
     cy.get('[data-testid="conversation-provider-telegram"]').should('be.visible')
+    cy.get('[data-testid="conversation-provider-google_messages"]').should('be.visible')
+    cy.get('[data-testid="conversation-provider-meta"]').should('be.visible')
 
     cy.contains('Active AI session').click({ force: true })
     cy.get('[data-testid="conversation-settings-toggle"]').click({ force: true })
