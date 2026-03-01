@@ -5,6 +5,13 @@ import { localBridgeHttpUrl } from "../../lib/local-bridge-origin";
 import { openWindow } from "../../stores/windows";
 import { openWorkflowIntegrations } from "../../stores/workflow-ui";
 import { integrationStore } from "../../stores/integrations";
+import {
+  loadCloudflareProvider,
+  loadDockerProvider,
+  loadGithubWorkflowProvider,
+  loadLocalWorkflowRunnerProvider
+} from "../../lib/cloud/cloud-panel-providers";
+import { createCloudPanelClients } from "../../lib/cloud/cloud-clients";
 import IntentContextMenu from "../layout/IntentContextMenu";
 function logError(message, error) {
   if (import.meta.env?.DEV) {
@@ -83,117 +90,31 @@ function CloudPanel(props) {
     const hetznerToken = getToken("hetzner");
     const githubToken = integrationStore.getToken("github");
     const googleToken = integrationStore.getToken("google");
-    try {
-      try {
-        const dockerRes = await fetch(localBridgeHttpUrl("/v1/local/docker/summary"), { cache: "no-store" });
-        if (dockerRes.ok) {
-          const docker = await dockerRes.json();
-          if (docker?.ok) {
-            const services = Array.isArray(docker.services) ? docker.services : [];
-            const containers = Array.isArray(docker.containers) ? docker.containers : [];
-            setLocalDocker({
-              available: true,
-              swarmActive: Boolean(docker.swarm_active)
-            });
-            newStats.docker = services.length + containers.length;
-            newStats.dockerServices = services.length;
-            newStats.dockerContainers = containers.length;
-            for (const svc of services) {
-              allResources.push({
-                id: `docker-svc-${svc.id}`,
-                name: svc.name || svc.id,
-                type: "service",
-                provider: "docker",
-                status: (svc.replicas || "").startsWith("0/") ? "inactive" : "active",
-                metadata: {
-                  mode: svc.mode || "",
-                  replicas: svc.replicas || "",
-                  image: svc.image || "",
-                  ports: svc.ports || ""
-                }
-              });
-            }
-            for (const ctr of containers) {
-              allResources.push({
-                id: `docker-ctr-${ctr.id}`,
-                name: ctr.name || ctr.id,
-                type: "container",
-                provider: "docker",
-                status: ctr.state || ctr.status || "unknown",
-                metadata: {
-                  containerId: ctr.id || "",
-                  containerName: ctr.name || ctr.id || "",
-                  image: ctr.image || "",
-                  status: ctr.status || "",
-                  ports: ctr.ports || ""
-                }
-              });
-            }
-          } else {
-            setLocalDocker({ available: false, swarmActive: false });
-          }
-        } else {
-          setLocalDocker({ available: false, swarmActive: false });
-        }
-      } catch {
-        setLocalDocker({ available: false, swarmActive: false });
+    const cloudClients = createCloudPanelClients({
+      fetchFn: fetch,
+      localBridgeUrl: localBridgeHttpUrl,
+      getCloudflareToken: () => getToken("cloudflare"),
+      getGithubToken: () => integrationStore.getToken("github")
+    });
+    const mergeResult = (result) => {
+      if (!result || typeof result !== "object") return;
+      if (Array.isArray(result.resources) && result.resources.length > 0) {
+        allResources.push(...result.resources);
       }
+      if (result.stats && typeof result.stats === "object") {
+        Object.assign(newStats, result.stats);
+      }
+      if (result.localDocker && typeof result.localDocker === "object") {
+        setLocalDocker(result.localDocker);
+      }
+    };
+    try {
+      mergeResult(await loadDockerProvider({ dockerClient: cloudClients.docker }));
       if (cloudflareToken) {
-        try {
-          const zonesRes = await fetch(`/api/cloudflare/zones?token=${encodeURIComponent(cloudflareToken)}`);
-          if (zonesRes.ok) {
-            const zones = await zonesRes.json();
-            newStats.domains = (newStats.domains || 0) + zones.length;
-            for (const zone of zones) {
-              allResources.push({
-                id: `cf-zone-${zone.id}`,
-                name: zone.name,
-                type: "domain",
-                provider: "cloudflare",
-                status: zone.paused ? "inactive" : "active"
-              });
-            }
-          }
-        } catch (e) {
-          logError("CF zones:", e);
-        }
-        try {
-          const workersRes = await fetch(`/api/cloudflare/workers?token=${encodeURIComponent(cloudflareToken)}`);
-          if (workersRes.ok) {
-            const workers = await workersRes.json();
-            newStats.functions = (newStats.functions || 0) + workers.length;
-            for (const worker of workers) {
-              allResources.push({
-                id: `cf-worker-${worker.id}`,
-                name: worker.name,
-                type: "function",
-                provider: "cloudflare",
-                status: "active"
-              });
-            }
-          }
-        } catch (e) {
-          logError("CF workers:", e);
-        }
-        try {
-          const pagesRes = await fetch(`/api/cloudflare/pages?token=${encodeURIComponent(cloudflareToken)}`);
-          if (pagesRes.ok) {
-            const pages = await pagesRes.json();
-            newStats.pages = (newStats.pages || 0) + pages.length;
-            for (const page of pages) {
-              allResources.push({
-                id: `cf-page-${page.id}`,
-                name: page.name,
-                type: "pages",
-                provider: "cloudflare",
-                status: "active",
-                url: page.subdomain ? `${page.name}.${page.subdomain}.pages.dev` : void 0
-              });
-            }
-          }
-        } catch (e) {
-          logError("CF pages:", e);
-        }
+        mergeResult(await loadCloudflareProvider({
+          cloudflareClient: cloudClients.cloudflare,
+          token: cloudflareToken
+        }));
       }
       if (vercelToken) {
         try {
@@ -281,37 +202,10 @@ function CloudPanel(props) {
         }
       }
       if (githubToken) {
-        try {
-          const runsRes = await fetch(
-            localBridgeHttpUrl(`/v1/local/github/workflow/runs?token=${encodeURIComponent(githubToken)}&per_page=24`),
-            { cache: "no-store" }
-          );
-          if (runsRes.ok) {
-            const payload = await runsRes.json().catch(() => ({}));
-            const runs = Array.isArray(payload?.runs) ? payload.runs : [];
-            newStats.workflowRuns = runs.length;
-            for (const run of runs) {
-              const repoName = String(run?.repo_full_name || run?.repository?.full_name || "github/workflow").trim();
-              const workflowName = String(run?.name || run?.display_title || "Workflow").trim();
-              allResources.push({
-                id: `gh-run-${run.id || `${repoName}-${workflowName}`}`,
-                name: `${repoName} · ${workflowName}`,
-                type: "workflow",
-                provider: "github",
-                status: run.conclusion || run.status || "unknown",
-                url: run.html_url,
-                metadata: {
-                  source: "github",
-                  branch: run.head_branch,
-                  event: run.event,
-                  actor: run.actor?.login
-                }
-              });
-            }
-          }
-        } catch (e) {
-          logError("GitHub workflow runs:", e);
-        }
+        mergeResult(await loadGithubWorkflowProvider({
+          githubWorkflowClient: cloudClients.githubWorkflow,
+          token: githubToken
+        }));
         try {
           const userRes = await fetch(`/api/github/user?token=${encodeURIComponent(githubToken)}`);
           if (userRes.ok) {
@@ -323,34 +217,9 @@ function CloudPanel(props) {
         } catch (e) {
         }
       }
-      try {
-        const localRunsRes = await fetch(localBridgeHttpUrl("/v1/local/github/workflow/runner/runs"), {
-          cache: "no-store"
-        });
-        if (localRunsRes.ok) {
-          const payload = await localRunsRes.json().catch(() => ({}));
-          const localRuns = Array.isArray(payload?.runs) ? payload.runs : [];
-          newStats.localWorkflowRuns = localRuns.length;
-          for (const run of localRuns.slice(0, 12)) {
-            allResources.push({
-              id: `local-run-${run.id || run.started_unix_ms}`,
-              name: `local · ${run.workflow_id || "intent-ui-ci"}`,
-              type: "workflow",
-              provider: "github",
-              status: run.status || "unknown",
-              metadata: {
-                source: "local",
-                duration: typeof run.duration_ms === "number" ? `${Math.round(run.duration_ms / 1000)}s` : "",
-                actor: "local-runner",
-                event: "workflow_dispatch"
-              },
-              description: String(run.message || "").trim()
-            });
-          }
-        }
-      } catch (e) {
-        logError("Local workflow runner runs:", e);
-      }
+      mergeResult(await loadLocalWorkflowRunnerProvider({
+        githubWorkflowClient: cloudClients.githubWorkflow
+      }));
       if (googleToken) {
         try {
           const messagesRes = await fetch(`/api/google/messages?limit=10&token=${encodeURIComponent(googleToken)}`);
@@ -487,15 +356,16 @@ function CloudPanel(props) {
     setWorkflowRunnerLoading(true);
     setError(null);
     setNotice("");
+    const cloudClients = createCloudPanelClients({
+      fetchFn: fetch,
+      localBridgeUrl: localBridgeHttpUrl,
+      getCloudflareToken: () => getToken("cloudflare"),
+      getGithubToken: () => integrationStore.getToken("github")
+    });
     try {
-      const response = await fetch(localBridgeHttpUrl("/v1/local/github/workflow/runner/run"), {
-        method: "POST",
-        headers: { "content-type": "application/json; charset=utf-8" },
-        body: JSON.stringify({ workflow_id: "intent-ui-ci" })
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload?.ok === false) {
-        throw new Error(String(payload?.error || `local workflow runner failed (${response.status})`));
+      const response = await cloudClients.githubWorkflow.runLocalWorkflow("intent-ui-ci");
+      if (!response?.ok) {
+        throw new Error(String(response?.error || "local workflow runner failed"));
       }
       setNotice("Local CI workflow run completed. Refreshed workflow list.");
       await fetchAllResources();
