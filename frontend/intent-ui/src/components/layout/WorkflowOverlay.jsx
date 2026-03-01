@@ -9,7 +9,6 @@ import DevicesPanel from "./DevicesPanel";
 import LeftDrawer from "./LeftDrawer";
 import {
   closeWorkflowDemo,
-  openWorkflowIntegrations,
   startNewAssistantSession,
   setWorkflowCode,
   toggleWorkflowDrawer,
@@ -24,17 +23,10 @@ import {
   CHAT_HEAD_PREFS_KEY,
   CHAT_HEAD_PRESET_COLORS,
   DRAWER_ICON_BUTTON_CLASS,
-  DRAWER_SUGGESTION_ICON_BUTTON_CLASS,
   LEFT_DRAWER_PANEL_ITEMS,
-  PANEL_SUGGESTION_TAGS,
   RIGHT_DRAWER_PANEL_ITEMS,
-  THREAD_OVERSCAN,
-  THREAD_PAGE_SIZE,
-  THREAD_ROW_ESTIMATE
+  THREAD_PAGE_SIZE
 } from "./workflow-overlay.constants";
-import {
-  integrationIconForSuggestion,
-} from "./workflow-overlay.utils";
 import {
   emitConversationChatHeadUpdated,
   emitConversationMessageSent
@@ -71,8 +63,8 @@ function WorkflowOverlay() {
   const [showConversationList, setShowConversationList] = createSignal(true);
   const [contactOnlyThreads, setContactOnlyThreads] = createSignal([]);
   const [loadedThreadCount, setLoadedThreadCount] = createSignal(THREAD_PAGE_SIZE);
-  const [threadScrollTop, setThreadScrollTop] = createSignal(0);
-  const [threadViewportHeight, setThreadViewportHeight] = createSignal(560);
+  const [, setThreadScrollTop] = createSignal(0);
+  const [, setThreadViewportHeight] = createSignal(560);
   const [followThreadBottom, setFollowThreadBottom] = createSignal(true);
   const [showConversationSettings, setShowConversationSettings] = createSignal(false);
   const [showEmojiPalette, setShowEmojiPalette] = createSignal(false);
@@ -165,27 +157,6 @@ function WorkflowOverlay() {
     const local = localMessagesByConversation()[active.id] || [];
     return [...(active.messages || []), ...local];
   });
-  const suggestIntegrationsForPanel = (panelId) => {
-    const wantedTags = PANEL_SUGGESTION_TAGS[panelId] || [];
-    if (wantedTags.length === 0) return [];
-    return integrationStore.list()
-      .map((integration) => {
-        const integrationTags = Array.isArray(integration.tags) ? integration.tags : [];
-        const overlap = integrationTags.filter((tag) => wantedTags.includes(tag)).length;
-        return { integration, overlap };
-      })
-      .filter((item) => item.overlap > 0)
-      .sort((a, b) => {
-        if (a.integration.available !== b.integration.available) return a.integration.available ? 1 : -1;
-        if (a.integration.connected !== b.integration.connected) return a.integration.connected ? 1 : -1;
-        if (b.overlap !== a.overlap) return b.overlap - a.overlap;
-        return a.integration.name.localeCompare(b.integration.name);
-      })
-      .slice(0, 4)
-      .map((item) => item.integration);
-  };
-  const leftPanelSuggestions = createMemo(() => suggestIntegrationsForPanel(state().leftPanel));
-  const rightPanelSuggestions = createMemo(() => suggestIntegrationsForPanel(state().rightPanel));
   const chatHeadForConversation = (conversation) => {
     if (!conversation) return { emoji: "💬", color: CHAT_HEAD_PRESET_COLORS[0], label: "C" };
     const pref = chatHeadPrefs()[conversation.id] || {};
@@ -222,66 +193,14 @@ function WorkflowOverlay() {
     const all = activeConversationMessages();
     return all.slice(Math.max(0, all.length - loadedThreadCount()));
   });
-  const virtualWindow = createMemo(() => {
-    const count = visibleThreadMessages().length;
-    const viewport = Math.max(threadViewportHeight(), 1);
-    const start = Math.max(0, Math.floor(threadScrollTop() / THREAD_ROW_ESTIMATE) - THREAD_OVERSCAN);
-    const end = Math.min(count, Math.ceil((threadScrollTop() + viewport) / THREAD_ROW_ESTIMATE) + THREAD_OVERSCAN);
-    return { count, start, end };
-  });
   const virtualThreadRows = createMemo(() => {
-    const { start, end } = virtualWindow();
-    return visibleThreadMessages().slice(start, end).map((message, index) => ({
+    return visibleThreadMessages().map((message, index) => ({
       message,
-      key: `${message?.id || "msg"}-${start + index}`
+      key: `${message?.id || "msg"}-${index}`
     }));
   });
-  const virtualTopPad = createMemo(() => virtualWindow().start * THREAD_ROW_ESTIMATE);
-  const virtualBottomPad = createMemo(() => Math.max(0, (virtualWindow().count - virtualWindow().end) * THREAD_ROW_ESTIMATE));
-  const openIntegrationSuggestion = (integrationId) => {
-    openWorkflowIntegrations(integrationId);
-  };
-  const DrawerIntegrationSuggestions = (props) => (
-    <div class="shrink-0 border-t border-neutral-800 bg-[#0d0e12]/95 px-3 py-2" data-testid={`drawer-suggestions-${props.side}-${props.panel}`}>
-      <div class="relative mb-1 h-7 overflow-hidden">
-        <div class="pointer-events-none absolute inset-0 flex items-center gap-1 opacity-35" aria-hidden="true">
-          <For each={props.items().slice(0, 8)}>
-            {(integration) => {
-              const Icon = integrationIconForSuggestion(integration.id);
-              return <Icon size={12} class="text-neutral-500" />;
-            }}
-          </For>
-        </div>
-        <div class="relative z-10 flex h-full items-center">
-          <p class="text-[10px] font-medium uppercase tracking-wide text-neutral-300">Suggested Integrations</p>
-        </div>
-      </div>
-      <Show
-        when={props.items().length > 0}
-        fallback={<p class="px-1 py-1 text-[10px] text-neutral-500">No integration suggestions for this panel yet.</p>}
-      >
-        <div class="flex flex-wrap gap-1" data-testid={`drawer-suggestions-list-${props.side}-${props.panel}`}>
-          <For each={props.items()}>
-            {(integration) => {
-              const Icon = integrationIconForSuggestion(integration.id);
-              return (
-                <button
-                  type="button"
-                  class={DRAWER_SUGGESTION_ICON_BUTTON_CLASS}
-                  onClick={() => openIntegrationSuggestion(integration.id)}
-                  data-testid={`drawer-suggestion-${props.panel}-${integration.id}`}
-                  title={`${integration.name} · ${integration.available ? "available" : integration.availabilityReason || "not ready"}`}
-                  aria-label={`Open integration ${integration.name}`}
-                >
-                  <Icon size={14} />
-                </button>
-              );
-            }}
-          </For>
-        </div>
-      </Show>
-    </div>
-  );
+  const virtualTopPad = createMemo(() => 0);
+  const virtualBottomPad = createMemo(() => 0);
   const {
     selectedDeviceId,
     setSelectedDeviceId,
@@ -531,11 +450,6 @@ function WorkflowOverlay() {
               <div class="min-w-0 flex-1 p-0">
                 <div class="flex h-full min-h-0 flex-col">
                   <LeftDrawer state={state} onOpenGuide={() => openWindow("guide")} />
-                  <DrawerIntegrationSuggestions
-                    side="left"
-                    panel={state().leftPanel}
-                    items={leftPanelSuggestions}
-                  />
                 </div>
               </div>
               <div class="hidden">
@@ -670,11 +584,6 @@ function WorkflowOverlay() {
                       />
                     </Show>
                   </div>
-                  <DrawerIntegrationSuggestions
-                    side="right"
-                    panel={state().rightPanel}
-                    items={rightPanelSuggestions}
-                  />
                 </div>
               </div>
             </div>

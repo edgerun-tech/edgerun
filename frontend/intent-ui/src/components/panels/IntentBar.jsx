@@ -180,6 +180,11 @@ const mediaCommandCatalog = [
   "next track",
   "previous track"
 ];
+const weatherCommandCatalog = [
+  "weather",
+  "weather now",
+  "refresh weather"
+];
 const googleCommandCatalog = [
   "connect google",
   "open email",
@@ -194,6 +199,7 @@ const systemCommandCatalog = [
   "/help",
   "/guide",
   "set provider opencode",
+  "weather",
   "open credentials",
   "open onvif",
   "onvif",
@@ -241,6 +247,7 @@ const helpCommandCatalog = [
   {
     section: "Other",
     items: [
+      { command: "weather", description: "Refresh weather status" },
       { command: "demo investigate api latency spike", description: "Generate demo result set" },
       { command: "@alex message hello there", description: "Run contact action demo" },
       { command: "$ ls -la", description: "Run command in terminal panel" },
@@ -441,6 +448,7 @@ function IntentBar() {
   const commandIndex = createMemo(() => {
     const commands = new Set(systemCommandCatalog);
     for (const cmd of mediaCommandCatalog) commands.add(cmd);
+    for (const cmd of weatherCommandCatalog) commands.add(cmd);
     for (const cmd of googleCommandCatalog) commands.add(cmd);
     for (const cmd of demoCommandCatalog) commands.add(cmd);
     for (const option of accentOptions) commands.add(`set accent ${option.id}`);
@@ -1269,6 +1277,14 @@ function IntentBar() {
       setMode("intent");
       return;
     }
+    if (/^(weather|weather\s+now|refresh\s+weather)$/i.test(trimmed)) {
+      await refreshWeather();
+      addRecentCommand(trimmed.toLowerCase());
+      setQuery("");
+      setMode("intent");
+      setError(null);
+      return;
+    }
     const isDirectUrl = /^https?:\/\//i.test(trimmed);
     const isBrowserCommand = /^browser\s+/i.test(trimmed);
     const isDomainLike = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#].*)?$/i.test(trimmed);
@@ -1817,39 +1833,84 @@ function IntentBar() {
       clearTimeout(timer);
     }
   };
+  const weatherConditionFromCode = (code) => {
+    const numeric = Number(code);
+    if (!Number.isFinite(numeric)) return "cloudy";
+    if (numeric === 0 || numeric === 1) return "sunny";
+    if (numeric === 2 || numeric === 3 || numeric === 45 || numeric === 48) return "cloudy";
+    if ([95, 96, 99].includes(numeric)) return "stormy";
+    return "rainy";
+  };
+  const fetchWeatherViaApiRoute = async (coords) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetchWithTimeout(
+          `/api/weather?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lon)}`,
+          8500 + attempt * 1000
+        );
+        const parsed = await response.json().catch(() => ({}));
+        if (response.ok && parsed?.ok && parsed?.weather) {
+          return parsed.weather;
+        }
+      } catch {
+        // retry on transient failures
+      }
+      if (attempt < 2) {
+        await sleep(400 * (attempt + 1));
+      }
+    }
+    return null;
+  };
+  const fetchWeatherViaOpenMeteo = async (coords) => {
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", String(coords.lat));
+    url.searchParams.set("longitude", String(coords.lon));
+    url.searchParams.set("timezone", "auto");
+    url.searchParams.set("forecast_days", "3");
+    url.searchParams.set("current", "temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,weather_code");
+    url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min");
+    try {
+      const response = await fetchWithTimeout(url.toString(), 9000);
+      const parsed = await response.json().catch(() => ({}));
+      if (!response.ok || !parsed || typeof parsed !== "object") return null;
+      const current = parsed.current && typeof parsed.current === "object" ? parsed.current : {};
+      const daily = parsed.daily && typeof parsed.daily === "object" ? parsed.daily : {};
+      const weatherCodes = Array.isArray(daily.weather_code) ? daily.weather_code : [];
+      const tempMax = Array.isArray(daily.temperature_2m_max) ? daily.temperature_2m_max : [];
+      const tempMin = Array.isArray(daily.temperature_2m_min) ? daily.temperature_2m_min : [];
+      const forecast = weatherCodes.slice(0, 3).map((weatherCode, index) => ({
+        condition: weatherConditionFromCode(weatherCode),
+        max: Number.isFinite(tempMax[index]) ? Math.round(tempMax[index]) : null,
+        min: Number.isFinite(tempMin[index]) ? Math.round(tempMin[index]) : null
+      }));
+      const next = {
+        temp: Number.isFinite(current.temperature_2m) ? Math.round(current.temperature_2m) : null,
+        condition: weatherConditionFromCode(current.weather_code),
+        humidity: Number.isFinite(current.relative_humidity_2m) ? Math.round(current.relative_humidity_2m) : null,
+        windSpeed: Number.isFinite(current.wind_speed_10m) ? Math.round(current.wind_speed_10m) : null,
+        feelsLike: Number.isFinite(current.apparent_temperature) ? Math.round(current.apparent_temperature) : null,
+        location: coords.location || "Current location",
+        forecast
+      };
+      if (!Number.isFinite(next.temp)) return null;
+      return next;
+    } catch {
+      return null;
+    }
+  };
   const refreshWeather = async () => {
     if (weatherUpdating || weatherAborted) return;
     weatherUpdating = true;
     try {
       const coords = await resolveWeatherCoords();
-      let payload = null;
-      let success = false;
-      for (let attempt = 0; attempt < 3 && !success; attempt += 1) {
-        try {
-          const response = await fetchWithTimeout(
-            `/api/weather?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lon)}`,
-            8500 + attempt * 1000
-          );
-          const parsed = await response.json().catch(() => ({}));
-          if (response.ok && parsed?.ok && parsed?.weather) {
-            payload = parsed;
-            success = true;
-            break;
-          }
-        } catch {
-          // retry on transient failures
-        }
-        if (attempt < 2) {
-          await sleep(400 * (attempt + 1));
-        }
-      }
-      if (!success || !payload?.weather) {
+      const routeWeather = await fetchWeatherViaApiRoute(coords);
+      const next = routeWeather || await fetchWeatherViaOpenMeteo(coords);
+      if (!next) {
         if (lastGoodWeather) {
           setWeather((prev) => ({ ...prev, ...lastGoodWeather }));
         }
         return;
       }
-      const next = payload.weather;
       const mergedWeather = {
         temp: Number.isFinite(next.temp) ? next.temp : weather().temp,
         condition: typeof next.condition === "string" ? next.condition : weather().condition,
@@ -2111,7 +2172,7 @@ function IntentBar() {
     animate={{ x: 0, opacity: 1 }}
     transition={{ delay: 0.1 }}
   >
-            <div class="flex items-center gap-2 rounded-full border border-neutral-800/80 bg-neutral-900/45 px-2 py-0.5 text-neutral-300">
+            <div class="flex items-center gap-2 rounded-full border border-neutral-800/80 bg-neutral-900/45 px-2 py-0.5 text-neutral-300" data-testid="intentbar-weather-chip">
               <Show
                 when={Number.isFinite(weather().temp)}
                 fallback={<span class="text-sm font-medium text-neutral-500">--</span>}
@@ -2119,10 +2180,10 @@ function IntentBar() {
                 <Show when={partyMode()} fallback={getWeatherIcon(weather().condition, 18)}>
                   <PartyBars />
                 </Show>
-                <span class="text-sm font-medium">{weather().temp}°</span>
+                <span class="text-sm font-medium" data-testid="intentbar-weather-temp">{weather().temp}°</span>
               </Show>
               <Show when={hasSpecificWeatherLocation()}>
-                <span class="text-xs text-neutral-500 hidden sm:inline">{weather().location}</span>
+                <span class="text-xs text-neutral-500 hidden sm:inline" data-testid="intentbar-weather-location">{weather().location}</span>
               </Show>
             </div>
           </Motion.div>

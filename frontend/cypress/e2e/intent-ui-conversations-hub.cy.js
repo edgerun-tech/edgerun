@@ -38,9 +38,6 @@ describe('intent ui conversations hub', () => {
 
     cy.get('[data-testid="profile-bootstrap-gate"]').should('not.exist')
     cy.get('button[title="Conversations"]').first().click({ force: true })
-    cy.get('[data-testid="drawer-suggestions-right-conversations"]').should('be.visible')
-    cy.get('[data-testid="drawer-suggestions-list-right-conversations"]').should('be.visible')
-    cy.get('[data-testid="drawer-suggestion-conversations-email"]').should('be.visible')
 
     cy.contains('Active AI session').should('be.visible')
 

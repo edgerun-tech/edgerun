@@ -23,7 +23,7 @@ describe('intent ui workflow modal gating', () => {
     })
 
     cy.get('button[title="Conversations"]').first().click({ force: true })
-    cy.get('[data-testid="drawer-suggestion-conversations-email"]').click({ force: true })
+    cy.get('button[title="Integrations panel"]').first().click({ force: true })
 
     cy.window().then((win) => {
       const workflow = win.__intentDebug?.getWorkflowUi?.()

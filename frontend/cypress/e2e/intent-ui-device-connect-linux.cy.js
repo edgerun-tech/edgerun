@@ -42,9 +42,6 @@ describe('intent ui linux first device connect', () => {
     })
 
     cy.get('button[title="Devices panel"]').first().click({ force: true })
-    cy.get('[data-testid="drawer-suggestions-right-devices"]').should('be.visible')
-    cy.get('[data-testid="drawer-suggestions-list-right-devices"]').should('be.visible')
-    cy.get('[data-testid="drawer-suggestion-devices-tailscale"]').should('be.visible')
 
     cy.get('[data-testid="device-open-connect-dialog"]').should('be.visible').click()
     cy.get('[data-testid="device-connect-dialog"]').should('be.visible')

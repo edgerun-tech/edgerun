@@ -35,3 +35,4 @@ CLOUD_OS_DEV_HMR_AND_SOLID_RUNTIME_STABILITY_V1.md	historical	cloud-os		Cloud-os
 2026-03-01-workflow-modal-gating-v1.md	active	intent-ui		Gates code-edit modal to explicit demo flow so integrations do not trigger it.
 2026-03-01-tailscale-integration-quickstart-v2.md	active	intent-ui		Generates Tailscale join/funnel/app-connector setup artifacts from integration inputs.
 2026-03-01-telemetry-panel-minimize-dock-v1.md	active	intent-ui		Adds minimize controls and restore dock tray for telemetry floating panels.
+2026-03-01-workflow-drawer-remove-integration-suggestions-v1.md	active	intent-ui		Removes suggested-integration strips from workflow drawers.
