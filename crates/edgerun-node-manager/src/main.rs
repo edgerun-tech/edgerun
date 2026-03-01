@@ -127,6 +127,7 @@ const LOCAL_BEEPER_IMPORTED_PATH: &str = "/v1/local/beeper/imported";
 const LOCAL_BEEPER_MEDIA_PATH: &str = "/v1/local/beeper/media";
 const LOCAL_BEEPER_SEND_PATH: &str = "/v1/local/beeper/send";
 const LOCAL_TAILSCALE_DEVICES_PATH: &str = "/v1/local/tailscale/devices";
+const LOCAL_ONVIF_DISCOVER_PATH: &str = "/v1/local/onvif/discover";
 const LOCAL_GOOGLE_MESSAGES_PATH: &str = "/v1/local/google/messages";
 const LOCAL_GOOGLE_MESSAGE_PATH: &str = "/v1/local/google/message/{id}";
 const LOCAL_GOOGLE_EVENTS_PATH: &str = "/v1/local/google/events";
@@ -719,6 +720,12 @@ struct LocalGooglePhotosQuery {
     token: String,
     #[serde(default, alias = "pageSize")]
     page_size: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LocalOnvifDiscoverQuery {
+    #[serde(default, alias = "waitMs")]
+    wait_ms: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2653,6 +2660,8 @@ fn start_local_bridge(local_bridge_listen: &str, device_pubkey_b64url: &str) -> 
             post(handle_local_tailscale_devices),
         )
         .route(LOCAL_TAILSCALE_DEVICES_PATH, options(handle_local_options))
+        .route(LOCAL_ONVIF_DISCOVER_PATH, get(handle_local_onvif_discover))
+        .route(LOCAL_ONVIF_DISCOVER_PATH, options(handle_local_options))
         .route(LOCAL_GOOGLE_MESSAGES_PATH, get(handle_local_google_messages))
         .route(LOCAL_GOOGLE_MESSAGES_PATH, options(handle_local_options))
         .route(LOCAL_GOOGLE_MESSAGE_PATH, get(handle_local_google_message))
@@ -3785,6 +3794,151 @@ async fn handle_local_tailscale_devices(
         sonic_rs::json!({
             "ok": true,
             "devices": payload["devices"].as_array().cloned().unwrap_or_default(),
+        }),
+    )
+}
+
+fn parse_onvif_name_hint(payload: &str) -> Option<String> {
+    let marker = "onvif://www.onvif.org/name/";
+    let payload_lower = payload.to_ascii_lowercase();
+    let marker_index = payload_lower.find(marker)?;
+    let source = &payload[marker_index + marker.len()..];
+    let mut value = String::new();
+    for ch in source.chars() {
+        if ch.is_whitespace() || ch == '<' || ch == '>' || ch == '"' || ch == '\'' {
+            break;
+        }
+        value.push(ch);
+    }
+    let decoded = value.replace("%20", " ").replace('+', " ").trim().to_string();
+    if decoded.is_empty() {
+        return None;
+    }
+    Some(decoded.chars().take(120).collect())
+}
+
+fn extract_http_urls(payload: &str) -> Vec<String> {
+    payload
+        .split(|ch: char| ch.is_whitespace() || ch == '<' || ch == '>' || ch == '"' || ch == '\'')
+        .filter_map(|token| {
+            let candidate = token.trim_matches(|ch: char| {
+                matches!(ch, ',' | ';' | ')' | '(' | '[' | ']' | '{' | '}' | '\\')
+            });
+            if candidate.starts_with("http://") || candidate.starts_with("https://") {
+                Some(candidate.to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn normalize_onvif_candidate_url(raw: &str) -> Option<String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return None;
+    }
+    let candidate = if value.starts_with("http://") || value.starts_with("https://") {
+        value.to_string()
+    } else {
+        format!("http://{value}")
+    };
+    let parsed = reqwest::Url::parse(&candidate).ok()?;
+    Some(parsed.to_string())
+}
+
+fn onvif_host_from_url(url: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(url).ok()?;
+    parsed.host_str().map(|value| value.to_string())
+}
+
+async fn discover_onvif_ws(wait_ms: u64) -> Result<Vec<sonic_rs::Value>> {
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0")
+        .await
+        .context("bind onvif discovery socket")?;
+    let message_id = format!("uuid:edgerun-{}-{}", now_unix_ms(), std::process::id());
+    let probe = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\" xmlns:a=\"http://schemas.xmlsoap.org/ws/2004/08/addressing\" xmlns:d=\"http://schemas.xmlsoap.org/ws/2005/04/discovery\" xmlns:dn=\"http://www.onvif.org/ver10/network/wsdl\">\
+  <s:Header>\
+    <a:Action>http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe</a:Action>\
+    <a:MessageID>{}</a:MessageID>\
+    <a:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</a:To>\
+  </s:Header>\
+  <s:Body>\
+    <d:Probe>\
+      <d:Types>dn:NetworkVideoTransmitter</d:Types>\
+    </d:Probe>\
+  </s:Body>\
+</s:Envelope>",
+        message_id
+    );
+    socket
+        .send_to(probe.as_bytes(), "239.255.255.250:3702")
+        .await
+        .context("send onvif discovery probe")?;
+
+    let wait_duration = Duration::from_millis(wait_ms.clamp(250, 5000));
+    let start = tokio::time::Instant::now();
+    let mut seen = std::collections::HashSet::new();
+    let mut items = Vec::new();
+    let mut buffer = vec![0u8; 8192];
+
+    while start.elapsed() < wait_duration {
+        let remaining = wait_duration.saturating_sub(start.elapsed());
+        let received = tokio::time::timeout(remaining, socket.recv_from(&mut buffer)).await;
+        let (size, source_addr) = match received {
+            Ok(Ok(value)) => value,
+            Ok(Err(_)) => continue,
+            Err(_) => break,
+        };
+
+        let payload = String::from_utf8_lossy(&buffer[..size]);
+        let name_hint = parse_onvif_name_hint(&payload);
+        let mut urls: Vec<String> = extract_http_urls(&payload)
+            .into_iter()
+            .filter_map(|item| normalize_onvif_candidate_url(&item))
+            .filter(|item| {
+                let lower = item.to_ascii_lowercase();
+                lower.contains("onvif") || lower.contains("device_service")
+            })
+            .collect();
+
+        if urls.is_empty() {
+            urls.push(format!("http://{}/onvif/device_service", source_addr.ip()));
+        }
+
+        for url in urls {
+            let key = url.to_ascii_lowercase();
+            if !seen.insert(key) {
+                continue;
+            }
+            let ip = onvif_host_from_url(&url).unwrap_or_else(|| source_addr.ip().to_string());
+            let name = name_hint.clone().unwrap_or_else(|| ip.clone());
+            items.push(sonic_rs::json!({
+                "name": name,
+                "ip": ip,
+                "url": url,
+                "source": "ws-discovery"
+            }));
+        }
+    }
+
+    Ok(items)
+}
+
+async fn handle_local_onvif_discover(Query(query): Query<LocalOnvifDiscoverQuery>) -> Response {
+    let wait_ms = query.wait_ms.unwrap_or(1400).clamp(250, 5000);
+    let items = match discover_onvif_ws(wait_ms).await {
+        Ok(value) => value,
+        Err(err) => return local_json_error(AxumStatusCode::BAD_GATEWAY, &err.to_string()),
+    };
+    local_json_value(
+        AxumStatusCode::OK,
+        sonic_rs::json!({
+            "ok": true,
+            "waitMs": wait_ms,
+            "items": items
         }),
     )
 }

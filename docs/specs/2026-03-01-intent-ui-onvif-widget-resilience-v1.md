@@ -2,7 +2,7 @@
 
 ## Goal and non-goals
 - Goal:
-  - Make ONVIF panel scan behavior deterministic when ONVIF discovery backend is unavailable.
+  - Make ONVIF panel scan behavior deterministic by providing a node-local ONVIF discovery backend and explicit UI fallback behavior.
   - Prefer node-local bridge discovery path for scan attempts while preserving legacy API compatibility.
   - Keep manual camera add flow fully functional even when scan endpoint is missing.
 - Non-goals:
@@ -16,16 +16,20 @@
 
 ## Acceptance criteria
 1. ONVIF scan attempts node-local discovery first (`/v1/local/onvif/discover`) and then legacy `/api/onvif/discover` fallback.
-2. If neither discovery endpoint is available, panel shows actionable status text instead of generic failure.
-3. Manual camera add remains available and produces normalized URLs.
-4. Add/update Cypress coverage that opens ONVIF panel, runs scan with mocked response, and adds a scanned camera.
-5. Frontend validation passes:
+2. Local bridge provides `/v1/local/onvif/discover` via WS-Discovery probe and returns normalized candidate URLs.
+3. If neither discovery endpoint is available, panel shows actionable status text instead of generic failure.
+4. Manual camera add remains available and produces normalized URLs.
+5. Add/update Cypress coverage that opens ONVIF panel, runs scan with mocked response, and adds a scanned camera.
+6. Backend validation passes:
+- `cargo check -p edgerun-node-manager`
+7. Frontend validation passes:
 - `cd frontend && bun run check`
 - `cd frontend && bun run build`
 
 ## Rollout and rollback
 - Rollout:
+  - Add node-local ONVIF WS-Discovery endpoint.
   - Update ONVIF panel scan path + status behavior.
   - Add ONVIF panel E2E regression coverage.
 - Rollback:
-  - Revert ONVIF panel scan fallback/status changes and ONVIF Cypress spec.
+  - Revert node-local ONVIF discovery endpoint, ONVIF panel scan fallback/status changes, and ONVIF Cypress spec.
