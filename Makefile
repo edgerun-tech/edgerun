@@ -1,4 +1,4 @@
-.PHONY: clean check fmt clippy test verify matrix-check tree drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki
+.PHONY: clean check fmt clippy test verify matrix-check tree drift cloudflare-targets-check ecosystem-check ecosystem-build ecosystem-test ecosystem-verify actions-local-list actions-local-run actions-local-dry-run actions-local-runtime-dry-run nodeos-initramfs nodeos-kernel-check nodeos-yubikey-cert nodeos-signed-uki nodeos-verify-uki hooks-install secrets-scan
 
 CARGO_TARGET_DIR ?= $(CURDIR)/out/target
 export CARGO_TARGET_DIR
@@ -72,3 +72,9 @@ nodeos-signed-uki:
 
 nodeos-verify-uki:
 	./scripts/nodeos/verify-signed-uki.sh
+
+hooks-install:
+	./scripts/install-git-hooks.sh
+
+secrets-scan:
+	./scripts/scan-secrets.sh --all
