@@ -42,7 +42,7 @@ clap = { version = "4", features = ["derive"] }
 ed25519-dalek = "2"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
-sonic-rs = "0.4"
+sonic-rs = "0.5"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net", "fs", "time", "process"] }
 tracing = "0.1"
