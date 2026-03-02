@@ -3,6 +3,7 @@ FROM archlinux:base
 
 # Runtime-only image for the prebuilt host binary.
 RUN pacman -Syu --noconfirm --needed \
+  git \
   webkit2gtk \
   gtk3 \
   ca-certificates \

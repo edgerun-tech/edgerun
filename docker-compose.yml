@@ -28,6 +28,7 @@ services:
     working_dir: /workspace/mcp-syscall
     volumes:
       - ../mcp-syscall:/workspace/mcp-syscall
+      - /home/ken/.codex:/root/.codex
       - /home/ken/src/edgerun:/workspace/edgerun
       - /var/cache/build/rust/target/release:/var/cache/build/rust/target/release:ro
       - /var/run/docker.sock:/var/run/docker.sock

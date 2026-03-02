@@ -412,6 +412,8 @@ fn sync_workspace_into_worktree(repo_root: &Path, worktree_path: &Path) -> Resul
         .arg("-a")
         .arg("--delete")
         .arg("--exclude")
+        .arg(".git")
+        .arg("--exclude")
         .arg(".git/")
         .arg(format!("{}/", repo_root.display()))
         .arg(format!("{}/", worktree_path.display()))
