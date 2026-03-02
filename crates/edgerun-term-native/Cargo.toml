@@ -19,7 +19,7 @@ json = "0.12"
 log = "0.4"
 once_cell = "1.19"
 pixels = "0.15"
-portable-pty = "0.8"
+portable-pty = "0.9"
 term-core = { package = "edgerun-term-core", path = "../edgerun-term-core", features = ["test-util"] }
 term-ui = { package = "edgerun-term-ui", path = "../edgerun-term-ui" }
 vte = "0.13"

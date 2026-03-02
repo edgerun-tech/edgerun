@@ -15,7 +15,7 @@ edgerun-hwvault-primitives = { path = "../edgerun-hwvault-primitives" }
 edgerun-observability = { path = "../edgerun-observability" }
 edgerun-control-signing = { path = "../edgerun-control-signing" }
 json = "0.12"
-portable-pty = "0.8"
+portable-pty = "0.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
