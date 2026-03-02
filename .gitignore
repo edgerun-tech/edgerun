@@ -24,3 +24,9 @@ node_modules/
 .edgerun-scheduler-data/
 .wrangler/
 /program/target-local/
+
+# Sensitive/local-only cloudflared credentials
+config/cloudflared/node-manager-tunnel-credentials.json
+
+# Local/prepared node-manager image binaries
+docker/node-manager/bin/
