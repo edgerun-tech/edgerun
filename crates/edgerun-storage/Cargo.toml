@@ -35,7 +35,7 @@ tempfile = "3.10"
 criterion = "0.5"
 
 [build-dependencies]
-prost-build = "0.13"
+prost-build = "0.14"
 
 [features]
 default = []
