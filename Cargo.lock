@@ -3639,9 +3639,9 @@ dependencies = [
 
 [[package]]
 name = "icy_sixel"
-version = "0.4.3"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03c0bfd4d909d2557f240ba2b2cd68114e49c5d02b91472f4455d9814269b91b"
+checksum = "85518b9086bf01117761b90e7691c0ef3236fa8adfb1fb44dd248fe5f87215d5"
 dependencies = [
  "quantette",
  "thiserror 2.0.18",
@@ -5965,7 +5965,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "059a34f111a9dee2ce1ac2826a68b24601c4298cfeb1a587c3cb493d5ab46f52"
 dependencies = [
  "libc",
- "nix 0.26.4",
+ "nix 0.29.0",
 ]
 
 [[package]]
