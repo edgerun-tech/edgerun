@@ -14,7 +14,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 thiserror.workspace = true
 async-trait = "0.1"
-prost = "0.13"
+prost = "0.14"
 oci-spec = "0.7.1"
 containerd-shim-protos = { version = "0.10", features = ["async"] }
 containerd-shim = { version = "0.10", features = ["async"] }

@@ -6,6 +6,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 serde.workspace = true
 thiserror.workspace = true

@@ -13,7 +13,7 @@ exclude = ["/target", "/.github", "/tmp", "*.log"]
 [dependencies]
 blake3.workspace = true
 hex.workspace = true
-prost = "0.13"
+prost = "0.14"
 edgerun-crypto = { path = "../edgerun-crypto" }
 serde.workspace = true
 uuid = { version = "1.8", features = ["v4", "serde"] }
