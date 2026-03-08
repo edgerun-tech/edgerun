@@ -24,4 +24,4 @@ edgerun-control-signing = { path = "../../crates/edgerun-control-signing" }
 edgerun-p2p = { path = "../../crates/edgerun-p2p" }
 edgerun-hwvault-primitives = { path = "../../crates/edgerun-hwvault-primitives" }
 fs2 = "0.4"
-prost = "0.13"
+prost = "0.14"
