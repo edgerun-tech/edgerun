@@ -1,0 +1,21 @@
+brief:
+  issuer: agent_assistant
+  action: query
+  scope: recent-timeline
+delegation_chain:
+- issuer: user_alice
+  recipient: agent_assistant
+  capability:
+    kind: CAPABILITY_KIND_QUERY
+    actions:
+    - query
+    scope: timeline:last_7d
+  id: delegation_query_agent_assistant
+  issued_at: '2030-01-01T00:00:00Z'
+  expires_at: '2030-01-08T00:00:00Z'
+  record_domain_tag: lifegraph:v0:delegation-record
+  sig_domain_tag: lifegraph:v0:delegation-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xe8f05b3a1d15dbe0ea05d13763f1d904c24c212038f6945e741cd0472a196b8a12bb9969f5e428aad2e13cc79028b5040975eb181f4d80ffb6d14114c4c5860b'

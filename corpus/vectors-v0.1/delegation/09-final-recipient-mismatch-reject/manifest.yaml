@@ -1,0 +1,9 @@
+id: delegation/09-final-recipient-mismatch-reject
+suite: delegation
+validator: validate_delegation_chain
+version: 1
+priority: mandatory
+description: delegation chain is rejected when the final recipient does not match the requesting issuer
+tags:
+- delegation
+- validate_delegation_chain

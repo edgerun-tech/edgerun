@@ -1,0 +1,7 @@
+candidate_routes:
+- advertiser: adv_a
+  next_hop_node: hop_a
+  quality_hint: 5
+  cost_hint: 2
+  has_active_session: false
+policy_profile: default-v0

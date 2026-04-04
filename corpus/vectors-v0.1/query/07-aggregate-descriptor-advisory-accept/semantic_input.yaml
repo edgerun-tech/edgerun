@@ -1,0 +1,6 @@
+aggregate_descriptor:
+  aggregate_id: agg_01
+  source_query_id: query_active
+  aggregator: node_server
+  input_fragments:
+  - object_id: fragment_obj_1

@@ -1,0 +1,14 @@
+signed_record:
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  not_before: '2030-01-01T00:00:00Z'
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_08-not-before-equals-now-accept
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x3d8dc859e85cc1551a1053637d2ab29a330e542af2e4341da26768d6b94781265882f6d0ab2aafd06252acd9a94c628f26c24e867319df0ad1d79217a9c64f0d'

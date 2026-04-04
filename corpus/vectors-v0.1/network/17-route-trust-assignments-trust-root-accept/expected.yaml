@@ -1,0 +1,5 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: route_trust_assignments_accepted
+  advisory_only: true

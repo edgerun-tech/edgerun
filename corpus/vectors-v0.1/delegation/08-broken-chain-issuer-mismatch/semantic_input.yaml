@@ -1,0 +1,19 @@
+brief:
+  issuer: user_carol
+  action: query
+  scope: domain:local
+delegation_chain:
+- delegation_id: del_root
+  issuer: user_alice
+  recipient: user_bob
+  capability:
+    actions:
+    - query
+    scope: domain:local
+- delegation_id: del_child
+  issuer: user_alice
+  recipient: user_carol
+  capability:
+    actions:
+    - query
+    scope: domain:local

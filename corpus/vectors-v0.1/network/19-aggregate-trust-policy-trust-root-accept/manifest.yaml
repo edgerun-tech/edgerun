@@ -1,0 +1,10 @@
+id: network/19-aggregate-trust-policy-trust-root-accept
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: aggregate trust policy is advisory-accepted when issued by a configured trust root
+tags:
+- network
+- route
+- policy

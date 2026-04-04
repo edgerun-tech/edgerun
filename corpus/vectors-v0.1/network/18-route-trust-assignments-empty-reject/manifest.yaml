@@ -1,0 +1,10 @@
+id: network/18-route-trust-assignments-empty-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route trust assignments are rejected when the assignments list is empty
+tags:
+- network
+- route
+- trust

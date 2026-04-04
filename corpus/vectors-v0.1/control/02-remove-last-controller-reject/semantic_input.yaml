@@ -1,0 +1,17 @@
+brief:
+  command_type: REMOVE_CONTROLLER
+  target_controller: user_alice
+command:
+  command_type: REMOVE_CONTROLLER
+  target_controller: user_alice
+  issuer: user_alice
+  target_node: node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ctrl_02-remove-last-controller-reject
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x8c0726025e17f0b2c57807b71a5a5c5420c95adf0f991981b65ceb05949fd0f20aeec0c25ada91ceb52915feecab7c32060e1d9fe73a49059f10a5c4de6b4d04'

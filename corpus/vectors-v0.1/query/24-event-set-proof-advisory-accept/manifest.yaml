@@ -1,0 +1,10 @@
+id: query/24-event-set-proof-advisory-accept
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: event set proof is advisory-accepted when referenced events and related objects are locally available
+tags:
+- query
+- proof
+- event

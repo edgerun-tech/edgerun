@@ -1,0 +1,9 @@
+id: trust/01-assurance-accept
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: assurance claim is accepted when attester is allowed and class satisfies policy
+tags:
+- trust
+- validate_trust

@@ -1,0 +1,10 @@
+brief:
+  candidate_event: duplicate_event
+  seq: 3
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 3
+  stream_id: timeline_stream
+  prev_ref:
+    event_hash_hex: '0x0202020202020202020202020202020202020202020202020202020202020202'
+  event_hash_hex: '0x0303030303030303030303030303030303030303030303030303030303030303'

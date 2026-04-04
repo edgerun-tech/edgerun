@@ -1,0 +1,9 @@
+id: object/15-manifest-representation-id-mismatch-reject
+suite: object
+validator: validate_object_retrieval
+version: 1
+priority: mandatory
+description: header and manifest must agree on representation id
+tags:
+- object
+- validate_object_retrieval

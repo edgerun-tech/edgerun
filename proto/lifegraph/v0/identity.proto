@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package lifegraph.v0.identity;
+
+import "google/protobuf/timestamp.proto";
+import "lifegraph/v0/common.proto";
+
+enum KeyAlgorithm {
+  KEY_ALGORITHM_UNSPECIFIED = 0;
+  KEY_ALGORITHM_ED25519 = 1;
+  KEY_ALGORITHM_X25519 = 2;
+  KEY_ALGORITHM_ECDSA_P256 = 3;
+  KEY_ALGORITHM_ECDSA_P384 = 4;
+  KEY_ALGORITHM_RSA_2048 = 5;
+}
+
+message IdentityRecord {
+  uint32 record_version = 1;
+  bytes identity_id = 2;
+  lifegraph.v0.common.IdentityKind identity_kind = 3;
+  KeyAlgorithm key_algorithm = 4;
+  bytes public_key = 5;
+  google.protobuf.Timestamp created_at = 6;
+  lifegraph.v0.common.IdentityRef supersedes_identity = 7;
+  repeated lifegraph.v0.common.ObjectRef assurance_claim_objects = 8;
+  lifegraph.v0.common.ObjectRef metadata_object = 9;
+  lifegraph.v0.common.Signature signature = 10;
+}

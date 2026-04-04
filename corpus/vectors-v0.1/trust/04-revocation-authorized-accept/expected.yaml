@@ -1,0 +1,5 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: revocation_accepted
+  target: del_query_1

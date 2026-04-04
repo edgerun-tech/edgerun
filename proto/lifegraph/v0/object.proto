@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package lifegraph.v0.object;
+
+import "google/protobuf/timestamp.proto";
+import "lifegraph/v0/common.proto";
+
+enum ChunkingMode {
+  CHUNKING_MODE_UNSPECIFIED = 0;
+  CHUNKING_MODE_NONE = 1;
+  CHUNKING_MODE_MANIFEST = 2;
+}
+
+message LogicalObjectDescriptor {
+  uint32 descriptor_version = 1;
+  bytes object_id = 2;
+  lifegraph.v0.common.ObjectKind object_kind = 3;
+  uint32 object_schema_version = 4;
+  string canonicalization_id = 5;
+  lifegraph.v0.common.Digest canonical_digest = 6;
+  uint64 canonical_size = 7;
+  google.protobuf.Timestamp created_at = 8;
+  lifegraph.v0.common.IdentityRef producer = 9;
+  lifegraph.v0.common.ObjectRef describes_object = 10;
+  lifegraph.v0.common.ObjectRef object_metadata = 11;
+}
+
+message StoredRepresentationHeader {
+  uint32 header_version = 1;
+  bytes representation_id = 2;
+  lifegraph.v0.common.ObjectRef object = 3;
+  lifegraph.v0.common.Digest representation_digest = 4;
+  optional uint64 plaintext_size = 5;
+  uint64 stored_size = 6;
+  string encryption_scheme = 7;
+  string compression_scheme = 8;
+  ChunkingMode chunking_mode = 9;
+  lifegraph.v0.common.ObjectRef chunk_manifest_object = 10;
+  lifegraph.v0.common.ObjectRef access_package_object = 11;
+  google.protobuf.Timestamp created_at = 12;
+  lifegraph.v0.common.ObjectRef representation_metadata = 13;
+}
+
+message ChunkEntry {
+  uint32 index = 1;
+  bytes chunk_representation_id = 2;
+  lifegraph.v0.common.Digest chunk_digest = 3;
+  uint64 offset = 4;
+  uint64 length = 5;
+}
+
+message ChunkManifest {
+  uint32 manifest_version = 1;
+  lifegraph.v0.common.ObjectRef object = 2;
+  lifegraph.v0.common.RepresentationRef representation = 3;
+  uint32 chunk_count = 4;
+  uint64 total_stored_size = 5;
+  repeated ChunkEntry chunk_entries = 6;
+  lifegraph.v0.common.ObjectRef manifest_metadata = 7;
+}

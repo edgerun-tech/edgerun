@@ -1,0 +1,16 @@
+brief:
+  command_type: STORE_OBJECT
+  target_node: node_server
+command:
+  issuer: user_alice
+  target_node: node_server
+  command_type: STORE_OBJECT
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_collision
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xc60ce1cd84223ea493b2959a76f5717adfc2acf392a90ecd6a36203af2eaf3316f17184d0e0a7d930149a46e435997905954b8a860e88ee0fe22c962181b0b0e'

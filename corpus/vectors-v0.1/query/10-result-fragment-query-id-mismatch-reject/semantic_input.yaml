@@ -1,0 +1,6 @@
+result_fragment:
+  query_id: query_other
+  responder: node_server
+  event_refs:
+  - stream_id: timeline_stream
+    seq: 3

@@ -1,0 +1,43 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Run repo validation suite
+        run: make test
+
+      - name: Generate Go coverage report
+        run: make coverage-go
+
+      - name: Build daemon binary
+        run: make build-go
+
+      - name: Build release binaries
+        run: make release-build
+
+      - name: Build container image
+        run: docker build -t lifegraph-reference-core:ci .
+
+      - name: Upload Go coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: var/coverage/go.cover
+          if-no-files-found: error

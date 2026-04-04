@@ -1,0 +1,10 @@
+id: control/03-safe-transfer-add-verify-remove
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: safe transfer pattern adds new controller, verifies possession, then
+  removes old controller
+tags:
+- control
+- validate_control_change

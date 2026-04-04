@@ -1,0 +1,9 @@
+id: command/06-bad-signature-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: command with invalid signature is rejected
+tags:
+- command
+- validate_command

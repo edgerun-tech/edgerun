@@ -1,0 +1,12 @@
+candidate_event:
+  event_type: EVENT_TYPE_ACTION_FAILED
+  seq: 1
+  stream_id: node_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x1515151515151515151515151515151515151515151515151515151515151515'
+action_lifecycle_payload:
+  origin_command:
+    command_id: cmd1
+  action_instance_id: action_1
+  status: ACTION_STATUS_FAILED

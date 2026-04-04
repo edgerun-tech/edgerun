@@ -1,0 +1,11 @@
+brief:
+  view_type: timeline
+  producer: node_server
+snapshot:
+  view_type: timeline
+  producer: node_server
+  base_heads:
+  - stream_id: timeline_stream
+    seq: 10
+    event_hash_hex: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  payload_object: snapshot_payload_1

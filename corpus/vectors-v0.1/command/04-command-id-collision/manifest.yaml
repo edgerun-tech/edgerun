@@ -1,0 +1,9 @@
+id: command/04-command-id-collision
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: same command_id with different hash is rejected
+tags:
+- command
+- validate_command

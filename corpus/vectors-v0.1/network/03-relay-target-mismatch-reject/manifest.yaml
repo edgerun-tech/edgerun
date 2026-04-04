@@ -1,0 +1,9 @@
+id: network/03-relay-target-mismatch-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: relay envelope is rejected when addressed to a different node
+tags:
+- network
+- validate_network

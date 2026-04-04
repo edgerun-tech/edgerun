@@ -1,0 +1,4 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  record_hash_source: signable_form

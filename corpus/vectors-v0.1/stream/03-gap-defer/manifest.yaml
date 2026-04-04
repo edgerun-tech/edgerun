@@ -1,0 +1,9 @@
+id: stream/03-gap-defer
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: event ahead of local head by more than one defers due to missing predecessor
+tags:
+- stream
+- validate_stream_append

@@ -1,0 +1,10 @@
+id: network/20-aggregate-trust-policy-negative-minimum-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: aggregate trust policy is rejected when minimum trust score is negative
+tags:
+- network
+- route
+- policy

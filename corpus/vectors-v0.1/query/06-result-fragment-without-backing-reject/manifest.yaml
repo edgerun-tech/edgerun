@@ -1,0 +1,9 @@
+id: query/06-result-fragment-without-backing-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: query result fragment is rejected when it contains no backing references or bundled result object
+tags:
+- query
+- validate_query

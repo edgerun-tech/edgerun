@@ -1,0 +1,9 @@
+id: object/04-representation-digest-mismatch
+suite: object
+validator: validate_object_retrieval
+version: 1
+priority: mandatory
+description: claimed representation digest mismatch is rejected
+tags:
+- object
+- validate_object_retrieval

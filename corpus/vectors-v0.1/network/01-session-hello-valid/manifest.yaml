@@ -1,0 +1,9 @@
+id: network/01-session-hello-valid
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: valid session hello for the local node is accepted
+tags:
+- network
+- validate_network

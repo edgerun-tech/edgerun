@@ -1,0 +1,7 @@
+query:
+  requester: node_server
+  query_class: QUERY_CLASS_HEAD
+  target_scope:
+    scope_kind: node
+    segments:
+    - node_server

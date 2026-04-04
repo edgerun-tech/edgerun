@@ -1,0 +1,19 @@
+brief:
+  command_type: TRANSFER_CONTROL
+  from: user_alice
+  to: user_bob
+command:
+  command_type: TRANSFER_CONTROL
+  from: user_alice
+  to: user_bob
+  issuer: user_alice
+  target_node: node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ctrl_03-safe-transfer-add-verify-remove
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xa3fdbb08932739b811ad414bb49112bf015f43e5b56735f34fd2f3c66e6b47c6c90755d3893193e74dad6d9ffd93d96c0ae81a60b103adbc7ef94f73789cef0e'

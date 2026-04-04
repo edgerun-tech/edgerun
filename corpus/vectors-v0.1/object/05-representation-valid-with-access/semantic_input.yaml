@@ -1,0 +1,9 @@
+brief:
+  object_kind: PAYLOAD
+  canonicalization_id: raw-bytes-v0
+representation:
+  header:
+    object_kind: OBJECT_KIND_PAYLOAD
+    encryption_scheme: aes-gcm-v1
+    representation_digest: '0x4c433383a4da36e52727a6e4ff8bf597bc21a7a372f67253956532d9ab447fbd'
+  stored_bytes_hex: '0x01020304'

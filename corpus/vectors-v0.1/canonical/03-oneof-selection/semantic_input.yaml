@@ -1,0 +1,21 @@
+brief:
+  record_family: CommandEnvelope
+  focus: oneof-payload
+fixture_record:
+  record_family: CommandEnvelope
+  focus: oneof-payload
+  envelope_version: 1
+  command_id: '0x0a0b0c0d'
+  target_node:
+    node_id: '0x10'
+  issuer:
+    identity_id: '0xa1'
+    identity_kind: user
+    key_hint: '0x01'
+  command_type: STORE_OBJECT
+  command_version: 1
+  issued_at: '2030-01-01T00:05:00Z'
+  payload_object:
+    object_id: '0xbeef'
+    object_kind: note
+  inline_payload: null

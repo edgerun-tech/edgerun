@@ -1,0 +1,16 @@
+brief:
+  command_type: QUERY
+  target_node: node_server
+command:
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2029-12-31T23:59:00Z'
+  command_id: cmd_05-expired-command-reject
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x89b01cc3dd28fc5a7c6dcb2d58e37c997bf3d0ebb558a200095a44dbc5a643f3ccb78d8251cd750dec51b7772931aecee509ae625b5d4687cb3668a3dae10d0b'

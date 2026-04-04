@@ -1,0 +1,18 @@
+brief:
+  candidate_event: prev-hash-mismatch
+  seq: 1
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: '0x73747265616d2d6e6f64652d736572766572'
+  prev_ref:
+    seq: 0
+    hash_hex: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+  recorded_at: '2030-01-01T00:05:00Z'
+  signature_fixture: node_server
+  record_domain_tag: lifegraph:v0:event-envelope
+  sig_domain_tag: lifegraph:v0:event-signature
+  signature:
+    algorithm: ed25519
+    value: '0x04a0029d57958ad484cf1e5f979627a49e28b53567f3af09dfc2dae26fed4eb59e2b3de452dd7dd092010af655b959bf1754bf7e66f06f2ffa5b23dab273db02'
+  event_hash_hex: '0x9236955fbb8365844c66e8c41e5b5632cf4e3bc37ff880d590717308f3b4fe7b'

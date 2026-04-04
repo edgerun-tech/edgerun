@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package lifegraph.v0.common;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+enum IdentityKind {
+  IDENTITY_KIND_UNSPECIFIED = 0;
+  IDENTITY_KIND_USER = 1;
+  IDENTITY_KIND_NODE = 2;
+  IDENTITY_KIND_AGENT = 3;
+  IDENTITY_KIND_SERVICE = 4;
+  IDENTITY_KIND_OTHER = 5;
+}
+
+enum ObjectKind {
+  OBJECT_KIND_UNSPECIFIED = 0;
+  OBJECT_KIND_PAYLOAD = 1;
+  OBJECT_KIND_ATTACHMENT = 2;
+  OBJECT_KIND_SNAPSHOT = 3;
+  OBJECT_KIND_MANIFEST = 4;
+  OBJECT_KIND_INDEX = 5;
+  OBJECT_KIND_COMMAND = 6;
+  OBJECT_KIND_PROOF = 7;
+  OBJECT_KIND_DERIVED_VIEW = 8;
+}
+
+enum AssuranceClass {
+  ASSURANCE_CLASS_UNSPECIFIED = 0;
+  ASSURANCE_CLASS_SOFTWARE = 1;
+  ASSURANCE_CLASS_HARDWARE_BACKED = 2;
+  ASSURANCE_CLASS_ATTESTED_RUNTIME = 3;
+}
+
+enum TransportClass {
+  TRANSPORT_CLASS_UNSPECIFIED = 0;
+  TRANSPORT_CLASS_BLE = 1;
+  TRANSPORT_CLASS_LAN_IP = 2;
+  TRANSPORT_CLASS_QUIC = 3;
+  TRANSPORT_CLASS_WIFI_DIRECT = 4;
+  TRANSPORT_CLASS_RELAY = 5;
+  TRANSPORT_CLASS_STORE_FORWARD = 6;
+  TRANSPORT_CLASS_OTHER = 7;
+}
+
+enum Directness {
+  DIRECTNESS_UNSPECIFIED = 0;
+  DIRECTNESS_DIRECT = 1;
+  DIRECTNESS_RELAYED = 2;
+  DIRECTNESS_BRIDGE_REQUIRED = 3;
+  DIRECTNESS_STORE_FORWARD = 4;
+}
+
+enum StorageClass {
+  STORAGE_CLASS_UNSPECIFIED = 0;
+  STORAGE_CLASS_HOT = 1;
+  STORAGE_CLASS_WARM = 2;
+  STORAGE_CLASS_COLD = 3;
+  STORAGE_CLASS_ARCHIVE = 4;
+}
+
+enum ExecutionClass {
+  EXECUTION_CLASS_UNSPECIFIED = 0;
+  EXECUTION_CLASS_LOCAL_ONLY = 1;
+  EXECUTION_CLASS_TRUSTED_PEER = 2;
+  EXECUTION_CLASS_TEE_ALLOWED = 3;
+  EXECUTION_CLASS_REDUNDANT_UNTRUSTED = 4;
+  EXECUTION_CLASS_PUBLIC = 5;
+}
+
+message Digest {
+  enum Algorithm {
+    DIGEST_ALGORITHM_UNSPECIFIED = 0;
+    DIGEST_ALGORITHM_BLAKE3_256 = 1;
+    DIGEST_ALGORITHM_SHA256 = 2;
+  }
+
+  Algorithm algorithm = 1;
+  bytes value = 2;
+}
+
+message Signature {
+  enum Algorithm {
+    SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+    SIGNATURE_ALGORITHM_ED25519 = 1;
+    SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 2;
+    SIGNATURE_ALGORITHM_ECDSA_P384_SHA384 = 3;
+    SIGNATURE_ALGORITHM_RSA_PKCS1V15_SHA256 = 4;
+    SIGNATURE_ALGORITHM_RSA_PSS_SHA256 = 5;
+  }
+
+  Algorithm algorithm = 1;
+  bytes value = 2;
+}
+
+message TimeWindow {
+  google.protobuf.Timestamp not_before = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message RateLimit {
+  uint64 max_operations = 1;
+  google.protobuf.Duration per = 2;
+}
+
+message IdentityRef {
+  bytes identity_id = 1;
+  optional IdentityKind identity_kind = 2;
+  optional bytes key_hint = 3;
+}
+
+message NodeRef {
+  bytes node_id = 1;
+}
+
+message StreamRef {
+  bytes stream_id = 1;
+}
+
+message EventRef {
+  bytes stream_id = 1;
+  uint64 seq = 2;
+  Digest event_hash = 3;
+}
+
+message HeadRef {
+  bytes stream_id = 1;
+  uint64 seq = 2;
+  Digest event_hash = 3;
+}
+
+message CheckpointRef {
+  optional bytes checkpoint_id = 1;
+  repeated HeadRef heads = 2;
+}
+
+message ObjectRef {
+  bytes object_id = 1;
+  optional ObjectKind object_kind = 2;
+}
+
+message RepresentationRef {
+  bytes representation_id = 1;
+  bytes object_id = 2;
+}
+
+message CommandRef {
+  bytes command_id = 1;
+  Digest command_hash = 2;
+}
+
+message DelegationRef {
+  bytes delegation_id = 1;
+  Digest delegation_hash = 2;
+}
+
+message RevocationRef {
+  bytes revocation_id = 1;
+  Digest revocation_hash = 2;
+}
+
+message SnapshotRef {
+  bytes snapshot_id = 1;
+  optional bytes object_id = 2;
+}

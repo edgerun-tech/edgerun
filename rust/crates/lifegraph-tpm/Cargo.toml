@@ -1,0 +1,10 @@
+[package]
+name = "lifegraph-tpm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lifegraph-core = { path = "../lifegraph-core" }
+sha2.workspace = true

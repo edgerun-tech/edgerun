@@ -1,0 +1,4 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  validation_level: representation_valid_only

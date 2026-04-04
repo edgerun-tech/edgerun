@@ -1,0 +1,9 @@
+id: trust/02-assurance-insufficient-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: assurance claim is rejected when its class is below required minimum
+tags:
+- trust
+- validate_trust

@@ -1,0 +1,9 @@
+id: delegation/07-scope-mismatch-reject
+suite: delegation
+validator: validate_delegation_chain
+version: 1
+priority: mandatory
+description: delegated scope narrower than requested scope is rejected
+tags:
+- delegation
+- validate_delegation_chain

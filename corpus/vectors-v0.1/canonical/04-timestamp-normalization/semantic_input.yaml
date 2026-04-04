@@ -1,0 +1,16 @@
+brief:
+  record_family: EventEnvelope
+  focus: timestamp-normalization
+fixture_record:
+  record_family: EventEnvelope
+  focus: timestamp-normalization
+  envelope_version: 1
+  stream_id: '0x22'
+  seq: 7
+  event_type: SNAPSHOT_ACCEPTED
+  event_version: 1
+  recorded_at: '2030-01-01T00:00:00Z'
+  effective_at: '2030-01-01T07:00:00+07:00'
+  related_commands:
+  - cmd_01
+  - cmd_02

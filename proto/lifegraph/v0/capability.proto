@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package lifegraph.v0.capability;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "lifegraph/v0/common.proto";
+import "lifegraph/v0/trust.proto";
+
+enum CapabilityRole {
+  CAPABILITY_ROLE_UNSPECIFIED = 0;
+  CAPABILITY_ROLE_INPUT = 1;
+  CAPABILITY_ROLE_OUTPUT = 2;
+  CAPABILITY_ROLE_SECURE_ELEMENT = 3;
+  CAPABILITY_ROLE_COMMUNICATION = 4;
+  CAPABILITY_ROLE_STORAGE = 5;
+  CAPABILITY_ROLE_EXECUTION = 6;
+  CAPABILITY_ROLE_DERIVED = 7;
+}
+
+enum CapabilityModality {
+  CAPABILITY_MODALITY_UNSPECIFIED = 0;
+  CAPABILITY_MODALITY_VISUAL = 1;
+  CAPABILITY_MODALITY_AUDITORY = 2;
+  CAPABILITY_MODALITY_TOUCH = 3;
+  CAPABILITY_MODALITY_BIOMETRIC = 4;
+  CAPABILITY_MODALITY_DISPLAY = 5;
+  CAPABILITY_MODALITY_RADIO = 6;
+  CAPABILITY_MODALITY_CRYPTOGRAPHIC = 7;
+  CAPABILITY_MODALITY_HAPTIC = 8;
+  CAPABILITY_MODALITY_TEXT = 9;
+  CAPABILITY_MODALITY_COMPUTATIONAL = 10;
+  CAPABILITY_MODALITY_OTHER = 11;
+}
+
+enum CapabilityEventKind {
+  CAPABILITY_EVENT_KIND_UNSPECIFIED = 0;
+  CAPABILITY_EVENT_KIND_VISUAL = 1;
+  CAPABILITY_EVENT_KIND_AUDITORY = 2;
+  CAPABILITY_EVENT_KIND_TOUCH = 3;
+  CAPABILITY_EVENT_KIND_BIOMETRIC = 4;
+  CAPABILITY_EVENT_KIND_DISPLAY = 5;
+  CAPABILITY_EVENT_KIND_RADIO = 6;
+  CAPABILITY_EVENT_KIND_SIGNING = 7;
+  CAPABILITY_EVENT_KIND_ATTESTATION = 8;
+  CAPABILITY_EVENT_KIND_HAPTIC = 9;
+  CAPABILITY_EVENT_KIND_TEXT = 10;
+  CAPABILITY_EVENT_KIND_STATE = 11;
+  CAPABILITY_EVENT_KIND_INFERENCE = 12;
+}
+
+enum CapabilityOperation {
+  CAPABILITY_OPERATION_UNSPECIFIED = 0;
+  CAPABILITY_OPERATION_QUERY = 1;
+  CAPABILITY_OPERATION_OBSERVE = 2;
+  CAPABILITY_OPERATION_CAPTURE = 3;
+  CAPABILITY_OPERATION_CONTROL = 4;
+  CAPABILITY_OPERATION_RENDER = 5;
+  CAPABILITY_OPERATION_SIGN = 6;
+  CAPABILITY_OPERATION_ATTEST = 7;
+  CAPABILITY_OPERATION_VERIFY = 8;
+  CAPABILITY_OPERATION_INVOKE = 9;
+}
+
+enum CapabilityAccessClass {
+  CAPABILITY_ACCESS_CLASS_UNSPECIFIED = 0;
+  CAPABILITY_ACCESS_CLASS_RAW = 1;
+  CAPABILITY_ACCESS_CLASS_DERIVED = 2;
+}
+
+enum CapabilityConstraintKind {
+  CAPABILITY_CONSTRAINT_KIND_UNSPECIFIED = 0;
+  CAPABILITY_CONSTRAINT_KIND_REQUIRE_USER_PRESENCE = 1;
+  CAPABILITY_CONSTRAINT_KIND_REQUIRE_BIOMETRIC = 2;
+  CAPABILITY_CONSTRAINT_KIND_REQUIRE_FRESHNESS = 3;
+  CAPABILITY_CONSTRAINT_KIND_REQUIRE_LOCAL_ONLY = 4;
+  CAPABILITY_CONSTRAINT_KIND_REQUIRE_HARDWARE_PROTECTED = 5;
+  CAPABILITY_CONSTRAINT_KIND_ONE_SHOT = 6;
+  CAPABILITY_CONSTRAINT_KIND_RATE_LIMITED = 7;
+  CAPABILITY_CONSTRAINT_KIND_MAX_BYTES = 8;
+  CAPABILITY_CONSTRAINT_KIND_SCOPE = 9;
+}
+
+message CapabilityConstraint {
+  CapabilityConstraintKind kind = 1;
+  optional uint64 uint_value = 2;
+  string string_value = 3;
+  google.protobuf.Duration duration_value = 4;
+  lifegraph.v0.common.RateLimit rate_limit = 5;
+}
+
+message CapabilityDescriptor {
+  uint32 descriptor_version = 1;
+  bytes capability_id = 2;
+  lifegraph.v0.common.IdentityRef provider_identity = 3;
+  lifegraph.v0.common.NodeRef provider_node = 4;
+  CapabilityRole role = 5;
+  repeated CapabilityModality modalities = 6;
+  repeated CapabilityEventKind event_kinds = 7;
+  repeated CapabilityOperation operations = 8;
+  repeated CapabilityConstraint default_constraints = 9;
+  string provider_name = 10;
+  string provider_instance_id = 11;
+  lifegraph.v0.common.Signature signature = 12;
+}
+
+message CapabilitySelector {
+  bytes capability_id = 1;
+  CapabilityRole role = 2;
+  repeated CapabilityModality modalities = 3;
+  repeated CapabilityEventKind event_kinds = 4;
+  repeated CapabilityOperation operations = 5;
+  CapabilityAccessClass access_class = 6;
+  lifegraph.v0.common.IdentityRef provider_identity = 7;
+  lifegraph.v0.common.NodeRef provider_node = 8;
+  string provider_instance_id = 9;
+}
+
+message CapabilityRequest {
+  uint32 request_version = 1;
+  bytes request_id = 2;
+  lifegraph.v0.common.IdentityRef requester = 3;
+  lifegraph.v0.common.NodeRef requester_node = 4;
+  CapabilitySelector selector = 5;
+  repeated CapabilityOperation requested_operations = 6;
+  repeated CapabilityConstraint requested_constraints = 7;
+  string purpose = 8;
+  google.protobuf.Duration requested_duration = 9;
+  bytes correlation_id = 10;
+  lifegraph.v0.common.Signature signature = 11;
+}
+
+message CapabilityGrant {
+  uint32 grant_version = 1;
+  bytes grant_id = 2;
+  lifegraph.v0.common.IdentityRef issuer = 3;
+  lifegraph.v0.common.IdentityRef grantee = 4;
+  lifegraph.v0.common.NodeRef grantee_node = 5;
+  CapabilitySelector selector = 6;
+  repeated CapabilityOperation granted_operations = 7;
+  repeated CapabilityConstraint enforced_constraints = 8;
+  CapabilityAccessClass access_class = 9;
+  google.protobuf.Timestamp issued_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+  bytes correlation_id = 12;
+  lifegraph.v0.common.RevocationRef supersedes_revocation = 13;
+  lifegraph.v0.common.Signature signature = 14;
+}
+
+message CapabilityInvocation {
+  uint32 invocation_version = 1;
+  bytes invocation_id = 2;
+  bytes grant_id = 3;
+  lifegraph.v0.common.IdentityRef invoker = 4;
+  CapabilityOperation operation = 5;
+  CapabilityAccessClass requested_access_class = 6;
+  lifegraph.v0.common.ObjectRef parameter_object = 7;
+  bytes correlation_id = 8;
+  google.protobuf.Timestamp invoked_at = 9;
+  lifegraph.v0.common.Signature signature = 10;
+}
+
+message CapabilityResult {
+  uint32 result_version = 1;
+  bytes invocation_id = 2;
+  bytes grant_id = 3;
+  bool success = 4;
+  CapabilityAccessClass result_access_class = 5;
+  repeated CapabilityEventKind produced_event_kinds = 6;
+  lifegraph.v0.common.ObjectRef payload_object = 7;
+  string error_reason = 8;
+  google.protobuf.Timestamp produced_at = 9;
+  lifegraph.v0.common.Signature signature = 10;
+}
+
+message CapabilityRevocation {
+  uint32 revocation_version = 1;
+  bytes revocation_id = 2;
+  bytes grant_id = 3;
+  lifegraph.v0.common.IdentityRef issuer = 4;
+  google.protobuf.Timestamp effective_at = 5;
+  string reason = 6;
+  repeated CapabilityConstraint replacement_constraints = 7;
+  lifegraph.v0.common.Signature signature = 8;
+}

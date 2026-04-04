@@ -1,0 +1,9 @@
+id: network/02-session-hello-version-unsupported
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: session hello is rejected when no protocol version overlap exists
+tags:
+- network
+- validate_network

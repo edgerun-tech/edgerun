@@ -1,0 +1,9 @@
+id: canonical/07-unknown-focus-reject
+suite: canonical
+validator: canonicalize_signable
+version: 1
+priority: mandatory
+description: unknown canonical focus is rejected
+tags:
+- canonical
+- canonicalize_signable

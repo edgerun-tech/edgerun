@@ -1,0 +1,5 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: aggregate_descriptor_received
+  advisory_only: true

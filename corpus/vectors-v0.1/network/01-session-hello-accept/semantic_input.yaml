@@ -1,0 +1,9 @@
+brief:
+  kind: session_hello
+session_hello:
+  initiator: user_alice
+  target_node: node_server
+  session_nonce: nonce_01
+  supported_protocol_versions:
+  - 1
+  - 2

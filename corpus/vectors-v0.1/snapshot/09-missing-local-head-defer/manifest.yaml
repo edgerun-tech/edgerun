@@ -1,0 +1,9 @@
+id: snapshot/09-missing-local-head-defer
+suite: snapshot
+validator: validate_snapshot
+version: 1
+priority: mandatory
+description: trusted snapshot defers when local base head for the referenced stream is unavailable
+tags:
+- snapshot
+- validate_snapshot

@@ -1,0 +1,9 @@
+query:
+  requester: node_server
+  query_class: QUERY_CLASS_VIEW
+  target_scope:
+    scope_kind: view
+    target_view_types:
+    - timeline
+  required_proof_classes:
+  - PROOF_CLASS_SNAPSHOT_BASE

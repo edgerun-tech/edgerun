@@ -1,0 +1,16 @@
+brief:
+  command_type: QUERY
+  target_node: node_server
+command:
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_06-bad-signature-reject
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'

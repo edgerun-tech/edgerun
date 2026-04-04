@@ -1,0 +1,6 @@
+route_selection_policy:
+  minimum_quality_hint: 3
+  maximum_cost_hint: 5
+  require_active_session: true
+  preferred_advertisers:
+  - identity_id: adv_b

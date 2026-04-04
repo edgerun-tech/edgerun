@@ -1,0 +1,5 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: event_set_proof_received
+  advisory_only: true

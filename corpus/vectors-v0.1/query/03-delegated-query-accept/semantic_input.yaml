@@ -1,0 +1,17 @@
+brief:
+  query_class: QUERY_CLASS_HEAD
+query:
+  requester: agent_assistant
+  query_id: query_03
+  query_class: QUERY_CLASS_HEAD
+  target_scope: timeline:last_7d
+  result_limit: 10
+  delegation_chain:
+  - delegation_id: del_query_agent
+    issuer: user_alice
+    recipient: agent_assistant
+    capability:
+      kind: CAPABILITY_KIND_QUERY
+      actions:
+      - query
+      scope: timeline:last_7d

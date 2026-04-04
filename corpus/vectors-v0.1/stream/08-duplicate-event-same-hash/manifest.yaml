@@ -1,0 +1,9 @@
+id: stream/08-duplicate-event-same-hash
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: same seq and same event hash is treated as duplicate rather than fork
+tags:
+- stream
+- validate_stream_append

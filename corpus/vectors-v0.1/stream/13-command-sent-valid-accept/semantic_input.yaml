@@ -1,0 +1,12 @@
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_SENT
+  seq: 1
+  stream_id: node_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x1313131313131313131313131313131313131313131313131313131313131313'
+command_sent_payload:
+  command:
+    command_id: cmd1
+  target_node:
+    node_id: node_server

@@ -1,0 +1,10 @@
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_SENT
+  seq: 1
+  stream_id: node_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x1616161616161616161616161616161616161616161616161616161616161616'
+command_sent_payload:
+  command:
+    command_id: cmd1

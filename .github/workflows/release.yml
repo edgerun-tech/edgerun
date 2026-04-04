@@ -1,0 +1,71 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Build release binary
+        run: |
+          mkdir -p dist
+          cd go
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -trimpath -ldflags='-s -w' \
+            -o ../dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/lifegraphd
+
+      - name: Generate release checksum
+        run: |
+          cd dist
+          sha256sum lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} > lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate SBOM
+        run: |
+          syft packages file:dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} -o spdx-json=dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json
+          if-no-files-found: error
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json

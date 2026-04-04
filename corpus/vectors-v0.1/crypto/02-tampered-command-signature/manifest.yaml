@@ -1,0 +1,9 @@
+id: crypto/02-tampered-command-signature
+suite: crypto
+validator: validate_crypto
+version: 1
+priority: mandatory
+description: tampered canonical command signature is rejected
+tags:
+- crypto
+- validate_crypto

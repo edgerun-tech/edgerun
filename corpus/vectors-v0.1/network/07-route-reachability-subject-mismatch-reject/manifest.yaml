@@ -1,0 +1,9 @@
+id: network/07-route-reachability-subject-mismatch-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route advertisement is rejected when embedded reachability hints refer to a different target node
+tags:
+- network
+- validate_network

@@ -1,0 +1,8 @@
+[package]
+name = "lifegraph-alsa-speaker"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lifegraph-capabilities = { path = "../lifegraph-capabilities" }
+lifegraph-speaker = { path = "../lifegraph-speaker" }

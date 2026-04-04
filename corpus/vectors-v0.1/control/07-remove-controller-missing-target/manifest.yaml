@@ -1,0 +1,9 @@
+id: control/07-remove-controller-missing-target
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: remove controller rejects when target controller is missing
+tags:
+- control
+- validate_control_change

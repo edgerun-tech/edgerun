@@ -1,0 +1,12 @@
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: node_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x1111111111111111111111111111111111111111111111111111111111111111'
+command_result_payload:
+  command:
+    command_id: cmd1
+  issuer: user_alice
+  decision: COMMAND_DECISION_REJECTED

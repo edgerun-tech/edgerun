@@ -1,0 +1,17 @@
+brief:
+  command_type: ADD_CONTROLLER
+  new_controller: user_bob
+command:
+  command_type: ADD_CONTROLLER
+  new_controller: user_bob
+  issuer: user_alice
+  target_node: node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ctrl_01-add-controller
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xec3b16d1997772b69dce9766f48ba9ff59f224a671f5c56c324fd90e952fb41cc50498ac8ef80ec67f1c7ca09e0c3eb7bf00cc8bb8bc079276da45d50fd02300'

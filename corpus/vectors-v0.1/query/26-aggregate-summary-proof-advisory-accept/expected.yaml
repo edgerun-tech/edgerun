@@ -1,0 +1,5 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: aggregate_summary_proof_received
+  advisory_only: true

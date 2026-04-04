@@ -1,0 +1,3 @@
+route_trust_assignments:
+  issuer: root_authority
+  assignments: []

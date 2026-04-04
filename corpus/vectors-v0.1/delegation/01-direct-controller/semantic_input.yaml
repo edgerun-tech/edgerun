@@ -1,0 +1,5 @@
+brief:
+  issuer: user_alice
+  action: node_control
+  scope: node_server
+delegation_chain: []

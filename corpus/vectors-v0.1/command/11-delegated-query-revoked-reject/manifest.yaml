@@ -1,0 +1,9 @@
+id: command/11-delegated-query-revoked-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: delegated command is rejected when the presented delegation chain contains a revoked link
+tags:
+- command
+- validate_command

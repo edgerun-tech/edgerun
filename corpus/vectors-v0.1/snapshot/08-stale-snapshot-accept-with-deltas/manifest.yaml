@@ -1,0 +1,9 @@
+id: snapshot/08-stale-snapshot-accept-with-deltas
+suite: snapshot
+validator: validate_snapshot
+version: 1
+priority: mandatory
+description: stale snapshot is accepted when all intermediate deltas are available
+tags:
+- snapshot
+- validate_snapshot

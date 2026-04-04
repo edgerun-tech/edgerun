@@ -1,0 +1,19 @@
+brief:
+  command_type: TRANSFER_CONTROL
+  from: user_alice
+  to: user_bob
+command:
+  command_type: TRANSFER_CONTROL
+  from: user_alice
+  to: user_bob
+  issuer: user_alice
+  target_node: node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ctrl_04-transfer-missing-proof-defer
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x3de144af8b8069e060ad8cd8ed034aff005ff3c7a77b84956791839154589f7a4af604e7451ace0ce01ee5d38134b00695be4bd319d5d2afc4a2f0d70055770b'

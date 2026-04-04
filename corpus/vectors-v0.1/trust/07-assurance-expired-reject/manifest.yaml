@@ -1,0 +1,9 @@
+id: trust/07-assurance-expired-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: expired assurance claim is rejected
+tags:
+- trust
+- validate_trust

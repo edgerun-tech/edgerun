@@ -1,0 +1,12 @@
+[package]
+name = "lifegraph-linux-wifi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lifegraph-capabilities = { path = "../lifegraph-capabilities" }
+lifegraph-linux-netif = { path = "../lifegraph-linux-netif" }
+lifegraph-network-interface = { path = "../lifegraph-network-interface" }
+lifegraph-wifi = { path = "../lifegraph-wifi" }

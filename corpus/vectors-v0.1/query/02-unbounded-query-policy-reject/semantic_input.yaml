@@ -1,0 +1,6 @@
+brief:
+  query_class: QUERY_CLASS_SEARCH
+query:
+  requester: user_alice
+  query_id: query_02
+  query_class: QUERY_CLASS_SEARCH

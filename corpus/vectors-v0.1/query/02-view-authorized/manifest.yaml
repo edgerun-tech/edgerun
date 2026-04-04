@@ -1,0 +1,9 @@
+id: query/02-view-authorized
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: authorized view query is accepted with snapshot proof class
+tags:
+- query
+- validate_query

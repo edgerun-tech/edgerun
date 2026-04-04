@@ -1,0 +1,4 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  decision: crypto_valid

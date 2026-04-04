@@ -1,0 +1,9 @@
+id: query/02-unbounded-query-policy-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: completely unbounded query is rejected by local policy
+tags:
+- query
+- validate_query

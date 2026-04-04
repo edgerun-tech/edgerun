@@ -1,0 +1,4 @@
+current_query_id: query_active
+available_events:
+  stream_a:6: present
+policy_profile: default-v0

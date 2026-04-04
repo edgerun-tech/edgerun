@@ -1,0 +1,9 @@
+id: stream/01-genesis-valid
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: valid node genesis event at seq 0
+tags:
+- stream
+- validate_stream_append

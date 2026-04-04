@@ -1,0 +1,9 @@
+id: stream/05-bad-signature-reject
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: invalid event signature is rejected
+tags:
+- stream
+- validate_stream_append

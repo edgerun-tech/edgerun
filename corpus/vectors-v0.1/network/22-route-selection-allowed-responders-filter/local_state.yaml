@@ -1,0 +1,13 @@
+candidate_routes:
+- advertiser: adv_a
+  next_hop_node: hop_a
+  quality_hint: 9
+  cost_hint: 1
+- advertiser: adv_b
+  next_hop_node: hop_b
+  quality_hint: 5
+  cost_hint: 1
+aggregate_trust_policy:
+  allowed_responders:
+  - identity_id: adv_b
+policy_profile: default-v0

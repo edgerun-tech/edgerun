@@ -1,0 +1,10 @@
+id: network/15-route-selection-picks-best-eligible
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route selection chooses the highest-scoring eligible route under normalized v0 policy
+tags:
+- network
+- route
+- selection

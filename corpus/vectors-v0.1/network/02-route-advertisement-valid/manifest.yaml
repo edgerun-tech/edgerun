@@ -1,0 +1,9 @@
+id: network/02-route-advertisement-valid
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route advertisements are advisory but structurally accepted
+tags:
+- network
+- validate_network

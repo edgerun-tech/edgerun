@@ -1,0 +1,6 @@
+proof_bundle:
+  bundle_version: 1
+  payload_type: PROOF_PAYLOAD_TYPE_STREAM_HEADS
+  source_query_id: query_other
+  payload_object:
+    object_id: proof_obj_other

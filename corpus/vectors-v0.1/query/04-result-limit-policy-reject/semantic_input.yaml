@@ -1,0 +1,8 @@
+brief:
+  query_class: QUERY_CLASS_VIEW
+query:
+  requester: user_alice
+  query_id: query_04
+  query_class: QUERY_CLASS_VIEW
+  target_scope: node:node_server
+  result_limit: 500

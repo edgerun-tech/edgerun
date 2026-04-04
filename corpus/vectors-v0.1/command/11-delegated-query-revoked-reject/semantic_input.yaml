@@ -1,0 +1,20 @@
+brief:
+  command_type: QUERY
+  target_node: node_server
+command:
+  issuer: user_bob
+  target_node: node_server
+  command_type: QUERY
+  action: query
+  scope: node:node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_11-delegated-query-revoked-reject
+  delegation_chain:
+  - delegation_id: del_query_revoked
+    issuer: user_alice
+    recipient: user_bob
+    capability:
+      actions:
+      - query
+      scope: node:node_server

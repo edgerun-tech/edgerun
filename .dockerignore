@@ -1,0 +1,10 @@
+.git
+.github
+.venv
+.pytest_cache
+.coverage
+coverage.json
+coverage.xml
+__pycache__
+python/.pytest_cache
+var/

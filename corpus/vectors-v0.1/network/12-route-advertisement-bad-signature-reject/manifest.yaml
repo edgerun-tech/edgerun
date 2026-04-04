@@ -1,0 +1,9 @@
+id: network/12-route-advertisement-bad-signature-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route advertisement is rejected when signature verification fails
+tags:
+- network
+- validate_network

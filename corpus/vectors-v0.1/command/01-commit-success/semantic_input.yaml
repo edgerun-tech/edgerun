@@ -1,0 +1,16 @@
+brief:
+  command_type: PUBLISH_SNAPSHOT
+  target_node: node_server
+command:
+  issuer: user_alice
+  target_node: node_server
+  command_type: PUBLISH_SNAPSHOT
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_01-commit-success
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xd4ee78c21651659c6e585b63edec42e7991a6696a20e0b6c2919ace271d4ee28763251895e9cd38239f77011f8b4c5dc76145558340d6a45331ae70d61338906'

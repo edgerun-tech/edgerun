@@ -1,0 +1,9 @@
+id: stream/07-prev-hash-mismatch-reject
+suite: stream
+validator: validate_stream_append
+version: 1
+priority: mandatory
+description: next event with wrong prev hash is rejected
+tags:
+- stream
+- validate_stream_append

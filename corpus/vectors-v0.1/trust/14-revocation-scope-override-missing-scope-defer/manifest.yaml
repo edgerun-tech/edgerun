@@ -1,0 +1,10 @@
+id: trust/14-revocation-scope-override-missing-scope-defer
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: scope override is deferred when the original delegation scope is not locally known
+tags:
+- trust
+- revocation
+- defer

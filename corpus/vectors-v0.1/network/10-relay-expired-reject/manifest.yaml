@@ -1,0 +1,9 @@
+id: network/10-relay-expired-reject
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: relay envelope is rejected when store_until is in the past
+tags:
+- network
+- validate_network

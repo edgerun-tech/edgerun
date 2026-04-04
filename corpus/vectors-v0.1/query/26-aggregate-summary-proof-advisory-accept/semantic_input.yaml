@@ -1,0 +1,9 @@
+aggregate_summary_proof:
+  source_query_id: query_active
+  included_responders:
+  - identity_id: node_a
+  excluded_responders:
+  - identity_id: node_b
+  total_trust_score: 4
+  trust_policy_object:
+    object_id: trust_policy_ok

@@ -1,0 +1,15 @@
+brief:
+  command_type: ADD_CONTROLLER
+command:
+  command_type: ADD_CONTROLLER
+  issuer: user_alice
+  target_node: node_server
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: ctrl_05-add-controller-missing-target
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x8a734f7f670941d7c8e5aeb258be959b4acadfe9bb75f3c1677686aeffb28c862f08a6293f640ec1b404b750476d6a7e45c77799a63a6e728d77e93847dd3505'

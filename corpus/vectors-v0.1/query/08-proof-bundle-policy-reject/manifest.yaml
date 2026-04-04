@@ -1,0 +1,9 @@
+id: query/08-proof-bundle-policy-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle is rejected when its payload type is disallowed by local policy
+tags:
+- query
+- validate_query

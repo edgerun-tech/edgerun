@@ -1,0 +1,10 @@
+id: query/28-snapshot-set-proof-advisory-accept
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: snapshot set proof is advisory-accepted when referenced snapshots are locally available
+tags:
+- query
+- proof
+- snapshot

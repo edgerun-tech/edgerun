@@ -1,0 +1,11 @@
+[package]
+name = "lifegraph-json"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = true
+description = "Dependency-light JSON toolkit with owned, borrowed, tape, and compiled-schema fast paths"
+readme = "README.md"
+documentation = "https://docs.rs/lifegraph-json"
+keywords = ["json", "parser", "serializer", "zero-copy", "tape"]
+categories = ["encoding", "parser-implementations"]

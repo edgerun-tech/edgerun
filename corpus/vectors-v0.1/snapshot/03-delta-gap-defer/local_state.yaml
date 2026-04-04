@@ -1,0 +1,11 @@
+now: '2030-01-01T00:00:00Z'
+trusted_snapshot_producers:
+- node_server
+stream_heads:
+  timeline_stream:
+    seq: 10
+    event_hash_hex: '0x1010101010101010101010101010101010101010101010101010101010101010'
+available_deltas:
+- seq: 12
+  event_hash_hex: '0x1212121212121212121212121212121212121212121212121212121212121212'
+policy_profile: default-v0

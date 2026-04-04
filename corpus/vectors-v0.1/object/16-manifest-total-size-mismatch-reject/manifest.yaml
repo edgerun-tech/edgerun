@@ -1,0 +1,9 @@
+id: object/16-manifest-total-size-mismatch-reject
+suite: object
+validator: validate_object_retrieval
+version: 1
+priority: mandatory
+description: manifest total_stored_size must equal summed chunk lengths
+tags:
+- object
+- validate_object_retrieval

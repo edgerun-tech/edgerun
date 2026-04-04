@@ -1,0 +1,5 @@
+reachability_hint:
+  subject_node: node_server
+  locator_payload: quic://node_server.example
+  valid_after: '2030-01-01T01:00:00Z'
+  valid_until: '2030-01-01T00:00:00Z'

@@ -1,0 +1,10 @@
+id: query/22-snapshot-set-proof-missing-snapshot-defer
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: snapshot set proof is deferred when a referenced snapshot is not locally available
+tags:
+- query
+- proof
+- snapshot

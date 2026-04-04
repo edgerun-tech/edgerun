@@ -1,0 +1,4 @@
+route_selection_policy:
+  minimum_quality_hint: 8
+  maximum_cost_hint: 1
+  require_active_session: true

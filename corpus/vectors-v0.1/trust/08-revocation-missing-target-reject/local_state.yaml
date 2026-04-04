@@ -1,0 +1,4 @@
+now: '2030-01-01T12:00:00Z'
+trust_roots:
+- user_alice
+policy_profile: default-v0

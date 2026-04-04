@@ -1,0 +1,10 @@
+id: trust/15-revocation-replacement-target-mismatch-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: replacement revocation is rejected when it points at a different target than the revocation it replaces
+tags:
+- trust
+- revocation
+- replacement

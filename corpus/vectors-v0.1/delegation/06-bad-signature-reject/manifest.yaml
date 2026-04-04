@@ -1,0 +1,9 @@
+id: delegation/06-bad-signature-reject
+suite: delegation
+validator: validate_delegation_chain
+version: 1
+priority: mandatory
+description: delegation with invalid signature is rejected
+tags:
+- delegation
+- validate_delegation_chain

@@ -1,0 +1,10 @@
+id: network/23-route-selection-preferred-aggregator-bonus
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: route selection gives a normalized score bonus to preferred aggregators from aggregate trust policy
+tags:
+- network
+- route
+- selection

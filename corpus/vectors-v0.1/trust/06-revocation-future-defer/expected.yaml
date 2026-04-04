@@ -1,0 +1,4 @@
+verdict: DEFER
+reason_code: MISSING_DEPENDENCY
+derived:
+  decision: revocation_scheduled

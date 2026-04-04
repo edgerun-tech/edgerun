@@ -1,0 +1,4 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  validation_level: logical_object_valid

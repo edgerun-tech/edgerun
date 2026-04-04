@@ -1,0 +1,184 @@
+syntax = "proto3";
+
+package lifegraph.v0.trust;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "lifegraph/v0/common.proto";
+
+enum CapabilityKind {
+  CAPABILITY_KIND_UNSPECIFIED = 0;
+  CAPABILITY_KIND_NODE_CONTROL = 1;
+  CAPABILITY_KIND_QUERY = 2;
+  CAPABILITY_KIND_SNAPSHOT_PUBLISH = 3;
+  CAPABILITY_KIND_OBJECT_STORE = 4;
+  CAPABILITY_KIND_OBJECT_FETCH = 5;
+  CAPABILITY_KIND_RELAY = 6;
+  CAPABILITY_KIND_EXECUTE_WORKLOAD = 7;
+  CAPABILITY_KIND_DECRYPT_DOMAIN = 8;
+}
+
+enum ScopeKind {
+  SCOPE_KIND_UNSPECIFIED = 0;
+  SCOPE_KIND_NODE = 1;
+  SCOPE_KIND_STREAM = 2;
+  SCOPE_KIND_OBJECT_CLASS = 3;
+  SCOPE_KIND_VIEW = 4;
+  SCOPE_KIND_DOMAIN = 5;
+  SCOPE_KIND_QUERY_CLASS = 6;
+  SCOPE_KIND_WORKLOAD_CLASS = 7;
+  SCOPE_KIND_GLOBAL_WITH_CONSTRAINTS = 8;
+}
+
+enum DelegationPolicy {
+  DELEGATION_POLICY_UNSPECIFIED = 0;
+  DELEGATION_POLICY_NON_DELEGABLE = 1;
+  DELEGATION_POLICY_DELEGABLE_WITH_ATTENUATION = 2;
+}
+
+enum ExportPolicy {
+  EXPORT_POLICY_UNSPECIFIED = 0;
+  EXPORT_POLICY_ALLOW_EXPORT = 1;
+  EXPORT_POLICY_QUERY_ONLY = 2;
+  EXPORT_POLICY_SIGN_ONLY = 3;
+  EXPORT_POLICY_NO_PLAINTEXT_EXPORT = 4;
+}
+
+enum RevocationKind {
+  REVOCATION_KIND_UNSPECIFIED = 0;
+  REVOCATION_KIND_DELEGATION = 1;
+  REVOCATION_KIND_CONTROLLER_INSTALLATION = 2;
+  REVOCATION_KIND_IDENTITY_TRUST = 3;
+  REVOCATION_KIND_ASSURANCE_CLAIM = 4;
+  REVOCATION_KIND_SNAPSHOT_TRUST = 5;
+  REVOCATION_KIND_REPRESENTATION_ACCESS = 6;
+}
+
+message AssuranceClaim {
+  uint32 claim_version = 1;
+
+  oneof subject {
+    lifegraph.v0.common.IdentityRef subject_identity = 2;
+    lifegraph.v0.common.NodeRef subject_node = 3;
+  }
+
+  lifegraph.v0.common.AssuranceClass assurance_class = 4;
+  lifegraph.v0.common.IdentityRef attester = 5;
+  google.protobuf.Timestamp issued_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  lifegraph.v0.common.ObjectRef evidence_object = 8;
+  string claim_note = 9;
+  lifegraph.v0.common.Signature signature = 10;
+}
+
+message AssuranceRequirement {
+  uint32 assurance_version = 1;
+  lifegraph.v0.common.AssuranceClass required_class = 2;
+  repeated lifegraph.v0.common.IdentityRef acceptable_attesters = 3;
+  google.protobuf.Duration max_evidence_age = 4;
+  lifegraph.v0.common.ObjectRef assurance_metadata = 5;
+}
+
+message ScopeDescriptor {
+  uint32 scope_version = 1;
+  ScopeKind scope_kind = 2;
+  repeated lifegraph.v0.common.NodeRef target_nodes = 3;
+  repeated lifegraph.v0.common.StreamRef target_streams = 4;
+  repeated lifegraph.v0.common.ObjectKind target_object_kinds = 5;
+  repeated string target_view_types = 6;
+  repeated string target_domains = 7;
+  lifegraph.v0.common.TimeWindow time_bounds = 8;
+  lifegraph.v0.common.ObjectRef scope_metadata = 9;
+}
+
+message ConstraintSet {
+  uint32 constraint_version = 1;
+  google.protobuf.Timestamp not_before = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  optional uint64 max_uses = 4;
+  lifegraph.v0.common.RateLimit rate_limit = 5;
+  optional bool requires_local_session = 6;
+  optional bool requires_user_presence = 7;
+  repeated lifegraph.v0.common.TransportClass requires_transport_classes = 8;
+  repeated string requires_location_classes = 9;
+  ExportPolicy export_policy = 10;
+  repeated lifegraph.v0.common.ExecutionClass execution_class_limits = 11;
+  repeated lifegraph.v0.common.StorageClass storage_class_limits = 12;
+  lifegraph.v0.common.ObjectRef constraint_metadata = 13;
+}
+
+message CapabilityDescriptor {
+  uint32 capability_version = 1;
+  CapabilityKind capability_kind = 2;
+  repeated string actions = 3;
+  ScopeDescriptor scope = 4;
+  ConstraintSet constraints = 5;
+  DelegationPolicy delegation_policy = 6;
+  AssuranceRequirement minimum_assurance = 7;
+  lifegraph.v0.common.ObjectRef capability_metadata = 8;
+}
+
+message DelegationRecord {
+  uint32 record_version = 1;
+  bytes delegation_id = 2;
+  lifegraph.v0.common.IdentityRef issuer = 3;
+  lifegraph.v0.common.IdentityRef recipient = 4;
+  google.protobuf.Timestamp issued_at = 5;
+  google.protobuf.Timestamp not_before = 6;
+  google.protobuf.Timestamp expires_at = 7;
+  CapabilityDescriptor capability = 8;
+  lifegraph.v0.common.DelegationRef parent_delegation = 9;
+  repeated lifegraph.v0.common.IdentityRef revocation_authorities = 10;
+  lifegraph.v0.common.ObjectRef delegation_metadata = 11;
+  lifegraph.v0.common.Signature signature = 12;
+}
+
+message RevocationRecord {
+  uint32 record_version = 1;
+  bytes revocation_id = 2;
+  lifegraph.v0.common.IdentityRef issuer = 3;
+  google.protobuf.Timestamp issued_at = 4;
+  google.protobuf.Timestamp effective_at = 5;
+  RevocationKind revocation_kind = 6;
+
+  oneof target {
+    lifegraph.v0.common.DelegationRef target_delegation = 7;
+    lifegraph.v0.common.IdentityRef target_identity = 8;
+    lifegraph.v0.common.NodeRef target_node = 9;
+    lifegraph.v0.common.ObjectRef target_object = 10;
+  }
+
+  ScopeDescriptor scope_override = 11;
+  string reason_code = 12;
+  bytes replacement_id = 13;
+  lifegraph.v0.common.ObjectRef revocation_metadata = 14;
+  lifegraph.v0.common.Signature signature = 15;
+}
+
+message AggregateTrustPolicy {
+  uint32 policy_version = 1;
+  optional uint64 minimum_trust_score = 2;
+  repeated lifegraph.v0.common.IdentityRef preferred_aggregators = 3;
+  repeated lifegraph.v0.common.IdentityRef allowed_responders = 4;
+  lifegraph.v0.common.ObjectRef policy_metadata = 5;
+}
+
+message RouteTrustAssignment {
+  lifegraph.v0.common.IdentityRef subject = 1;
+  uint64 trust_score = 2;
+  string source = 3;
+}
+
+message RouteTrustAssignments {
+  repeated RouteTrustAssignment assignments = 1;
+}
+
+message RouteSelectionPolicy {
+  uint32 policy_version = 1;
+  optional uint64 minimum_quality_hint = 2;
+  optional uint64 maximum_cost_hint = 3;
+  repeated lifegraph.v0.common.IdentityRef preferred_advertisers = 4;
+  repeated lifegraph.v0.common.NodeRef preferred_next_hops = 5;
+  optional bool require_active_session = 6;
+  lifegraph.v0.common.ObjectRef policy_metadata = 7;
+}

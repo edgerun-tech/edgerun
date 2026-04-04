@@ -1,0 +1,9 @@
+id: query/14-proof-bundle-bad-signature-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle is rejected when signature verification fails
+tags:
+- query
+- validate_query

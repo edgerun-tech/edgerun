@@ -1,0 +1,17 @@
+brief:
+  command_type: QUERY
+  target_node: node_server
+command:
+  issuer: user_alice
+  target_node: node_server
+  command_type: QUERY
+  not_before: '2030-01-01T00:00:01Z'
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_07-not-before-future-reject
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x28391a8d654270c05a5115f54150c6f207a748ccc582bbe209c2db7b1e0689a572d7d37f369e477877b765081aa9c65f6553683fad4f7e070cbb3ed3f320fb02'

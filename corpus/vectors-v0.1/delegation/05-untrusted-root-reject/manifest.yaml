@@ -1,0 +1,9 @@
+id: delegation/05-untrusted-root-reject
+suite: delegation
+validator: validate_delegation_chain
+version: 1
+priority: mandatory
+description: delegation chain rooted outside local trust roots is rejected
+tags:
+- delegation
+- validate_delegation_chain

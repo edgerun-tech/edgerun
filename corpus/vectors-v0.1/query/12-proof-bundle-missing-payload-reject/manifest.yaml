@@ -1,0 +1,9 @@
+id: query/12-proof-bundle-missing-payload-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle is structurally invalid when payload_object is absent
+tags:
+- query
+- validate_query

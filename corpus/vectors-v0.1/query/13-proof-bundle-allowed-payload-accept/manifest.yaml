@@ -1,0 +1,9 @@
+id: query/13-proof-bundle-allowed-payload-accept
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle is accepted when payload family is allowed and payload object is present
+tags:
+- query
+- validate_query

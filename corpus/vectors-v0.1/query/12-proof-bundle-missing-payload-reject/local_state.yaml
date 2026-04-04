@@ -1,0 +1,3 @@
+allowed_proof_payload_types:
+- PROOF_PAYLOAD_TYPE_RESULT_FRAGMENT
+policy_profile: default-v0

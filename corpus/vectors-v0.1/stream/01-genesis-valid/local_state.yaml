@@ -1,0 +1,4 @@
+now: '2030-01-01T00:00:00Z'
+stream_writer_identity: node_server
+stream_events: []
+policy_profile: default-v0

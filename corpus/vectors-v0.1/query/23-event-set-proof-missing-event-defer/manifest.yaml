@@ -1,0 +1,10 @@
+id: query/23-event-set-proof-missing-event-defer
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: event set proof is deferred when a referenced event is not locally available
+tags:
+- query
+- proof
+- event

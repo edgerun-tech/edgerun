@@ -1,0 +1,6 @@
+now: '2030-01-01T12:00:00Z'
+acceptable_attesters:
+- user_alice
+minimum_assurance_class: ASSURANCE_CLASS_SOFTWARE
+max_assurance_evidence_age_seconds: 172800
+policy_profile: default-v0

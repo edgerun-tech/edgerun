@@ -1,0 +1,9 @@
+id: trust/04-revocation-authorized-accept
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: revocation record is accepted when issuer is an authorized revocation authority for the target delegation
+tags:
+- trust
+- validate_trust

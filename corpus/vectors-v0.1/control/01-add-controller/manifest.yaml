@@ -1,0 +1,9 @@
+id: control/01-add-controller
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: authorized add-controller command succeeds
+tags:
+- control
+- validate_control_change

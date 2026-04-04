@@ -1,0 +1,37 @@
+brief:
+  issuer: agent_assistant
+  action: node_control
+  scope: extra-node
+delegation_chain:
+- issuer: user_alice
+  recipient: agent_assistant
+  capability:
+    kind: CAPABILITY_KIND_QUERY
+    actions:
+    - query
+    scope: timeline:last_7d
+  id: delegation_alice_agent_query
+  issued_at: '2030-01-01T00:00:00Z'
+  expires_at: '2030-01-08T00:00:00Z'
+  record_domain_tag: lifegraph:v0:delegation-record
+  sig_domain_tag: lifegraph:v0:delegation-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0xa7e8a7d72fbc0a8599edbdab341570e868225138f53ee53b068765b9878af0be81e7d792878e8922376b0c264d453f0d9bc8b039634cd1a167787ddec65b2300'
+- issuer: agent_assistant
+  recipient: agent_assistant
+  capability:
+    kind: CAPABILITY_KIND_NODE_CONTROL
+    actions:
+    - node_control
+    scope: node:extra-node
+  id: delegation_agent_agent_control
+  issued_at: '2030-01-01T00:05:00Z'
+  expires_at: '2030-01-08T00:05:00Z'
+  record_domain_tag: lifegraph:v0:delegation-record
+  sig_domain_tag: lifegraph:v0:delegation-signature
+  signature_fixture: agent_assistant
+  signature:
+    algorithm: ed25519
+    value: '0x191328aee4003a81a5f233947ee3505255be63d140f681758d7cdc8d5acf581ea3e089f970a774110dc9e79938508074431419b805e84ea86cd26565202dd70f'

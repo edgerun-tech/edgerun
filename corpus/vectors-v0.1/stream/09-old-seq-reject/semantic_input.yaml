@@ -1,0 +1,10 @@
+brief:
+  candidate_event: stale_event
+  seq: 1
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: timeline_stream
+  prev_ref:
+    event_hash_hex: '0x0000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x0101010101010101010101010101010101010101010101010101010101010101'

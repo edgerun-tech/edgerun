@@ -1,0 +1,10 @@
+id: query/25-trust-policy-proof-missing-policy-defer
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: trust policy proof is deferred when a referenced policy object is not locally available
+tags:
+- query
+- proof
+- trust

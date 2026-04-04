@@ -1,0 +1,9 @@
+id: trust/09-assurance-evidence-age-exceeded-reject
+suite: trust
+validator: validate_trust
+version: 1
+priority: mandatory
+description: assurance claim is rejected when evidence age exceeds configured maximum
+tags:
+- trust
+- validate_trust

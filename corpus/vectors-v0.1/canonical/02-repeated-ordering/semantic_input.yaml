@@ -1,0 +1,11 @@
+brief:
+  record_family: ScopeDescriptor
+  focus: repeated-field-order
+fixture_record:
+  record_family: ScopeDescriptor
+  focus: repeated-field-order
+  scope_kind: timeline
+  segments:
+  - last_30d
+  - mentions
+  - unread

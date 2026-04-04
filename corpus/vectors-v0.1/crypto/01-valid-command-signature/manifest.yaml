@@ -1,0 +1,9 @@
+id: crypto/01-valid-command-signature
+suite: crypto
+validator: validate_crypto
+version: 1
+priority: mandatory
+description: valid canonical command signature verifies
+tags:
+- crypto
+- validate_crypto

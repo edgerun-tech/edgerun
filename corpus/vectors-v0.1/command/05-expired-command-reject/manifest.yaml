@@ -1,0 +1,9 @@
+id: command/05-expired-command-reject
+suite: command
+validator: validate_command
+version: 1
+priority: mandatory
+description: expired command is rejected before authority evaluation
+tags:
+- command
+- validate_command

@@ -1,0 +1,11 @@
+candidate_event:
+  event_type: EVENT_TYPE_NODE_GENESIS
+  seq: 0
+  stream_id: node_stream
+  event_hash_hex: '0x1414141414141414141414141414141414141414141414141414141414141414'
+node_genesis_payload:
+  node_id: node_server
+  primary_node_identity:
+    identity_id: node_server
+  initial_controllers:
+  - identity_id: ctrl1

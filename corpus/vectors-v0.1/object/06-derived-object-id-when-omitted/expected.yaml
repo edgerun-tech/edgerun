@@ -1,0 +1,6 @@
+verdict: ACCEPT
+reason_code: null
+derived:
+  validation_level: logical_object_valid
+  canonicalization_id: raw-bytes-v0
+  object_id: '0x20fb4a5dbebdfb3bc1aa1c94a6750544a81cdade8d0bf40829241ef635513b6f'

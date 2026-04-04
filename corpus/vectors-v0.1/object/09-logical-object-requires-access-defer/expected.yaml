@@ -1,0 +1,4 @@
+verdict: DEFER
+reason_code: MISSING_DEPENDENCY
+derived:
+  validation_level: deferred_missing_access

@@ -1,0 +1,19 @@
+brief:
+  candidate_event: command_committed
+  seq: 1
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  seq: 1
+  stream_id: '0x73747265616d2d6e6f64652d736572766572'
+  prev_ref:
+    seq: 0
+    hash_fixture: genesis_hash
+    hash_hex: '0x6a51b42243ae3bfd60f335756da6f9fcff5331ba230997256bb8e08d49b74780'
+  recorded_at: '2030-01-01T00:05:00Z'
+  signature_fixture: node_server
+  record_domain_tag: lifegraph:v0:event-envelope
+  sig_domain_tag: lifegraph:v0:event-signature
+  signature:
+    algorithm: ed25519
+    value: '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'
+  event_hash_hex: '0x75a9d96368d0ba216c0a52fee77c4ed0d6b825d0defafb9a2ec9642d5047c7b2'

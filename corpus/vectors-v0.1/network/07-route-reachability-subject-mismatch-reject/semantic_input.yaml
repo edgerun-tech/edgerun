@@ -1,0 +1,9 @@
+route_advertisement:
+  target_node: node_server
+  advertiser: user_alice
+  advertised_at: '2030-01-01T00:00:00Z'
+  expires_at: '2030-01-01T01:00:00Z'
+  reachability:
+  - subject_node: node_other
+    locator_payload: quic://node_other.example
+    valid_until: '2030-01-01T01:00:00Z'

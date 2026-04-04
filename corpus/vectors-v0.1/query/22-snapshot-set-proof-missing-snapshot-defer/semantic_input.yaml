@@ -1,0 +1,4 @@
+snapshot_set_proof:
+  source_query_id: query_active
+  snapshots:
+  - snapshot_id: snap_missing

@@ -1,0 +1,6 @@
+verdict: ACCEPT
+reason_code: null
+post_state:
+  controller_set:
+  - user_alice
+  - user_bob

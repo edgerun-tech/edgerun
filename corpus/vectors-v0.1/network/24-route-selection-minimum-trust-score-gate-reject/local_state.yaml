@@ -1,0 +1,10 @@
+candidate_routes:
+- advertiser: adv_a
+  next_hop_node: hop_a
+  quality_hint: 4
+  cost_hint: 1
+route_assignment_scores:
+  adv_a: 0
+aggregate_trust_policy:
+  minimum_trust_score: 5
+policy_profile: default-v0

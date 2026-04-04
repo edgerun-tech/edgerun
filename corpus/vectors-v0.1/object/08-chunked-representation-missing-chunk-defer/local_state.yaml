@@ -1,0 +1,6 @@
+now: '2030-01-01T00:00:00Z'
+access_state:
+  may_decrypt: false
+available_chunks:
+  '0xcee2b76ffe8fd8f8142495a696e604ba6066ea02438cca9aa9bee796282c7b8a': '0x68656c6c6f20'
+policy_profile: default-v0

@@ -1,0 +1,9 @@
+id: query/09-proof-bundle-advisory-accept
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: proof bundle is accepted as advisory support when policy allows its payload type
+tags:
+- query
+- validate_query

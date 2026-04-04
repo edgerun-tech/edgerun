@@ -1,0 +1,4 @@
+now: '2030-01-01T00:00:00Z'
+trusted_snapshot_producers:
+- node_server
+policy_profile: default-v0

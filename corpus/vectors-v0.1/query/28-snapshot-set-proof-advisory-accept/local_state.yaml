@@ -1,0 +1,4 @@
+current_query_id: query_active
+available_snapshots:
+  snap_1: present
+policy_profile: default-v0

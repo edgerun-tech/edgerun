@@ -1,0 +1,9 @@
+id: delegation/02-single-delegation
+suite: delegation
+validator: validate_delegation_chain
+version: 1
+priority: mandatory
+description: single delegation grants bounded query authority
+tags:
+- delegation
+- validate_delegation_chain

@@ -1,0 +1,4 @@
+session_accept:
+  responder: node_server
+  echoed_session_nonce: nonce_ok
+  selected_protocol_version: 3

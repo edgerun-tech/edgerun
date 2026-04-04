@@ -1,0 +1,13 @@
+signed_record:
+  issuer: user_alice
+  target_node: node_server
+  command_type: FETCH_OBJECT
+  issued_at: '2030-01-01T00:10:00Z'
+  expires_at: '2030-01-01T01:10:00Z'
+  command_id: cmd_crypto_valid
+  record_domain_tag: lifegraph:v0:command-envelope
+  sig_domain_tag: lifegraph:v0:command-signature
+  signature_fixture: user_alice
+  signature:
+    algorithm: ed25519
+    value: '0x4868f00461785d8555d4107b24b3f366891829895751ef70df4cb8684ec3366aeb287dc09675ea2cd8fbb4e79bd22ab98f4b0f7c9cb3444ddc66f2d32410f006'

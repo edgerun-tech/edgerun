@@ -1,0 +1,8 @@
+now: '2030-01-01T00:00:00Z'
+current_controller_set:
+- user_alice
+allowed_query_classes:
+- QUERY_CLASS_VIEW
+- QUERY_CLASS_HEAD
+max_query_result_limit: 100
+policy_profile: default-v0

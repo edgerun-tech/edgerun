@@ -1,0 +1,31 @@
+brief:
+  record_family: DelegationRecord
+  focus: signable-vs-full
+fixture_record:
+  record_family: DelegationRecord
+  focus: signable-vs-full
+  domain_tag: lifegraph:v0:delegation-record
+  delegation_id: '0xdd01'
+  issuer:
+    identity_id: '0x45dcb90b3a5ce84c4d856b4c3637c775c562977bbd6dbdf5d5a41847dd6ca3d0'
+    identity_kind: user
+    key_hint: '0x421c820e'
+  recipient:
+    identity_id: '0x129fe28e3661d005fe0779d0f1f715c34bc4f39bbe85755cae39edd29c5b1cb6'
+    identity_kind: agent
+    key_hint: '0xdae7f75c'
+  capability:
+    kind: CAPABILITY_KIND_QUERY
+    actions:
+    - query
+    scope:
+      scope_kind: timeline
+      segments:
+      - last_7d
+  issued_at: '2030-01-01T00:00:00Z'
+  expires_at: '2030-01-08T00:00:00Z'
+  signature:
+    algorithm: ed25519
+    value: '0x652bbe9cb4166772d71470952aa73dc6efc4b4c3f8b5df10400fe194703b4b171099e884c21db0f91c08cf3c02bc3a8e1d65121c0fa1b00b9855c181f31f140c'
+  signature_fixture: user_alice
+  sig_domain_tag: lifegraph:v0:delegation-signature

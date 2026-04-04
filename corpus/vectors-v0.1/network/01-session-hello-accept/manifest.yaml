@@ -1,0 +1,9 @@
+id: network/01-session-hello-accept
+suite: network
+validator: validate_network
+version: 1
+priority: mandatory
+description: session hello is accepted when target and protocol version are compatible
+tags:
+- network
+- validate_network

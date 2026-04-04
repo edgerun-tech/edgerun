@@ -1,0 +1,20 @@
+brief:
+  candidate_event: node_genesis
+  seq: 0
+candidate_event:
+  event_type: EVENT_TYPE_NODE_GENESIS
+  seq: 0
+  stream_id: '0x73747265616d2d6e6f64652d736572766572'
+  recorded_at: '2030-01-01T00:00:00Z'
+  payload_summary:
+    node_id: node_server
+    primary_node_identity: node_server
+    initial_controllers:
+    - user_alice
+  signature_fixture: node_server
+  record_domain_tag: lifegraph:v0:event-envelope
+  sig_domain_tag: lifegraph:v0:event-signature
+  signature:
+    algorithm: ed25519
+    value: '0xe561a94bd8852909db84484dbad796c87edff6abf0cf3035874575e3a7c70f3d2f7553dfb9301fde9b5526d13281c4b7f0e1742f69c0709debf880f592318e0d'
+  event_hash_hex: '0x6a51b42243ae3bfd60f335756da6f9fcff5331ba230997256bb8e08d49b74780'

@@ -1,0 +1,7 @@
+revocation_record:
+  revocation_id: rev_01
+  issuer: user_alice
+  issued_at: '2030-01-01T00:00:00Z'
+  effective_at: '2030-01-01T00:00:00Z'
+  revocation_kind: REVOCATION_KIND_DELEGATION
+  target_delegation: del_query_1

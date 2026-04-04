@@ -1,0 +1,9 @@
+id: control/04-transfer-missing-proof-defer
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: transfer control defers when proof of possession is missing
+tags:
+- control
+- validate_control_change

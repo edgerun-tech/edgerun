@@ -1,0 +1,7 @@
+relay_envelope:
+  original_sender: user_alice
+  relay_message_id: relay_10
+  intended_recipient_node: node_server
+  payload_kind: PAYLOAD_KIND_QUERY
+  inline_payload: payload_bytes
+  store_until: '2029-12-31T23:59:59Z'

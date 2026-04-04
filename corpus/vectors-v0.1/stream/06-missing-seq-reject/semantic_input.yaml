@@ -1,0 +1,10 @@
+brief:
+  candidate_event: missing-seq
+candidate_event:
+  event_type: EVENT_TYPE_COMMAND_COMMITTED
+  stream_id: '0x73747265616d2d6e6f64652d736572766572'
+  signature_fixture: node_server
+  sig_domain_tag: lifegraph:v0:event-signature
+  signature:
+    algorithm: ed25519
+    value: '0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000'

@@ -1,0 +1,10 @@
+id: canonical/05-signable-vs-full
+suite: canonical
+validator: hash_record
+version: 1
+priority: mandatory
+description: signable form and full form differ only by signature slot; record hash
+  uses signable form
+tags:
+- canonical
+- hash_record

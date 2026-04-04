@@ -1,0 +1,10 @@
+id: query/15-aggregate-query-id-mismatch-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: aggregate descriptor is rejected when source query id does not match the active query
+tags:
+- query
+- aggregate
+- mismatch

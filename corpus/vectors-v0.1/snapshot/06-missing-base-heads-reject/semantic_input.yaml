@@ -1,0 +1,7 @@
+brief:
+  view_type: timeline
+  producer: node_server
+snapshot:
+  view_type: timeline
+  producer: node_server
+  payload_object: snapshot_payload_1

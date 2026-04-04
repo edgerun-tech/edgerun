@@ -1,0 +1,9 @@
+now: '2030-01-01T00:00:00Z'
+trust_roots:
+- user_alice
+revocations:
+- target: delegation_to_agent_assistant
+  reason: revoked
+current_controller_set:
+- user_alice
+policy_profile: default-v0

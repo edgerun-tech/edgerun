@@ -1,0 +1,9 @@
+id: query/01-head-authorized
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: authorized head query for local node is accepted
+tags:
+- query
+- validate_query

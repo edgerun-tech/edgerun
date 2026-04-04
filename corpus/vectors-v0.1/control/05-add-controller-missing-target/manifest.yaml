@@ -1,0 +1,9 @@
+id: control/05-add-controller-missing-target
+suite: control
+validator: validate_control_change
+version: 1
+priority: mandatory
+description: add-controller without new_controller is structurally invalid
+tags:
+- control
+- validate_control_change

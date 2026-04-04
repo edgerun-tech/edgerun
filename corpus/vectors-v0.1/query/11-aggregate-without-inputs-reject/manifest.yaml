@@ -1,0 +1,9 @@
+id: query/11-aggregate-without-inputs-reject
+suite: query
+validator: validate_query
+version: 1
+priority: mandatory
+description: aggregate descriptor is rejected when it does not reference any input fragments
+tags:
+- query
+- validate_query
