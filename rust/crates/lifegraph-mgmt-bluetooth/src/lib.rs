@@ -754,16 +754,14 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
         let ty = data[offset + 1];
         let value = &data[offset + 2..offset + 1 + len];
         match ty {
-            0x08 => {
-                if out.local_name.is_none() {
+            0x08
+                if out.local_name.is_none() => {
                     out.local_name = Some(String::from_utf8_lossy(value).to_string());
                 }
-            }
-            0x09 => {
-                if !value.is_empty() {
+            0x09
+                if !value.is_empty() => {
                     out.local_name = Some(String::from_utf8_lossy(value).to_string());
                 }
-            }
             0x02 | 0x03 => {
                 for chunk in value.chunks_exact(2) {
                     parse_uuid16_in_discovery_payload(
@@ -799,8 +797,8 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
                     );
                 }
             }
-            0x16 => {
-                if value.len() >= 2 {
+            0x16
+                if value.len() >= 2 => {
                     let uuid = u16::from_le_bytes([value[0], value[1]]);
                     parse_uuid16_in_discovery_payload(
                         &mut out.service_uuids,
@@ -808,25 +806,22 @@ fn parse_eir_or_ad_data(data: &[u8]) -> ParsedDiscoveryData {
                         uuid,
                     );
                 }
-            }
-            0x20 => {
-                if value.len() >= 4 {
+            0x20
+                if value.len() >= 4 => {
                     let uuid = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
                     out.service_uuids.push(format_32bit_service_uuid(uuid));
                     if let Some(profile_uuid) = map_profile_from_32bit_uuid(uuid) {
                         out.profiles.extend(profile_uuid);
                     }
                 }
-            }
-            0x21 => {
-                if value.len() >= 16 {
+            0x21
+                if value.len() >= 16 => {
                     let mut b = [0u8; 16];
                     b.copy_from_slice(&value[..16]);
                     b.reverse();
                     let value = format_128bit_service_uuid(&b);
                     out.service_uuids.push(value);
                 }
-            }
             0x15 => {
                 for chunk in value.chunks_exact(16) {
                     let mut b = [0u8; 16];

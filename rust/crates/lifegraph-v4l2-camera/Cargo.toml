@@ -8,3 +8,5 @@ publish.workspace = true
 [dependencies]
 lifegraph-biometrics = { path = "../lifegraph-biometrics" }
 lifegraph-camera-biometrics = { path = "../lifegraph-camera-biometrics" }
+lifegraph-capabilities = { path = "../lifegraph-capabilities" }
+lifegraph-proto = { path = "../lifegraph-proto" }

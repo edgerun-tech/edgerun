@@ -281,7 +281,14 @@ For long-running actions, the node **MAY** later record `action_started`, `actio
 
 The command sender **MAY** independently record `command_sent` in its own stream. This produces deliberate double-entry history: the sender records issuance, the receiver records acceptance or rejection.
 
-A node’s authoritative state changes only through events the node itself appends to its own stream.
+A node's authoritative state changes only through events the node itself appends to its own stream.
+
+### 5.1 Replay resistance
+
+Replay detection is keyed by `command_hash` (SHA-256 of the canonical signable command envelope), which is globally unique by construction. The `command_id` field is an application-level idempotency hint only and MUST NOT be used as the replay key.
+
+- Same `command_hash` => `DUPLICATE` (already processed)
+- Different `command_hash` => distinct command, regardless of `command_id` value
 
 ---
 
@@ -2212,12 +2219,14 @@ Implementations may choose another index backend, but they should preserve the s
 Recommended replay key space:
 
 ```text
-(target_node_id, command_id) -> command_hash, decision_event_ref
+command_hash -> (command_id, decision_event_ref)
 ```
 
+Where `command_hash` is the SHA-256 hash of the canonical command envelope (signable form).
+
 Rules:
-- same command_id + same command_hash => `DUPLICATE`
-- same command_id + different command_hash => `REJECT`
+- same command_hash => `DUPLICATE`
+- `command_id` is an application-level idempotency hint only, not the replay key
 - exact committed prior command may return prior acknowledgement
 - no re-execution of side effects unless explicitly defined idempotent
 
@@ -2420,8 +2429,6 @@ message Digest {
   enum Algorithm {
     DIGEST_ALGORITHM_UNSPECIFIED = 0;
     DIGEST_ALGORITHM_SHA256 = 1;
-    DIGEST_ALGORITHM_SHA256 = 1;
-    DIGEST_ALGORITHM_SHA256 = 2;
   }
 
   Algorithm algorithm = 1;
@@ -2431,7 +2438,7 @@ message Digest {
 message Signature {
   enum Algorithm {
     SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
-    SIGNATURE_ALGORITHM_ED25519 = 1;
+    SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 1;
   }
 
   Algorithm algorithm = 1;
@@ -2522,8 +2529,7 @@ import "lifegraph/v0/common.proto";
 
 enum KeyAlgorithm {
   KEY_ALGORITHM_UNSPECIFIED = 0;
-  KEY_ALGORITHM_ED25519 = 1;
-  KEY_ALGORITHM_X25519 = 2;
+  KEY_ALGORITHM_ECDSA_P256 = 1;
 }
 
 message IdentityRecord {

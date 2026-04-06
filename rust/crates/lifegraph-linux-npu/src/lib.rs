@@ -155,7 +155,7 @@ pub fn discover_linux_npus_in(
     let mut out = Vec::new();
     for info in collect_accel_class_devices(accel_class_root, accel_dev_root)?
         .into_iter()
-        .chain(collect_pci_driver_npus(pci_root)?.into_iter())
+        .chain(collect_pci_driver_npus(pci_root)?)
     {
         if by_id.insert(info.instance_id.clone()) {
             out.push(info);

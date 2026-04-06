@@ -483,7 +483,7 @@ mod tests {
             correlation_id: Vec::new(),
             invoked_at: None,
             signature: Some(Signature {
-                algorithm: 3, // ED25519 -- wrong
+                algorithm: 0, // UNSPECIFIED -- wrong
                 value: vec![0u8; 64],
             }),
         };

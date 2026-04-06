@@ -4,10 +4,6 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-autobins = false
-
-[lib]
-path = "stub.rs"
 
 [dependencies]
 lifegraph-capabilities = { path = "../lifegraph-capabilities" }

@@ -391,7 +391,7 @@ impl MachineReport {
                 section_to_json(
                     &self.network_interfaces.items,
                     self.network_interfaces.error.as_deref(),
-                    |item| network_interface_to_json(item),
+                    network_interface_to_json,
                 ),
             ),
             (
@@ -399,7 +399,7 @@ impl MachineReport {
                 section_to_json(
                     &self.wifi_interfaces.items,
                     self.wifi_interfaces.error.as_deref(),
-                    |item| wifi_interface_to_json(item),
+                    wifi_interface_to_json,
                 ),
             ),
             (
@@ -407,7 +407,7 @@ impl MachineReport {
                 section_to_json(
                     &self.usb_devices.items,
                     self.usb_devices.error.as_deref(),
-                    |item| usb_device_to_json(item),
+                    usb_device_to_json,
                 ),
             ),
             (
@@ -415,7 +415,7 @@ impl MachineReport {
                 section_to_json(
                     &self.pci_devices.items,
                     self.pci_devices.error.as_deref(),
-                    |item| pci_device_to_json(item),
+                    pci_device_to_json,
                 ),
             ),
         ])

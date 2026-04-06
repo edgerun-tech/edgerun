@@ -117,9 +117,9 @@ cat > "$run_helper" <<META
 #!/usr/bin/env bash
 set -euo pipefail
 script_dir="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
-cd $(printf '%q' "$repo_root")/go
+cd $(printf '%q' "$repo_root")/rust
 source "\$script_dir/$(basename "$daemon_env")"
-args=(go run ./cmd/lifegraphd
+args=(cargo run --release -p lifegraph-node --bin lifegraphd --
   --fixture "\${LIFEGRAPHD_FIXTURE:-$fixture}"
   --tpm-key-context "\${LIFEGRAPHD_TPM_KEY_CONTEXT}"
   --tpm-public-key "\${LIFEGRAPHD_TPM_PUBLIC_KEY}"

@@ -41,7 +41,8 @@ fn main() {
                 eprintln!("PCM hw:{},{} not found", card, device);
                 std::process::exit(1);
             };
-            let mut backend = AlsaMicrophoneBackend { proc_root: "/proc/asound".into(), pcm };
+            let device_path = format!("/dev/snd/pcmC{}D{}c", pcm.card_index, pcm.device_index);
+            let mut backend = AlsaMicrophoneBackend { pcm, device_path };
             match backend.capture_audio(&AudioCaptureRequest {
                 duration_ms,
                 sample_rate_hz: rate,

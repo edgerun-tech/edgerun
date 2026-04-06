@@ -256,6 +256,11 @@ pub trait MeshSigner {
     /// Signs a pre-hashed 32-byte SHA-256 digest.
     /// Returns exactly 64 bytes: r (32 bytes) || s (32 bytes).
     fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError>;
+
+    /// Returns self as `Any` for downcasting (used by TCP task cloning).
+    fn as_any(&self) -> &dyn std::any::Any {
+        &()
+    }
 }
 
 /// Wraps any `HardwareSigningKey` as a `MeshSigner`.
@@ -332,7 +337,7 @@ pub fn validate_hardware_key_info(
     }
 
     if let Some(minimum) = requirements.minimum_assurance {
-        if !key_info.assurance_level.is_at_least(minimum.clone()) {
+        if !key_info.assurance_level.is_at_least(minimum) {
             return Err(HardwareSigningError::Validation(
                 HardwareValidationIssue::AssuranceTooWeak {
                     actual: key_info.assurance_level.clone(),

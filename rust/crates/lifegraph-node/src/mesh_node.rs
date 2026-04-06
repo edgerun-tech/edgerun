@@ -204,8 +204,10 @@ impl MeshNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lifegraph_core::protocol::{EventEnvelope, EventType, IdentityRef, NodeRef, Signature};
     use lifegraph_hardware_signing::MeshSigner;
+    use lifegraph_proto::lifegraph::v0::common as proto_common;
+    use lifegraph_proto::lifegraph::v0::stream as proto_stream;
+    use lifegraph_proto::lifegraph::v0::stream::EventType;
     use rand::rngs::OsRng;
     use sha2::Digest;
 
@@ -294,36 +296,34 @@ metadata:
         let signer = Box::new(TestSigner::new());
         let mut node = MeshNode::from_config(config, signer).unwrap();
 
-        // Process a command by delivering it as an inbound frame
-        let command = CommandEnvelope {
+        // Build a command using the proto type directly
+        let command = proto_stream::CommandEnvelope {
             envelope_version: 1,
-            command_id: Some(vec![1, 2, 3]),
-            target_node: NodeRef {
+            command_id: vec![1, 2, 3],
+            target_node: Some(proto_common::NodeRef {
                 node_id: node.identity().0.to_vec(),
-            },
-            issuer: IdentityRef {
+            }),
+            issuer: Some(proto_common::IdentityRef {
                 identity_id: vec![7, 8, 9],
-                identity_kind: None,
+                identity_kind: Some(0),
                 key_hint: None,
-            },
-            command_type: Some("COMMAND_TYPE_QUERY".into()),
+            }),
+            command_type: 7, // QUERY
             command_version: 1,
             issued_at: None,
             not_before: None,
             expires_at: None,
-            idempotency_key: None,
-            payload_object: None,
-            inline_payload: None,
+            idempotency_key: vec![],
+            payload: None,
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
             signature: None,
         };
 
-        // Encode as protobuf and deliver as a frame
-        let proto_cmd: proto_stream::CommandEnvelope = (&command).into();
+        // Encode and deliver as a frame
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(&proto_cmd, &mut buf).unwrap();
+        proto_stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
         let mut frame = MeshFrame::from_payload(node.identity(), buf);
         frame.header.src = node.identity();
         frame.signature = [0u8; 64];
@@ -337,81 +337,54 @@ metadata:
 
     #[test]
     fn two_nodes_exchange_signed_commands() {
-        // Create two nodes
         let config_a = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
         let signer_a = Box::new(TestSigner::new());
         let node_a_id = signer_a.node_id();
-        let mut alice = MeshNode::from_config(config_a, signer_a).unwrap();
+        let _alice = MeshNode::from_config(config_a, signer_a).unwrap();
 
         let config_b = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
         let signer_b = Box::new(TestSigner::new());
         let mut bob = MeshNode::from_config(config_b, signer_b).unwrap();
 
-        // Alice creates a signed command for Bob
-        let command = CommandEnvelope {
+        // Build a command using the proto type directly
+        let command = proto_stream::CommandEnvelope {
             envelope_version: 1,
-            command_id: Some(vec![1, 2, 3]),
-            target_node: NodeRef {
+            command_id: vec![1, 2, 3],
+            target_node: Some(proto_common::NodeRef {
                 node_id: bob.identity().0.to_vec(),
-            },
-            issuer: IdentityRef {
+            }),
+            issuer: Some(proto_common::IdentityRef {
                 identity_id: node_a_id.0.to_vec(),
-                identity_kind: Some("node".into()),
-                key_hint: Some(node_a_id.0.to_vec()), // Public key for verification
-            },
-            command_type: Some("COMMAND_TYPE_QUERY".into()),
+                identity_kind: Some(2), // NODE
+                key_hint: Some(node_a_id.0.to_vec()),
+            }),
+            command_type: 7, // QUERY
             command_version: 1,
             issued_at: None,
             not_before: None,
             expires_at: None,
-            idempotency_key: None,
-            payload_object: None,
-            inline_payload: None,
+            idempotency_key: vec![],
+            payload: None,
             delegation_chain: vec![],
             requested_assurance: None,
             command_metadata: None,
             signature: None,
         };
 
-        // Sign the command with Alice's hardware signer
-        let proto_cmd: proto_stream::CommandEnvelope = (&command).into();
+        // Encode and deliver as a frame (fake signature)
         let mut buf = Vec::new();
-        proto_stream::CommandEnvelope::encode(&proto_cmd, &mut buf).unwrap();
+        proto_stream::CommandEnvelope::encode(&command, &mut buf).unwrap();
         let mut frame = MeshFrame::from_payload(bob.identity(), buf);
         frame.header.src = node_a_id;
+        frame.signature = [0u8; 64];
+        let wire = frame.to_wire();
 
-        // Sign the frame
-        let preimage = frame.signed_preimage();
-        let digest = sha2::Sha256::digest(&preimage);
-        let mut digest_bytes = [0u8; 32];
-        digest_bytes.copy_from_slice(&digest);
-        // Use Alice's signer directly
-        // We need to expose the signer from the MeshNode — for testing, we'll use the fact
-        // that we have the signing key from TestSigner
-        // For the test, we'll just create a properly signed frame manually
-        // using Alice's signing key
-
-        // Create a properly signed frame using Alice's hardware signing key
-        let wire = {
-            let proto_cmd: proto_stream::CommandEnvelope = (&command).into();
-            let mut buf = Vec::new();
-            proto_stream::CommandEnvelope::encode(&proto_cmd, &mut buf).unwrap();
-            // For testing, we'll just create a frame with a valid signature
-            let mut frame = MeshFrame::from_payload(bob.identity(), buf);
-            frame.header.src = node_a_id;
-            // For testing, we'll use a fake signature - the verification will fail
-            // but we can still test the frame delivery and command processing
-            frame.signature = [0u8; 64];
-            frame.to_wire()
-        };
-
-        // Deliver to Bob
         let processed = bob.deliver_inbound_frame(&wire).unwrap();
         assert!(processed > 0);
 
         // Bob should have recorded the command in his stream
         // genesis (seq 0) + rejected (seq 1, because signature is fake)
         assert_eq!(bob.events().len(), 2);
-        assert_eq!(bob.events()[1].event_type, lifegraph_stream::EventType::CommandRejected);
+        assert_eq!(bob.events()[1].event_type, EventType::CommandRejected as i32);
     }
 }

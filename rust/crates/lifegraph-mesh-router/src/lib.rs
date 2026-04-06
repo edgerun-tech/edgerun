@@ -47,7 +47,7 @@ impl DiscoveryPacket {
         let mut out = Vec::with_capacity(5 + (count as usize) * 65);
         out.extend_from_slice(&self.sequence.to_le_bytes());
         out.push(count);
-        for route in self.routes.iter().take(Self::MAX_ROUTES as usize) {
+        for route in self.routes.iter().take(Self::MAX_ROUTES) {
             out.extend_from_slice(&route.destination.0);
             out.push(route.cost);
         }

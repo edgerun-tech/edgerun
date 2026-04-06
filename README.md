@@ -6,7 +6,7 @@ It currently contains:
 - `rust/` — the main Rust workspace
 - `proto/` — Lifegraph protobuf schemas
 - `docs/` — implementation and deployment notes
-- `corpus/` and `spec/` — protocol/reference assets
+- `corpus/` and `spec/` — protocol conformance test vectors and specifications
 - `systemd/` — service-related files
 
 ## Repository status
@@ -26,13 +26,13 @@ What is still rough:
 ## Repository layout
 
 - `rust/` — main workspace and crates
-- `rust/crates/lifegraph-core` — core protocol/domain types
+- `rust/crates/lifegraph-core` — core protocol/domain types and validators
 - `rust/crates/lifegraph-proto` — generated protobuf bindings/build glue
 - `rust/crates/lifegraph-linux-*` — Linux capability backends and CLI tools
 - `proto/` — protobuf definitions
 - `docs/` — notes and design docs
 - `spec/` — reference/spec material
-- `corpus/` — corpus/reference assets
+- `corpus/` — conformance test vectors
 
 ## Quick start
 
@@ -41,6 +41,13 @@ Basic workspace check:
 ```bash
 cd rust
 cargo check --workspace
+```
+
+Run the full test suite:
+
+```bash
+cd rust
+cargo test --workspace
 ```
 
 Run the currently useful read-only inventory tools:

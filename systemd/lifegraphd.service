@@ -1,0 +1,35 @@
+[Unit]
+Description=Lifegraph Node Daemon
+Documentation=file:///home/ken/lifegraph_reference_core/docs/machine_daemon.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/home/ken/lifegraph_reference_core/target/release/lifegraphd run --config /etc/lifegraph/node.yaml
+Restart=on-failure
+RestartSec=5
+WatchdogSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/lib/lifegraph
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+MemoryDenyWriteExecute=true
+
+# TPM access (if hardware signing is used)
+DeviceAllow=/dev/tpmrm0 rw
+DeviceAllow=/dev/hidraw* rw
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lifegraphd
+
+[Install]
+WantedBy=multi-user.target

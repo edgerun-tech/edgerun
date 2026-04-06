@@ -2,22 +2,12 @@
 
 ## Inspect TPM capabilities
 
-List the TPM algorithms, curves, and persistent handles through the CLI:
+Use the `lifegraph-tpm` crate's tooling or `tpm2-tools` directly:
 
 ```bash
-(cd go && go run ./cmd/lifegraphctl --mode tpm-capabilities)
-```
-
-Optional explicit TPM device:
-
-```bash
-(cd go && go run ./cmd/lifegraphctl --mode tpm-capabilities --tpm-path /dev/tpmrm0)
-```
-
-Inspect a persistent handle and get the recommended wire signature algorithm:
-
-```bash
-(cd go && go run ./cmd/lifegraphctl --mode tpm-key-info --target 0x81010020)
+tpm2_getcap properties-fixed
+tpm2_getcap properties-variable
+tpm2_getcap algorithms
 ```
 
 ## Provision a direct-signing TPM key
@@ -66,13 +56,14 @@ Then run the daemon with the same authorization material:
 ```bash
 source ./var/tpm-node-server-auth/metadata.env
 
-(cd go && go run ./cmd/lifegraphd \
+cd rust
+cargo run --release -p lifegraph-node --bin lifegraphd -- \
   --fixture node_server \
   --data-dir ../var/lifegraph \
   --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
   --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
   --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM" \
-  --tpm-key-auth "$LIFEGRAPHD_TPM_KEY_AUTH")
+  --tpm-key-auth "$LIFEGRAPHD_TPM_KEY_AUTH"
 ```
 
 ## Provision a PCR-policy TPM key
@@ -108,13 +99,14 @@ Then point `lifegraphd` at that session using the normal auth flag:
 ```bash
 source ./var/tpm-node-server-policy/metadata.env
 
-(cd go && go run ./cmd/lifegraphd \
+cd rust
+cargo run --release -p lifegraph-node --bin lifegraphd -- \
   --fixture node_server \
   --data-dir ../var/lifegraph \
   --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
   --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
   --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM" \
-  --tpm-key-auth session:../var/tpm-policy/signing.session)
+  --tpm-key-auth session:../var/tpm-policy/signing.session
 ```
 
 When finished, flush the live session:
@@ -130,12 +122,13 @@ ECDSA P-256 example:
 ```bash
 source ./var/tpm-node-server/metadata.env
 
-(cd go && go run ./cmd/lifegraphd \
+cd rust
+cargo run --release -p lifegraph-node --bin lifegraphd -- \
   --fixture node_server \
   --data-dir ../var/lifegraph \
   --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
   --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM")
+  --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM"
 ```
 
 The legacy TPM seed-loading mode has been removed. Use direct TPM signing with `--tpm-key-context`, `--tpm-public-key`, and `--signature-algorithm` instead.
@@ -157,7 +150,7 @@ The legacy TPM seed-loading mode has been removed. Use direct TPM signing with `
 
 ## Daemon startup TPM self-check
 
-When direct TPM signing is enabled, `lifegraphd` now refuses to start unless all of these pass before it serves traffic:
+When direct TPM signing is enabled, `lifegraphd` refuses to start unless all of these pass before it serves traffic:
 
 - the TPM handle/context can be read
 - the TPM public key matches the provided PEM file

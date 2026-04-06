@@ -1174,11 +1174,7 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
             lifegraph_camera_biometrics::CameraLivenessChallengeKind::PassivePresence => {
                 if challenge.require_rgb && !face_present_in_rgb {
                     false
-                } else if challenge.require_infrared && !face_present_in_infrared {
-                    false
-                } else {
-                    true
-                }
+                } else { !(challenge.require_infrared && !face_present_in_infrared) }
             }
             _ => false,
         };
@@ -1223,6 +1219,69 @@ impl PairedCameraBiometricReader for V4l2PairedCameraBiometricReader {
             },
             state: Self::default_liveness_state(passed),
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CapabilityProvider implementations
+// ---------------------------------------------------------------------------
+
+use lifegraph_capabilities::{CapabilityDescriptor, CapabilityProvider};
+use lifegraph_proto::lifegraph::v0::capability::{
+    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityRole,
+};
+
+impl CapabilityProvider for V4l2CameraBiometricReader {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        let instance = self.device.devnode.to_string_lossy().to_string();
+        CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: instance.as_bytes().to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: CapabilityRole::Input as i32,
+            modalities: vec![CapabilityModality::Visual as i32],
+            event_kinds: vec![CapabilityEventKind::Visual as i32],
+            operations: vec![
+                CapabilityOperation::Query as i32,
+                CapabilityOperation::Capture as i32,
+            ],
+            default_constraints: Vec::new(),
+            provider_name: "v4l2-camera".into(),
+            provider_instance_id: instance,
+            signature: None,
+        }
+    }
+}
+
+impl CapabilityProvider for V4l2PairedCameraBiometricReader {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: self.selection.group_key.as_bytes().to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: CapabilityRole::Input as i32,
+            modalities: {
+                let mut mods = vec![CapabilityModality::Visual as i32];
+                if self.selection.infrared.is_some() {
+                    mods.push(CapabilityModality::Biometric as i32);
+                }
+                mods
+            },
+            event_kinds: vec![
+                CapabilityEventKind::Visual as i32,
+                CapabilityEventKind::Biometric as i32,
+            ],
+            operations: vec![
+                CapabilityOperation::Query as i32,
+                CapabilityOperation::Capture as i32,
+            ],
+            default_constraints: Vec::new(),
+            provider_name: "v4l2-camera".into(),
+            provider_instance_id: self.selection.group_key.clone(),
+            signature: None,
+        }
     }
 }
 

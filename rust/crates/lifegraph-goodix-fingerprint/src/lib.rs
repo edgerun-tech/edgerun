@@ -471,7 +471,7 @@ fn parse_usb_utf16le_string_descriptor(bytes: &[u8]) -> Result<String, GoodixFin
         ));
     }
     let declared_len = bytes[0] as usize;
-    if declared_len < 2 || (declared_len - 2) % 2 != 0 {
+    if declared_len < 2 || !(declared_len - 2).is_multiple_of(2) {
         return Err(GoodixFingerprintError::Parse(
             "invalid USB string descriptor length".into(),
         ));
@@ -491,7 +491,7 @@ fn parse_usb_language_ids(bytes: &[u8]) -> Result<Vec<u16>, GoodixFingerprintErr
         ));
     }
     let declared_len = bytes[0] as usize;
-    if declared_len < 4 || (declared_len - 2) % 2 != 0 {
+    if declared_len < 4 || !(declared_len - 2).is_multiple_of(2) {
         return Err(GoodixFingerprintError::Parse(
             "invalid USB language descriptor length".into(),
         ));

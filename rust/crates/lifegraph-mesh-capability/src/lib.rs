@@ -136,6 +136,12 @@ pub struct MeshEnvelopeDispatcher {
     inboxes: HashMap<NodeID, Vec<EnvelopeInbox>>,
 }
 
+impl Default for MeshEnvelopeDispatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MeshEnvelopeDispatcher {
     pub fn new() -> Self {
         Self {

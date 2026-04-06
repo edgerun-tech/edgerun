@@ -27,10 +27,10 @@ impl RemoteCapabilityProvider for NoopProvider {
         CapabilityDescriptor::default()
     }
     fn open_session(&mut self, _open: &CapabilitySessionOpen) -> Result<CapabilitySessionAccept, CapabilityError> {
-        Err(CapabilityError::Unsupported("cli tool does not serve capabilities".into()))
+        Err(CapabilityError::Unsupported("cli tool does not serve capabilities"))
     }
     fn invoke(&mut self, _session_id: &[u8], _invocation: &CapabilityInvocation, _inline_params: Option<&[u8]>) -> Result<RemoteInvocationResult, CapabilityError> {
-        Err(CapabilityError::Unsupported("cli tool does not serve capabilities".into()))
+        Err(CapabilityError::Unsupported("cli tool does not serve capabilities"))
     }
     fn close_session(&mut self, _close: &CapabilitySessionClose) -> Result<(), CapabilityError> { Ok(()) }
     fn handle_request(&mut self, _request: &CapabilityRequest) -> Result<Option<CapabilityGrant>, CapabilityError> { Ok(None) }

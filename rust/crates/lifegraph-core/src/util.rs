@@ -21,7 +21,7 @@ pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, time::error::Pars
 pub fn hex_to_bytes(value: &str) -> Result<Vec<u8>, hex::FromHexError> {
     let trimmed = value.strip_prefix("0x").unwrap_or(value);
     let owned;
-    let s = if trimmed.len() % 2 != 0 {
+    let s = if !trimmed.len().is_multiple_of(2) {
         owned = format!("0{trimmed}");
         owned.as_str()
     } else {

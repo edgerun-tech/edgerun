@@ -1,20 +1,23 @@
 # syntax=docker/dockerfile:1.7
-FROM golang:1.26 AS builder
+FROM rust:1.85 AS builder
 WORKDIR /src
 
-COPY go/go.mod go/go.sum ./go/
-WORKDIR /src/go
-RUN go mod download
+# Cache dependencies first
+COPY rust/Cargo.toml rust/Cargo.lock ./rust/
+COPY rust/crates ./rust/crates
+WORKDIR /src/rust
+RUN cargo fetch --locked
 
 WORKDIR /src
-COPY . .
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/go/pkg/mod \
-    cd go && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o /out/lifegraphd ./cmd/lifegraphd
+COPY proto ./proto
+COPY rust ./rust
+
+# Build the node daemon
+RUN cd rust && cargo build --release -p lifegraph-node --bin lifegraphd
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app
-COPY --from=builder /out/lifegraphd /usr/local/bin/lifegraphd
+COPY --from=builder /src/rust/target/release/lifegraphd /usr/local/bin/lifegraphd
 
 EXPOSE 8080
 VOLUME ["/var/lib/lifegraph"]

@@ -157,9 +157,9 @@ impl SimplePolicyEngine {
         h.update(&request.request_id);
         h.update(descriptor.provider_name.as_bytes());
         h.update(descriptor.provider_instance_id.as_bytes());
-        h.update(&self.nonce.to_le_bytes());
-        h.update(&now.as_secs().to_le_bytes());
-        h.update(&now.subsec_nanos().to_le_bytes());
+        h.update(self.nonce.to_le_bytes());
+        h.update(now.as_secs().to_le_bytes());
+        h.update(now.subsec_nanos().to_le_bytes());
         h.finalize().to_vec()
     }
 

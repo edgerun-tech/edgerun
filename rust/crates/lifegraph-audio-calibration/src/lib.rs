@@ -103,9 +103,13 @@ pub fn run_speaker_mic_sweep(
     let mut level = config.start_level_percent;
     let mut out = Vec::new();
     loop {
+        let device_path = format!(
+            "/dev/snd/pcmC{}D{}c",
+            pcm.card_index, pcm.device_index
+        );
         let mut mic = AlsaMicrophoneBackend {
-            proc_root: "/proc/asound".into(),
             pcm: pcm.clone(),
+            device_path,
         };
         let speaker_clone = speaker.clone();
         let tone = synth_tone(

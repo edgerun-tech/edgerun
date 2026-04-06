@@ -26,6 +26,7 @@ pub enum UserVerificationPolicy {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default)]
 pub struct BiometricState {
     pub modality: Option<BiometricModality>,
     pub verified: bool,
@@ -33,16 +34,6 @@ pub struct BiometricState {
     pub user_present: bool,
 }
 
-impl Default for BiometricState {
-    fn default() -> Self {
-        Self {
-            modality: None,
-            verified: false,
-            hardware_protected: false,
-            user_present: false,
-        }
-    }
-}
 
 impl BiometricState {
     pub fn assurance_strength(&self) -> BiometricAssuranceStrength {

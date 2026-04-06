@@ -224,7 +224,8 @@ struct IpMreq {
 }
 
 #[repr(C)]
-struct SockaddrIn {
+#[derive(Clone, Copy)]
+pub struct SockaddrIn {
     sin_family: u16,
     sin_port: u16,
     sin_addr: u32,
@@ -458,6 +459,165 @@ impl Drop for IpTunnel {
 }
 
 // ---------------------------------------------------------------------------
+// UDP broadcast socket (works without root)
+// ---------------------------------------------------------------------------
+
+/// A UDP socket that broadcasts MeshFrames to all peers on the local network.
+/// Works without root — the default transport for development.
+pub struct UdpBroadcastSocket {
+    fd: c_int,
+    /// Learned peer IPs from inbound datagrams, keyed by NodeID.
+    peer_addrs: HashMap<NodeID, SockaddrIn>,
+}
+
+impl UdpBroadcastSocket {
+    const DEFAULT_PORT: u16 = 47079;
+
+    /// Binds a UDP socket for broadcast mesh communication.
+    pub fn bind() -> Result<Self, io::Error> {
+        Self::bind_port(Self::DEFAULT_PORT)
+    }
+
+    pub fn bind_port(port: u16) -> Result<Self, io::Error> {
+        let fd = unsafe { socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP) };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+
+        // Allow reuse so multiple nodes can run on the same machine (different binds)
+        let reuse: c_int = 1;
+        unsafe {
+            setsockopt(fd, SOL_SOCKET, 2, &reuse as *const _ as *const c_void, 4);
+        }
+
+        // Enable broadcast
+        let broadcast: c_int = 1;
+        unsafe {
+            setsockopt(fd, SOL_SOCKET, 6, &broadcast as *const _ as *const c_void, 4);
+        }
+
+        // Bind to 0.0.0.0:port
+        let addr = SockaddrIn {
+            sin_family: AF_INET as u16,
+            sin_port: port.to_be(),
+            sin_addr: 0, // INADDR_ANY
+            sin_zero: [0; 8],
+        };
+        let rc = unsafe {
+            bind(fd, &addr as *const _ as *const c_void, std::mem::size_of::<SockaddrIn>() as u32)
+        };
+        if rc < 0 {
+            let err = io::Error::last_os_error();
+            unsafe { close(fd) };
+            return Err(err);
+        }
+
+        // Set non-blocking so pump() can return quickly
+        unsafe {
+            libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
+        }
+
+        Ok(Self {
+            fd,
+            peer_addrs: HashMap::new(),
+        })
+    }
+
+    /// Receives a datagram if available. Returns (data, sender_addr).
+    pub fn recv(&mut self) -> Result<Option<(Vec<u8>, SockaddrIn)>, io::Error> {
+        let mut buf = vec![0u8; 8192];
+        let mut addr = SockaddrIn {
+            sin_family: 0,
+            sin_port: 0,
+            sin_addr: 0,
+            sin_zero: [0; 8],
+        };
+        let mut addrlen = std::mem::size_of::<SockaddrIn>() as u32;
+        let n = unsafe {
+            recvfrom(
+                self.fd,
+                buf.as_mut_ptr() as *mut c_void,
+                buf.len(),
+                0,
+                &mut addr as *mut _ as *mut c_void,
+                &mut addrlen,
+            )
+        };
+        if n < 0 {
+            let err = io::Error::last_os_error();
+            if err.kind() == io::ErrorKind::WouldBlock {
+                return Ok(None);
+            }
+            return Err(err);
+        }
+        buf.truncate(n as usize);
+        Ok(Some((buf, addr)))
+    }
+
+    /// Sends a datagram to the broadcast address.
+    pub fn broadcast(&self, data: &[u8]) -> Result<(), io::Error> {
+        let dst = SockaddrIn {
+            sin_family: AF_INET as u16,
+            sin_port: Self::DEFAULT_PORT.to_be(),
+            sin_addr: u32::from_be_bytes([255, 255, 255, 255]),
+            sin_zero: [0; 8],
+        };
+        let n = unsafe {
+            sendto(
+                self.fd,
+                data.as_ptr() as *const c_void,
+                data.len(),
+                0,
+                &dst as *const _ as *const c_void,
+                std::mem::size_of::<SockaddrIn>() as u32,
+            )
+        };
+        if n < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Sends a datagram to a specific peer (learned from an inbound frame).
+    pub fn send_to(&self, data: &[u8], addr: &SockaddrIn) -> Result<(), io::Error> {
+        let n = unsafe {
+            sendto(
+                self.fd,
+                data.as_ptr() as *const c_void,
+                data.len(),
+                0,
+                addr as *const _ as *const c_void,
+                std::mem::size_of::<SockaddrIn>() as u32,
+            )
+        };
+        if n < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
+    /// Looks up a peer's socket address by NodeID.
+    pub fn peer_addr(&self, peer_id: &NodeID) -> Option<SockaddrIn> {
+        self.peer_addrs.get(peer_id).copied()
+    }
+
+    /// Records a peer's address (called after receiving a frame from them).
+    pub fn learn_peer(&mut self, peer_id: NodeID, addr: SockaddrIn) {
+        self.peer_addrs.insert(peer_id, addr);
+    }
+
+    pub fn fd(&self) -> c_int {
+        self.fd
+    }
+}
+
+impl Drop for UdpBroadcastSocket {
+    fn drop(&mut self) {
+        unsafe { close(self.fd) };
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Mesh link manager
 // ---------------------------------------------------------------------------
 
@@ -466,6 +626,7 @@ pub struct MeshLink {
     raw_sockets: HashMap<c_int, RawEthernetSocket>, // keyed by ifindex
     multicast_sockets: Vec<MulticastSocket>,
     tunnels: HashMap<NodeID, IpTunnel>, // keyed by peer NodeID
+    udp_broadcast: Option<UdpBroadcastSocket>, // works without root
     /// This node's identity (ECDSA P-256 public key).
     local_node_id: NodeID,
     /// Outbound frames queued for sending (by the daemon event loop).
@@ -477,12 +638,19 @@ pub struct MeshLink {
     inbound_data_frames: VecDeque<MeshFrame>,
 }
 
+impl Default for MeshLink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MeshLink {
     pub fn new() -> Self {
         Self {
             raw_sockets: HashMap::new(),
             multicast_sockets: Vec::new(),
             tunnels: HashMap::new(),
+            udp_broadcast: None,
             local_node_id: NodeID([0u8; 64]),
             pending_frames: VecDeque::new(),
             mac_table: HashMap::new(),
@@ -525,6 +693,13 @@ impl MeshLink {
         Ok(())
     }
 
+    /// Enables UDP broadcast transport (works without root).
+    /// This is the default transport for development.
+    pub fn enable_udp_broadcast(&mut self) -> Result<(), io::Error> {
+        self.udp_broadcast = Some(UdpBroadcastSocket::bind()?);
+        Ok(())
+    }
+
     /// Returns all file descriptors to poll with `select()`/`poll()`.
     #[must_use]
     pub fn poll_fds(&self) -> Vec<c_int> {
@@ -537,6 +712,9 @@ impl MeshLink {
         }
         for tunnel in self.tunnels.values() {
             fds.push(tunnel.fd());
+        }
+        if let Some(udp) = &self.udp_broadcast {
+            fds.push(udp.fd());
         }
         fds
     }
@@ -619,7 +797,22 @@ impl MeshLink {
             }
         }
 
-        // Fallback: multicast broadcast
+        // Unicast: try UDP if we know the peer's address (learned from a previous inbound frame)
+        if let Some(udp) = &self.udp_broadcast {
+            if let Some(peer_addr) = udp.peer_addr(&dest) {
+                if udp.send_to(&wire, &peer_addr).is_ok() {
+                    return Ok(());
+                }
+            }
+        }
+
+        // Fallback: UDP broadcast (works without root)
+        if let Some(udp) = &self.udp_broadcast {
+            if udp.broadcast(&wire).is_ok() {
+                return Ok(());
+            }
+        }
+        // Last resort: multicast broadcast
         for mcast in &self.multicast_sockets {
             let _ = mcast.send(&wire);
         }
@@ -647,17 +840,14 @@ impl MeshLink {
             count += 1;
         }
 
-        // Multicast discovery packets — collect first
+        // Multicast discovery packets
         let mut disc_packets: Vec<Vec<u8>> = Vec::new();
         for mcast in &self.multicast_sockets {
             while let Some((data, _sender_ip)) = mcast.recv()? {
                 disc_packets.push(data);
             }
         }
-        // Discovery from multicast needs the sender's NodeID which we can't
-        // get from UDP alone. For multicast, we use the raw Ethernet src MAC
-        // as a fallback mapping. Skip for now — full discovery needs the
-        // sender's identity from the frame header wrapping.
+        let _ = disc_packets;
 
         // Tunnel packets
         let mut tunnel_frames: Vec<(NodeID, MeshFrame)> = Vec::new();
@@ -673,8 +863,21 @@ impl MeshLink {
             count += 1;
         }
 
-        // Suppress unused variable warnings
-        let _ = disc_packets;
+        // UDP broadcast frames — the default transport (works without root)
+        let mut udp_frames: Vec<MeshFrame> = Vec::new();
+        if let Some(udp) = &mut self.udp_broadcast {
+            while let Some((data, sender_addr)) = udp.recv()? {
+                if let Some(frame) = MeshFrame::from_wire(&data) {
+                    // Learn the sender's NodeID → IP mapping for unicast replies
+                    udp.learn_peer(frame.header.src, sender_addr);
+                    udp_frames.push(frame);
+                }
+            }
+        }
+        for frame in udp_frames {
+            self.process_inbound_frame(router, frame, 0);
+            count += 1;
+        }
 
         Ok(count)
     }

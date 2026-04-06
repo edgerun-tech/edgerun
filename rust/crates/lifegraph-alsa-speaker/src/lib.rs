@@ -19,7 +19,7 @@ const SNDRV_PCM_HW_PARAM_PERIOD_SIZE: usize = 13;
 const SNDRV_PCM_HW_PARAM_PERIODS: usize = 15;
 const SNDRV_PCM_HW_PARAM_BUFFER_SIZE: usize = 17;
 const SNDRV_MASK_MAX: usize = 256;
-const SNDRV_MASK_WORDS: usize = (SNDRV_MASK_MAX + 31) / 32;
+const SNDRV_MASK_WORDS: usize = SNDRV_MASK_MAX.div_ceil(32);
 const SNDRV_PCM_ACCESS_RW_INTERLEAVED: u32 = 3;
 const SNDRV_PCM_FORMAT_S16_LE: u32 = 2;
 const SNDRV_CTL_ELEM_IFACE_MIXER: i32 = 2;
@@ -326,7 +326,7 @@ fn scale_s16le_audio(bytes: &[u8], gain_percent: u16) -> Vec<u8> {
         let clamped = scaled.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
         out.extend_from_slice(&clamped.to_le_bytes());
     }
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         out.extend_from_slice(&bytes[bytes.len() - 1..]);
     }
     out
@@ -416,7 +416,7 @@ impl AlsaSpeakerBackend {
             let (min, max) = unsafe {
                 if is_integer {
                     let v = info.value.integer;
-                    (v.min as i64, v.max as i64)
+                    (v.min, v.max)
                 } else {
                     (0, 1)
                 }
@@ -498,7 +498,7 @@ impl AlsaSpeakerBackend {
             return Ok(None);
         };
         let volume_value = self.read_control_value(&volume_control)?;
-        let raw_current = unsafe { volume_value.value.integer.value[0] as i64 };
+        let raw_current = unsafe { volume_value.value.integer.value[0] };
         let span = (volume_control.max - volume_control.min).max(1);
         let percent =
             (((raw_current - volume_control.min).clamp(0, span) * 100) / span).clamp(0, 100) as u8;
@@ -735,7 +735,7 @@ pub fn discover_speakers() -> Result<Vec<AlsaSpeakerBackend>, CapabilityError> {
             default_sample_rate_hz: 48_000,
         });
     }
-    out.sort_by(|a, b| (a.card_index, a.device_index).cmp(&(b.card_index, b.device_index)));
+    out.sort_by_key(|a| (a.card_index, a.device_index));
     Ok(out)
 }
 

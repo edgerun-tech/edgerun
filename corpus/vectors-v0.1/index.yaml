@@ -183,7 +183,7 @@ cases:
 - id: query/02-view-authorized
   suite: query
   validator: validate_query
-- id: network/01-session-hello-valid
+- id: network/25-session-hello-valid
   suite: network
   validator: validate_network
 - id: network/02-route-advertisement-valid
@@ -195,10 +195,10 @@ cases:
 - id: crypto/02-tampered-command-signature
   suite: crypto
   validator: validate_crypto
-- id: query/01-controller-bounded-query-accept
+- id: query/29-controller-bounded-query-accept
   suite: query
   validator: validate_query
-- id: query/02-unbounded-query-policy-reject
+- id: query/30-unbounded-query-policy-reject
   suite: query
   validator: validate_query
 - id: query/03-delegated-query-accept
@@ -210,7 +210,7 @@ cases:
 - id: network/01-session-hello-accept
   suite: network
   validator: validate_network
-- id: network/02-session-hello-version-unsupported
+- id: network/26-session-hello-version-unsupported
   suite: network
   validator: validate_network
 - id: network/03-relay-target-mismatch-reject

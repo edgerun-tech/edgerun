@@ -750,23 +750,12 @@ pub fn validate_command_case(
             &semantic_hash_hex(command).unwrap_or_default(),
         ),
     );
+    // Replay cache is keyed by command_hash; command_id is stored as an idempotency hint only.
     if let Some(replay) = get_map(local_state, "replay_cache") {
-        if let Some(cached) = replay.get(&command_id) {
-            let same = match cached {
-                Value::Map(m) => string_value(m, "command_hash_fixture", "") == command_hash,
-                Value::String(s) => s == &command_hash,
-                _ => false,
-            };
-            if same {
-                return duplicate(
-                    ReasonCode::ReplayDetected,
-                    mapping([("command_hash", ystr(command_hash))]),
-                );
-            }
-            return reject(
+        if replay.contains_key(&command_hash) {
+            return duplicate(
                 ReasonCode::ReplayDetected,
                 mapping([("command_hash", ystr(command_hash))]),
-                empty_map(),
             );
         }
     }
@@ -2766,10 +2755,11 @@ mod tests {
             Value::Map(m) => m,
             _ => unreachable!(),
         };
+        // Replay cache is keyed by command_hash
         let state = match mapping([
             ("current_controller_set", seq([ystr("controller-a")])),
             ("local_node", ystr("node-a")),
-            ("replay_cache", mapping([("cmd-1", ystr("hash-1"))])),
+            ("replay_cache", mapping([("hash-1", ystr("cmd-1"))])),
         ]) {
             Value::Map(m) => m,
             _ => unreachable!(),
@@ -2780,7 +2770,8 @@ mod tests {
     }
 
     #[test]
-    fn command_replay_different_hash_is_rejected() {
+    fn command_different_hash_same_id_is_accepted() {
+        // command_id is only an idempotency hint — different hash means different command
         let semantic = match mapping([(
             "command",
             mapping([
@@ -2794,17 +2785,17 @@ mod tests {
             Value::Map(m) => m,
             _ => unreachable!(),
         };
+        // Replay cache has a different hash for the same command_id — should not affect this command
         let state = match mapping([
             ("current_controller_set", seq([ystr("controller-a")])),
             ("local_node", ystr("node-a")),
-            ("replay_cache", mapping([("cmd-1", ystr("hash-1"))])),
+            ("replay_cache", mapping([("hash-1", ystr("cmd-1"))])),
         ]) {
             Value::Map(m) => m,
             _ => unreachable!(),
         };
         let result = validate_command_case(&semantic, &state, &TestVerifier, &no_hash);
-        assert_eq!(result.verdict, Verdict::Reject);
-        assert_eq!(result.reason_code, Some(ReasonCode::ReplayDetected));
+        assert_eq!(result.verdict, Verdict::Accept);
     }
 
     #[test]

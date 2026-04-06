@@ -161,7 +161,7 @@ pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<
     digest_bytes.copy_from_slice(&digest);
     let sig = signer.sign_digest(&digest_bytes)?;
     event.signature = Some(Signature {
-        algorithm: 2, // ECDSA_P256_SHA256
+        algorithm: 1, // ECDSA_P256_SHA256
         value: sig.to_vec(),
     });
     Ok(())

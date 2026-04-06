@@ -18,54 +18,63 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
+          - target: x86_64-unknown-linux-gnu
+            artifact_name: lifegraphd-linux-amd64
+          - target: aarch64-unknown-linux-gnu
+            artifact_name: lifegraphd-linux-arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          go-version-file: go/go.mod
-          cache-dependency-path: go/go.sum
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Build release binary
         run: |
           mkdir -p dist
-          cd go
-          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
-            go build -trimpath -ldflags='-s -w' \
-            -o ../dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/lifegraphd
+          cd rust
+          CROSS_COMPILE_TARGET=${{ matrix.target }} cargo build --release -p lifegraph-node --bin lifegraphd --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/lifegraphd ../dist/${{ matrix.artifact_name }}
 
       - name: Generate release checksum
         run: |
           cd dist
-          sha256sum lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} > lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+          sha256sum ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Generate SBOM
         run: |
-          syft packages file:dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }} -o spdx-json=dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json
+          syft packages file:dist/${{ matrix.artifact_name }} -o spdx-json=dist/${{ matrix.artifact_name }}.sbom.spdx.json
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: ${{ matrix.artifact_name }}
           path: |
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json
+            dist/${{ matrix.artifact_name }}
+            dist/${{ matrix.artifact_name }}.sha256
+            dist/${{ matrix.artifact_name }}.sbom.spdx.json
           if-no-files-found: error
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
-            dist/lifegraphd-${{ matrix.goos }}-${{ matrix.goarch }}.sbom.spdx.json
+            dist/${{ matrix.artifact_name }}
+            dist/${{ matrix.artifact_name }}.sha256
+            dist/${{ matrix.artifact_name }}.sbom.spdx.json
