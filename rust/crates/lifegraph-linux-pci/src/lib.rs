@@ -1,4 +1,7 @@
 use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::{
+    is_pci_address, parse_hex_u16, parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, read_trimmed,
+};
 use lifegraph_pci::{default_pci_descriptor, PciDeviceInfo, PciInventory};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -29,30 +32,6 @@ pub struct LinuxPciBackend {
     pub root_path: PathBuf,
 }
 
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
-fn parse_hex_u16(text: Option<String>) -> Option<u16> {
-    text.and_then(|v| u16::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_hex_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| u32::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_hex_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| u8::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| v.parse::<u32>().ok())
-}
-
-fn parse_i32(text: Option<String>) -> Option<i32> {
-    text.and_then(|v| v.parse::<i32>().ok())
-}
-
 fn infer_parent_address(path: &Path) -> Option<String> {
     let canonical = fs::canonicalize(path).ok()?;
     let parent = canonical.parent()?;
@@ -62,11 +41,6 @@ fn infer_parent_address(path: &Path) -> Option<String> {
     } else {
         None
     }
-}
-
-fn is_pci_address(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    bytes.len() == 12 && bytes[4] == b':' && bytes[7] == b':' && bytes[10] == b'.'
 }
 
 pub fn discover_pci_devices() -> Result<Vec<LinuxPciDevice>, CapabilityError> {
@@ -177,23 +151,11 @@ impl PciInventory for LinuxPciBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "lifegraph-linux-pci-test-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&base).unwrap();
-        base
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_pci_device_from_sysfs() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-pci");
         fs::create_dir_all(root.join("0000:01:00.0")).unwrap();
         fs::write(root.join("0000:01:00.0/vendor"), "0x144d\n").unwrap();
         fs::write(root.join("0000:01:00.0/device"), "0xa80a\n").unwrap();

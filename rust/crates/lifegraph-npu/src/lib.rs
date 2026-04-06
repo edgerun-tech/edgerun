@@ -1,7 +1,11 @@
+// Re-export types that downstream NPU backends need to implement traits.
+pub use lifegraph_capabilities::{
+    CapabilityDescriptor, CapabilityError, CapabilityProvider,
+};
+
 use lifegraph_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityRole,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

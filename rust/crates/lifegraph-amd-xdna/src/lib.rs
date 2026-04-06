@@ -1,11 +1,10 @@
-use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use lifegraph_linux_npu::{discover_linux_npus_in, LinuxNpuInfo};
+use lifegraph_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
 use lifegraph_npu::{
-    default_npu_descriptor, validate_npu_workload_request, NpuDevice, NpuExecutionMode, NpuInfo,
-    NpuWorkloadRequest, NpuWorkloadResult,
+    CapabilityDescriptor, CapabilityError, CapabilityProvider, default_npu_descriptor,
+    validate_npu_workload_request, NpuDevice, NpuExecutionMode, NpuInfo, NpuWorkloadRequest,
+    NpuWorkloadResult,
 };
-use std::collections::BTreeSet;
-use std::fs;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 const AMD_VENDOR_ID: u32 = 0x1022;
@@ -13,7 +12,6 @@ const AMD_VENDOR_ID: u32 = 0x1022;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AmdXdnaGeneration {
     PhoenixOrHawkPoint,
-    StrixPointOrLater,
     Unknown,
 }
 
@@ -30,10 +28,6 @@ pub struct AmdXdnaBackend {
     pub info: AmdXdnaInfo,
 }
 
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
-}
-
 fn classify_generation(info: &LinuxNpuInfo) -> AmdXdnaGeneration {
     let Some(device_id) = info.device_id else {
         return AmdXdnaGeneration::Unknown;
@@ -44,18 +38,7 @@ fn classify_generation(info: &LinuxNpuInfo) -> AmdXdnaGeneration {
     }
 }
 
-fn amdxdna_sysfs_path(info: &LinuxNpuInfo) -> Option<PathBuf> {
-    let sys = &info.sysfs_path;
-    if sys
-        .file_name()
-        .is_some_and(|v| v.to_string_lossy().starts_with("accel"))
-    {
-        Some(sys.clone())
-    } else {
-        None
-    }
-}
-
+#[must_use]
 pub fn is_amd_xdna_candidate(info: &LinuxNpuInfo) -> bool {
     info.vendor_id == Some(AMD_VENDOR_ID)
         && (info.driver_name.as_deref() == Some("amdxdna")
@@ -80,7 +63,7 @@ pub fn discover_amd_xdna_devices_in(
     accel_dev_root: &Path,
 ) -> Result<Vec<AmdXdnaInfo>, CapabilityError> {
     let mut out = Vec::new();
-    let mut seen = BTreeSet::new();
+    let mut seen = HashSet::new();
     for info in discover_linux_npus_in(accel_class_root, pci_root, accel_dev_root)? {
         if !is_amd_xdna_candidate(&info) {
             continue;
@@ -93,13 +76,21 @@ pub fn discover_amd_xdna_devices_in(
             continue;
         }
         let generation = classify_generation(&info);
-        let mut supported_execution_modes = vec![NpuExecutionMode::Inference];
-        if info.character_device.is_some() {
-            supported_execution_modes.push(NpuExecutionMode::Compilation);
-            supported_execution_modes.push(NpuExecutionMode::Preprocessing);
-        }
+        let supported_execution_modes = if info.character_device.is_some() {
+            vec![
+                NpuExecutionMode::Inference,
+                NpuExecutionMode::Compilation,
+                NpuExecutionMode::Preprocessing,
+            ]
+        } else {
+            vec![NpuExecutionMode::Inference]
+        };
         out.push(AmdXdnaInfo {
-            amdxdna_sysfs_path: amdxdna_sysfs_path(&info),
+            amdxdna_sysfs_path: info
+                .sysfs_path
+                .file_name()
+                .is_some_and(|v| v.to_string_lossy().starts_with("accel"))
+                .then(|| info.sysfs_path.clone()),
             generation,
             linux: info,
             supported_execution_modes,
@@ -117,12 +108,17 @@ impl CapabilityProvider for AmdXdnaBackend {
 
 impl NpuDevice for AmdXdnaBackend {
     fn npu_info(&self) -> Result<NpuInfo, CapabilityError> {
-        let firmware_version = self.info.linux.firmware_version.clone().or_else(|| {
-            self.info
-                .amdxdna_sysfs_path
-                .as_ref()
-                .and_then(|p| read_trimmed(&p.join("fw_version")))
-        });
+        let firmware_version = self
+            .info
+            .linux
+            .firmware_version
+            .clone()
+            .or_else(|| {
+                self.info
+                    .amdxdna_sysfs_path
+                    .as_ref()
+                    .and_then(|p| read_trimmed(&p.join("fw_version")))
+            });
         Ok(NpuInfo {
             provider: "amd-xdna".into(),
             instance_id: self.info.linux.instance_id.clone(),
@@ -149,7 +145,7 @@ impl NpuDevice for AmdXdnaBackend {
         validate_npu_workload_request(request)?;
         if self.info.linux.character_device.is_none() {
             return Err(CapabilityError::Unsupported(
-                "amd-xdna device is not exposed via /dev/accel yet",
+                "amd-xdna device is not exposed via /dev/accel",
             ));
         }
         Err(CapabilityError::Unsupported(
@@ -161,17 +157,8 @@ impl NpuDevice for AmdXdnaBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_npu::temp_root;
+    use std::fs;
 
     #[test]
     fn filters_for_amd_xdna() {

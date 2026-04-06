@@ -3,6 +3,7 @@ use lifegraph_input::{
     default_input_descriptor, validate_event_read_request, InputDevice, InputDeviceInfo,
     InputDeviceKind, InputEventKind, InputEventRecord,
 };
+use lifegraph_linux_sysfs::read_trimmed;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::os::fd::AsRawFd;
@@ -70,11 +71,7 @@ pub struct EvdevInputBackend {
     file: File,
 }
 
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
-}
-
-fn parse_uevent_map(path: &Path) -> Vec<(String, String)> {
+fn parse_uevent_list(path: &Path) -> Vec<(String, String)> {
     let Some(raw) = fs::read_to_string(path).ok() else {
         return Vec::new();
     };
@@ -176,7 +173,7 @@ pub fn discover_evdev_devices_in(root: &Path) -> Result<Vec<EvdevDeviceInfo>, Ca
         let device_name = read_trimmed(&device_path.join("name")).unwrap_or_else(|| name.clone());
         let physical_path = read_trimmed(&device_path.join("phys"));
         let unique_id = read_trimmed(&device_path.join("uniq")).filter(|s| !s.is_empty());
-        let uevent = parse_uevent_map(&device_path.join("uevent"));
+        let uevent = parse_uevent_list(&device_path.join("uevent"));
         let mut bus_type = None;
         let mut vendor_id = None;
         let mut product_id = None;
@@ -299,17 +296,7 @@ impl InputDevice for EvdevInputBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn parse_product_id_splits_fields() {

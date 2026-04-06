@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use blake3::Hasher;
+use sha2::{Digest, Sha256};
 use lifegraph_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
@@ -152,15 +152,15 @@ impl SimplePolicyEngine {
         now: SystemTime,
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
-        let mut hasher = Hasher::new();
-        hasher.update(&request.request_id);
-        hasher.update(descriptor.provider_name.as_bytes());
-        hasher.update(descriptor.provider_instance_id.as_bytes());
-        hasher.update(&self.nonce.to_le_bytes());
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        hasher.update(&now.as_secs().to_le_bytes());
-        hasher.update(&now.subsec_nanos().to_le_bytes());
-        hasher.finalize().as_bytes().to_vec()
+        let mut h = Sha256::new();
+        h.update(&request.request_id);
+        h.update(descriptor.provider_name.as_bytes());
+        h.update(descriptor.provider_instance_id.as_bytes());
+        h.update(&self.nonce.to_le_bytes());
+        h.update(&now.as_secs().to_le_bytes());
+        h.update(&now.subsec_nanos().to_le_bytes());
+        h.finalize().to_vec()
     }
 
     fn effective_requested_operations(
@@ -666,35 +666,33 @@ fn requires_user_presence(
         return true;
     }
 
-    let modalities = descriptor
+    let role = CapabilityRole::try_from(descriptor.role).unwrap_or(CapabilityRole::Unspecified);
+
+    let sensitive_modality = descriptor
         .modalities
         .iter()
         .filter_map(|value| CapabilityModality::try_from(*value).ok())
-        .collect::<Vec<_>>();
-    let operations = operations
+        .any(|modality| {
+            matches!(
+                modality,
+                CapabilityModality::Auditory
+                    | CapabilityModality::Visual
+                    | CapabilityModality::Biometric
+                    | CapabilityModality::Touch
+            )
+        });
+    let sensitive_operation = operations
         .iter()
         .filter_map(|value| CapabilityOperation::try_from(*value).ok())
-        .collect::<Vec<_>>();
-    let role = CapabilityRole::try_from(descriptor.role).unwrap_or(CapabilityRole::Unspecified);
-
-    let sensitive_modality = modalities.iter().any(|modality| {
-        matches!(
-            modality,
-            CapabilityModality::Auditory
-                | CapabilityModality::Visual
-                | CapabilityModality::Biometric
-                | CapabilityModality::Touch
-        )
-    });
-    let sensitive_operation = operations.iter().any(|operation| {
-        matches!(
-            operation,
-            CapabilityOperation::Capture
-                | CapabilityOperation::Control
-                | CapabilityOperation::Render
-                | CapabilityOperation::Sign
-        )
-    });
+        .any(|operation| {
+            matches!(
+                operation,
+                CapabilityOperation::Capture
+                    | CapabilityOperation::Control
+                    | CapabilityOperation::Render
+                    | CapabilityOperation::Sign
+            )
+        });
 
     (sensitive_modality || matches!(role, CapabilityRole::Input | CapabilityRole::SecureElement))
         && sensitive_operation
@@ -723,10 +721,10 @@ fn duration_from_prost(value: &ProstDuration) -> Option<Duration> {
 }
 
 fn revocation_id_for(grant_id: &[u8], reason: &RevocationReason) -> Vec<u8> {
-    let mut hasher = Hasher::new();
-    hasher.update(grant_id);
-    hasher.update(reason.as_str().as_bytes());
-    hasher.finalize().as_bytes().to_vec()
+    let mut h = Sha256::new();
+    h.update(grant_id);
+    h.update(reason.as_str().as_bytes());
+    h.finalize().to_vec()
 }
 
 #[cfg(test)]

@@ -16,7 +16,6 @@ This repo is active, but it is not a polished end-user product yet.
 What is real today:
 - a multi-crate Rust workspace for Lifegraph core types, protocol bindings, remote capability plumbing, and hardware capability backends
 - runnable Linux hardware inspection tools for PCI, USB, network interfaces, and Wi-Fi
-- an experimental `lifegraph-agent` daemon/bootstrap path backed by SurrealDB KV and blob storage
 - protocol/schema assets under `proto/`
 
 What is still rough:
@@ -29,7 +28,6 @@ What is still rough:
 - `rust/` — main workspace and crates
 - `rust/crates/lifegraph-core` — core protocol/domain types
 - `rust/crates/lifegraph-proto` — generated protobuf bindings/build glue
-- `rust/crates/lifegraph-agent` — experimental agent daemon and storage wiring
 - `rust/crates/lifegraph-linux-*` — Linux capability backends and CLI tools
 - `proto/` — protobuf definitions
 - `docs/` — notes and design docs
@@ -73,21 +71,6 @@ Verified in this environment:
 - `linux-wifi-tool list | state <ifname> | scan <ifname> | ap-state <ifname> | ap-start <ifname> <ssid> [freq_mhz] | ap-stop <ifname> | enable <ifname> | disable <ifname> | block <ifname>`
 
 Be careful with commands that change interface/admin/power state; the `list`, `inventory`, `state`, and `scan` flows are the safest starting points.
-
-## Experimental agent daemon
-
-There is also an experimental Rust agent daemon:
-
-```bash
-cd rust
-cargo run -q -p lifegraph-agent --bin lifegraph-agent
-```
-
-By default it initializes under `/data/lifegraph-agent`. You can override paths and identifiers with environment variables such as:
-- `LIFEGRAPH_AGENT_DATA_ROOT`
-- `LIFEGRAPH_AGENT_ID`
-- `LIFEGRAPH_AGENT_NAMESPACE`
-- `LIFEGRAPH_AGENT_DATABASE`
 
 ## Remote capability socket demo
 

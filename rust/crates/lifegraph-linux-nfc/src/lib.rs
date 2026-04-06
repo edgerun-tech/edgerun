@@ -1,4 +1,5 @@
 use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::read_trimmed;
 use lifegraph_nfc::{default_nfc_descriptor, NfcDevice, NfcDeviceInfo, NfcPowerState};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,10 +15,6 @@ pub struct LinuxNfcAdapter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinuxNfcBackend {
     pub adapter: LinuxNfcAdapter,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
 }
 
 pub fn discover_nfc_adapters() -> Result<Vec<LinuxNfcAdapter>, CapabilityError> {
@@ -78,23 +75,11 @@ impl NfcDevice for LinuxNfcBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "lifegraph-linux-nfc-test-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&base).unwrap();
-        base
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_nfc_adapter_from_sysfs() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-nfc");
         fs::create_dir_all(root.join("nfc0/power")).unwrap();
         fs::write(root.join("nfc0/power/control"), "on\n").unwrap();
         fs::write(root.join("nfc0/protocols"), "iso14443\n").unwrap();

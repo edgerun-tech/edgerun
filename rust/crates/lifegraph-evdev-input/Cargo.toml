@@ -8,3 +8,4 @@ publish.workspace = true
 [dependencies]
 lifegraph-capabilities = { path = "../lifegraph-capabilities" }
 lifegraph-input = { path = "../lifegraph-input" }
+lifegraph-linux-sysfs = { path = "../lifegraph-linux-sysfs" }

@@ -934,7 +934,7 @@ Closed symbolic set for a given schema family version.
 All structured records in this section follow these rules unless the family says otherwise:
 
 - Field order in canonical representation is the schema order defined here.
-- Absent optional fields are omitted in semantic representation and become `null` at CSE slot time.
+- Absent optional fields are omitted from protobuf wire encoding.
 - Repeated fields preserve order exactly as supplied.
 - Core records MUST NOT use arbitrary key-value maps for authority-bearing semantics.
 - Unknown required fields invalidate the record.
@@ -1365,13 +1365,14 @@ Canonicalization makes these things unambiguous:
 
 This section is normative.
 
-A conforming implementation **MUST NOT** hash or sign raw protobuf wire bytes for protocol meaning.
+Canonical bytes for every protocol message **are** the deterministic protobuf wire encoding of the normalized message. No intermediate encoding layer is required.
 
 ### 17.2 Required algorithms in v0
 
 Core v0 requires:
-- hash / digest: **BLAKE3-256**
-- signature: **Ed25519**
+- hash / digest: **SHA-256**
+- signature: **ECDSA P-256 with SHA-256**
+- protobuf serialization: **prost** semantics (ascending field number order, deterministic varint encoding)
 
 ### 17.3 Identifier classes
 
@@ -1406,7 +1407,7 @@ Examples:
 Recommended:
 
 ```text
-identity_id = BLAKE3-256(
+identity_id = SHA256(
   "lifegraph:v0:id:identity" || 0x00 ||
   uint32_be(key_algorithm) || 0x00 ||
   public_key_bytes
@@ -1415,118 +1416,65 @@ identity_id = BLAKE3-256(
 
 Recommended, not universally mandatory, but once chosen for a deployment it should remain stable.
 
-### 17.5 Canonical semantic encoding v0
+### 17.5 Canonical protobuf encoding v0
 
-The canonical semantic encoding is:
+The canonical encoding for every protocol message is its **protobuf wire format**, produced with deterministic semantics:
 
-**CSE-v0** = deterministic CBOR arrays over the semantic message tree.
+- Fields are emitted in ascending field number order.
+- Repeated fields preserve element order.
+- Absent optional fields are omitted from the wire encoding.
+- Oneof fields emit only the selected variant.
+- Unknown wire fields are dropped and never participate in canonicalization.
 
-Used only for:
+`prost` produces this output deterministically in Rust. Implementations in other languages **MUST** produce byte-identical output for the same semantic input.
+
+Used for:
 - hashing
 - signing
 - object identity for structured logical objects
 
-Not required as transport encoding.
+### 17.6 Deterministic protobuf requirement
 
-### 17.6 Deterministic CBOR requirement
+A conforming implementation **MUST** produce identical protobuf wire bytes for any protocol message given the same semantic content. This is the single canonicalization requirement.
 
-CSE-v0 uses deterministic CBOR with shortest-length integer representation and deterministic lengths.
-
-To avoid map-order ambiguity, protocol messages use **positional arrays**, not maps.
-
-### 17.7 Message-to-CSE mapping
-
-For every structured protocol message:
-
-```text
-CSE(message_type, message_value, mode) = deterministic_cbor(array_slots)
-```
-
-Slot index corresponds to the message’s **protobuf field number**.
-
-Therefore:
+To guarantee determinism:
 - field numbers are part of cryptographic semantics
-- field numbers MUST NEVER be renumbered
-- field numbers MUST NEVER be reused
-- new fields MUST use new higher field numbers
+- field numbers **MUST NEVER** be renumbered
+- field numbers **MUST NEVER** be reused
+- new fields **MUST** use new higher field numbers
+- enum values use their numeric wire form
+- integers use protobuf varint encoding
 
-### 17.8 Slot rules
+### 17.7 Proto-normalized message
 
-For a message with highest defined field number `N`, the canonical array has exactly `N` slots.
+For any protocol message `M`, its canonical form is:
 
-For each field number `i`:
-- absent optional field => `null`
-- repeated empty => `[]`
-- singular present => canonical value
-- nested message => nested CSE
-- unselected oneof member => `null`
-- selected oneof member => canonical value
-
-### 17.9 Presence semantics
-
-CSE-v0 preserves distinctions:
-- `null` ≠ `0`
-- `null` ≠ `false`
-- `null` ≠ empty bytes
-- `null` ≠ empty string
-- `null` ≠ `[]`
-
-### 17.10 Scalar canonical values
-
-- Bool => CBOR boolean
-- Unsigned integer => CBOR unsigned integer
-- Signed integer => CBOR signed integer
-- Enum => CBOR unsigned integer using numeric enum value
-- Bytes => CBOR byte string
-- Text => CBOR text string using UTF-8 after NFC normalization
-
-No global line-ending normalization is implied.
-
-### 17.11 Well-known canonical forms
-
-#### Timestamp
-Encoded as:
 ```text
-[ seconds, nanos ]
+canonical_bytes = protobuf_encode(normalize(M))
 ```
 
-#### Duration
-Encoded as:
-```text
-[ seconds, nanos ]
-```
+Where `normalize(M)` produces a message instance with:
+- absent optional fields set to the language's "not present" representation
+- repeated empty fields encoded as empty lists (not omitted from the semantic value)
+- enum values mapped to their numeric wire value
 
-### 17.12 Repeated fields
-
-Repeated fields are encoded as CBOR arrays preserving supplied order.
-
-If a repeated field is empty, it canonicalizes to `[]`, not `null`.
-
-### 17.13 Unknown fields
-
-Canonicalization is defined over the validated semantic message, not raw wire bytes.
-
-Unknown wire fields MUST NOT participate in canonicalization.
-
-If a message version cannot be safely interpreted because of unknown required semantics, the message MUST be rejected before cryptographic acceptance.
-
-### 17.14 Signable form vs full form
+### 17.8 Signable form vs full form
 
 For any signed record family:
 
 #### Signable form
-Canonical form with `signature = null`.
+The protocol message with `signature` set to absent / `null`.
 
 Used for:
 - hashing for signature purposes
 - record hash derivation
 
 #### Full form
-Canonical form with actual signature present.
+The protocol message with actual signature present.
 
 Used when the signed record itself is stored as a logical object.
 
-### 17.15 Domain separation
+### 17.9 Domain separation
 
 Every cryptographic input uses an ASCII domain tag followed by a zero byte separator.
 
@@ -1550,13 +1498,13 @@ Examples:
 - `lifegraph:v0:sig:revocation-record`
 - `lifegraph:v0:sig:snapshot-descriptor`
 
-### 17.16 Record hash derivation
+### 17.10 Record hash derivation
 
 For every signable family:
 
 ```text
-record_hash = BLAKE3-256(
-  hash_domain_tag || 0x00 || CSE(signable_form)
+record_hash = SHA256(
+  hash_domain_tag || 0x00 || protobuf_encode(signable_form)
 )
 ```
 
@@ -1574,34 +1522,34 @@ Applies to at minimum:
 - IdentityRecord when signed
 - AssuranceClaim when signed
 
-### 17.17 Signature derivation
+### 17.11 Signature derivation
 
 ```text
 sig_input = sig_domain_tag || 0x00 || record_hash_bytes
-signature = Ed25519_sign(private_key, sig_input)
+signature = ECDSA_P256_SHA256_sign(private_key, sig_input)
 ```
 
 Verification:
 
 ```text
-Ed25519_verify(public_key, sig_input, signature)
+ECDSA_P256_SHA256_verify(public_key, sig_input, signature)
 ```
 
-### 17.18 Family-specific hash meanings
+### 17.12 Family-specific hash meanings
 
 - `event_hash = hash(EventEnvelope_signable_form)`
 - `command_hash = hash(CommandEnvelope_signable_form)`
 - `delegation_hash = hash(DelegationRecord_signable_form)`
 - `revocation_hash = hash(RevocationRecord_signable_form)`
 
-### 17.19 Logical object canonicalization classes
+### 17.13 Logical object canonicalization classes
 
 Every logical object declares a `canonicalization_id`.
 
 v0 recognizes:
 
-#### `proto-cse-v0:<full_message_name>:<schema_version>`
-Canonical bytes are `CSE(full_form_of_message)`.
+#### `proto-v0:<full_message_name>:<schema_version>`
+Canonical bytes are `protobuf_encode(full_form_of_message)`.
 
 #### `raw-bytes-v0`
 Canonical bytes are exact raw bytes.
@@ -1609,20 +1557,20 @@ Canonical bytes are exact raw bytes.
 #### `utf8-nfc-v0`
 Canonical bytes are UTF-8 after NFC normalization.
 
-### 17.20 Logical object identity derivation
+### 17.14 Logical object identity derivation
 
 ```text
-object_id = BLAKE3-256(
+object_id = SHA256(
   "lifegraph:v0:object" || 0x00 ||
   utf8(canonicalization_id) || 0x00 ||
   canonical_bytes
 )
 ```
 
-### 17.21 Stored representation digest and identity
+### 17.15 Stored representation digest and identity
 
 ```text
-representation_digest = BLAKE3-256(
+representation_digest = SHA256(
   "lifegraph:v0:representation-bytes" || 0x00 || stored_representation_bytes
 )
 ```
@@ -1632,29 +1580,29 @@ For the simple v0 profile:
 representation_id = representation_digest.value
 ```
 
-### 17.22 Chunk digest
+### 17.16 Chunk digest
 
 ```text
-chunk_digest = BLAKE3-256(
+chunk_digest = SHA256(
   "lifegraph:v0:chunk-bytes" || 0x00 || chunk_bytes
 )
 ```
 
-### 17.23 Signature field handling in object identity
+### 17.17 Signature field handling in object identity
 
 If a signable record is itself stored as a logical object:
-- `record_hash` uses signable form with `signature = null`
+- `record_hash` uses signable form with `signature` absent
 - `object_id` uses full form with actual signature present
 
-### 17.24 Canonical field evolution rule
+### 17.18 Canonical field evolution rule
 
-Because CSE-v0 uses protobuf field-number slots:
+Because canonicalization uses protobuf field numbers:
 - field numbers are permanent
 - field numbers are cryptographically significant
-- adding a field means adding a new higher-number slot
+- adding a field means adding a new higher-number field
 - removing a field from meaning requires deprecation, not renumbering
 
-### 17.25 Minimal family map
+### 17.19 Minimal family map
 
 Signable families:
 - `IdentityRecord`
@@ -1677,11 +1625,11 @@ Non-signable but canonicalizable structured object families:
 - `ChunkManifest`
 - structured payload messages stored as objects
 
-### 17.26 Conformance requirement
+### 17.20 Conformance requirement
 
-A conforming implementation **MUST** be able to produce identical canonical bytes for the same semantic record as any other conforming implementation.
+A conforming implementation **MUST** be able to produce identical protobuf wire bytes for the same semantic record as any other conforming implementation.
 
-### 17.27 Test vectors
+### 17.21 Test vectors
 
 Before implementation is considered stable, the protocol **SHOULD** publish cross-language test vectors for at minimum:
 - one EventEnvelope
@@ -1695,7 +1643,7 @@ Before implementation is considered stable, the protocol **SHOULD** publish cros
 
 Each test vector should include:
 - semantic message content
-- canonical CBOR hex
+- canonical protobuf wire hex
 - record hash hex
 - signature input hex
 - signature hex
@@ -2082,7 +2030,7 @@ Mandatory categories:
 ### 19.4.1 Minimum interoperable profile
 
 A minimal conforming v0 implementation MUST support:
-- CSE-v0 canonicalization
+- protobuf-based canonicalization
 - v0 hash and signature derivation rules
 - stream append validation
 - delegation chain validation
@@ -2471,7 +2419,8 @@ enum ExecutionClass {
 message Digest {
   enum Algorithm {
     DIGEST_ALGORITHM_UNSPECIFIED = 0;
-    DIGEST_ALGORITHM_BLAKE3_256 = 1;
+    DIGEST_ALGORITHM_SHA256 = 1;
+    DIGEST_ALGORITHM_SHA256 = 1;
     DIGEST_ALGORITHM_SHA256 = 2;
   }
 

@@ -12,6 +12,52 @@ use lifegraph_yubikey::{
     YubiKeySignatureAlgorithm, YubiKeySigningKey,
 };
 
+// ---------------------------------------------------------------------------
+// Mesh identity constants — ECDSA P256 is the universal algorithm
+// ---------------------------------------------------------------------------
+
+/// Size of an uncompressed P-256 public key (x || y, no 0x04 prefix).
+pub const MESH_PUBLIC_KEY_LENGTH: usize = 64;
+
+/// Size of an ECDSA P-256 signature (r || s, 32 bytes each).
+pub const MESH_SIGNATURE_LENGTH: usize = 64;
+
+/// A node's identity in the mesh.
+///
+/// This is the raw uncompressed ECDSA P-256 public key (64 bytes: x || y).
+/// The same format is produced by TPMs, YubiKeys, Android Keystore,
+/// and iOS Secure Enclave — making it the universal hardware-backed identity.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NodeID(pub [u8; MESH_PUBLIC_KEY_LENGTH]);
+
+impl NodeID {
+    /// Short hex display for logging/UI (first 8 hex chars).
+    pub fn short(&self) -> String {
+        lifegraph_core::util::bytes_to_hex(&self.0[..4])
+    }
+
+    /// Full hex representation.
+    pub fn to_hex(&self) -> String {
+        lifegraph_core::util::bytes_to_hex(&self.0)
+    }
+}
+
+impl core::fmt::Debug for NodeID {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "NodeID({})", self.short())
+    }
+}
+
+impl AsRef<[u8]> for NodeID {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hardware signature algorithm — existing types
+// ---------------------------------------------------------------------------
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HardwareProviderKind {
     Tpm,
@@ -30,6 +76,20 @@ pub enum HardwareSignatureAlgorithm {
     Eddsa,
     Opaque(String),
 }
+
+impl HardwareSignatureAlgorithm {
+    /// Returns `true` if this is ECDSA P-256 with SHA-256 — the universal
+    /// mesh algorithm supported by every secure enclave.
+    #[must_use]
+    pub fn is_ecdsa_p256(&self) -> bool {
+        matches!(self, Self::EcdsaP256Sha256)
+    }
+}
+
+/// The canonical mesh signing algorithm — ECDSA P-256 SHA-256.
+/// Every secure hardware provider supports this, producing a 64-byte
+/// public key (NodeID) and 64-byte signature.
+pub const MESH_ALGORITHM: HardwareSignatureAlgorithm = HardwareSignatureAlgorithm::EcdsaP256Sha256;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HardwareAssuranceStrength {
@@ -74,6 +134,32 @@ pub struct HardwareKeyInfo {
     pub attestation: Vec<Vec<u8>>,
     pub assurance_level: HardwareAssuranceLevel,
     pub biometric_state: BiometricState,
+}
+
+impl HardwareKeyInfo {
+    /// Extracts the `NodeID` from this key's public key.
+    ///
+    /// Returns `None` if the key is not ECDSA P-256 or the public key
+    /// is not exactly 64 bytes (uncompressed x || y, no 0x04 prefix).
+    #[must_use]
+    pub fn node_id(&self) -> Option<NodeID> {
+        if !self.algorithm.is_ecdsa_p256() {
+            return None;
+        }
+        if self.public_key.len() != MESH_PUBLIC_KEY_LENGTH {
+            return None;
+        }
+        let mut bytes = [0u8; MESH_PUBLIC_KEY_LENGTH];
+        bytes.copy_from_slice(&self.public_key);
+        Some(NodeID(bytes))
+    }
+
+    /// Returns `true` if this key is suitable for mesh use
+    /// (ECDSA P-256 with a valid 64-byte public key).
+    #[must_use]
+    pub fn is_mesh_capable(&self) -> bool {
+        self.node_id().is_some()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -151,6 +237,68 @@ pub trait HardwareSigningKey {
     fn key_info(&self) -> Result<HardwareKeyInfo, HardwareSigningError>;
 
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, HardwareSigningError>;
+}
+
+// ---------------------------------------------------------------------------
+// Mesh signer — digest-only interface for the mesh daemon
+// ---------------------------------------------------------------------------
+
+/// A signer that the mesh daemon uses to sign outbound frames.
+///
+/// The private key **never leaves secure hardware**.  The daemon only:
+/// 1. Holds the public key (`NodeID`)
+/// 2. Hashes the frame preimage with SHA-256
+/// 3. Sends the 32-byte digest to hardware → gets back 64-byte signature
+pub trait MeshSigner {
+    /// This node's identity (ECDSA P-256 public key, 64 bytes: x || y).
+    fn node_id(&self) -> NodeID;
+
+    /// Signs a pre-hashed 32-byte SHA-256 digest.
+    /// Returns exactly 64 bytes: r (32 bytes) || s (32 bytes).
+    fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError>;
+}
+
+/// Wraps any `HardwareSigningKey` as a `MeshSigner`.
+/// The hardware performs all signing internally — the daemon only sends
+/// the SHA-256 digest of the frame preimage.
+pub struct HardwareMeshSigner<K: HardwareSigningKey> {
+    key: K,
+    node_id: NodeID,
+}
+
+impl<K: HardwareSigningKey> HardwareMeshSigner<K> {
+    pub fn new(key: K) -> Result<Self, HardwareSigningError> {
+        let info = key.key_info()?;
+        let node_id = info.node_id().ok_or(HardwareSigningError::Provider(
+            "hardware key is not an ECDSA P-256 key".into(),
+        ))?;
+        Ok(Self { key, node_id })
+    }
+
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+}
+
+impl<K: HardwareSigningKey> MeshSigner for HardwareMeshSigner<K> {
+    fn node_id(&self) -> NodeID {
+        self.node_id
+    }
+
+    fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
+        // The hardware key signs the 32-byte digest directly.
+        // For ECDSA P-256, the signature is exactly 64 bytes (r || s).
+        let sig = self.key.sign_message(digest)?;
+        if sig.len() != MESH_SIGNATURE_LENGTH {
+            return Err(HardwareSigningError::Provider(format!(
+                "hardware returned {}-byte signature, expected {}",
+                sig.len(), MESH_SIGNATURE_LENGTH
+            )));
+        }
+        let mut out = [0u8; MESH_SIGNATURE_LENGTH];
+        out.copy_from_slice(&sig);
+        Ok(out)
+    }
 }
 
 pub fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
@@ -547,6 +695,68 @@ mod tests {
     use lifegraph_tpm::{TpmAssuranceLevel, TpmKeyInfo, TpmSignatureAlgorithm};
     use lifegraph_yubikey::{YubiKeyAssuranceLevel, YubiKeyKeyInfo, YubiKeySignatureAlgorithm};
 
+    #[test]
+    fn node_id_short_display() {
+        let mut bytes = [0u8; 64];
+        bytes[0] = 0xaa;
+        bytes[1] = 0xbb;
+        bytes[2] = 0xcc;
+        bytes[3] = 0xdd;
+        let id = NodeID(bytes);
+        assert_eq!(id.short(), "0xaabbccdd");
+        assert_eq!(id.to_hex().len(), 130); // 64 bytes * 2 + "0x"
+    }
+
+    #[test]
+    fn node_id_from_ecdsa_p256_key() {
+        let info = HardwareKeyInfo {
+            provider: HardwareProviderKind::Tpm,
+            key_name: "tpm-key".into(),
+            algorithm: HardwareSignatureAlgorithm::EcdsaP256Sha256,
+            public_key: vec![0x42u8; 64],
+            attestation: vec![vec![9, 9]],
+            assurance_level: HardwareAssuranceLevel::IsolatedHardware,
+            biometric_state: BiometricState::default(),
+        };
+        let node_id = info.node_id().expect("should extract NodeID");
+        assert_eq!(node_id.0.len(), 64);
+        assert!(info.is_mesh_capable());
+    }
+
+    #[test]
+    fn node_id_rejects_non_p256_algorithm() {
+        let info = HardwareKeyInfo {
+            provider: HardwareProviderKind::Tpm,
+            key_name: "tpm-key".into(),
+            algorithm: HardwareSignatureAlgorithm::Eddsa,
+            public_key: vec![0x42u8; 64],
+            attestation: vec![],
+            assurance_level: HardwareAssuranceLevel::IsolatedHardware,
+            biometric_state: BiometricState::default(),
+        };
+        assert!(info.node_id().is_none());
+        assert!(!info.is_mesh_capable());
+    }
+
+    #[test]
+    fn node_id_rejects_wrong_key_length() {
+        let info = HardwareKeyInfo {
+            provider: HardwareProviderKind::Tpm,
+            key_name: "tpm-key".into(),
+            algorithm: HardwareSignatureAlgorithm::EcdsaP256Sha256,
+            public_key: vec![0x42u8; 96], // P384 size
+            attestation: vec![],
+            assurance_level: HardwareAssuranceLevel::IsolatedHardware,
+            biometric_state: BiometricState::default(),
+        };
+        assert!(info.node_id().is_none());
+    }
+
+    #[test]
+    fn mesh_algorithm_is_ecdsa_p256() {
+        assert!(MESH_ALGORITHM.is_ecdsa_p256());
+    }
+
     struct FakeTpmKey;
     impl TpmSigningKey for FakeTpmKey {
         fn key_info(&self) -> Result<TpmKeyInfo, TpmError> {
@@ -806,5 +1016,50 @@ mod tests {
             sig,
             signature_input_for_record("lifegraph:v0:sig:test", &[8u8; 32])
         );
+    }
+
+    #[test]
+    fn hardware_mesh_signer_extracts_node_id_and_signs_digest() {
+        // Use the FakeTpmKey from existing tests
+        struct FakeMeshKey;
+        impl HardwareSigningKey for FakeMeshKey {
+            fn key_info(&self) -> Result<HardwareKeyInfo, HardwareSigningError> {
+                // ECDSA P-256 public key (64 bytes)
+                let mut pk = [0u8; 64];
+                pk[0] = 0x04; // marker byte, not used
+                pk[1] = 0xAB;
+                // Rest zeros
+                Ok(HardwareKeyInfo {
+                    provider: HardwareProviderKind::Tpm,
+                    key_name: "fake-key".into(),
+                    algorithm: HardwareSignatureAlgorithm::EcdsaP256Sha256,
+                    public_key: pk.to_vec(),
+                    attestation: vec![],
+                    assurance_level: HardwareAssuranceLevel::IsolatedHardware,
+                    biometric_state: BiometricState::default(),
+                })
+            }
+            fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, HardwareSigningError> {
+                // Simulate hardware: return 64-byte "signature" based on digest
+                let mut sig = [0u8; 64];
+                sig[..32].copy_from_slice(message);
+                sig[32..].copy_from_slice(&message.iter().map(|b| !b).collect::<Vec<_>>()[..32]);
+                Ok(sig.to_vec())
+            }
+        }
+
+        let key = FakeMeshKey;
+        let signer = HardwareMeshSigner::new(key).expect("should create signer");
+
+        // NodeID extracted from public key
+        let node_id = signer.node_id();
+        assert_eq!(node_id.0[0], 0x04);
+        assert_eq!(node_id.0[1], 0xAB);
+
+        // Sign a digest
+        let digest = [0x42u8; 32];
+        let sig = signer.sign_digest(&digest).expect("should sign digest");
+        assert_eq!(sig.len(), 64);
+        assert_eq!(sig[..32], digest); // first half is the digest (as expected from fake key)
     }
 }

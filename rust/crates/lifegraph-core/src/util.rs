@@ -2,15 +2,15 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use unicode_normalization::UnicodeNormalization;
 
-use crate::protocol::Timestamp;
+use prost_types::Timestamp;
 
 pub fn parse_rfc3339(value: &str) -> Result<OffsetDateTime, time::error::Parse> {
     OffsetDateTime::parse(value, &Rfc3339)
 }
 
-pub fn timestamp_parts(value: &str) -> Result<(i64, i64), time::error::Parse> {
+pub fn timestamp_parts(value: &str) -> Result<(i64, i32), time::error::Parse> {
     let t = parse_rfc3339(value)?;
-    Ok((t.unix_timestamp(), t.nanosecond() as i64))
+    Ok((t.unix_timestamp(), t.nanosecond() as i32))
 }
 
 pub fn parse_timestamp_value(value: &str) -> Result<Timestamp, time::error::Parse> {

@@ -1,4 +1,7 @@
 use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::{
+    parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed,
+};
 use lifegraph_usb::{
     default_usb_descriptor, UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed,
 };
@@ -32,26 +35,6 @@ pub struct LinuxUsbDevice {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinuxUsbBackend {
     pub root_path: PathBuf,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
-fn parse_hex_u16(text: Option<String>) -> Option<u16> {
-    text.and_then(|v| u16::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| v.parse::<u32>().ok())
-}
-
-fn parse_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| v.parse::<u8>().ok())
-}
-
-fn parse_hex_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| u8::from_str_radix(v.trim_start_matches("0x"), 16).ok())
 }
 
 fn parse_speed(text: Option<String>) -> UsbSpeed {
@@ -238,23 +221,11 @@ impl UsbInventory for LinuxUsbBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "lifegraph-linux-usb-test-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&base).unwrap();
-        base
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_usb_device_from_sysfs() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-usb");
         fs::create_dir_all(root.join("1-2")).unwrap();
         fs::create_dir_all(root.join("1-2:1.0")).unwrap();
         fs::write(root.join("1-2/busnum"), "1\n").unwrap();
@@ -287,7 +258,7 @@ mod tests {
 
     #[test]
     fn parent_child_relationships_are_built() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-usb");
         fs::create_dir_all(root.join("1-4")).unwrap();
         fs::write(root.join("1-4/idVendor"), "1d6b\n").unwrap();
         fs::write(root.join("1-4/busnum"), "1\n").unwrap();

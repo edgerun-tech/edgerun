@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::crypto::blake3_256;
+use crate::crypto::sha256;
 use crate::result::{
     accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult, Verdict,
 };
@@ -2102,7 +2102,7 @@ pub fn validate_object_case(
         let realized = must_hex_to_bytes(&string_value(obj, "realized_bytes_hex", "0x"));
         let mut payload = b"lifegraph:v0:object\0raw-bytes-v0\0".to_vec();
         payload.extend_from_slice(&realized);
-        let object_id = bytes_to_hex(&blake3_256(&payload));
+        let object_id = bytes_to_hex(&sha256(&payload));
         let mut claimed = string_value(obj, "object_id", "");
         if claimed.is_empty() {
             claimed = get_map(obj, "descriptor")
@@ -2151,7 +2151,7 @@ pub fn validate_object_case(
                 let chunk_bytes = must_hex_to_bytes(chunk_value);
                 let mut chunk_payload = b"lifegraph:v0:chunk-bytes\0".to_vec();
                 chunk_payload.extend_from_slice(&chunk_bytes);
-                let actual_digest = bytes_to_hex(&blake3_256(&chunk_payload));
+                let actual_digest = bytes_to_hex(&sha256(&chunk_payload));
                 if !digest_hex.is_empty() && actual_digest != digest_hex {
                     return reject(ReasonCode::RepresentationInvalid, empty_map(), empty_map());
                 }
@@ -2163,7 +2163,7 @@ pub fn validate_object_case(
         };
         let mut payload = b"lifegraph:v0:representation-bytes\0".to_vec();
         payload.extend_from_slice(&stored);
-        let digest = bytes_to_hex(&blake3_256(&payload));
+        let digest = bytes_to_hex(&sha256(&payload));
         let header = get_map(rep, "header");
         let claimed = if string_value(rep, "representation_digest", "").is_empty() {
             header
@@ -2212,7 +2212,7 @@ pub fn validate_object_case(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::blake3_256;
+    use crate::crypto::sha256;
     use crate::value::yi64;
 
     struct TestVerifier;
@@ -2599,11 +2599,11 @@ mod tests {
         let chunk_bytes = vec![0x61, 0x62, 0x63];
         let mut chunk_payload = b"lifegraph:v0:chunk-bytes\0".to_vec();
         chunk_payload.extend_from_slice(&chunk_bytes);
-        let chunk_digest = bytes_to_hex(&blake3_256(&chunk_payload));
+        let chunk_digest = bytes_to_hex(&sha256(&chunk_payload));
 
         let mut rep_payload = b"lifegraph:v0:representation-bytes\0".to_vec();
         rep_payload.extend_from_slice(&chunk_bytes);
-        let representation_digest = bytes_to_hex(&blake3_256(&rep_payload));
+        let representation_digest = bytes_to_hex(&sha256(&rep_payload));
 
         let semantic = match mapping([(
             "representation",

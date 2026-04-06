@@ -1,0 +1,16 @@
+[package]
+name = "lifegraph-stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+lifegraph-core = { path = "../lifegraph-core" }
+lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
+sha2.workspace = true
+p256.workspace = true
+prost-types.workspace = true
+
+[dev-dependencies]
+rand = "0.8.5"

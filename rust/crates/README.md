@@ -17,4 +17,4 @@ Core workspace crates live under `rust/crates/`.
   `lifegraph-linux-netif`, `lifegraph-usb`, `lifegraph-linux-usb`, `lifegraph-pci`,
   `lifegraph-linux-pci`, `lifegraph-nfc`, `lifegraph-linux-nfc`, `lifegraph-npu`,
   `lifegraph-linux-npu`
-- Application/examples: `lifegraph-agent`, `lifegraph-amd-xdna`
+- Application/examples: `lifegraph-amd-xdna`

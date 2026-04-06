@@ -5,7 +5,7 @@ use lifegraph_cec::{
     CecMessage,
 };
 use lifegraph_linux_gpu::discover_gpus;
-use std::collections::HashMap;
+use lifegraph_linux_sysfs::{link_name, parse_uevent_map, read_trimmed};
 use std::fs::{self, File, OpenOptions};
 use std::os::raw::{c_int, c_ulong};
 use std::path::{Path, PathBuf};
@@ -148,25 +148,6 @@ pub struct LinuxCecAdapter {
     file: File,
 }
 
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
-fn parse_uevent_map(path: &Path) -> HashMap<String, String> {
-    let Some(raw) = fs::read_to_string(path).ok() else {
-        return HashMap::new();
-    };
-    raw.lines()
-        .filter_map(|line| line.split_once('='))
-        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
-        .collect()
-}
-
-fn link_name(path: &Path) -> Option<String> {
-    path.file_name()
-        .map(|value| value.to_string_lossy().to_string())
-}
-
 fn decode_c_string(bytes: &[u8]) -> String {
     let end = bytes
         .iter()
@@ -284,12 +265,14 @@ pub fn discover_cec_adapters_in(root: &Path) -> Result<Vec<LinuxCecAdapterInfo>,
         let uevent = parse_uevent_map(&path.join("uevent"));
         let driver_name = fs::read_link(path.join("device/driver"))
             .ok()
-            .as_ref()
-            .and_then(|link| link_name(link.as_path()));
-        let device_node = uevent
-            .get("DEVNAME")
-            .map(|value| format!("/dev/{value}"))
-            .or_else(|| Some(format!("/dev/{instance_id}")));
+            .as_deref()
+            .and_then(link_name);
+        let device_node = Some(
+            uevent
+                .get("DEVNAME")
+                .map(|value| format!("/dev/{value}"))
+                .unwrap_or_else(|| format!("/dev/{instance_id}")),
+        );
         let mut info = LinuxCecAdapterInfo {
             instance_id: instance_id.clone(),
             sysfs_path: path.clone(),
@@ -489,17 +472,7 @@ pub fn wake_gpu_connector(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_adapter_from_sysfs_layout() {

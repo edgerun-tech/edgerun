@@ -9,3 +9,4 @@ publish.workspace = true
 lifegraph-capabilities = { path = "../lifegraph-capabilities" }
 lifegraph-cec = { path = "../lifegraph-cec" }
 lifegraph-linux-gpu = { path = "../lifegraph-linux-gpu" }
+lifegraph-linux-sysfs = { path = "../lifegraph-linux-sysfs" }

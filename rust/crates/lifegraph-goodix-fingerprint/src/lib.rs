@@ -11,8 +11,8 @@ use std::os::fd::AsRawFd;
 use std::os::raw::{c_int, c_ulong, c_void};
 use std::path::{Path, PathBuf};
 
-pub const GOODIX_VENDOR_ID: u16 = 0x27c6;
-pub const GOODIX_FRAMEWORK_13_PRODUCT_ID: u16 = 0x609c;
+pub(crate) const GOODIX_VENDOR_ID: u16 = 0x27c6;
+pub(crate) const GOODIX_FRAMEWORK_13_PRODUCT_ID: u16 = 0x609c;
 
 const USB_DIR_IN: u8 = 0x80;
 const USB_TYPE_STANDARD: u8 = 0x00 << 5;
@@ -25,35 +25,38 @@ const USB_DT_STRING: u8 = 0x03;
 const GOODIX_PACKAGE_CRC_SIZE: usize = 4;
 const GOODIX_PACKAGE_HEADER_SIZE: usize = 8;
 const GOODIX_RESPONSE_ACK_CMD: u8 = 0xaa;
-pub const GOODIX_CMD_GET_VERSION: u8 = 0xd0;
-pub const GOODIX_CMD_UPDATE_CONFIG: u8 = 0xc0;
-pub const GOODIX_CMD_CAPTURE_DATA: u8 = 0xa2;
-pub const GOODIX_CMD_IDENTIFY: u8 = 0xa5;
-pub const GOODIX_CMD_ENROLL_INIT: u8 = 0xa1;
-pub const GOODIX_CMD_ENROLL: u8 = 0xa0;
-pub const GOODIX_CMD_CHECK_DUPLICATE: u8 = 0xa3;
-pub const GOODIX_CMD_COMMIT_ENROLLMENT: u8 = 0xa4;
-pub const GOODIX_CMD_GET_FINGERLIST: u8 = 0xa6;
-pub const GOODIX_CMD_FINGER_MODE: u8 = 0xb0;
-pub const GOODIX_CMD_POWER_BUTTON_SHIELD: u8 = 0xe0;
-pub const GOODIX_CMD_DELETE_TEMPLATE: u8 = 0xa7;
-pub const GOODIX_SUBCMD_DEFAULT: u8 = 0x00;
-pub const GOODIX_SUBCMD_DELETE_ALL: u8 = 0x01;
-pub const GOODIX_SUBCMD_WRITE_CFG_TO_FLASH: u8 = 0x01;
-pub const GOODIX_SUBCMD_GET_FINGER_MODE: u8 = 0x00;
-pub const GOODIX_SUBCMD_SET_FINGER_DOWN: u8 = 0x01;
-pub const GOODIX_SUBCMD_SET_FINGER_UP: u8 = 0x02;
-pub const GOODIX_SUBCMD_PWR_BTN_SHIELD_OFF: u8 = 0x00;
-pub const GOODIX_SUBCMD_PWR_BTN_SHIELD_ON: u8 = 0x01;
+pub(crate) const GOODIX_CMD_GET_VERSION: u8 = 0xd0;
+pub(crate) const GOODIX_CMD_UPDATE_CONFIG: u8 = 0xc0;
+pub(crate) const GOODIX_CMD_CAPTURE_DATA: u8 = 0xa2;
+pub(crate) const GOODIX_CMD_IDENTIFY: u8 = 0xa5;
+pub(crate) const GOODIX_CMD_ENROLL_INIT: u8 = 0xa1;
+pub(crate) const GOODIX_CMD_ENROLL: u8 = 0xa0;
+pub(crate) const GOODIX_CMD_CHECK_DUPLICATE: u8 = 0xa3;
+pub(crate) const GOODIX_CMD_COMMIT_ENROLLMENT: u8 = 0xa4;
+pub(crate) const GOODIX_CMD_GET_FINGERLIST: u8 = 0xa6;
+pub(crate) const GOODIX_CMD_FINGER_MODE: u8 = 0xb0;
+pub(crate) const GOODIX_CMD_POWER_BUTTON_SHIELD: u8 = 0xe0;
+pub(crate) const GOODIX_CMD_DELETE_TEMPLATE: u8 = 0xa7;
+pub(crate) const GOODIX_SUBCMD_DEFAULT: u8 = 0x00;
+pub(crate) const GOODIX_SUBCMD_DELETE_ALL: u8 = 0x01;
+pub(crate) const GOODIX_SUBCMD_WRITE_CFG_TO_FLASH: u8 = 0x01;
+pub(crate) const GOODIX_SUBCMD_GET_FINGER_MODE: u8 = 0x00;
+pub(crate) const GOODIX_SUBCMD_SET_FINGER_DOWN: u8 = 0x01;
+pub(crate) const GOODIX_SUBCMD_SET_FINGER_UP: u8 = 0x02;
+pub(crate) const GOODIX_SUBCMD_PWR_BTN_SHIELD_OFF: u8 = 0x00;
+pub(crate) const GOODIX_SUBCMD_PWR_BTN_SHIELD_ON: u8 = 0x01;
 const GOODIX_TIMEOUT_SEND_MS: u32 = 1000;
 const GOODIX_TIMEOUT_ACK_MS: u32 = 2000;
 const GOODIX_TIMEOUT_DATA_MS: u32 = 5000;
-pub const GOODIX_SUCCESS: u8 = 0x00;
-pub const GOODIX_FAILED: u8 = 0x80;
-pub const GOODIX_ERROR_FINGER_ID_NOEXIST: u8 = 0x9c;
-pub const GOODIX_ERROR_TEMPLATE_INCOMPLETE: u8 = 0xb8;
-pub const GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT: u8 = 0xc7;
-pub const GOODIX_ERROR_NO_AVAILABLE_SPACE: u8 = 0x8f;
+pub(crate) const GOODIX_SUCCESS: u8 = 0x00;
+pub(crate) const GOODIX_FAILED: u8 = 0x80;
+#[allow(dead_code)]
+pub(crate) const GOODIX_ERROR_FINGER_ID_NOEXIST: u8 = 0x9c;
+#[allow(dead_code)]
+pub(crate) const GOODIX_ERROR_TEMPLATE_INCOMPLETE: u8 = 0xb8;
+pub(crate) const GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT: u8 = 0xc7;
+#[allow(dead_code)]
+pub(crate) const GOODIX_ERROR_NO_AVAILABLE_SPACE: u8 = 0x8f;
 const GOODIX_MAX_STORED_PRINTS: u8 = 20;
 const GOODIX_SENSOR_CONFIG_SIZE: usize = 128;
 const GOODIX_SENSOR_CONFIG_BODY_SIZE: usize = 26;
@@ -266,6 +269,7 @@ const IOC_NRSHIFT: u32 = 0;
 const IOC_TYPESHIFT: u32 = IOC_NRSHIFT + IOC_NRBITS;
 const IOC_SIZESHIFT: u32 = IOC_TYPESHIFT + IOC_TYPEBITS;
 const IOC_DIRSHIFT: u32 = IOC_SIZESHIFT + IOC_SIZEBITS;
+#[allow(dead_code)]
 const IOC_NONE: u32 = 0;
 const IOC_WRITE: u32 = 1;
 const IOC_READ: u32 = 2;
@@ -286,6 +290,7 @@ const fn ioc(dir: u32, ty: u8, nr: u8, size: usize) -> u32 {
 const fn ior<T>(ty: u8, nr: u8) -> u32 {
     ioc(IOC_READ, ty, nr, core::mem::size_of::<T>())
 }
+#[allow(dead_code)]
 const fn iow<T>(ty: u8, nr: u8) -> u32 {
     ioc(IOC_WRITE, ty, nr, core::mem::size_of::<T>())
 }

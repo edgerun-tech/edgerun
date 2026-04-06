@@ -1,5 +1,7 @@
-//! Protobuf-generated wire types.
-pub mod convert;
+//! Protobuf-generated wire types — the canonical Lifegraph protocol types.
+//!
+//! Every domain message is a protobuf struct with `prost::Message`.
+//! Canonical encoding = `prost::Message::encode()` directly.
 
 pub mod lifegraph {
     pub mod v0 {

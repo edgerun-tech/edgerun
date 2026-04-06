@@ -1,15 +1,16 @@
 use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::{
+    close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
+};
 use lifegraph_network_interface::{
     default_network_interface_descriptor, NetworkAdminState, NetworkInterfaceController,
     NetworkInterfaceInfo, NetworkInterfaceKind, NetworkLinkState,
 };
 use std::fs;
 use std::io;
-use std::os::raw::{c_char, c_int, c_short, c_ulong};
+use std::os::raw::{c_char, c_short, c_ulong};
 use std::path::{Path, PathBuf};
 
-const AF_INET: c_int = 2;
-const SOCK_DGRAM: c_int = 2;
 const SIOCGIFFLAGS: c_ulong = 0x8913;
 const SIOCSIFFLAGS: c_ulong = 0x8914;
 const IFF_UP: c_short = 0x1;
@@ -20,12 +21,6 @@ const ARPHRD_TUNNEL6: u32 = 769;
 const ARPHRD_IEEE80211: u32 = 801;
 const ARPHRD_IEEE80211_PRISM: u32 = 802;
 const ARPHRD_IEEE80211_RADIOTAP: u32 = 803;
-
-unsafe extern "C" {
-    fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
-    fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
-    fn close(fd: c_int) -> c_int;
-}
 
 #[repr(C)]
 union Ifru {
@@ -53,38 +48,21 @@ pub struct LinuxNetifBackend {
     pub interface: LinuxNetworkInterface,
 }
 
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
 fn make_ifreq(name: &str) -> Ifreq {
     let mut ifr = Ifreq {
         name: [0; 16],
         ifru: Ifru { flags: 0 },
     };
-    for (dst, src) in ifr.name.iter_mut().zip(name.as_bytes().iter().copied()) {
-        *dst = src as c_char;
-    }
+    fill_ifr_name(&mut ifr.name, name);
     ifr
 }
 
-fn open_ioctl_socket() -> Result<c_int, CapabilityError> {
-    let fd = unsafe { socket(AF_INET, SOCK_DGRAM, 0) };
-    if fd < 0 {
-        return Err(CapabilityError::Provider(format!(
-            "failed to open ioctl socket: {}",
-            io::Error::last_os_error()
-        )));
-    }
-    Ok(fd)
-}
-
 pub fn interface_flags(name: &str) -> Result<c_short, CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut ifr = make_ifreq(name);
-    let rc = unsafe { ioctl(fd, SIOCGIFFLAGS, &mut ifr) };
+    let rc = unsafe { ioctl_call(fd, SIOCGIFFLAGS, &mut ifr as *mut Ifreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         return Err(CapabilityError::Provider(format!(
             "failed to read interface flags for {name}: {err}"
@@ -94,12 +72,12 @@ pub fn interface_flags(name: &str) -> Result<c_short, CapabilityError> {
 }
 
 pub fn set_interface_up(name: &str, enabled: bool) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut ifr = make_ifreq(name);
-    let get_rc = unsafe { ioctl(fd, SIOCGIFFLAGS, &mut ifr) };
+    let get_rc = unsafe { ioctl_call(fd, SIOCGIFFLAGS, &mut ifr as *mut Ifreq as *mut _) };
     if get_rc < 0 {
         let err = io::Error::last_os_error();
-        unsafe { close(fd) };
+        unsafe { close_ioctl_fd(fd) };
         return Err(CapabilityError::Provider(format!(
             "failed to read interface flags for {name}: {err}"
         )));
@@ -111,9 +89,9 @@ pub fn set_interface_up(name: &str, enabled: bool) -> Result<(), CapabilityError
         flags &= !IFF_UP;
     }
     ifr.ifru = Ifru { flags };
-    let set_rc = unsafe { ioctl(fd, SIOCSIFFLAGS, &mut ifr) };
+    let set_rc = unsafe { ioctl_call(fd, SIOCSIFFLAGS, &mut ifr as *mut Ifreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if set_rc < 0 {
         return Err(CapabilityError::Provider(format!(
             "failed to set interface flags for {name}: {err}"
@@ -243,23 +221,11 @@ impl NetworkInterfaceController for LinuxNetifBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "lifegraph-linux-netif-test-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&base).unwrap();
-        base
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_network_interface_from_sysfs() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-netif");
         let net = root.join("net");
         fs::create_dir_all(net.join("eth0/device")).unwrap();
         fs::write(net.join("eth0/address"), "aa:bb:cc:dd:ee:ff\n").unwrap();
@@ -275,7 +241,7 @@ mod tests {
 
     #[test]
     fn wireless_interface_is_classified() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-netif");
         let net = root.join("net");
         fs::create_dir_all(net.join("wlan0/wireless")).unwrap();
         fs::write(net.join("wlan0/type"), format!("{}\n", ARPHRD_IEEE80211)).unwrap();

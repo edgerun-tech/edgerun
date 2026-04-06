@@ -42,6 +42,12 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::rc::Rc;
 
+pub mod capability_signature;
+pub use capability_signature::{
+    sign_invocation, sign_request, sign_grant, sign_result, sign_revocation,
+    verify_invocation, verify_request, verify_grant, verify_result, verify_revocation,
+};
+
 pub struct RemoteInvocationResult {
     pub result: CapabilityResult,
     pub inline_payload: Vec<u8>,
@@ -114,7 +120,10 @@ pub struct PolicyWrappedProvider<P> {
     inner: P,
     policy: SimplePolicyEngine,
     context: PolicyContext,
+    /// Sessions keyed by grant_id (used by invocations).
     sessions: HashMap<Vec<u8>, SessionGrantBinding>,
+    /// Reverse index: session_id → grant_id (used by close_session).
+    session_to_grant: HashMap<Vec<u8>, Vec<u8>>,
 }
 
 impl<P> PolicyWrappedProvider<P> {
@@ -127,6 +136,7 @@ impl<P> PolicyWrappedProvider<P> {
                 ..PolicyContext::default()
             },
             sessions: HashMap::new(),
+            session_to_grant: HashMap::new(),
         }
     }
 
@@ -139,6 +149,7 @@ impl<P> PolicyWrappedProvider<P> {
                 ..PolicyContext::default()
             },
             sessions: HashMap::new(),
+            session_to_grant: HashMap::new(),
         }
     }
 
@@ -243,15 +254,17 @@ where
         let standardized_accept = session_accept_from_grant(open, &grant);
         accept.granted_operations = standardized_accept.granted_operations;
         accept.granted_access_class = standardized_accept.granted_access_class;
-        self.sessions.insert(
-            open.session_id.clone(),
-            SessionGrantBinding {
-                session_id: open.session_id.clone(),
-                grant_id: grant.grant_id.clone(),
-                granted_operations: grant.granted_operations.clone(),
-                granted_access_class: grant.access_class,
-            },
-        );
+        accept.grant_id = standardized_accept.grant_id;
+        let binding = SessionGrantBinding {
+            session_id: open.session_id.clone(),
+            grant_id: grant.grant_id.clone(),
+            granted_operations: grant.granted_operations.clone(),
+            granted_access_class: grant.access_class,
+        };
+        // Index by grant_id (used by invocations)
+        self.sessions.insert(grant.grant_id.clone(), binding);
+        // Reverse index: session_id → grant_id (used by close_session)
+        self.session_to_grant.insert(open.session_id.clone(), grant.grant_id);
         Ok(accept)
     }
 
@@ -282,10 +295,12 @@ where
     }
 
     fn close_session(&mut self, close: &CapabilitySessionClose) -> Result<(), CapabilityError> {
-        if let Some(binding) = self.sessions.remove(&close.session_id) {
-            let _ = self
-                .policy
-                .revoke(&binding.grant_id, RevocationReason::Superseded);
+        if let Some(grant_id) = self.session_to_grant.remove(&close.session_id) {
+            if let Some(binding) = self.sessions.remove(&grant_id) {
+                let _ = self
+                    .policy
+                    .revoke(&binding.grant_id, RevocationReason::Superseded);
+            }
         }
         self.inner.close_session(close)
     }
@@ -645,6 +660,7 @@ pub fn session_accept_from_grant(
         granted_operations: grant.granted_operations.clone(),
         granted_access_class: grant.access_class,
         error_reason: String::new(),
+        grant_id: grant.grant_id.clone(),
     }
 }
 
@@ -659,6 +675,7 @@ pub fn session_reject(
         granted_operations: Vec::new(),
         granted_access_class: lifegraph_capabilities::CapabilityAccessClass::Unspecified as i32,
         error_reason: reason.into(),
+        grant_id: Vec::new(),
     }
 }
 
@@ -670,6 +687,7 @@ pub fn accept_session_open_unchecked(open: &CapabilitySessionOpen) -> Capability
         granted_operations: open.requested_operations.clone(),
         granted_access_class: open.requested_access_class,
         error_reason: String::new(),
+        grant_id: open.session_id.clone(),
     }
 }
 
@@ -3022,13 +3040,14 @@ mod tests {
             .unwrap();
         assert!(serve_one(&mut provider, &mut server).unwrap());
         let accept = client.recv().unwrap().unwrap();
-        match accept.message {
+        let grant_id = match accept.message {
             Some(capability_remote_envelope::Message::SessionAccept(accept)) => {
                 assert!(accept.accepted);
                 assert_eq!(accept.session_id, b"sess".to_vec());
+                accept.grant_id
             }
             other => panic!("unexpected message: {other:?}"),
-        }
+        };
 
         client
             .send(CapabilityRemoteEnvelope {
@@ -3036,7 +3055,7 @@ mod tests {
                     CapabilityInvocation {
                         invocation_version: 1,
                         invocation_id: b"inv".to_vec(),
-                        grant_id: b"sess".to_vec(),
+                        grant_id,
                         invoker: None,
                         operation: CapabilityOperation::Observe as i32,
                         requested_access_class: CapabilityAccessClass::Derived as i32,
@@ -3097,7 +3116,9 @@ mod tests {
             })
             .unwrap();
         assert!(accept.accepted);
-        let binding = provider.sessions().get(b"sess".as_slice()).unwrap();
+        // Sessions are now keyed by grant_id (which is returned in the accept)
+        let binding = provider.sessions().get(&accept.grant_id).unwrap();
+        assert_eq!(binding.session_id, b"sess");
         assert!(provider.policy().grant_record(&binding.grant_id).is_some());
     }
 
@@ -3254,14 +3275,14 @@ mod tests {
             })
             .unwrap();
         assert!(serve_one(&mut provider, &mut server).unwrap());
-        let _accept = client.recv().unwrap().unwrap();
+        let accept_env = client.recv().unwrap().unwrap();
+        let grant_id = match accept_env.message {
+            Some(capability_remote_envelope::Message::SessionAccept(ref a)) => a.grant_id.clone(),
+            _ => panic!("expected SessionAccept"),
+        };
+        // Verify session is stored by grant_id
+        assert!(provider.sessions().get(&grant_id).is_some());
 
-        let grant_id = provider
-            .sessions()
-            .get(b"sess".as_slice())
-            .unwrap()
-            .grant_id
-            .clone();
         let revocation = CapabilityRevocation {
             revocation_version: 1,
             revocation_id: b"rev-1".to_vec(),
@@ -3286,7 +3307,7 @@ mod tests {
                     CapabilityInvocation {
                         invocation_version: 1,
                         invocation_id: b"inv-after-revoke".to_vec(),
-                        grant_id: b"sess".to_vec(),
+                        grant_id,
                         invoker: None,
                         operation: CapabilityOperation::Observe as i32,
                         requested_access_class: CapabilityAccessClass::Derived as i32,

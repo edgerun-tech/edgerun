@@ -3,6 +3,10 @@ use lifegraph_gpu::{
     default_gpu_descriptor, infer_gpu_vendor, GpuConnectorInfo, GpuDisplayMode, GpuInfo,
     GpuInventory, GpuVendor,
 };
+use lifegraph_linux_sysfs::{
+    is_pci_address, link_name, parse_bool_flag, parse_hex_u16, parse_hex_u32, parse_hex_u8,
+    parse_i32, parse_u32, parse_uevent_map, read_trimmed,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -130,7 +134,7 @@ pub fn discover_gpus_in(
             current_link_width: parse_u32(read_trimmed(&path.join("current_link_width"))),
             max_link_speed: read_trimmed(&path.join("max_link_speed")),
             max_link_width: parse_u32(read_trimmed(&path.join("max_link_width"))),
-            boot_vga: parse_bool_flag(read_trimmed(&path.join("boot_vga"))),
+            boot_vga: parse_bool_flag(read_trimmed(&path.join("boot_vga"))).unwrap_or(false),
             drm_cards: drm.cards,
             drm_render_nodes: drm.render_nodes,
             drm_card_device_nodes: drm.card_device_nodes,
@@ -273,8 +277,8 @@ fn build_drm_map(root: &Path) -> Result<DrmNodeMap, CapabilityError> {
             entry.connectors.push(LinuxGpuConnector {
                 name: connector_name,
                 connector_id: parse_u32(read_trimmed(&path.join("connector_id"))),
-                connected: read_trimmed(&path.join("status")).is_some_and(|v| v == "connected"),
-                enabled: read_trimmed(&path.join("enabled")).is_some_and(|v| v == "enabled"),
+                connected: read_trimmed(&path.join("status")).as_deref() == Some("connected"),
+                enabled: read_trimmed(&path.join("enabled")).as_deref() == Some("enabled"),
                 current_mode,
                 modes,
                 cec_adapter: None,
@@ -332,13 +336,13 @@ fn parse_modes(contents: &str) -> Vec<GpuDisplayMode> {
 fn resolve_driver_module(path: &Path, driver_link: Option<&PathBuf>) -> Option<String> {
     driver_link
         .and_then(|link| fs::read_link(link.join("module")).ok())
-        .as_ref()
-        .and_then(|link| link_name(link.as_path()))
+        .as_deref()
+        .and_then(link_name)
         .or_else(|| {
             fs::read_link(path.join("driver/module"))
                 .ok()
-                .as_ref()
-                .and_then(|link| link_name(link.as_path()))
+                .as_deref()
+                .and_then(link_name)
         })
 }
 
@@ -349,63 +353,12 @@ fn drm_device_node_for(name: &str) -> Option<String> {
         .then(|| device_node.display().to_string())
 }
 
-fn parse_uevent_map(path: &Path) -> HashMap<String, String> {
-    let Some(raw) = fs::read_to_string(path).ok() else {
-        return HashMap::new();
-    };
-    raw.lines()
-        .filter_map(|line| line.split_once('='))
-        .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
-        .collect()
-}
-
-fn link_name(path: &Path) -> Option<String> {
-    path.file_name()
-        .map(|value| value.to_string_lossy().to_string())
-}
-
 fn is_gpu_class(class_code: Option<u32>) -> bool {
     class_code.is_some_and(|code| matches!(code >> 16, 0x03 | 0x12))
 }
 
 fn is_display_class(class_code: u32) -> bool {
     (class_code >> 16) == 0x03
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
-fn parse_bool_flag(text: Option<String>) -> bool {
-    matches!(
-        text.as_deref(),
-        Some("1") | Some("y") | Some("yes") | Some("true") | Some("enabled")
-    )
-}
-
-fn parse_hex_u16(text: Option<String>) -> Option<u16> {
-    text.and_then(|v| u16::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_hex_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| u32::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_hex_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| u8::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-}
-
-fn parse_u32(text: Option<String>) -> Option<u32> {
-    text.and_then(|v| v.parse::<u32>().ok())
-}
-
-fn parse_i32(text: Option<String>) -> Option<i32> {
-    text.and_then(|v| v.parse::<i32>().ok())
-}
-
-fn is_pci_address(name: &str) -> bool {
-    let bytes = name.as_bytes();
-    bytes.len() == 12 && bytes[4] == b':' && bytes[7] == b':' && bytes[10] == b'.'
 }
 
 pub fn cec_adapter_lookup() -> HashMap<(u32, u32), String> {
@@ -460,17 +413,7 @@ pub fn attach_cec_adapters_to_gpus_with_lookup(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_gpu_from_pci_and_drm_sysfs() {

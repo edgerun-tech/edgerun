@@ -29,6 +29,7 @@ message CapabilitySessionAccept {
   repeated lifegraph.v0.capability.CapabilityOperation granted_operations = 4;
   lifegraph.v0.capability.CapabilityAccessClass granted_access_class = 5;
   string error_reason = 6;
+  bytes grant_id = 7;
 }
 
 message CapabilitySessionEvent {

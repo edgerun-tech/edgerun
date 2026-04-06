@@ -2,6 +2,7 @@ use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityPr
 use lifegraph_display::{
     default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
 };
+use lifegraph_linux_sysfs::read_trimmed;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -19,10 +20,6 @@ pub struct DrmConnectorInfo {
 pub struct DrmDisplayBackend {
     pub sysfs_root: PathBuf,
     pub connector: DrmConnectorInfo,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
 }
 
 fn parse_mode_line(line: &str) -> Option<DisplayMode> {
@@ -70,7 +67,7 @@ pub fn discover_drm_connectors_in(root: &Path) -> Result<Vec<DrmConnectorInfo>, 
             continue;
         }
         let status = read_trimmed(&path.join("status")).unwrap_or_default();
-        let enabled = read_trimmed(&path.join("enabled")).is_some_and(|v| v == "enabled");
+        let enabled = read_trimmed(&path.join("enabled")).as_deref() == Some("enabled");
         let modes = fs::read_to_string(path.join("modes"))
             .ok()
             .map(|s| parse_modes(&s))
@@ -128,17 +125,7 @@ impl DisplayDevice for DrmDisplayBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn parse_mode_line_supports_refresh() {

@@ -7,4 +7,5 @@ publish.workspace = true
 
 [dependencies]
 lifegraph-capabilities = { path = "../lifegraph-capabilities" }
+lifegraph-linux-sysfs = { path = "../lifegraph-linux-sysfs" }
 lifegraph-nfc = { path = "../lifegraph-nfc" }

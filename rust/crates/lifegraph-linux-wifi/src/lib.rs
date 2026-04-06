@@ -2,6 +2,9 @@ use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityPr
 use lifegraph_linux_netif::{
     discover_network_interfaces, discover_network_interfaces_in, LinuxNetifBackend,
 };
+use lifegraph_linux_sysfs::{
+    close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,
+};
 use lifegraph_network_interface::{
     NetworkAdminState, NetworkInterfaceController, NetworkInterfaceKind,
 };
@@ -12,12 +15,10 @@ use lifegraph_wifi::{
 };
 use std::fs;
 use std::io;
-use std::os::raw::{c_char, c_int, c_ulong};
+use std::os::raw::{c_char, c_ulong};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const AF_INET: c_int = 2;
-const SOCK_DGRAM: c_int = 2;
 const SIOCGIWESSID: c_ulong = 0x8B1B;
 const SIOCSIWESSID: c_ulong = 0x8B1A;
 const SIOCGIWAP: c_ulong = 0x8B15;
@@ -25,12 +26,6 @@ const SIOCGIWFREQ: c_ulong = 0x8B05;
 const SIOCSIWFREQ: c_ulong = 0x8B04;
 const SIOCGIWMODE: c_ulong = 0x8B07;
 const SIOCSIWMODE: c_ulong = 0x8B06;
-
-unsafe extern "C" {
-    fn socket(domain: c_int, ty: c_int, protocol: c_int) -> c_int;
-    fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
-    fn close(fd: c_int) -> c_int;
-}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -77,10 +72,6 @@ pub struct LinuxWifiInterface {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinuxWifiBackend {
     pub interface: LinuxWifiInterface,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
 }
 
 fn is_wireless_interface(path: &Path) -> bool {
@@ -153,30 +144,17 @@ pub fn discover_wifi_interfaces_in(
     Ok(out)
 }
 
-fn open_ioctl_socket() -> Result<c_int, CapabilityError> {
-    let fd = unsafe { socket(AF_INET, SOCK_DGRAM, 0) };
-    if fd < 0 {
-        return Err(CapabilityError::Provider(format!(
-            "failed to open ioctl socket: {}",
-            io::Error::last_os_error()
-        )));
-    }
-    Ok(fd)
-}
-
 fn make_iwreq(name: &str) -> Iwreq {
     let mut req = Iwreq {
         ifr_name: [0; 16],
         u: IwreqData { name: [0; 16] },
     };
-    for (dst, src) in req.ifr_name.iter_mut().zip(name.as_bytes().iter().copied()) {
-        *dst = src as c_char;
-    }
+    fill_ifr_name(&mut req.ifr_name, name);
     req
 }
 
 fn query_essid(name: &str) -> Result<Option<String>, CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut buf = [0u8; 64];
     let mut req = make_iwreq(name);
     req.u = IwreqData {
@@ -186,9 +164,9 @@ fn query_essid(name: &str) -> Result<Option<String>, CapabilityError> {
             flags: 0,
         },
     };
-    let rc = unsafe { ioctl(fd, SIOCGIWESSID, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCGIWESSID, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         if matches!(err.raw_os_error(), Some(95) | Some(22) | Some(19)) {
             return Ok(None);
@@ -213,11 +191,11 @@ fn query_essid(name: &str) -> Result<Option<String>, CapabilityError> {
 }
 
 fn set_essid(name: &str, ssid: &str) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut buf = [0u8; 34];
     let ssid_bytes = ssid.as_bytes();
     if ssid_bytes.len() > 32 {
-        unsafe { close(fd) };
+        unsafe { close_ioctl_fd(fd) };
         return Err(CapabilityError::InvalidRequest(
             "wifi access point ssid must not exceed 32 bytes",
         ));
@@ -231,9 +209,9 @@ fn set_essid(name: &str, ssid: &str) -> Result<(), CapabilityError> {
             flags: 1,
         },
     };
-    let rc = unsafe { ioctl(fd, SIOCSIWESSID, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCSIWESSID, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         return Err(CapabilityError::Provider(format!(
             "failed to set ESSID for {name}: {err}"
@@ -243,11 +221,11 @@ fn set_essid(name: &str, ssid: &str) -> Result<(), CapabilityError> {
 }
 
 fn query_bssid(name: &str) -> Result<Option<String>, CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut req = make_iwreq(name);
-    let rc = unsafe { ioctl(fd, SIOCGIWAP, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCGIWAP, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         if matches!(err.raw_os_error(), Some(95) | Some(22) | Some(19)) {
             return Ok(None);
@@ -268,11 +246,11 @@ fn query_bssid(name: &str) -> Result<Option<String>, CapabilityError> {
 }
 
 fn query_frequency_mhz(name: &str) -> Result<Option<u32>, CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut req = make_iwreq(name);
-    let rc = unsafe { ioctl(fd, SIOCGIWFREQ, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCGIWFREQ, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         if matches!(err.raw_os_error(), Some(95) | Some(22) | Some(19)) {
             return Ok(None);
@@ -290,7 +268,7 @@ fn query_frequency_mhz(name: &str) -> Result<Option<u32>, CapabilityError> {
 }
 
 fn set_frequency_mhz(name: &str, frequency_mhz: u32) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut req = make_iwreq(name);
     req.u = IwreqData {
         freq: IwFreq {
@@ -300,9 +278,9 @@ fn set_frequency_mhz(name: &str, frequency_mhz: u32) -> Result<(), CapabilityErr
             flags: 0,
         },
     };
-    let rc = unsafe { ioctl(fd, SIOCSIWFREQ, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCSIWFREQ, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         return Err(CapabilityError::Provider(format!(
             "failed to set frequency for {name}: {err}"
@@ -332,11 +310,11 @@ fn wifi_mode_from_u32(mode: u32) -> WifiInterfaceMode {
 }
 
 fn query_mode(name: &str) -> Result<WifiInterfaceMode, CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut req = make_iwreq(name);
-    let rc = unsafe { ioctl(fd, SIOCGIWMODE, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCGIWMODE, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         if matches!(err.raw_os_error(), Some(95) | Some(22) | Some(19)) {
             return Ok(WifiInterfaceMode::Unknown);
@@ -349,14 +327,14 @@ fn query_mode(name: &str) -> Result<WifiInterfaceMode, CapabilityError> {
 }
 
 fn set_mode(name: &str, mode: WifiInterfaceMode) -> Result<(), CapabilityError> {
-    let fd = open_ioctl_socket()?;
+    let fd = open_ioctl_socket().map_err(CapabilityError::Provider)?;
     let mut req = make_iwreq(name);
     req.u = IwreqData {
         mode: wifi_mode_to_u32(mode),
     };
-    let rc = unsafe { ioctl(fd, SIOCSIWMODE, &mut req) };
+    let rc = unsafe { ioctl_call(fd, SIOCSIWMODE, &mut req as *mut Iwreq as *mut _) };
     let err = io::Error::last_os_error();
-    unsafe { close(fd) };
+    unsafe { close_ioctl_fd(fd) };
     if rc < 0 {
         return Err(CapabilityError::Provider(format!(
             "failed to set mode for {name}: {err}"
@@ -567,23 +545,11 @@ impl WifiAccessPointController for LinuxWifiBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn tempdir() -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "lifegraph-linux-wifi-test-{}",
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&base).unwrap();
-        base
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_wireless_interface_from_sysfs() {
-        let root = tempdir();
+        let root = temp_root("lifegraph-linux-wifi");
         let net = root.join("net");
         let rfkill = root.join("rfkill");
         fs::create_dir_all(net.join("wlan0/wireless")).unwrap();

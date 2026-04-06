@@ -1,7 +1,5 @@
-pub mod canonical;
-pub mod cbor;
+pub mod command;
 pub mod crypto;
-pub mod metadata;
 pub mod protocol;
 pub mod result;
 pub mod util;

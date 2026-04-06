@@ -897,11 +897,13 @@ fn parse_piv_metadata(
     })
 }
 
-pub fn list_pcsc_readers() -> Result<Vec<YubiKeyReaderInfo>, YubiKeyError> {
+#[allow(dead_code)]
+pub(crate) fn list_pcsc_readers() -> Result<Vec<YubiKeyReaderInfo>, YubiKeyError> {
     PcscContext::establish()?.list_readers()
 }
 
-pub fn looks_like_yubikey_reader(name: &str) -> bool {
+#[cfg(test)]
+pub(crate) fn looks_like_yubikey_reader(name: &str) -> bool {
     let lowered = name.to_ascii_lowercase();
     lowered.contains("yubikey") || lowered.contains("yubi")
 }
@@ -912,11 +914,12 @@ pub trait YubiKeySigningKey {
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, YubiKeyError>;
 }
 
-pub fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
+pub(crate) fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
     signature_input(sig_domain_tag, record_hash)
 }
 
-pub fn sign_record_with_yubikey(
+#[allow(dead_code)]
+pub(crate) fn sign_record_with_yubikey(
     key: &dyn YubiKeySigningKey,
     sig_domain_tag: &str,
     record_hash: &[u8],

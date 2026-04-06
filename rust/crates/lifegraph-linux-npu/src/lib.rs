@@ -1,7 +1,9 @@
-use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::parse_hex_u32_from_str;
+// Re-export sysfs helpers that downstream NPU backends need.
+pub use lifegraph_linux_sysfs::{read_trimmed, temp_root};
 use lifegraph_npu::{
-    default_npu_descriptor, validate_npu_workload_request, NpuDevice, NpuInfo, NpuWorkloadRequest,
-    NpuWorkloadResult,
+    CapabilityDescriptor, CapabilityError, CapabilityProvider, default_npu_descriptor,
+    validate_npu_workload_request, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
 };
 use std::collections::BTreeSet;
 use std::fs;
@@ -24,16 +26,6 @@ pub struct LinuxNpuInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LinuxNpuBackend {
     pub info: LinuxNpuInfo,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|s| s.trim().to_string())
-}
-
-fn parse_hex_u32(s: &str) -> Option<u32> {
-    let trimmed = s.trim();
-    let trimmed = trimmed.strip_prefix("0x").unwrap_or(trimmed);
-    u32::from_str_radix(trimmed, 16).ok()
 }
 
 fn read_driver_name(device_path: &Path) -> Option<String> {
@@ -62,10 +54,10 @@ fn pci_info_from_device(device_path: &Path) -> (Option<String>, Option<u32>, Opt
     let pci_address = device_path
         .file_name()
         .map(|v| v.to_string_lossy().to_string());
-    let vendor_id = read_trimmed(&device_path.join("vendor")).and_then(|v| parse_hex_u32(&v));
-    let device_id = read_trimmed(&device_path.join("device")).and_then(|v| parse_hex_u32(&v));
+    let vendor_id = read_trimmed(&device_path.join("vendor")).and_then(|v| parse_hex_u32_from_str(&v));
+    let device_id = read_trimmed(&device_path.join("device")).and_then(|v| parse_hex_u32_from_str(&v));
     let accel_class = read_trimmed(&device_path.join("class"))
-        .and_then(|v| parse_hex_u32(&v))
+        .and_then(|v| parse_hex_u32_from_str(&v))
         .is_some_and(|class_code| class_code >> 16 == 0x12);
     (pci_address, vendor_id, device_id, accel_class)
 }
@@ -213,17 +205,7 @@ impl NpuDevice for LinuxNpuBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discovers_accel_class_device() {

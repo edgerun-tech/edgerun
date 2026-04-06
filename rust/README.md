@@ -35,7 +35,6 @@ The workspace is organized into crate groups by ownership/risk boundary:
   - `lifegraph-npu`, `lifegraph-linux-npu`
 
 - **Application / experiment crates**
-  - `lifegraph-agent`
   - `lifegraph-amd-xdna`
 
 ## Commands

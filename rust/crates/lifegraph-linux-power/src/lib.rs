@@ -1,4 +1,5 @@
 use lifegraph_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
+use lifegraph_linux_sysfs::{parse_bool_flag, parse_u64, parse_u8, read_trimmed};
 use lifegraph_power::{
     default_power_descriptor, BatteryStatus, LidState, PowerInventory, PowerSourceInfo,
     PowerSupplyKind, PowerSystemInfo,
@@ -29,26 +30,6 @@ pub struct LinuxPowerSupply {
 pub struct LinuxPowerBackend {
     pub power_supply_root: PathBuf,
     pub proc_acpi_root: PathBuf,
-}
-
-fn read_trimmed(path: &Path) -> Option<String> {
-    fs::read_to_string(path).ok().map(|v| v.trim().to_string())
-}
-
-fn parse_u64(text: Option<String>) -> Option<u64> {
-    text.and_then(|v| v.parse::<u64>().ok())
-}
-
-fn parse_u8(text: Option<String>) -> Option<u8> {
-    text.and_then(|v| v.parse::<u8>().ok())
-}
-
-fn parse_bool_flag(text: Option<String>) -> Option<bool> {
-    text.as_deref().and_then(|value| match value {
-        "1" | "y" | "yes" | "true" | "enabled" | "online" => Some(true),
-        "0" | "n" | "no" | "false" | "disabled" | "offline" => Some(false),
-        _ => None,
-    })
 }
 
 fn power_kind_from_type(value: Option<String>) -> PowerSupplyKind {
@@ -209,17 +190,7 @@ impl PowerInventory for LinuxPowerBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use lifegraph_linux_sysfs::temp_root;
 
     #[test]
     fn discover_battery_and_ac_from_sysfs() {

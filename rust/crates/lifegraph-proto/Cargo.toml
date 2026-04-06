@@ -7,7 +7,6 @@ publish.workspace = true
 
 [dependencies]
 hex.workspace = true
-lifegraph-core = { path = "../lifegraph-core" }
 prost.workspace = true
 prost-types.workspace = true
 
