@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(offset, 0);
 
         // Verify the event log file exists and has content
-        let log_path = data_root.join("events").join(format!("{}.log", lifegraph_core::util::bytes_to_hex("test-stream")));
+        let log_path = data_root.join("events").join(format!("{}.log", lifegraph_core::util::bytes_to_hex(b"test-stream")));
         assert!(log_path.exists());
         assert!(log_path.metadata().unwrap().len() > 0);
 
