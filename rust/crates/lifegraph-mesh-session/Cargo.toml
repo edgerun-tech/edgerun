@@ -10,7 +10,6 @@ lifegraph-mesh = { path = "../lifegraph-mesh" }
 lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
 aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc"] }
 p256 = { workspace = true }
-hkdf.workspace = true
-sha2.workspace = true
 getrandom.workspace = true
 rand_core.workspace = true
+lifegraph-core = { path = "../lifegraph-core" }

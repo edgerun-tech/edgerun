@@ -13,10 +13,10 @@ lifegraph-mesh-capability = { path = "../lifegraph-mesh-capability" }
 lifegraph-mesh-session = { path = "../lifegraph-mesh-session" }
 lifegraph-remote-capability = { path = "../lifegraph-remote-capability" }
 lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
+lifegraph-core = { path = "../lifegraph-core" }
 lifegraph-capabilities = { path = "../lifegraph-capabilities" }
 lifegraph-linux-netif = { path = "../lifegraph-linux-netif" }
 lifegraph-network-interface = { path = "../lifegraph-network-interface" }
 lifegraph-proto = { path = "../lifegraph-proto" }
 prost.workspace = true
-sha2.workspace = true
 libc.workspace = true

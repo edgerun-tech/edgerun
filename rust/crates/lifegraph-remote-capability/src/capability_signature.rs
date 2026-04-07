@@ -29,7 +29,6 @@ use lifegraph_proto::lifegraph::v0::capability::{
 use lifegraph_proto::lifegraph::v0::common::{signature, Signature};
 use p256::ecdsa::VerifyingKey;
 use prost::Message;
-use sha2::{Digest, Sha256};
 
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.
 pub const SIGNATURE_ALGORITHM_ECDSA_P256_SHA256: i32 =
@@ -54,7 +53,7 @@ pub fn sign_message<M: Message>(
     msg.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
 
     // Hash and sign
-    let digest = Sha256::digest(&buf);
+    let digest = lifegraph_core::crypto::sha256(&buf);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
     let sig_bytes = signer.sign_digest(&digest_bytes).map_err(|e| format!("sign: {e}"))?;
@@ -94,7 +93,7 @@ pub fn verify_message<M: Message + Clone>(
     msg_clone.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
 
     // Hash
-    let digest = Sha256::digest(&buf);
+    let digest = lifegraph_core::crypto::sha256(&buf);
 
     // Build ECDSA signature
     let ecdsa_sig = p256::ecdsa::Signature::from_slice(&sig.value)

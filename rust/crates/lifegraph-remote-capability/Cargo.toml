@@ -19,7 +19,6 @@ lifegraph-proto = { path = "../lifegraph-proto" }
 lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
 prost.workspace = true
 p256.workspace = true
-sha2.workspace = true
 
-[dev-dependencies]
+lifegraph-core = { path = "../lifegraph-core" }
 getrandom.workspace = true

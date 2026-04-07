@@ -204,8 +204,7 @@ fn issue_ephemeral_leaf(
     node_id_hex: &str,
 ) -> Result<(CertificateDer<'static>, PrivatePkcs8KeyDer<'static>), Box<dyn std::error::Error + Send + Sync>> {
     use ring::rand::SystemRandom;
-    use sha2::{Digest, Sha256};
-
+    
     // 1. Generate ephemeral keypair with ring
     let rng = SystemRandom::new();
     let eph_pkcs8 = ring::signature::EcdsaKeyPair::generate_pkcs8(
@@ -235,7 +234,7 @@ fn issue_ephemeral_leaf(
     )?;
 
     // 5. Sign the TBSCertificate with the root CA's hardware signer
-    let tbs_hash = Sha256::digest(&tbs_cert_bytes);
+    let tbs_hash = lifegraph_core::crypto::sha256(&tbs_cert_bytes);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&tbs_hash);
     let raw_sig = root_signer.sign_digest(&digest_bytes)

@@ -1970,11 +1970,10 @@ fn run_mesh_loop(
 
 fn sign_event_envelope(event: &mut lifegraph_core::protocol::EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
     use lifegraph_core::protocol::{ProtocolRecord, canonical_bytes};
-    use sha2::{Digest, Sha256};
-
+    
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
     let sig = signer.sign_digest(&digest_bytes)

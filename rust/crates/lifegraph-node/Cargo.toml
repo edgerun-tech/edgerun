@@ -30,7 +30,6 @@ lifegraph-mesh-link = { path = "../lifegraph-mesh-link" }
 lifegraph-mesh-router = { path = "../lifegraph-mesh-router" }
 lifegraph-linux-netif = { path = "../lifegraph-linux-netif" }
 lifegraph-network-interface = { path = "../lifegraph-network-interface" }
-sha2.workspace = true
 p256.workspace = true
 prost.workspace = true
 prost-types.workspace = true

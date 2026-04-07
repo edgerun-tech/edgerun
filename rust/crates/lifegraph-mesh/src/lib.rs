@@ -11,7 +11,6 @@ use lifegraph_hardware_signing::{
 use p256::ecdsa::Signature;
 use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 use p256::ecdsa::VerifyingKey;
-use sha2::{Digest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Frame types
@@ -218,7 +217,7 @@ impl MeshFrame {
 
         // Hash the preimage and verify
         let preimage = self.signed_preimage();
-        let digest = Sha256::digest(&preimage);
+        let digest = lifegraph_core::crypto::sha256(&preimage);
         vk.verify_prehash(&digest, &sig).is_ok()
     }
 }
@@ -319,7 +318,7 @@ impl MeshRoutingTable {
 /// This should be called before `to_wire()`.
 pub fn sign_frame(frame: &mut MeshFrame, signing_key: &p256::ecdsa::SigningKey) {
     let preimage = frame.signed_preimage();
-    let digest = Sha256::digest(&preimage);
+    let digest = lifegraph_core::crypto::sha256(&preimage);
     let sig: Signature = signing_key.sign_prehash(&digest).expect("P-256 signing failed");
     frame.signature.copy_from_slice(&sig.to_bytes());
 }

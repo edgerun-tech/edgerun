@@ -7,7 +7,6 @@ publish.workspace = true
 
 [dependencies]
 lifegraph-proto = { path = "../lifegraph-proto" }
-sha2.workspace = true
 p256.workspace = true
 unicode-normalization.workspace = true
 prost.workspace = true

@@ -24,7 +24,6 @@ use lifegraph_core::protocol::{
 };
 use lifegraph_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
 use prost_types::Timestamp;
-use sha2::{Digest as ShaDigest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Stream writer
@@ -156,7 +155,7 @@ fn ms_to_timestamp(ms: i64) -> Timestamp {
 pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), StreamError> {
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
     let sig = signer.sign_digest(&digest_bytes)?;
@@ -172,7 +171,7 @@ pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<
 pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, false);
-    let hash = Sha256::digest(&canonical);
+    let hash = lifegraph_core::crypto::sha256(&canonical);
     Digest {
         algorithm: 1, // DIGEST_ALGORITHM_SHA256
         value: hash.to_vec(),
@@ -191,7 +190,7 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
 
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
 

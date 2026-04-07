@@ -7,4 +7,3 @@ publish.workspace = true
 
 [dependencies]
 lifegraph-core = { path = "../lifegraph-core" }
-sha2.workspace = true

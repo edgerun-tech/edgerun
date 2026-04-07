@@ -12,7 +12,6 @@ use crate::protocol::{
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
-use sha2::{Digest as ShaDigest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Stream append validation (protobuf-native)
@@ -139,7 +138,7 @@ pub fn validate_stream_append(
 fn compute_event_hash(event: &EventEnvelope) -> crate::protocol::Digest {
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, false);
-    let hash = Sha256::digest(&canonical);
+    let hash = crate::crypto::sha256(&canonical);
     crate::protocol::Digest {
         algorithm: 1,
         value: hash.to_vec(),

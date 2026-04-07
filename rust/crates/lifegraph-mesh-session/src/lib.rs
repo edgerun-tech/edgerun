@@ -44,7 +44,6 @@ use aes_gcm::{
 pub use p256::ecdh::EphemeralSecret;
 use p256::PublicKey;
 use p256::elliptic_curve::sec1::ToEncodedPoint;
-use sha2::Sha256;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -461,11 +460,9 @@ impl SessionManager {
 /// Derives a 32-byte AES-256 session key from an ECDH shared secret
 /// using HKDF-SHA256.
 fn derive_session_key(shared_secret: &[u8]) -> [u8; 32] {
-    use hkdf::Hkdf;
-    let hkdf = Hkdf::<Sha256>::new(None, shared_secret);
-    let mut key = [0u8; 32];
-    hkdf.expand(HKDF_INFO, &mut key).expect("HKDF expand failed");
-    key
+    let key_bytes = lifegraph_core::crypto::HkdfSha256::new(None, shared_secret)
+        .expand(HKDF_INFO, 32);
+    key_bytes.try_into().expect("HKDF expand failed")
 }
 
 // ---------------------------------------------------------------------------

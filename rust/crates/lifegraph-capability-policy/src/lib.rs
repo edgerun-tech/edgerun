@@ -1,7 +1,6 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use sha2::{Digest, Sha256};
 use lifegraph_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,
@@ -153,7 +152,7 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let mut h = Sha256::new();
+        let mut h = lifegraph_core::crypto::Sha256Hasher::new();
         h.update(&request.request_id);
         h.update(descriptor.provider_name.as_bytes());
         h.update(descriptor.provider_instance_id.as_bytes());
@@ -721,7 +720,7 @@ fn duration_from_prost(value: &ProstDuration) -> Option<Duration> {
 }
 
 fn revocation_id_for(grant_id: &[u8], reason: &RevocationReason) -> Vec<u8> {
-    let mut h = Sha256::new();
+    let mut h = lifegraph_core::crypto::Sha256Hasher::new();
     h.update(grant_id);
     h.update(reason.as_str().as_bytes());
     h.finalize().to_vec()

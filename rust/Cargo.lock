@@ -712,9 +712,9 @@ name = "lifegraph-capability-policy"
 version = "0.1.0"
 dependencies = [
  "lifegraph-capabilities",
+ "lifegraph-core",
  "lifegraph-proto",
  "prost-types",
- "sha2",
 ]
 
 [[package]]
@@ -732,7 +732,6 @@ dependencies = [
  "p256",
  "prost",
  "prost-types",
- "sha2",
  "unicode-normalization",
 ]
 
@@ -918,9 +917,9 @@ name = "lifegraph-mesh"
 version = "0.1.0"
 dependencies = [
  "getrandom 0.4.2",
+ "lifegraph-core",
  "lifegraph-hardware-signing",
  "p256",
- "sha2",
 ]
 
 [[package]]
@@ -943,6 +942,7 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "lifegraph-capabilities",
+ "lifegraph-core",
  "lifegraph-hardware-signing",
  "lifegraph-linux-netif",
  "lifegraph-mesh",
@@ -954,7 +954,6 @@ dependencies = [
  "lifegraph-proto",
  "lifegraph-remote-capability",
  "prost",
- "sha2",
 ]
 
 [[package]]
@@ -982,12 +981,11 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "getrandom 0.4.2",
- "hkdf",
+ "lifegraph-core",
  "lifegraph-hardware-signing",
  "lifegraph-mesh",
  "p256",
  "rand_core",
- "sha2",
 ]
 
 [[package]]
@@ -1055,7 +1053,6 @@ dependencies = [
  "rustls",
  "serde",
  "serde_yaml",
- "sha2",
  "x509-parser",
 ]
 
@@ -1099,6 +1096,7 @@ dependencies = [
  "lifegraph-camera-biometrics",
  "lifegraph-capabilities",
  "lifegraph-capability-policy",
+ "lifegraph-core",
  "lifegraph-hardware-signing",
  "lifegraph-input",
  "lifegraph-microphone",
@@ -1107,7 +1105,6 @@ dependencies = [
  "lifegraph-wifi",
  "p256",
  "prost",
- "sha2",
 ]
 
 [[package]]
@@ -1130,7 +1127,6 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "getrandom 0.4.2",
- "hkdf",
  "libc",
  "lifegraph-core",
  "lifegraph-hardware-signing",
@@ -1138,7 +1134,6 @@ dependencies = [
  "prost",
  "prost-types",
  "rusqlite",
- "sha2",
 ]
 
 [[package]]
@@ -1150,7 +1145,6 @@ dependencies = [
  "lifegraph-hardware-signing",
  "p256",
  "prost-types",
- "sha2",
 ]
 
 [[package]]
@@ -1158,7 +1152,6 @@ name = "lifegraph-tpm"
 version = "0.1.0"
 dependencies = [
  "lifegraph-core",
- "sha2",
 ]
 
 [[package]]
@@ -1194,7 +1187,6 @@ name = "lifegraph-yubikey"
 version = "0.1.0"
 dependencies = [
  "lifegraph-core",
- "sha2",
 ]
 
 [[package]]

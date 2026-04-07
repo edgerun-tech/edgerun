@@ -21,7 +21,6 @@ use crate::protocol::{
 };
 use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
 use crate::value::Value;
-use sha2::{Digest as ShaDigest, Sha256};
 
 // ---------------------------------------------------------------------------
 // Command validation context
@@ -50,7 +49,7 @@ pub struct CommandValidationContext<'a> {
 pub fn command_hash(command: &CommandEnvelope) -> Digest {
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let hash = Sha256::digest(&canonical);
+    let hash = crate::crypto::sha256(&canonical);
     Digest {
         algorithm: 1, // SHA256
         value: hash.to_vec(),
@@ -145,7 +144,7 @@ pub fn validate_command(
 
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = crate::crypto::sha256(&canonical);
 
     if !verify_ecdsa_p256(&public_key, digest.as_slice(), &sig.value) {
         return reject(
@@ -461,7 +460,7 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
 
     let record = ProtocolRecord::CommandEnvelope(command.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = crate::crypto::sha256(&canonical);
 
     if !verify_ecdsa_p256(&public_key, digest.as_slice(), &sig.value) {
         return reject(
@@ -542,7 +541,7 @@ mod tests {
         // Sign it
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,
@@ -561,7 +560,7 @@ mod tests {
         });
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,
@@ -724,7 +723,7 @@ mod tests {
         // Re-sign after modification
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,
@@ -760,7 +759,7 @@ mod tests {
         // Re-sign
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,
@@ -873,7 +872,7 @@ mod tests {
         // Sign the command
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,
@@ -938,7 +937,7 @@ mod tests {
         });
         let record = ProtocolRecord::CommandEnvelope(cmd.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = crate::crypto::sha256(&canonical);
         let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
         cmd.signature = Some(ProtoSignature {
             algorithm: 1,

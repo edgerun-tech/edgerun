@@ -182,8 +182,7 @@ mod tests {
         {
             let store = NodeStore::open(&config).unwrap();
             // We need the blob_id — it's SHA-256 of "persistent secret"
-            use sha2::{Digest, Sha256};
-            let blob_id = lifegraph_core::util::bytes_to_hex(&Sha256::digest(b"persistent secret"));
+                        let blob_id = lifegraph_core::util::bytes_to_hex(&lifegraph_core::crypto::sha256(b"persistent secret"));
 
             let entry = store.get_blob(&blob_id).unwrap().unwrap();
             let decrypted = store.decrypt_blob(&entry.nonce, &entry.ciphertext).unwrap();

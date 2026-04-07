@@ -133,8 +133,8 @@ impl MeshNode {
     fn sign_frame(&mut self, frame: &mut MeshFrame) {
         frame.header.src = self.node.identity();
         let preimage = frame.signed_preimage();
-        use sha2::Digest;
-        let digest = sha2::Sha256::digest(&preimage);
+        
+        let digest = lifegraph_core::crypto::sha256(&preimage);
         let mut digest_bytes = [0u8; 32];
         digest_bytes.copy_from_slice(&digest);
         // Sign via the node's internal signer — this is a limitation of the current design
@@ -209,7 +209,7 @@ mod tests {
     use lifegraph_proto::lifegraph::v0::stream as proto_stream;
     use lifegraph_proto::lifegraph::v0::stream::EventType;
     use p256::ecdsa::signature::hazmat::PrehashSigner;
-    use sha2::Digest;
+    
 
     fn random_signing_key() -> p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];

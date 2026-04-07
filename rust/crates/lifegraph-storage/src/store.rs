@@ -173,8 +173,7 @@ impl NodeStore {
         file.sync_all()?;
 
         // Compute hash for the index (using SHA-256 of the protobuf bytes)
-        use sha2::{Digest, Sha256};
-        let event_hash = Sha256::digest(&event_bytes).to_vec();
+                let event_hash = lifegraph_core::crypto::sha256(&event_bytes).to_vec();
 
         // Update SQLite index atomically
         self.index.put_event(
@@ -321,10 +320,9 @@ impl NodeStore {
         }
 
         use lifegraph_proto::lifegraph::v0::common::ObjectRef;
-        use sha2::{Digest, Sha256};
-
+        
         // Compute content-derived object ID
-        let object_id = Sha256::digest(content).to_vec();
+        let object_id = lifegraph_core::crypto::sha256(content).to_vec();
 
         // Create LogicalObjectDescriptor (for future storage/persistence)
         let _descriptor = lifegraph_proto::lifegraph::v0::object::LogicalObjectDescriptor {
@@ -335,7 +333,7 @@ impl NodeStore {
             canonicalization_id: "raw-bytes-v0".into(),
             canonical_digest: Some(lifegraph_proto::lifegraph::v0::common::Digest {
                 algorithm: 1, // DIGEST_ALGORITHM_SHA256
-                value: Sha256::digest(content).to_vec(),
+                value: lifegraph_core::crypto::sha256(content).to_vec(),
             }),
             canonical_size: content.len() as u64,
             created_at: Some(prost_types::Timestamp {
@@ -643,8 +641,7 @@ impl NodeStore {
     ) -> Result<lifegraph_proto::lifegraph::v0::access::SnapshotDescriptor, StorageError> {
         use lifegraph_proto::lifegraph::v0::access::SnapshotDescriptor;
         use lifegraph_proto::lifegraph::v0::common::{HeadRef, Digest, IdentityRef};
-        use sha2::{Digest as Sha256Digest, Sha256};
-
+        
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
         let base_heads: Vec<HeadRef> = heads.iter().map(|(sid, seq, hash)| HeadRef {
@@ -662,7 +659,7 @@ impl NodeStore {
             .unwrap()
             .as_secs();
         let snapshot_id = {
-            let digest = Sha256::digest(format!("{}-{}", view_type, now_secs).as_bytes());
+            let digest = lifegraph_core::crypto::sha256(format!("{}-{}", view_type, now_secs).as_bytes());
             format!("snap-{}", lifegraph_core::util::bytes_to_hex(&digest[..8]))
         };
         let node_id = signer.node_id();
@@ -697,7 +694,7 @@ impl NodeStore {
         // Sign the descriptor
         let record = lifegraph_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone());
         let canonical = lifegraph_core::protocol::canonical_bytes(&record, true);
-        let digest = Sha256::digest(&canonical);
+        let digest = lifegraph_core::crypto::sha256(&canonical);
         let mut digest_bytes = [0u8; 32];
         digest_bytes.copy_from_slice(&digest);
         let sig = signer.sign_digest(&digest_bytes)
@@ -922,8 +919,7 @@ impl NodeStore {
                 };
 
                 // Compute hash
-                use sha2::{Digest, Sha256};
-                let event_hash = Sha256::digest(&event_bytes).to_vec();
+                                let event_hash = lifegraph_core::crypto::sha256(&event_bytes).to_vec();
 
                 // Rebuild index entry
                 self.index.put_event(

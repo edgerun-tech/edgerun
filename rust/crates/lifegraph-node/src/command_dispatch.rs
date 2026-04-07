@@ -17,7 +17,6 @@ use lifegraph_proto::lifegraph::v0::trust::{DelegationRecord as ProtoDelegationR
 use lifegraph_proto::lifegraph::v0::common::CommandRef;
 use prost::Message;
 use p256::ecdsa::signature::hazmat::PrehashVerifier;
-use sha2::{Digest as ShaDigest, Sha256};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -110,7 +109,7 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
     signable_cmd.signature = None;
     let mut canonical = Vec::new();
     prost::Message::encode(&signable_cmd, &mut canonical).unwrap();
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
 
     let mut sig_bytes = [0u8; 64];
     sig_bytes.copy_from_slice(&sig.value);
@@ -157,7 +156,7 @@ fn verify_delegation_signature(delegation: &lifegraph_proto::lifegraph::v0::trus
     signable.signature = None;
     let mut canonical = Vec::new();
     prost::Message::encode(&signable, &mut canonical).unwrap();
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
 
     let r = p256::FieldBytes::from_slice(&sig.value[..32]);
     let s = p256::FieldBytes::from_slice(&sig.value[32..]);
@@ -857,7 +856,7 @@ fn record_and_respond(
 fn sign_event_envelope(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = Sha256::digest(&canonical);
+    let digest = lifegraph_core::crypto::sha256(&canonical);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
     let sig = signer.sign_digest(&digest_bytes)
@@ -876,7 +875,7 @@ fn delegation_hash(delegation: &lifegraph_proto::lifegraph::v0::trust::Delegatio
     prost::Message::encode(&signable, &mut canonical).unwrap();
     Digest {
         algorithm: 1,
-        value: Sha256::digest(&canonical).to_vec(),
+        value: lifegraph_core::crypto::sha256(&canonical).to_vec(),
     }
 }
 

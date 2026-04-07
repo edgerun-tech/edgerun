@@ -8,7 +8,6 @@ publish.workspace = true
 [dependencies]
 lifegraph-core = { path = "../lifegraph-core" }
 lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
-sha2.workspace = true
 p256.workspace = true
 prost-types.workspace = true
 

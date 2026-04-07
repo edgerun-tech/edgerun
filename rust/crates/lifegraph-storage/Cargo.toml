@@ -11,8 +11,6 @@ lifegraph-proto = { path = "../lifegraph-proto" }
 lifegraph-hardware-signing = { path = "../lifegraph-hardware-signing" }
 rusqlite.workspace = true
 aes-gcm.workspace = true
-sha2.workspace = true
-hkdf.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 getrandom.workspace = true

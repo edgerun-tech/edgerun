@@ -1,5 +1,4 @@
 use lifegraph_core::crypto::signature_input;
-use sha2::{Digest, Sha256, Sha384};
 use std::ffi::{c_char, c_long, c_void};
 
 const SCARD_SCOPE_SYSTEM: u32 = 2;
@@ -701,8 +700,8 @@ fn digest_for_yubikey_algorithm(
     match algorithm {
         YubiKeySignatureAlgorithm::EcdsaP256Sha256
         | YubiKeySignatureAlgorithm::RsaPkcs1v15Sha256
-        | YubiKeySignatureAlgorithm::RsaPssSha256 => Ok(Sha256::digest(message).to_vec()),
-        YubiKeySignatureAlgorithm::EcdsaP384Sha384 => Ok(Sha384::digest(message).to_vec()),
+        | YubiKeySignatureAlgorithm::RsaPssSha256 => Ok(lifegraph_core::crypto::sha256(message).to_vec()),
+        YubiKeySignatureAlgorithm::EcdsaP384Sha384 => Ok(lifegraph_core::crypto::sha384(message)),
         other => Err(YubiKeyError::UnsupportedAlgorithm(other.clone())),
     }
 }

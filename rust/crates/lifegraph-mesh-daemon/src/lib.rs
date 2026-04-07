@@ -19,7 +19,6 @@ use lifegraph_remote_capability::RemoteCapabilityProvider;
 use lifegraph_hardware_signing::HardwareSigningError;
 use lifegraph_proto::lifegraph::v0::capability_runtime::CapabilityRemoteEnvelope;
 use prost::Message;
-use sha2::{Digest, Sha256};
 use libc::{c_int, pollfd, POLLIN};
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -240,7 +239,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
 
             // Step 2: hash the preimage (header + payload)
             let preimage = frame.signed_preimage();
-            let digest = Sha256::digest(&preimage);
+            let digest = lifegraph_core::crypto::sha256(&preimage);
             let mut digest_bytes = [0u8; 32];
             digest_bytes.copy_from_slice(&digest);
 

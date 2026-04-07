@@ -1,5 +1,4 @@
 use lifegraph_core::crypto::signature_input;
-use sha2::{Digest, Sha256, Sha384, Sha512};
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -1047,9 +1046,9 @@ pub fn hash_message_for_algorithm(
         TpmSignatureAlgorithm::RsaPkcs1v15Sha256
         | TpmSignatureAlgorithm::RsaPssSha256
         | TpmSignatureAlgorithm::EcdsaP256Sha256
-        | TpmSignatureAlgorithm::EcSchnorr => Sha256::digest(message).to_vec(),
-        TpmSignatureAlgorithm::EcdsaP384Sha384 => Sha384::digest(message).to_vec(),
-        TpmSignatureAlgorithm::Eddsa => Sha512::digest(message).to_vec(),
+        | TpmSignatureAlgorithm::EcSchnorr => lifegraph_core::crypto::sha256(message).to_vec(),
+        TpmSignatureAlgorithm::EcdsaP384Sha384 => lifegraph_core::crypto::sha384(message),
+        TpmSignatureAlgorithm::Eddsa => lifegraph_core::crypto::sha512(message),
         TpmSignatureAlgorithm::Opaque(v) => {
             return Err(TpmError::UnsupportedAlgorithm(
                 TpmSignatureAlgorithm::Opaque(v.clone()),

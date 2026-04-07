@@ -28,8 +28,6 @@ use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
 };
-use hkdf::Hkdf;
-use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -120,7 +118,7 @@ impl BlobStore {
         _recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
         // Derive blob ID from plaintext hash (content-addressed)
-        let blob_id = lifegraph_core::util::bytes_to_hex(&Sha256::digest(plaintext));
+        let blob_id = lifegraph_core::util::bytes_to_hex(&lifegraph_core::crypto::sha256(plaintext));
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
@@ -210,11 +208,8 @@ impl BlobStore {
 ///
 /// Same private key always produces the same blob key, so blobs survive restarts.
 fn derive_blob_key_from_private_key(private_key_bytes: &[u8]) -> [u8; 32] {
-    let hk = Hkdf::<Sha256>::new(None, private_key_bytes);
-    let mut okm = [0u8; 32];
-    hk.expand(b"lifegraph:v0:blob-key", &mut okm)
-        .expect("HKDF expand to 32 bytes never fails for SHA-256");
-    okm
+    let hk = lifegraph_core::crypto::HkdfSha256::new(None, private_key_bytes);
+    hk.expand(b"lifegraph:v0:blob-key", 32).try_into().unwrap()
 }
 
 // ---------------------------------------------------------------------------
