@@ -12,5 +12,5 @@ aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "a
 p256 = { workspace = true }
 hkdf.workspace = true
 sha2.workspace = true
-zeroize.workspace = true
-rand = "=0.8.5"
+getrandom.workspace = true
+rand_core.workspace = true

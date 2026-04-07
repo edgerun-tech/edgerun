@@ -406,7 +406,9 @@ mod tests {
 
     /// Creates a real P-256 keypair and returns (NodeID, signing_key).
     fn make_real_keypair() -> (NodeID, SigningKey) {
-        let signing_key = SigningKey::random(&mut rand_core::OsRng);
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).unwrap();
+        let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
         let encoded = signing_key.verifying_key().to_encoded_point(false);
         let bytes = encoded.as_bytes();
         // Skip the 0x04 prefix, take x||y (64 bytes)

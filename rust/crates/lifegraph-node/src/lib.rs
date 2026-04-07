@@ -221,7 +221,13 @@ fn now_ms() -> i64 {
 mod tests {
     use super::*;
     use lifegraph_hardware_signing::MeshSigner;
-    use rand::rngs::OsRng;
+    use p256::ecdsa::signature::hazmat::PrehashSigner;
+
+    fn random_signing_key() -> p256::ecdsa::SigningKey {
+        let mut bytes = [0u8; 32];
+        getrandom::fill(&mut bytes).unwrap();
+        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+    }
 
     struct TestSigner {
         node_id: NodeID,
@@ -230,7 +236,7 @@ mod tests {
 
     impl TestSigner {
         fn new() -> Self {
-            let key = p256::ecdsa::SigningKey::random(&mut OsRng);
+            let key = random_signing_key();
             let vk = key.verifying_key();
             let encoded = vk.to_encoded_point(false);
             let mut node_bytes = [0u8; 64];
@@ -251,9 +257,8 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], lifegraph_hardware_signing::HardwareSigningError> {
-            use p256::ecdsa::signature::hazmat::RandomizedPrehashSigner;
-            let sig: p256::ecdsa::Signature =
-                self.key.sign_prehash_with_rng(&mut OsRng, digest).unwrap();
+            let sig: p256::ecdsa::Signature = self.key.sign_prehash(digest)
+                .map_err(|e| lifegraph_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());
             Ok(bytes)

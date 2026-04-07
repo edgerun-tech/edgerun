@@ -84,8 +84,6 @@ p256 = { version = "=0.13.2", default-features = false, features = ["ecdh", "ecd
 prost = "=0.14.3"
 prost-build = "=0.14.3"
 prost-types = "=0.14.3"
-rand = "=0.8.5"
-rand_core = { version = "=0.6.4", features = ["getrandom"] }
 rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"] }
 ring = "0.17"
 rusqlite = "=0.37.0"
@@ -98,7 +96,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 unicode-normalization = "=0.1.25"
 x509-parser = "0.16"
-zeroize = "=1.8.2"
 
 # Dev-only
 criterion = "0.5"
+rand_core = "=0.6.4"

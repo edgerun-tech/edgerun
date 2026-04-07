@@ -49,4 +49,3 @@ ring.workspace = true
 x509-parser.workspace = true
 
 [dev-dependencies]
-rand.workspace = true

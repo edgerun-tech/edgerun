@@ -47,9 +47,22 @@ use p256::elliptic_curve::sec1::ToEncodedPoint;
 use sha2::Sha256;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use rand::rngs::OsRng;
-use rand::RngCore;
-use zeroize::Zeroize;
+
+/// Volatile zero to prevent compiler optimization from eliding it.
+fn volatile_zero_u64(val: &mut u64) {
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    let p: *mut u64 = val;
+    unsafe { p.write_volatile(0) }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
+
+fn volatile_zero_bytes(buf: &mut [u8]) {
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+    for b in buf.iter_mut() {
+        unsafe { (b as *mut u8).write_volatile(0) }
+    }
+    core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -98,7 +111,7 @@ impl MeshSession {
     /// Creates a session from a derived AES-256-GCM key.
     fn new(peer: NodeID, key: [u8; 32]) -> Self {
         let mut nonce_prefix = [0u8; 4];
-        OsRng.fill_bytes(&mut nonce_prefix);
+        getrandom::fill(&mut nonce_prefix).expect("getrandom failed");
 
         Self {
             peer,
@@ -173,9 +186,9 @@ impl MeshSession {
 impl Drop for MeshSession {
     fn drop(&mut self) {
         // Zero all sensitive fields on drop
-        self.nonce_counter.zeroize();
-        self.nonce_prefix.zeroize();
-        if let Some(ref mut c) = self.highest_seen_counter { c.zeroize(); }
+        volatile_zero_u64(&mut self.nonce_counter);
+        volatile_zero_bytes(&mut self.nonce_prefix);
+        if let Some(ref mut c) = self.highest_seen_counter { volatile_zero_u64(c); }
         // The cipher holds the AES-256 key — we can't zero it directly,
         // but the key material in the cipher struct is stored in memory
         // that will be freed. For defense-in-depth, we could use a custom
@@ -290,6 +303,33 @@ impl SessionManager {
         self.our_node_id
     }
 
+    /// Generate a random EphemeralSecret using getrandom + rand_core.
+    /// getrandom fills bytes; rand_core's OsRng wraps it for the ECDH API.
+    pub fn random_ephemeral_secret() -> EphemeralSecret {
+        struct GetrandomRng;
+        impl rand_core::CryptoRng for GetrandomRng {}
+        impl rand_core::RngCore for GetrandomRng {
+            fn next_u32(&mut self) -> u32 {
+                let mut buf = [0u8; 4];
+                getrandom::fill(&mut buf).unwrap();
+                u32::from_be_bytes(buf)
+            }
+            fn next_u64(&mut self) -> u64 {
+                let mut buf = [0u8; 8];
+                getrandom::fill(&mut buf).unwrap();
+                u64::from_be_bytes(buf)
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                getrandom::fill(dest).unwrap();
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+        EphemeralSecret::random(&mut GetrandomRng)
+    }
+
     // -----------------------------------------------------------------------
     // Handshake: initiator side
     // -----------------------------------------------------------------------
@@ -300,7 +340,7 @@ impl SessionManager {
     /// message to send to the responder. The private ephemeral key is kept
     /// internally until the handshake completes.
     pub fn initiate_handshake(&self, _peer: NodeID) -> (HandshakeInit, EphemeralSecret) {
-        let secret = EphemeralSecret::random(&mut OsRng);
+        let secret = Self::random_ephemeral_secret();
         let pub_point = secret.public_key().to_encoded_point(false);
         let pub_bytes = pub_point.as_bytes();
         let mut ephemeral_pub = [0u8; ECDH_PUBLIC_KEY_SIZE];
@@ -346,7 +386,7 @@ impl SessionManager {
         let their_pub = PublicKey::from_sec1_bytes(&init.ephemeral_pub)
             .map_err(|_| SessionError::InvalidEcdhPublicKey)?;
 
-        let our_secret = EphemeralSecret::random(&mut OsRng);
+        let our_secret = Self::random_ephemeral_secret();
         let our_pub_point = our_secret.public_key().to_encoded_point(false);
         let our_pub_bytes = our_pub_point.as_bytes();
         let mut ephemeral_pub = [0u8; ECDH_PUBLIC_KEY_SIZE];
@@ -639,9 +679,9 @@ mod tests {
 
     #[test]
     fn derive_session_key_is_deterministic() {
-        let secret_a = p256::ecdh::EphemeralSecret::random(&mut OsRng);
+        let secret_a = crate::SessionManager::random_ephemeral_secret();
         let pub_a = secret_a.public_key();
-        let secret_b = p256::ecdh::EphemeralSecret::random(&mut OsRng);
+        let secret_b = crate::SessionManager::random_ephemeral_secret();
         let pub_b = secret_b.public_key();
 
         let shared_ab = secret_a.diffie_hellman(&pub_b);
