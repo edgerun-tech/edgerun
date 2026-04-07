@@ -34,7 +34,9 @@ mod tests {
     use std::sync::Arc;
 
     fn tmp_data_root() -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("lg_test_{}", std::process::id()));
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("lg_test_{}_{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path).unwrap();
         path
