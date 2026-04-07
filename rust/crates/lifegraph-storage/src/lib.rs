@@ -34,8 +34,10 @@ mod tests {
     use std::sync::Arc;
 
     fn tmp_data_root() -> std::path::PathBuf {
-        let dir = tempfile::tempdir().unwrap();
-        dir.keep().to_path_buf()
+        let path = std::env::temp_dir().join(format!("lg_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        path
     }
 
     fn test_event(stream_id: &str, seq: u64) -> EventEnvelope {

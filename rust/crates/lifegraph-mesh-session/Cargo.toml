@@ -14,10 +14,3 @@ hkdf.workspace = true
 sha2.workspace = true
 zeroize.workspace = true
 rand = "=0.8.5"
-
-[dev-dependencies]
-criterion.workspace = true
-
-[[bench]]
-name = "session_bench"
-harness = false

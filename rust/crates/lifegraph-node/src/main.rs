@@ -1254,7 +1254,7 @@ async fn handle_tls_connection(
     store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
 ) {
     let (mut reader, mut writer) = tokio::io::split(stream);
-    let mut read_buf = bytes::BytesMut::with_capacity(4096);
+    let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
     handle_tcp_stream_common(
@@ -1272,7 +1272,7 @@ async fn handle_tcp_connection(
     store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
 ) {
     let (mut reader, mut writer) = tokio::io::split(stream);
-    let mut read_buf = bytes::BytesMut::with_capacity(4096);
+    let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
     handle_tcp_stream_common(
@@ -1288,7 +1288,7 @@ async fn handle_tcp_connection(
 async fn handle_tcp_stream_common<R, W>(
     reader: &mut R,
     writer: &mut W,
-    read_buf: &mut bytes::BytesMut,
+    read_buf: &mut Vec<u8>,
     conn_rate_limiter: &mut ingress::TokenBucket,
     store_tx: &tokio::sync::mpsc::Sender<StoreRequest>,
 ) where
@@ -1344,7 +1344,10 @@ async fn handle_tcp_stream_common<R, W>(
             }
         }
 
-        let payload: Vec<u8> = read_buf.split_to(total_needed).split_off(8).to_vec();
+        let payload: Vec<u8> = {
+            let frame = read_buf.drain(..total_needed).collect::<Vec<u8>>();
+            frame.into_iter().skip(8).collect()
+        };
 
         // Per-connection rate limit (cheap check, before decode or crypto)
         if !conn_rate_limiter.try_consume() {
@@ -2088,7 +2091,7 @@ struct SignerConfig {
 /// Used for TLS where the signer must be shared across threads.
 struct SyncSoftwareSigner {
     node_id: NodeID,
-    key: parking_lot::Mutex<SigningKey>,
+    key: std::sync::Mutex<SigningKey>,
 }
 
 impl SyncSoftwareSigner {
@@ -2099,7 +2102,7 @@ impl SyncSoftwareSigner {
         node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
         Self {
             node_id: NodeID(node_bytes),
-            key: parking_lot::Mutex::new(key),
+            key: std::sync::Mutex::new(key),
         }
     }
 }
@@ -2113,7 +2116,7 @@ impl MeshSigner for SyncSoftwareSigner {
         &self,
         digest: &[u8; 32],
     ) -> Result<[u8; 64], lifegraph_hardware_signing::HardwareSigningError> {
-        let key = self.key.lock();
+        let key = self.key.lock().unwrap();
         let sig: p256::ecdsa::Signature = key
             .sign_prehash(digest)
             .map_err(|e| lifegraph_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;

@@ -19,6 +19,3 @@ hex.workspace = true
 getrandom.workspace = true
 thiserror.workspace = true
 libc.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
