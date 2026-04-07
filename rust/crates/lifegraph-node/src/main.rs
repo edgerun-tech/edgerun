@@ -14,6 +14,7 @@
 //! The node's private key NEVER leaves secure hardware. The config file only
 //! stores the public key (NodeID) and a reference to the hardware key handle.
 //! No `.key` file is ever written.
+use lifegraph_log;
 
 mod capabilities;
 mod ingress;
@@ -29,6 +30,7 @@ use lifegraph_mesh_router::MeshRouter;
 use lifegraph_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
 use prost::Message;
 use std::sync::Arc;
+use std::env;
 use p256::ecdsa::SigningKey;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use std::fs;
@@ -91,18 +93,14 @@ fn main() {
         }
         Commands::Run { config, listen, tls_cert, health_port, log_level } => {
             // Initialize structured logging
-            let env_filter = tracing_subscriber::EnvFilter::try_new(&log_level)
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-            tracing_subscriber::fmt()
-                .with_env_filter(env_filter)
-                .with_ansi(true)
-                .init();
+            env::set_var("RUST_LOG", &log_level);
+            lifegraph_log::init_from_env();
 
             let rt = lifegraph_rt::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .unwrap_or_else(|e| {
-                    tracing::error!("failed to create tokio runtime: {}", e);
+                    lifegraph_log::error!("failed to create tokio runtime: {}", e);
                     std::process::exit(1);
                 });
             rt.block_on(async move {
@@ -366,11 +364,11 @@ async fn run_health_server(port: u16, state: HealthState) {
     let listener = match lifegraph_rt::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
-            tracing::error!("failed to bind health endpoint on {}: {}", addr, e);
+            lifegraph_log::error!("failed to bind health endpoint on {}: {}", addr, e);
             return;
         }
     };
-    tracing::info!(port, "health endpoint listening");
+    lifegraph_log::info!("health endpoint listening");
 
     loop {
         match listener.accept().await {
@@ -394,7 +392,7 @@ async fn run_health_server(port: u16, state: HealthState) {
                 });
             }
             Err(e) => {
-                tracing::warn!("health endpoint accept error: {}", e);
+                lifegraph_log::warn!("health endpoint accept error: {}", e);
             }
         }
     }
@@ -450,8 +448,7 @@ async fn run_peer_reconnection(
 
                 // In v0, we just log — actual outbound reconnection is initiated
                 // when the peer is listed in bootstrap_peers config.
-                tracing::debug!(node_id = node_id_hex, retry = retry_count,
-                    "peer reconnection pending (use bootstrap_peers config)");
+                lifegraph_log::debug!("peer reconnection pending (use bootstrap_peers config)");
 
                 // Clean up very old entries
                 if *retry_count > 20 {
@@ -468,13 +465,13 @@ async fn run_peer_reconnection(
 
 async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Option<PathBuf>, health_port: Option<u16>) {
     if !path.exists() {
-        tracing::error!("config not found at {}. Run `lifegraphd init` first.", path.display());
+        lifegraph_log::error!("config not found at {}. Run `lifegraphd init` first.", path.display());
         std::process::exit(1);
     }
 
     let yaml = fs::read_to_string(path).unwrap();
     let config: NodeConfig = serde_yaml::from_str(&yaml).unwrap_or_else(|e| {
-        tracing::error!("invalid config: {}", e);
+        lifegraph_log::error!("invalid config: {}", e);
         std::process::exit(1);
     });
 
@@ -485,12 +482,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     let node_name = config.name.as_deref().unwrap_or("(unnamed)").to_string();
     let signer_type = config.signer.as_ref().map(|s| s.signer_type.clone()).unwrap_or_else(|| "unconfigured".to_string());
 
-    tracing::info!(
-        node = node_name,
-        stream_id = config.stream_id,
-        node_id = node_id.short(),
-        signer = signer_type,
-        "lifegraphd starting"
+    lifegraph_log::info!("lifegraphd starting"
     );
 
     // --- Health endpoint ---
@@ -514,7 +506,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
         }),
     };
     let mut store = NodeStore::open(&store_config).unwrap_or_else(|e| {
-        tracing::error!("failed to open storage at {}: {}", data_root.display(), e);
+        lifegraph_log::error!("failed to open storage at {}: {}", data_root.display(), e);
         std::process::exit(1);
     });
 
@@ -552,17 +544,17 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             signature: None,
         };
         sign_event_envelope(&mut genesis, &*signer).unwrap_or_else(|e| {
-            tracing::error!("failed to sign genesis event: {}", e);
+            lifegraph_log::error!("failed to sign genesis event: {}", e);
             std::process::exit(1);
         });
         store.append_event(&genesis).unwrap_or_else(|e| {
-            tracing::error!("failed to write genesis event: {}", e);
+            lifegraph_log::error!("failed to write genesis event: {}", e);
             std::process::exit(1);
         });
-        tracing::info!(stream_id = config.stream_id, "genesis event created (seq=0)");
+        lifegraph_log::info!("genesis event created (seq=0)");
     } else {
         let (head_seq, _) = store.get_head(stream_id_bytes).unwrap().unwrap();
-        tracing::info!(head_seq, stream_id = config.stream_id, "loaded stream");
+        lifegraph_log::info!("loaded stream");
     }
 
     // --- Unix socket capability server ---
@@ -572,17 +564,17 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
         let policy = lifegraph_capability_policy::SimplePolicyEngine::default();
         capabilities::discover_and_register_capabilities(&mut multi, policy);
         let cap_count = multi.len();
-        tracing::info!(count = cap_count, "discovered capability providers");
+        lifegraph_log::info!("discovered capability providers");
 
         if cap_count > 0 {
             let multi_arc = Arc::new(std::sync::Mutex::new(multi));
             let socket_path_clone = socket_path.clone();
             std::thread::spawn(move || {
                 if let Err(e) = capabilities::serve_capabilities_unix(multi_arc, &socket_path_clone) {
-                    tracing::error!("capability server error: {}", e);
+                    lifegraph_log::error!("capability server error: {}", e);
                 }
             });
-            tracing::info!(path = %socket_path.display(), "capability server listening");
+            lifegraph_log::info!("capability server listening");
         }
     }
 
@@ -599,7 +591,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
         .map(|s| s.as_bytes().to_vec())
         .collect();
     if !allowed_peers.is_empty() {
-        tracing::info!(count = allowed_peers.len(), "peer allowlist active");
+        lifegraph_log::info!("peer allowlist active");
     }
 
     // --- Peer bootstrap (before store is moved) ---
@@ -607,7 +599,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     let unreachable_peers = store.list_unreachable_peers_with_addr().unwrap_or_default();
     for peer in &bootstrap_peers {
         if let Err(e) = store.upsert_peer(&peer.node_id_hex, Some(&peer.addr), "unknown", true) {
-            tracing::warn!(error = %e, node_id = peer.node_id_hex, "failed to record bootstrap peer");
+            lifegraph_log::warn!("failed to record bootstrap peer");
         }
     }
 
@@ -634,11 +626,11 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             // Build TLS config with hardware-backed ephemeral leaf cert issuance
             match tls::build_tls_server_config(cert_path, Arc::clone(&signer)) {
                 Ok(tls_config) => {
-                    tracing::info!(cert = %cert_path.display(), "TLS enabled with hardware-issued ephemeral leaf certificate");
+                    lifegraph_log::info!("TLS enabled with hardware-issued ephemeral leaf certificate");
                     Some(Arc::new(tls_rt::TlsAcceptor::new(Arc::new(tls_config))))
                 }
                 Err(e) => {
-                    tracing::error!("failed to build TLS config: {}", e);
+                    lifegraph_log::error!("failed to build TLS config: {}", e);
                     std::process::exit(1);
                 }
             }
@@ -653,17 +645,17 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             tls_acceptor.clone(),
         ));
         if tls_acceptor.is_some() {
-            tracing::info!(addr = %addr, "TCP+TLS listener started");
+            lifegraph_log::info!("TCP+TLS listener started");
         } else {
-            tracing::info!(addr = %addr, "TCP listener started (no TLS)");
+            lifegraph_log::info!("TCP listener started (no TLS)");
         }
     } else {
-        tracing::info!("running mesh-only (no TCP listener)");
+        lifegraph_log::info!("running mesh-only (no TCP listener)");
     }
 
     // --- Bootstrap peer connections ---
     if !bootstrap_peers.is_empty() {
-        tracing::info!(count = bootstrap_peers.len(), "connecting to bootstrap peers");
+        lifegraph_log::info!("connecting to bootstrap peers");
         for peer in &bootstrap_peers {
             // Attempt TCP connection
             let peer_addr = peer.addr.clone();
@@ -672,12 +664,12 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             lifegraph_rt::spawn(async move {
                 match lifegraph_rt::TcpStream::connect(&peer_addr).await {
                     Ok(stream) => {
-                        tracing::info!(addr = %peer_addr, node_id = peer_id_hex, "connected to bootstrap peer");
+                        lifegraph_log::info!("connected to bootstrap peer");
                         // Handle as a regular TCP connection (bidirectional)
                         handle_bootstrap_connection(stream, conn_store_tx, &peer_id_hex).await;
                     }
                     Err(e) => {
-                        tracing::warn!(addr = %peer_addr, node_id = peer_id_hex, error = %e, "failed to connect to bootstrap peer");
+                        lifegraph_log::warn!("failed to connect to bootstrap peer");
                     }
                 }
             });
@@ -705,7 +697,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     // Wait for shutdown signal
     let shutdown = lifegraph_rt::spawn(async {
         lifegraph_rt::ctrl_c().await.ok();
-        tracing::info!("shutting down");
+        lifegraph_log::info!("shutting down");
     });
     let _ = shutdown.await;
 
@@ -733,7 +725,7 @@ async fn run_fetch_queue_consumer(
     use lifegraph_storage::sqlite::SqliteIndexConfig;
 
     if peers.is_empty() {
-        tracing::info!("no bootstrap peers configured, fetch queue consumer disabled");
+        lifegraph_log::info!("no bootstrap peers configured, fetch queue consumer disabled");
         return;
     }
 
@@ -741,7 +733,7 @@ async fn run_fetch_queue_consumer(
     let index = match SqliteIndex::open(&SqliteIndexConfig { db_path: index_path }) {
         Ok(idx) => idx,
         Err(e) => {
-            tracing::error!("failed to open SQLite index for fetch queue: {}", e);
+            lifegraph_log::error!("failed to open SQLite index for fetch queue: {}", e);
             return;
         }
     };
@@ -757,7 +749,7 @@ async fn run_fetch_queue_consumer(
             Ok(Some(entry)) => entry,
             Ok(None) => continue, // Queue is empty
             Err(e) => {
-                tracing::warn!("failed to dequeue fetch: {}", e);
+                lifegraph_log::warn!("failed to dequeue fetch: {}", e);
                 continue;
             }
         };
@@ -766,7 +758,7 @@ async fn run_fetch_queue_consumer(
         let fetch_id = fetch_entry.target_id.clone();
         let fetch_priority = fetch_entry.priority;
 
-        tracing::debug!(target = %fetch_type, id = %fetch_id, "processing fetch queue entry");
+        lifegraph_log::debug!("processing fetch queue entry");
 
         // Try each peer until one responds
         let mut fetched = false;
@@ -814,14 +806,14 @@ async fn run_fetch_queue_consumer(
             // Send query over TCP to the peer
             match send_query_to_peer(&peer_addr, &query).await {
                 Ok(_fragment_bytes) => {
-                    tracing::info!(peer = %peer_addr, "fetch query succeeded");
+                    lifegraph_log::info!("fetch query succeeded");
                     fetched = true;
                     // Mark as done
                     let _ = index.mark_fetch_done(fetch_entry.id);
                     break;
                 }
                 Err(e) => {
-                    tracing::debug!(peer = %peer_addr, error = %e, "peer query failed, trying next");
+                    lifegraph_log::debug!("peer query failed, trying next");
                 }
             }
         }
@@ -952,11 +944,11 @@ fn run_store_task(
                 .filter(|(typ, _)| typ == "delegation")
                 .filter_map(|(_, hex)| lifegraph_core::util::hex_to_bytes(&hex).ok())
                 .collect();
-            tracing::info!(count = revoked.len(), "loaded active revocations");
+            lifegraph_log::info!("loaded active revocations");
             revoked
         }
         Err(e) => {
-            tracing::warn!("failed to load revocations: {}", e);
+            lifegraph_log::warn!("failed to load revocations: {}", e);
             std::collections::HashSet::new()
         }
     };
@@ -1068,16 +1060,13 @@ fn run_store_task(
             StoreRequest::ProduceSnapshot { view_type, completeness, reply_tx } => {
                 match store.produce_snapshot(signer, &view_type, completeness) {
                     Ok(descriptor) => {
-                        tracing::info!(
-                            snapshot_id = %String::from_utf8_lossy(&descriptor.snapshot_id),
-                            head_count = descriptor.base_heads.len(),
-                            "snapshot produced"
+                        lifegraph_log::info!("snapshot produced"
                         );
                         let result_bytes = prost::Message::encode_to_vec(&descriptor);
                         let _ = reply_tx.send(StoreResponse::Ok(result_bytes));
                     }
                     Err(e) => {
-                        tracing::error!("snapshot production failed: {}", e);
+                        lifegraph_log::error!("snapshot production failed: {}", e);
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
                 }
@@ -1085,22 +1074,17 @@ fn run_store_task(
             StoreRequest::FetchObject { object_ref, reply_tx } => {
                 match store.get_object(&object_ref) {
                     Ok(Some(result)) => {
-                        tracing::info!(
-                            object_id = %lifegraph_core::util::bytes_to_hex(&object_ref.object_id),
-                            content_len = result.content.len(),
-                            "object fetched"
+                        lifegraph_log::info!("object fetched"
                         );
                         let _ = reply_tx.send(StoreResponse::Ok(result.content));
                     }
                     Ok(None) => {
-                        tracing::warn!(
-                            object_id = %lifegraph_core::util::bytes_to_hex(&object_ref.object_id),
-                            "object not found for fetch"
+                        lifegraph_log::warn!("object not found for fetch"
                         );
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
                     Err(e) => {
-                        tracing::error!("object fetch failed: {}", e);
+                        lifegraph_log::error!("object fetch failed: {}", e);
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
                 }
@@ -1108,11 +1092,11 @@ fn run_store_task(
             StoreRequest::SendCommand { peer_addr, command, reply_tx } => {
                 match send_command_to_peer(&peer_addr, &command, &mut store, stream_id, signer) {
                     Ok(response) => {
-                        tracing::info!(peer = %peer_addr, "outbound command succeeded");
+                        lifegraph_log::info!("outbound command succeeded");
                         let _ = reply_tx.send(StoreResponse::Ok(response));
                     }
                     Err(e) => {
-                        tracing::error!(peer = %peer_addr, error = %e, "outbound command failed");
+                        lifegraph_log::error!("outbound command failed");
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
                 }
@@ -1123,7 +1107,7 @@ fn run_store_task(
         if request_counter.is_multiple_of(10) {
             if let Ok(resolved) = store.process_fetch_queue() {
                 if resolved > 0 {
-                    tracing::info!(resolved, "fetch queue processed items");
+                    lifegraph_log::info!("fetch queue processed items");
                 }
             }
         }
@@ -1133,10 +1117,10 @@ fn run_store_task(
             match store.integrity_check_and_rebuild() {
                 Ok(0) => {} // Healthy
                 Ok(rebuilt) => {
-                    tracing::warn!(rebuilt, "SQLite corruption detected and indexes rebuilt");
+                    lifegraph_log::warn!("SQLite corruption detected and indexes rebuilt");
                 }
                 Err(e) => {
-                    tracing::error!(error = %e, "integrity check and rebuild failed");
+                    lifegraph_log::error!("integrity check and rebuild failed");
                 }
             }
         }
@@ -1146,7 +1130,7 @@ fn run_store_task(
             match store.wal_checkpoint() {
                 Ok(Some(wal_size)) if wal_size > 1024 * 1024 => {
                     // WAL > 1MB after checkpoint — log a warning
-                    tracing::warn!(wal_size, "WAL file remains large after checkpoint");
+                    lifegraph_log::warn!("WAL file remains large after checkpoint");
                 }
                 _ => {}
             }
@@ -1157,9 +1141,7 @@ fn run_store_task(
             match store.check_disk_space() {
                 Ok(()) => {}
                 Err(available_bytes) => {
-                    tracing::error!(
-                        available_mb = available_bytes / 1024 / 1024,
-                        "CRITICAL: disk space critically low, writes may fail"
+                    lifegraph_log::error!("CRITICAL: disk space critically low, writes may fail"
                     );
                 }
             }
@@ -1215,7 +1197,7 @@ async fn run_tcp_listener(
     let listener = match lifegraph_rt::TcpListener::bind(&listen_addr).await {
         Ok(l) => l,
         Err(e) => {
-            tracing::error!("failed to bind TCP on {}: {}", listen_addr, e);
+            lifegraph_log::error!("failed to bind TCP on {}: {}", listen_addr, e);
             return;
         }
     };
@@ -1230,21 +1212,21 @@ async fn run_tcp_listener(
                         // Perform TLS handshake
                         match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
-                                tracing::debug!(peer = %peer_addr, "TLS connection accepted");
+                                lifegraph_log::debug!("TLS connection accepted");
                                 handle_tls_connection(tls_stream, conn_store_tx).await;
                             }
                             Err(e) => {
-                                tracing::debug!(peer = %peer_addr, error = %e, "TLS handshake failed");
+                                lifegraph_log::debug!("TLS handshake failed");
                             }
                         }
                     } else {
-                        tracing::debug!(peer = %peer_addr, "TCP connection accepted");
+                        lifegraph_log::debug!("TCP connection accepted");
                         handle_tcp_connection(stream, conn_store_tx).await;
                     }
                 });
             }
             Err(e) => {
-                tracing::warn!("TCP accept error: {}", e);
+                lifegraph_log::warn!("TCP accept error: {}", e);
             }
         }
     }
@@ -1308,14 +1290,14 @@ async fn handle_tcp_stream_common<R, W>(
                     if read_buf.is_empty() {
                         return; // Clean close
                     }
-                    tracing::debug!("TCP closed mid-header");
+                    lifegraph_log::debug!("TCP closed mid-header");
                     return;
                 }
                 Ok(n) => {
                     read_buf.extend_from_slice(&chunk[..n]);
                 }
                 Err(e) => {
-                    tracing::debug!("TCP read error: {}", e);
+                    lifegraph_log::debug!("TCP read error: {}", e);
                     return;
                 }
             }
@@ -1323,7 +1305,7 @@ async fn handle_tcp_stream_common<R, W>(
 
         let frame_len = u64::from_be_bytes(read_buf[..8].try_into().unwrap()) as usize;
         if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
-            tracing::warn!(frame_len, "TCP frame length invalid or too large");
+            lifegraph_log::warn!("TCP frame length invalid or too large");
             return;
         }
 
@@ -1333,14 +1315,14 @@ async fn handle_tcp_stream_common<R, W>(
             let mut chunk = vec![0u8; 4096.min(total_needed - read_buf.len())];
             match reader.read(&mut chunk).await {
                 Ok(0) => {
-                    tracing::debug!("TCP closed mid-frame");
+                    lifegraph_log::debug!("TCP closed mid-frame");
                     return;
                 }
                 Ok(n) => {
                     read_buf.extend_from_slice(&chunk[..n]);
                 }
                 Err(e) => {
-                    tracing::debug!("TCP read error: {}", e);
+                    lifegraph_log::debug!("TCP read error: {}", e);
                     return;
                 }
             }
@@ -1353,7 +1335,7 @@ async fn handle_tcp_stream_common<R, W>(
 
         // Per-connection rate limit (cheap check, before decode or crypto)
         if !conn_rate_limiter.try_consume() {
-            tracing::warn!("TCP rate-limited connection");
+            lifegraph_log::warn!("TCP rate-limited connection");
             return;
         }
 
@@ -1382,7 +1364,7 @@ async fn handle_tcp_stream_common<R, W>(
                         }
                     }
                     Ok(StoreResponse::Rejected(reason)) => {
-                        tracing::debug!(?reason, "TCP snapshot production screened");
+                        lifegraph_log::debug!("TCP snapshot production screened");
                         return;
                     }
                     Err(_) => return,
@@ -1396,7 +1378,7 @@ async fn handle_tcp_stream_common<R, W>(
                 let proto_command = match lifegraph_proto::lifegraph::v0::stream::CommandEnvelope::decode(&raw[..]) {
                     Ok(cmd) => cmd,
                     Err(e) => {
-                        tracing::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
+                        lifegraph_log::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
                         let err = format!("FETCH_OBJECT: decode failed");
                         let resp_frame = encode_tcp_frame(err.as_bytes());
                         let _ = writer.write_all(&resp_frame).await;
@@ -1428,7 +1410,7 @@ async fn handle_tcp_stream_common<R, W>(
                 };
 
                 if object_ref.object_id.is_empty() {
-                    tracing::warn!("FETCH_OBJECT: no object reference provided");
+                    lifegraph_log::warn!("FETCH_OBJECT: no object reference provided");
                     let err_resp = format!("FETCH_OBJECT: no object reference provided");
                     let resp_frame = encode_tcp_frame(err_resp.as_bytes());
                     let _ = writer.write_all(&resp_frame).await;
@@ -1447,7 +1429,7 @@ async fn handle_tcp_stream_common<R, W>(
                         }
                     }
                     Ok(StoreResponse::Rejected(reason)) => {
-                        tracing::debug!(?reason, "TCP fetch object screened");
+                        lifegraph_log::debug!("TCP fetch object screened");
                         return;
                     }
                     Err(_) => return,
@@ -1469,7 +1451,7 @@ async fn handle_tcp_stream_common<R, W>(
                     }
                 }
                 Ok(StoreResponse::Rejected(reason)) => {
-                    tracing::debug!(?reason, "TCP message screened");
+                    lifegraph_log::debug!("TCP message screened");
                     return;
                 }
                 Err(_) => return,
@@ -1496,7 +1478,7 @@ async fn handle_tcp_stream_common<R, W>(
                     }
                 }
                 Ok(StoreResponse::Rejected(reason)) => {
-                    tracing::debug!(?reason, "TCP query screened");
+                    lifegraph_log::debug!("TCP query screened");
                     return;
                 }
                 Err(_) => return,
@@ -1504,7 +1486,7 @@ async fn handle_tcp_stream_common<R, W>(
             continue;
         }
 
-        tracing::debug!(payload_len = payload.len(), "TCP received unrecognized message type");
+        lifegraph_log::debug!("TCP received unrecognized message type");
     }
 }
 
@@ -1578,7 +1560,7 @@ fn execute_query(
     let (max_bytes, max_results) = match check_query_cost(query) {
         QueryCostCheck::Allowed { max_bytes, max_results } => (max_bytes, max_results),
         QueryCostCheck::Denied { reason } => {
-            tracing::warn!(reason, "query denied due to cost limits");
+            lifegraph_log::warn!("query denied due to cost limits");
             return build_query_denial(query, responder_node_id, reason);
         }
     };
@@ -1610,7 +1592,7 @@ fn execute_query(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "query HEAD failed");
+                    lifegraph_log::warn!("query HEAD failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
             }
@@ -1663,7 +1645,7 @@ fn execute_query(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "query EVENT_RANGE failed");
+                    lifegraph_log::warn!("query EVENT_RANGE failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
             }
@@ -1680,7 +1662,7 @@ fn execute_query(
                         }
                     }
                     Err(e) => {
-                        tracing::warn!(error = %e, "query OBJECT_EXISTENCE failed");
+                        lifegraph_log::warn!("query OBJECT_EXISTENCE failed");
                         completeness = ResultCompleteness::Partial as i32;
                     }
                 }
@@ -1699,7 +1681,7 @@ fn execute_query(
                         completeness = ResultCompleteness::Partial as i32;
                     }
                     Err(e) => {
-                        tracing::warn!(error = %e, "query OBJECT_FETCH failed");
+                        lifegraph_log::warn!("query OBJECT_FETCH failed");
                         completeness = ResultCompleteness::Partial as i32;
                     }
                 }
@@ -1726,7 +1708,7 @@ fn execute_query(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "query SNAPSHOT failed");
+                    lifegraph_log::warn!("query SNAPSHOT failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
             }
@@ -1754,7 +1736,7 @@ fn execute_query(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(error = %e, "query SEARCH failed");
+                    lifegraph_log::warn!("query SEARCH failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
             }
@@ -1801,7 +1783,7 @@ fn execute_query(
 
         // Unknown query class
         _ => {
-            tracing::warn!(query_class, "query class not supported");
+            lifegraph_log::warn!("query class not supported");
             completeness = ResultCompleteness::Denied as i32;
         }
     }
@@ -1848,10 +1830,7 @@ fn execute_query(
     // Enforce max_total_bytes on the serialized response
     if let Some(max_b) = max_bytes {
         if fragment_bytes.len() > max_b {
-            tracing::warn!(
-                response_bytes = fragment_bytes.len(),
-                max_bytes = max_b,
-                "query response exceeds max_total_bytes, returning denial"
+            lifegraph_log::warn!("query response exceeds max_total_bytes, returning denial"
             );
             return build_query_denial(query, responder_node_id, "response_too_large");
         }
@@ -1906,8 +1885,8 @@ fn run_mesh_loop(
     let mut router = MeshRouter::new(local);
 
     match mesh_link.enable_udp_broadcast() {
-        Ok(_) => tracing::info!("UDP broadcast enabled on port 47079"),
-        Err(e) => tracing::warn!("UDP broadcast failed: {}", e),
+        Ok(_) => lifegraph_log::info!("UDP broadcast enabled on port 47079"),
+        Err(e) => lifegraph_log::warn!("UDP broadcast failed: {}", e),
     }
 
     let interfaces = discover_network_interfaces().unwrap_or_default();
@@ -1919,20 +1898,20 @@ fn run_mesh_loop(
         let Ok(ifindex_str) = fs::read_to_string(&ifindex_path) else { continue; };
         let Ok(ifindex): Result<i32, _> = ifindex_str.trim().parse() else { continue; };
         if mesh_link.add_raw_ethernet(ifindex).is_ok() {
-            tracing::info!(iface = iface.name, ifindex, "opened raw socket");
+            lifegraph_log::info!("opened raw socket");
         }
     }
 
     if let Err(e) = mesh_link.broadcast_discovery(&mut router) {
-        tracing::warn!("discovery broadcast failed: {}", e);
+        lifegraph_log::warn!("discovery broadcast failed: {}", e);
     }
 
-    tracing::info!("mesh loop running");
+    lifegraph_log::info!("mesh loop running");
 
     let mut discovery_counter: u64 = 0;
     loop {
         if let Err(e) = mesh_link.pump(&mut router) {
-            tracing::warn!("mesh pump error: {}", e);
+            lifegraph_log::warn!("mesh pump error: {}", e);
         }
 
         let frames = mesh_link.drain_inbound_data_frames();
@@ -1973,16 +1952,16 @@ fn run_mesh_loop(
         discovery_counter += 1;
         if discovery_counter.is_multiple_of(500) {
             if let Err(e) = mesh_link.broadcast_discovery(&mut router) {
-                tracing::warn!("discovery failed: {}", e);
+                lifegraph_log::warn!("discovery failed: {}", e);
             }
             let dead = router.tick_heartbeat();
             for d in &dead {
-                tracing::info!(peer = d.short(), "peer dead");
+                lifegraph_log::info!("peer dead");
             }
         }
 
         if let Err(e) = mesh_link.drain_pending_frames(&mut router) {
-            tracing::warn!("send failed: {}", e);
+            lifegraph_log::warn!("send failed: {}", e);
         }
 
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -2073,7 +2052,7 @@ fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
                 node_id_hex: parts[1].to_string(),
             })
         } else {
-            tracing::warn!(entry, "invalid bootstrap peer format (expected host:port@node_id_hex)");
+            lifegraph_log::warn!("invalid bootstrap peer format (expected host:port@node_id_hex)");
             None
         }
     }).collect()

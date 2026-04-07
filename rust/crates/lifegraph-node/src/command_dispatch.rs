@@ -6,6 +6,7 @@
 //! - Controller set management and projection from event log
 //! - Revocation record processing
 
+use lifegraph_log;
 use lifegraph_core::command::{command_hash, validate_command, CommandValidationContext};
 use lifegraph_core::protocol::{canonical_bytes, ProtocolRecord, EventEnvelope, Digest};
 use lifegraph_core::result::Verdict;
@@ -373,9 +374,7 @@ fn dispatch_add_controller(
     // Add to controller set
     controllers.add(new_controller_id.clone());
 
-    tracing::info!(
-        controller_id = %lifegraph_core::util::bytes_to_hex(&new_controller_id),
-        "controller added"
+    lifegraph_log::info!("controller added"
     );
 
     let response = format!("controller added: {}", lifegraph_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
@@ -401,9 +400,7 @@ fn dispatch_remove_controller(
             false, "controller_not_found", Vec::new(), None);
     }
 
-    tracing::info!(
-        controller_id = %lifegraph_core::util::bytes_to_hex(&target_id),
-        "controller removed"
+    lifegraph_log::info!("controller removed"
     );
 
     let response = format!("controller removed: {}", lifegraph_core::util::bytes_to_hex(&target_id)).into_bytes();
@@ -428,9 +425,7 @@ fn dispatch_transfer_control(
     // Safe transfer: add new controller first (removing old ones is manual)
     controllers.add(new_controller_id.clone());
 
-    tracing::info!(
-        new_controller = %lifegraph_core::util::bytes_to_hex(&new_controller_id),
-        "control transfer initiated — new controller added, old controllers remain until explicitly removed"
+    lifegraph_log::info!("control transfer initiated — new controller added, old controllers remain until explicitly removed"
     );
 
     let response = format!("control transferred to: {}", lifegraph_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
@@ -499,16 +494,12 @@ fn dispatch_create_delegation(
         .unwrap_or_default();
 
     if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &lifegraph_core::util::bytes_to_hex(&capability_bytes), expires_at) {
-        tracing::warn!("failed to store delegation: {}", e);
+        lifegraph_log::warn!("failed to store delegation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "storage_failed", Vec::new(), None);
     }
 
-    tracing::info!(
-        delegation_id = %delegation_id_hex,
-        issuer = %issuer_hex,
-        recipient = %recipient_hex,
-        "delegation recorded"
+    lifegraph_log::info!("delegation recorded"
     );
 
     let response = format!("delegation recorded: {}", delegation_id_hex).into_bytes();
@@ -553,16 +544,12 @@ fn dispatch_create_revocation(
     let effective_at = revocation.effective_at.as_ref().map(|t| t.seconds);
 
     if let Err(e) = store.store_revocation(&revocation_id_hex, &issuer_hex, &target_type, &target_hex, effective_at) {
-        tracing::warn!("failed to store revocation: {}", e);
+        lifegraph_log::warn!("failed to store revocation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "storage_failed", Vec::new(), None);
     }
 
-    tracing::info!(
-        revocation_id = %revocation_id_hex,
-        target_type = %target_type,
-        target = %target_hex,
-        "revocation recorded"
+    lifegraph_log::info!("revocation recorded"
     );
 
     let response = format!("revocation recorded: {}", revocation_id_hex).into_bytes();
@@ -609,7 +596,7 @@ pub fn create_node_genesis_payload(
     let payload_bytes = prost::Message::encode_to_vec(&payload);
     store.put_object(&payload_bytes, 1 /* OBJECT_KIND_PAYLOAD */, &[stream_id.to_vec()])
         .unwrap_or_else(|e| {
-            tracing::warn!("failed to store genesis payload object: {}", e);
+            lifegraph_log::warn!("failed to store genesis payload object: {}", e);
             lifegraph_proto::lifegraph::v0::common::ObjectRef {
                 object_id: vec![],
                 object_kind: Some(1),
@@ -652,11 +639,11 @@ fn append_signed_event(
     };
 
     if let Err(e) = sign_event_envelope(&mut event, signer) {
-        tracing::warn!("failed to sign event: {}", e);
+        lifegraph_log::warn!("failed to sign event: {}", e);
         return None;
     }
     if let Err(e) = store.append_event(&event) {
-        tracing::warn!("failed to append event: {}", e);
+        lifegraph_log::warn!("failed to append event: {}", e);
         return None;
     }
     Some(event.seq)
@@ -687,7 +674,7 @@ pub fn record_command_sent_event(
     let payload_bytes = prost::Message::encode_to_vec(&payload);
     let object_ref = store.put_object(&payload_bytes, 1, &[stream_id.to_vec()])
         .unwrap_or_else(|e| {
-            tracing::warn!("failed to store command sent payload: {}", e);
+            lifegraph_log::warn!("failed to store command sent payload: {}", e);
             lifegraph_proto::lifegraph::v0::common::ObjectRef {
                 object_id: vec![],
                 object_kind: Some(1),
@@ -734,7 +721,7 @@ pub fn record_action_event(
     let payload_bytes = prost::Message::encode_to_vec(&payload);
     let object_ref = store.put_object(&payload_bytes, 1, &[stream_id.to_vec()])
         .unwrap_or_else(|e| {
-            tracing::warn!("failed to store action payload: {}", e);
+            lifegraph_log::warn!("failed to store action payload: {}", e);
             lifegraph_proto::lifegraph::v0::common::ObjectRef {
                 object_id: vec![],
                 object_kind: Some(1),
@@ -818,7 +805,7 @@ fn record_and_respond(
     let result_bytes = prost::Message::encode_to_vec(&result_payload);
     let object_ref = store.put_object(&result_bytes, 6 /* OBJECT_KIND_COMMAND */, &[stream_id.to_vec()])
         .unwrap_or_else(|e| {
-            tracing::warn!("failed to store command result object: {}", e);
+            lifegraph_log::warn!("failed to store command result object: {}", e);
             lifegraph_proto::lifegraph::v0::common::ObjectRef {
                 object_id: vec![],
                 object_kind: Some(6),
@@ -854,7 +841,7 @@ fn record_and_respond(
     if committed {
         if let Some((controller_hex, change_type)) = controller_change {
             if let Err(e) = store.record_controller_change(controller_hex, change_type, 0) {
-                tracing::warn!("failed to record controller change: {}", e);
+                lifegraph_log::warn!("failed to record controller change: {}", e);
             }
         }
     }

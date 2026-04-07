@@ -4,6 +4,7 @@
 //! On each startup, an ephemeral leaf certificate is issued by the root CA and used
 //! for TLS handshakes. The leaf cert + root CA cert form the TLS chain presented to peers.
 
+use lifegraph_log;
 use lifegraph_hardware_signing::MeshSigner;
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
 use std::sync::Arc;
@@ -670,9 +671,7 @@ pub fn build_tls_server_config(
             rustls::pki_types::PrivateKeyDer::Pkcs8(eph_key),
         )?;
 
-    tracing::info!(
-        root_subject = ?extract_cert_subject(&root_ca.root_cert()),
-        "TLS server config built with hardware-issued ephemeral leaf certificate"
+    lifegraph_log::info!("TLS server config built with hardware-issued ephemeral leaf certificate"
     );
 
     Ok(config)

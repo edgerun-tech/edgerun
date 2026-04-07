@@ -4,6 +4,7 @@ members = [
   # Protocol / core
   "crates/lifegraph-core",
   "crates/lifegraph-proto",
+  "crates/lifegraph-log",
   "crates/lifegraph-rt",
   "crates/lifegraph-json",
   "crates/lifegraph-capabilities",
@@ -94,6 +95,4 @@ unicode-normalization = "=0.1.25"
 x509-parser = "0.16"
 
 # Dev-only
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "ansi"] }
 rand_core = "=0.6.4"
