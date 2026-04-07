@@ -131,7 +131,7 @@ pub fn validate_stream_append(
     derived.insert("seq".into(), Value::Int(candidate.seq as i64));
     derived.insert(
         "stream_id".into(),
-        Value::String(hex::encode(&candidate.stream_id)),
+        Value::String(crate::util::bytes_to_hex(&candidate.stream_id)),
     );
     accept(Value::Map(derived), empty_map())
 }
@@ -200,7 +200,7 @@ pub fn validate_delegation_chain(
                 ReasonCode::RevocationActive,
                 Value::String(format!(
                     "delegation {} is revoked",
-                    hex::encode(&delegation.delegation_id)
+                    crate::util::bytes_to_hex(&delegation.delegation_id)
                 )),
                 empty_map(),
             );
@@ -277,7 +277,7 @@ pub fn validate_delegation_chain(
     derived.insert("chain_length".into(), Value::Int(chain.len() as i64));
     derived.insert(
         "root_issuer".into(),
-        Value::String(hex::encode(
+        Value::String(crate::util::bytes_to_hex(
             &chain[0]
                 .issuer
                 .as_ref()
@@ -287,7 +287,7 @@ pub fn validate_delegation_chain(
     );
     derived.insert(
         "leaf_recipient".into(),
-        Value::String(hex::encode(
+        Value::String(crate::util::bytes_to_hex(
             &chain
                 .last()
                 .unwrap()
@@ -364,11 +364,11 @@ pub fn validate_snapshot(
     let mut derived = std::collections::BTreeMap::new();
     derived.insert(
         "snapshot_id".into(),
-        Value::String(hex::encode(&snapshot.snapshot_id)),
+        Value::String(crate::util::bytes_to_hex(&snapshot.snapshot_id)),
     );
     derived.insert(
         "producer".into(),
-        Value::String(hex::encode(
+        Value::String(crate::util::bytes_to_hex(
             &snapshot
                 .producer
                 .as_ref()

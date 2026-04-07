@@ -164,7 +164,7 @@ pub fn validate_command(
         let mut derived = std::collections::BTreeMap::new();
         derived.insert(
             "command_hash".into(),
-            Value::String(hex::encode(&computed_hash)),
+            Value::String(crate::util::bytes_to_hex(&computed_hash)),
         );
         return duplicate(
             ReasonCode::ReplayDetected,
@@ -213,15 +213,15 @@ pub fn validate_command(
     let mut derived = std::collections::BTreeMap::new();
     derived.insert(
         "command_id".into(),
-        Value::String(hex::encode(&command.command_id)),
+        Value::String(crate::util::bytes_to_hex(&command.command_id)),
     );
     derived.insert(
         "command_hash".into(),
-        Value::String(hex::encode(&computed_hash)),
+        Value::String(crate::util::bytes_to_hex(&computed_hash)),
     );
     derived.insert(
         "issuer".into(),
-        Value::String(hex::encode(
+        Value::String(crate::util::bytes_to_hex(
             &command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default(),
         )),
     );
@@ -281,7 +281,7 @@ fn validate_delegation_chain(
                 ReasonCode::RevocationActive,
                 Value::String(format!(
                     "delegation {} is revoked",
-                    hex::encode(&delegation.delegation_id)
+                    crate::util::bytes_to_hex(&delegation.delegation_id)
                 )),
                 empty_map(),
             ));
@@ -474,11 +474,11 @@ pub fn validate_command_signature(command: &CommandEnvelope) -> ValidationResult
     let mut derived = std::collections::BTreeMap::new();
     derived.insert(
         "command_id".into(),
-        Value::String(hex::encode(&command.command_id)),
+        Value::String(crate::util::bytes_to_hex(&command.command_id)),
     );
     derived.insert(
         "command_hash".into(),
-        Value::String(hex::encode(command_hash(command).value)),
+        Value::String(crate::util::bytes_to_hex(&command_hash(command).value)),
     );
 
     accept(Value::Map(derived), empty_map())

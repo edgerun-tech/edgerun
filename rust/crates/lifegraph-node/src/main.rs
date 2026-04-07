@@ -152,7 +152,7 @@ fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         let mut node_id_bytes = [0u8; 64];
         node_id_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
         let node_id = NodeID(node_id_bytes);
-        let key_hex = hex::encode(signing_key.to_bytes());
+        let key_hex = lifegraph_core::util::bytes_to_hex(&signing_key.to_bytes());
         (node_id, Some(key_hex))
     } else if has_tpm {
         eprintln!("TPM found at /dev/tpmrm0, but automated key provisioning is not yet implemented.");
@@ -948,7 +948,7 @@ fn run_store_task(
             let revoked: std::collections::HashSet<Vec<u8>> = revocations
                 .into_iter()
                 .filter(|(typ, _)| typ == "delegation")
-                .filter_map(|(_, hex)| hex::decode(&hex).ok())
+                .filter_map(|(_, hex)| lifegraph_core::util::hex_to_bytes(&hex).ok())
                 .collect();
             tracing::info!(count = revoked.len(), "loaded active revocations");
             revoked
@@ -1084,7 +1084,7 @@ fn run_store_task(
                 match store.get_object(&object_ref) {
                     Ok(Some(result)) => {
                         tracing::info!(
-                            object_id = %hex::encode(&object_ref.object_id),
+                            object_id = %lifegraph_core::util::bytes_to_hex(&object_ref.object_id),
                             content_len = result.content.len(),
                             "object fetched"
                         );
@@ -1092,7 +1092,7 @@ fn run_store_task(
                     }
                     Ok(None) => {
                         tracing::warn!(
-                            object_id = %hex::encode(&object_ref.object_id),
+                            object_id = %lifegraph_core::util::bytes_to_hex(&object_ref.object_id),
                             "object not found for fetch"
                         );
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
@@ -1598,7 +1598,7 @@ fn execute_query(
                             break;
                         }
                         event_refs.push(EventRef {
-                            stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                            stream_id: lifegraph_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
                             seq: seq as u64,
                             event_hash: Some(lifegraph_core::protocol::Digest {
                                 algorithm: 1,
@@ -1649,7 +1649,7 @@ fn execute_query(
                                     break;
                                 }
                                 event_refs.push(EventRef {
-                                    stream_id: hex::decode(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
+                                    stream_id: lifegraph_core::util::hex_to_bytes(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
                                     seq: seq as u64,
                                     event_hash: Some(lifegraph_core::protocol::Digest {
                                         algorithm: 1,
@@ -1670,7 +1670,7 @@ fn execute_query(
         // Check if specific objects exist
         x if x == QueryClass::ObjectExistence as i32 => {
             if let Some(ref obj_ref) = query.query_payload_object {
-                let object_id_hex = hex::encode(&obj_ref.object_id);
+                let object_id_hex = lifegraph_core::util::bytes_to_hex(&obj_ref.object_id);
                 match store.is_object_present(&object_id_hex) {
                     Ok(present) => {
                         if present {
@@ -1716,7 +1716,7 @@ fn execute_query(
                         use lifegraph_proto::lifegraph::v0::common::SnapshotRef;
                         snapshot_refs.push(SnapshotRef {
                             snapshot_id: sid.clone().into_bytes(),
-                            object_id: Some(hex::decode(oid_hex).unwrap_or_default()),
+                            object_id: Some(lifegraph_core::util::hex_to_bytes(oid_hex).unwrap_or_default()),
                         });
                     }
                     if snaps.is_empty() {
@@ -1742,7 +1742,7 @@ fn execute_query(
                             break;
                         }
                         event_refs.push(EventRef {
-                            stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                            stream_id: lifegraph_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
                             seq: seq as u64,
                             event_hash: Some(lifegraph_core::protocol::Digest {
                                 algorithm: 1,
@@ -1768,7 +1768,7 @@ fn execute_query(
                         break;
                     }
                     event_refs.push(EventRef {
-                        stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                        stream_id: lifegraph_core::util::hex_to_bytes(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
                         seq: seq as u64,
                         event_hash: Some(lifegraph_core::protocol::Digest {
                             algorithm: 1,
@@ -1786,7 +1786,7 @@ fn execute_query(
                     use lifegraph_proto::lifegraph::v0::common::SnapshotRef;
                     snapshot_refs.push(SnapshotRef {
                         snapshot_id: sid.clone().into_bytes(),
-                        object_id: Some(hex::decode(oid_hex).unwrap_or_default()),
+                        object_id: Some(lifegraph_core::util::hex_to_bytes(oid_hex).unwrap_or_default()),
                     });
                 }
             }
@@ -2009,7 +2009,7 @@ fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
     if let Some(ref signer) = config.signer {
         if signer.signer_type == "software" {
             if let Some(ref hex_str) = signer.private_key_hex {
-                return hex::decode(hex_str.trim()).unwrap_or_else(|_| {
+                return lifegraph_core::util::hex_to_bytes(hex_str.trim()).unwrap_or_else(|_| {
                     eprintln!("error: invalid private key hex");
                     std::process::exit(1);
                 });
@@ -2166,7 +2166,7 @@ fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send + S
 
 fn parse_signing_key_hex(key_hex: &str) -> SigningKey {
     let hex_str = key_hex.trim();
-    let bytes = hex::decode(hex_str).unwrap_or_else(|e| {
+    let bytes = lifegraph_core::util::hex_to_bytes(hex_str).unwrap_or_else(|e| {
         eprintln!("error: invalid key hex: {}", e);
         std::process::exit(1);
     });

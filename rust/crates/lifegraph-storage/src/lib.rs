@@ -103,7 +103,7 @@ mod tests {
         assert_eq!(offset, 0);
 
         // Verify the event log file exists and has content
-        let log_path = data_root.join("events").join(format!("{}.log", hex::encode("test-stream")));
+        let log_path = data_root.join("events").join(format!("{}.log", lifegraph_core::util::bytes_to_hex("test-stream")));
         assert!(log_path.exists());
         assert!(log_path.metadata().unwrap().len() > 0);
 
@@ -183,7 +183,7 @@ mod tests {
             let store = NodeStore::open(&config).unwrap();
             // We need the blob_id — it's SHA-256 of "persistent secret"
             use sha2::{Digest, Sha256};
-            let blob_id = hex::encode(Sha256::digest(b"persistent secret"));
+            let blob_id = lifegraph_core::util::bytes_to_hex(Sha256::digest(b"persistent secret"));
 
             let entry = store.get_blob(&blob_id).unwrap().unwrap();
             let decrypted = store.decrypt_blob(&entry.nonce, &entry.ciphertext).unwrap();
@@ -338,7 +338,7 @@ mod tests {
         // Store an object
         let content = b"queued object";
         let obj_ref = store.put_object(content, 1, &[]).unwrap();
-        let object_id_hex = hex::encode(&obj_ref.object_id);
+        let object_id_hex = lifegraph_core::util::bytes_to_hex(&obj_ref.object_id);
 
         // Enqueue a fetch for it
         store.enqueue_fetch("object", &object_id_hex, 0).unwrap();

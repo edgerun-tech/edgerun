@@ -53,7 +53,17 @@ fn usage() {
 }
 
 fn parse_node_id(hex: &str) -> Result<NodeID, String> {
-    let bytes = hex::decode(hex).map_err(|e| format!("invalid hex: {e}"))?;
+    let trimmed = hex.strip_prefix("0x").unwrap_or(hex);
+    if trimmed.len() % 2 != 0 {
+        return Err(format!("invalid hex: odd length"));
+    }
+    let mut bytes = Vec::with_capacity(trimmed.len() / 2);
+    let buf = trimmed.as_bytes();
+    for chunk in buf.chunks_exact(2) {
+        let hi = hex_nibble(chunk[0]).ok_or_else(|| "bad hex".to_string())?;
+        let lo = hex_nibble(chunk[1]).ok_or_else(|| "bad hex".to_string())?;
+        bytes.push((hi << 4) | lo);
+    }
     if bytes.len() != 64 {
         return Err(format!(
             "NodeID must be 64 bytes (128 hex chars), got {} bytes ({} hex chars)",
@@ -256,5 +266,14 @@ fn main() {
     if let Err(e) = result {
         eprintln!("error: {e}");
         std::process::exit(1);
+    }
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
     }
 }

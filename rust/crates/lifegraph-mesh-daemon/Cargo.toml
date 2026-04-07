@@ -20,4 +20,3 @@ lifegraph-proto = { path = "../lifegraph-proto" }
 prost.workspace = true
 sha2.workspace = true
 libc.workspace = true
-hex.workspace = true

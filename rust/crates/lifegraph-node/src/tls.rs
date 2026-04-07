@@ -93,8 +93,8 @@ fn verify_cert_matches_node_id(
         }
         return Err(format!(
             "certificate public key does not match node identity.\n  cert: {}\n  node: {}",
-            hex::encode(&cert_pubkey),
-            hex::encode(&node_id.0),
+            lifegraph_core::util::bytes_to_hex(&cert_pubkey),
+            lifegraph_core::util::bytes_to_hex(&node_id.0),
         ));
     }
 
@@ -617,7 +617,7 @@ pub fn build_tls_server_config(
     let root_ca = RootCa::new(root_cert_path, signer)?;
 
     // Issue an ephemeral leaf certificate
-    let node_id_hex = hex::encode(&root_ca.signer.node_id().0);
+    let node_id_hex = lifegraph_core::util::bytes_to_hex(&root_ca.signer.node_id().0);
     let (leaf_cert, eph_key) = root_ca.issue_leaf(&node_id_hex)?;
 
     let root_cert = root_ca.root_cert().clone();

@@ -136,8 +136,8 @@ impl Node {
                 if let Some(Value::String(cmd_id)) = result.derived.as_map().and_then(|m| m.get("command_id")) {
                     if let Some(Value::String(cmd_hash)) = result.derived.as_map().and_then(|m| m.get("command_hash")) {
                         self.processed_commands.insert(
-                            hex::decode(cmd_hash).unwrap_or_default(),
-                            (hex::decode(cmd_id).unwrap_or_default(), 0i64),
+                            lifegraph_core::util::hex_to_bytes(cmd_hash).unwrap_or_default(),
+                            (lifegraph_core::util::hex_to_bytes(cmd_id).unwrap_or_default(), 0i64),
                         );
                     }
                 }

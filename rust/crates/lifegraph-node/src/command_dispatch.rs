@@ -374,13 +374,13 @@ fn dispatch_add_controller(
     controllers.add(new_controller_id.clone());
 
     tracing::info!(
-        controller_id = %hex::encode(&new_controller_id),
+        controller_id = %lifegraph_core::util::bytes_to_hex(&new_controller_id),
         "controller added"
     );
 
-    let response = format!("controller added: {}", hex::encode(&new_controller_id)).into_bytes();
+    let response = format!("controller added: {}", lifegraph_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&hex::encode(&new_controller_id), "added")))
+        true, "", response, Some((&lifegraph_core::util::bytes_to_hex(&new_controller_id), "added")))
 }
 
 fn dispatch_remove_controller(
@@ -402,13 +402,13 @@ fn dispatch_remove_controller(
     }
 
     tracing::info!(
-        controller_id = %hex::encode(&target_id),
+        controller_id = %lifegraph_core::util::bytes_to_hex(&target_id),
         "controller removed"
     );
 
-    let response = format!("controller removed: {}", hex::encode(&target_id)).into_bytes();
+    let response = format!("controller removed: {}", lifegraph_core::util::bytes_to_hex(&target_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&hex::encode(&target_id), "removed")))
+        true, "", response, Some((&lifegraph_core::util::bytes_to_hex(&target_id), "removed")))
 }
 
 fn dispatch_transfer_control(
@@ -429,13 +429,13 @@ fn dispatch_transfer_control(
     controllers.add(new_controller_id.clone());
 
     tracing::info!(
-        new_controller = %hex::encode(&new_controller_id),
+        new_controller = %lifegraph_core::util::bytes_to_hex(&new_controller_id),
         "control transfer initiated — new controller added, old controllers remain until explicitly removed"
     );
 
-    let response = format!("control transferred to: {}", hex::encode(&new_controller_id)).into_bytes();
+    let response = format!("control transferred to: {}", lifegraph_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&hex::encode(&new_controller_id), "transferred")))
+        true, "", response, Some((&lifegraph_core::util::bytes_to_hex(&new_controller_id), "transferred")))
 }
 
 // ---------------------------------------------------------------------------
@@ -490,15 +490,15 @@ fn dispatch_create_delegation(
     }
 
     // Store the delegation
-    let delegation_id_hex = hex::encode(&delegation.delegation_id);
-    let issuer_hex = delegation.issuer.as_ref().map(|i| hex::encode(&i.identity_id)).unwrap_or_default();
-    let recipient_hex = delegation.recipient.as_ref().map(|r| hex::encode(&r.identity_id)).unwrap_or_default();
+    let delegation_id_hex = lifegraph_core::util::bytes_to_hex(&delegation.delegation_id);
+    let issuer_hex = delegation.issuer.as_ref().map(|i| lifegraph_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
+    let recipient_hex = delegation.recipient.as_ref().map(|r| lifegraph_core::util::bytes_to_hex(&r.identity_id)).unwrap_or_default();
     let expires_at = delegation.expires_at.as_ref().map(|t| t.seconds);
     let capability_bytes = delegation.capability.as_ref()
         .map(|c| prost::Message::encode_to_vec(c))
         .unwrap_or_default();
 
-    if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &hex::encode(&capability_bytes), expires_at) {
+    if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &lifegraph_core::util::bytes_to_hex(&capability_bytes), expires_at) {
         tracing::warn!("failed to store delegation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "storage_failed", Vec::new(), None);
@@ -526,23 +526,23 @@ fn dispatch_create_revocation(
     revocation: &ProtoRevocationRecord,
 ) -> CommandDispatchResult {
     // Store the revocation
-    let revocation_id_hex = hex::encode(&revocation.revocation_id);
-    let issuer_hex = revocation.issuer.as_ref().map(|i| hex::encode(&i.identity_id)).unwrap_or_default();
+    let revocation_id_hex = lifegraph_core::util::bytes_to_hex(&revocation.revocation_id);
+    let issuer_hex = revocation.issuer.as_ref().map(|i| lifegraph_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
 
     // Determine target type and hex from the oneof
     let (target_type, target_hex) = if let Some(ref target) = revocation.target {
         match target {
             lifegraph_proto::lifegraph::v0::trust::revocation_record::Target::TargetDelegation(d) => {
-                ("delegation", hex::encode(&d.delegation_id))
+                ("delegation", lifegraph_core::util::bytes_to_hex(&d.delegation_id))
             }
             lifegraph_proto::lifegraph::v0::trust::revocation_record::Target::TargetIdentity(i) => {
-                ("identity", hex::encode(&i.identity_id))
+                ("identity", lifegraph_core::util::bytes_to_hex(&i.identity_id))
             }
             lifegraph_proto::lifegraph::v0::trust::revocation_record::Target::TargetNode(n) => {
-                ("node", hex::encode(&n.node_id))
+                ("node", lifegraph_core::util::bytes_to_hex(&n.node_id))
             }
             lifegraph_proto::lifegraph::v0::trust::revocation_record::Target::TargetObject(o) => {
-                ("object", hex::encode(&o.object_id))
+                ("object", lifegraph_core::util::bytes_to_hex(&o.object_id))
             }
         }
     } else {
@@ -720,7 +720,7 @@ pub fn record_action_event(
         command_hash: Some(command_hash(command)),
     };
 
-    let action_id = format!("action-{}", hex::encode(&command.command_id[..4.min(command.command_id.len())])).into_bytes();
+    let action_id = format!("action-{}", lifegraph_core::util::bytes_to_hex(&command.command_id[..4.min(command.command_id.len())])).into_bytes();
     let payload = ActionLifecyclePayload {
         payload_version: 1,
         origin_command: Some(command_ref.clone()),

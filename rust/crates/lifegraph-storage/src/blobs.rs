@@ -120,7 +120,7 @@ impl BlobStore {
         _recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
         // Derive blob ID from plaintext hash (content-addressed)
-        let blob_id = hex::encode(Sha256::digest(plaintext));
+        let blob_id = lifegraph_core::util::bytes_to_hex(&Sha256::digest(plaintext));
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];

@@ -151,7 +151,7 @@ impl NodeStore {
             )));
         }
 
-        let stream_id_hex = hex::encode(&event.stream_id);
+        let stream_id_hex = lifegraph_core::util::bytes_to_hex(&event.stream_id);
         let log_path = self.config.data_root.join("events").join(format!("{}.log", stream_id_hex));
 
         // Encode to protobuf
@@ -198,7 +198,7 @@ impl NodeStore {
     ///
     /// Uses the SQLite index to find the file offset, then reads the protobuf bytes.
     pub fn get_event(&self, stream_id: &[u8], seq: u64) -> Result<Option<EventEnvelope>, StorageError> {
-        let stream_id_hex = hex::encode(stream_id);
+        let stream_id_hex = lifegraph_core::util::bytes_to_hex(stream_id);
 
         // Look up offset in SQLite
         let Some(entry) = self.index.get_event(&stream_id_hex, seq as i64)? else {
@@ -229,7 +229,7 @@ impl NodeStore {
 
     /// Returns the current head (latest seq + hash) for a stream.
     pub fn get_head(&self, stream_id: &[u8]) -> Result<Option<(i64, Vec<u8>)>, StorageError> {
-        let stream_id_hex = hex::encode(stream_id);
+        let stream_id_hex = lifegraph_core::util::bytes_to_hex(stream_id);
         Ok(self.index.get_head(&stream_id_hex)?)
     }
 
@@ -358,7 +358,7 @@ impl NodeStore {
 
         // Record object presence in SQLite
         self.index.mark_object_present(
-            &hex::encode(&object_id),
+            &lifegraph_core::util::bytes_to_hex(&object_id),
             &blob_id,
             &blob_id,
         )?;
@@ -383,7 +383,7 @@ impl NodeStore {
         &self,
         object_ref: &lifegraph_proto::lifegraph::v0::common::ObjectRef,
     ) -> Result<Option<ObjectResult>, StorageError> {
-        let object_id_hex = hex::encode(&object_ref.object_id);
+        let object_id_hex = lifegraph_core::util::bytes_to_hex(&object_ref.object_id);
 
         // Check presence
         if !self.index.is_object_present(&object_id_hex)? {
@@ -491,7 +491,7 @@ impl NodeStore {
             let success = match entry.target_type.as_str() {
                 "object" => {
                     let obj_ref = lifegraph_proto::lifegraph::v0::common::ObjectRef {
-                        object_id: hex::decode(&entry.target_id).unwrap_or_default(),
+                        object_id: lifegraph_core::util::hex_to_bytes(&entry.target_id).unwrap_or_default(),
                         object_kind: None,
                     };
                     self.get_object(&obj_ref)?.is_some()
@@ -570,7 +570,7 @@ impl NodeStore {
     pub fn project_controller_set(&self, initial: Vec<Vec<u8>>, up_to_seq: i64) -> Result<ControllerSet, StorageError> {
         let mut set = ControllerSet::new(initial);
         for (controller_hex, change_type) in self.index.list_controller_changes(up_to_seq)? {
-            let controller_id = hex::decode(&controller_hex).unwrap_or_default();
+            let controller_id = lifegraph_core::util::hex_to_bytes(&controller_hex).unwrap_or_default();
             match change_type.as_str() {
                 "added" => set.add(controller_id),
                 "removed" => { set.remove(&controller_id); }
@@ -648,7 +648,7 @@ impl NodeStore {
         // Collect current stream heads
         let heads = self.list_stream_heads()?;
         let base_heads: Vec<HeadRef> = heads.iter().map(|(sid, seq, hash)| HeadRef {
-            stream_id: hex::decode(sid).unwrap_or_else(|_| sid.clone().into_bytes()),
+            stream_id: lifegraph_core::util::hex_to_bytes(sid).unwrap_or_else(|_| sid.clone().into_bytes()),
             seq: *seq as u64,
             event_hash: Some(Digest {
                 algorithm: 1,
@@ -663,7 +663,7 @@ impl NodeStore {
             .as_secs();
         let snapshot_id = {
             let digest = Sha256::digest(format!("{}-{}", view_type, now_secs).as_bytes());
-            format!("snap-{}", hex::encode(&digest[..8]))
+            format!("snap-{}", lifegraph_core::util::bytes_to_hex(&digest[..8]))
         };
         let node_id = signer.node_id();
 
@@ -713,14 +713,14 @@ impl NodeStore {
 
         // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
         let base_heads_text: String = heads.iter()
-            .map(|(sid, seq, hash)| format!("{}:{}:{}", sid, seq, hex::encode(hash)))
+            .map(|(sid, seq, hash)| format!("{}:{}:{}", sid, seq, lifegraph_core::util::bytes_to_hex(hash)))
             .collect::<Vec<_>>()
             .join(";");
-        let producer_hex = hex::encode(&node_id.0);
+        let producer_hex = lifegraph_core::util::bytes_to_hex(&node_id.0);
 
         self.index.put_snapshot(
             &snapshot_id,
-            &hex::encode(&object_ref.object_id),
+            &lifegraph_core::util::bytes_to_hex(&object_ref.object_id),
             view_type,
             &producer_hex,
             now_secs as i64,
@@ -751,7 +751,7 @@ impl NodeStore {
         }
 
         let producer = descriptor.producer.as_ref().unwrap();
-        let producer_hex = hex::encode(&producer.identity_id);
+        let producer_hex = lifegraph_core::util::bytes_to_hex(&producer.identity_id);
 
         // Check producer trust
         if !trusted_producers.is_empty() && !trusted_producers.contains(&producer.identity_id) {
@@ -761,7 +761,7 @@ impl NodeStore {
         // Store as object (if payload_object is present)
         if let Some(ref payload_ref) = descriptor.payload_object {
             self.index.mark_object_present(
-                &hex::encode(&payload_ref.object_id),
+                &lifegraph_core::util::bytes_to_hex(&payload_ref.object_id),
                 "snapshot-payload",
                 "snapshot-payload",
             )?;
@@ -770,16 +770,16 @@ impl NodeStore {
         // Store in snapshots table
         let snapshot_id = String::from_utf8_lossy(&descriptor.snapshot_id).to_string();
         let object_id_hex = if let Some(ref p) = descriptor.payload_object {
-            hex::encode(&p.object_id)
+            lifegraph_core::util::bytes_to_hex(&p.object_id)
         } else {
             String::new()
         };
         // Serialize base_heads as simple (stream_id_hex, seq, hash_hex) tuples
         let simple_heads: Vec<(String, u64, String)> = descriptor.base_heads.iter().map(|h| {
             (
-                hex::encode(&h.stream_id),
+                lifegraph_core::util::bytes_to_hex(&h.stream_id),
                 h.seq,
-                h.event_hash.as_ref().map(|d| hex::encode(&d.value)).unwrap_or_default(),
+                h.event_hash.as_ref().map(|d| lifegraph_core::util::bytes_to_hex(&d.value)).unwrap_or_default(),
             )
         }).collect();
         let base_heads = simple_heads.iter().map(|(s, seq, h)| format!("{}:{}:{}", s, seq, h)).collect::<Vec<_>>().join(";");
@@ -799,7 +799,7 @@ impl NodeStore {
         let local_heads = self.list_stream_heads()?;
         let mut is_stale = false;
         for base_head in &descriptor.base_heads {
-            let stream_id_hex = hex::encode(&base_head.stream_id);
+            let stream_id_hex = lifegraph_core::util::bytes_to_hex(&base_head.stream_id);
             if let Some((_sid, local_seq, _hash)) = local_heads.iter().find(|(s, _, _)| s == &stream_id_hex) {
                 let local_seq_u64 = *local_seq as u64;
                 if base_head.seq < local_seq_u64 {
@@ -834,8 +834,8 @@ impl NodeStore {
         command_hash: &[u8],
         decision_event_seq: i64,
     ) -> Result<CommandReplayResult, StorageError> {
-        let target_hex = hex::encode(target_node);
-        let cmd_hash_hex = hex::encode(command_hash);
+        let target_hex = lifegraph_core::util::bytes_to_hex(target_node);
+        let cmd_hash_hex = lifegraph_core::util::bytes_to_hex(command_hash);
 
         if let Some(existing) = self.index.get_replay_entry(&target_hex, &cmd_hash_hex)? {
             return Ok(CommandReplayResult::Duplicate {
@@ -843,7 +843,7 @@ impl NodeStore {
             });
         }
 
-        let cmd_id_hex = hex::encode(command_id);
+        let cmd_id_hex = lifegraph_core::util::bytes_to_hex(command_id);
         self.index.put_replay_entry(
             &target_hex,
             &cmd_hash_hex,
@@ -886,7 +886,7 @@ impl NodeStore {
                 .unwrap_or("")
                 .to_string();
 
-            let _stream_id = match hex::decode(&stream_id_hex) {
+            let _stream_id = match lifegraph_core::util::hex_to_bytes(&stream_id_hex) {
                 Ok(id) => id,
                 Err(_) => continue,
             };

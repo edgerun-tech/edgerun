@@ -604,12 +604,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-
-[[package]]
 name = "hkdf"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -801,7 +795,6 @@ dependencies = [
 name = "lifegraph-core"
 version = "0.1.0"
 dependencies = [
- "hex",
  "lifegraph-proto",
  "p256",
  "prost",
@@ -1012,7 +1005,6 @@ dependencies = [
 name = "lifegraph-mesh-daemon"
 version = "0.1.0"
 dependencies = [
- "hex",
  "libc",
  "lifegraph-capabilities",
  "lifegraph-hardware-signing",
@@ -1097,7 +1089,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "getrandom 0.4.2",
- "hex",
  "lifegraph-alsa-microphone",
  "lifegraph-alsa-speaker",
  "lifegraph-camera-biometrics",
@@ -1161,7 +1152,6 @@ dependencies = [
 name = "lifegraph-proto"
 version = "0.1.0"
 dependencies = [
- "hex",
  "prost",
  "prost-build",
  "prost-types",
@@ -1201,7 +1191,6 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "getrandom 0.4.2",
- "hex",
  "hkdf",
  "libc",
  "lifegraph-core",

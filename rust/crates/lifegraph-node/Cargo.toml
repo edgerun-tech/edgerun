@@ -37,7 +37,6 @@ prost-types.workspace = true
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-hex.workspace = true
 getrandom.workspace = true
 tokio.workspace = true
 tracing.workspace = true
