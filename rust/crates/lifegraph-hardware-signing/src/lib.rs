@@ -33,12 +33,12 @@ pub struct NodeID(pub [u8; MESH_PUBLIC_KEY_LENGTH]);
 impl NodeID {
     /// Short hex display for logging/UI (first 8 hex chars).
     pub fn short(&self) -> String {
-        lifegraph_core::util::bytes_to_hex(&self.0[..4])
+        lifegraph_core::util::bytes_to_hex_prefixed(&self.0[..4])
     }
 
     /// Full hex representation.
     pub fn to_hex(&self) -> String {
-        lifegraph_core::util::bytes_to_hex(&self.0)
+        lifegraph_core::util::bytes_to_hex_prefixed(&self.0)
     }
 }
 
