@@ -4,6 +4,7 @@ members = [
   # Protocol / core
   "crates/lifegraph-core",
   "crates/lifegraph-proto",
+  "crates/lifegraph-rt",
   "crates/lifegraph-json",
   "crates/lifegraph-capabilities",
   "crates/lifegraph-capability-policy",

@@ -1177,6 +1177,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lifegraph-rt"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "lifegraph-speaker"
 version = "0.1.0"
 dependencies = [
