@@ -20,7 +20,6 @@ mod capabilities;
 mod command_dispatch;
 mod ingress;
 
-use clap::{Parser, Subcommand};
 use lifegraph_hardware_signing::{MeshSigner, NodeID};
 use lifegraph_mesh::{FrameType, LocalNode, MeshFrame};
 use lifegraph_mesh_link::MeshLink;
@@ -38,53 +37,108 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::net::SocketAddr;
 
-#[derive(Parser)]
-#[command(name = "lifegraphd", about = "Lifegraph Node Daemon")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Generate a new node identity and config
+/// Parsed CLI arguments.
+enum Command {
     Init {
-        #[arg(long, default_value = "node.yaml")]
         config: PathBuf,
-        #[arg(long)]
         name: Option<String>,
-        /// Dev-only: generate an in-memory software key (NOT for production)
-        #[arg(long)]
         software: bool,
     },
-    /// Start the node daemon
     Run {
-        #[arg(long, default_value = "node.yaml")]
         config: PathBuf,
-        /// TCP listen address (e.g. 0.0.0.0:8080). If omitted, mesh-only.
-        #[arg(long)]
         listen: Option<SocketAddr>,
-        /// Health endpoint port. If omitted, no health server.
-        #[arg(long)]
         health_port: Option<u16>,
-        /// Log level: trace, debug, info, warn, error. Default: info.
-        #[arg(long, default_value = "info")]
         log_level: String,
     },
-    /// Show node identity and state
     Status {
-        #[arg(long, default_value = "node.yaml")]
         config: PathBuf,
     },
+}
+
+fn parse_args() -> Result<Command, String> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() {
+        return Err(format!(
+            "Usage: lifegraphd <command> [options]\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity\n  help    Show this help"
+        ));
+    }
+    let cmd = args[0].as_str();
+    match cmd {
+        "init" => {
+            let mut config = PathBuf::from("node.yaml");
+            let mut name = None;
+            let mut software = false;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
+                    "--name" => { i += 1; name = Some(args[i].clone()); }
+                    "--software" => { software = true; }
+                    "--help" | "-h" => {
+                        return Err("Usage: lifegraphd init [--config path] [--name name] [--software]".into());
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::Init { config, name, software })
+        }
+        "run" => {
+            let mut config = PathBuf::from("node.yaml");
+            let mut listen = None;
+            let mut health_port = None;
+            let mut log_level = "info".to_string();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
+                    "--listen" => { i += 1; listen = Some(args[i].parse().map_err(|e| format!("invalid listen address: {}", e))?); }
+                    "--health-port" => { i += 1; health_port = Some(args[i].parse().map_err(|e| format!("invalid port: {}", e))?); }
+                    "--log-level" => { i += 1; log_level = args[i].clone(); }
+                    "--help" | "-h" => {
+                        return Err("Usage: lifegraphd run [--config path] [--listen addr] [--health-port port] [--log-level level]".into());
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::Run { config, listen, health_port, log_level })
+        }
+        "status" => {
+            let mut config = PathBuf::from("node.yaml");
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--config" => { i += 1; config = PathBuf::from(&args[i]); }
+                    "--help" | "-h" => {
+                        return Err("Usage: lifegraphd status [--config path]".into());
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::Status { config })
+        }
+        "help" | "--help" | "-h" => {
+            Err("Lifegraph Node Daemon\n\nCommands:\n  init    Generate node identity\n  run     Start the daemon\n  status  Show node identity".into())
+        }
+        other => Err(format!("unknown command: {}", other)),
+    }
 }
 
 fn main() {
-    let cli = Cli::parse();
-    match cli.command {
-        Commands::Init { config, name, software } => {
+    let cmd = match parse_args() {
+        Ok(c) => c,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            std::process::exit(1);
+        }
+    };
+    match cmd {
+        Command::Init { config, name, software } => {
             cmd_init(&config, name, software);
         }
-        Commands::Run { config, listen, health_port, log_level } => {
+        Command::Run { config, listen, health_port, log_level } => {
             // Initialize structured logging
             env::set_var("RUST_LOG", &log_level);
             lifegraph_log::init_from_env();
@@ -93,14 +147,14 @@ fn main() {
                 .enable_all()
                 .build()
                 .unwrap_or_else(|e| {
-                    lifegraph_log::error!("failed to create tokio runtime: {}", e);
+                    lifegraph_log::error!("failed to create runtime: {}", e);
                     std::process::exit(1);
                 });
             rt.block_on(async move {
                 cmd_run(&config, listen, health_port).await;
             });
         }
-        Commands::Status { config } => {
+        Command::Status { config } => {
             cmd_status(&config);
         }
     }
@@ -234,7 +288,7 @@ fn cmd_status(path: &PathBuf) {
     }
 
     let yaml = fs::read_to_string(path).unwrap();
-    let config: NodeConfig = serde_yaml::from_str(&yaml).unwrap_or_else(|e| {
+    let config: NodeConfig = parse_config(&yaml).unwrap_or_else(|e| {
         eprintln!("error: invalid config: {}", e);
         std::process::exit(1);
     });
@@ -463,7 +517,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     }
 
     let yaml = fs::read_to_string(path).unwrap();
-    let config: NodeConfig = serde_yaml::from_str(&yaml).unwrap_or_else(|e| {
+    let config: NodeConfig = parse_config(&yaml).unwrap_or_else(|e| {
         lifegraph_log::error!("invalid config: {}", e);
         std::process::exit(1);
     });
@@ -1947,29 +2001,135 @@ fn now_ms_timestamp() -> prost_types::Timestamp {
 }
 
 // ---------------------------------------------------------------------------
-// Config
+// Config — simple YAML-like parser (no serde dependency)
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug)]
 struct NodeConfig {
     stream_id: String,
     name: Option<String>,
-    #[serde(default)]
     controllers: Vec<String>,
-    #[serde(default)]
     trust_nodes: Vec<String>,
-    /// Peer node IDs allowed to connect. Empty = allow all (open mode).
-    #[serde(default)]
     allowed_peers: Vec<String>,
-    /// Bootstrap peers to connect to on startup. Each entry is "host:port@node_id_hex".
-    #[serde(default)]
     bootstrap_peers: Vec<String>,
-    #[serde(default)]
     signer: Option<SignerConfig>,
-    #[serde(default)]
-    initial_grants: Vec<serde_yaml::Value>,
-    #[serde(default)]
-    metadata: serde_yaml::Value,
+}
+
+#[derive(Clone, Debug)]
+struct SignerConfig {
+    signer_type: String,
+    public_key_hex: String,
+    private_key_hex: Option<String>,
+    handle: Option<String>,
+    slot: Option<String>,
+}
+
+fn parse_config(yaml: &str) -> Result<NodeConfig, String> {
+    let mut config = NodeConfig {
+        stream_id: String::new(),
+        name: None,
+        controllers: Vec::new(),
+        trust_nodes: Vec::new(),
+        allowed_peers: Vec::new(),
+        bootstrap_peers: Vec::new(),
+        signer: None,
+    };
+
+    let mut in_signer = false;
+    let mut signer_type = String::new();
+    let mut public_key_hex = String::new();
+    let mut private_key_hex = Option::<String>::None;
+    let mut handle = Option::<String>::None;
+    let mut slot = Option::<String>::None;
+
+    for line in yaml.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+
+        // Detect signer section
+        if trimmed.starts_with("signer:") {
+            in_signer = true;
+            continue;
+        }
+
+        // Other top-level sections end signer parsing
+        if in_signer && !trimmed.starts_with(' ') && !trimmed.starts_with('\t') {
+            in_signer = false;
+        }
+
+        if in_signer {
+            let content = trimmed.trim_start();
+            if let Some(val) = parse_kv(content) {
+                match val.0.as_str() {
+                    "type" => signer_type = unquote(&val.1),
+                    "public_key_hex" => public_key_hex = unquote(&val.1),
+                    "private_key_hex" => private_key_hex = Some(unquote(&val.1)),
+                    "handle" => handle = Some(unquote(&val.1)),
+                    "slot" => slot = Some(unquote(&val.1)),
+                    _ => {}
+                }
+            }
+        } else {
+            if let Some((key, val)) = parse_kv(trimmed) {
+                match key.as_str() {
+                    "stream_id" => config.stream_id = unquote(&val),
+                    "name" => config.name = Some(unquote(&val)),
+                    "controllers" => config.controllers = parse_list(&val),
+                    "trust_nodes" => config.trust_nodes = parse_list(&val),
+                    "allowed_peers" => config.allowed_peers = parse_list(&val),
+                    "bootstrap_peers" => config.bootstrap_peers = parse_list(&val),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if !signer_type.is_empty() || !public_key_hex.is_empty() {
+        config.signer = Some(SignerConfig {
+            signer_type: if signer_type.is_empty() { "unknown".into() } else { signer_type },
+            public_key_hex,
+            private_key_hex,
+            handle,
+            slot,
+        });
+    }
+
+    if config.stream_id.is_empty() {
+        return Err("missing required field: stream_id".into());
+    }
+    Ok(config)
+}
+
+fn parse_kv(line: &str) -> Option<(String, String)> {
+    let colon = line.find(':')?;
+    let key = line[..colon].trim().to_string();
+    let val = line[colon+1..].trim().to_string();
+    Some((key, val))
+}
+
+fn parse_list(val: &str) -> Vec<String> {
+    let val = val.trim();
+    if val == "[]" || val.is_empty() { return Vec::new(); }
+    // Handle [item1, item2] format
+    if val.starts_with('[') && val.ends_with(']') {
+        let inner = &val[1..val.len()-1];
+        if inner.trim().is_empty() { return Vec::new(); }
+        return inner.split(',').map(|s| unquote(s.trim())).collect();
+    }
+    // Handled elsewhere
+    Vec::new()
+}
+
+fn unquote(s: &str) -> String {
+    let s = s.trim();
+    if s.len() >= 2 {
+        let bytes = s.as_bytes();
+        if (bytes[0] == b'"' && bytes[s.len()-1] == b'"') ||
+           (bytes[0] == 39 && bytes[s.len()-1] == 39) {
+            return s[1..s.len()-1].to_string();
+        }
+    }
+    s.to_string()
 }
 
 /// Parsed bootstrap peer configuration.
@@ -1995,17 +2155,6 @@ fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
     }).collect()
 }
 
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-struct SignerConfig {
-    #[serde(rename = "type")]
-    signer_type: String,
-    public_key_hex: String,
-    private_key_hex: Option<String>,
-    handle: Option<String>,
-    slot: Option<String>,
-}
-
-/// A software signer that is Send + Sync (wraps key in a Mutex).
 /// A software signer that is Send + Sync.
 struct SyncSoftwareSigner {
     node_id: NodeID,

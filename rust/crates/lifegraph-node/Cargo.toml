@@ -33,9 +33,6 @@ lifegraph-network-interface = { path = "../lifegraph-network-interface" }
 p256.workspace = true
 prost.workspace = true
 prost-types.workspace = true
-clap = { version = "4", features = ["derive"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
 getrandom.workspace = true
 lifegraph-rt = { path = "../lifegraph-rt" }
 

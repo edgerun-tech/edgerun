@@ -3,7 +3,6 @@
 //! A node is initialized from a YAML configuration that defines:
 //! - Its identity (public key)
 //! - Trusted controller identities
-//! - Initial capability grants
 //! - Initial trust relationships
 //!
 //! The config is embedded in the genesis event (seq=0) as the authoritative
@@ -19,39 +18,60 @@ use lifegraph_core::result::Verdict;
 use lifegraph_core::value::Value;
 use lifegraph_stream::{StreamWriter, StreamError};
 use lifegraph_hardware_signing::NodeID;
-use serde::{Deserialize, Serialize};
+// Simple YAML config parser (no serde dependency)
 use std::collections::{HashMap, HashSet};
 
 /// Node configuration — loaded from YAML and embedded in the genesis event.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct NodeConfig {
     /// The node's stream identifier.
     pub stream_id: String,
     /// Node name (human-readable).
     pub name: Option<String>,
     /// Trusted controller identity IDs (who can send commands).
-    #[serde(default)]
     pub controllers: Vec<String>,
     /// Trusted node IDs for bootstrapping trust relationships.
-    #[serde(default)]
     pub trust_nodes: Vec<String>,
-    /// Initial capability grants to install at startup.
-    #[serde(default)]
-    pub initial_grants: Vec<serde_yaml::Value>,
-    /// Arbitrary metadata.
-    #[serde(default)]
-    pub metadata: serde_yaml::Value,
 }
 
 impl NodeConfig {
     /// Loads a node configuration from a YAML string.
     pub fn from_yaml(yaml: &str) -> Result<Self, String> {
-        serde_yaml::from_str(yaml).map_err(|e| format!("invalid YAML config: {}", e))
+        let mut config = NodeConfig {
+            stream_id: String::new(),
+            name: None,
+            controllers: Vec::new(),
+            trust_nodes: Vec::new(),
+        };
+        for line in yaml.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+            if let Some(colon) = trimmed.find(':') {
+                let key = trimmed[..colon].trim();
+                let val = unquote(trimmed[colon+1..].trim());
+                match key {
+                    "stream_id" => config.stream_id = val.to_string(),
+                    "name" => config.name = Some(val.to_string()),
+                    "controllers" => config.controllers = parse_list(&val),
+                    "trust_nodes" => config.trust_nodes = parse_list(&val),
+                    _ => {}
+                }
+            }
+        }
+        if config.stream_id.is_empty() {
+            return Err("missing required field: stream_id".into());
+        }
+        Ok(config)
     }
 
     /// Serializes the config to a YAML string.
     pub fn to_yaml(&self) -> String {
-        serde_yaml::to_string(self).unwrap_or_default()
+        let mut out = String::new();
+        out.push_str(&format!("stream_id: \"{}\"\n", self.stream_id));
+        if let Some(ref name) = self.name { out.push_str(&format!("name: \"{}\"\n", name)); }
+        out.push_str(&format!("controllers: {:?}\n", self.controllers));
+        out.push_str(&format!("trust_nodes: {:?}\n", self.trust_nodes));
+        out
     }
 }
 
@@ -293,4 +313,22 @@ metadata:
         // The Node.process_command path is being replaced by the new NodeStore
         // integration in main.rs. This test is kept as a placeholder.
     }
+}
+fn unquote(s: &str) -> String {
+    let s = s.trim();
+    if s.len() >= 2 && s.starts_with("\x22") && s.ends_with("\x22") {
+        return s[1..s.len()-1].to_string();
+    }
+    s.to_string()
+}
+
+fn parse_list(val: &str) -> Vec<String> {
+    let val = val.trim();
+    if val == "[]" || val.is_empty() { return Vec::new(); }
+    if val.starts_with('[') && val.ends_with(']') {
+        let inner = &val[1..val.len()-1];
+        if inner.trim().is_empty() { return Vec::new(); }
+        return inner.split(',').map(|s| unquote(s.trim())).collect();
+    }
+    Vec::new()
 }
