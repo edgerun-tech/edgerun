@@ -4,6 +4,10 @@ members = [
   # Protocol / core
   "crates/lifegraph-core",
   "crates/lifegraph-proto",
+  "crates/lifegraph-base16ct",
+  "crates/lifegraph-cfg-if",
+  "crates/lifegraph-zeroize",
+  "crates/lifegraph-subtle",
   "crates/lifegraph-log",
   "crates/lifegraph-rt",
   "crates/lifegraph-json",
@@ -94,3 +98,9 @@ x509-parser = "0.16"
 
 # Dev-only
 rand_core = "=0.6.4"
+
+[patch.crates-io]
+subtle = { path = "crates/lifegraph-subtle" }
+zeroize = { path = "crates/lifegraph-zeroize" }
+cfg-if = { path = "crates/lifegraph-cfg-if" }
+base16ct = { path = "crates/lifegraph-base16ct" }
