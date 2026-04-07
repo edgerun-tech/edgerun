@@ -18,6 +18,7 @@
 mod capabilities;
 mod ingress;
 mod tls;
+mod tls_rt;
 mod command_dispatch;
 
 use clap::{Parser, Subcommand};
@@ -97,7 +98,7 @@ fn main() {
                 .with_ansi(true)
                 .init();
 
-            let rt = tokio::runtime::Builder::new_multi_thread()
+            let rt = lifegraph_rt::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .unwrap_or_else(|e| {
@@ -280,7 +281,7 @@ enum StoreRequest {
         command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
-        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+        reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
     },
     Query {
         /// The raw message bytes (for dedup hashing before decode).
@@ -288,25 +289,25 @@ enum StoreRequest {
         query: lifegraph_proto::lifegraph::v0::access::QueryRequest,
         /// Peer identity for allowlist check.
         peer_id: Option<Vec<u8>>,
-        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+        reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
     },
     /// Produce a snapshot of current stream heads.
     ProduceSnapshot {
         view_type: String,
         completeness: i32,
-        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+        reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
     },
     /// Fetch a local object by ObjectRef and return its content.
     FetchObject {
         object_ref: lifegraph_proto::lifegraph::v0::common::ObjectRef,
-        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+        reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
     },
     /// Send a command to a remote peer over TCP and record CommandSent event.
     #[allow(dead_code)]
     SendCommand {
         peer_addr: String,
         command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
-        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+        reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
     },
 }
 
@@ -330,7 +331,7 @@ struct MeshReply {
 struct OutboundCommand {
     peer_addr: String,
     command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
-    reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+    reply_tx: lifegraph_rt::oneshot::Sender<StoreResponse>,
 }
 
 /// A request sent to the store task from the mesh loop (blocking thread).
@@ -359,10 +360,10 @@ struct HealthState {
 ///
 /// GET /health → { "status": "ok", "uptime_secs": N, "node_id": "...", "stream_id": "..." }
 async fn run_health_server(port: u16, state: HealthState) {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use lifegraph_rt::{AsyncReadExt, AsyncWriteExt};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match tokio::net::TcpListener::bind(&addr).await {
+    let listener = match lifegraph_rt::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
             tracing::error!("failed to bind health endpoint on {}: {}", addr, e);
@@ -375,7 +376,7 @@ async fn run_health_server(port: u16, state: HealthState) {
         match listener.accept().await {
             Ok((mut stream, _)) => {
                 let state = state.clone();
-                tokio::spawn(async move {
+                lifegraph_rt::spawn(async move {
                     let mut buf = [0u8; 1024];
                     let _ = stream.read(&mut buf).await;
                     let uptime = state.started_at.elapsed().as_secs();
@@ -403,8 +404,8 @@ async fn run_health_server(port: u16, state: HealthState) {
 ///
 /// Sends a ping-like message and maintains the connection for query/command exchange.
 async fn handle_bootstrap_connection(
-    stream: tokio::net::TcpStream,
-    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    stream: lifegraph_rt::TcpStream,
+    store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
     _peer_id_hex: &str,
 ) {
     // Use the same TCP frame handler as regular connections
@@ -418,33 +419,33 @@ async fn handle_bootstrap_connection(
 /// to the store task.
 async fn run_peer_reconnection(
     initial_unreachable: Vec<(String, String)>,
-    _store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    _store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
 ) {
     use std::collections::HashMap;
 
     // Track backoff state per peer: (retry_count, next_attempt)
-    let mut backoff: HashMap<String, (u32, tokio::time::Instant)> = HashMap::new();
+    let mut backoff: HashMap<String, (u32, std::time::Instant)> = HashMap::new();
     const INITIAL_BACKOFF_SECS: u64 = 5;
     const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
 
     // Initialize with known unreachable peers
     for (node_id_hex, _addr) in initial_unreachable {
-        backoff.insert(node_id_hex, (0, tokio::time::Instant::now()));
+        backoff.insert(node_id_hex, (0, std::time::Instant::now()));
     }
 
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut interval = lifegraph_rt::interval(std::time::Duration::from_secs(10));
+    interval.set_missed_tick_behavior(lifegraph_rt::MissedTickBehavior::Skip);
 
     loop {
         interval.tick().await;
-        let now = tokio::time::Instant::now();
+        let now = std::time::Instant::now();
         let mut to_remove = Vec::new();
 
         for (node_id_hex, (retry_count, next_attempt)) in backoff.iter_mut() {
             if now >= *next_attempt {
                 let rc = *retry_count;
                 let delay = (INITIAL_BACKOFF_SECS * 2u64.pow(rc.min(6))).min(MAX_BACKOFF_SECS);
-                *next_attempt = now + tokio::time::Duration::from_secs(delay);
+                *next_attempt = now + std::time::Duration::from_secs(delay);
                 *retry_count += 1;
 
                 // In v0, we just log — actual outbound reconnection is initiated
@@ -499,7 +500,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             stream_id: config.stream_id.clone(),
             started_at: std::time::Instant::now(),
         };
-        tokio::spawn(run_health_server(hp, health_state));
+        lifegraph_rt::spawn(run_health_server(hp, health_state));
     }
 
     let data_root = path.parent()
@@ -586,7 +587,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     }
 
     // --- Store task (owns NodeStore + ingress state, not Send) ---
-    let (store_tx, store_rx) = tokio::sync::mpsc::channel::<StoreRequest>(256);
+    let (store_tx, store_rx) = lifegraph_rt::mpsc::channel::<StoreRequest>(256);
 
     let stream_id_vec = stream_id_bytes.to_vec();
     let store_signer: Arc<dyn MeshSigner + Send + Sync> = Arc::clone(&signer);
@@ -616,25 +617,25 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     let (mesh_command_tx, mesh_command_rx) = std::sync::mpsc::channel::<MeshCommandRequest>();
     let (_mesh_reply_tx, mesh_reply_rx) = std::sync::mpsc::channel::<MeshReply>();
 
-    let store_handle = tokio::task::spawn_blocking(move || {
+    let store_handle = lifegraph_rt::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
                        mesh_command_rx,
                        global_rate_limiter, message_hash_cache, allowed_peers, node_id);
     });
 
-    let mesh_handle = tokio::task::spawn_blocking(move || {
+    let mesh_handle = lifegraph_rt::spawn_blocking(move || {
         run_mesh_loop(mesh_node_id, mesh_command_tx, mesh_reply_rx);
     });
 
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
         // Build TLS config if a certificate is provided
-        let tls_acceptor: Option<Arc<tokio_rustls::TlsAcceptor>> = if let Some(ref cert_path) = tls_cert {
+        let tls_acceptor: Option<Arc<tls_rt::TlsAcceptor>> = if let Some(ref cert_path) = tls_cert {
             // Build TLS config with hardware-backed ephemeral leaf cert issuance
             match tls::build_tls_server_config(cert_path, Arc::clone(&signer)) {
                 Ok(tls_config) => {
                     tracing::info!(cert = %cert_path.display(), "TLS enabled with hardware-issued ephemeral leaf certificate");
-                    Some(Arc::new(tokio_rustls::TlsAcceptor::from(Arc::new(tls_config))))
+                    Some(Arc::new(tls_rt::TlsAcceptor::new(Arc::new(tls_config))))
                 }
                 Err(e) => {
                     tracing::error!("failed to build TLS config: {}", e);
@@ -645,7 +646,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             None
         };
 
-        let _tcp_handle = tokio::spawn(run_tcp_listener(
+        let _tcp_handle = lifegraph_rt::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
@@ -668,8 +669,8 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
             let peer_addr = peer.addr.clone();
             let peer_id_hex = peer.node_id_hex.clone();
             let conn_store_tx = store_tx.clone();
-            tokio::spawn(async move {
-                match tokio::net::TcpStream::connect(&peer_addr).await {
+            lifegraph_rt::spawn(async move {
+                match lifegraph_rt::TcpStream::connect(&peer_addr).await {
                     Ok(stream) => {
                         tracing::info!(addr = %peer_addr, node_id = peer_id_hex, "connected to bootstrap peer");
                         // Handle as a regular TCP connection (bidirectional)
@@ -690,20 +691,20 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
     let fetch_store_path = data_root.join("index.sqlite3");
     let fetch_peers = bootstrap_peers.clone();
     let fetch_node_id = node_id;
-    let _fetch_handle = tokio::spawn(async move {
+    let _fetch_handle = lifegraph_rt::spawn(async move {
         run_fetch_queue_consumer(fetch_store_path, fetch_peers, fetch_node_id).await;
     });
 
     // --- Peer reconnection task ---
     let recon_store_tx = store_tx.clone();
     let recon_peers = unreachable_peers;
-    tokio::spawn(async move {
+    lifegraph_rt::spawn(async move {
         run_peer_reconnection(recon_peers, recon_store_tx).await;
     });
 
     // Wait for shutdown signal
-    let shutdown = tokio::spawn(async {
-        tokio::signal::ctrl_c().await.ok();
+    let shutdown = lifegraph_rt::spawn(async {
+        lifegraph_rt::ctrl_c().await.ok();
         tracing::info!("shutting down");
     });
     let _ = shutdown.await;
@@ -745,8 +746,8 @@ async fn run_fetch_queue_consumer(
         }
     };
 
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut interval = lifegraph_rt::interval(std::time::Duration::from_secs(30));
+    interval.set_missed_tick_behavior(lifegraph_rt::MissedTickBehavior::Skip);
 
     loop {
         interval.tick().await;
@@ -844,11 +845,12 @@ fn send_command_to_peer(
     // Record CommandSent event on our own stream (double-entry bookkeeping)
     command_dispatch::record_command_sent_event(store, stream_id, signer, command);
 
-    // Use tokio runtime from the blocking context
-    let rt = tokio::runtime::Handle::current();
-    rt.block_on(async {
-        send_command_to_peer_async(peer_addr, command).await
-    })
+    // Spawn the async operation and wait for it
+    let peer_addr = peer_addr.to_string();
+    let command = command.clone();
+    lifegraph_rt::spawn(async move {
+        send_command_to_peer_async(&peer_addr, &command).await
+    }).blocking_recv().unwrap()
 }
 
 /// Async version of send_command_to_peer — no store mutation, just network I/O.
@@ -856,30 +858,30 @@ async fn send_command_to_peer_async(
     peer_addr: &str,
     command: &lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use lifegraph_rt::{AsyncReadExt, AsyncWriteExt};
 
-    let mut stream = tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
-        tokio::net::TcpStream::connect(peer_addr),
+    let mut stream = lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
+        lifegraph_rt::TcpStream::connect(peer_addr),
     ).await??;
 
     let cmd_bytes = prost::Message::encode_to_vec(command);
     let frame = encode_tcp_frame(&cmd_bytes);
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
         stream.write_all(&frame),
     ).await??;
 
     let mut header = [0u8; 8];
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
         stream.read_exact(&mut header),
     ).await??;
 
     let payload_len = u64::from_be_bytes(header) as usize;
     let mut payload = vec![0u8; payload_len];
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(30),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(30),
         stream.read_exact(&mut payload),
     ).await??;
 
@@ -891,31 +893,31 @@ async fn send_query_to_peer(
     peer_addr: &str,
     query: &lifegraph_proto::lifegraph::v0::access::QueryRequest,
 ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut stream = tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
-        tokio::net::TcpStream::connect(peer_addr),
+    use lifegraph_rt::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
+        lifegraph_rt::TcpStream::connect(peer_addr),
     ).await??;
 
     let query_bytes = prost::Message::encode_to_vec(query);
     let frame = encode_tcp_frame(&query_bytes);
 
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
         stream.write_all(&frame),
     ).await??;
 
     // Read response (8-byte length prefix + payload)
     let mut header = [0u8; 8];
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(10),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(10),
         stream.read_exact(&mut header),
     ).await??;
 
     let payload_len = u64::from_be_bytes(header) as usize;
     let mut payload = vec![0u8; payload_len];
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(30),
+    lifegraph_rt::timeout(
+        std::time::Duration::from_secs(30),
         stream.read_exact(&mut payload),
     ).await??;
 
@@ -930,7 +932,7 @@ fn run_store_task(
     mut store: NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    mut rx: tokio::sync::mpsc::Receiver<StoreRequest>,
+    mut rx: lifegraph_rt::mpsc::Receiver<StoreRequest>,
     mesh_command_rx: std::sync::mpsc::Receiver<MeshCommandRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
@@ -1207,10 +1209,10 @@ const TCP_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 async fn run_tcp_listener(
     listen_addr: SocketAddr,
     _node_id: NodeID,
-    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
-    tls_acceptor: Option<Arc<tokio_rustls::TlsAcceptor>>,
+    store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
+    tls_acceptor: Option<Arc<tls_rt::TlsAcceptor>>,
 ) {
-    let listener = match tokio::net::TcpListener::bind(&listen_addr).await {
+    let listener = match lifegraph_rt::TcpListener::bind(&listen_addr).await {
         Ok(l) => l,
         Err(e) => {
             tracing::error!("failed to bind TCP on {}: {}", listen_addr, e);
@@ -1223,7 +1225,7 @@ async fn run_tcp_listener(
             Ok((stream, peer_addr)) => {
                 let conn_store_tx = store_tx.clone();
                 let tls_acceptor = tls_acceptor.clone();
-                tokio::spawn(async move {
+                lifegraph_rt::spawn(async move {
                     if let Some(ref acceptor) = tls_acceptor {
                         // Perform TLS handshake
                         match acceptor.accept(stream).await {
@@ -1250,10 +1252,10 @@ async fn run_tcp_listener(
 
 /// Handles a TLS-wrapped connection.
 async fn handle_tls_connection(
-    stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
-    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    mut stream: tls_rt::TlsStream,
+    store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
 ) {
-    let (mut reader, mut writer) = tokio::io::split(stream);
+    let (mut reader, mut writer) = tls_rt::split(&mut stream);
     let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
@@ -1268,10 +1270,10 @@ async fn handle_tls_connection(
 
 /// Handles a plain TCP connection.
 async fn handle_tcp_connection(
-    stream: tokio::net::TcpStream,
-    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    mut stream: lifegraph_rt::TcpStream,
+    store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
 ) {
-    let (mut reader, mut writer) = tokio::io::split(stream);
+    let (mut reader, mut writer) = lifegraph_rt::split(&mut stream);
     let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
@@ -1290,12 +1292,12 @@ async fn handle_tcp_stream_common<R, W>(
     writer: &mut W,
     read_buf: &mut Vec<u8>,
     conn_rate_limiter: &mut ingress::TokenBucket,
-    store_tx: &tokio::sync::mpsc::Sender<StoreRequest>,
+    store_tx: &lifegraph_rt::mpsc::Sender<StoreRequest>,
 ) where
-    R: tokio::io::AsyncRead + Unpin,
-    W: tokio::io::AsyncWrite + Unpin,
+    R: lifegraph_rt::AsyncRead + Unpin,
+    W: lifegraph_rt::AsyncWrite + Unpin,
 {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use lifegraph_rt::{AsyncReadExt, AsyncWriteExt};
 
     loop {
         // Read 8-byte length prefix
@@ -1364,7 +1366,7 @@ async fn handle_tcp_stream_common<R, W>(
             // Check if this is a snapshot publish command
             use lifegraph_proto::lifegraph::v0::stream::CommandType;
             if command.command_type == CommandType::PublishSnapshot as i32 {
-                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                let (reply_tx, reply_rx) = lifegraph_rt::oneshot::channel();
                 if store_tx.send(StoreRequest::ProduceSnapshot {
                     view_type: "stream_heads".to_string(),
                     completeness: 1, // FULL
@@ -1433,7 +1435,7 @@ async fn handle_tcp_stream_common<R, W>(
                     continue;
                 }
 
-                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                let (reply_tx, reply_rx) = lifegraph_rt::oneshot::channel();
                 if store_tx.send(StoreRequest::FetchObject { object_ref, reply_tx }).await.is_err() {
                     return;
                 }
@@ -1453,7 +1455,7 @@ async fn handle_tcp_stream_common<R, W>(
                 continue;
             }
 
-            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+            let (reply_tx, reply_rx) = lifegraph_rt::oneshot::channel();
             if store_tx.send(StoreRequest::Command {
                 raw_bytes: raw, command, peer_id: None, reply_tx,
             }).await.is_err() {
@@ -1480,7 +1482,7 @@ async fn handle_tcp_stream_common<R, W>(
             lifegraph_proto::lifegraph::v0::access::QueryRequest::decode(&payload[..])
         {
             let raw = payload.clone();
-            let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+            let (reply_tx, reply_rx) = lifegraph_rt::oneshot::channel();
             if store_tx.send(StoreRequest::Query {
                 raw_bytes: raw, query, peer_id: None, reply_tx,
             }).await.is_err() {

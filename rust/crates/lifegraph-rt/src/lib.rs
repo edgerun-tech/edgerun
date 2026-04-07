@@ -9,8 +9,9 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+pub use std::time::Instant;
 // ===========================================================================
 // Ready queue
 // ===========================================================================
@@ -604,7 +605,7 @@ impl AsyncWrite for WriteHalf<'_> {
 // ===========================================================================
 
 pub fn sleep(d: Duration) -> Sleep { Sleep { deadline: Instant::now() + d } }
-pub struct Sleep { deadline: Instant }
+pub struct Sleep { deadline: std::time::Instant }
 impl Future for Sleep {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -636,7 +637,6 @@ impl<F: Future> Future for Timeout<F> {
 impl std::fmt::Display for Elapsed { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("deadline elapsed") } }
 impl std::error::Error for Elapsed {}
 
-pub use std::time::Instant as RtInstant;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)] pub enum MissedTickBehavior { Skip }
 
 pub fn interval(d: Duration) -> Interval { Interval { d, next: Instant::now() + d, _mb: MissedTickBehavior::Skip } }
@@ -684,6 +684,13 @@ pub mod mpsc {
     }
     impl<T> Receiver<T> {
         pub async fn recv(&mut self) -> Option<T> { RecvFut { inner: &self.inner }.await }
+        pub fn blocking_recv(&mut self) -> Option<T> {
+            loop {
+                if let Some(v) = self.inner.q.lock().unwrap().pop_front() { return Some(v); }
+                if self.inner.closed.load(Ordering::Relaxed) { return None; }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        }
     }
     struct RecvFut<'a, T> { inner: &'a ChanInner<T> }
     impl<T> Future for RecvFut<'_, T> {

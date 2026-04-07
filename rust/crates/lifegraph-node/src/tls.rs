@@ -65,16 +65,56 @@ pub fn load_cert(path: &std::path::Path) -> Result<CertificateDer<'static>, Box<
         .map_err(|e| format!("failed to read certificate file {}: {}", path.display(), e))?;
 
     // Try PEM first
-    let mut reader = std::io::Cursor::new(&data);
-    let certs: Result<Vec<_>, _> = rustls_pemfile::certs(&mut reader).collect();
-    if let Ok(certs) = certs {
-        if let Some(cert) = certs.into_iter().next() {
-            return Ok(cert);
-        }
+    if let Some(cert) = parse_pem_cert(&data) {
+        return Ok(cert);
     }
 
     // Try DER
     Ok(CertificateDer::from(data))
+}
+
+/// Simple PEM certificate parser (no external dependency needed).
+fn parse_pem_cert(data: &[u8]) -> Option<CertificateDer<'static>> {
+    let text = std::str::from_utf8(data).ok()?;
+    let start = text.find("-----BEGIN CERTIFICATE-----")?;
+    let end = text.find("-----END CERTIFICATE-----")?;
+    let b64 = &text[start + 27..end];
+    let der = decode_base64(b64)?;
+    Some(CertificateDer::from(der))
+}
+
+/// Minimal base64 decoder (RFC 4648 standard alphabet).
+fn decode_base64(input: &str) -> Option<Vec<u8>> {
+    const TABLE: &[u8; 128] = &{
+        let mut t = [255u8; 128];
+        let mut i = 0;
+        while i < 26 { t[(b'A' + i) as usize] = i; i += 1; }
+        i = 0;
+        while i < 26 { t[(b'a' + i) as usize] = 26 + i; i += 1; }
+        i = 0;
+        while i < 10 { t[(b'0' + i) as usize] = 52 + i; i += 1; }
+        t[b'+' as usize] = 62;
+        t[b'/' as usize] = 63;
+        t
+    };
+    let input = input.as_bytes();
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+    for &b in input {
+        if b.is_ascii_whitespace() { continue; }
+        if b == b'=' { break; }
+        if b as usize >= TABLE.len() { return None; }
+        let v = TABLE[b as usize];
+        if v == 255 { return None; }
+        buf = (buf << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Some(out)
 }
 
 /// Verifies that a certificate's public key matches the node's hardware identity.

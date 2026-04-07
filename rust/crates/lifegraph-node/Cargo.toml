@@ -38,12 +38,10 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 getrandom.workspace = true
-tokio.workspace = true
+lifegraph-rt = { path = "../lifegraph-rt" }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rustls.workspace = true
-tokio-rustls.workspace = true
-rustls-pemfile.workspace = true
 rcgen.workspace = true
 ring.workspace = true
 x509-parser.workspace = true
