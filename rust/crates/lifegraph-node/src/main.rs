@@ -746,8 +746,8 @@ async fn run_fetch_queue_consumer(
     use lifegraph_proto::lifegraph::v0::access::{QueryClass, QueryRequest};
     use lifegraph_proto::lifegraph::v0::common::IdentityRef;
     use lifegraph_proto::lifegraph::v0::trust::{ScopeDescriptor, ScopeKind};
-    use lifegraph_storage::sqlite::SqliteIndex;
-    use lifegraph_storage::sqlite::SqliteIndexConfig;
+    use lifegraph_storage::FileIndex;
+    
 
     if peers.is_empty() {
         lifegraph_log::info!("no bootstrap peers configured, fetch queue consumer disabled");
@@ -755,7 +755,7 @@ async fn run_fetch_queue_consumer(
     }
 
     // Open a separate SQLite connection for the fetch queue
-    let index = match SqliteIndex::open(&SqliteIndexConfig { db_path: index_path }) {
+    let index = match FileIndex::open(&index_path.parent().unwrap().to_path_buf()) {
         Ok(idx) => idx,
         Err(e) => {
             lifegraph_log::error!("failed to open SQLite index for fetch queue: {}", e);

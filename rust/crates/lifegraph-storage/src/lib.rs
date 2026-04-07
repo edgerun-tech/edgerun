@@ -17,12 +17,12 @@
 
 pub mod blobs;
 pub mod error;
-pub mod sqlite;
+pub mod file_index;
 pub mod store;
 
 pub use error::StorageError;
 pub use blobs::{BlobStore, BlobKeySource, BlobEntry, blob_file_path};
-pub use sqlite::{SqliteIndex, SqliteIndexConfig, EventIndexEntry, ReplayEntry, FetchEntry};
+pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry};
 pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
 
 #[cfg(test)]
@@ -89,7 +89,7 @@ mod tests {
 
         assert!(data_root.join("events").is_dir());
         assert!(data_root.join("blobs").is_dir());
-        assert!(data_root.join("index.sqlite3").exists());
+        assert!(data_root.join("index.bin").exists());
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod tests {
 
         // Delete the SQLite database
         drop(store);
-        fs::remove_file(data_root.join("index.sqlite3")).unwrap();
+        fs::remove_file(data_root.join("index.bin")).unwrap();
 
         // Reopen and rebuild
         let mut store = NodeStore::open(&config).unwrap();

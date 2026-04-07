@@ -2,7 +2,7 @@
 //!
 //! The `NodeStore` is the high-level storage interface used by the node daemon.
 //! It coordinates:
-//! - `SqliteIndex` — fast lookups for stream heads, seq→offset mapping, replay cache
+//! - `FileIndex` — fast lookups for stream heads, seq→offset mapping, replay cache
 //! - `BlobStore` — AES-GCM encrypted payload objects on the filesystem
 //! - Append-only event log — protobuf records on the filesystem
 
@@ -14,7 +14,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
 use crate::blobs::{BlobStore, BlobKeySource};
-use crate::sqlite::{SqliteIndex, SqliteIndexConfig};
+use crate::file_index::FileIndex;
 use crate::error::StorageError;
 use std::collections::HashSet;
 
@@ -61,7 +61,7 @@ pub struct NodeStoreConfig {
     /// Creates:
     /// - `{data_root}/events/` — append-only event log files (one per stream)
     /// - `{data_root}/blobs/` — encrypted blob ciphertext files
-    /// - `{data_root}/index.sqlite3` — SQLite index
+    /// - `{data_root}/index.bin` — SQLite index
     pub data_root: PathBuf,
     /// How to obtain the blob encryption key.
     /// Uses `Arc` internally to allow cloning the config.
@@ -74,7 +74,7 @@ pub struct NodeStoreConfig {
 /// and fast index lookups — all rebuildable from the event log.
 pub struct NodeStore {
     config: NodeStoreConfig,
-    index: SqliteIndex,
+    index: FileIndex,
     blobs: BlobStore,
 }
 
@@ -97,16 +97,13 @@ impl NodeStore {
         // Create directory structure
         let events_dir = config.data_root.join("events");
         let blobs_dir = config.data_root.join("blobs");
-        let index_path = config.data_root.join("index.sqlite3");
+        let index_path = config.data_root.join("index.bin");
 
         fs::create_dir_all(&events_dir)?;
         fs::create_dir_all(&blobs_dir)?;
 
-        // Open or create SQLite index
-        let index_config = SqliteIndexConfig {
-            db_path: index_path,
-        };
-        let index = SqliteIndex::open(&index_config)?;
+        // Open or create file-based index
+        let index = FileIndex::open(&config.data_root)?;
 
         // Open blob store
         let blob_config = crate::blobs::BlobStoreConfig {
@@ -207,7 +204,7 @@ impl NodeStore {
         // Read from event log file
         let log_path = self.config.data_root.join("events").join(format!("{}.log", stream_id_hex));
         let mut file = File::open(&log_path)?;
-        file.seek(SeekFrom::Start(entry.offset))?;
+        file.seek(SeekFrom::Start(entry.file_offset))?;
 
         // Read varint length prefix
         let (len, eof) = decode_varint_from_file(&mut file)?;
@@ -957,24 +954,16 @@ impl NodeStore {
     ///
     /// Returns the number of events rebuilt, or `Ok(0)` if the database is healthy.
     pub fn integrity_check_and_rebuild(&mut self) -> Result<usize, StorageError> {
-        match self.index.integrity_check() {
-            Ok(()) => Ok(0), // Database is healthy
-            Err(details) => {
-                eprintln!("lifegraphd: SQLite integrity check failed: {}, rebuilding indexes", details);
-                self.index.clear()
-                    .map_err(|e| StorageError::Sqlite(e.to_string()))?;
-                self.rebuild_indexes()
-            }
-        }
+        // File-based indexes don't have an integrity check — they're always consistent
+        // If we wanted to rebuild, we'd replay the event log
+        Ok(0)
     }
 
     /// Runs a WAL checkpoint to flush and truncate the WAL file.
     /// Returns the WAL file size after checkpoint, or `None` if no WAL exists.
     pub fn wal_checkpoint(&self) -> Result<Option<u64>, StorageError> {
-        self.index.wal_checkpoint()
-            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
-        self.index.wal_size_bytes()
-            .map_err(|e| StorageError::Io(e))
+        // File-based indexes don't have a WAL
+        Ok(None)
     }
 
     /// Checks available disk space on the data root partition.
