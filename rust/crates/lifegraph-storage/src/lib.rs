@@ -23,7 +23,7 @@ pub mod store;
 pub use error::StorageError;
 pub use blobs::{BlobStore, BlobKeySource, BlobEntry, blob_file_path};
 pub use sqlite::{SqliteIndex, SqliteIndexConfig, EventIndexEntry, ReplayEntry, FetchEntry};
-pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult};
+pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
 
 #[cfg(test)]
 mod tests {
@@ -342,5 +342,93 @@ mod tests {
         // Process the queue
         let resolved = store.process_fetch_queue().unwrap();
         assert_eq!(resolved, 1);
+    }
+
+    #[test]
+    fn get_event_with_payload_resolves_automatically() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let mut store = NodeStore::open(&config).unwrap();
+
+        // Create an event with a payload object
+        let content = b"command result payload";
+        let obj_ref = store.put_object(content, 6, &[]).unwrap();
+
+        let event = test_event_with_payload("test-stream", 0, Some(obj_ref));
+        store.append_event(&event).unwrap();
+
+        // Get event with auto-resolved payload
+        let (retrieved, payload) = store.get_event_with_payload(b"test-stream", 0).unwrap().unwrap();
+        assert_eq!(retrieved.seq, 0);
+        assert!(payload.is_some());
+        assert_eq!(payload.unwrap(), content);
+    }
+
+    #[test]
+    fn get_event_with_payload_returns_none_for_missing_payload() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let mut store = NodeStore::open(&config).unwrap();
+
+        // Create event without payload
+        let event = test_event_with_payload("test-stream", 0, None);
+        store.append_event(&event).unwrap();
+
+        let (retrieved, payload) = store.get_event_with_payload(b"test-stream", 0).unwrap().unwrap();
+        assert_eq!(retrieved.seq, 0);
+        assert!(payload.is_none());
+    }
+
+    #[test]
+    fn get_events_with_payloads_resolves_batch() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let mut store = NodeStore::open(&config).unwrap();
+
+        // Create events with and without payloads
+        let content1 = b"payload 1";
+        let obj_ref1 = store.put_object(content1, 6, &[]).unwrap();
+        store.append_event(&test_event_with_payload("test-stream", 0, Some(obj_ref1))).unwrap();
+        store.append_event(&test_event_with_payload("test-stream", 1, None)).unwrap();
+
+        let content3 = b"payload 3";
+        let obj_ref3 = store.put_object(content3, 6, &[]).unwrap();
+        store.append_event(&test_event_with_payload("test-stream", 2, Some(obj_ref3))).unwrap();
+
+        // Batch retrieve with payload resolution
+        let results = store.get_events_with_payloads(b"test-stream", 0, 2).unwrap();
+        assert_eq!(results.len(), 3);
+
+        assert_eq!(results[0].1.as_deref(), Some(&content1[..]));
+        assert!(results[1].1.is_none());
+        assert_eq!(results[2].1.as_deref(), Some(&content3[..]));
+    }
+
+    fn test_event_with_payload(stream_id: &str, seq: u64, payload_object: Option<lifegraph_proto::lifegraph::v0::common::ObjectRef>) -> EventEnvelope {
+        EventEnvelope {
+            envelope_version: 1,
+            stream_id: stream_id.as_bytes().to_vec(),
+            seq,
+            prev_event_hash: if seq > 0 {
+                Some(lifegraph_core::protocol::Digest {
+                    algorithm: 1,
+                    value: vec![0u8; 32],
+                })
+            } else {
+                None
+            },
+            event_type: EventType::CommandCommitted as i32,
+            event_version: 1,
+            recorded_at: None,
+            effective_at: None,
+            payload_object,
+            related_events: vec![],
+            related_commands: vec![],
+            related_objects: vec![],
+            related_delegations: vec![],
+            related_revocations: vec![],
+            event_metadata: None,
+            signature: None,
+        }
     }
 }

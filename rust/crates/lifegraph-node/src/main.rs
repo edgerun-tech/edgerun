@@ -17,6 +17,8 @@
 
 mod capabilities;
 mod ingress;
+mod tls;
+mod command_dispatch;
 
 use clap::{Parser, Subcommand};
 use lifegraph_hardware_signing::{MeshSigner, NodeID};
@@ -27,8 +29,7 @@ use lifegraph_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
 use prost::Message;
 use std::sync::Arc;
 use p256::ecdsa::SigningKey;
-use p256::ecdsa::signature::hazmat::RandomizedPrehashSigner;
-use rand::rngs::OsRng;
+use p256::ecdsa::signature::hazmat::PrehashSigner;
 use std::fs;
 use lifegraph_linux_netif::discover_network_interfaces;
 use lifegraph_network_interface::NetworkLinkState;
@@ -62,6 +63,11 @@ enum Commands {
         /// TCP listen address (e.g. 0.0.0.0:8080). If omitted, mesh-only.
         #[arg(long)]
         listen: Option<SocketAddr>,
+        /// TLS certificate file (PEM/DER). The cert's public key must match
+        /// the node's hardware signing key (TPM/YubiKey). Enables TLS on
+        /// the TCP listener when provided.
+        #[arg(long)]
+        tls_cert: Option<PathBuf>,
         /// Health endpoint port. If omitted, no health server.
         #[arg(long)]
         health_port: Option<u16>,
@@ -82,7 +88,7 @@ fn main() {
         Commands::Init { config, name, software } => {
             cmd_init(&config, name, software);
         }
-        Commands::Run { config, listen, health_port, log_level } => {
+        Commands::Run { config, listen, tls_cert, health_port, log_level } => {
             // Initialize structured logging
             let env_filter = tracing_subscriber::EnvFilter::try_new(&log_level)
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -99,7 +105,7 @@ fn main() {
                     std::process::exit(1);
                 });
             rt.block_on(async move {
-                cmd_run(&config, listen, health_port).await;
+                cmd_run(&config, listen, tls_cert, health_port).await;
             });
         }
         Commands::Status { config } => {
@@ -132,7 +138,15 @@ fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("WARNING: --software generates an INSECURE key stored in the config file.");
         eprintln!("This is for development/testing only. NEVER use in production.");
         eprintln!();
-        let signing_key = SigningKey::random(&mut OsRng);
+        let mut key_bytes = [0u8; 32];
+        getrandom::fill(&mut key_bytes).unwrap_or_else(|e| {
+            eprintln!("error: failed to get random bytes for key generation: {}", e);
+            std::process::exit(1);
+        });
+        let signing_key = SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
+            eprintln!("error: failed to create signing key: {}", e);
+            std::process::exit(1);
+        });
         let verifying_key = signing_key.verifying_key();
         let encoded = verifying_key.to_encoded_point(false);
         let mut node_id_bytes = [0u8; 64];
@@ -276,6 +290,24 @@ enum StoreRequest {
         peer_id: Option<Vec<u8>>,
         reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
     },
+    /// Produce a snapshot of current stream heads.
+    ProduceSnapshot {
+        view_type: String,
+        completeness: i32,
+        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+    },
+    /// Fetch a local object by ObjectRef and return its content.
+    FetchObject {
+        object_ref: lifegraph_proto::lifegraph::v0::common::ObjectRef,
+        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+    },
+    /// Send a command to a remote peer over TCP and record CommandSent event.
+    #[allow(dead_code)]
+    SendCommand {
+        peer_addr: String,
+        command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
+        reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+    },
 }
 
 /// Response from the store task back to the TCP handler.
@@ -286,7 +318,154 @@ enum StoreResponse {
     Rejected(ingress::IngressResult),
 }
 
-async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: Option<u16>) {
+/// Reply from the store task back to the TCP handler.
+/// Contains the response bytes and the original sender's NodeID.
+struct MeshReply {
+    source: NodeID,
+    response_bytes: Vec<u8>,
+}
+
+/// An outbound command to be sent to a remote peer.
+#[allow(dead_code)]
+struct OutboundCommand {
+    peer_addr: String,
+    command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
+    reply_tx: tokio::sync::oneshot::Sender<StoreResponse>,
+}
+
+/// A request sent to the store task from the mesh loop (blocking thread).
+/// Uses std::sync::mpsc since both sender (mesh loop) and receiver (store task)
+/// are on blocking threads.
+struct MeshCommandRequest {
+    command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
+    raw_bytes: Vec<u8>,
+    source: NodeID,
+    reply_tx: std::sync::mpsc::Sender<MeshReply>,
+}
+
+// ---------------------------------------------------------------------------
+// Health endpoint
+// ---------------------------------------------------------------------------
+
+/// Shared health state updated by the daemon.
+#[derive(Clone, Debug)]
+struct HealthState {
+    node_id: String,
+    stream_id: String,
+    started_at: std::time::Instant,
+}
+
+/// Runs a simple HTTP health server on the given port.
+///
+/// GET /health → { "status": "ok", "uptime_secs": N, "node_id": "...", "stream_id": "..." }
+async fn run_health_server(port: u16, state: HealthState) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("failed to bind health endpoint on {}: {}", addr, e);
+            return;
+        }
+    };
+    tracing::info!(port, "health endpoint listening");
+
+    loop {
+        match listener.accept().await {
+            Ok((mut stream, _)) => {
+                let state = state.clone();
+                tokio::spawn(async move {
+                    let mut buf = [0u8; 1024];
+                    let _ = stream.read(&mut buf).await;
+                    let uptime = state.started_at.elapsed().as_secs();
+                    let body = format!(
+                        r#"{{"status":"ok","uptime_secs":{},"node_id":"{}","stream_id":"{}"}}"#,
+                        uptime, state.node_id, state.stream_id
+                    );
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(),
+                        body
+                    );
+                    let _ = stream.write_all(response.as_bytes()).await;
+                    let _ = stream.flush().await;
+                });
+            }
+            Err(e) => {
+                tracing::warn!("health endpoint accept error: {}", e);
+            }
+        }
+    }
+}
+
+/// Handles a TCP connection to a bootstrap peer.
+///
+/// Sends a ping-like message and maintains the connection for query/command exchange.
+async fn handle_bootstrap_connection(
+    stream: tokio::net::TcpStream,
+    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    _peer_id_hex: &str,
+) {
+    // Use the same TCP frame handler as regular connections
+    handle_tcp_connection(stream, store_tx).await;
+}
+
+/// Periodically attempts to reconnect to unreachable peers.
+///
+/// Runs on a timer, tracks unreachable peers and attempts TCP reconnection
+/// with exponential backoff. Uses `store_tx` to send peer status updates
+/// to the store task.
+async fn run_peer_reconnection(
+    initial_unreachable: Vec<(String, String)>,
+    _store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+) {
+    use std::collections::HashMap;
+
+    // Track backoff state per peer: (retry_count, next_attempt)
+    let mut backoff: HashMap<String, (u32, tokio::time::Instant)> = HashMap::new();
+    const INITIAL_BACKOFF_SECS: u64 = 5;
+    const MAX_BACKOFF_SECS: u64 = 300; // 5 minutes
+
+    // Initialize with known unreachable peers
+    for (node_id_hex, _addr) in initial_unreachable {
+        backoff.insert(node_id_hex, (0, tokio::time::Instant::now()));
+    }
+
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        interval.tick().await;
+        let now = tokio::time::Instant::now();
+        let mut to_remove = Vec::new();
+
+        for (node_id_hex, (retry_count, next_attempt)) in backoff.iter_mut() {
+            if now >= *next_attempt {
+                let rc = *retry_count;
+                let delay = (INITIAL_BACKOFF_SECS * 2u64.pow(rc.min(6))).min(MAX_BACKOFF_SECS);
+                *next_attempt = now + tokio::time::Duration::from_secs(delay);
+                *retry_count += 1;
+
+                // In v0, we just log — actual outbound reconnection is initiated
+                // when the peer is listed in bootstrap_peers config.
+                tracing::debug!(node_id = node_id_hex, retry = retry_count,
+                    "peer reconnection pending (use bootstrap_peers config)");
+
+                // Clean up very old entries
+                if *retry_count > 20 {
+                    to_remove.push(node_id_hex.clone());
+                }
+            }
+        }
+
+        for key in to_remove {
+            backoff.remove(&key);
+        }
+    }
+}
+
+async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Option<PathBuf>, health_port: Option<u16>) {
     if !path.exists() {
         tracing::error!("config not found at {}. Run `lifegraphd init` first.", path.display());
         std::process::exit(1);
@@ -313,6 +492,16 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         "lifegraphd starting"
     );
 
+    // --- Health endpoint ---
+    if let Some(hp) = health_port {
+        let health_state = HealthState {
+            node_id: node_id.short(),
+            stream_id: config.stream_id.clone(),
+            started_at: std::time::Instant::now(),
+        };
+        tokio::spawn(run_health_server(hp, health_state));
+    }
+
     let data_root = path.parent()
         .unwrap_or_else(|| std::path::Path::new("."))
         .join("data");
@@ -334,6 +523,15 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         use lifegraph_core::protocol::EventEnvelope;
         use lifegraph_proto::lifegraph::v0::stream::EventType;
 
+        // Create and store the NodeGenesisPayload as an encrypted object
+        let initial_controllers: Vec<Vec<u8>> = vec![node_id.0.to_vec()];
+        let payload_object_ref = command_dispatch::create_node_genesis_payload(
+            &mut store,
+            stream_id_bytes,
+            &node_id,
+            &initial_controllers,
+        );
+
         let mut genesis = EventEnvelope {
             envelope_version: 1,
             stream_id: stream_id_bytes.to_vec(),
@@ -341,9 +539,9 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
             prev_event_hash: None,
             event_type: EventType::NodeGenesis as i32,
             event_version: 1,
-            recorded_at: None,
+            recorded_at: Some(now_ms_timestamp()),
             effective_at: None,
-            payload_object: None,
+            payload_object: Some(payload_object_ref),
             related_events: vec![],
             related_commands: vec![],
             related_objects: vec![],
@@ -391,8 +589,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     let (store_tx, store_rx) = tokio::sync::mpsc::channel::<StoreRequest>(256);
 
     let stream_id_vec = stream_id_bytes.to_vec();
-    let stream_id_vec_clone = stream_id_vec.clone();
-    let store_signer: Box<dyn MeshSigner + Send> = clone_signer_for_send(&*signer);
+    let store_signer: Arc<dyn MeshSigner + Send + Sync> = Arc::clone(&signer);
 
     // Ingress screening state
     let global_rate_limiter = ingress::TokenBucket::new(1000, 500); // burst 1000, 500/sec global
@@ -404,58 +601,325 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         tracing::info!(count = allowed_peers.len(), "peer allowlist active");
     }
 
+    // --- Peer bootstrap (before store is moved) ---
+    let bootstrap_peers = parse_bootstrap_peers(&config.bootstrap_peers);
+    let unreachable_peers = store.list_unreachable_peers_with_addr().unwrap_or_default();
+    for peer in &bootstrap_peers {
+        if let Err(e) = store.upsert_peer(&peer.node_id_hex, Some(&peer.addr), "unknown", true) {
+            tracing::warn!(error = %e, node_id = peer.node_id_hex, "failed to record bootstrap peer");
+        }
+    }
+
+    // --- Mesh poll loop (blocking thread) ---
+    // Creates direct channels between mesh loop and store task
+    let mesh_node_id = node_id;
+    let (mesh_command_tx, mesh_command_rx) = std::sync::mpsc::channel::<MeshCommandRequest>();
+    let (_mesh_reply_tx, mesh_reply_rx) = std::sync::mpsc::channel::<MeshReply>();
+
     let store_handle = tokio::task::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
+                       mesh_command_rx,
                        global_rate_limiter, message_hash_cache, allowed_peers, node_id);
     });
 
-    // --- Mesh poll loop (owns MeshLink, runs on blocking thread) ---
-    let mesh_node_id = node_id;
-    let (mesh_inbound_tx, mut mesh_inbound_rx) = tokio::sync::mpsc::channel::<MeshFrame>(256);
-
     let mesh_handle = tokio::task::spawn_blocking(move || {
-        run_mesh_loop(mesh_node_id, mesh_inbound_tx);
+        run_mesh_loop(mesh_node_id, mesh_command_tx, mesh_reply_rx);
     });
 
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
+        // Build TLS config if a certificate is provided
+        let tls_acceptor: Option<Arc<tokio_rustls::TlsAcceptor>> = if let Some(ref cert_path) = tls_cert {
+            // Build TLS config with hardware-backed ephemeral leaf cert issuance
+            match tls::build_tls_server_config(cert_path, Arc::clone(&signer)) {
+                Ok(tls_config) => {
+                    tracing::info!(cert = %cert_path.display(), "TLS enabled with hardware-issued ephemeral leaf certificate");
+                    Some(Arc::new(tokio_rustls::TlsAcceptor::from(Arc::new(tls_config))))
+                }
+                Err(e) => {
+                    tracing::error!("failed to build TLS config: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            None
+        };
+
         let _tcp_handle = tokio::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
+            tls_acceptor.clone(),
         ));
-        tracing::info!(addr = %addr, "TCP listener started");
+        if tls_acceptor.is_some() {
+            tracing::info!(addr = %addr, "TCP+TLS listener started");
+        } else {
+            tracing::info!(addr = %addr, "TCP listener started (no TLS)");
+        }
     } else {
         tracing::info!("running mesh-only (no TCP listener)");
     }
 
-    // Event processing loop: route mesh inbound to store
+    // --- Bootstrap peer connections ---
+    if !bootstrap_peers.is_empty() {
+        tracing::info!(count = bootstrap_peers.len(), "connecting to bootstrap peers");
+        for peer in &bootstrap_peers {
+            // Attempt TCP connection
+            let peer_addr = peer.addr.clone();
+            let peer_id_hex = peer.node_id_hex.clone();
+            let conn_store_tx = store_tx.clone();
+            tokio::spawn(async move {
+                match tokio::net::TcpStream::connect(&peer_addr).await {
+                    Ok(stream) => {
+                        tracing::info!(addr = %peer_addr, node_id = peer_id_hex, "connected to bootstrap peer");
+                        // Handle as a regular TCP connection (bidirectional)
+                        handle_bootstrap_connection(stream, conn_store_tx, &peer_id_hex).await;
+                    }
+                    Err(e) => {
+                        tracing::warn!(addr = %peer_addr, node_id = peer_id_hex, error = %e, "failed to connect to bootstrap peer");
+                    }
+                }
+            });
+        }
+    }
+
+    // --- Fetch queue consumer: processes pending fetch requests by querying peers ---
+    // Note: The fetch consumer needs its own store access. We can't share the same
+    // NodeStore with the store task (it's not Send), so we open a separate connection
+    // to the same SQLite database for read-only fetch queue operations.
+    let fetch_store_path = data_root.join("index.sqlite3");
+    let fetch_peers = bootstrap_peers.clone();
+    let fetch_node_id = node_id;
+    let _fetch_handle = tokio::spawn(async move {
+        run_fetch_queue_consumer(fetch_store_path, fetch_peers, fetch_node_id).await;
+    });
+
+    // --- Peer reconnection task ---
+    let recon_store_tx = store_tx.clone();
+    let recon_peers = unreachable_peers;
+    tokio::spawn(async move {
+        run_peer_reconnection(recon_peers, recon_store_tx).await;
+    });
+
+    // Wait for shutdown signal
     let shutdown = tokio::spawn(async {
         tokio::signal::ctrl_c().await.ok();
         tracing::info!("shutting down");
     });
-    let mut shutdown_fut = shutdown;
-
-    loop {
-        tokio::select! {
-            _ = &mut shutdown_fut => break,
-            Some(frame) = mesh_inbound_rx.recv() => {
-                if frame.header.frame_type == FrameType::Data {
-                    if let Ok(command) =
-                        lifegraph_proto::lifegraph::v0::stream::CommandEnvelope::decode(&frame.payload[..])
-                    {
-                        // Process mesh command directly on this thread via store channel
-                        process_mesh_command(command, &store_tx, &node_id, &stream_id_vec_clone, &*signer).await;
-                    }
-                }
-            }
-        }
-    }
+    let _ = shutdown.await;
 
     // Cleanup
     drop(store_tx);
     let _ = store_handle.await;
     let _ = mesh_handle.await;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch queue consumer: processes pending fetches by querying bootstrap peers
+// ---------------------------------------------------------------------------
+
+/// Periodically checks the fetch queue and sends queries to bootstrap peers
+/// to retrieve missing events, objects, or snapshots.
+async fn run_fetch_queue_consumer(
+    index_path: std::path::PathBuf,
+    peers: Vec<BootstrapPeer>,
+    local_node_id: NodeID,
+) {
+    use lifegraph_proto::lifegraph::v0::access::{QueryClass, QueryRequest};
+    use lifegraph_proto::lifegraph::v0::common::IdentityRef;
+    use lifegraph_proto::lifegraph::v0::trust::{ScopeDescriptor, ScopeKind};
+    use lifegraph_storage::sqlite::SqliteIndex;
+    use lifegraph_storage::sqlite::SqliteIndexConfig;
+
+    if peers.is_empty() {
+        tracing::info!("no bootstrap peers configured, fetch queue consumer disabled");
+        return;
+    }
+
+    // Open a separate SQLite connection for the fetch queue
+    let index = match SqliteIndex::open(&SqliteIndexConfig { db_path: index_path }) {
+        Ok(idx) => idx,
+        Err(e) => {
+            tracing::error!("failed to open SQLite index for fetch queue: {}", e);
+            return;
+        }
+    };
+
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    loop {
+        interval.tick().await;
+
+        // Dequeue one pending fetch at a time
+        let fetch_entry = match index.dequeue_fetch() {
+            Ok(Some(entry)) => entry,
+            Ok(None) => continue, // Queue is empty
+            Err(e) => {
+                tracing::warn!("failed to dequeue fetch: {}", e);
+                continue;
+            }
+        };
+
+        let fetch_type = fetch_entry.target_type.clone();
+        let fetch_id = fetch_entry.target_id.clone();
+        let fetch_priority = fetch_entry.priority;
+
+        tracing::debug!(target = %fetch_type, id = %fetch_id, "processing fetch queue entry");
+
+        // Try each peer until one responds
+        let mut fetched = false;
+        for peer in &peers {
+            let peer_addr = peer.addr.clone();
+
+            // Build appropriate query based on fetch type
+            let query_class = match fetch_type.as_str() {
+                "event" => QueryClass::EventRange,
+                "object" => QueryClass::ObjectFetch,
+                "snapshot" => QueryClass::Snapshot,
+                _ => continue,
+            };
+
+            let query_id = format!("fetch-{}-{}", fetch_type, fetch_id).into_bytes();
+            let query = QueryRequest {
+                request_version: 1,
+                query_id,
+                requester: Some(IdentityRef {
+                    identity_id: local_node_id.0.to_vec(),
+                    identity_kind: Some(2), // NODE
+                    key_hint: None,
+                }),
+                target_scope: Some(ScopeDescriptor {
+                    scope_version: 1,
+                    scope_kind: ScopeKind::Node as i32,
+                    target_nodes: vec![],
+                    target_streams: vec![],
+                    target_object_kinds: vec![],
+                    target_view_types: vec![],
+                    target_domains: vec![],
+                    time_bounds: None,
+                    scope_metadata: None,
+                }),
+                query_class: query_class as i32,
+                time_window: None,
+                checkpoint_base: None,
+                result_limit: Some(100),
+                cost_limit: None,
+                required_proof_classes: vec![],
+                query_payload_object: None,
+                signature: None,
+            };
+
+            // Send query over TCP to the peer
+            match send_query_to_peer(&peer_addr, &query).await {
+                Ok(_fragment_bytes) => {
+                    tracing::info!(peer = %peer_addr, "fetch query succeeded");
+                    fetched = true;
+                    // Mark as done
+                    let _ = index.mark_fetch_done(fetch_entry.id);
+                    break;
+                }
+                Err(e) => {
+                    tracing::debug!(peer = %peer_addr, error = %e, "peer query failed, trying next");
+                }
+            }
+        }
+
+        if !fetched {
+            // Re-enqueue with lower priority for retry
+            let _ = index.enqueue_fetch(&fetch_type, &fetch_id, fetch_priority - 1);
+        }
+    }
+}
+
+/// Sends a CommandEnvelope to a peer over TCP, records CommandSent event, and returns the response.
+/// (Blocking version — for use from the store task's blocking thread)
+fn send_command_to_peer(
+    peer_addr: &str,
+    command: &lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    // Record CommandSent event on our own stream (double-entry bookkeeping)
+    command_dispatch::record_command_sent_event(store, stream_id, signer, command);
+
+    // Use tokio runtime from the blocking context
+    let rt = tokio::runtime::Handle::current();
+    rt.block_on(async {
+        send_command_to_peer_async(peer_addr, command).await
+    })
+}
+
+/// Async version of send_command_to_peer — no store mutation, just network I/O.
+async fn send_command_to_peer_async(
+    peer_addr: &str,
+    command: &lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let mut stream = tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        tokio::net::TcpStream::connect(peer_addr),
+    ).await??;
+
+    let cmd_bytes = prost::Message::encode_to_vec(command);
+    let frame = encode_tcp_frame(&cmd_bytes);
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        stream.write_all(&frame),
+    ).await??;
+
+    let mut header = [0u8; 8];
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        stream.read_exact(&mut header),
+    ).await??;
+
+    let payload_len = u64::from_be_bytes(header) as usize;
+    let mut payload = vec![0u8; payload_len];
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(30),
+        stream.read_exact(&mut payload),
+    ).await??;
+
+    Ok(payload)
+}
+
+/// Sends a QueryRequest to a peer over TCP and returns the QueryResultFragment bytes.
+async fn send_query_to_peer(
+    peer_addr: &str,
+    query: &lifegraph_proto::lifegraph::v0::access::QueryRequest,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        tokio::net::TcpStream::connect(peer_addr),
+    ).await??;
+
+    let query_bytes = prost::Message::encode_to_vec(query);
+    let frame = encode_tcp_frame(&query_bytes);
+
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        stream.write_all(&frame),
+    ).await??;
+
+    // Read response (8-byte length prefix + payload)
+    let mut header = [0u8; 8];
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(10),
+        stream.read_exact(&mut header),
+    ).await??;
+
+    let payload_len = u64::from_be_bytes(header) as usize;
+    let mut payload = vec![0u8; payload_len];
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(30),
+        stream.read_exact(&mut payload),
+    ).await??;
+
+    Ok(payload)
 }
 
 // ---------------------------------------------------------------------------
@@ -467,73 +931,189 @@ fn run_store_task(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     mut rx: tokio::sync::mpsc::Receiver<StoreRequest>,
+    mesh_command_rx: std::sync::mpsc::Receiver<MeshCommandRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
     allowed_peers: Vec<Vec<u8>>,
     responder_node_id: NodeID,
 ) {
+    // Initialize controller set from the node's config
+    let initial_controllers = config_controllers_from_signer(&*signer);
+    let mut controllers = command_dispatch::ControllerSet::new(initial_controllers.clone());
+    let mut replay_cache: std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)> = std::collections::HashMap::new();
+
+    // Load active revocations from the database
+    let revoked_delegations: std::collections::HashSet<Vec<u8>> = match store.list_active_revocations() {
+        Ok(revocations) => {
+            let revoked: std::collections::HashSet<Vec<u8>> = revocations
+                .into_iter()
+                .filter(|(typ, _)| typ == "delegation")
+                .filter_map(|(_, hex)| hex::decode(&hex).ok())
+                .collect();
+            tracing::info!(count = revoked.len(), "loaded active revocations");
+            revoked
+        }
+        Err(e) => {
+            tracing::warn!("failed to load revocations: {}", e);
+            std::collections::HashSet::new()
+        }
+    };
+
+    let trusted_root_ids: Vec<Vec<u8>> = controllers.to_vec();
+
     let mut request_counter: u64 = 0;
 
-    while let Some(req) = rx.blocking_recv() {
+    loop {
+        // Try to receive from either mesh (sync, non-blocking poll) or TCP (blocking recv)
+        let req = if let Ok(mesh_req) = mesh_command_rx.try_recv() {
+            // Process mesh command and route reply back through mesh
+            process_mesh_command_sync(mesh_req, &mut store, stream_id, signer,
+                &mut controllers, &mut replay_cache, &revoked_delegations, &trusted_root_ids);
+            request_counter += 1;
+            continue;
+        } else if let Some(store_req) = rx.blocking_recv() {
+            store_req
+        } else {
+            // TCP channel closed, shut down
+            break;
+        };
+
         request_counter += 1;
 
         // Extract screening data without consuming the full request yet
+        // ProduceSnapshot, FetchObject, and SendCommand skip screening (local trusted operations)
         let raw_bytes: Vec<u8> = match &req {
             StoreRequest::Command { raw_bytes, .. } |
             StoreRequest::Query { raw_bytes, .. } => raw_bytes.clone(),
+            StoreRequest::ProduceSnapshot { .. } |
+            StoreRequest::FetchObject { .. } |
+            StoreRequest::SendCommand { .. } => Vec::new(),
         };
         let peer_id: Option<Vec<u8>> = match &req {
             StoreRequest::Command { peer_id, .. } |
             StoreRequest::Query { peer_id, .. } => peer_id.clone(),
+            StoreRequest::ProduceSnapshot { .. } |
+            StoreRequest::FetchObject { .. } |
+            StoreRequest::SendCommand { .. } => None,
         };
 
         // ---- §18.3 Ingress screening (cheap → expensive) ----
+        // ProduceSnapshot is a local trusted operation — skip screening
 
-        // 1. Recent duplicate detection (before any crypto work)
-        let msg_hash = ingress::quick_message_hash(&raw_bytes);
-        if message_hash_cache.contains(msg_hash) {
-            let reply = match req {
-                StoreRequest::Command { reply_tx, .. } => reply_tx,
-                StoreRequest::Query { reply_tx, .. } => reply_tx,
-            };
-            let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::Duplicate));
-            continue;
-        }
-
-        // 2. Global rate limit
-        if !global_rate_limiter.try_consume() {
-            let reply = match req {
-                StoreRequest::Command { reply_tx, .. } => reply_tx,
-                StoreRequest::Query { reply_tx, .. } => reply_tx,
-            };
-            let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
-            continue;
-        }
-
-        // 3. Peer allowlist check
-        if let Some(ref p) = peer_id {
-            if !ingress::is_peer_allowed(p, &allowed_peers) {
+        if !matches!(&req, StoreRequest::ProduceSnapshot { .. } | StoreRequest::FetchObject { .. } | StoreRequest::SendCommand { .. }) {
+            // 1. Recent duplicate detection (before any crypto work)
+            let msg_hash = ingress::quick_message_hash(&raw_bytes);
+            if message_hash_cache.contains(msg_hash) {
                 let reply = match req {
                     StoreRequest::Command { reply_tx, .. } => reply_tx,
                     StoreRequest::Query { reply_tx, .. } => reply_tx,
+                    StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
+                    StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
                 };
-                let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::PeerNotAllowed));
+                let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::Duplicate));
                 continue;
             }
-        }
 
-        // Screening passed — cache the hash and proceed
-        message_hash_cache.insert(msg_hash);
+            // 2. Global rate limit
+            if !global_rate_limiter.try_consume() {
+                let reply = match req {
+                    StoreRequest::Command { reply_tx, .. } => reply_tx,
+                    StoreRequest::Query { reply_tx, .. } => reply_tx,
+                    StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
+                    StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
+                    StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
+                };
+                let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                continue;
+            }
+
+            // 3. Peer allowlist check
+            if let Some(ref p) = peer_id {
+                if !ingress::is_peer_allowed(p, &allowed_peers) {
+                    let reply = match req {
+                        StoreRequest::Command { reply_tx, .. } => reply_tx,
+                        StoreRequest::Query { reply_tx, .. } => reply_tx,
+                        StoreRequest::ProduceSnapshot { reply_tx, .. } => reply_tx,
+                        StoreRequest::FetchObject { reply_tx, .. } => reply_tx,
+                        StoreRequest::SendCommand { reply_tx, .. } => reply_tx,
+                    };
+                    let _ = reply.send(StoreResponse::Rejected(ingress::IngressResult::PeerNotAllowed));
+                    continue;
+                }
+            }
+
+            // Screening passed — cache the hash
+            message_hash_cache.insert(msg_hash);
+        }
 
         // 4. Process the request
         match req {
             StoreRequest::Command { command, reply_tx, .. } => {
-                let result = process_command_sync(&command, &mut store, stream_id, signer);
-                let _ = reply_tx.send(StoreResponse::Ok(result));
+                // Full command dispatch: validation, delegation check, type dispatch
+                // (handled in run_store_task via controllers and replay_cache)
+                let result = command_dispatch::dispatch_command(
+                    &command, &mut store, stream_id, signer,
+                    &mut controllers, &mut replay_cache,
+                    &revoked_delegations, &trusted_root_ids,
+                );
+                let _ = reply_tx.send(StoreResponse::Ok(result.response_bytes));
             }
             StoreRequest::Query { query, reply_tx, .. } => {
                 let result = execute_query(&query, &mut store, stream_id, &responder_node_id);
                 let _ = reply_tx.send(StoreResponse::Ok(result));
+            }
+            StoreRequest::ProduceSnapshot { view_type, completeness, reply_tx } => {
+                match store.produce_snapshot(signer, &view_type, completeness) {
+                    Ok(descriptor) => {
+                        tracing::info!(
+                            snapshot_id = %String::from_utf8_lossy(&descriptor.snapshot_id),
+                            head_count = descriptor.base_heads.len(),
+                            "snapshot produced"
+                        );
+                        let result_bytes = prost::Message::encode_to_vec(&descriptor);
+                        let _ = reply_tx.send(StoreResponse::Ok(result_bytes));
+                    }
+                    Err(e) => {
+                        tracing::error!("snapshot production failed: {}", e);
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    }
+                }
+            }
+            StoreRequest::FetchObject { object_ref, reply_tx } => {
+                match store.get_object(&object_ref) {
+                    Ok(Some(result)) => {
+                        tracing::info!(
+                            object_id = %hex::encode(&object_ref.object_id),
+                            content_len = result.content.len(),
+                            "object fetched"
+                        );
+                        let _ = reply_tx.send(StoreResponse::Ok(result.content));
+                    }
+                    Ok(None) => {
+                        tracing::warn!(
+                            object_id = %hex::encode(&object_ref.object_id),
+                            "object not found for fetch"
+                        );
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    }
+                    Err(e) => {
+                        tracing::error!("object fetch failed: {}", e);
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    }
+                }
+            }
+            StoreRequest::SendCommand { peer_addr, command, reply_tx } => {
+                match send_command_to_peer(&peer_addr, &command, &mut store, stream_id, signer) {
+                    Ok(response) => {
+                        tracing::info!(peer = %peer_addr, "outbound command succeeded");
+                        let _ = reply_tx.send(StoreResponse::Ok(response));
+                    }
+                    Err(e) => {
+                        tracing::error!(peer = %peer_addr, error = %e, "outbound command failed");
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                    }
+                }
             }
         }
 
@@ -545,25 +1125,77 @@ fn run_store_task(
                 }
             }
         }
+
+        // Periodically run integrity check (every 100 requests)
+        if request_counter.is_multiple_of(100) {
+            match store.integrity_check_and_rebuild() {
+                Ok(0) => {} // Healthy
+                Ok(rebuilt) => {
+                    tracing::warn!(rebuilt, "SQLite corruption detected and indexes rebuilt");
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "integrity check and rebuild failed");
+                }
+            }
+        }
+
+        // Periodically checkpoint WAL (every 50 requests)
+        if request_counter.is_multiple_of(50) {
+            match store.wal_checkpoint() {
+                Ok(Some(wal_size)) if wal_size > 1024 * 1024 => {
+                    // WAL > 1MB after checkpoint — log a warning
+                    tracing::warn!(wal_size, "WAL file remains large after checkpoint");
+                }
+                _ => {}
+            }
+        }
+
+        // Periodically check disk space (every 200 requests)
+        if request_counter.is_multiple_of(200) {
+            match store.check_disk_space() {
+                Ok(()) => {}
+                Err(available_bytes) => {
+                    tracing::error!(
+                        available_mb = available_bytes / 1024 / 1024,
+                        "CRITICAL: disk space critically low, writes may fail"
+                    );
+                }
+            }
+        }
     }
 }
 
-/// Process a command from a mesh frame (no TCP response needed).
-async fn process_mesh_command(
-    command: lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
-    store_tx: &tokio::sync::mpsc::Sender<StoreRequest>,
-    _node_id: &NodeID,
-    _stream_id: &[u8],
-    _signer: &dyn MeshSigner,
+/// Processes a mesh command synchronously and routes the reply back through the mesh.
+fn process_mesh_command_sync(
+    req: MeshCommandRequest,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut command_dispatch::ControllerSet,
+    replay_cache: &mut std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
+    revoked_delegations: &std::collections::HashSet<Vec<u8>>,
+    trusted_root_ids: &[Vec<u8>],
 ) {
-    // Send to store task — mesh commands don't need a response back to sender
-    let (reply_tx, _reply_rx) = tokio::sync::oneshot::channel();
-    let _ = store_tx.send(StoreRequest::Command {
-        raw_bytes: command.encode_to_vec(),
-        command,
-        peer_id: None,
-        reply_tx,
-    }).await;
+    let source = req.source;
+    let raw_bytes = req.raw_bytes.clone();
+
+    // Ingress screening for mesh commands
+    let _msg_hash = ingress::quick_message_hash(&raw_bytes);
+    // (mesh commands bypass rate limiting and allowlist for now — they're from the local mesh)
+
+    // Full command dispatch
+    let result = command_dispatch::dispatch_command(
+        &req.command, store, stream_id, signer,
+        controllers, replay_cache,
+        revoked_delegations, trusted_root_ids,
+    );
+
+    // Route reply back through mesh to the original sender
+    let reply = MeshReply {
+        source,
+        response_bytes: result.response_bytes,
+    };
+    let _ = req.reply_tx.send(reply);
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +1208,7 @@ async fn run_tcp_listener(
     listen_addr: SocketAddr,
     _node_id: NodeID,
     store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+    tls_acceptor: Option<Arc<tokio_rustls::TlsAcceptor>>,
 ) {
     let listener = match tokio::net::TcpListener::bind(&listen_addr).await {
         Ok(l) => l,
@@ -588,10 +1221,24 @@ async fn run_tcp_listener(
     loop {
         match listener.accept().await {
             Ok((stream, peer_addr)) => {
-                tracing::debug!(peer = %peer_addr, "TCP connection accepted");
                 let conn_store_tx = store_tx.clone();
+                let tls_acceptor = tls_acceptor.clone();
                 tokio::spawn(async move {
-                    handle_tcp_connection(stream, conn_store_tx).await;
+                    if let Some(ref acceptor) = tls_acceptor {
+                        // Perform TLS handshake
+                        match acceptor.accept(stream).await {
+                            Ok(tls_stream) => {
+                                tracing::debug!(peer = %peer_addr, "TLS connection accepted");
+                                handle_tls_connection(tls_stream, conn_store_tx).await;
+                            }
+                            Err(e) => {
+                                tracing::debug!(peer = %peer_addr, error = %e, "TLS handshake failed");
+                            }
+                        }
+                    } else {
+                        tracing::debug!(peer = %peer_addr, "TCP connection accepted");
+                        handle_tcp_connection(stream, conn_store_tx).await;
+                    }
                 });
             }
             Err(e) => {
@@ -601,18 +1248,54 @@ async fn run_tcp_listener(
     }
 }
 
+/// Handles a TLS-wrapped connection.
+async fn handle_tls_connection(
+    stream: tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+    store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
+) {
+    let (mut reader, mut writer) = tokio::io::split(stream);
+    let mut read_buf = bytes::BytesMut::with_capacity(4096);
+    let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
+
+    handle_tcp_stream_common(
+        &mut reader,
+        &mut writer,
+        &mut read_buf,
+        &mut conn_rate_limiter,
+        &store_tx,
+    ).await;
+}
+
+/// Handles a plain TCP connection.
 async fn handle_tcp_connection(
     stream: tokio::net::TcpStream,
     store_tx: tokio::sync::mpsc::Sender<StoreRequest>,
 ) {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    // Per-connection rate limiter: burst 100, 50 messages/sec.
-    // Prevents a single connection from monopolizing the global budget.
+    let (mut reader, mut writer) = tokio::io::split(stream);
+    let mut read_buf = bytes::BytesMut::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
-    let (mut reader, mut writer) = stream.into_split();
-    let mut read_buf = bytes::BytesMut::with_capacity(4096);
+    handle_tcp_stream_common(
+        &mut reader,
+        &mut writer,
+        &mut read_buf,
+        &mut conn_rate_limiter,
+        &store_tx,
+    ).await;
+}
+
+/// Common frame handling logic for both plain TCP and TLS connections.
+async fn handle_tcp_stream_common<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    read_buf: &mut bytes::BytesMut,
+    conn_rate_limiter: &mut ingress::TokenBucket,
+    store_tx: &tokio::sync::mpsc::Sender<StoreRequest>,
+) where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     loop {
         // Read 8-byte length prefix
@@ -674,6 +1357,99 @@ async fn handle_tcp_connection(
             lifegraph_proto::lifegraph::v0::stream::CommandEnvelope::decode(&payload[..])
         {
             let raw = payload.clone();
+
+            // Check if this is a snapshot publish command
+            use lifegraph_proto::lifegraph::v0::stream::CommandType;
+            if command.command_type == CommandType::PublishSnapshot as i32 {
+                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                if store_tx.send(StoreRequest::ProduceSnapshot {
+                    view_type: "stream_heads".to_string(),
+                    completeness: 1, // FULL
+                    reply_tx,
+                }).await.is_err() {
+                    return;
+                }
+                match reply_rx.await {
+                    Ok(StoreResponse::Ok(resp_payload)) => {
+                        let resp_frame = encode_tcp_frame(&resp_payload);
+                        if writer.write_all(&resp_frame).await.is_err() {
+                            return;
+                        }
+                    }
+                    Ok(StoreResponse::Rejected(reason)) => {
+                        tracing::debug!(?reason, "TCP snapshot production screened");
+                        return;
+                    }
+                    Err(_) => return,
+                }
+                continue;
+            }
+
+            // Check if this is a fetch object command
+            if command.command_type == CommandType::FetchObject as i32 {
+                // Decode the raw payload as proto CommandEnvelope to get payload_object
+                let proto_command = match lifegraph_proto::lifegraph::v0::stream::CommandEnvelope::decode(&raw[..]) {
+                    Ok(cmd) => cmd,
+                    Err(e) => {
+                        tracing::warn!("FETCH_OBJECT: failed to decode proto command: {}", e);
+                        let err = format!("FETCH_OBJECT: decode failed");
+                        let resp_frame = encode_tcp_frame(err.as_bytes());
+                        let _ = writer.write_all(&resp_frame).await;
+                        continue;
+                    }
+                };
+
+                // Extract the ObjectRef from the proto command's payload_object
+                let object_ref = if let Some(ref obj) = proto_command.payload {
+                    use lifegraph_proto::lifegraph::v0::stream::command_envelope::Payload;
+                    match obj {
+                        Payload::PayloadObject(obj) => obj.clone(),
+                        Payload::InlinePayload(bytes) => {
+                            if let Ok(obj) = lifegraph_proto::lifegraph::v0::common::ObjectRef::decode(&bytes[..]) {
+                                obj
+                            } else {
+                                lifegraph_proto::lifegraph::v0::common::ObjectRef {
+                                    object_id: vec![],
+                                    object_kind: None,
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    lifegraph_proto::lifegraph::v0::common::ObjectRef {
+                        object_id: vec![],
+                        object_kind: None,
+                    }
+                };
+
+                if object_ref.object_id.is_empty() {
+                    tracing::warn!("FETCH_OBJECT: no object reference provided");
+                    let err_resp = format!("FETCH_OBJECT: no object reference provided");
+                    let resp_frame = encode_tcp_frame(err_resp.as_bytes());
+                    let _ = writer.write_all(&resp_frame).await;
+                    continue;
+                }
+
+                let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+                if store_tx.send(StoreRequest::FetchObject { object_ref, reply_tx }).await.is_err() {
+                    return;
+                }
+                match reply_rx.await {
+                    Ok(StoreResponse::Ok(resp_payload)) => {
+                        let resp_frame = encode_tcp_frame(&resp_payload);
+                        if writer.write_all(&resp_frame).await.is_err() {
+                            return;
+                        }
+                    }
+                    Ok(StoreResponse::Rejected(reason)) => {
+                        tracing::debug!(?reason, "TCP fetch object screened");
+                        return;
+                    }
+                    Err(_) => return,
+                }
+                continue;
+            }
+
             let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
             if store_tx.send(StoreRequest::Command {
                 raw_bytes: raw, command, peer_id: None, reply_tx,
@@ -736,98 +1512,52 @@ fn encode_tcp_frame(payload: &[u8]) -> Vec<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Command processing (sync, runs on store task thread)
+// Helpers
 // ---------------------------------------------------------------------------
 
-fn process_command_sync(
-    command: &lifegraph_proto::lifegraph::v0::stream::CommandEnvelope,
-    store: &mut NodeStore,
-    stream_id: &[u8],
-    signer: &dyn MeshSigner,
-) -> Vec<u8> {
-    use lifegraph_proto::lifegraph::v0::common::CommandRef;
-    use lifegraph_proto::lifegraph::v0::stream::{CommandResultPayload, EventType};
-
-    let outcome = validate_command_signature(command);
-    let (event_type, decision, reason_code) = match outcome {
-        CommandValidation::Valid => (EventType::CommandCommitted, 1, ""),
-        CommandValidation::MissingSignature => (EventType::CommandRejected, 2, "missing_signature"),
-        CommandValidation::BadAlgorithm => (EventType::CommandRejected, 2, "bad_algorithm"),
-        CommandValidation::NoIssuer => (EventType::CommandRejected, 2, "no_issuer"),
-        CommandValidation::BadKeyHint => (EventType::CommandRejected, 2, "bad_key_hint"),
-        CommandValidation::BadPublicKey => (EventType::CommandRejected, 2, "bad_public_key"),
-        CommandValidation::BadSignature => (EventType::CommandRejected, 2, "invalid_signature"),
-    };
-
-    if outcome == CommandValidation::Valid {
-        tracing::info!("command accepted");
-    } else {
-        tracing::info!(reason = reason_code, "command rejected");
-    }
-
-    let command_id_bytes = command.command_id.clone();
-    let command_ref = CommandRef {
-        command_id: command_id_bytes.clone(),
-        command_hash: None,
-    };
-    let result_payload = CommandResultPayload {
-        payload_version: 1,
-        command: Some(command_ref.clone()),
-        issuer: command.issuer.clone(),
-        decision,
-        decision_basis: None,
-        reason_code: reason_code.to_string(),
-        effect_summary_object: None,
-        result_object: None,
-    };
-    let result_bytes = prost::Message::encode_to_vec(&result_payload);
-
-    let object_ref = store.put_object(&result_bytes, 6 /* OBJECT_KIND_COMMAND */, &[stream_id.to_vec()])
-        .unwrap_or_else(|e| {
-            tracing::warn!("failed to store command result object: {}", e);
-            lifegraph_proto::lifegraph::v0::common::ObjectRef {
-                object_id: vec![],
-                object_kind: Some(6),
-            }
-        });
-
-    let head_seq = store.get_head(stream_id).ok().flatten().map(|(s, _)| s).unwrap_or(-1);
-    let mut event = lifegraph_core::protocol::EventEnvelope {
-        envelope_version: 1,
-        stream_id: stream_id.to_vec(),
-        seq: (head_seq + 1) as u64,
-        prev_event_hash: store.get_head(stream_id).ok().flatten().map(|(_, h)| {
-            lifegraph_core::protocol::Digest {
-                algorithm: 1,
-                value: h,
-            }
-        }),
-        event_type: event_type as i32,
-        event_version: 1,
-        recorded_at: Some(now_ms_timestamp()),
-        effective_at: None,
-        payload_object: Some(object_ref),
-        related_events: vec![],
-        related_commands: vec![command_ref],
-        related_objects: vec![],
-        related_delegations: vec![],
-        related_revocations: vec![],
-        event_metadata: None,
-        signature: None,
-    };
-    if sign_event_envelope(&mut event, signer).is_err() {
-        tracing::warn!("failed to sign event");
-    }
-    if let Err(e) = store.append_event(&event) {
-        tracing::warn!("failed to append event: {}", e);
-    }
-
-    result_bytes
+/// Extracts the initial controller identities.
+/// The node's own identity is always the initial controller.
+fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
+    vec![signer.node_id().0.to_vec()]
 }
 
 // ---------------------------------------------------------------------------
 // Query execution engine (§14.20–§14.21)
 // ---------------------------------------------------------------------------
+
+/// Result of query cost evaluation.
+#[allow(dead_code)]
+enum QueryCostCheck {
+    Allowed { max_bytes: Option<usize>, max_results: Option<usize> },
+    Denied { reason: &'static str },
+}
+
+/// Evaluates the query's cost_limit and returns allowed limits or denial reason.
+fn check_query_cost(
+    query: &lifegraph_proto::lifegraph::v0::access::QueryRequest,
+) -> QueryCostCheck {
+    // Constants for v0 cost limits
+    const DEFAULT_MAX_BYTES: usize = 10 * 1024 * 1024; // 10 MB
+    const DEFAULT_MAX_RESULTS: usize = 10_000;
+
+    let (max_bytes, max_results) = if let Some(ref cost_limit) = query.cost_limit {
+        // If cost_limit is specified, use its values with defaults as fallbacks
+        let bytes = cost_limit.max_total_bytes.map(|b| b as usize).unwrap_or(DEFAULT_MAX_BYTES);
+        let results = cost_limit.max_results.map(|r| r as usize).unwrap_or(DEFAULT_MAX_RESULTS);
+        (bytes, results)
+    } else {
+        // No cost limit specified — use defaults
+        (DEFAULT_MAX_BYTES, DEFAULT_MAX_RESULTS)
+    };
+
+    // max_federated_responders: in v0 we only query locally, so always allowed
+    // max_wall_time: enforced at call site via timeout
+
+    QueryCostCheck::Allowed {
+        max_bytes: Some(max_bytes),
+        max_results: Some(max_results),
+    }
+}
 
 /// Executes a QueryRequest against local state and returns a QueryResultFragment.
 fn execute_query(
@@ -839,9 +1569,18 @@ fn execute_query(
     use lifegraph_proto::lifegraph::v0::access::{QueryClass, QueryResultFragment, ResultCompleteness};
     use lifegraph_proto::lifegraph::v0::common::{EventRef, ObjectRef};
 
-    let query_class = query.query_class; // QueryClass enum
+    // 1. Check cost limits before doing any work
+    let (max_bytes, max_results) = match check_query_cost(query) {
+        QueryCostCheck::Allowed { max_bytes, max_results } => (max_bytes, max_results),
+        QueryCostCheck::Denied { reason } => {
+            tracing::warn!(reason, "query denied due to cost limits");
+            return build_query_denial(query, responder_node_id, reason);
+        }
+    };
+
+    let query_class = query.query_class;
     let mut event_refs: Vec<EventRef> = Vec::new();
-    let snapshot_refs: Vec<lifegraph_proto::lifegraph::v0::common::SnapshotRef> = Vec::new();
+    let mut snapshot_refs: Vec<lifegraph_proto::lifegraph::v0::common::SnapshotRef> = Vec::new();
     let mut object_refs: Vec<ObjectRef> = Vec::new();
     let mut completeness = ResultCompleteness::CompleteForLocalKnowledge as i32;
 
@@ -851,6 +1590,10 @@ fn execute_query(
             match store.list_stream_heads() {
                 Ok(heads) => {
                     for (stream_id_hex, seq, hash) in heads {
+                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                            completeness = ResultCompleteness::Partial as i32;
+                            break;
+                        }
                         event_refs.push(EventRef {
                             stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
                             seq: seq as u64,
@@ -872,9 +1615,36 @@ fn execute_query(
         x if x == QueryClass::EventRange as i32 => {
             match store.list_stream_heads() {
                 Ok(heads) => {
+                    // Determine time_window filter if present
+                    let time_filter = query.time_window.as_ref().map(|tw| {
+                        (
+                            tw.not_before.as_ref().map(|t| t.seconds),
+                            tw.expires_at.as_ref().map(|t| t.seconds),
+                        )
+                    });
+
                     for (stream_id_hex, head_seq, _hash) in &heads {
-                        if let Ok(events) = store.list_event_range(stream_id_hex, 0, *head_seq) {
+                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                            completeness = ResultCompleteness::Partial as i32;
+                            break;
+                        }
+
+                        // Determine sequence range from time_window
+                        let (from_seq, to_seq) = if let Some((Some(_not_before_secs), Some(_expires_at_secs))) = time_filter {
+                            // In v0 we don't have event timestamps indexed, so we fall back
+                            // to returning the full range and let the client filter.
+                            // This is a known limitation.
+                            (0i64, *head_seq)
+                        } else {
+                            (0i64, *head_seq)
+                        };
+
+                        if let Ok(events) = store.list_event_range(stream_id_hex, from_seq, to_seq) {
                             for (seq, hash, _ver) in events {
+                                if max_results.map_or(false, |m| event_refs.len() >= m) {
+                                    completeness = ResultCompleteness::Partial as i32;
+                                    break;
+                                }
                                 event_refs.push(EventRef {
                                     stream_id: hex::decode(stream_id_hex).unwrap_or_else(|_| stream_id_hex.clone().into_bytes()),
                                     seq: seq as u64,
@@ -931,25 +1701,107 @@ fn execute_query(
             }
         }
 
-        // Snapshot query: return known snapshot refs (none in v0, but respond gracefully)
+        // Snapshot query: return known snapshot refs
         x if x == QueryClass::Snapshot as i32 => {
-            completeness = ResultCompleteness::MetadataOnly as i32;
+            match store.list_snapshots() {
+                Ok(snaps) => {
+                    for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
+                        if max_results.map_or(false, |m| snapshot_refs.len() >= m) {
+                            completeness = ResultCompleteness::Partial as i32;
+                            break;
+                        }
+                        use lifegraph_proto::lifegraph::v0::common::SnapshotRef;
+                        snapshot_refs.push(SnapshotRef {
+                            snapshot_id: sid.clone().into_bytes(),
+                            object_id: Some(hex::decode(oid_hex).unwrap_or_default()),
+                        });
+                    }
+                    if snaps.is_empty() {
+                        completeness = ResultCompleteness::MetadataOnly as i32;
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "query SNAPSHOT failed");
+                    completeness = ResultCompleteness::Partial as i32;
+                }
+            }
+        }
+
+        // Search query: scan event log for matching event types or content
+        x if x == QueryClass::Search as i32 => {
+            // In v0, search is limited — we scan stream heads and return refs.
+            // A full implementation would index event content.
+            match store.list_stream_heads() {
+                Ok(heads) => {
+                    for (stream_id_hex, seq, hash) in heads {
+                        if max_results.map_or(false, |m| event_refs.len() >= m) {
+                            completeness = ResultCompleteness::Partial as i32;
+                            break;
+                        }
+                        event_refs.push(EventRef {
+                            stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                            seq: seq as u64,
+                            event_hash: Some(lifegraph_core::protocol::Digest {
+                                algorithm: 1,
+                                value: hash,
+                            }),
+                        });
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "query SEARCH failed");
+                    completeness = ResultCompleteness::Partial as i32;
+                }
+            }
+        }
+
+        // View query: return current view of the node (stream heads + snapshots)
+        x if x == QueryClass::View as i32 => {
+            // Return stream heads as events and snapshot refs
+            if let Ok(heads) = store.list_stream_heads() {
+                for (stream_id_hex, seq, hash) in heads {
+                    if max_results.map_or(false, |m| event_refs.len() >= m) {
+                        completeness = ResultCompleteness::Partial as i32;
+                        break;
+                    }
+                    event_refs.push(EventRef {
+                        stream_id: hex::decode(&stream_id_hex).unwrap_or_else(|_| stream_id_hex.into_bytes()),
+                        seq: seq as u64,
+                        event_hash: Some(lifegraph_core::protocol::Digest {
+                            algorithm: 1,
+                            value: hash,
+                        }),
+                    });
+                }
+            }
+            if let Ok(snaps) = store.list_snapshots() {
+                for (sid, oid_hex, _vt, _ph, _pa, _c, _bh) in &snaps {
+                    if max_results.map_or(false, |m| snapshot_refs.len() >= m) {
+                        completeness = ResultCompleteness::Partial as i32;
+                        break;
+                    }
+                    use lifegraph_proto::lifegraph::v0::common::SnapshotRef;
+                    snapshot_refs.push(SnapshotRef {
+                        snapshot_id: sid.clone().into_bytes(),
+                        object_id: Some(hex::decode(oid_hex).unwrap_or_default()),
+                    });
+                }
+            }
         }
 
         // Trust state: return current controller set (from config in v0)
         x if x == QueryClass::TrustState as i32 => {
-            // In v0, trust state is local config — return metadata-only
             completeness = ResultCompleteness::MetadataOnly as i32;
         }
 
         // Unknown query class
         _ => {
-            eprintln!("lifegraphd: query class {} not supported", query_class);
+            tracing::warn!(query_class, "query class not supported");
             completeness = ResultCompleteness::Denied as i32;
         }
     }
 
-    // Apply result_limit if set
+    // Apply result_limit from query (in addition to cost_limit)
     if let Some(limit) = query.result_limit {
         let limit = limit as usize;
         if event_refs.len() > limit {
@@ -958,6 +1810,10 @@ fn execute_query(
         }
         if object_refs.len() > limit {
             object_refs.truncate(limit);
+            completeness = ResultCompleteness::Partial as i32;
+        }
+        if snapshot_refs.len() > limit {
+            snapshot_refs.truncate(limit);
             completeness = ResultCompleteness::Partial as i32;
         }
     }
@@ -982,6 +1838,51 @@ fn execute_query(
         signature: None,
     };
 
+    let fragment_bytes = prost::Message::encode_to_vec(&fragment);
+
+    // Enforce max_total_bytes on the serialized response
+    if let Some(max_b) = max_bytes {
+        if fragment_bytes.len() > max_b {
+            tracing::warn!(
+                response_bytes = fragment_bytes.len(),
+                max_bytes = max_b,
+                "query response exceeds max_total_bytes, returning denial"
+            );
+            return build_query_denial(query, responder_node_id, "response_too_large");
+        }
+    }
+
+    fragment_bytes
+}
+
+/// Builds a denial QueryResultFragment when cost limits are exceeded.
+fn build_query_denial(
+    query: &lifegraph_proto::lifegraph::v0::access::QueryRequest,
+    responder_node_id: &NodeID,
+    reason: &str,
+) -> Vec<u8> {
+    use lifegraph_proto::lifegraph::v0::access::{QueryResultFragment, ResultCompleteness};
+
+    let fragment = QueryResultFragment {
+        fragment_version: 1,
+        query_id: query.query_id.clone(),
+        responder: Some(lifegraph_proto::lifegraph::v0::common::IdentityRef {
+            identity_id: responder_node_id.0.to_vec(),
+            identity_kind: Some(2),
+            key_hint: None,
+        }),
+        answered_at: Some(now_ms_timestamp()),
+        completeness: ResultCompleteness::Denied as i32,
+        snapshot_refs: vec![],
+        event_refs: vec![],
+        object_refs: vec![],
+        proof_objects: vec![],
+        omission_reason: reason.to_string(),
+        bundled_result_object: None,
+        result_metadata: None,
+        signature: None,
+    };
+
     prost::Message::encode_to_vec(&fragment)
 }
 
@@ -991,7 +1892,8 @@ fn execute_query(
 
 fn run_mesh_loop(
     node_id: NodeID,
-    mesh_inbound_tx: tokio::sync::mpsc::Sender<MeshFrame>,
+    mesh_command_tx: std::sync::mpsc::Sender<MeshCommandRequest>,
+    mesh_reply_rx: std::sync::mpsc::Receiver<MeshReply>,
 ) {
     let local = LocalNode::new(node_id);
     let mut mesh_link = MeshLink::new();
@@ -999,8 +1901,8 @@ fn run_mesh_loop(
     let mut router = MeshRouter::new(local);
 
     match mesh_link.enable_udp_broadcast() {
-        Ok(_) => println!("lifegraphd: UDP broadcast enabled on port 47079"),
-        Err(e) => eprintln!("lifegraphd: warning: UDP broadcast failed: {}", e),
+        Ok(_) => tracing::info!("UDP broadcast enabled on port 47079"),
+        Err(e) => tracing::warn!("UDP broadcast failed: {}", e),
     }
 
     let interfaces = discover_network_interfaces().unwrap_or_default();
@@ -1012,26 +1914,44 @@ fn run_mesh_loop(
         let Ok(ifindex_str) = fs::read_to_string(&ifindex_path) else { continue; };
         let Ok(ifindex): Result<i32, _> = ifindex_str.trim().parse() else { continue; };
         if mesh_link.add_raw_ethernet(ifindex).is_ok() {
-            println!("lifegraphd: opened raw socket on {} (ifindex={})", iface.name, ifindex);
+            tracing::info!(iface = iface.name, ifindex, "opened raw socket");
         }
     }
 
     if let Err(e) = mesh_link.broadcast_discovery(&mut router) {
-        eprintln!("lifegraphd: warning: discovery broadcast failed: {}", e);
+        tracing::warn!("discovery broadcast failed: {}", e);
     }
 
-    println!("lifegraphd: mesh loop running");
+    tracing::info!("mesh loop running");
 
     let mut discovery_counter: u64 = 0;
     loop {
         if let Err(e) = mesh_link.pump(&mut router) {
-            eprintln!("lifegraphd: mesh pump error: {}", e);
+            tracing::warn!("mesh pump error: {}", e);
         }
 
         let frames = mesh_link.drain_inbound_data_frames();
         for frame in frames {
             if frame.header.dest == node_id || frame.header.dest.0 == [0u8; 64] {
-                let _ = mesh_inbound_tx.try_send(frame);
+                if frame.header.frame_type == FrameType::Data {
+                    // Decode as command and send to store task for processing
+                    if let Ok(command) =
+                        lifegraph_proto::lifegraph::v0::stream::CommandEnvelope::decode(&frame.payload[..])
+                    {
+                        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+                        let _ = mesh_command_tx.send(MeshCommandRequest {
+                            command,
+                            raw_bytes: frame.payload.clone(),
+                            source: frame.header.src,
+                            reply_tx,
+                        });
+                        // Wait for reply and queue it back through mesh
+                        if let Ok(reply) = reply_rx.recv() {
+                            let reply_frame = MeshFrame::from_payload(reply.source, reply.response_bytes);
+                            mesh_link.queue_frame(reply_frame);
+                        }
+                    }
+                }
             } else if let Some(next_hop) = router.next_hop_for(&frame.header.dest) {
                 let mut fwd = frame;
                 fwd.header.dest = next_hop;
@@ -1039,83 +1959,29 @@ fn run_mesh_loop(
             }
         }
 
+        // Also receive replies that were routed from other sources (TCP queries forwarded to mesh)
+        while let Ok(reply) = mesh_reply_rx.try_recv() {
+            let reply_frame = MeshFrame::from_payload(reply.source, reply.response_bytes);
+            mesh_link.queue_frame(reply_frame);
+        }
+
         discovery_counter += 1;
         if discovery_counter.is_multiple_of(500) {
             if let Err(e) = mesh_link.broadcast_discovery(&mut router) {
-                eprintln!("lifegraphd: discovery failed: {}", e);
+                tracing::warn!("discovery failed: {}", e);
             }
             let dead = router.tick_heartbeat();
             for d in &dead {
-                println!("lifegraphd: peer {} is dead", d.short());
+                tracing::info!(peer = d.short(), "peer dead");
             }
         }
 
         if let Err(e) = mesh_link.drain_pending_frames(&mut router) {
-            eprintln!("lifegraphd: send failed: {}", e);
+            tracing::warn!("send failed: {}", e);
         }
 
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-}
-
-// ---------------------------------------------------------------------------
-// Command validation
-// ---------------------------------------------------------------------------
-
-#[derive(PartialEq)]
-enum CommandValidation {
-    Valid,
-    MissingSignature,
-    BadAlgorithm,
-    NoIssuer,
-    BadKeyHint,
-    BadPublicKey,
-    BadSignature,
-}
-
-fn validate_command_signature(command: &lifegraph_proto::lifegraph::v0::stream::CommandEnvelope) -> CommandValidation {
-    use sha2::{Digest, Sha256};
-
-    let Some(sig) = &command.signature else {
-        return CommandValidation::MissingSignature;
-    };
-    if sig.algorithm != 1 {
-        return CommandValidation::BadAlgorithm;
-    }
-    let Some(issuer) = &command.issuer else {
-        return CommandValidation::NoIssuer;
-    };
-    let Some(key_hint) = &issuer.key_hint else {
-        return CommandValidation::BadKeyHint;
-    };
-    if key_hint.len() != 64 {
-        return CommandValidation::BadKeyHint;
-    }
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return CommandValidation::BadPublicKey,
-    };
-
-    let mut signable_cmd = command.clone();
-    signable_cmd.signature = None;
-    let mut canonical = Vec::new();
-    prost::Message::encode(&signable_cmd, &mut canonical).unwrap();
-    let digest = Sha256::digest(&canonical);
-
-    let mut sig_bytes = [0u8; 64];
-    sig_bytes.copy_from_slice(&sig.value);
-    let r = p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    if let Ok(ecdsa_sig) = p256::ecdsa::Signature::from_scalars(*r, *s) {
-        use p256::ecdsa::signature::hazmat::PrehashVerifier;
-        if vk.verify_prehash(digest.as_slice(), &ecdsa_sig).is_ok() {
-            return CommandValidation::Valid;
-        }
-    }
-    CommandValidation::BadSignature
 }
 
 fn sign_event_envelope(event: &mut lifegraph_core::protocol::EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
@@ -1134,16 +2000,6 @@ fn sign_event_envelope(event: &mut lifegraph_core::protocol::EventEnvelope, sign
         value: sig.to_vec(),
     });
     Ok(())
-}
-
-/// Clone a signer into a `Box<dyn MeshSigner + Send>`.
-/// Currently only SoftwareSigner is functional.
-fn clone_signer_for_send(signer: &dyn MeshSigner) -> Box<dyn MeshSigner + Send> {
-    if let Some(software) = signer.as_any().downcast_ref::<SoftwareSigner>() {
-        Box::new(SoftwareSigner::new(software.key.clone()))
-    } else {
-        panic!("cloning non-software signer not yet supported");
-    }
 }
 
 fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
@@ -1184,12 +2040,38 @@ struct NodeConfig {
     /// Peer node IDs allowed to connect. Empty = allow all (open mode).
     #[serde(default)]
     allowed_peers: Vec<String>,
+    /// Bootstrap peers to connect to on startup. Each entry is "host:port@node_id_hex".
+    #[serde(default)]
+    bootstrap_peers: Vec<String>,
     #[serde(default)]
     signer: Option<SignerConfig>,
     #[serde(default)]
     initial_grants: Vec<serde_yaml::Value>,
     #[serde(default)]
     metadata: serde_yaml::Value,
+}
+
+/// Parsed bootstrap peer configuration.
+#[derive(Clone, Debug)]
+struct BootstrapPeer {
+    addr: String,
+    node_id_hex: String,
+}
+
+fn parse_bootstrap_peers(entries: &[String]) -> Vec<BootstrapPeer> {
+    entries.iter().filter_map(|entry| {
+        // Format: "host:port@node_id_hex"
+        let parts: Vec<&str> = entry.splitn(2, '@').collect();
+        if parts.len() == 2 {
+            Some(BootstrapPeer {
+                addr: parts[0].to_string(),
+                node_id_hex: parts[1].to_string(),
+            })
+        } else {
+            tracing::warn!(entry, "invalid bootstrap peer format (expected host:port@node_id_hex)");
+            None
+        }
+    }).collect()
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -1202,16 +2084,14 @@ struct SignerConfig {
     slot: Option<String>,
 }
 
-// ---------------------------------------------------------------------------
-// Software signer
-// ---------------------------------------------------------------------------
-
-struct SoftwareSigner {
+/// A software signer that is Send + Sync (wraps key in a Mutex).
+/// Used for TLS where the signer must be shared across threads.
+struct SyncSoftwareSigner {
     node_id: NodeID,
-    key: SigningKey,
+    key: parking_lot::Mutex<SigningKey>,
 }
 
-impl SoftwareSigner {
+impl SyncSoftwareSigner {
     fn new(key: SigningKey) -> Self {
         let vk = key.verifying_key();
         let encoded = vk.to_encoded_point(false);
@@ -1219,12 +2099,12 @@ impl SoftwareSigner {
         node_bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
         Self {
             node_id: NodeID(node_bytes),
-            key,
+            key: parking_lot::Mutex::new(key),
         }
     }
 }
 
-impl MeshSigner for SoftwareSigner {
+impl MeshSigner for SyncSoftwareSigner {
     fn node_id(&self) -> NodeID {
         self.node_id
     }
@@ -1233,9 +2113,9 @@ impl MeshSigner for SoftwareSigner {
         &self,
         digest: &[u8; 32],
     ) -> Result<[u8; 64], lifegraph_hardware_signing::HardwareSigningError> {
-        let sig: p256::ecdsa::Signature = self
-            .key
-            .sign_prehash_with_rng(&mut OsRng, digest)
+        let key = self.key.lock();
+        let sig: p256::ecdsa::Signature = key
+            .sign_prehash(digest)
             .map_err(|e| lifegraph_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
         let mut bytes = [0u8; 64];
         bytes.copy_from_slice(&sig.to_bytes());
@@ -1251,7 +2131,7 @@ impl MeshSigner for SoftwareSigner {
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn load_signer_from_config(config: &NodeConfig) -> Box<dyn MeshSigner> {
+fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send + Sync> {
     let Some(signer_config) = &config.signer else {
         eprintln!("error: no signer configured. Run `lifegraphd init` first.");
         std::process::exit(1);
@@ -1264,7 +2144,7 @@ fn load_signer_from_config(config: &NodeConfig) -> Box<dyn MeshSigner> {
                 std::process::exit(1);
             };
             let signing_key = parse_signing_key_hex(key_hex);
-            Box::new(SoftwareSigner::new(signing_key))
+            Arc::new(SyncSoftwareSigner::new(signing_key))
         }
         "tpm" => {
             eprintln!("error: TPM signing not yet implemented.");

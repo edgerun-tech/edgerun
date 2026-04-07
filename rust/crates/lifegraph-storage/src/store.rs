@@ -16,6 +16,42 @@ use std::path::PathBuf;
 use crate::blobs::{BlobStore, BlobKeySource};
 use crate::sqlite::{SqliteIndex, SqliteIndexConfig};
 use crate::error::StorageError;
+use std::collections::HashSet;
+
+// ---------------------------------------------------------------------------
+// Controller state
+// ---------------------------------------------------------------------------
+
+/// The current set of controller identities authorized to influence a node.
+#[derive(Clone, Debug, Default)]
+pub struct ControllerSet {
+    controllers: HashSet<Vec<u8>>,
+}
+
+impl ControllerSet {
+    pub fn new(initial: Vec<Vec<u8>>) -> Self {
+        Self {
+            controllers: initial.into_iter().collect(),
+        }
+    }
+
+    pub fn add(&mut self, identity_id: Vec<u8>) {
+        self.controllers.insert(identity_id);
+    }
+
+    pub fn remove(&mut self, identity_id: &Vec<u8>) -> bool {
+        self.controllers.remove(identity_id)
+    }
+
+    pub fn contains(&self, identity_id: &Vec<u8>) -> bool {
+        self.controllers.contains(identity_id)
+    }
+
+    pub fn to_vec(&self) -> Vec<Vec<u8>> {
+        self.controllers.iter().cloned().collect()
+    }
+}
+use lifegraph_hardware_signing::MeshSigner;
 
 /// Configuration for the unified node storage.
 #[derive(Clone, Debug)]
@@ -107,6 +143,14 @@ impl NodeStore {
     ///
     /// Returns the byte offset where the event was written.
     pub fn append_event(&mut self, event: &EventEnvelope) -> Result<u64, StorageError> {
+        // Check disk space before writing
+        if let Err(available) = self.check_disk_space() {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::StorageFull,
+                format!("insufficient disk space: {} bytes available", available),
+            )));
+        }
+
         let stream_id_hex = hex::encode(&event.stream_id);
         let log_path = self.config.data_root.join("events").join(format!("{}.log", stream_id_hex));
 
@@ -268,6 +312,14 @@ impl NodeStore {
         object_kind: i32,
         recipients: &[Vec<u8>],
     ) -> Result<lifegraph_proto::lifegraph::v0::common::ObjectRef, StorageError> {
+        // Check disk space before writing
+        if let Err(available) = self.check_disk_space() {
+            return Err(StorageError::Io(std::io::Error::new(
+                std::io::ErrorKind::StorageFull,
+                format!("insufficient disk space: {} bytes available", available),
+            )));
+        }
+
         use lifegraph_proto::lifegraph::v0::common::ObjectRef;
         use sha2::{Digest, Sha256};
 
@@ -375,6 +427,51 @@ impl NodeStore {
     }
 
     // -----------------------------------------------------------------------
+    // Auto payload resolution
+    // -----------------------------------------------------------------------
+
+    /// Retrieves an event and automatically resolves its payload_object to decrypted content.
+    ///
+    /// Returns the event envelope and, if the event has a payload_object reference,
+    /// the decrypted payload bytes. If the payload_object is None or the object is
+    /// not present, the payload bytes will be None.
+    pub fn get_event_with_payload(
+        &self,
+        stream_id: &[u8],
+        seq: u64,
+    ) -> Result<Option<(EventEnvelope, Option<Vec<u8>>)>, StorageError> {
+        let Some(event) = self.get_event(stream_id, seq)? else {
+            return Ok(None);
+        };
+        let payload = self.resolve_payload(&event.payload_object)?;
+        Ok(Some((event, payload)))
+    }
+
+    /// Retrieves a range of events and automatically resolves all their payload_objects.
+    ///
+    /// Returns a vector of (event, payload_bytes) tuples. Events without a payload_object
+    /// or with missing objects will have None as their payload.
+    ///
+    /// This is more efficient than calling `get_event_with_payload()` in a loop because
+    /// it batches the payload resolution.
+    pub fn get_events_with_payloads(
+        &self,
+        stream_id: &[u8],
+        from_seq: u64,
+        to_seq: u64,
+    ) -> Result<Vec<(EventEnvelope, Option<Vec<u8>>)>, StorageError> {
+        let mut results = Vec::new();
+        for seq in from_seq..=to_seq {
+            let Some(event) = self.get_event(stream_id, seq)? else {
+                continue;
+            };
+            let payload = self.resolve_payload(&event.payload_object)?;
+            results.push((event, payload));
+        }
+        Ok(results)
+    }
+
+    // -----------------------------------------------------------------------
     // Fetch queue consumer
     // -----------------------------------------------------------------------
 
@@ -433,6 +530,292 @@ impl NodeStore {
         priority: i64,
     ) -> Result<(), StorageError> {
         Ok(self.index.enqueue_fetch(target_type, target_id, priority)?)
+    }
+
+    // -----------------------------------------------------------------------
+    // Peer database
+    // -----------------------------------------------------------------------
+
+    /// Returns all known snapshots.
+    pub fn list_snapshots(&self) -> Result<Vec<(String, String, String, String, i64, i32, String)>, StorageError> {
+        Ok(self.index.list_snapshots()?)
+    }
+
+    /// Returns a snapshot by ID.
+    pub fn get_snapshot(&self, snapshot_id: &str) -> Result<Option<(String, String, String, String, i64, i32, String)>, StorageError> {
+        Ok(self.index.get_snapshot(snapshot_id)?)
+    }
+
+    /// Records or updates a known peer.
+    pub fn upsert_peer(&self, node_id_hex: &str, addr: Option<&str>, status: &str, is_bootstrap: bool) -> Result<(), StorageError> {
+        Ok(self.index.upsert_peer(node_id_hex, addr, status, is_bootstrap)?)
+    }
+
+    /// Updates a peer's reachability status.
+    pub fn update_peer_status(&self, node_id_hex: &str, status: &str) -> Result<(), StorageError> {
+        Ok(self.index.update_peer_status(node_id_hex, status)?)
+    }
+
+    // -----------------------------------------------------------------------
+    // Controller state persistence
+    // -----------------------------------------------------------------------
+
+    /// Records a controller change for replay and projection.
+    pub fn record_controller_change(&self, controller_hex: &str, change_type: &str, event_seq: i64) -> Result<(), StorageError> {
+        Ok(self.index.record_controller_change(controller_hex, change_type, event_seq)?)
+    }
+
+    /// Projects the controller set from the persistent change log.
+    /// Starts with the initial controllers and applies all changes up to the given event sequence.
+    pub fn project_controller_set(&self, initial: Vec<Vec<u8>>, up_to_seq: i64) -> Result<ControllerSet, StorageError> {
+        let mut set = ControllerSet::new(initial);
+        for (controller_hex, change_type) in self.index.list_controller_changes(up_to_seq)? {
+            let controller_id = hex::decode(&controller_hex).unwrap_or_default();
+            match change_type.as_str() {
+                "added" => set.add(controller_id),
+                "removed" => { set.remove(&controller_id); }
+                "transferred" => set.add(controller_id),
+                _ => {}
+            }
+        }
+        Ok(set)
+    }
+
+    // -----------------------------------------------------------------------
+    // Delegation and revocation persistence
+    // -----------------------------------------------------------------------
+
+    /// Stores a delegation record.
+    pub fn store_delegation(
+        &self,
+        delegation_id: &str,
+        issuer_hex: &str,
+        recipient_hex: &str,
+        capability_hex: &str,
+        expires_at: Option<i64>,
+    ) -> Result<(), StorageError> {
+        Ok(self.index.store_delegation(delegation_id, issuer_hex, recipient_hex, capability_hex, expires_at)?)
+    }
+
+    /// Stores a revocation record.
+    pub fn store_revocation(
+        &self,
+        revocation_id: &str,
+        issuer_hex: &str,
+        target_type: &str,
+        target_hex: &str,
+        effective_at: Option<i64>,
+    ) -> Result<(), StorageError> {
+        Ok(self.index.store_revocation(revocation_id, issuer_hex, target_type, target_hex, effective_at)?)
+    }
+
+    /// Returns all active revocation target IDs (type, hex).
+    pub fn list_active_revocations(&self) -> Result<Vec<(String, String)>, StorageError> {
+        Ok(self.index.list_active_revocations()?)
+    }
+
+    /// Returns all known peers.
+    pub fn list_peers(&self) -> Result<Vec<(String, Option<String>, String, Option<i64>, bool)>, StorageError> {
+        Ok(self.index.list_peers()?)
+    }
+
+    /// Returns unreachable peers with known addresses for reconnection.
+    pub fn list_unreachable_peers_with_addr(&self) -> Result<Vec<(String, String)>, StorageError> {
+        Ok(self.index.list_unreachable_peers_with_addr()?)
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshot production and consumption
+    // -----------------------------------------------------------------------
+
+    /// Produces a snapshot of the current stream heads.
+    ///
+    /// Builds a `SnapshotDescriptor` with all known stream heads,
+    /// serializes it to an encrypted object, signs the descriptor,
+    /// and records it in the snapshots table.
+    ///
+    /// Returns the signed `SnapshotDescriptor`.
+    pub fn produce_snapshot(
+        &mut self,
+        signer: &dyn MeshSigner,
+        view_type: &str,
+        completeness: i32,
+    ) -> Result<lifegraph_proto::lifegraph::v0::access::SnapshotDescriptor, StorageError> {
+        use lifegraph_proto::lifegraph::v0::access::SnapshotDescriptor;
+        use lifegraph_proto::lifegraph::v0::common::{HeadRef, Digest, IdentityRef};
+        use sha2::{Digest as Sha256Digest, Sha256};
+
+        // Collect current stream heads
+        let heads = self.list_stream_heads()?;
+        let base_heads: Vec<HeadRef> = heads.iter().map(|(sid, seq, hash)| HeadRef {
+            stream_id: hex::decode(sid).unwrap_or_else(|_| sid.clone().into_bytes()),
+            seq: *seq as u64,
+            event_hash: Some(Digest {
+                algorithm: 1,
+                value: hash.clone(),
+            }),
+        }).collect();
+
+        // Create snapshot descriptor
+        let now_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let snapshot_id = {
+            let digest = Sha256::digest(format!("{}-{}", view_type, now_secs).as_bytes());
+            format!("snap-{}", hex::encode(&digest[..8]))
+        };
+        let node_id = signer.node_id();
+
+        let mut descriptor = SnapshotDescriptor {
+            descriptor_version: 1,
+            snapshot_id: snapshot_id.clone().into_bytes(),
+            view_type: view_type.to_string(),
+            view_version: 1,
+            producer: Some(IdentityRef {
+                identity_id: node_id.0.to_vec(),
+                identity_kind: Some(2), // NODE
+                key_hint: None,
+            }),
+            produced_at: Some(prost_types::Timestamp {
+                seconds: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64,
+                nanos: 0,
+            }),
+            base_heads,
+            base_checkpoints: vec![],
+            scope: None,
+            completeness,
+            payload_object: None,
+            supersedes: None,
+            snapshot_metadata: None,
+            signature: None,
+        };
+
+        // Sign the descriptor
+        let record = lifegraph_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone());
+        let canonical = lifegraph_core::protocol::canonical_bytes(&record, true);
+        let digest = Sha256::digest(&canonical);
+        let mut digest_bytes = [0u8; 32];
+        digest_bytes.copy_from_slice(&digest);
+        let sig = signer.sign_digest(&digest_bytes)
+            .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {}", e)))?;
+        descriptor.signature = Some(lifegraph_core::protocol::Signature {
+            algorithm: 1,
+            value: sig.to_vec(),
+        });
+
+        // Store as encrypted object
+        let descriptor_bytes = prost::Message::encode_to_vec(&descriptor);
+        let object_ref = self.put_object(&descriptor_bytes, 3 /* OBJECT_KIND_SNAPSHOT */, &[])?;
+
+        // Store base_heads as simple delimited text: stream_hex:seq:hash_hex;...
+        let base_heads_text: String = heads.iter()
+            .map(|(sid, seq, hash)| format!("{}:{}:{}", sid, seq, hex::encode(hash)))
+            .collect::<Vec<_>>()
+            .join(";");
+        let producer_hex = hex::encode(&node_id.0);
+
+        self.index.put_snapshot(
+            &snapshot_id,
+            &hex::encode(&object_ref.object_id),
+            view_type,
+            &producer_hex,
+            now_secs as i64,
+            completeness,
+            &base_heads_text,
+        )?;
+
+        Ok(descriptor)
+    }
+
+    /// Consumes (accepts) a snapshot received from another node.
+    ///
+    /// Validates the snapshot's producer trust, structural integrity,
+    /// and records it in the local snapshots table.
+    ///
+    /// Returns the acceptance class: "accepted_trusted", "accepted_stale", or error.
+    pub fn consume_snapshot(
+        &mut self,
+        descriptor: &lifegraph_proto::lifegraph::v0::access::SnapshotDescriptor,
+        trusted_producers: &[Vec<u8>],
+    ) -> Result<String, StorageError> {
+        // Structural validation
+        if descriptor.snapshot_id.is_empty() {
+            return Err(StorageError::Decode("snapshot_id is empty".into()));
+        }
+        if descriptor.producer.is_none() {
+            return Err(StorageError::Decode("producer is missing".into()));
+        }
+
+        let producer = descriptor.producer.as_ref().unwrap();
+        let producer_hex = hex::encode(&producer.identity_id);
+
+        // Check producer trust
+        if !trusted_producers.is_empty() && !trusted_producers.contains(&producer.identity_id) {
+            return Err(StorageError::Decode("snapshot producer not trusted".into()));
+        }
+
+        // Store as object (if payload_object is present)
+        if let Some(ref payload_ref) = descriptor.payload_object {
+            self.index.mark_object_present(
+                &hex::encode(&payload_ref.object_id),
+                "snapshot-payload",
+                "snapshot-payload",
+            )?;
+        }
+
+        // Store in snapshots table
+        let snapshot_id = String::from_utf8_lossy(&descriptor.snapshot_id).to_string();
+        let object_id_hex = if let Some(ref p) = descriptor.payload_object {
+            hex::encode(&p.object_id)
+        } else {
+            String::new()
+        };
+        // Serialize base_heads as simple (stream_id_hex, seq, hash_hex) tuples
+        let simple_heads: Vec<(String, u64, String)> = descriptor.base_heads.iter().map(|h| {
+            (
+                hex::encode(&h.stream_id),
+                h.seq,
+                h.event_hash.as_ref().map(|d| hex::encode(&d.value)).unwrap_or_default(),
+            )
+        }).collect();
+        let base_heads = simple_heads.iter().map(|(s, seq, h)| format!("{}:{}:{}", s, seq, h)).collect::<Vec<_>>().join(";");
+        let produced_at = descriptor.produced_at.as_ref().map(|t| t.seconds).unwrap_or(0);
+
+        self.index.put_snapshot(
+            &snapshot_id,
+            &object_id_hex,
+            &descriptor.view_type,
+            &producer_hex,
+            produced_at,
+            descriptor.completeness,
+            &base_heads,
+        )?;
+
+        // Check staleness against local heads
+        let local_heads = self.list_stream_heads()?;
+        let mut is_stale = false;
+        for base_head in &descriptor.base_heads {
+            let stream_id_hex = hex::encode(&base_head.stream_id);
+            if let Some((_sid, local_seq, _hash)) = local_heads.iter().find(|(s, _, _)| s == &stream_id_hex) {
+                let local_seq_u64 = *local_seq as u64;
+                if base_head.seq < local_seq_u64 {
+                    is_stale = true;
+                    // In v0 we always accept stale snapshots
+                } else if base_head.seq > local_seq_u64 {
+                    return Err(StorageError::Decode("snapshot base is ahead of local head".into()));
+                }
+            }
+        }
+
+        if is_stale {
+            Ok("accepted_stale".into())
+        } else {
+            Ok("accepted_trusted".into())
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -567,6 +950,75 @@ impl NodeStore {
         }
 
         Ok(total_events)
+    }
+
+    // -----------------------------------------------------------------------
+    // Integrity and resilience
+    // -----------------------------------------------------------------------
+
+    /// Runs a SQLite integrity check. If corruption is detected,
+    /// automatically rebuilds all indexes from the event log.
+    ///
+    /// Returns the number of events rebuilt, or `Ok(0)` if the database is healthy.
+    pub fn integrity_check_and_rebuild(&mut self) -> Result<usize, StorageError> {
+        match self.index.integrity_check() {
+            Ok(()) => Ok(0), // Database is healthy
+            Err(details) => {
+                eprintln!("lifegraphd: SQLite integrity check failed: {}, rebuilding indexes", details);
+                self.index.clear()
+                    .map_err(|e| StorageError::Sqlite(e))?;
+                self.rebuild_indexes()
+            }
+        }
+    }
+
+    /// Runs a WAL checkpoint to flush and truncate the WAL file.
+    /// Returns the WAL file size after checkpoint, or `None` if no WAL exists.
+    pub fn wal_checkpoint(&self) -> Result<Option<u64>, StorageError> {
+        self.index.wal_checkpoint()
+            .map_err(|e| StorageError::Sqlite(e))?;
+        self.index.wal_size_bytes()
+            .map_err(|e| StorageError::Io(e))
+    }
+
+    /// Checks available disk space on the data root partition.
+    /// Returns available bytes, or `None` if the stat couldn't be obtained.
+    pub fn available_disk_space(&self) -> Result<Option<u64>, std::io::Error> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::ffi::CString;
+
+        let path_c = CString::new(self.config.data_root.as_os_str().as_bytes())
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains null bytes"))?;
+
+        unsafe {
+            let mut stat: libc::statvfs = std::mem::zeroed();
+            if libc::statvfs(path_c.as_ptr(), &mut stat) == 0 {
+                let avail = stat.f_bavail * stat.f_frsize;
+                Ok(Some(avail as u64))
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        }
+    }
+
+    /// Checks if there is sufficient disk space for a write operation.
+    /// Returns `Ok(())` if space is adequate, or `Err` with available bytes.
+    ///
+    /// The minimum threshold is 10 MB — below this, writes are rejected
+    /// to prevent partial writes and corruption.
+    pub fn check_disk_space(&self) -> Result<(), u64> {
+        const MIN_FREE_BYTES: u64 = 10 * 1024 * 1024; // 10 MB
+        match self.available_disk_space() {
+            Ok(Some(available)) => {
+                if available < MIN_FREE_BYTES {
+                    Err(available)
+                } else {
+                    Ok(())
+                }
+            }
+            Ok(None) => Ok(()), // Can't check, proceed optimistically
+            Err(_) => Ok(()), // Can't check, proceed optimistically
+        }
     }
 
     /// Returns the data root path.

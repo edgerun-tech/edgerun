@@ -30,7 +30,6 @@ lifegraph-mesh-link = { path = "../lifegraph-mesh-link" }
 lifegraph-mesh-router = { path = "../lifegraph-mesh-router" }
 lifegraph-linux-netif = { path = "../lifegraph-linux-netif" }
 lifegraph-network-interface = { path = "../lifegraph-network-interface" }
-ctrlc = "3"
 sha2.workspace = true
 p256.workspace = true
 prost.workspace = true
@@ -39,14 +38,18 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 hex.workspace = true
-rand = "0.8.5"
+getrandom.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 bytes.workspace = true
-futures = "0.3"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 parking_lot.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
+rustls-pemfile.workspace = true
+rcgen.workspace = true
+ring.workspace = true
+x509-parser.workspace = true
 
 [dev-dependencies]
-rand = "0.8.5"
+rand.workspace = true

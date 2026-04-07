@@ -75,6 +75,52 @@ impl SqliteIndex {
                 representation_id TEXT,
                 blob_id TEXT,
                 status TEXT NOT NULL DEFAULT 'missing'  -- 'missing', 'present', 'corrupted'
+            );
+
+            CREATE TABLE IF NOT EXISTS peers (
+                node_id_hex TEXT PRIMARY KEY NOT NULL,
+                addr TEXT,
+                status TEXT NOT NULL DEFAULT 'unknown',  -- 'unknown', 'reachable', 'unreachable'
+                last_seen INTEGER,
+                first_seen INTEGER NOT NULL,
+                is_bootstrap INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS snapshots (
+                snapshot_id TEXT PRIMARY KEY NOT NULL,
+                object_id_hex TEXT NOT NULL,
+                view_type TEXT NOT NULL,
+                producer_hex TEXT NOT NULL,
+                produced_at INTEGER NOT NULL,
+                completeness INTEGER NOT NULL,
+                base_heads TEXT NOT NULL,
+                stored_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS controller_changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                controller_hex TEXT NOT NULL,
+                change_type TEXT NOT NULL,  -- 'added', 'removed', 'transferred'
+                event_seq INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS delegations (
+                delegation_id TEXT PRIMARY KEY NOT NULL,
+                issuer_hex TEXT NOT NULL,
+                recipient_hex TEXT NOT NULL,
+                capability_hex TEXT NOT NULL,
+                expires_at INTEGER,
+                is_revoked INTEGER NOT NULL DEFAULT 0,
+                stored_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS revocations (
+                revocation_id TEXT PRIMARY KEY NOT NULL,
+                issuer_hex TEXT NOT NULL,
+                target_type TEXT NOT NULL,  -- 'delegation', 'identity', 'node', 'object'
+                target_hex TEXT NOT NULL,
+                effective_at INTEGER,
+                stored_at INTEGER NOT NULL
             );",
         )?;
 
@@ -382,6 +428,279 @@ impl SqliteIndex {
     }
 
     // -----------------------------------------------------------------------
+    // Peer database
+    // -----------------------------------------------------------------------
+
+    /// Upserts a known peer. If it already exists, updates addr, status, and last_seen.
+    pub fn upsert_peer(
+        &self,
+        node_id_hex: &str,
+        addr: Option<&str>,
+        status: &str,
+        is_bootstrap: bool,
+    ) -> Result<(), rusqlite::Error> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.execute(
+            "INSERT INTO peers (node_id_hex, addr, status, last_seen, first_seen, is_bootstrap)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(node_id_hex) DO UPDATE SET
+                 addr = COALESCE(excluded.addr, peers.addr),
+                 status = excluded.status,
+                 last_seen = excluded.last_seen",
+            params![
+                node_id_hex,
+                addr,
+                status,
+                now,
+                now,
+                if is_bootstrap { 1 } else { 0 },
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Updates the reachability status of a peer.
+    pub fn update_peer_status(
+        &self,
+        node_id_hex: &str,
+        status: &str,
+    ) -> Result<(), rusqlite::Error> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.execute(
+            "UPDATE peers SET status = ?1, last_seen = ?2 WHERE node_id_hex = ?3",
+            params![status, now, node_id_hex],
+        )?;
+        Ok(())
+    }
+
+    /// Returns all known peers.
+    pub fn list_peers(&self) -> Result<Vec<(String, Option<String>, String, Option<i64>, bool)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT node_id_hex, addr, status, last_seen, is_bootstrap FROM peers ORDER BY last_seen DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let nid: String = row.get(0)?;
+            let addr: Option<String> = row.get(1)?;
+            let status: String = row.get(2)?;
+            let last_seen: Option<i64> = row.get(3)?;
+            let is_boot: i64 = row.get(4)?;
+            Ok((nid, addr, status, last_seen, is_boot != 0))
+        })?;
+        rows.collect()
+    }
+
+    /// Returns unreachable peers that have a known address, for reconnection attempts.
+    pub fn list_unreachable_peers_with_addr(
+        &self,
+    ) -> Result<Vec<(String, String)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT node_id_hex, addr FROM peers
+             WHERE status = 'unreachable' AND addr IS NOT NULL
+             ORDER BY last_seen ASC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let nid: String = row.get(0)?;
+            let addr: String = row.get(1)?;
+            Ok((nid, addr))
+        })?;
+        rows.collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshots
+    // -----------------------------------------------------------------------
+
+    /// Stores a snapshot record.
+    pub fn put_snapshot(
+        &self,
+        snapshot_id: &str,
+        object_id_hex: &str,
+        view_type: &str,
+        producer_hex: &str,
+        produced_at: i64,
+        completeness: i32,
+        base_heads: &str,
+    ) -> Result<(), rusqlite::Error> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO snapshots
+             (snapshot_id, object_id_hex, view_type, producer_hex, produced_at, completeness, base_heads, stored_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![snapshot_id, object_id_hex, view_type, producer_hex, produced_at, completeness, base_heads, now],
+        )?;
+        Ok(())
+    }
+
+    /// Returns all known snapshots.
+    pub fn list_snapshots(&self) -> Result<Vec<(String, String, String, String, i64, i32, String)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT snapshot_id, object_id_hex, view_type, producer_hex, produced_at, completeness, base_heads
+             FROM snapshots ORDER BY produced_at DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let sid: String = row.get(0)?;
+            let oid: String = row.get(1)?;
+            let vt: String = row.get(2)?;
+            let ph: String = row.get(3)?;
+            let pa: i64 = row.get(4)?;
+            let c: i32 = row.get(5)?;
+            let bh: String = row.get(6)?;
+            Ok((sid, oid, vt, ph, pa, c, bh))
+        })?;
+        rows.collect()
+    }
+
+    /// Returns a snapshot by ID.
+    pub fn get_snapshot(&self, snapshot_id: &str) -> Result<Option<(String, String, String, String, i64, i32, String)>, rusqlite::Error> {
+        self.conn.query_row(
+            "SELECT snapshot_id, object_id_hex, view_type, producer_hex, produced_at, completeness, base_heads
+             FROM snapshots WHERE snapshot_id = ?1",
+            params![snapshot_id],
+            |row| {
+                let sid: String = row.get(0)?;
+                let oid: String = row.get(1)?;
+                let vt: String = row.get(2)?;
+                let ph: String = row.get(3)?;
+                let pa: i64 = row.get(4)?;
+                let c: i32 = row.get(5)?;
+                let bh: String = row.get(6)?;
+                Ok((sid, oid, vt, ph, pa, c, bh))
+            },
+        ).optional()
+    }
+
+    // -----------------------------------------------------------------------
+    // Controller state persistence
+    // -----------------------------------------------------------------------
+
+    /// Records a controller change (add/remove/transfer).
+    pub fn record_controller_change(
+        &self,
+        controller_hex: &str,
+        change_type: &str,
+        event_seq: i64,
+    ) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "INSERT INTO controller_changes (controller_hex, change_type, event_seq)
+             VALUES (?1, ?2, ?3)",
+            params![controller_hex, change_type, event_seq],
+        )?;
+        Ok(())
+    }
+
+    /// Returns all controller changes up to and including the given event sequence number.
+    /// Ordered by id (insertion order).
+    pub fn list_controller_changes(
+        &self,
+        up_to_seq: i64,
+    ) -> Result<Vec<(String, String)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT controller_hex, change_type FROM controller_changes
+             WHERE event_seq <= ?1 ORDER BY id ASC"
+        )?;
+        let rows = stmt.query_map(params![up_to_seq], |row| {
+            let hex: String = row.get(0)?;
+            let typ: String = row.get(1)?;
+            Ok((hex, typ))
+        })?;
+        rows.collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Delegation and revocation persistence
+    // -----------------------------------------------------------------------
+
+    /// Stores or updates a delegation record.
+    pub fn store_delegation(
+        &self,
+        delegation_id: &str,
+        issuer_hex: &str,
+        recipient_hex: &str,
+        capability_hex: &str,
+        expires_at: Option<i64>,
+    ) -> Result<(), rusqlite::Error> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO delegations
+             (delegation_id, issuer_hex, recipient_hex, capability_hex, expires_at, is_revoked, stored_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
+            params![delegation_id, issuer_hex, recipient_hex, capability_hex, expires_at, now],
+        )?;
+        Ok(())
+    }
+
+    /// Marks a delegation as revoked.
+    pub fn revoke_delegation(&self, delegation_id: &str) -> Result<(), rusqlite::Error> {
+        self.conn.execute(
+            "UPDATE delegations SET is_revoked = 1 WHERE delegation_id = ?1",
+            params![delegation_id],
+        )?;
+        Ok(())
+    }
+
+    /// Returns all non-revoked delegation IDs issued by the given issuer.
+    pub fn list_active_delegations(&self, issuer_hex: &str) -> Result<Vec<String>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT delegation_id FROM delegations
+             WHERE issuer_hex = ?1 AND is_revoked = 0
+             ORDER BY stored_at DESC"
+        )?;
+        let rows = stmt.query_map(params![issuer_hex], |row| row.get(0))?;
+        rows.collect()
+    }
+
+    /// Returns all active revocation target IDs.
+    pub fn list_active_revocations(&self) -> Result<Vec<(String, String)>, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT target_type, target_hex FROM revocations ORDER BY stored_at DESC"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let typ: String = row.get(0)?;
+            let hex: String = row.get(1)?;
+            Ok((typ, hex))
+        })?;
+        rows.collect()
+    }
+
+    /// Records a revocation.
+    pub fn store_revocation(
+        &self,
+        revocation_id: &str,
+        issuer_hex: &str,
+        target_type: &str,
+        target_hex: &str,
+        effective_at: Option<i64>,
+    ) -> Result<(), rusqlite::Error> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.execute(
+            "INSERT OR REPLACE INTO revocations
+             (revocation_id, issuer_hex, target_type, target_hex, effective_at, stored_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![revocation_id, issuer_hex, target_type, target_hex, effective_at, now],
+        )?;
+        // If this revocation targets a delegation, also mark it in the delegations table
+        if target_type == "delegation" {
+            self.revoke_delegation(target_hex)?;
+        }
+        Ok(())
+    }
+
+    // -----------------------------------------------------------------------
     // Maintenance
     // -----------------------------------------------------------------------
 
@@ -392,9 +711,45 @@ impl SqliteIndex {
              DELETE FROM events;
              DELETE FROM replay_cache;
              DELETE FROM fetch_queue;
-             DELETE FROM object_presence;",
+             DELETE FROM object_presence;
+             DELETE FROM peers;
+             DELETE FROM snapshots;",
         )?;
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Integrity and resilience
+    // -----------------------------------------------------------------------
+
+    /// Runs `PRAGMA integrity_check` and returns the result.
+    /// Returns `Ok(())` if the database is intact, or `Err` with details.
+    pub fn integrity_check(&self) -> Result<(), String> {
+        let result: String = self.conn
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .map_err(|e| format!("integrity_check query failed: {}", e))?;
+        if result == "ok" {
+            Ok(())
+        } else {
+            Err(result)
+        }
+    }
+
+    /// Runs `PRAGMA wal_checkpoint(TRUNCATE)` to checkpoint and truncate the WAL file.
+    /// Returns the checkpoint result code, or error.
+    pub fn wal_checkpoint(&self) -> Result<i64, rusqlite::Error> {
+        self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))
+    }
+
+    /// Returns the current WAL file size in bytes, or None if the file doesn't exist.
+    pub fn wal_size_bytes(&self) -> Result<Option<u64>, std::io::Error> {
+        let wal_path = format!("{}-wal", self.conn.path().map(|p| p.to_string()).unwrap_or_default());
+        let path = std::path::Path::new(&wal_path);
+        if path.exists() {
+            Ok(Some(path.metadata()?.len()))
+        } else {
+            Ok(None)
+        }
     }
 }
 
