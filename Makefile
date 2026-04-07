@@ -15,9 +15,9 @@ build:
 # Cross-compile release binaries
 release-build:
 	mkdir -p dist
-	cd rust && cargo build --release -p lifegraph-node --bin lifegraphd
-	cp rust/target/release/lifegraphd dist/lifegraphd-linux-amd64
+	cd rust && cargo build --release -p edgerun-node --bin edgerund
+	cp rust/target/release/edgerund dist/edgerund-linux-amd64
 
 # Build container image from Rust source
 docker-build:
-	docker build -t lifegraph-reference-core:local .
+	docker build -t edgerun-reference-core:local .

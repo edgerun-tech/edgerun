@@ -1,0 +1,58 @@
+[package]
+name = "edgerun-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "edgerund"
+path = "src/main.rs"
+
+[features]
+default = []
+hardware = [
+    "dep:edgerun-evdev-input",
+    "dep:edgerun-alsa-speaker",
+    "dep:edgerun-alsa-microphone",
+    "dep:edgerun-microphone",
+    "dep:edgerun-v4l2-camera",
+    "dep:edgerun-camera-biometrics",
+    "dep:edgerun-speaker",
+]
+
+[dependencies]
+edgerun-core = { path = "../edgerun-core" }
+edgerun-proto = { path = "../edgerun-proto" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-capability-policy = { path = "../edgerun-capability-policy" }
+edgerun-stream = { path = "../edgerun-stream" }
+edgerun-storage = { path = "../edgerun-storage" }
+edgerun-remote-capability = { path = "../edgerun-remote-capability" }
+edgerun-mesh = { path = "../edgerun-mesh" }
+edgerun-mesh-link = { path = "../edgerun-mesh-link" }
+edgerun-mesh-router = { path = "../edgerun-mesh-router" }
+edgerun-linux-netif = { path = "../edgerun-linux-netif" }
+edgerun-network-interface = { path = "../edgerun-network-interface" }
+p256.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+edgerun-rt = { path = "../edgerun-rt" }
+
+edgerun-log = { path = "../edgerun-log" }
+
+# Hardware signing is required for node identity and stream writing
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+
+# Optional hardware backends (enable with --features hardware)
+edgerun-evdev-input = { path = "../edgerun-evdev-input", optional = true }
+edgerun-alsa-speaker = { path = "../edgerun-alsa-speaker", optional = true }
+edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone", optional = true }
+edgerun-microphone = { path = "../edgerun-microphone", optional = true }
+edgerun-v4l2-camera = { path = "../edgerun-v4l2-camera", optional = true }
+edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics", optional = true }
+edgerun-speaker = { path = "../edgerun-speaker", optional = true }
+
+[dev-dependencies]
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }

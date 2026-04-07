@@ -7,7 +7,7 @@ Usage:
   $0 --pcr-list sha256:7 --session ./var/tpm-policy/signing.session [--tpm-path /dev/tpmrm0]
 
 Creates a live TPM policy session bound to the requested PCR selection and leaves
-it on disk for tools like lifegraphd/tpm2_sign to use via:
+it on disk for tools like edgerund/tpm2_sign to use via:
   session:<session-path>
 
 Cleanup when finished:

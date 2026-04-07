@@ -1,8 +1,8 @@
-# Lifegraph v0 Conformance
+# edgerun v0 Conformance
 
 ## 1. Purpose
 
-The conformance suite exists to prove that independent implementations of the Lifegraph v0 core protocol produce the same:
+The conformance suite exists to prove that independent implementations of the edgerun v0 core protocol produce the same:
 
 - canonical semantic bytes
 - record hashes
@@ -264,7 +264,7 @@ A released vector corpus MUST be immutable.
 
 ## 14. CI gate
 
-A build claiming conformance to Lifegraph v0 MUST pass all `mandatory` vectors for the targeted corpus release.
+A build claiming conformance to edgerun v0 MUST pass all `mandatory` vectors for the targeted corpus release.
 
 Optional vectors are strongly recommended and should become mandatory only when the protocol section they test is considered fully frozen in practice.
 

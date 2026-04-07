@@ -1,0 +1,10 @@
+[package]
+name = "edgerun-mgmt-bluetooth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-bluetooth = { path = "../edgerun-bluetooth" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }

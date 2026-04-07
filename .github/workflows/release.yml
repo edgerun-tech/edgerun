@@ -19,9 +19,9 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            artifact_name: lifegraphd-linux-amd64
+            artifact_name: edgerund-linux-amd64
           - target: aarch64-unknown-linux-gnu
-            artifact_name: lifegraphd-linux-arm64
+            artifact_name: edgerund-linux-arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -46,8 +46,8 @@ jobs:
         run: |
           mkdir -p dist
           cd rust
-          CROSS_COMPILE_TARGET=${{ matrix.target }} cargo build --release -p lifegraph-node --bin lifegraphd --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/lifegraphd ../dist/${{ matrix.artifact_name }}
+          CROSS_COMPILE_TARGET=${{ matrix.target }} cargo build --release -p edgerun-node --bin edgerund --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/edgerund ../dist/${{ matrix.artifact_name }}
 
       - name: Generate release checksum
         run: |

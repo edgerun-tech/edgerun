@@ -12,8 +12,8 @@ candidate_event:
     initial_controllers:
     - user_alice
   signature_fixture: node_server
-  record_domain_tag: lifegraph:v0:event-envelope
-  sig_domain_tag: lifegraph:v0:event-signature
+  record_domain_tag: edgerun:v0:event-envelope
+  sig_domain_tag: edgerun:v0:event-signature
   signature:
     algorithm: ed25519
     value: '0xe561a94bd8852909db84484dbad796c87edff6abf0cf3035874575e3a7c70f3d2f7553dfb9301fde9b5526d13281c4b7f0e1742f69c0709debf880f592318e0d'

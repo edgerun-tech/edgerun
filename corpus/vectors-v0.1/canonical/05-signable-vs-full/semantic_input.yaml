@@ -4,7 +4,7 @@ brief:
 fixture_record:
   record_family: DelegationRecord
   focus: signable-vs-full
-  domain_tag: lifegraph:v0:delegation-record
+  domain_tag: edgerun:v0:delegation-record
   delegation_id: '0xdd01'
   issuer:
     identity_id: '0x45dcb90b3a5ce84c4d856b4c3637c775c562977bbd6dbdf5d5a41847dd6ca3d0'
@@ -28,4 +28,4 @@ fixture_record:
     algorithm: ed25519
     value: '0x652bbe9cb4166772d71470952aa73dc6efc4b4c3f8b5df10400fe194703b4b171099e884c21db0f91c08cf3c02bc3a8e1d65121c0fa1b00b9855c181f31f140c'
   signature_fixture: user_alice
-  sig_domain_tag: lifegraph:v0:delegation-signature
+  sig_domain_tag: edgerun:v0:delegation-signature

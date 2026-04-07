@@ -8,8 +8,8 @@ command:
   issued_at: '2030-01-01T00:10:00Z'
   expires_at: '2030-01-01T01:10:00Z'
   command_id: cmd_same
-  record_domain_tag: lifegraph:v0:command-envelope
-  sig_domain_tag: lifegraph:v0:command-signature
+  record_domain_tag: edgerun:v0:command-envelope
+  sig_domain_tag: edgerun:v0:command-signature
   signature_fixture: user_alice
   signature:
     algorithm: ed25519

@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SPEC = ROOT / 'lifegraph_core_protocol_v0_single_file.md'
-PROTO_DIR = ROOT / 'proto' / 'lifegraph' / 'v0'
+SPEC = ROOT / 'edgerun_core_protocol_v0_single_file.md'
+PROTO_DIR = ROOT / 'proto' / 'edgerun' / 'v0'
 
-HEADING_RE = re.compile(r'^### `lifegraph/v0/([^`]+\.proto)`\n\n```proto\n(.*?)\n```', re.S | re.M)
+HEADING_RE = re.compile(r'^### `edgerun/v0/([^`]+\.proto)`\n\n```proto\n(.*?)\n```', re.S | re.M)
 MESSAGE_RE = re.compile(r'(?ms)^message\s+(\w+)\s*\{(.*?)^\}')
 ENUM_RE = re.compile(r'(?ms)^enum\s+(\w+)\s*\{(.*?)^\}')
 FIELD_LINE_RE = re.compile(r'^\s*(?:optional\s+)?(?:repeated\s+)?[A-Za-z0-9_\.<>]+\s+[A-Za-z0-9_]+\s*=\s*\d+\s*;$')
@@ -53,7 +53,7 @@ def main() -> int:
 
     for name, spec_body in sorted(spec_files.items()):
         if name not in actual_files:
-            problems.append(f'missing file: proto/lifegraph/v0/{name}')
+            problems.append(f'missing file: proto/edgerun/v0/{name}')
             continue
         actual_body = actual_files[name]
 

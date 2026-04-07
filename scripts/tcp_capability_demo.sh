@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUST_DIR="$ROOT/rust"
 ADDR="${1:-127.0.0.1:47070}"
-SERVER_LOG="${TMPDIR:-/tmp}/lifegraph-capability-demo-server.log"
-CLIENT_LOG="${TMPDIR:-/tmp}/lifegraph-capability-demo-client.log"
+SERVER_LOG="${TMPDIR:-/tmp}/edgerun-capability-demo-server.log"
+CLIENT_LOG="${TMPDIR:-/tmp}/edgerun-capability-demo-client.log"
 
 cleanup() {
   if [[ -n "${server_pid:-}" ]]; then
@@ -18,14 +18,14 @@ trap cleanup EXIT
 cd "$RUST_DIR"
 
 echo "[demo] starting server on tcp:$ADDR"
-cargo run -q -p lifegraph-remote-capability --bin capability-demo-server -- tcp "$ADDR" \
+cargo run -q -p edgerun-remote-capability --bin capability-demo-server -- tcp "$ADDR" \
   > /dev/null 2>"$SERVER_LOG" &
 server_pid=$!
 
 sleep 1
 
 echo "[demo] running client"
-cargo run -q -p lifegraph-remote-capability --bin capability-demo-client -- tcp "$ADDR" \
+cargo run -q -p edgerun-remote-capability --bin capability-demo-client -- tcp "$ADDR" \
   >"$CLIENT_LOG" 2>&1
 
 cleanup

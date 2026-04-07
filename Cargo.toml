@@ -1,0 +1,147 @@
+[workspace]
+resolver = "2"
+members = [
+  # Vendored external crates
+  "crates/aead",
+  "crates/aes",
+  "crates/aes-gcm",
+  "crates/anyhow",
+  "crates/base64ct",
+  "crates/block-padding",
+  "crates/bytes",
+  "crates/cbc",
+  "crates/cipher",
+  "crates/ctr",
+  "crates/either",
+  "crates/ghash",
+  "crates/inout",
+  "crates/itertools",
+  "crates/libc",
+  "crates/opaque-debug",
+  "crates/pbkdf2",
+  "crates/pkcs5",
+  "crates/pkcs8",
+  "crates/polyval",
+  "crates/proc-macro2",
+  "crates/prost",
+  "crates/prost-derive",
+  "crates/prost-types",
+  "crates/quote",
+  "crates/salsa20",
+  "crates/scrypt",
+  "crates/sha1",
+  "crates/sha2",
+  "crates/spki",
+  "crates/syn",
+  "crates/unicode-ident",
+  "crates/universal-hash",
+  "crates/version_check",
+
+  # Protocol / core
+  "crates/edgerun-core",
+  "crates/edgerun-proto",
+  "crates/edgerun-cpufeatures",
+  "crates/edgerun-const-oid",
+  "crates/edgerun-base16ct",
+  "crates/edgerun-cfg-if",
+  "crates/edgerun-zeroize",
+  "crates/edgerun-subtle",
+  "crates/edgerun-log",
+  "crates/edgerun-rt",
+  "crates/edgerun-json",
+  "crates/edgerun-capabilities",
+  "crates/edgerun-capability-policy",
+  "crates/edgerun-machine-report",
+  "crates/edgerun-remote-capability",
+  "crates/edgerun-stream",
+
+  # Device & media abstraction
+  "crates/edgerun-input",
+  "crates/edgerun-evdev-input",
+  "crates/edgerun-microphone",
+  "crates/edgerun-alsa-microphone",
+  "crates/edgerun-speaker",
+  "crates/edgerun-alsa-speaker",
+  "crates/edgerun-audio-calibration",
+  "crates/edgerun-v4l2-camera",
+  "crates/edgerun-camera-biometrics",
+  "crates/edgerun-cec",
+  "crates/edgerun-linux-cec",
+  "crates/edgerun-display",
+  "crates/edgerun-drm-display",
+  "crates/edgerun-gpu",
+  "crates/edgerun-linux-gpu",
+  "crates/edgerun-power",
+  "crates/edgerun-linux-power",
+
+  # Biometric & identity backends
+  "crates/edgerun-fingerprint",
+  "crates/edgerun-goodix-fingerprint",
+  "crates/edgerun-biometrics",
+  "crates/edgerun-yubikey",
+  "crates/edgerun-crypto-common",
+  "crates/edgerun-block-buffer",
+  "crates/edgerun-typenum",
+  "crates/edgerun-generic-array",
+  "crates/edgerun-signature",
+  "crates/edgerun-hkdf",
+  "crates/edgerun-rfc6979",
+  "crates/edgerun-hmac",
+  "crates/edgerun-digest",
+  "crates/edgerun-der",
+  "crates/edgerun-sec1",
+  "crates/edgerun-group",
+  "crates/edgerun-ff",
+  "crates/edgerun-crypto-bigint",
+  "crates/edgerun-primeorder",
+  "crates/edgerun-elliptic-curve",
+  "crates/edgerun-ecdsa",
+  "crates/edgerun-p256",
+  "crates/edgerun-tpm",
+  "crates/edgerun-android-keystore",
+  "crates/edgerun-hardware-signing",
+
+  # Connectivity and transport backends
+  "crates/edgerun-bluetooth",
+  "crates/edgerun-mgmt-bluetooth",
+  "crates/edgerun-wifi",
+  "crates/edgerun-linux-wifi",
+  "crates/edgerun-network-interface",
+  "crates/edgerun-linux-netif",
+  "crates/edgerun-usb",
+  "crates/edgerun-linux-usb",
+  "crates/edgerun-pci",
+  "crates/edgerun-linux-pci",
+  "crates/edgerun-nfc",
+  "crates/edgerun-linux-nfc",
+  "crates/edgerun-npu",
+  "crates/edgerun-linux-npu",
+  "crates/edgerun-linux-sysfs",
+  "crates/edgerun-mesh",
+  "crates/edgerun-mesh-session",
+  "crates/edgerun-mesh-capability",
+  "crates/edgerun-mesh-daemon",
+  "crates/edgerun-node",
+  "crates/edgerun-mesh-link",
+  "crates/edgerun-mesh-router",
+  "crates/edgerun-virtual-disk",
+  "crates/edgerun-storage",
+
+  # Experiments
+  "crates/edgerun-amd-xdna",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+publish = false
+version = "0.1.0"
+
+[workspace.dependencies]
+aes-gcm = { path = "crates/aes-gcm", default-features = false, features = ["aes", "alloc"] }
+sha2 = { path = "crates/sha2", default-features = false }
+libc = { path = "crates/libc" }
+p256 = { path = "crates/edgerun-p256", default-features = false, features = ["ecdh", "ecdsa"] }
+prost = { path = "crates/prost" }
+prost-types = { path = "crates/prost-types" }
+rand_core = { path = "crates/edgerun-rand_core" }

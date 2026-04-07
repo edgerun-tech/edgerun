@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mesh-integration-test.sh — Tests the Lifegraph mesh stack using Linux
+# mesh-integration-test.sh — Tests the edgerun mesh stack using Linux
 # network namespaces connected by veth pairs.  No QEMU needed.
 #
 # Topology:
@@ -75,7 +75,7 @@ section "Building mesh-tool binary"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/../rust"
-cargo build -p lifegraph-mesh-daemon --bin mesh-tool --quiet 2>&1
+cargo build -p edgerun-mesh-daemon --bin mesh-tool --quiet 2>&1
 MESH_TOOL="$(pwd)/target/debug/mesh-tool"
 echo "  mesh-tool: $MESH_TOOL"
 

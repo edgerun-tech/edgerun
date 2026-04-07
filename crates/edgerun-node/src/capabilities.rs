@@ -1,0 +1,729 @@
+//! Capability discovery and server for the edgerun node daemon.
+//!
+//! Discovers hardware devices, wraps them as `RemoteCapabilityProvider`s,
+//! aggregates them into a multi-provider, and serves them over a Unix socket.
+
+use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
+use edgerun_capability_policy::{PolicyContext, SimplePolicyEngine};
+use edgerun_remote_capability::{
+    FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
+    serve_one,
+};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+
+#[cfg(feature = "hardware")]
+use edgerun_evdev_input::EvdevInputBackend;
+#[cfg(feature = "hardware")]
+use edgerun_remote_capability::{
+    CameraRemoteAdapter, InputRemoteAdapter,
+    MicrophoneRemoteAdapter, SpeakerRemoteAdapter,
+};
+#[cfg(feature = "hardware")]
+use edgerun_v4l2_camera::{V4l2CameraBiometricReader, discover_camera_devices};
+#[cfg(feature = "hardware")]
+use edgerun_camera_biometrics::CameraBiometricPurpose;
+#[cfg(feature = "hardware")]
+use edgerun_microphone::{AudioCaptureRequest, MicrophoneSampleFormat};
+
+// ---------------------------------------------------------------------------
+// Multi-provider — aggregates multiple capability providers into one
+// ---------------------------------------------------------------------------
+
+/// A capability provider that wraps multiple underlying providers.
+///
+/// Clients request a specific capability by matching the provider's descriptor.
+/// The multi-provider routes session opens and invocations to the correct
+/// underlying provider.
+pub struct MultiCapabilityProvider {
+    /// Registered providers, keyed by their capability ID.
+    providers: HashMap<String, Box<dyn RemoteCapabilityProvider + Send>>,
+}
+
+impl MultiCapabilityProvider {
+    pub fn new() -> Self {
+        Self {
+            providers: HashMap::new(),
+        }
+    }
+
+    /// Registers a capability provider.
+    pub fn register(&mut self, descriptor: &CapabilityDescriptor, provider: Box<dyn RemoteCapabilityProvider + Send>) {
+        let key = format!(
+            "{}:{}:{}",
+            descriptor.provider_name,
+            descriptor.provider_instance_id,
+            descriptor.modalities.first().unwrap_or(&0)
+        );
+        self.providers.insert(key, provider);
+    }
+
+    /// Returns the number of registered providers.
+    pub fn len(&self) -> usize {
+        self.providers.len()
+    }
+}
+
+impl RemoteCapabilityProvider for MultiCapabilityProvider {
+    fn descriptor(&self) -> CapabilityDescriptor {
+        let id = format!("{}-providers", self.providers.len());
+        CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: id.as_bytes().to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: Vec::new(),
+            event_kinds: Vec::new(),
+            operations: Vec::new(),
+            default_constraints: Vec::new(),
+            provider_name: "edgerun-multi".into(),
+            provider_instance_id: id,
+            signature: None,
+        }
+    }
+
+    fn open_session(
+        &mut self,
+        open: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionOpen,
+    ) -> Result<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept, edgerun_capabilities::CapabilityError> {
+        let mut last_err = None;
+        for (key, provider) in self.providers.iter_mut() {
+            match provider.open_session(open) {
+                Ok(accept) => return Ok(accept),
+                Err(e) => last_err = Some((key.clone(), e)),
+            }
+        }
+        Err(last_err.map(|(_, e)| e).unwrap_or_else(|| {
+            edgerun_capabilities::CapabilityError::Unsupported("no capability providers registered")
+        }))
+    }
+
+    fn invoke(
+        &mut self,
+        session_id: &[u8],
+        invocation: &edgerun_capabilities::CapabilityInvocation,
+        inline_parameters: Option<&[u8]>,
+    ) -> Result<edgerun_remote_capability::RemoteInvocationResult, edgerun_capabilities::CapabilityError> {
+        for provider in self.providers.values_mut() {
+            match provider.invoke(session_id, invocation, inline_parameters) {
+                Ok(result) => return Ok(result),
+                Err(edgerun_capabilities::CapabilityError::PermissionDenied(_)) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Err(edgerun_capabilities::CapabilityError::PermissionDenied(
+            "no provider authorized for this session",
+        ))
+    }
+
+    fn close_session(
+        &mut self,
+        close: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        for provider in self.providers.values_mut() {
+            let _ = provider.close_session(close);
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hardware discovery
+// ---------------------------------------------------------------------------
+
+/// Discovers all available hardware capabilities and registers them with the
+/// multi-provider, wrapped in policy enforcement.
+pub fn discover_and_register_capabilities(
+    multi: &mut MultiCapabilityProvider,
+    policy: SimplePolicyEngine,
+) {
+    let context = PolicyContext {
+        is_local: true,
+        ..PolicyContext::default()
+    };
+
+    #[cfg(feature = "hardware")]
+    {
+        // --- Input devices (evdev) ---
+        match edgerun_evdev_input::discover_evdev_devices() {
+            Ok(devices) => {
+                for device_info in devices {
+                    match EvdevInputBackend::open(device_info.clone()) {
+                        Ok(backend) => {
+                            let descriptor = backend.descriptor();
+                            let adapter = InputRemoteAdapter::new(backend, 64);
+                            let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                                .with_context(context.clone());
+                            multi.register(&descriptor, Box::new(wrapped));
+                        }
+                        Err(e) => eprintln!("edgerund: warning: failed to open evdev device: {}", e),
+                    }
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: evdev discovery failed: {}", e),
+        }
+
+        // --- Speakers (ALSA) ---
+        match edgerun_alsa_speaker::discover_speakers() {
+            Ok(speakers) => {
+                for backend in speakers {
+                    let descriptor = backend.descriptor();
+                    let adapter = SpeakerRemoteAdapter::new(backend);
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: ALSA speaker discovery failed: {}", e),
+        }
+
+        // --- Microphones (ALSA) ---
+        match edgerun_alsa_microphone::discover_alsa_pcms() {
+            Ok(pcms) => {
+                let capture_pcms: Vec<_> = pcms.into_iter().filter(|p| p.capture).collect();
+                for pcm in capture_pcms {
+                    match edgerun_alsa_microphone::AlsaMicrophoneBackend::open(pcm.clone()) {
+                        Ok(backend) => {
+                            let descriptor = backend.descriptor();
+                            let adapter = MicrophoneRemoteAdapter::new(backend, AudioCaptureRequest {
+                                sample_rate_hz: 48_000,
+                                channels: 2,
+                                duration_ms: 1000,
+                                format: MicrophoneSampleFormat::PcmS16Le,
+                            });
+                            let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                                .with_context(context.clone());
+                            multi.register(&descriptor, Box::new(wrapped));
+                        }
+                        Err(e) => eprintln!("edgerund: warning: failed to open ALSA mic: {}", e),
+                    }
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: ALSA microphone discovery failed: {}", e),
+        }
+
+        // --- Cameras (V4L2) ---
+        match discover_camera_devices() {
+            Ok(devices) => {
+                for device in devices {
+                    let reader = V4l2CameraBiometricReader::new(device);
+                    let descriptor = reader.descriptor();
+                    let adapter = CameraRemoteAdapter::new(
+                        reader,
+                        CameraBiometricPurpose::Enrollment,
+                        5000,
+                        descriptor.clone(),
+                    );
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: V4L2 camera discovery failed: {}", e),
+        }
+    }
+
+    let _ = (multi, policy, context);
+}
+
+// ---------------------------------------------------------------------------
+// Unix socket server
+// ---------------------------------------------------------------------------
+
+/// Thread-safe capability server using `Arc<std::sync::Mutex<MultiCapabilityProvider>>`.
+/// Listens on a Unix domain socket and serves capabilities to connecting clients.
+pub fn serve_capabilities_unix(
+    multi: Arc<std::sync::Mutex<MultiCapabilityProvider>>,
+    socket_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if socket_path.exists() {
+        let _ = std::fs::remove_file(socket_path);
+    }
+    if let Some(parent) = socket_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    let listener = std::os::unix::net::UnixListener::bind(socket_path)?;
+    println!("edgerund: capability server listening on {}", socket_path.display());
+
+    loop {
+        match listener.accept() {
+            Ok((stream, _addr)) => {
+                let mut transport = FramedRemoteTransport::new(stream);
+                let mut locked = multi.lock().unwrap();
+                match serve_one(&mut *locked, &mut transport) {
+                    Ok(true) => {} // connection served
+                    Ok(false) => {} // connection closed gracefully
+                    Err(e) => eprintln!("edgerund: capability serve error: {}", e),
+                }
+            }
+            Err(e) => {
+                eprintln!("edgerund: capability server: accept error: {}", e);
+                if !socket_path.exists() {
+                    break; // socket was removed — time to shut down
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Builds a multi-provider with all discovered capabilities.
+/// Used by the mesh capability server.
+pub fn build_multi_provider(_node_private_key: &[u8]) -> MultiCapabilityProvider {
+    let mut multi = MultiCapabilityProvider::new();
+    let policy = SimplePolicyEngine::default();
+    discover_and_register_capabilities(&mut multi, policy);
+    multi
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
+    use edgerun_remote_capability::RemoteCapabilityProvider;
+    use edgerun_proto::edgerun::v0::capability_runtime::{
+        CapabilitySessionOpen, CapabilitySessionClose,
+    };
+
+    // -----------------------------------------------------------------------
+    // MultiCapabilityProvider tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn multi_provider_new_is_empty() {
+        let multi = MultiCapabilityProvider::new();
+        assert_eq!(multi.len(), 0);
+    }
+
+    #[test]
+    fn multi_provider_descriptor_with_no_providers() {
+        let multi = MultiCapabilityProvider::new();
+        let desc = multi.descriptor();
+        assert_eq!(desc.provider_name, "edgerun-multi");
+        assert!(desc.capability_id.ends_with(b"-providers"));
+    }
+
+    #[test]
+    fn multi_provider_descriptor_with_providers() {
+        let mut multi = MultiCapabilityProvider::new();
+        // Register a dummy provider to test descriptor changes
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"test-cap".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "test-provider".into(),
+            provider_instance_id: "inst-1".into(),
+            signature: None,
+        };
+        let dummy = DummyProvider::new();
+        multi.register(&desc, Box::new(dummy));
+        assert_eq!(multi.len(), 1);
+
+        let multi_desc = multi.descriptor();
+        assert!(multi_desc.capability_id.ends_with(b"1-providers".as_slice()));
+    }
+
+    #[test]
+    fn multi_provider_register_uses_correct_key() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"cap-1".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![2],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "my-provider".into(),
+            provider_instance_id: "instance-42".into(),
+            signature: None,
+        };
+        let provider = DummyProvider::new();
+        multi.register(&desc, Box::new(provider));
+        assert_eq!(multi.len(), 1);
+    }
+
+    #[test]
+    fn multi_provider_register_overwrites_same_key() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"cap".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "prov".into(),
+            provider_instance_id: "inst".into(),
+            signature: None,
+        };
+        multi.register(&desc, Box::new(DummyProvider::new()));
+        multi.register(&desc, Box::new(DummyProvider::new()));
+        // Same key -> overwrites, so length stays 1
+        assert_eq!(multi.len(), 1);
+    }
+
+    #[test]
+    fn multi_provider_register_multiple_different_keys() {
+        let mut multi = MultiCapabilityProvider::new();
+
+        let desc1 = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"cap1".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "p1".into(),
+            provider_instance_id: "i1".into(),
+            signature: None,
+        };
+        let desc2 = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"cap2".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![2],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "p2".into(),
+            provider_instance_id: "i2".into(),
+            signature: None,
+        };
+
+        multi.register(&desc1, Box::new(DummyProvider::new()));
+        multi.register(&desc2, Box::new(DummyProvider::new()));
+        assert_eq!(multi.len(), 2);
+    }
+
+    #[test]
+    fn multi_provider_open_session_first_provider_accepts() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"session-test".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "accepting".into(),
+            provider_instance_id: "acc-1".into(),
+            signature: None,
+        };
+        let mut accepting = DummyProvider::new();
+        accepting.accept_sessions = true;
+        multi.register(&desc, Box::new(accepting));
+
+        let open = CapabilitySessionOpen {
+            version: 1,
+            session_id: vec![1, 2, 3],
+            selector: None,
+            mode: 0,
+            requested_operations: vec![],
+            requested_access_class: 0,
+            requested_constraints: vec![],
+            correlation_id: vec![],
+        };
+        let result = multi.open_session(&open);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn multi_provider_open_session_all_reject_returns_error() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"reject-test".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "rejecting".into(),
+            provider_instance_id: "rej-1".into(),
+            signature: None,
+        };
+        multi.register(&desc, Box::new(DummyProvider::new()));
+
+        let open = CapabilitySessionOpen {
+            version: 1,
+            session_id: vec![1],
+            selector: None,
+            mode: 0,
+            requested_operations: vec![],
+            requested_access_class: 0,
+            requested_constraints: vec![],
+            correlation_id: vec![],
+        };
+        let result = multi.open_session(&open);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn multi_provider_open_session_empty_returns_unsupported() {
+        let mut multi = MultiCapabilityProvider::new();
+        let open = CapabilitySessionOpen {
+            version: 1,
+            session_id: vec![],
+            selector: None,
+            mode: 0,
+            requested_operations: vec![],
+            requested_access_class: 0,
+            requested_constraints: vec![],
+            correlation_id: vec![],
+        };
+        let result = multi.open_session(&open);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CapabilityError::Unsupported(msg) => {
+                assert!(msg.contains("no capability providers registered"));
+            }
+            _ => panic!("expected Unsupported error"),
+        }
+    }
+
+    #[test]
+    fn multi_provider_invoke_first_provider_succeeds() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"invoke-test".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "invoker".into(),
+            provider_instance_id: "inv-1".into(),
+            signature: None,
+        };
+        let mut invoker = DummyProvider::new();
+        invoker.allow_invokes = true;
+        multi.register(&desc, Box::new(invoker));
+
+        let invocation = edgerun_capabilities::CapabilityInvocation {
+            invocation_version: 1,
+            invocation_id: vec![1],
+            grant_id: vec![],
+            invoker: None,
+            operation: 0,
+            requested_access_class: 0,
+            parameter_object: None,
+            correlation_id: vec![],
+            invoked_at: None,
+            signature: None,
+        };
+        let result = multi.invoke(b"session-1", &invocation, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn multi_provider_invoke_permission_denied_continues() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"perm-test".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "denier".into(),
+            provider_instance_id: "den-1".into(),
+            signature: None,
+        };
+        multi.register(&desc, Box::new(DummyProvider::new()));
+
+        let invocation = edgerun_capabilities::CapabilityInvocation {
+            invocation_version: 1,
+            invocation_id: vec![1],
+            grant_id: vec![],
+            invoker: None,
+            operation: 0,
+            requested_access_class: 0,
+            parameter_object: None,
+            correlation_id: vec![],
+            invoked_at: None,
+            signature: None,
+        };
+        let result = multi.invoke(b"session-1", &invocation, None);
+        // DummyProvider returns PermissionDenied by default
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn multi_provider_close_session_calls_all() {
+        let mut multi = MultiCapabilityProvider::new();
+        let desc = CapabilityDescriptor {
+            descriptor_version: 1,
+            capability_id: b"close-test".to_vec(),
+            provider_identity: None,
+            provider_node: None,
+            role: 0,
+            modalities: vec![1],
+            event_kinds: vec![],
+            operations: vec![],
+            default_constraints: vec![],
+            provider_name: "closer".into(),
+            provider_instance_id: "close-1".into(),
+            signature: None,
+        };
+        multi.register(&desc, Box::new(DummyProvider::new()));
+
+        let close = CapabilitySessionClose {
+            version: 1,
+            session_id: vec![1, 2, 3],
+            reason: String::new(),
+        };
+        let result = multi.close_session(&close);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn multi_provider_close_empty_sessions() {
+        let mut multi = MultiCapabilityProvider::new();
+        let close = CapabilitySessionClose {
+            version: 1,
+            session_id: vec![],
+            reason: String::new(),
+        };
+        let result = multi.close_session(&close);
+        assert!(result.is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // Build multi-provider
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_multi_provider_returns_multi() {
+        let multi = build_multi_provider(&[0u8; 32]);
+        // Without hardware, no capabilities are discovered, but the multi is valid
+        // (hardware discovery silently fails in test environments)
+        let _ = multi;
+    }
+
+    // -----------------------------------------------------------------------
+    // Dummy provider for testing
+    // -----------------------------------------------------------------------
+
+    struct DummyProvider {
+        accept_sessions: bool,
+        allow_invokes: bool,
+    }
+
+    impl DummyProvider {
+        fn new() -> Self {
+            Self {
+                accept_sessions: false,
+                allow_invokes: false,
+            }
+        }
+    }
+
+    impl RemoteCapabilityProvider for DummyProvider {
+        fn descriptor(&self) -> CapabilityDescriptor {
+            CapabilityDescriptor {
+                descriptor_version: 1,
+                capability_id: b"dummy".to_vec(),
+                provider_identity: None,
+                provider_node: None,
+                role: 0,
+                modalities: vec![0],
+                event_kinds: vec![],
+                operations: vec![],
+                default_constraints: vec![],
+                provider_name: "dummy".into(),
+                provider_instance_id: "dummy-1".into(),
+                signature: None,
+            }
+        }
+
+        fn open_session(
+            &mut self,
+            _open: &CapabilitySessionOpen,
+        ) -> Result<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept, CapabilityError> {
+            if self.accept_sessions {
+                Ok(edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
+                    version: 1,
+                    session_id: vec![1, 2, 3],
+                    accepted: true,
+                    granted_operations: vec![],
+                    granted_access_class: 0,
+                    error_reason: String::new(),
+                    grant_id: vec![],
+                })
+            } else {
+                Err(CapabilityError::Unsupported("not accepting"))
+            }
+        }
+
+        fn invoke(
+            &mut self,
+            _session_id: &[u8],
+            _invocation: &edgerun_capabilities::CapabilityInvocation,
+            _inline_parameters: Option<&[u8]>,
+        ) -> Result<edgerun_remote_capability::RemoteInvocationResult, CapabilityError> {
+            if self.allow_invokes {
+                Ok(edgerun_remote_capability::RemoteInvocationResult {
+                    result: edgerun_proto::edgerun::v0::capability::CapabilityResult {
+                        result_version: 1,
+                        invocation_id: vec![],
+                        grant_id: vec![],
+                        success: true,
+                        result_access_class: 0,
+                        produced_event_kinds: vec![],
+                        payload_object: None,
+                        error_reason: String::new(),
+                        produced_at: None,
+                        signature: None,
+                    },
+                    inline_payload: vec![],
+                })
+            } else {
+                Err(CapabilityError::PermissionDenied("no access"))
+            }
+        }
+
+        fn close_session(
+            &mut self,
+            _close: &CapabilitySessionClose,
+        ) -> Result<(), CapabilityError> {
+            Ok(())
+        }
+    }
+}

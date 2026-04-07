@@ -3,10 +3,10 @@ managed:
   enabled: true
   override:
     - file_option: go_package_prefix
-      value: lifegraph-reference-core/gen
+      value: edgerun-reference-core/gen
 plugins:
   - local: protoc-gen-prost
-    out: rust/crates/lifegraph-proto/src/gen
+    out: rust/crates/edgerun-proto/src/gen
     opt:
       - paths=source_relative
       - enable_type_names

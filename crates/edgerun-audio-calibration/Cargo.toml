@@ -1,0 +1,13 @@
+[package]
+name = "edgerun-audio-calibration"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+version.workspace = true
+
+[dependencies]
+edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }
+edgerun-alsa-speaker = { path = "../edgerun-alsa-speaker" }
+edgerun-microphone = { path = "../edgerun-microphone" }
+edgerun-speaker = { path = "../edgerun-speaker" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }

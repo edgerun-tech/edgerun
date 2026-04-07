@@ -1,0 +1,23 @@
+[package]
+name = "edgerun-remote-capability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-capability-policy = { path = "../edgerun-capability-policy" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
+edgerun-biometrics = { path = "../edgerun-biometrics" }
+edgerun-bluetooth = { path = "../edgerun-bluetooth" }
+edgerun-input = { path = "../edgerun-input" }
+edgerun-microphone = { path = "../edgerun-microphone" }
+edgerun-speaker = { path = "../edgerun-speaker" }
+edgerun-wifi = { path = "../edgerun-wifi" }
+edgerun-proto = { path = "../edgerun-proto" }
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+prost.workspace = true
+p256.workspace = true
+
+edgerun-core = { path = "../edgerun-core" }

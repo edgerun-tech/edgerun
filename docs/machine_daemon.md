@@ -11,7 +11,7 @@ Run the Rust machine daemon as the bootstrap layer that can:
 
 ## Current Rust implementation
 
-A first Rust scaffold now exists in `rust/crates/lifegraph-machine-daemon`.
+A first Rust scaffold now exists in `rust/crates/edgerun-machine-daemon`.
 
 It currently provides:
 

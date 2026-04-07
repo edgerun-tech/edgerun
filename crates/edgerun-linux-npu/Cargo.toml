@@ -1,0 +1,10 @@
+[package]
+name = "edgerun-linux-npu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+edgerun-npu = { path = "../edgerun-npu" }

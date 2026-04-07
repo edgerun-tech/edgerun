@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-mesh-capability"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-mesh = { path = "../edgerun-mesh" }
+edgerun-mesh-link = { path = "../edgerun-mesh-link" }
+edgerun-mesh-router = { path = "../edgerun-mesh-router" }
+edgerun-remote-capability = { path = "../edgerun-remote-capability" }
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-proto = { path = "../edgerun-proto" }
+prost.workspace = true

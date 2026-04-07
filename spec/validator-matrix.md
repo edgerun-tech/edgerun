@@ -1,4 +1,4 @@
-# Lifegraph v0 Validator Matrix
+# edgerun v0 Validator Matrix
 
 This matrix maps each validator or routine to:
 

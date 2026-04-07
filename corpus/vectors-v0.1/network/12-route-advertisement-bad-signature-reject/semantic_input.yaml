@@ -5,7 +5,7 @@ route_advertisement:
   expires_at: '2030-01-01T01:00:00Z'
   reachability: []
   record_hash_hex: '0x0202020202020202020202020202020202020202020202020202020202020202'
-  sig_domain_tag: lifegraph:v0:route-advertisement-signature
+  sig_domain_tag: edgerun:v0:route-advertisement-signature
   signature_fixture: user_alice
   signature:
     algorithm: ed25519

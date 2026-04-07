@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+package edgerun.v0.access;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "edgerun/v0/common.proto";
+import "edgerun/v0/trust.proto";
+
+enum SnapshotCompleteness {
+  SNAPSHOT_COMPLETENESS_UNSPECIFIED = 0;
+  SNAPSHOT_COMPLETENESS_FULL = 1;
+  SNAPSHOT_COMPLETENESS_PARTIAL = 2;
+  SNAPSHOT_COMPLETENESS_BOUNDED = 3;
+}
+
+enum QueryClass {
+  QUERY_CLASS_UNSPECIFIED = 0;
+  QUERY_CLASS_HEAD = 1;
+  QUERY_CLASS_SNAPSHOT = 2;
+  QUERY_CLASS_EVENT_RANGE = 3;
+  QUERY_CLASS_OBJECT_EXISTENCE = 4;
+  QUERY_CLASS_OBJECT_FETCH = 5;
+  QUERY_CLASS_VIEW = 6;
+  QUERY_CLASS_SEARCH = 7;
+  QUERY_CLASS_TRUST_STATE = 8;
+}
+
+enum ProofClass {
+  PROOF_CLASS_UNSPECIFIED = 0;
+  PROOF_CLASS_SIGNATURE = 1;
+  PROOF_CLASS_STREAM_HEAD = 2;
+  PROOF_CLASS_EVENT_REF = 3;
+  PROOF_CLASS_OBJECT_REF = 4;
+  PROOF_CLASS_SNAPSHOT_BASE = 5;
+}
+
+enum ResultCompleteness {
+  RESULT_COMPLETENESS_UNSPECIFIED = 0;
+  RESULT_COMPLETENESS_COMPLETE_FOR_LOCAL_KNOWLEDGE = 1;
+  RESULT_COMPLETENESS_PARTIAL = 2;
+  RESULT_COMPLETENESS_DENIED = 3;
+  RESULT_COMPLETENESS_METADATA_ONLY = 4;
+}
+
+enum ProofPayloadType {
+  PROOF_PAYLOAD_TYPE_UNSPECIFIED = 0;
+  PROOF_PAYLOAD_TYPE_STREAM_HEADS = 1;
+  PROOF_PAYLOAD_TYPE_SNAPSHOT_SET = 2;
+  PROOF_PAYLOAD_TYPE_EVENT_SET = 3;
+  PROOF_PAYLOAD_TYPE_OBJECT_ASSERTION = 4;
+  PROOF_PAYLOAD_TYPE_RESULT_FRAGMENT = 5;
+  PROOF_PAYLOAD_TYPE_AGGREGATE_SUMMARY = 6;
+  PROOF_PAYLOAD_TYPE_TRUST_POLICY = 7;
+}
+
+message CostLimit {
+  optional uint64 max_results = 1;
+  optional uint64 max_total_bytes = 2;
+  google.protobuf.Duration max_wall_time = 3;
+  optional uint32 max_federated_responders = 4;
+}
+
+message SnapshotDescriptor {
+  uint32 descriptor_version = 1;
+  bytes snapshot_id = 2;
+  string view_type = 3;
+  uint32 view_version = 4;
+  edgerun.v0.common.IdentityRef producer = 5;
+  google.protobuf.Timestamp produced_at = 6;
+  repeated edgerun.v0.common.HeadRef base_heads = 7;
+  repeated edgerun.v0.common.CheckpointRef base_checkpoints = 8;
+  edgerun.v0.trust.ScopeDescriptor scope = 9;
+  SnapshotCompleteness completeness = 10;
+  edgerun.v0.common.ObjectRef payload_object = 11;
+  edgerun.v0.common.SnapshotRef supersedes = 12;
+  edgerun.v0.common.ObjectRef snapshot_metadata = 13;
+  edgerun.v0.common.Signature signature = 14;
+}
+
+message QueryRequest {
+  uint32 request_version = 1;
+  bytes query_id = 2;
+  edgerun.v0.common.IdentityRef requester = 3;
+  edgerun.v0.trust.ScopeDescriptor target_scope = 4;
+  QueryClass query_class = 5;
+  edgerun.v0.common.TimeWindow time_window = 6;
+  edgerun.v0.common.CheckpointRef checkpoint_base = 7;
+  optional uint64 result_limit = 8;
+  CostLimit cost_limit = 9;
+  repeated ProofClass required_proof_classes = 10;
+  edgerun.v0.common.ObjectRef query_payload_object = 11;
+  edgerun.v0.common.Signature signature = 12;
+}
+
+message QueryResultFragment {
+  uint32 fragment_version = 1;
+  bytes query_id = 2;
+  edgerun.v0.common.IdentityRef responder = 3;
+  google.protobuf.Timestamp answered_at = 4;
+  ResultCompleteness completeness = 5;
+  repeated edgerun.v0.common.SnapshotRef snapshot_refs = 6;
+  repeated edgerun.v0.common.EventRef event_refs = 7;
+  repeated edgerun.v0.common.ObjectRef object_refs = 8;
+  repeated edgerun.v0.common.ObjectRef proof_objects = 9;
+  string omission_reason = 10;
+  edgerun.v0.common.ObjectRef bundled_result_object = 11;
+  edgerun.v0.common.ObjectRef result_metadata = 12;
+  edgerun.v0.common.Signature signature = 13;
+}
+
+message FederatedAggregateDescriptor {
+  uint32 descriptor_version = 1;
+  bytes aggregate_id = 2;
+  bytes source_query_id = 3;
+  edgerun.v0.common.IdentityRef aggregator = 4;
+  google.protobuf.Timestamp aggregated_at = 5;
+  repeated edgerun.v0.common.ObjectRef input_fragments = 6;
+  edgerun.v0.common.ObjectRef aggregation_policy_object = 7;
+  edgerun.v0.common.ObjectRef payload_object = 8;
+  edgerun.v0.common.Signature signature = 9;
+}
+
+message StreamHeadsProof {
+  bytes source_query_id = 1;
+  repeated edgerun.v0.common.HeadRef heads = 2;
+}
+
+message SnapshotSetProof {
+  bytes source_query_id = 1;
+  repeated edgerun.v0.common.SnapshotRef snapshots = 2;
+}
+
+message EventSetProof {
+  bytes source_query_id = 1;
+  repeated edgerun.v0.common.EventRef events = 2;
+  repeated edgerun.v0.common.ObjectRef related_objects = 3;
+}
+
+message ObjectAssertionProof {
+  bytes source_query_id = 1;
+  edgerun.v0.common.ObjectRef object_ref = 2;
+  bool exists = 3;
+  edgerun.v0.common.ObjectRef bundled_result_object = 4;
+}
+
+message ResultFragmentProof {
+  edgerun.v0.access.QueryResultFragment fragment = 1;
+}
+
+message AggregateSummaryProof {
+  bytes source_query_id = 1;
+  repeated edgerun.v0.common.IdentityRef included_responders = 2;
+  repeated edgerun.v0.common.IdentityRef excluded_responders = 3;
+  uint64 total_trust_score = 4;
+  edgerun.v0.common.ObjectRef trust_policy_object = 5;
+}
+
+message TrustPolicyProof {
+  bytes source_query_id = 1;
+  edgerun.v0.common.ObjectRef policy_object = 2;
+  edgerun.v0.common.ObjectRef assignments_object = 3;
+}
+
+message ProofBundle {
+  uint32 bundle_version = 1;
+  ProofPayloadType payload_type = 2;
+  bytes source_query_id = 3;
+  edgerun.v0.common.ObjectRef payload_object = 4;
+  repeated edgerun.v0.common.ObjectRef supporting_objects = 5;
+  edgerun.v0.common.Signature signature = 6;
+}

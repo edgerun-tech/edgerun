@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-capabilities"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-proto = { path = "../edgerun-proto" }

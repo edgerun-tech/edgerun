@@ -5,7 +5,7 @@ session_hello:
   supported_protocol_versions:
   - 1
   record_hash_hex: '0x0303030303030303030303030303030303030303030303030303030303030303'
-  sig_domain_tag: lifegraph:v0:session-hello-signature
+  sig_domain_tag: edgerun:v0:session-hello-signature
   signature_fixture: user_alice
   signature:
     algorithm: ed25519

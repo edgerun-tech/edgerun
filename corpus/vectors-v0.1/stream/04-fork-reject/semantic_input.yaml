@@ -11,8 +11,8 @@ candidate_event:
     hash_hex: '0x6a51b42243ae3bfd60f335756da6f9fcff5331ba230997256bb8e08d49b74780'
   recorded_at: '2030-01-01T00:05:00Z'
   signature_fixture: node_server
-  record_domain_tag: lifegraph:v0:event-envelope
-  sig_domain_tag: lifegraph:v0:event-signature
+  record_domain_tag: edgerun:v0:event-envelope
+  sig_domain_tag: edgerun:v0:event-signature
   signature:
     algorithm: ed25519
     value: '0x0669b98d0de1ba08e1b258a016fe749864476db9c2edffdf01e3b3427a2a6dfefd8b8fe7428b5b4df55697d5c146cd4c662997f1f3cf1f85644c6d1a3686a708'

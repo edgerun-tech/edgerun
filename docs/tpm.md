@@ -2,7 +2,7 @@
 
 ## Inspect TPM capabilities
 
-Use the `lifegraph-tpm` crate's tooling or `tpm2-tools` directly:
+Use the `edgerun-tpm` crate's tooling or `tpm2-tools` directly:
 
 ```bash
 tpm2_getcap properties-fixed
@@ -33,11 +33,11 @@ Create and persist an RSA-2048 key:
 The script writes:
 - `public.pem`
 - `metadata.env`
-- `lifegraphd.env`
-- `run-lifegraphd.sh`
+- `edgerund.env`
+- `run-edgerund.sh`
 - transient context artifacts for inspection/reprovisioning
 
-`metadata.env` contains raw key settings. `lifegraphd.env` is shell-ready, and `run-lifegraphd.sh` launches the daemon with the matching flags in one command.
+`metadata.env` contains raw key settings. `edgerund.env` is shell-ready, and `run-edgerund.sh` launches the daemon with the matching flags in one command.
 
 ## Provision an auth-protected TPM key
 
@@ -57,13 +57,13 @@ Then run the daemon with the same authorization material:
 source ./var/tpm-node-server-auth/metadata.env
 
 cd rust
-cargo run --release -p lifegraph-node --bin lifegraphd -- \
+cargo run --release -p edgerun-node --bin edgerund -- \
   --fixture node_server \
-  --data-dir ../var/lifegraph \
-  --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM" \
-  --tpm-key-auth "$LIFEGRAPHD_TPM_KEY_AUTH"
+  --data-dir ../var/edgerun \
+  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
+  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
+  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM" \
+  --tpm-key-auth "$edgerunD_TPM_KEY_AUTH"
 ```
 
 ## Provision a PCR-policy TPM key
@@ -94,18 +94,18 @@ Before starting the daemon, open a live policy session that satisfies the same P
   --session ./var/tpm-policy/signing.session
 ```
 
-Then point `lifegraphd` at that session using the normal auth flag:
+Then point `edgerund` at that session using the normal auth flag:
 
 ```bash
 source ./var/tpm-node-server-policy/metadata.env
 
 cd rust
-cargo run --release -p lifegraph-node --bin lifegraphd -- \
+cargo run --release -p edgerun-node --bin edgerund -- \
   --fixture node_server \
-  --data-dir ../var/lifegraph \
-  --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM" \
+  --data-dir ../var/edgerun \
+  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
+  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
+  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM" \
   --tpm-key-auth session:../var/tpm-policy/signing.session
 ```
 
@@ -115,7 +115,7 @@ When finished, flush the live session:
 tpm2_flushcontext ./var/tpm-policy/signing.session
 ```
 
-## Run lifegraphd with direct TPM signing
+## Run edgerund with direct TPM signing
 
 ECDSA P-256 example:
 
@@ -123,12 +123,12 @@ ECDSA P-256 example:
 source ./var/tpm-node-server/metadata.env
 
 cd rust
-cargo run --release -p lifegraph-node --bin lifegraphd -- \
+cargo run --release -p edgerun-node --bin edgerund -- \
   --fixture node_server \
-  --data-dir ../var/lifegraph \
-  --tpm-key-context "$LIFEGRAPHD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$LIFEGRAPHD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$LIFEGRAPHD_SIGNATURE_ALGORITHM"
+  --data-dir ../var/edgerun \
+  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
+  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
+  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM"
 ```
 
 The legacy TPM seed-loading mode has been removed. Use direct TPM signing with `--tpm-key-context`, `--tpm-public-key`, and `--signature-algorithm` instead.
@@ -145,12 +145,12 @@ The legacy TPM seed-loading mode has been removed. Use direct TPM signing with `
 
 - Direct TPM signing uses `tpm2_sign` with a TPM key context or persistent handle and exported PEM public key.
 - `--tpm-key-auth` accepts normal TPM auth strings, including `file:` and `session:` formats supported by `tpm2-tools`.
-- Verification happens in the Lifegraph runtime using the selected wire signature algorithm.
+- Verification happens in the edgerun runtime using the selected wire signature algorithm.
 - ECDSA and RSA are now protocol-valid options, not just local experiments.
 
 ## Daemon startup TPM self-check
 
-When direct TPM signing is enabled, `lifegraphd` refuses to start unless all of these pass before it serves traffic:
+When direct TPM signing is enabled, `edgerund` refuses to start unless all of these pass before it serves traffic:
 
 - the TPM handle/context can be read
 - the TPM public key matches the provided PEM file

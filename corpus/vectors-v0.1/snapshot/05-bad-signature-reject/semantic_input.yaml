@@ -9,7 +9,7 @@ snapshot:
     seq: 10
     event_hash_hex: '0x1010101010101010101010101010101010101010101010101010101010101010'
   payload_object: snapshot_payload_1
-  sig_domain_tag: lifegraph:v0:snapshot-signature
+  sig_domain_tag: edgerun:v0:snapshot-signature
   signature_fixture: node_server
   signature:
     algorithm: ed25519

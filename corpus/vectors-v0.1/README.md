@@ -1,4 +1,4 @@
-# Lifegraph v0.1 Initial Vector Corpus
+# edgerun v0.1 Initial Vector Corpus
 
 This corpus is the first conformance seed set.
 

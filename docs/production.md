@@ -4,7 +4,7 @@ This repository can now support a **controlled production-style deployment** of 
 
 ## Included hardening baseline
 
-`lifegraphd` (from `lifegraph-node` crate) supports:
+`edgerund` (from `edgerun-node` crate) supports:
 - disk-backed object storage with runtime state persistence
 - graceful shutdown on `SIGINT` / `SIGTERM`
 - object encryption via AES-GCM with persistent blob keys
@@ -14,7 +14,7 @@ This repository can now support a **controlled production-style deployment** of 
 ## Recommended deployment profile
 
 Minimum recommendation for a real deployment:
-1. Run `lifegraphd` with `--data-dir` on durable storage.
+1. Run `edgerund` with `--data-dir` on durable storage.
 2. Restrict network exposure to trusted peers or an internal network segment.
 3. Ship stderr logs into your observability stack.
 4. Back up the data directory, including the SQLite index database and encrypted blob store.
@@ -26,12 +26,12 @@ Operational support in-repo now includes:
 - `Makefile` targets for `check`, `test`, `build`, `release-build`, and `docker-build`
 - `.github/workflows/ci.yml` to continuously run Rust tests and builds
 - `.github/workflows/release.yml` to build tagged multi-arch Linux daemon artifacts for release handoff
-- a multi-stage `Dockerfile` for building a minimal `lifegraphd` container image
+- a multi-stage `Dockerfile` for building a minimal `edgerund` container image
 
 Container build:
 
 ```bash
-docker build -t lifegraph-reference-core:local .
+docker build -t edgerun-reference-core:local .
 make release-build
 ```
 
@@ -39,16 +39,16 @@ Container run example for explicit local testing:
 
 ```bash
 docker run --rm -p 8080:8080 \
-  -v "$PWD/var/lifegraph:/var/lib/lifegraph" \
-  lifegraph-reference-core:local
+  -v "$PWD/var/edgerun:/var/lib/edgerun" \
+  edgerun-reference-core:local
 ```
 
 ## Example systemd-style command
 
 ```bash
-exec ./lifegraphd \
-  --data-dir /var/lib/lifegraph \
-  --config /etc/lifegraph/node.yaml
+exec ./edgerund \
+  --data-dir /var/lib/edgerun \
+  --config /etc/edgerun/node.yaml
 ```
 
 ## Still not "done forever"

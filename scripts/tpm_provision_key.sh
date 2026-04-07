@@ -15,8 +15,8 @@ Outputs:
   <out-dir>/key.ctx
   <out-dir>/public.pem
   <out-dir>/metadata.env
-  <out-dir>/lifegraphd.env
-  <out-dir>/run-lifegraphd.sh
+  <out-dir>/edgerund.env
+  <out-dir>/run-edgerund.sh
 USAGE
 }
 
@@ -53,8 +53,8 @@ priv="$out_dir/key.priv"
 ctx="$out_dir/key.ctx"
 pem="$out_dir/public.pem"
 meta="$out_dir/metadata.env"
-daemon_env="$out_dir/lifegraphd.env"
-run_helper="$out_dir/run-lifegraphd.sh"
+daemon_env="$out_dir/edgerund.env"
+run_helper="$out_dir/run-edgerund.sh"
 
 case "$type" in
   ecc-p256)
@@ -89,28 +89,28 @@ tpm2_evictcontrol -Q -C "$hierarchy" -c "$ctx" "$handle"
 tpm2_readpublic -Q -c "$handle" -f pem -o "$pem"
 
 cat > "$meta" <<META
-LIFEGRAPHD_TPM_KEY_CONTEXT=$handle
-LIFEGRAPHD_TPM_PUBLIC_KEY=$pem
-LIFEGRAPHD_SIGNATURE_ALGORITHM=$sig_alg
+edgerunD_TPM_KEY_CONTEXT=$handle
+edgerunD_TPM_PUBLIC_KEY=$pem
+edgerunD_SIGNATURE_ALGORITHM=$sig_alg
 META
 if [[ -n "$auth" ]]; then
-  printf 'LIFEGRAPHD_TPM_KEY_AUTH=%s\n' "$auth" >> "$meta"
+  printf 'edgerunD_TPM_KEY_AUTH=%s\n' "$auth" >> "$meta"
 fi
 if [[ -n "$policy_file" ]]; then
-  printf 'LIFEGRAPHD_TPM_POLICY=%s\n' "$policy_file" >> "$meta"
+  printf 'edgerunD_TPM_POLICY=%s\n' "$policy_file" >> "$meta"
 fi
 
 cat > "$daemon_env" <<META
-export LIFEGRAPHD_TPM_KEY_CONTEXT=$handle
-export LIFEGRAPHD_TPM_PUBLIC_KEY=$pem
-export LIFEGRAPHD_SIGNATURE_ALGORITHM=$sig_alg
-export LIFEGRAPHD_FIXTURE=$(printf '%q' "$fixture")
+export edgerunD_TPM_KEY_CONTEXT=$handle
+export edgerunD_TPM_PUBLIC_KEY=$pem
+export edgerunD_SIGNATURE_ALGORITHM=$sig_alg
+export edgerunD_FIXTURE=$(printf '%q' "$fixture")
 META
 if [[ -n "$auth" ]]; then
-  printf 'export LIFEGRAPHD_TPM_KEY_AUTH=%q\n' "$auth" >> "$daemon_env"
+  printf 'export edgerunD_TPM_KEY_AUTH=%q\n' "$auth" >> "$daemon_env"
 fi
 if [[ -n "$policy_file" ]]; then
-  printf 'export LIFEGRAPHD_TPM_POLICY=%q\n' "$policy_file" >> "$daemon_env"
+  printf 'export edgerunD_TPM_POLICY=%q\n' "$policy_file" >> "$daemon_env"
 fi
 
 cat > "$run_helper" <<META
@@ -119,13 +119,13 @@ set -euo pipefail
 script_dir="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 cd $(printf '%q' "$repo_root")/rust
 source "\$script_dir/$(basename "$daemon_env")"
-args=(cargo run --release -p lifegraph-node --bin lifegraphd --
-  --fixture "\${LIFEGRAPHD_FIXTURE:-$fixture}"
-  --tpm-key-context "\${LIFEGRAPHD_TPM_KEY_CONTEXT}"
-  --tpm-public-key "\${LIFEGRAPHD_TPM_PUBLIC_KEY}"
-  --signature-algorithm "\${LIFEGRAPHD_SIGNATURE_ALGORITHM}")
-if [[ -n "\${LIFEGRAPHD_TPM_KEY_AUTH:-}" ]]; then
-  args+=(--tpm-key-auth "\${LIFEGRAPHD_TPM_KEY_AUTH}")
+args=(cargo run --release -p edgerun-node --bin edgerund --
+  --fixture "\${edgerunD_FIXTURE:-$fixture}"
+  --tpm-key-context "\${edgerunD_TPM_KEY_CONTEXT}"
+  --tpm-public-key "\${edgerunD_TPM_PUBLIC_KEY}"
+  --signature-algorithm "\${edgerunD_SIGNATURE_ALGORITHM}")
+if [[ -n "\${edgerunD_TPM_KEY_AUTH:-}" ]]; then
+  args+=(--tpm-key-auth "\${edgerunD_TPM_KEY_AUTH}")
 fi
 exec "\${args[@]}" "\$@"
 META

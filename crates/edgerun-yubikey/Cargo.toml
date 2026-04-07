@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-yubikey"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-core = { path = "../edgerun-core" }

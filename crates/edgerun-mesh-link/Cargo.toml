@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-mesh-link"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-mesh = { path = "../edgerun-mesh" }
+edgerun-mesh-router = { path = "../edgerun-mesh-router" }
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-network-interface = { path = "../edgerun-network-interface" }
+libc.workspace = true
+
+[dev-dependencies]
+edgerun-core = { path = "../edgerun-core" }
+edgerun-mesh = { path = "../edgerun-mesh" }
+p256.workspace = true

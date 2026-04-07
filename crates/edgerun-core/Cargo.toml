@@ -1,0 +1,13 @@
+[package]
+name = "edgerun-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-proto = { path = "../edgerun-proto" }
+p256.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+rand_core.workspace = true

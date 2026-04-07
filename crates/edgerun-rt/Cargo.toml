@@ -1,0 +1,10 @@
+[package]
+name = "edgerun-rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Minimal epoll-based async runtime for edgerun"
+
+[dependencies]
+libc = { path = "../libc" }
