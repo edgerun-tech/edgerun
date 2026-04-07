@@ -89,10 +89,7 @@ rcgen = { version = "0.13", default-features = false, features = ["pem", "ring"]
 ring = "0.17"
 rusqlite = "=0.37.0"
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"] }
-rustls-pemfile = "2"
 sha2 = "=0.10.9"
-tokio = { version = "=1.50.0", features = ["macros", "rt-multi-thread", "signal", "time", "net", "io-util", "sync"] }
-tokio-rustls = "0.26"
 unicode-normalization = "=0.1.25"
 x509-parser = "0.16"
 
