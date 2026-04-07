@@ -4,6 +4,9 @@ members = [
   # Protocol / core
   "crates/lifegraph-core",
   "crates/lifegraph-proto",
+  "crates/lifegraph-cpufeatures",
+  "crates/lifegraph-const-oid",
+  "crates/lifegraph-rand_core",
   "crates/lifegraph-base16ct",
   "crates/lifegraph-cfg-if",
   "crates/lifegraph-zeroize",
@@ -104,3 +107,7 @@ subtle = { path = "crates/lifegraph-subtle" }
 zeroize = { path = "crates/lifegraph-zeroize" }
 cfg-if = { path = "crates/lifegraph-cfg-if" }
 base16ct = { path = "crates/lifegraph-base16ct" }
+
+rand_core = { path = "crates/lifegraph-rand_core" }
+const-oid = { path = "crates/lifegraph-const-oid" }
+cpufeatures = { path = "crates/lifegraph-cpufeatures" }
