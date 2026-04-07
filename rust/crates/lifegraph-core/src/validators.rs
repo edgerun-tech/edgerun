@@ -174,7 +174,7 @@ fn nonce_bytes(value: &Value) -> Option<Vec<u8>> {
 
 fn validate_reachability_hint_map(
     hint: &BTreeMap<String, Value>,
-    now: Option<time::OffsetDateTime>,
+    now: Option<crate::util::DateTimeUtc>,
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> Result<(), ReasonCode> {
@@ -441,8 +441,8 @@ pub fn validate_trust_case(
             .and_then(Value::as_i64)
         {
             if let Some(issued) = claim.get("issued_at").and_then(Value::as_str) {
-                let age = now - parse_rfc3339(issued).unwrap();
-                if age.whole_seconds() > max_age {
+                let age_secs = now.duration_secs(&parse_rfc3339(issued).unwrap()) as i64;
+                if age_secs > max_age {
                     return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
                 }
             }

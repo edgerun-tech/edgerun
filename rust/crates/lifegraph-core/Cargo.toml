@@ -9,7 +9,6 @@ publish.workspace = true
 lifegraph-proto = { path = "../lifegraph-proto" }
 sha2.workspace = true
 p256.workspace = true
-time.workspace = true
 unicode-normalization.workspace = true
 prost.workspace = true
 prost-types.workspace = true

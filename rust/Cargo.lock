@@ -800,7 +800,6 @@ dependencies = [
  "prost",
  "prost-types",
  "sha2",
- "time",
  "unicode-normalization",
 ]
 
