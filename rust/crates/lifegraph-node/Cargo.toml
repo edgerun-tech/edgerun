@@ -38,9 +38,5 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 getrandom.workspace = true
 lifegraph-rt = { path = "../lifegraph-rt" }
-rustls.workspace = true
-rcgen.workspace = true
-ring.workspace = true
-x509-parser.workspace = true
 
 lifegraph-log = { path = "../lifegraph-log" }

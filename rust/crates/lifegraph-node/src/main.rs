@@ -17,10 +17,8 @@
 use lifegraph_log;
 
 mod capabilities;
-mod ingress;
-mod tls;
-mod tls_rt;
 mod command_dispatch;
+mod ingress;
 
 use clap::{Parser, Subcommand};
 use lifegraph_hardware_signing::{MeshSigner, NodeID};
@@ -29,10 +27,10 @@ use lifegraph_mesh_link::MeshLink;
 use lifegraph_mesh_router::MeshRouter;
 use lifegraph_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
 use prost::Message;
-use std::sync::Arc;
-use std::env;
 use p256::ecdsa::SigningKey;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
+use std::env;
+use std::sync::Arc;
 use std::fs;
 use lifegraph_linux_netif::discover_network_interfaces;
 use lifegraph_network_interface::NetworkLinkState;
@@ -66,11 +64,6 @@ enum Commands {
         /// TCP listen address (e.g. 0.0.0.0:8080). If omitted, mesh-only.
         #[arg(long)]
         listen: Option<SocketAddr>,
-        /// TLS certificate file (PEM/DER). The cert's public key must match
-        /// the node's hardware signing key (TPM/YubiKey). Enables TLS on
-        /// the TCP listener when provided.
-        #[arg(long)]
-        tls_cert: Option<PathBuf>,
         /// Health endpoint port. If omitted, no health server.
         #[arg(long)]
         health_port: Option<u16>,
@@ -91,7 +84,7 @@ fn main() {
         Commands::Init { config, name, software } => {
             cmd_init(&config, name, software);
         }
-        Commands::Run { config, listen, tls_cert, health_port, log_level } => {
+        Commands::Run { config, listen, health_port, log_level } => {
             // Initialize structured logging
             env::set_var("RUST_LOG", &log_level);
             lifegraph_log::init_from_env();
@@ -104,7 +97,7 @@ fn main() {
                     std::process::exit(1);
                 });
             rt.block_on(async move {
-                cmd_run(&config, listen, tls_cert, health_port).await;
+                cmd_run(&config, listen, health_port).await;
             });
         }
         Commands::Status { config } => {
@@ -463,7 +456,7 @@ async fn run_peer_reconnection(
     }
 }
 
-async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Option<PathBuf>, health_port: Option<u16>) {
+async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: Option<u16>) {
     if !path.exists() {
         lifegraph_log::error!("config not found at {}. Run `lifegraphd init` first.", path.display());
         std::process::exit(1);
@@ -621,34 +614,12 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, tls_cert: Opti
 
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
-        // Build TLS config if a certificate is provided
-        let tls_acceptor: Option<Arc<tls_rt::TlsAcceptor>> = if let Some(ref cert_path) = tls_cert {
-            // Build TLS config with hardware-backed ephemeral leaf cert issuance
-            match tls::build_tls_server_config(cert_path, Arc::clone(&signer)) {
-                Ok(tls_config) => {
-                    lifegraph_log::info!("TLS enabled with hardware-issued ephemeral leaf certificate");
-                    Some(Arc::new(tls_rt::TlsAcceptor::new(Arc::new(tls_config))))
-                }
-                Err(e) => {
-                    lifegraph_log::error!("failed to build TLS config: {}", e);
-                    std::process::exit(1);
-                }
-            }
-        } else {
-            None
-        };
-
         let _tcp_handle = lifegraph_rt::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
-            tls_acceptor.clone(),
         ));
-        if tls_acceptor.is_some() {
-            lifegraph_log::info!("TCP+TLS listener started");
-        } else {
-            lifegraph_log::info!("TCP listener started (no TLS)");
-        }
+        lifegraph_log::info!("TCP listener started");
     } else {
         lifegraph_log::info!("running mesh-only (no TCP listener)");
     }
@@ -1192,7 +1163,6 @@ async fn run_tcp_listener(
     listen_addr: SocketAddr,
     _node_id: NodeID,
     store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
-    tls_acceptor: Option<Arc<tls_rt::TlsAcceptor>>,
 ) {
     let listener = match lifegraph_rt::TcpListener::bind(&listen_addr).await {
         Ok(l) => l,
@@ -1206,23 +1176,9 @@ async fn run_tcp_listener(
         match listener.accept().await {
             Ok((stream, peer_addr)) => {
                 let conn_store_tx = store_tx.clone();
-                let tls_acceptor = tls_acceptor.clone();
                 lifegraph_rt::spawn(async move {
-                    if let Some(ref acceptor) = tls_acceptor {
-                        // Perform TLS handshake
-                        match acceptor.accept(stream).await {
-                            Ok(tls_stream) => {
-                                lifegraph_log::debug!("TLS connection accepted");
-                                handle_tls_connection(tls_stream, conn_store_tx).await;
-                            }
-                            Err(e) => {
-                                lifegraph_log::debug!("TLS handshake failed");
-                            }
-                        }
-                    } else {
-                        lifegraph_log::debug!("TCP connection accepted");
-                        handle_tcp_connection(stream, conn_store_tx).await;
-                    }
+                    lifegraph_log::debug!("TCP connection accepted");
+                    handle_tcp_connection(stream, conn_store_tx).await;
                 });
             }
             Err(e) => {
@@ -1230,24 +1186,6 @@ async fn run_tcp_listener(
             }
         }
     }
-}
-
-/// Handles a TLS-wrapped connection.
-async fn handle_tls_connection(
-    mut stream: tls_rt::TlsStream,
-    store_tx: lifegraph_rt::mpsc::Sender<StoreRequest>,
-) {
-    let (mut reader, mut writer) = tls_rt::split(&mut stream);
-    let mut read_buf = Vec::with_capacity(4096);
-    let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
-
-    handle_tcp_stream_common(
-        &mut reader,
-        &mut writer,
-        &mut read_buf,
-        &mut conn_rate_limiter,
-        &store_tx,
-    ).await;
 }
 
 /// Handles a plain TCP connection.
@@ -1268,7 +1206,7 @@ async fn handle_tcp_connection(
     ).await;
 }
 
-/// Common frame handling logic for both plain TCP and TLS connections.
+/// Common frame handling logic for TCP connections.
 async fn handle_tcp_stream_common<R, W>(
     reader: &mut R,
     writer: &mut W,
@@ -2068,7 +2006,7 @@ struct SignerConfig {
 }
 
 /// A software signer that is Send + Sync (wraps key in a Mutex).
-/// Used for TLS where the signer must be shared across threads.
+/// A software signer that is Send + Sync.
 struct SyncSoftwareSigner {
     node_id: NodeID,
     key: std::sync::Mutex<SigningKey>,
