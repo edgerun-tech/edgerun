@@ -44,6 +44,24 @@ members = [
   "crates/lifegraph-goodix-fingerprint",
   "crates/lifegraph-biometrics",
   "crates/lifegraph-yubikey",
+  "crates/lifegraph-crypto-common",
+  "crates/lifegraph-block-buffer",
+  "crates/lifegraph-typenum",
+  "crates/lifegraph-generic-array",
+  "crates/lifegraph-signature",
+  "crates/lifegraph-hkdf",
+  "crates/lifegraph-rfc6979",
+  "crates/lifegraph-hmac",
+  "crates/lifegraph-digest",
+  "crates/lifegraph-der",
+  "crates/lifegraph-sec1",
+  "crates/lifegraph-group",
+  "crates/lifegraph-ff",
+  "crates/lifegraph-crypto-bigint",
+  "crates/lifegraph-primeorder",
+  "crates/lifegraph-elliptic-curve",
+  "crates/lifegraph-ecdsa",
+  "crates/lifegraph-p256",
   "crates/lifegraph-tpm",
   "crates/lifegraph-android-keystore",
   "crates/lifegraph-hardware-signing",
@@ -103,11 +121,28 @@ x509-parser = "0.16"
 rand_core = "=0.6.4"
 
 [patch.crates-io]
-subtle = { path = "crates/lifegraph-subtle" }
-zeroize = { path = "crates/lifegraph-zeroize" }
-cfg-if = { path = "crates/lifegraph-cfg-if" }
 base16ct = { path = "crates/lifegraph-base16ct" }
-
-rand_core = { path = "crates/lifegraph-rand_core" }
+block-buffer = { path = "crates/lifegraph-block-buffer" }
+cfg-if = { path = "crates/lifegraph-cfg-if" }
 const-oid = { path = "crates/lifegraph-const-oid" }
 cpufeatures = { path = "crates/lifegraph-cpufeatures" }
+crypto-bigint = { path = "crates/lifegraph-crypto-bigint" }
+crypto-common = { path = "crates/lifegraph-crypto-common" }
+der = { path = "crates/lifegraph-der" }
+digest = { path = "crates/lifegraph-digest" }
+ecdsa = { path = "crates/lifegraph-ecdsa" }
+elliptic-curve = { path = "crates/lifegraph-elliptic-curve" }
+ff = { path = "crates/lifegraph-ff" }
+generic-array = { path = "crates/lifegraph-generic-array" }
+group = { path = "crates/lifegraph-group" }
+hkdf = { path = "crates/lifegraph-hkdf" }
+hmac = { path = "crates/lifegraph-hmac" }
+p256 = { path = "crates/lifegraph-p256" }
+primeorder = { path = "crates/lifegraph-primeorder" }
+rand_core = { path = "crates/lifegraph-rand_core" }
+rfc6979 = { path = "crates/lifegraph-rfc6979" }
+sec1 = { path = "crates/lifegraph-sec1" }
+signature = { path = "crates/lifegraph-signature" }
+subtle = { path = "crates/lifegraph-subtle" }
+typenum = { path = "crates/lifegraph-typenum" }
+zeroize = { path = "crates/lifegraph-zeroize" }
