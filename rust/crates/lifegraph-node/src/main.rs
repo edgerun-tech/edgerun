@@ -94,7 +94,7 @@ fn main() {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
             tracing_subscriber::fmt()
                 .with_env_filter(env_filter)
-                .json()
+                .with_ansi(true)
                 .init();
 
             let rt = tokio::runtime::Builder::new_multi_thread()

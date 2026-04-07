@@ -92,11 +92,11 @@ rustls-pemfile = "2"
 sha2 = "=0.10.9"
 tokio = { version = "=1.50.0", features = ["macros", "rt-multi-thread", "signal", "time", "net", "io-util", "sync"] }
 tokio-rustls = "0.26"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 unicode-normalization = "=0.1.25"
 x509-parser = "0.16"
 
 # Dev-only
 criterion = "0.5"
 rand_core = "=0.6.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["env-filter", "fmt", "ansi"] }
