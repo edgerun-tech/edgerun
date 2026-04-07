@@ -966,7 +966,7 @@ impl NodeStore {
             Err(details) => {
                 eprintln!("lifegraphd: SQLite integrity check failed: {}, rebuilding indexes", details);
                 self.index.clear()
-                    .map_err(|e| StorageError::Sqlite(e))?;
+                    .map_err(|e| StorageError::Sqlite(e.to_string()))?;
                 self.rebuild_indexes()
             }
         }
@@ -976,7 +976,7 @@ impl NodeStore {
     /// Returns the WAL file size after checkpoint, or `None` if no WAL exists.
     pub fn wal_checkpoint(&self) -> Result<Option<u64>, StorageError> {
         self.index.wal_checkpoint()
-            .map_err(|e| StorageError::Sqlite(e))?;
+            .map_err(|e| StorageError::Sqlite(e.to_string()))?;
         self.index.wal_size_bytes()
             .map_err(|e| StorageError::Io(e))
     }

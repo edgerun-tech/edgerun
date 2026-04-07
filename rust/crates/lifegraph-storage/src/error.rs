@@ -1,18 +1,48 @@
 //! Storage errors.
 
+use std::fmt;
+
 /// Unified storage error type.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum StorageError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("SQLite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
-    #[error("encode error: {0}")]
+    Io(std::io::Error),
+    Sqlite(String),
     Encode(String),
-    #[error("decode error: {0}")]
     Decode(String),
-    #[error("encryption error: {0}")]
     Encryption(String),
-    #[error("decryption error: {0}")]
     Decryption(String),
+}
+
+impl fmt::Display for StorageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(e) => write!(f, "I/O error: {e}"),
+            Self::Sqlite(e) => write!(f, "SQLite error: {e}"),
+            Self::Encode(e) => write!(f, "encode error: {e}"),
+            Self::Decode(e) => write!(f, "decode error: {e}"),
+            Self::Encryption(e) => write!(f, "encryption error: {e}"),
+            Self::Decryption(e) => write!(f, "decryption error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for StorageError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for StorageError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+impl From<rusqlite::Error> for StorageError {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Sqlite(e.to_string())
+    }
 }

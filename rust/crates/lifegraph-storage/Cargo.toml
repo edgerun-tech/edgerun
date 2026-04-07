@@ -17,5 +17,4 @@ prost.workspace = true
 prost-types.workspace = true
 hex.workspace = true
 getrandom.workspace = true
-thiserror.workspace = true
 libc.workspace = true
