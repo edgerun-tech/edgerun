@@ -256,7 +256,7 @@ impl HkdfSha256 {
 }
 
 /// HMAC-SHA256 (RFC 2104).
-fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
+pub fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
     let block_size = 64;
     let hash_len = 32;
     // If key > block size, hash it first

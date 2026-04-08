@@ -418,7 +418,39 @@ impl<K: TpmSigningKey> HardwareSigningKey for TpmHardwareKeyAdapter<K> {
     }
 
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, HardwareSigningError> {
-        self.inner.sign_message(message).map_err(Into::into)
+        let sig = self.inner.sign_message(message)?;
+        // For ECDSA, the TPM returns: scheme(2) + hashAlg(2) + r_size(2) + r + s_size(2) + s
+        // The mesh expects just r || s (64 bytes for P-256).
+        // Strip the TPM signature wrapper for ECDSA.
+        let key_info = self.inner.key_info().map_err(HardwareSigningError::from)?;
+        if matches!(key_info.algorithm, TpmSignatureAlgorithm::EcdsaP256Sha256 | TpmSignatureAlgorithm::EcdsaP384Sha384) {
+            if sig.len() < 8 {
+                return Err(HardwareSigningError::Provider(
+                    "TPM ECDSA signature too short".into(),
+                ));
+            }
+            // Skip scheme(2) + hashAlg(2) + r_size(2)
+            let r_start: usize = 6;
+            let r_size: usize = u16::from_be_bytes([sig[4], sig[5]]) as usize;
+            let r_end: usize = r_start + r_size;
+            // Skip s_size(2)
+            let s_start: usize = r_end + 2;
+            let s_size: usize = u16::from_be_bytes([sig[s_start - 2], sig[s_start - 1]]) as usize;
+            let s_end: usize = s_start + s_size;
+            
+            if s_end != sig.len() {
+                return Err(HardwareSigningError::Provider(
+                    "TPM ECDSA signature size mismatch".into(),
+                ));
+            }
+            
+            let mut out = Vec::with_capacity(r_size + s_size);
+            out.extend_from_slice(&sig[r_start..r_end]);
+            out.extend_from_slice(&sig[s_start..s_end]);
+            Ok(out)
+        } else {
+            Ok(sig)
+        }
     }
 }
 

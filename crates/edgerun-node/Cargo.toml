@@ -43,6 +43,8 @@ edgerun-log = { path = "../edgerun-log" }
 
 # Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-tpm = { path = "../edgerun-tpm" }
+edgerun-yubikey = { path = "../edgerun-yubikey" }
 
 # Optional hardware backends (enable with --features hardware)
 edgerun-evdev-input = { path = "../edgerun-evdev-input", optional = true }

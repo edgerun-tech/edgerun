@@ -14,6 +14,28 @@ pub const TPM_CC_START_AUTH_SESSION: u32 = 0x0000_0176;
 pub const TPM_CC_POLICY_COMMAND_CODE: u32 = 0x0000_016C;
 pub const TPM_CC_POLICY_PCR: u32 = 0x0000_017F;
 pub const TPM_CC_POLICY_AUTHORIZE: u32 = 0x0000_016A;
+pub const TPM_CC_CREATE_PRIMARY: u32 = 0x0000_0131;
+pub const TPM_CC_FLUSH_CONTEXT: u32 = 0x0000_0165;
+pub const TPM_CC_STARTUP: u32 = 0x0000_0144;
+pub const TPM_CC_SHUTDOWN: u32 = 0x0000_0145;
+pub const TPM_SU_CLEAR: u16 = 0x0000;
+pub const TPM_SU_STATE: u16 = 0x0001;
+pub const TPM_PERSISTENT_FIRST: u32 = 0x8100_0000;
+pub const TPM_SE_HMAC: u8 = 0x00;
+pub const TPM_ECC_NIST_P256: u16 = 0x0003;
+pub const TPM_ALG_ECDSA: u16 = 0x0018;
+pub const TPM_ALG_SHA256: u16 = 0x000B;
+pub const TPM_ALG_NULL: u16 = 0x0010;
+pub const TPM_ALG_ECC: u16 = 0x0023;
+// TPMA_OBJECT bits (from tpm2-tss tss2_tpm2_types.h)
+pub const TPMA_OBJECT_FIXED_TPM: u32 =             0x0000_0002;
+pub const TPMA_OBJECT_FIXED_PARENT: u32 =          0x0000_0010;
+pub const TPMA_OBJECT_SENSITIVE_DATA_ORIGIN: u32 = 0x0000_0020;
+pub const TPMA_OBJECT_USER_WITH_AUTH: u32 =        0x0000_0040;
+pub const TPMA_OBJECT_NODA: u32 =                  0x0000_0400;
+pub const TPMA_OBJECT_SIGN_ENCRYPT: u32 =          0x0004_0000;
+pub const TPMA_OBJECT_DECRYPT: u32 =               0x0002_0000;
+pub const TPMA_OBJECT_RESTRICTED: u32 =            0x0001_0000;
 pub const TPM_RS_PW: u32 = 0x4000_0009;
 pub const TPM_RH_OWNER: u32 = 0x4000_0001;
 pub const TPM_RH_NULL: u32 = 0x4000_0007;
@@ -648,7 +670,14 @@ pub fn sign_prehashed_with_device<T: TpmTransport>(
     params: &TpmSignCommandParams,
 ) -> Result<TpmParsedSignature, TpmError> {
     match authorization_mode {
-        TpmAuthorizationMode::None => device.sign_raw(params),
+        // For persisted keys with userWithAuth, we need at least an empty password session
+        TpmAuthorizationMode::None => {
+            let empty_auth = TpmPasswordAuthSession {
+                auth_value: Vec::new(),
+                session_attributes: 0,
+            };
+            device.sign_raw_with_password_auth(params, &empty_auth)
+        }
         TpmAuthorizationMode::Password(auth) => device.sign_raw_with_password_auth(params, auth),
         TpmAuthorizationMode::Policy(runner) => runner.sign_authorized(device, params),
     }
@@ -1410,6 +1439,209 @@ fn map_ecc_curve(value: u16) -> TpmEccCurve {
         other => TpmEccCurve::Unknown(other),
     }
 }
+
+// ---------------------------------------------------------------------------
+// CreatePrimary — create an ECDSA P-256 signing key under the owner hierarchy
+// ---------------------------------------------------------------------------
+
+/// Parameters for `CreatePrimary`.
+#[derive(Clone, Debug)]
+pub struct TpmCreatePrimaryParams {
+    pub primary_handle: u32,       // e.g. TPM_RH_OWNER
+    pub auth_value: Vec<u8>,        // optional password (empty = no auth)
+    pub object_attributes: u32,
+    pub ecc_curve: u16,             // TPM_ECC_NIST_P256 = 0x0003
+    pub scheme: u16,                // TPM_ALG_ECDSA = 0x0018
+    pub name_alg: u16,              // TPM_ALG_SHA256 = 0x000B
+}
+
+/// Result of a successful `CreatePrimary`.
+#[derive(Clone, Debug)]
+pub struct TpmCreatePrimaryResult {
+    /// Virtual handle assigned by the TPM resource manager.
+    pub object_handle: u32,
+    /// Actual TPM handle (may differ from virtual handle due to RM mapping).
+    pub tpm_handle: u32,
+    /// The public key (x || y for ECDSA P-256, no 0x04 prefix).
+    pub public_key: Vec<u8>,
+    /// The TPM "name" of the key (algorithm || SHA-256 hash of public area).
+    pub name: Vec<u8>,
+    /// Raw public area bytes for reference.
+    pub public_area_raw: Vec<u8>,
+    /// Creation data (for future sealing/attestation).
+    pub creation_data: Vec<u8>,
+    /// Creation hash.
+    pub creation_hash: Vec<u8>,
+    /// Creation ticket.
+    pub creation_ticket_tag: u16,
+    pub creation_ticket_hierarchy: u32,
+    pub creation_ticket_digest: Vec<u8>,
+}
+
+/// Result of creating and persisting a TPM key.
+#[derive(Clone, Debug)]
+pub struct TpmProvisionedKey {
+    /// Persistent handle where the key was saved (e.g. 0x81000001).
+    pub persistent_handle: u32,
+    /// ECDSA P-256 public key (64 bytes: x || y).
+    pub public_key_bytes: Vec<u8>,
+    /// TPM name of the key.
+    pub name: Vec<u8>,
+}
+
+// ---------------------------------------------------------------------------
+// TPM2_Startup
+// ---------------------------------------------------------------------------
+
+/// Builds a `TPM2_Startup` command.
+pub fn build_startup_command(startup_type: u16) -> Vec<u8> {
+    let mut out = Vec::with_capacity(12);
+    encode_command_header(
+        TpmCommandHeader {
+            tag: TPM_ST_NO_SESSIONS,
+            size: 12,
+            command_code: TPM_CC_STARTUP,
+        },
+        &mut out,
+    );
+    out.extend_from_slice(&startup_type.to_be_bytes());
+    out
+}
+
+impl<T: TpmTransport> TpmDevice<T> {
+    /// Sends a TPM2_Startup command to initialize the TPM.
+    /// 
+    /// This must be called once after system boot before any other TPM commands.
+    /// Use `TPM_SU_CLEAR` for a normal startup, or `TPM_SU_STATE` to restore saved state.
+    pub fn startup(&mut self, startup_type: u16) -> Result<(), TpmError> {
+        let cmd = build_startup_command(startup_type);
+        match self.transmit_command(&cmd) {
+            Ok(_) => Ok(()),
+            Err(TpmError::TpmResponseCode(0x120)) => {
+                // TPM_RC_INITIALIZE - already started, ignore
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Creates a primary ECDSA P-256 signing key and persists it.
+    ///
+    /// Returns the persistent handle and public key bytes.
+    ///
+    /// Uses the TSS2 ESAPI library for key provisioning because the kernel TPM
+    /// resource manager has restrictions on raw session creation and handle
+    /// management that are only properly handled through the TSS2 stack.
+    pub fn create_ecdsa_p256_signing_key(
+        &mut self,
+        persistent_handle: u32,
+    ) -> Result<TpmProvisionedKey, TpmError> {
+        use tss_esapi::{
+            attributes::ObjectAttributesBuilder,
+            handles::PersistentTpmHandle,
+            interface_types::{
+                algorithm::{HashingAlgorithm, PublicAlgorithm},
+                dynamic_handles::Persistent,
+                ecc::EccCurve,
+                resource_handles::{Hierarchy, Provision},
+            },
+            structures::{PublicEccParametersBuilder, EccScheme, EccPoint, HashScheme, PublicBuilder},
+            tcti_ldr::TctiNameConf,
+            Context,
+        };
+
+        // Create TCTI context for /dev/tpmrm0
+        let tcti = TctiNameConf::from_environment_variable()
+            .unwrap_or_else(|_| TctiNameConf::Device(Default::default()));
+
+        let mut context = Context::new(tcti)
+            .map_err(|e| TpmError::Provider(format!("failed to create TPM context: {}", e)))?;
+
+        // Build object attributes
+        let attrs = ObjectAttributesBuilder::new()
+            .with_sign_encrypt(true)
+            .with_fixed_tpm(true)
+            .with_fixed_parent(true)
+            .with_sensitive_data_origin(true)
+            .with_user_with_auth(true)
+            .with_no_da(true)
+            .build()
+            .map_err(|e| TpmError::Provider(format!("failed to build object attributes: {}", e)))?;
+
+        // Build ECC scheme (ECDSA with SHA256)
+        let scheme = EccScheme::EcDsa(HashScheme::new(HashingAlgorithm::Sha256));
+
+        // Build public template using the simpler signing key constructor
+        let ecc_params = PublicEccParametersBuilder::new_unrestricted_signing_key(
+            scheme,
+            EccCurve::NistP256,
+        )
+        .build()
+        .map_err(|e| TpmError::Provider(format!("failed to build ECC parameters: {}", e)))?;
+
+        let public = PublicBuilder::new()
+            .with_public_algorithm(PublicAlgorithm::Ecc)
+            .with_name_hashing_algorithm(HashingAlgorithm::Sha256)
+            .with_object_attributes(attrs)
+            .with_ecc_parameters(ecc_params)
+            .with_ecc_unique_identifier(EccPoint::default())
+            .build()
+            .map_err(|e| TpmError::Provider(format!("failed to build public template: {}", e)))?;
+
+        // Create primary key
+        let result = context
+            .execute_with_nullauth_session(|ctx| {
+                ctx.create_primary(Hierarchy::Owner, public, None, None, None, None)
+            })
+            .map_err(|e| TpmError::Provider(format!("TPM CreatePrimary failed: {}", e)))?;
+
+        // Scan for an available persistent handle using raw TPM reads
+        let mut available_handle = persistent_handle;
+        {
+            let mut check_device = TpmDevice::new(LinuxTpmDevice::new("/dev/tpmrm0"));
+            for h in (0x81000001u32..=0x810000FF).step_by(1) {
+                if check_device.read_public(TpmHandle(h)).is_err() {
+                    available_handle = h;
+                    break;
+                }
+            }
+        }
+
+        // Persist the key to the available handle
+        let persistent_handle_tpm = PersistentTpmHandle::new(available_handle)
+            .map_err(|e| TpmError::Provider(format!("invalid persistent handle: {}", e)))?;
+        let persistent_handle_full = Persistent::Persistent(persistent_handle_tpm);
+
+        context
+            .execute_with_nullauth_session(|ctx| {
+                ctx.evict_control(Provision::Owner, result.key_handle.into(), persistent_handle_full)
+            })
+            .map_err(|e| TpmError::Provider(format!("TPM EvictControl failed: {}", e)))?;
+
+        // Extract public key bytes (x || y)
+        let public_key_bytes = match &result.out_public {
+            tss_esapi::structures::Public::Ecc { unique, .. } => {
+                let x_bytes = unique.x().value();
+                let y_bytes = unique.y().value();
+                let mut bytes = Vec::with_capacity(64);
+                bytes.extend_from_slice(x_bytes);
+                bytes.extend_from_slice(y_bytes);
+                bytes
+            }
+            _ => return Err(TpmError::Protocol("expected ECC public key".into())),
+        };
+
+        Ok(TpmProvisionedKey {
+            persistent_handle,
+            public_key_bytes,
+            name: vec![],
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

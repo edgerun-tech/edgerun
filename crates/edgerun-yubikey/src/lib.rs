@@ -31,13 +31,13 @@ unsafe extern "C" {
         phContext: *mut ScardContextHandle,
     ) -> c_long;
     fn SCardReleaseContext(hContext: ScardContextHandle) -> c_long;
-    fn SCardListReadersA(
+    fn SCardListReaders(
         hContext: ScardContextHandle,
         mszGroups: *const c_char,
         mszReaders: *mut c_char,
         pcchReaders: *mut u32,
     ) -> c_long;
-    fn SCardConnectA(
+    fn SCardConnect(
         hContext: ScardContextHandle,
         szReader: *const c_char,
         dwShareMode: u32,
@@ -285,7 +285,7 @@ impl PcscContext {
     pub fn list_readers(&self) -> Result<Vec<YubiKeyReaderInfo>, YubiKeyError> {
         let mut len = 0u32;
         let rc = unsafe {
-            SCardListReadersA(
+            SCardListReaders(
                 self.handle,
                 core::ptr::null(),
                 core::ptr::null_mut(),
@@ -302,7 +302,7 @@ impl PcscContext {
         }
         let mut buf = vec![0u8; len as usize];
         let rc = unsafe {
-            SCardListReadersA(
+            SCardListReaders(
                 self.handle,
                 core::ptr::null(),
                 buf.as_mut_ptr().cast(),
@@ -327,7 +327,7 @@ impl PcscContext {
         let mut handle = 0usize;
         let mut active_protocol = 0u32;
         let rc = unsafe {
-            SCardConnectA(
+            SCardConnect(
                 self.handle,
                 reader.as_ptr().cast(),
                 SCARD_SHARE_SHARED,

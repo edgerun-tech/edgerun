@@ -7,3 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
+
+[dependencies.tss-esapi]
+version = "7.4"
+default-features = false

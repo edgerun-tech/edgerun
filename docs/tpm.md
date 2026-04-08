@@ -1,158 +1,68 @@
 # TPM workflows
 
-## Inspect TPM capabilities
+## TPM Key Initialization
 
-Use the `edgerun-tpm` crate's tooling or `tpm2-tools` directly:
+The `edgerund init` command initializes TPM keys **natively** using the TSS2 ESAPI library (`tss-esapi` Rust crate) which wraps the system's `libtss2-esys.so`. This is the same code path that `tpm2-tools` uses internally.
 
+When you run:
 ```bash
-tpm2_getcap properties-fixed
-tpm2_getcap properties-variable
-tpm2_getcap algorithms
+edgerund init --config node.yaml
 ```
 
-## Provision a direct-signing TPM key
+The daemon:
+1. Detects TPM availability via `/dev/tpmrm0`
+2. Scans for available persistent handles (0x81000001-0x810000FF)
+3. Creates an ECDSA P-256 signing key using TSS2 ESAPI:
+   - `Esys_CreatePrimary` - Creates the primary ECC key under owner hierarchy with proper attributes
+   - `Esys_EvictControl` - Persists the key to a permanent handle
+4. Derives the NodeID from the public key coordinates
+5. Writes the configuration with the TPM signer type and handle
 
-Create and persist an ECDSA P-256 key:
+**Requires:** `tpm2-tss` system library (provides `libtss2-esys.so`). On Arch/CachyOS: `pacman -S tpm2-tss`.
 
+### NV Space
+
+TPM persistent handles consume NV storage. If you get an "insufficient space for NV allocation" error, evict unused handles:
 ```bash
-./scripts/tpm_provision_key.sh \
-  --type ecc-p256 \
-  --handle 0x81010020 \
-  --out-dir ./var/tpm-node-server
+tpm2_getcap handles-persistent          # List existing handles
+tpm2_evictcontrol -C o -c 0x81000001    # Evict a specific handle
 ```
 
-Create and persist an RSA-2048 key:
+## TPM Protocol Implementation Details
 
-```bash
-./scripts/tpm_provision_key.sh \
-  --type rsa-2048 \
-  --handle 0x81010021 \
-  --out-dir ./var/tpm-node-server-rsa
+### Why TSS2 ESAPI?
+
+The kernel TPM resource manager (`/dev/tpmrm0`) has several restrictions that make raw TPM command construction difficult:
+
+1. **Session creation blocked**: `TPM2_StartAuthSession` is intercepted and rejected by the kernel RM
+2. **Handle virtualization**: The RM maps actual TPM handles to virtual handles, requiring special handling for `EvictControl`
+3. **Response format differences**: The RM modifies response structures (no `parameterSize` field in SESSIONS responses)
+
+The TSS2 ESAPI library handles all these quirks correctly, making it the reliable choice for TPM key provisioning.
+
+### Architecture
+
+```
+edgerund init
+  └─> TpmDevice::create_ecdsa_p256_signing_key()
+       └─> tss-esapi (Rust crate)
+            └─> libtss2-esys.so (system library)
+                 └─> /dev/tpmrm0 (TPM resource manager)
 ```
 
-The script writes:
-- `public.pem`
-- `metadata.env`
-- `edgerund.env`
-- `run-edgerund.sh`
-- transient context artifacts for inspection/reprovisioning
+### Runtime Signing
 
-`metadata.env` contains raw key settings. `edgerund.env` is shell-ready, and `run-edgerund.sh` launches the daemon with the matching flags in one command.
+After initialization, runtime signing operations use the **native** TPM command implementation in `edgerun-tpm` which communicates directly with `/dev/tpmrm0`. This works because:
+- The persistent key handle is already established
+- `TPM2_ReadPublic` and `TPM2_Sign` don't require session creation
+- The RM allows these commands with password auth sessions
 
-## Provision an auth-protected TPM key
+### Key Attributes
 
-Add `--auth` when creating the key:
-
-```bash
-./scripts/tpm_provision_key.sh \
-  --type ecc-p256 \
-  --handle 0x81010022 \
-  --auth 'file:./secrets/node-server.auth' \
-  --out-dir ./var/tpm-node-server-auth
-```
-
-Then run the daemon with the same authorization material:
-
-```bash
-source ./var/tpm-node-server-auth/metadata.env
-
-cd rust
-cargo run --release -p edgerun-node --bin edgerund -- \
-  --fixture node_server \
-  --data-dir ../var/edgerun \
-  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM" \
-  --tpm-key-auth "$edgerunD_TPM_KEY_AUTH"
-```
-
-## Provision a PCR-policy TPM key
-
-Create a reusable PCR policy digest:
-
-```bash
-./scripts/tpm_make_pcr_policy.sh \
-  --pcr-list sha256:7 \
-  --out-dir ./var/tpm-policy
-```
-
-Create a key bound to that policy:
-
-```bash
-./scripts/tpm_provision_key.sh \
-  --type ecc-p256 \
-  --handle 0x81010023 \
-  --policy ./var/tpm-policy/policy.digest \
-  --out-dir ./var/tpm-node-server-policy
-```
-
-Before starting the daemon, open a live policy session that satisfies the same PCR rule:
-
-```bash
-./scripts/tpm_start_pcr_policy_session.sh \
-  --pcr-list sha256:7 \
-  --session ./var/tpm-policy/signing.session
-```
-
-Then point `edgerund` at that session using the normal auth flag:
-
-```bash
-source ./var/tpm-node-server-policy/metadata.env
-
-cd rust
-cargo run --release -p edgerun-node --bin edgerund -- \
-  --fixture node_server \
-  --data-dir ../var/edgerun \
-  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM" \
-  --tpm-key-auth session:../var/tpm-policy/signing.session
-```
-
-When finished, flush the live session:
-
-```bash
-tpm2_flushcontext ./var/tpm-policy/signing.session
-```
-
-## Run edgerund with direct TPM signing
-
-ECDSA P-256 example:
-
-```bash
-source ./var/tpm-node-server/metadata.env
-
-cd rust
-cargo run --release -p edgerun-node --bin edgerund -- \
-  --fixture node_server \
-  --data-dir ../var/edgerun \
-  --tpm-key-context "$edgerunD_TPM_KEY_CONTEXT" \
-  --tpm-public-key "$edgerunD_TPM_PUBLIC_KEY" \
-  --signature-algorithm "$edgerunD_SIGNATURE_ALGORITHM"
-```
-
-The legacy TPM seed-loading mode has been removed. Use direct TPM signing with `--tpm-key-context`, `--tpm-public-key`, and `--signature-algorithm` instead.
-
-## Supported selectable signing algorithms
-
-- `ed25519`
-- `ecdsa-p256`
-- `ecdsa-p384`
-- `rsa-pkcs1v15-sha256`
-- `rsa-pss-sha256`
-
-## Notes
-
-- Direct TPM signing uses `tpm2_sign` with a TPM key context or persistent handle and exported PEM public key.
-- `--tpm-key-auth` accepts normal TPM auth strings, including `file:` and `session:` formats supported by `tpm2-tools`.
-- Verification happens in the edgerun runtime using the selected wire signature algorithm.
-- ECDSA and RSA are now protocol-valid options, not just local experiments.
-
-## Daemon startup TPM self-check
-
-When direct TPM signing is enabled, `edgerund` refuses to start unless all of these pass before it serves traffic:
-
-- the TPM handle/context can be read
-- the TPM public key matches the provided PEM file
-- the selected `--signature-algorithm` matches the TPM key type
-- a real sign+verify self-check succeeds with the TPM key
+Created keys have these TPM object attributes:
+- `signEncrypt` - Key can be used for signing
+- `fixedTPM` - Key cannot be duplicated to another TPM
+- `fixedParent` - Key cannot be reparented
+- `sensitiveDataOrigin` - Key material generated inside TPM
+- `userWithAuth` - Key can be authorized with empty password
+- `noDA` - Key immune to dictionary attacks
