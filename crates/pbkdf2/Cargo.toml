@@ -83,9 +83,6 @@ path = "../sha1"
 [dev-dependencies.sha2]
 path = "../sha2"
 
-[dev-dependencies.streebog]
-version = "0.10"
-
 [features]
 default = ["hmac"]
 parallel = [

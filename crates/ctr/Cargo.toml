@@ -52,12 +52,6 @@ features = ["dev"]
 [dev-dependencies.hex-literal]
 version = "0.3.3"
 
-[dev-dependencies.kuznyechik]
-version = "0.8"
-
-[dev-dependencies.magma]
-version = "0.8"
-
 [features]
 alloc = ["cipher/alloc"]
 block-padding = ["cipher/block-padding"]
