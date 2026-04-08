@@ -1529,71 +1529,106 @@ impl<T: TpmTransport> TpmDevice<T> {
     ///
     /// Returns the persistent handle and public key bytes.
     ///
-    /// Uses the TSS2 ESAPI library for key provisioning because the kernel TPM
-    /// resource manager has restrictions on raw session creation and handle
-    /// management that are only properly handled through the TSS2 stack.
+    /// Uses raw TSS2 ESAPI calls (tss-esapi-sys) to avoid pulling in the
+    /// full tss-esapi crate which depends on regex for TCTI string parsing.
     pub fn create_ecdsa_p256_signing_key(
         &mut self,
         persistent_handle: u32,
     ) -> Result<TpmProvisionedKey, TpmError> {
-        use tss_esapi::{
-            attributes::ObjectAttributesBuilder,
-            handles::PersistentTpmHandle,
-            interface_types::{
-                algorithm::{HashingAlgorithm, PublicAlgorithm},
-                dynamic_handles::Persistent,
-                ecc::EccCurve,
-                resource_handles::{Hierarchy, Provision},
-            },
-            structures::{PublicEccParametersBuilder, EccScheme, EccPoint, HashScheme, PublicBuilder},
-            tcti_ldr::TctiNameConf,
-            Context,
+        use tss_esapi_sys::*;
+
+        // TPM 2.0 spec constants
+        const TPM2_ALG_ECC: u16 = 0x0023;
+        const TPM2_ALG_SHA256: u16 = 0x000B;
+        const TPM2_ALG_ECDSA: u16 = 0x0018;
+        const TPM2_ALG_NULL: u16 = 0x0010;
+        const TPM2_ECC_NIST_P256: u16 = 0x0003;
+        const TPM2_RH_OWNER: u32 = 0x4000_0001;
+        const TPMA_OBJECT_SIGN_ENCRYPT: u32 =    0x0004_0000;
+        const TPMA_OBJECT_FIXED_TPM: u32 =       0x0000_0002;
+        const TPMA_OBJECT_FIXED_PARENT: u32 =    0x0000_0010;
+        const TPMA_OBJECT_SENSITIVE_DATA_ORIGIN: u32 = 0x0000_0020;
+        const TPMA_OBJECT_USER_WITH_AUTH: u32 =  0x0000_0040;
+        const TPMA_OBJECT_NODA: u32 =            0x0000_0400;
+
+        // Initialize TCTI for /dev/tpmrm0
+        let tcti_name = b"device:/dev/tpmrm0\0";
+        let mut tcti_ctx: *mut TSS2_TCTI_CONTEXT = std::ptr::null_mut();
+        let rc = unsafe { Tss2_TctiLdr_Initialize(tcti_name.as_ptr().cast(), &mut tcti_ctx) };
+        if rc != 0 {
+            return Err(TpmError::Provider(format!(
+                "Tss2_TctiLdr_Initialize failed: 0x{rc:08x}"
+            )));
+        }
+
+        // Initialize ESYS context
+        let mut esys_ctx: *mut ESYS_CONTEXT = std::ptr::null_mut();
+        let rc = unsafe { Esys_Initialize(&mut esys_ctx, tcti_ctx, std::ptr::null_mut()) };
+        if rc != 0 {
+            unsafe { Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+            return Err(TpmError::Provider(format!(
+                "Esys_Initialize failed: 0x{rc:08x}"
+            )));
+        }
+
+        // Startup TPM
+        let rc = unsafe { Esys_Startup(esys_ctx, 0x0000 /* TPM2_SU_CLEAR */) };
+        if rc != 0 && rc != 0x0000_0120 /* TPM_RC_INITIALIZE */ {
+            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+            return Err(TpmError::Provider(format!(
+                "Esys_Startup failed: 0x{rc:08x}"
+            )));
+        }
+
+        // Build TPMT_PUBLIC template for ECDSA P-256
+        let object_attributes = TPMA_OBJECT_SIGN_ENCRYPT
+            | TPMA_OBJECT_FIXED_TPM
+            | TPMA_OBJECT_FIXED_PARENT
+            | TPMA_OBJECT_SENSITIVE_DATA_ORIGIN
+            | TPMA_OBJECT_USER_WITH_AUTH
+            | TPMA_OBJECT_NODA;
+
+        let mut public: TPM2B_PUBLIC = unsafe { std::mem::zeroed() };
+        public.publicArea.type_ = TPM2_ALG_ECC;
+        public.publicArea.nameAlg = TPM2_ALG_SHA256;
+        public.publicArea.objectAttributes = object_attributes;
+        public.publicArea.parameters.eccDetail.scheme.scheme = TPM2_ALG_ECDSA;
+        public.publicArea.parameters.eccDetail.scheme.details.ecdsa.hashAlg = TPM2_ALG_SHA256;
+        public.publicArea.parameters.eccDetail.symmetric.algorithm = TPM2_ALG_NULL;
+        public.publicArea.parameters.eccDetail.kdf.scheme = TPM2_ALG_NULL;
+        public.publicArea.parameters.eccDetail.curveID = TPM2_ECC_NIST_P256;
+
+        let in_sensitive: TPM2B_SENSITIVE_CREATE = unsafe { std::mem::zeroed() };
+        let outside_info: TPM2B_DATA = unsafe { std::mem::zeroed() };
+        let creation_pcr: TPML_PCR_SELECTION = unsafe { std::mem::zeroed() };
+
+        let mut key_handle: ESYS_TR = ESYS_TR_NONE;
+        let mut out_public: *mut TPM2B_PUBLIC = std::ptr::null_mut();
+
+        let rc = unsafe {
+            Esys_CreatePrimary(
+                esys_ctx,
+                TPM2_RH_OWNER as ESYS_TR,
+                ESYS_TR_PASSWORD,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE,
+                &in_sensitive,
+                &public,
+                &outside_info,
+                &creation_pcr,
+                &mut key_handle,
+                &mut out_public,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
         };
-
-        // Create TCTI context for /dev/tpmrm0
-        let tcti = TctiNameConf::from_environment_variable()
-            .unwrap_or_else(|_| TctiNameConf::Device(Default::default()));
-
-        let mut context = Context::new(tcti)
-            .map_err(|e| TpmError::Provider(format!("failed to create TPM context: {}", e)))?;
-
-        // Build object attributes
-        let attrs = ObjectAttributesBuilder::new()
-            .with_sign_encrypt(true)
-            .with_fixed_tpm(true)
-            .with_fixed_parent(true)
-            .with_sensitive_data_origin(true)
-            .with_user_with_auth(true)
-            .with_no_da(true)
-            .build()
-            .map_err(|e| TpmError::Provider(format!("failed to build object attributes: {}", e)))?;
-
-        // Build ECC scheme (ECDSA with SHA256)
-        let scheme = EccScheme::EcDsa(HashScheme::new(HashingAlgorithm::Sha256));
-
-        // Build public template using the simpler signing key constructor
-        let ecc_params = PublicEccParametersBuilder::new_unrestricted_signing_key(
-            scheme,
-            EccCurve::NistP256,
-        )
-        .build()
-        .map_err(|e| TpmError::Provider(format!("failed to build ECC parameters: {}", e)))?;
-
-        let public = PublicBuilder::new()
-            .with_public_algorithm(PublicAlgorithm::Ecc)
-            .with_name_hashing_algorithm(HashingAlgorithm::Sha256)
-            .with_object_attributes(attrs)
-            .with_ecc_parameters(ecc_params)
-            .with_ecc_unique_identifier(EccPoint::default())
-            .build()
-            .map_err(|e| TpmError::Provider(format!("failed to build public template: {}", e)))?;
-
-        // Create primary key
-        let result = context
-            .execute_with_nullauth_session(|ctx| {
-                ctx.create_primary(Hierarchy::Owner, public, None, None, None, None)
-            })
-            .map_err(|e| TpmError::Provider(format!("TPM CreatePrimary failed: {}", e)))?;
+        if rc != 0 {
+            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+            return Err(TpmError::Provider(format!(
+                "Esys_CreatePrimary failed: 0x{rc:08x}"
+            )));
+        }
 
         // Scan for an available persistent handle using raw TPM reads
         let mut available_handle = persistent_handle;
@@ -1607,32 +1642,49 @@ impl<T: TpmTransport> TpmDevice<T> {
             }
         }
 
-        // Persist the key to the available handle
-        let persistent_handle_tpm = PersistentTpmHandle::new(available_handle)
-            .map_err(|e| TpmError::Provider(format!("invalid persistent handle: {}", e)))?;
-        let persistent_handle_full = Persistent::Persistent(persistent_handle_tpm);
+        // Persist the key
+        let mut new_handle: ESYS_TR = ESYS_TR_NONE;
+        let rc = unsafe {
+            Esys_EvictControl(
+                esys_ctx,
+                TPM2_RH_OWNER as ESYS_TR,
+                key_handle,
+                ESYS_TR_PASSWORD,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE,
+                available_handle,
+                &mut new_handle,
+            )
+        };
+        if rc != 0 {
+            unsafe { Esys_FlushContext(esys_ctx, key_handle) };
+            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+            return Err(TpmError::Provider(format!(
+                "Esys_EvictControl failed: 0x{rc:08x}"
+            )));
+        }
 
-        context
-            .execute_with_nullauth_session(|ctx| {
-                ctx.evict_control(Provision::Owner, result.key_handle.into(), persistent_handle_full)
-            })
-            .map_err(|e| TpmError::Provider(format!("TPM EvictControl failed: {}", e)))?;
-
-        // Extract public key bytes (x || y)
-        let public_key_bytes = match &result.out_public {
-            tss_esapi::structures::Public::Ecc { unique, .. } => {
-                let x_bytes = unique.x().value();
-                let y_bytes = unique.y().value();
-                let mut bytes = Vec::with_capacity(64);
-                bytes.extend_from_slice(x_bytes);
-                bytes.extend_from_slice(y_bytes);
-                bytes
-            }
-            _ => return Err(TpmError::Protocol("expected ECC public key".into())),
+        // Extract public key bytes (x || y) from out_public
+        let public_key_bytes = if out_public.is_null() {
+            return Err(TpmError::Protocol("null out_public from CreatePrimary".into()));
+        } else {
+            let pub_ref = unsafe { &*out_public };
+            // SAFETY: We created an ECC key, so the union contains ecc variant
+            let unique = unsafe { &pub_ref.publicArea.unique.ecc };
+            let x_bytes = &unique.x.buffer[..unique.x.size as usize];
+            let y_bytes = &unique.y.buffer[..unique.y.size as usize];
+            let mut bytes = Vec::with_capacity(64);
+            bytes.extend_from_slice(x_bytes);
+            bytes.extend_from_slice(y_bytes);
+            bytes
         };
 
+        // Cleanup
+        unsafe { Esys_FlushContext(esys_ctx, key_handle) };
+        unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+
         Ok(TpmProvisionedKey {
-            persistent_handle,
+            persistent_handle: available_handle,
             public_key_bytes,
             name: vec![],
         })
