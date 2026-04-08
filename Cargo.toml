@@ -137,6 +137,9 @@ license = "MIT"
 publish = false
 version = "0.1.0"
 
+[profile.release]
+panic = "abort"
+
 [workspace.dependencies]
 aes-gcm = { path = "crates/aes-gcm", default-features = false, features = ["aes", "alloc"] }
 sha2 = { path = "crates/sha2", default-features = false }
