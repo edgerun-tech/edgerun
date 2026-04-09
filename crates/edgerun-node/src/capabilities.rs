@@ -539,10 +539,10 @@ pub fn build_mesh_capability_server(
     edgerun_mesh_capability::MeshEnvelopeDispatcher,
 ) {
     use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher, OutboundQueue};
-    use std::cell::RefCell;
     use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
 
-    let outbound: OutboundQueue = std::rc::Rc::new(RefCell::new(VecDeque::new()));
+    let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
     let dispatcher = MeshEnvelopeDispatcher::new();
     let server = MeshCapabilityServer::new(multi);
     (server, outbound, dispatcher)

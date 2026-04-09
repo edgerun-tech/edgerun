@@ -22,14 +22,15 @@ use edgerun_proto::edgerun::v0::capability_runtime::{
 };
 use edgerun_remote_capability::RemoteCapabilityProvider;
 use prost::Message;
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 /// Shared outbound queue: (destination NodeID, serialized protobuf payload).
 /// Used by `MeshCapabilityTransport::send()` to push frames that the daemon
 /// will drain, encrypt, and send.
-pub type OutboundQueue = Rc<RefCell<VecDeque<(NodeID, Vec<u8>)>>>;
+///
+/// Thread-safe via `Arc<Mutex<>>` to allow future multi-threaded mesh daemons.
+pub type OutboundQueue = Arc<Mutex<VecDeque<(NodeID, Vec<u8>)>>>;
 
 // ---------------------------------------------------------------------------
 // Envelope channel — maps NodeID to a queue of inbound envelopes
@@ -63,7 +64,7 @@ impl EnvelopeInbox {
 /// messages through the mesh, addressed by `NodeID`.
 ///
 /// **Outbound**: `send()` pushes serialized protobuf payloads to a shared
-/// `OutboundQueue` (an `Rc<RefCell<VecDeque>>`). The daemon drains this
+/// `OutboundQueue` (an `Arc<Mutex<VecDeque>>`). The daemon drains this
 /// queue, encrypts through the session manager, signs, and transmits.
 ///
 /// **Inbound**: Decrypted capability envelopes are delivered to the inbox
@@ -111,7 +112,7 @@ impl edgerun_remote_capability::RemoteCapabilityTransport for MeshCapabilityTran
         // The daemon will drain this queue, encrypt through the session manager,
         // sign with hardware, and transmit.
         let payload = envelope.encode_to_vec();
-        self.outbound.borrow_mut().push_back((self.remote_id, payload));
+        self.outbound.lock().expect("outbound queue poisoned").push_back((self.remote_id, payload));
         Ok(())
     }
 
@@ -390,8 +391,7 @@ mod tests {
     };
     use edgerun_remote_capability::{RemoteCapabilityProvider, RemoteCapabilityTransport};
     use prost::Message;
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     // -----------------------------------------------------------------------
     // Test helpers
@@ -601,16 +601,16 @@ mod tests {
 
     #[test]
     fn outbound_queue_default_empty() {
-        let queue: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
-        assert!(queue.borrow().is_empty());
+        let queue: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
+        assert!(queue.lock().unwrap().is_empty());
     }
 
     #[test]
     fn outbound_queue_shared_across_clones() {
-        let queue: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
-        let clone = Rc::clone(&queue);
-        queue.borrow_mut().push_back((node_id(1), vec![1, 2, 3]));
-        assert_eq!(clone.borrow().len(), 1);
+        let queue: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
+        let clone = Arc::clone(&queue);
+        queue.lock().unwrap().push_back((node_id(1), vec![1, 2, 3]));
+        assert_eq!(clone.lock().unwrap().len(), 1);
     }
 
     // ===================================================================
@@ -619,7 +619,7 @@ mod tests {
 
     #[test]
     fn transport_new_sets_remote_id() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let remote = node_id(0x42);
         let transport = MeshCapabilityTransport::new(remote, outbound);
         assert_eq!(*transport.remote_id(), remote);
@@ -627,23 +627,23 @@ mod tests {
 
     #[test]
     fn transport_inbox_is_initially_empty() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let transport = MeshCapabilityTransport::new(node_id(1), outbound);
         assert!(transport.inbox().is_empty());
     }
 
     #[test]
     fn transport_send_pushes_to_outbound_queue() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let remote = node_id(0xBB);
-        let mut transport = MeshCapabilityTransport::new(remote, Rc::clone(&outbound));
+        let mut transport = MeshCapabilityTransport::new(remote, Arc::clone(&outbound));
 
         let envelope = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
             make_session_open(1, b"sess-1".to_vec()),
         )));
         assert!(transport.send(envelope).is_ok());
 
-        let queue = outbound.borrow();
+        let queue = outbound.lock().unwrap();
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].0, remote);
         // Payload should be a valid protobuf encoding
@@ -652,8 +652,8 @@ mod tests {
 
     #[test]
     fn transport_send_multiple_accumulates() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
-        let mut transport = MeshCapabilityTransport::new(node_id(5), Rc::clone(&outbound));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
+        let mut transport = MeshCapabilityTransport::new(node_id(5), Arc::clone(&outbound));
 
         for i in 0..3u8 {
             let envelope = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
@@ -662,7 +662,7 @@ mod tests {
             transport.send(envelope).unwrap();
         }
 
-        let queue = outbound.borrow();
+        let queue = outbound.lock().unwrap();
         assert_eq!(queue.len(), 3);
         for entry in queue.iter() {
             assert_eq!(entry.0, node_id(5));
@@ -671,14 +671,14 @@ mod tests {
 
     #[test]
     fn transport_recv_returns_none_when_inbox_empty() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut transport = MeshCapabilityTransport::new(node_id(1), outbound);
         assert!(transport.recv().unwrap().is_none());
     }
 
     #[test]
     fn transport_recv_returns_queued_envelopes() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut transport = MeshCapabilityTransport::new(node_id(0xBB), outbound);
 
         // Simulate mesh delivering an envelope into the inbox
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn transport_recv_fifo_ordering() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut transport = MeshCapabilityTransport::new(node_id(1), outbound);
 
         for i in 0..4u8 {
@@ -715,17 +715,17 @@ mod tests {
     fn transport_send_then_recv_independent() {
         // send() pushes to outbound queue; recv() reads from inbox.
         // They are independent paths.
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
-        let mut transport = MeshCapabilityTransport::new(node_id(1), Rc::clone(&outbound));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
+        let mut transport = MeshCapabilityTransport::new(node_id(1), Arc::clone(&outbound));
 
         transport.send(make_envelope(None)).unwrap();
         assert!(transport.recv().unwrap().is_none()); // inbox still empty
-        assert_eq!(outbound.borrow().len(), 1); // outbound has the message
+        assert_eq!(outbound.lock().unwrap().len(), 1); // outbound has the message
     }
 
     #[test]
     fn transport_inbox_mut_access() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut transport = MeshCapabilityTransport::new(node_id(1), outbound);
         let inbox_mut = transport.inbox_mut();
         assert!(inbox_mut.is_empty());
@@ -735,8 +735,8 @@ mod tests {
 
     #[test]
     fn transport_different_remote_ids() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
-        let t1 = MeshCapabilityTransport::new(node_id(1), Rc::clone(&outbound));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
+        let t1 = MeshCapabilityTransport::new(node_id(1), Arc::clone(&outbound));
         let t2 = MeshCapabilityTransport::new(node_id(2), outbound);
         assert_ne!(t1.remote_id(), t2.remote_id());
     }
@@ -974,7 +974,7 @@ mod tests {
 
     #[test]
     fn client_creation_registers_inbox() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let remote = node_id(0xDD);
         let _client = MeshCapabilityClient::new(remote, outbound, &mut dispatcher);
@@ -984,7 +984,7 @@ mod tests {
 
     #[test]
     fn client_remote_id() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let remote = node_id(0xDD);
         let client = MeshCapabilityClient::new(remote, outbound, &mut dispatcher);
@@ -993,7 +993,7 @@ mod tests {
 
     #[test]
     fn client_transport_mut_access() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let remote = node_id(0xDD);
         let mut client = MeshCapabilityClient::new(remote, outbound, &mut dispatcher);
@@ -1007,23 +1007,23 @@ mod tests {
 
     #[test]
     fn client_can_send_via_transport() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let remote = node_id(0xDD);
-        let mut client = MeshCapabilityClient::new(remote, Rc::clone(&outbound), &mut dispatcher);
+        let mut client = MeshCapabilityClient::new(remote, Arc::clone(&outbound), &mut dispatcher);
 
         let envelope = make_envelope(Some(capability_remote_envelope::Message::SessionOpen(
             make_session_open(1, b"client-session".to_vec()),
         )));
         client.transport_mut().send(envelope).unwrap();
 
-        assert_eq!(outbound.borrow().len(), 1);
-        assert_eq!(outbound.borrow()[0].0, remote);
+        assert_eq!(outbound.lock().unwrap().len(), 1);
+        assert_eq!(outbound.lock().unwrap()[0].0, remote);
     }
 
     #[test]
     fn client_can_recv_via_transport() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let remote = node_id(0xDD);
         let mut client = MeshCapabilityClient::new(remote, outbound, &mut dispatcher);
@@ -1045,12 +1045,12 @@ mod tests {
 
     #[test]
     fn multiple_clients_same_dispatcher() {
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let r1 = node_id(10);
         let r2 = node_id(20);
 
-        let _c1 = MeshCapabilityClient::new(r1, Rc::clone(&outbound), &mut dispatcher);
+        let _c1 = MeshCapabilityClient::new(r1, Arc::clone(&outbound), &mut dispatcher);
         let _c2 = MeshCapabilityClient::new(r2, outbound, &mut dispatcher);
 
         // Both inboxes should be registered
@@ -1569,13 +1569,13 @@ mod tests {
     #[test]
     fn multiple_clients_multiple_servers_shared_dispatcher() {
         // Simulate: two clients sending to one server
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
 
         let r1 = node_id(100);
         let r2 = node_id(200);
-        let mut c1 = MeshCapabilityClient::new(r1, Rc::clone(&outbound), &mut dispatcher);
-        let mut c2 = MeshCapabilityClient::new(r2, Rc::clone(&outbound), &mut dispatcher);
+        let mut c1 = MeshCapabilityClient::new(r1, Arc::clone(&outbound), &mut dispatcher);
+        let mut c2 = MeshCapabilityClient::new(r2, Arc::clone(&outbound), &mut dispatcher);
 
         // Server listening on both remotes
         let provider = MockProvider::default();
@@ -1596,7 +1596,7 @@ mod tests {
             .unwrap();
 
         // Verify outbound queue has both
-        assert_eq!(outbound.borrow().len(), 2);
+        assert_eq!(outbound.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -1631,7 +1631,7 @@ mod tests {
         let mut server = MeshCapabilityServer::new(mock);
 
         // Client side
-        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let outbound: OutboundQueue = Arc::new(Mutex::new(VecDeque::new()));
         let mut dispatcher = MeshEnvelopeDispatcher::new();
         let mut client = MeshCapabilityClient::new(client_id, outbound.clone(), &mut dispatcher);
 
@@ -1643,8 +1643,8 @@ mod tests {
             .unwrap();
 
         // Verify outbound has the envelope
-        assert_eq!(outbound.borrow().len(), 1);
-        let (dest, payload) = outbound.borrow_mut().pop_front().unwrap();
+        assert_eq!(outbound.lock().unwrap().len(), 1);
+        let (dest, payload) = outbound.lock().unwrap().pop_front().unwrap();
         assert_eq!(dest, client_id); // sent to the client's remote target
 
         // Simulate mesh delivery: server receives the envelope

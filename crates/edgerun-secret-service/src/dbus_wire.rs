@@ -102,11 +102,15 @@ impl Rdr {
                     let inner = &el[1..el.len() - 1];
                     if inner.len() < 2 { return Ok(Val::Dict(vec![])); }
                     let kt = &inner[..1]; let vt = &inner[1..];
-                    self.al(4); let al = self.u32()? as usize; let end = self.p + al;
+                    self.al(4); let body_len = self.u32()? as usize;
+                    let body_start = self.p;
+                    let end = self.p + body_len;
                     let mut ent = Vec::new();
                     while self.p < end {
-                        // Each dict entry is 8-byte aligned (like a struct)
-                        self.al(8);
+                        // Align to 8 relative to body_start
+                        let body_off = self.p - body_start;
+                        let pad = (8 - (body_off % 8)) % 8;
+                        self.p += pad;
                         if self.p >= end { break; }
                         ent.push((self.val(kt)?, self.val(vt)?));
                     }
@@ -172,11 +176,12 @@ impl Wtr {
                     let kt = &inner[..1]; let vt = &inner[1..];
                     let mut tmp = Wtr::new();
                     if let Val::Dict(entries) = v {
-                        for (k, vv) in entries {
-                            tmp.pd(8);
+                        for (i, (k, vv)) in entries.iter().enumerate() {
+                            if i > 0 { tmp.pd(8); }
                             tmp.wval(kt, k);
                             tmp.wval(vt, vv);
                         }
+                        tmp.pd(8); // pad body end to 8
                     }
                     let td = tmp.finish();
                     self.pd(4); self.u32(td.len() as u32);
@@ -279,7 +284,11 @@ pub fn decode_msg(data: &[u8]) -> io::Result<Msg> {
         fields.insert(fc, rdr.val(&sg)?);
     }
 
-    let bsig = fields.get(&F_SIG).and_then(|v| v.s()).unwrap_or("").to_string();
+    let bsig = fields.get(&F_SIG).and_then(|v| match v {
+        Val::Sig(s) => Some(s.as_str()),
+        Val::S(s) => Some(s.as_str()),
+        _ => None,
+    }).unwrap_or("").to_string();
     let bdata = &data[ah..ah + bl];
     let mut br = Rdr::new(bdata.to_vec());
     let mut body = Vec::new();
@@ -314,7 +323,9 @@ mod tests {
             (Val::S("k2".into()), Val::S("v2".into())),
         ]);
         w.wval("a{ss}", &d);
-        let mut r = Rdr::new(w.finish());
+        let bytes = w.finish();
+        eprintln!("dict_ss bytes ({}): {:02x?}", bytes.len(), bytes);
+        let mut r = Rdr::new(bytes);
         let v = r.val("a{ss}").unwrap();
         let pairs = v.dict_ss().unwrap();
         assert_eq!(pairs.len(), 2);

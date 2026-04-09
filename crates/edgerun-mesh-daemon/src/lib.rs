@@ -20,10 +20,9 @@ use edgerun_hardware_signing::HardwareSigningError;
 use edgerun_proto::edgerun::v0::capability_runtime::CapabilityRemoteEnvelope;
 use prost::Message;
 use libc::{c_int, pollfd, POLLIN};
-use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
@@ -91,14 +90,14 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             last_heartbeat: Instant::now() - heartbeat_interval,
             running: false,
             signer: None,
-            outbound: Rc::new(RefCell::new(VecDeque::new())),
+            outbound: Arc::new(Mutex::new(VecDeque::new())),
             pending_handshakes: HashMap::new(),
         }
     }
 
     /// Returns the shared outbound queue for creating `MeshCapabilityTransport` instances.
     pub fn outbound_queue(&self) -> OutboundQueue {
-        Rc::clone(&self.outbound)
+        Arc::clone(&self.outbound)
     }
 
     /// Attaches a hardware-backed signer.
@@ -434,7 +433,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     /// If a session has expired, initiates a rekey handshake and re-queues
     /// the payloads for delivery after the handshake completes.
     fn drain_and_encrypt_outbound(&mut self) -> Result<(), io::Error> {
-        let payloads: Vec<(NodeID, Vec<u8>)> = self.outbound.borrow_mut().drain(..).collect();
+        let payloads: Vec<(NodeID, Vec<u8>)> = self.outbound.lock().unwrap().drain(..).collect();
         let mut rekey_peers: HashMap<NodeID, Vec<Vec<u8>>> = HashMap::new();
 
         for (peer, payload) in payloads {
@@ -486,7 +485,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             }
             // Buffer payloads for after handshake completes
             for payload in payloads {
-                self.outbound.borrow_mut().push_back((peer, payload));
+                self.outbound.lock().unwrap().push_back((peer, payload));
             }
         }
 
@@ -497,7 +496,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     /// and encrypts/sends them. Called after a handshake completes.
     fn drain_and_encrypt_buffered(&mut self, peer: &NodeID) -> Result<(), io::Error> {
         // Separate matching payloads from non-matching
-        let mut queue = self.outbound.borrow_mut();
+        let mut queue = self.outbound.lock().unwrap();
         let (matching, others): (Vec<_>, Vec<_>) = queue.drain(..).partition(|(p, _)| p == peer);
         // Put non-matching payloads back
         for item in others {
@@ -711,8 +710,8 @@ mod tests {
         let daemon = TestDaemon::new(node_id(1), MeshDaemonConfig::default(), TestProvider);
         let q1 = daemon.outbound_queue();
         let q2 = daemon.outbound_queue();
-        // Both point to the same Rc
-        assert!(Rc::ptr_eq(&q1, &q2));
+        // Both point to the same Arc
+        assert!(Arc::ptr_eq(&q1, &q2));
     }
 
     // --- Accessors ---
