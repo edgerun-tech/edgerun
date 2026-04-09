@@ -85,7 +85,7 @@ edgerun-log = { path = "../edgerun-log" }
 libc = { path = "../libc" }
 
 # Hardware signing is required for node identity and stream writing
-edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
 edgerun-tpm = { path = "../edgerun-tpm" }
 edgerun-yubikey = { path = "../edgerun-yubikey" }
 

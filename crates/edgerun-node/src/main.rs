@@ -36,7 +36,7 @@ use edgerun_hardware_signing::{
 use edgerun_tpm::{
     LinuxTpmSigningKey, TpmHandle,
 };
-use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot, YubiKeySigningKey, PcscContext};
+use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot, YubiKeySigningKey, LinuxUsbYubiKey};
 use edgerun_core::util::system_time_to_prost;
 use p256::ecdsa::SigningKey;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
@@ -282,12 +282,13 @@ fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         // YubiKey: scan for an existing ECDSA P-256 key in slot 9a (authentication)
         eprintln!("Scanning YubiKey for ECDSA P-256 key in slot 9a...");
 
-        let reader = detect_yubikey_reader().unwrap_or_else(|e| {
+        let device = detect_yubikey_device().unwrap_or_else(|e| {
             eprintln!("error: {}", e);
             std::process::exit(1);
         });
+        let device_display = format!("{:03}:{:03}", device.bus, device.device);
 
-        let yubikey = LinuxPcscYubiKey::new(reader.clone(), YubiKeyPivSlot::Authentication);
+        let yubikey = LinuxPcscYubiKey::new(device, YubiKeyPivSlot::Authentication);
         let yubi_key_info = yubikey.key_info().unwrap_or_else(|e| {
             eprintln!("error: failed to read YubiKey key info: {}", e);
             eprintln!();
@@ -314,7 +315,7 @@ fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         pub_bytes.copy_from_slice(&yubi_key_info.public_key);
         let node_id = NodeID(pub_bytes);
 
-        eprintln!("  Reader: {}", reader);
+        eprintln!("  USB Device: {}", device_display);
         eprintln!("  Slot: 9a");
         eprintln!("  Public key: {}", node_id.to_hex());
 
@@ -402,16 +403,14 @@ fn check_yubikey_available() -> bool {
         .unwrap_or(false)
 }
 
-/// Finds the first YubiKey PC/SC reader name.
-fn detect_yubikey_reader() -> Result<String, String> {
-    let ctx = PcscContext::establish()
-        .map_err(|e| format!("PC/SC context establishment failed: {}", e))?;
-    let readers = ctx.list_readers()
-        .map_err(|e| format!("PC/SC list_readers failed: {}", e))?;
-    if readers.is_empty() {
-        return Err("no smart card readers found".into());
+/// Finds the first YubiKey USB device info.
+fn detect_yubikey_device() -> Result<edgerun_yubikey::LinuxUsbYubiKeyInfo, String> {
+    let devices = edgerun_yubikey::LinuxUsbYubiKey::discover()
+        .map_err(|e| format!("YubiKey USB discovery failed: {}", e))?;
+    if devices.is_empty() {
+        return Err("no YubiKey devices found on USB bus".into());
     }
-    Ok(readers[0].name.clone())
+    Ok(devices.into_iter().next().unwrap())
 }
 
 /// Scans TPM persistent handles to find the first unused one.
@@ -2785,14 +2784,15 @@ fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send + S
                 }
             };
 
-            let reader = detect_yubikey_reader().unwrap_or_else(|e| {
-                eprintln!("error: no YubiKey reader found: {}", e);
+            let device = detect_yubikey_device().unwrap_or_else(|e| {
+                eprintln!("error: no YubiKey device found: {}", e);
                 std::process::exit(1);
             });
 
-            edgerun_log::info!("using YubiKey signer: reader={}, slot={}", reader, slot_str);
+            edgerun_log::info!("using YubiKey signer: bus={:03}, device={:03}, slot={}",
+                device.bus, device.device, slot_str);
 
-            let yubikey = LinuxPcscYubiKey::new(reader, slot);
+            let yubikey = LinuxPcscYubiKey::new(device, slot);
             let adapter = YubiKeyHardwareKeyAdapter::new(yubikey);
             let mesh_signer = HardwareMeshSigner::new(adapter)
                 .unwrap_or_else(|e| {

@@ -602,16 +602,16 @@ impl LinuxUsbYubiKey {
 /// High-level YubiKey signing key using raw USB CCID transport.
 /// (Backward-compatible API — discovers USB devices internally by reader name.)
 pub struct LinuxPcscYubiKey {
-    pub reader_name: String,
+    pub device_info: LinuxUsbYubiKeyInfo,
     pub slot: YubiKeyPivSlot,
     pub serial_number: Option<String>,
     pub pin: Option<Vec<u8>>,
 }
 
 impl LinuxPcscYubiKey {
-    pub fn new(reader_name: impl Into<String>, slot: YubiKeyPivSlot) -> Self {
+    pub fn new(device_info: LinuxUsbYubiKeyInfo, slot: YubiKeyPivSlot) -> Self {
         Self {
-            reader_name: reader_name.into(),
+            device_info,
             slot,
             serial_number: None,
             pin: None,
@@ -628,21 +628,9 @@ impl LinuxPcscYubiKey {
         self
     }
 
-    /// Find the USB device matching this key's reader_name or serial_number.
+    /// Find the USB device matching this key's device_info.
     fn find_device(&self) -> Result<LinuxUsbYubiKeyInfo, YubiKeyError> {
-        let devices = LinuxUsbYubiKey::discover()?;
-        if devices.is_empty() {
-            return Err(YubiKeyError::Provider("no YubiKey devices found on USB bus".into()));
-        }
-        // If serial_number is set, try to match it; otherwise use first device
-        if let Some(serial) = &self.serial_number {
-            for dev in &devices {
-                // TODO: read serial from device descriptor when available
-                let _ = serial;
-            }
-        }
-        // Use first available device
-        Ok(devices.into_iter().next().unwrap())
+        Ok(self.device_info.clone())
     }
 
     pub fn probe(&self) -> Result<YubiKeyPivInfo, YubiKeyError> {

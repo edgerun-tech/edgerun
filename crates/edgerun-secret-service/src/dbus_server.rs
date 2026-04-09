@@ -75,12 +75,23 @@ impl Server {
     /// Accept one client connection — tries the bus first, then the standalone socket.
     pub fn accept_once(&mut self) -> io::Result<()> {
         // Try the bus first (non-blocking check)
-        if let Some(ref mut bus) = self.bus {
-            if let Ok(Some((msg, sender))) = bus.accept_one() {
-                let reply_data = self.handle_bus_message(&sender, msg);
-                bus.send(&reply_data)?;
-                return Ok(());
+        let bus_msg_and_sender = if let Some(ref mut bus) = self.bus {
+            match bus.accept_one() {
+                Ok(Some(val)) => Some(val),
+                Ok(None) => None,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => None,
+                Err(_) => None,
             }
+        } else {
+            None
+        };
+
+        if let Some((msg, sender)) = bus_msg_and_sender {
+            let reply_data = self.encode_reply_for_bus(&sender, msg);
+            if let Some(ref mut bus) = self.bus {
+                bus.send(&reply_data)?;
+            }
+            return Ok(());
         }
 
         // Fall back to the standalone socket
@@ -88,13 +99,12 @@ impl Server {
         self.serve_client(stream)
     }
 
-    /// Handle a message received from the D-Bus session bus and return encoded reply.
-    fn handle_bus_message(&mut self, sender: &str, raw_msg: Vec<u8>) -> Vec<u8> {
+    /// Encode a reply for a bus message without holding a borrow on the bus.
+    fn encode_reply_for_bus(&mut self, sender: &str, raw_msg: Vec<u8>) -> Vec<u8> {
         if let Ok(msg) = decode_msg(&raw_msg) {
             let reply = self.handle_message(sender, &msg);
             return encode_msg(&reply);
         }
-        // Return an error reply if we couldn't decode
         let err = Msg::err(0, sender, "org.freedesktop.DBus.Error.InvalidArgs", "could not decode message");
         encode_msg(&err)
     }
