@@ -898,6 +898,7 @@ name = "edgerun-amd-xdna"
 version = "0.1.0"
 dependencies = [
  "edgerun-linux-npu 0.1.0",
+ "edgerun-log 0.1.0",
  "edgerun-npu 0.1.0",
  "libc 0.2.183",
 ]
@@ -1234,6 +1235,7 @@ dependencies = [
  "edgerun-capabilities 0.1.0",
  "edgerun-linux-netif 0.1.0",
  "edgerun-linux-sysfs 0.1.0",
+ "edgerun-log 0.1.0",
  "edgerun-network-interface 0.1.0",
  "edgerun-wifi 0.1.0",
  "hmac 0.12.1",
@@ -1292,6 +1294,7 @@ dependencies = [
  "edgerun-core 0.1.0",
  "edgerun-hardware-signing 0.1.0",
  "edgerun-linux-netif 0.1.0",
+ "edgerun-log 0.1.0",
  "edgerun-mesh 0.1.0",
  "edgerun-mesh-capability 0.1.0",
  "edgerun-mesh-link 0.1.0",
@@ -1510,6 +1513,7 @@ dependencies = [
 name = "edgerun-rt"
 version = "0.1.0"
 dependencies = [
+ "edgerun-log 0.1.0",
  "libc 0.2.183",
 ]
 
@@ -1537,6 +1541,7 @@ dependencies = [
  "aes-gcm 0.10.3",
  "edgerun-core 0.1.0",
  "edgerun-hardware-signing 0.1.0",
+ "edgerun-log 0.1.0",
  "edgerun-proto 0.1.0",
  "libc 0.2.183",
  "prost 0.14.3",

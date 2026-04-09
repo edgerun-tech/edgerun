@@ -1121,9 +1121,9 @@ impl NpuDevice for AmdXdnaBackend {
             let p = std::path::Path::new(path);
             if p.exists() {
                 if let Err(e) = ctx.load_model_from_file(p) {
-                    eprintln!("warning: failed to load model from {}: {}", path, e);
+                    edgerun_log::warn!("failed to load model from {}: {}", path, e);
                 } else {
-                    eprintln!("loaded XCLBIN model from {}", path);
+                    edgerun_log::info!("loaded XCLBIN model from {}", path);
                     break;
                 }
             }
@@ -1160,13 +1160,13 @@ impl NpuDevice for AmdXdnaBackend {
                     });
                 }
                 Err(e) => {
-                    eprintln!("warning: inference failed: {}", e);
+                    edgerun_log::warn!("inference failed: {}", e);
                     // Fall through to error return below
                 }
             }
         } else {
             // No model available — create a minimal command buffer to verify the hardware path
-            eprintln!("no XCLBIN model found — verifying hardware path only");
+            edgerun_log::info!("no XCLBIN model found — verifying hardware path only");
             let cmd_size = 64;
             let mut cmd_bo = ctx.create_buffer(cmd_size, AMDXDNA_BO_CMD)?;
             unsafe {
@@ -1180,7 +1180,7 @@ impl NpuDevice for AmdXdnaBackend {
                     input_bo.sync_from_device()?;
                 }
                 Err(e) => {
-                    eprintln!("warning: command submission failed: {}", e);
+                    edgerun_log::warn!("command submission failed: {}", e);
                 }
             }
         }

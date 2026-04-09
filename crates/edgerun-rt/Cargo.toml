@@ -8,3 +8,4 @@ description = "Minimal epoll-based async runtime for edgerun"
 
 [dependencies]
 libc = { path = "../libc" }
+edgerun-log = { path = "../edgerun-log" }

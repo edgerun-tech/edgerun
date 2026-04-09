@@ -317,7 +317,7 @@ impl Reactor {
                     }
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                Err(e) => { eprintln!("edgerun-rt: epoll: {}", e); std::thread::sleep(Duration::from_millis(10)); }
+                Err(e) => { edgerun_log::warn!("epoll error: {e}"); std::thread::sleep(Duration::from_millis(10)); }
             }
         }
     }
@@ -360,7 +360,7 @@ impl BlockingPool {
                                 } else {
                                     "unknown panic".to_string()
                                 };
-                                eprintln!("blocking task panicked: {}", msg);
+                                edgerun_log::warn!("blocking task panicked: {msg}");
                             }
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
@@ -378,7 +378,7 @@ impl BlockingPool {
                         } else {
                             "unknown panic".to_string()
                         };
-                        eprintln!("blocking task panicked: {}", msg);
+                        edgerun_log::warn!("blocking task panicked: {msg}");
                     }
                 }
             })
@@ -548,7 +548,7 @@ impl Builder {
                             } else {
                                 "unknown panic".to_string()
                             };
-                            eprintln!("task panicked: {}", msg);
+                            edgerun_log::warn!("task panicked: {msg}");
                             // Task is dropped — not re-inserted
                         }
                     }

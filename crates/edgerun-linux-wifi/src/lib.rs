@@ -1861,7 +1861,7 @@ impl WifiScanner for LinuxWifiBackend {
                 Err(e) => {
                     // nl80211 scan failed (likely requires CAP_NET_ADMIN),
                     // fall back to WEXT current network observation
-                    eprintln!("nl80211 scan failed: {}", e);
+                    edgerun_log::warn!("nl80211 scan failed: {e}");
                 }
             }
         }

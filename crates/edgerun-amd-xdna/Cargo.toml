@@ -9,3 +9,4 @@ publish.workspace = true
 edgerun-linux-npu = { path = "../edgerun-linux-npu" }
 edgerun-npu = { path = "../edgerun-npu" }
 libc = { path = "../libc" }
+edgerun-log = { path = "../edgerun-log" }

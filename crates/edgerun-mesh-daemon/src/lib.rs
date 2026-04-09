@@ -151,7 +151,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                 continue;
             }
             if let Err(e) = self.link.add_raw_ethernet(ifindex) {
-                eprintln!("mesh-daemon: failed to open raw socket on {name}: {e}");
+                edgerun_log::warn!("failed to open raw socket on {name}: {e}");
                 continue;
             }
             opened.push(name);
@@ -164,7 +164,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         let mut opened = Vec::new();
         for (&ifindex, &ipv4) in &self.config.interface_ipv4 {
             if let Err(e) = self.link.add_multicast(ipv4) {
-                eprintln!("mesh-daemon: failed to open multicast on ifindex {ifindex}: {e}");
+                edgerun_log::warn!("failed to open multicast on ifindex {ifindex}: {e}");
                 continue;
             }
             opened.push(format!("ifindex={ifindex}"));
@@ -346,7 +346,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                                 processed_any = true;
                             }
                             Err(e) => {
-                                eprintln!("mesh-daemon: handshake error: {e}");
+                                edgerun_log::warn!("handshake error: {e}");
                             }
                         }
                     }
@@ -380,7 +380,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                             // Peer sent encrypted data but we have no session — drop
                         }
                         Err(e) => {
-                            eprintln!("mesh-daemon: decrypt error from {sender:?}: {e}");
+                            edgerun_log::warn!("decrypt error from {sender:?}: {e}");
                         }
                     }
                 }
@@ -395,7 +395,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         let dispatched = match self.server.serve_one(&mut self.link) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("mesh-daemon: capability dispatch error: {e}");
+                edgerun_log::warn!("capability dispatch error: {e}");
                 false
             }
         };
@@ -410,7 +410,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         let signed_frames = match self.sign_pending_frames() {
             Ok(frames) => frames,
             Err(e) => {
-                eprintln!("mesh-daemon: signing error: {e}");
+                edgerun_log::error!("signing error: {e}");
                 Vec::new()
             }
         };
@@ -461,7 +461,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                     rekey_peers.entry(peer).or_default().push(payload);
                 }
                 Err(e) => {
-                    eprintln!("mesh-daemon: encrypt error for {peer:?}: {e}");
+                    edgerun_log::warn!("encrypt error for {peer:?}: {e}");
                 }
             }
         }
@@ -535,7 +535,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     pub fn tick_heartbeat(&mut self) {
         let dead = self.router.tick_heartbeat();
         for peer_id in &dead {
-            eprintln!("mesh-daemon: peer {peer_id:?} is dead, removing routes");
+            edgerun_log::info!("peer {peer_id:?} is dead, removing routes");
             self.server.dispatcher().remove_peer(peer_id);
         }
     }

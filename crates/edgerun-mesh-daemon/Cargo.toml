@@ -20,3 +20,4 @@ edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-proto = { path = "../edgerun-proto" }
 prost.workspace = true
 libc.workspace = true
+edgerun-log = { path = "../edgerun-log" }

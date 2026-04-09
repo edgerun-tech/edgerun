@@ -143,7 +143,7 @@ impl NodeStore {
         // Best-effort disk space check. The actual write will fail with an I/O
         // error if the disk fills between this check and the write.
         if let Err(available) = self.check_disk_space() {
-            eprintln!("[edgerun-storage] WARN: low disk space: {} bytes available", available);
+            edgerun_log::warn!("low disk space: {} bytes available", available);
         }
 
         let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
@@ -308,7 +308,7 @@ impl NodeStore {
     ) -> Result<edgerun_proto::edgerun::v0::common::ObjectRef, StorageError> {
         // Best-effort disk space check.
         if let Err(available) = self.check_disk_space() {
-            eprintln!("[edgerun-storage] WARN: low disk space: {} bytes available", available);
+            edgerun_log::warn!("low disk space: {} bytes available", available);
         }
 
         use edgerun_proto::edgerun::v0::common::ObjectRef;

@@ -13,3 +13,4 @@ aes-gcm.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 libc.workspace = true
+edgerun-log = { path = "../edgerun-log" }

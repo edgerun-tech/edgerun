@@ -15,3 +15,4 @@ libc = { path = "../libc" }
 pbkdf2 = { path = "../pbkdf2" }
 sha1 = { path = "../sha1" }
 hmac = { path = "../edgerun-hmac" }
+edgerun-log = { path = "../edgerun-log" }
