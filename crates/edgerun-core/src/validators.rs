@@ -15,6 +15,11 @@ pub trait FixtureVerifier {
     ) -> Option<bool>;
 }
 
+/// Parse a timestamp from untrusted input, returning `Err` on failure.
+fn parse_ts(s: &str) -> Result<crate::util::DateTimeUtc, ReasonCode> {
+    parse_rfc3339(s).map_err(|_| ReasonCode::StructuralInvalid)
+}
+
 fn get<'a>(m: &'a BTreeMap<String, Value>, key: &str) -> Option<&'a Value> {
     m.get(key)
 }
@@ -188,13 +193,13 @@ fn validate_reachability_hint_map(
     }
     if let Some(s) = hint.get("valid_after").and_then(Value::as_str) {
         if let Some(until_s) = hint.get("valid_until").and_then(Value::as_str) {
-            if parse_rfc3339(until_s).unwrap() < parse_rfc3339(s).unwrap() {
+            if parse_ts(until_s)? < parse_ts(s)? {
                 return Err(ReasonCode::TimeInvalid);
             }
         }
     }
     if let (Some(now), Some(until_s)) = (now, hint.get("valid_until").and_then(Value::as_str)) {
-        if parse_rfc3339(until_s).unwrap() < now {
+        if parse_ts(until_s)? < now {
             return Err(ReasonCode::TimeInvalid);
         }
     }
@@ -381,7 +386,9 @@ pub fn validate_crypto_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let payload = get_map(semantic_input, "signed_record").unwrap();
+    let Some(payload) = get_map(semantic_input, "signed_record") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     let expected = payload
         .get("signature_fixture")
         .and_then(Value::as_str)
@@ -409,13 +416,13 @@ pub fn validate_trust_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let now = parse_rfc3339(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap();
+    let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap_or(crate::util::DateTimeUtc::epoch());
     if let Some(claim) = get_map(semantic_input, "assurance_claim") {
         if !claim.contains_key("subject_identity") && !claim.contains_key("subject_node") {
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let Some(s) = claim.get("issued_at").and_then(Value::as_str) {
-            if parse_rfc3339(s).unwrap() > now {
+            if parse_ts(s).map_or(false, |t| t > now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
@@ -432,7 +439,7 @@ pub fn validate_trust_case(
             return reject(ReasonCode::CryptoInvalid, empty_map(), empty_map());
         }
         if let Some(s) = claim.get("expires_at").and_then(Value::as_str) {
-            if parse_rfc3339(s).unwrap() < now {
+            if parse_ts(s).map_or(true, |t| t < now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
@@ -441,7 +448,10 @@ pub fn validate_trust_case(
             .and_then(Value::as_i64)
         {
             if let Some(issued) = claim.get("issued_at").and_then(Value::as_str) {
-                let age_secs = now.duration_secs(&parse_rfc3339(issued).unwrap()) as i64;
+                let Ok(issued_dt) = parse_ts(issued) else {
+                    return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+                };
+                let age_secs = now.duration_secs(&issued_dt) as i64;
                 if age_secs > max_age {
                     return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
                 }
@@ -603,7 +613,7 @@ pub fn validate_trust_case(
             return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
         }
         if let Some(s) = revocation.get("effective_at").and_then(Value::as_str) {
-            if parse_rfc3339(s).unwrap() > now {
+            if parse_ts(s).map_or(false, |t| t > now) {
                 return defer(
                     ReasonCode::MissingDependency,
                     mapping([("decision", ystr("revocation_scheduled"))]),
@@ -647,7 +657,9 @@ pub fn validate_delegation_case(
     if chain.is_empty() {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
-    let first = chain[0].as_map().unwrap();
+    let Some(first) = chain[0].as_map() else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     if !trust_roots.contains(&string_value(first, "issuer", "")) {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
@@ -688,8 +700,12 @@ pub fn validate_delegation_case(
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
     }
     for i in 0..chain.len().saturating_sub(1) {
-        let parent = chain[i].as_map().unwrap();
-        let child = chain[i + 1].as_map().unwrap();
+        let Some(parent) = chain[i].as_map() else {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        };
+        let Some(child) = chain[i + 1].as_map() else {
+            return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+        };
         let pa = set_from_list(get_map(parent, "capability").and_then(|m| m.get("actions")));
         let ca = set_from_list(get_map(child, "capability").and_then(|m| m.get("actions")));
         if !ca.iter().all(|a| pa.contains(a)) {
@@ -725,18 +741,20 @@ pub fn validate_command_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let command = get_map(semantic_input, "command").unwrap();
+    let Some(command) = get_map(semantic_input, "command") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     if string_value(command, "target_node", "") != string_value(local_state, "local_node", "") {
         return reject(ReasonCode::TargetMismatch, empty_map(), empty_map());
     }
-    let now = parse_rfc3339(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap();
+    let now = parse_ts(&string_value(local_state, "now", "1970-01-01T00:00:00Z")).unwrap_or(crate::util::DateTimeUtc::epoch());
     if let Some(s) = command.get("not_before").and_then(Value::as_str) {
-        if parse_rfc3339(s).unwrap() > now {
+        if parse_ts(s).map_or(false, |t| t > now) {
             return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
         }
     }
     if let Some(s) = command.get("expires_at").and_then(Value::as_str) {
-        if parse_rfc3339(s).unwrap() < now {
+        if parse_ts(s).map_or(true, |t| t < now) {
             return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
         }
     }
@@ -1156,7 +1174,9 @@ pub fn validate_query_case(
             empty_map(),
         );
     }
-    let query = get_map(semantic_input, "query").unwrap();
+    let Some(query) = get_map(semantic_input, "query") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     if !has_any_query_bound(query) {
         return reject(ReasonCode::PolicyDenied, empty_map(), empty_map());
     }
@@ -1292,7 +1312,9 @@ pub fn validate_control_change_case(
     local_state: &BTreeMap<String, Value>,
     verifier: &dyn FixtureVerifier,
 ) -> ValidationResult {
-    let command = get_map(semantic_input, "command").unwrap();
+    let Some(command) = get_map(semantic_input, "command") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     let expected = command
         .get("signature_fixture")
         .and_then(Value::as_str)
@@ -1388,7 +1410,7 @@ pub fn validate_network_case(
     let now = local_state
         .get("now")
         .and_then(Value::as_str)
-        .map(|s| parse_rfc3339(s).unwrap());
+        .and_then(|s| parse_ts(s).ok());
     if let Some(assignments) = get_map(semantic_input, "route_trust_assignments") {
         let issuer = string_value(assignments, "issuer", "");
         if issuer.is_empty() {
@@ -1694,13 +1716,13 @@ pub fn validate_network_case(
     if let Some(route) = get_map(semantic_input, "route_advertisement") {
         if let Some(at) = route.get("advertised_at").and_then(Value::as_str) {
             if let Some(exp) = route.get("expires_at").and_then(Value::as_str) {
-                if parse_rfc3339(exp).unwrap() < parse_rfc3339(at).unwrap() {
+                if parse_ts(exp).ok().zip(parse_ts(at).ok()).map_or(false, |(e, a)| e < a) {
                     return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
                 }
             }
         }
         if let (Some(now), Some(exp)) = (now, route.get("expires_at").and_then(Value::as_str)) {
-            if parse_rfc3339(exp).unwrap() < now {
+            if parse_ts(exp).map_or(true, |t| t < now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
@@ -1747,7 +1769,7 @@ pub fn validate_network_case(
             return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
         }
         if let (Some(now), Some(until)) = (now, relay.get("store_until").and_then(Value::as_str)) {
-            if parse_rfc3339(until).unwrap() < now {
+            if parse_ts(until).map_or(true, |t| t < now) {
                 return reject(ReasonCode::TimeInvalid, empty_map(), empty_map());
             }
         }
@@ -1782,7 +1804,9 @@ pub fn validate_stream_append_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let event = get_map(semantic_input, "candidate_event").unwrap();
+    let Some(event) = get_map(semantic_input, "candidate_event") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     let seq_no = number_value(event, "seq", -1);
     if seq_no < 0 {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
@@ -1915,7 +1939,9 @@ pub fn validate_snapshot_case(
     verifier: &dyn FixtureVerifier,
     semantic_hash_hex: &dyn Fn(&BTreeMap<String, Value>) -> Option<String>,
 ) -> ValidationResult {
-    let snap = get_map(semantic_input, "snapshot").unwrap();
+    let Some(snap) = get_map(semantic_input, "snapshot") else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     let producer = string_value(snap, "producer", "");
     if !set_from_list(local_state.get("trusted_snapshot_producers")).contains(&producer) {
         return reject(ReasonCode::AuthorityDenied, empty_map(), empty_map());
@@ -1934,7 +1960,9 @@ pub fn validate_snapshot_case(
     if base_heads.is_empty() {
         return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
     }
-    let base = base_heads[0].as_map().unwrap();
+    let Some(base) = base_heads[0].as_map() else {
+        return reject(ReasonCode::StructuralInvalid, empty_map(), empty_map());
+    };
     let local_head = local_state
         .get("stream_heads")
         .and_then(|v| map_value(v, &string_value(base, "stream_id", "")));

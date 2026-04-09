@@ -204,29 +204,29 @@ fn write_gid_map(inside_gid: u32, outside_gid: u32, count: u32) -> io::Result<()
 }
 
 fn do_mount(source: &str, target: &str, fstype: &str, flags: c_ulong, data: &str) -> io::Result<()> {
-    let s = CString::new(source).unwrap();
-    let t = CString::new(target).unwrap();
-    let f = CString::new(fstype).unwrap();
-    let d = CString::new(data).unwrap();
+    let s = CString::new(source).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let f = CString::new(fstype).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let d = CString::new(data).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { mount(s.as_ptr(), t.as_ptr(), f.as_ptr(), flags, d.as_ptr() as *const _) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
 fn do_pivot_root(new_root: &str, put_old: &str) -> io::Result<()> {
-    let nr = CString::new(new_root).unwrap();
-    let po = CString::new(put_old).unwrap();
+    let nr = CString::new(new_root).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let po = CString::new(put_old).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { pivot_root(nr.as_ptr(), po.as_ptr()) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
 fn do_umount2(target: &str, flags: c_int) -> io::Result<()> {
-    let t = CString::new(target).unwrap();
+    let t = CString::new(target).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { umount2(t.as_ptr(), flags) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
 fn do_set_hostname(name: &str) -> io::Result<()> {
-    let n = CString::new(name).unwrap();
+    let n = CString::new(name).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     let ret = unsafe { sethostname(n.as_ptr(), n.as_bytes().len()) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
@@ -402,9 +402,12 @@ fn setup_rootfs(
     }
 
     // Bind mount rootfs to make it a mount point
+    let rootfs_cstr = rootfs.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "rootfs path is not valid UTF-8")
+    })?;
     do_mount(
-        rootfs.to_str().unwrap(),
-        rootfs.to_str().unwrap(),
+        rootfs_cstr,
+        rootfs_cstr,
         "bind",
         ms::BIND | ms::REC,
         "",
@@ -415,7 +418,10 @@ fn setup_rootfs(
     fs::create_dir_all(&old_root)?;
 
     // pivot_root
-    do_pivot_root(rootfs.to_str().unwrap(), old_root.to_str().unwrap())?;
+    let old_root_cstr = old_root.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "old_root path is not valid UTF-8")
+    })?;
+    do_pivot_root(rootfs_cstr, old_root_cstr)?;
 
     // Detach and remove old root
     do_umount2("/.oci-old-root", MNT_DETACH)?;

@@ -285,7 +285,7 @@ pub fn decode_msg(data: &[u8]) -> io::Result<Msg> {
     }
 
     let bsig = fields.get(&F_SIG).and_then(|v| match v {
-        Val::Sig(s) => Some(s.as_str()),
+        Val::G(s) => Some(s.as_str()),
         Val::S(s) => Some(s.as_str()),
         _ => None,
     }).unwrap_or("").to_string();

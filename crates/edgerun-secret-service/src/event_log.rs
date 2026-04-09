@@ -6,16 +6,16 @@
 
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
 
-use edgerun_json::{from_str, to_string, JsonValue};
+use edgerun_json::{from_str, JsonValue};
 
 // ===========================================================================
 // Event record
 // ===========================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SecretOp {
     Put { label: String, attributes: HashMap<String, String> },
     Delete,
@@ -40,20 +40,19 @@ impl SecretEvent {
             SecretOp::DeleteCollection => ("delete_collection", &String::new(), &HashMap::new()),
         };
 
-        let mut attrs_json = JsonValue::Object(edgerun_json::Map::new());
+        let mut attrs_map = edgerun_json::Map::new();
         for (k, v) in attrs {
-            attrs_json.insert(k.clone(), JsonValue::String(v.clone()));
+            attrs_map.insert(k.clone(), edgerun_json::JsonValue::String(v.clone()));
         }
 
-        let root = edgerun_json::json!({
-            "op": op,
-            "ns": self.ns.clone(),
-            "key": self.key.clone(),
-            "ts_us": self.ts_us,
-            "label": label.clone(),
-            "attributes": attrs_json,
-        });
-        to_string(&root).unwrap_or_default()
+        let mut obj = edgerun_json::Map::new();
+        obj.insert("op".into(), edgerun_json::JsonValue::String(op.to_string()));
+        obj.insert("ns".into(), edgerun_json::JsonValue::String(self.ns.clone()));
+        obj.insert("key".into(), edgerun_json::JsonValue::String(self.key.clone()));
+        obj.insert("ts_us".into(), edgerun_json::JsonValue::from(self.ts_us));
+        obj.insert("label".into(), edgerun_json::JsonValue::String(label.clone()));
+        obj.insert("attributes".into(), edgerun_json::JsonValue::Object(attrs_map));
+        edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default()
     }
 
     pub fn from_json(s: &str) -> Option<Self> {
@@ -94,6 +93,7 @@ impl SecretEvent {
 /// Format: `[varint length][JSON payload]` per record.
 pub struct EventLog {
     file: File,
+    path: PathBuf,
 }
 
 impl EventLog {
@@ -108,7 +108,7 @@ impl EventLog {
             .append(true)
             .read(true)
             .open(&path)?;
-        Ok(Self { file })
+        Ok(Self { file, path })
     }
 
     /// Appends an event to the log.
@@ -124,7 +124,7 @@ impl EventLog {
 
     /// Replays all events from the log.
     pub fn replay(&self) -> io::Result<Vec<SecretEvent>> {
-        let mut file = File::open(self.file.try_clone().unwrap().try_clone().unwrap())?;
+        let mut file = File::open(&self.path)?;
         let mut events = Vec::new();
         loop {
             match decode_varint_stream(&mut file) {

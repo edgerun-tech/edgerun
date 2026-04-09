@@ -11,10 +11,13 @@ pub struct DateTimeUtc {
 }
 
 impl DateTimeUtc {
+    pub fn epoch() -> Self {
+        Self { unix_secs: 0, nanos: 0 }
+    }
     pub fn now() -> Self {
         let d = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap();
+            .unwrap_or_default();
         Self {
             unix_secs: d.as_secs() as i64,
             nanos: d.subsec_nanos(),

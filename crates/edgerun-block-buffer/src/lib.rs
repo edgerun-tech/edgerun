@@ -192,14 +192,8 @@ where
     #[inline(always)]
     pub fn get_pos(&self) -> usize {
         let pos = self.pos as usize;
-        if !Kind::invariant(pos, BlockSize::USIZE) {
-            debug_assert!(false);
-            // SAFETY: `pos` never breaks the invariant
-            unsafe {
-                core::hint::unreachable_unchecked();
-            }
-        }
-        pos
+        debug_assert!(Kind::invariant(pos, BlockSize::USIZE), "pos invariant violated: {}", pos);
+        pos.min(BlockSize::USIZE)
     }
 
     /// Return slice of data stored inside the buffer.

@@ -20,6 +20,11 @@ enum EventType {
   EVENT_TYPE_CAPABILITY_REVOKED = 9;
   EVENT_TYPE_DELEGATION_CREATED = 10;
   EVENT_TYPE_REVOCATION_CREATED = 11;
+  // Secret service events
+  EVENT_TYPE_SECRET_PUT = 12;
+  EVENT_TYPE_SECRET_DELETE = 13;
+  EVENT_TYPE_COLLECTION_CREATED = 14;
+  EVENT_TYPE_COLLECTION_DELETED = 15;
 }
 
 enum CommandDecision {
@@ -46,7 +51,11 @@ enum CommandType {
   COMMAND_TYPE_QUERY = 7;
   COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
   COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
-  COMMAND_TYPE_CUSTOM = 1000;
+  // Secret management commands (custom range)
+  COMMAND_TYPE_PUT_SECRET = 1001;
+  COMMAND_TYPE_DELETE_SECRET = 1002;
+  COMMAND_TYPE_LIST_SECRETS = 1003;
+  COMMAND_TYPE_CUSTOM = 2000;
 }
 
 message EventEnvelope {
@@ -130,4 +139,51 @@ message ActionLifecyclePayload {
   edgerun.v0.common.ObjectRef error_object = 6;
   edgerun.v0.common.ObjectRef progress_object = 7;
   edgerun.v0.common.ObjectRef action_metadata = 8;
+}
+
+// ===========================================================================
+// Secret service payloads
+//
+// These payloads are stored as payload_object references in EventEnvelopes
+// for secret-related events. The actual secret value is NEVER stored in the
+// payload — only metadata (label, attributes, namespace, key name) is recorded.
+// The secret itself is stored separately in the encrypted BlobStore.
+// ===========================================================================
+
+message SecretPutPayload {
+  uint32 payload_version = 1;
+  // Credential namespace (e.g. "default", "login")
+  string namespace = 2;
+  // Stable key identifier (derived from label + attributes)
+  string key = 3;
+  // Human-readable label
+  string label = 4;
+  // Key-value attribute pairs for search
+  map<string, string> attributes = 5;
+  // The blob_id where the encrypted secret is stored (not the secret itself)
+  string secret_blob_id = 6;
+}
+
+message SecretDeletePayload {
+  uint32 payload_version = 1;
+  string namespace = 2;
+  string key = 3;
+  string label = 4;
+  // Optional reason for the deletion
+  string reason = 5;
+}
+
+message CollectionCreatedPayload {
+  uint32 payload_version = 1;
+  // Collection name (also used as namespace)
+  string collection_name = 2;
+  // Human-readable display label
+  string label = 3;
+}
+
+message CollectionDeletedPayload {
+  uint32 payload_version = 1;
+  string collection_name = 2;
+  // Number of items that were in the collection
+  uint32 items_removed = 3;
 }

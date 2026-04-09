@@ -73,7 +73,9 @@ pub fn project_capability_grants(
                 if let Some(object_ref) = &event.payload_object {
                     if let Ok(Some(obj)) = store.get_object(object_ref) {
                         if let Ok(grant) = edgerun_proto::edgerun::v0::capability::CapabilityGrant::decode(&obj.content[..]) {
-                            let _ = engine.import_grant(grant);
+                            if let Err(e) = engine.import_grant(grant) {
+                                edgerun_log::warn!("failed to import capability grant for event seq {}: {}", event.seq, e);
+                            }
                         }
                     }
                 }
@@ -83,7 +85,9 @@ pub fn project_capability_grants(
                 if let Some(object_ref) = &event.payload_object {
                     if let Ok(Some(obj)) = store.get_object(object_ref) {
                         if let Ok(revocation) = edgerun_proto::edgerun::v0::capability::CapabilityRevocation::decode(&obj.content[..]) {
-                            let _ = engine.revoke(&revocation.grant_id, RevocationReason::Superseded);
+                            if let Err(e) = engine.revoke(&revocation.grant_id, RevocationReason::Superseded) {
+                                edgerun_log::warn!("failed to revoke capability for event seq {}: {}", event.seq, e);
+                            }
                         }
                     }
                 }
@@ -265,7 +269,9 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
         close: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose,
     ) -> Result<(), edgerun_capabilities::CapabilityError> {
         for provider in self.providers.values_mut() {
-            let _ = provider.close_session(close);
+            if let Err(e) = provider.close_session(close) {
+                edgerun_log::debug!("provider close_session error: {}", e);
+            }
         }
         Ok(())
     }
@@ -291,7 +297,9 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
     ) -> Result<(), edgerun_capabilities::CapabilityError> {
         // Forward grant to all providers (each policy engine tracks it)
         for provider in self.providers.values_mut() {
-            let _ = provider.handle_grant(grant);
+            if let Err(e) = provider.handle_grant(grant) {
+                edgerun_log::debug!("provider handle_grant error: {}", e);
+            }
         }
         Ok(())
     }
@@ -302,7 +310,9 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
     ) -> Result<(), edgerun_capabilities::CapabilityError> {
         // Forward revocation to all providers
         for provider in self.providers.values_mut() {
-            let _ = provider.handle_revocation(revocation);
+            if let Err(e) = provider.handle_revocation(revocation) {
+                edgerun_log::debug!("provider handle_revocation error: {}", e);
+            }
         }
         Ok(())
     }

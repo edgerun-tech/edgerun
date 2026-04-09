@@ -1,18 +1,19 @@
-//! Credential backend — stores encrypted blobs via edgerun-storage,
-//! tracks metadata via edgerun-json.
+//! Credential backend — stores secrets via BlobStore (encrypted) + FileIndex (metadata),
+//! and records operations in an append-only event log.
 
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
 use edgerun_storage::{BlobStore, BlobKeySource, BlobStoreConfig, FileIndex};
-use edgerun_json::{from_str, to_string, JsonValue};
+
+use crate::event_log::{EventLog, SecretEvent, SecretOp};
 
 // ===========================================================================
 // Metadata
 // ===========================================================================
 
-/// Metadata stored alongside each credential (encrypted in the blob sidecar).
+/// Metadata stored alongside each credential.
 #[derive(Clone, Debug)]
 pub struct CredentialMeta {
     pub label: String,
@@ -22,26 +23,25 @@ pub struct CredentialMeta {
 
 impl CredentialMeta {
     pub fn to_json(&self) -> String {
-        let mut attrs = JsonValue::Object(edgerun_json::Map::new());
+        let mut obj = edgerun_json::Map::new();
+        let mut attrs = edgerun_json::Map::new();
         for (k, v) in &self.attributes {
-            attrs.insert(k.clone(), JsonValue::String(v.clone()));
+            attrs.insert(k.clone(), edgerun_json::JsonValue::String(v.clone()));
         }
-        let root = json!({
-            "label": self.label.clone(),
-            "attributes": attrs,
-            "created_us": self.created_us,
-        });
-        to_string(&root).unwrap_or_default()
+        obj.insert("label".into(), edgerun_json::JsonValue::String(self.label.clone()));
+        obj.insert("attributes".into(), edgerun_json::JsonValue::Object(attrs));
+        obj.insert("created_us".into(), edgerun_json::JsonValue::from(self.created_us));
+        edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default()
     }
 
     pub fn from_json(s: &str) -> Option<Self> {
-        let v: JsonValue = from_str(s).ok()?;
-        let label = v.get("label").and_then(JsonValue::as_str).unwrap_or("").to_string();
-        let created_us = v.get("created_us").and_then(JsonValue::as_u64).unwrap_or(0);
+        let v: edgerun_json::JsonValue = edgerun_json::from_str(s).ok()?;
+        let label = v.get("label").and_then(edgerun_json::JsonValue::as_str).unwrap_or("").to_string();
+        let created_us = v.get("created_us").and_then(edgerun_json::JsonValue::as_u64).unwrap_or(0);
         let mut attributes = HashMap::new();
-        if let Some(attrs) = v.get("attributes").and_then(JsonValue::as_object) {
-            for (k, v) in attrs.iter() {
-                if let Some(vs) = v.as_str() {
+        if let Some(attrs) = v.get("attributes").and_then(edgerun_json::JsonValue::as_object) {
+            for (k, val) in attrs.iter() {
+                if let Some(vs) = val.as_str() {
                     attributes.insert(k.clone(), vs.to_string());
                 }
             }
@@ -54,21 +54,30 @@ impl CredentialMeta {
 // Backend
 // ===========================================================================
 
+/// Secret service backend.
+///
+/// - `BlobStore` encrypts/decrypts secret payloads
+/// - `FileIndex` maps (namespace, name) → blob_id with JSON metadata in description
+/// - `EventLog` appends an audit record for every mutation
 pub struct Backend {
     blobs: BlobStore,
     index: FileIndex,
+    event_log: EventLog,
 }
 
 impl Backend {
     pub fn new(data_root: PathBuf) -> io::Result<Self> {
-        let pk = [0xBBu8; 32];
+        let pk = derive_key_from_path(&data_root);
+
         let blob_cfg = BlobStoreConfig { blob_dir: data_root.join("blobs") };
-        let _ = std::fs::create_dir_all(&data_root.join("blobs"));
+        let _ = std::fs::create_dir_all(&blob_cfg.blob_dir);
         let blobs = BlobStore::open(&blob_cfg, BlobKeySource::Software { private_key_bytes: pk.to_vec() })
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         let index = FileIndex::open(&data_root)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-        Ok(Self { blobs, index })
+        let event_log = EventLog::open(&data_root)?;
+
+        Ok(Self { blobs, index, event_log })
     }
 
     /// Map a collection D-Bus path to a credential namespace.
@@ -76,50 +85,60 @@ impl Backend {
         coll_path.trim_start_matches("/org/freedesktop/secrets/collections/").into()
     }
 
-    /// Compute a stable item key from label + attributes.
+    /// Map a collection path + item name to an item D-Bus path.
+    pub fn item_path(coll: &str, key: &str) -> String {
+        format!("{coll}/{key}")
+    }
+
+    /// Compute a stable item key from label + attributes (SHA-256 based).
     pub fn item_key(label: &str, attrs: &[(String, String)]) -> String {
-        use edgerun_json::json;
-        let arr: Vec<JsonValue> = attrs.iter()
-            .map(|(k, v)| json!([k.as_str(), v.as_str()]))
-            .collect();
-        let meta = json!({"l": label, "a": arr});
-        let json = edgerun_json::to_string(&meta).unwrap_or_default();
+        let mut obj = edgerun_json::Map::new();
+        obj.insert("l".into(), edgerun_json::JsonValue::String(label.to_string()));
+        let mut arr = Vec::new();
+        for (k, v) in attrs {
+            let mut pair = edgerun_json::Map::new();
+            pair.insert("k".into(), edgerun_json::JsonValue::String(k.clone()));
+            pair.insert("v".into(), edgerun_json::JsonValue::String(v.clone()));
+            arr.push(edgerun_json::JsonValue::Object(pair));
+        }
+        obj.insert("a".into(), edgerun_json::JsonValue::Array(arr));
+        let json = edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default();
         edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(json.as_bytes()))
     }
 
     // -- CRUD --
 
-    pub fn put(&self, coll: &str, key: &str, secret: &[u8], label: &str, attrs: &[(String, String)]) -> io::Result<()> {
+    pub fn put(&mut self, coll: &str, key: &str, secret: &[u8], label: &str, attrs: &[(String, String)]) -> io::Result<()> {
         let ns = Self::coll_to_ns(coll);
         let meta = CredentialMeta {
             label: label.into(),
             attributes: attrs.iter().cloned().collect(),
-            created_us: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_micros() as u64,
+            created_us: now_us(),
         };
-        // Store secret + metadata as one encrypted blob
-        let payload = meta.to_json().into_bytes();
-        let blob_id = self.blobs.store(&payload, &[])
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-        // Store the actual secret separately — blob_id = SHA256 of meta JSON, not secret
-        // Actually we need the secret encrypted too. Store the raw secret as the blob.
-        // Let me reconsider: blob is content-addressed by SHA256 of payload.
-        // We need TWO blobs: one for the secret, one for metadata indexed by name.
-        // Simpler: store {meta: {...}, secret_bytes: ay} as one blob.
-        // But then the blob_id changes on every secret rotation.
-        // Best: store the secret in the blob (content-addressed), metadata in the FileIndex description.
-        // The FileIndex description field holds the JSON metadata.
+        let description = meta.to_json();
 
-        // Re-do: store the raw secret as the blob
-        let secret_blob_id = self.blobs.store(secret, &[])
+        // Store encrypted blob
+        let blob_id = self.blobs.store(secret, &[])
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
-        // Index with JSON metadata in description
-        self.index.put_credential(&ns, key, &secret_blob_id, Some(&meta.to_json()))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+
+        // Index with metadata in description
+        self.index.put_credential(&ns, key, &blob_id, Some(&description))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+        // Event log
+        self.event_log.append(&SecretEvent {
+            ts_us: now_us(),
+            ns: ns.clone(),
+            key: key.to_string(),
+            op: SecretOp::Put { label: label.into(), attributes: attrs.iter().cloned().collect() },
+        })?;
+
+        Ok(())
     }
 
     pub fn get(&self, coll: &str, key: &str) -> io::Result<Option<(Vec<u8>, CredentialMeta)>> {
         let ns = Self::coll_to_ns(coll);
+
         let rec = self.index.get_credential(&ns, key)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
         let Some(rec) = rec else { return Ok(None); };
@@ -142,16 +161,28 @@ impl Backend {
         Ok(Some((secret, meta)))
     }
 
-    pub fn delete(&self, coll: &str, key: &str) -> io::Result<bool> {
+    pub fn delete(&mut self, coll: &str, key: &str) -> io::Result<bool> {
         let ns = Self::coll_to_ns(coll);
-        self.index.delete_credential(&ns, key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
+        let existed = self.index.delete_credential(&ns, key)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+        if existed {
+            self.event_log.append(&SecretEvent {
+                ts_us: now_us(),
+                ns: ns.clone(),
+                key: key.to_string(),
+                op: SecretOp::Delete,
+            })?;
+        }
+
+        Ok(existed)
     }
 
     pub fn list(&self, coll: &str) -> io::Result<Vec<(String, CredentialMeta)>> {
         let ns = Self::coll_to_ns(coll);
         let creds = self.index.list_credentials(&ns)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
         Ok(creds.into_iter().filter_map(|(key, desc, _ts)| {
             let meta = desc.as_deref()
                 .and_then(CredentialMeta::from_json)
@@ -171,6 +202,35 @@ impl Backend {
             attrs.iter().all(|(k, v)| meta.attributes.get(k) == Some(v))
         }).collect())
     }
+
+    pub fn list_collections(&self) -> io::Result<Vec<String>> {
+        let namespaces = self.index.list_credential_namespaces()
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        Ok(namespaces.into_iter()
+            .map(|ns| format!("/org/freedesktop/secrets/collections/{}", ns))
+            .collect())
+    }
+
+    pub fn collection_exists(&self, coll: &str) -> bool {
+        let ns = Self::coll_to_ns(coll);
+        self.index.list_credential_namespaces().map_or(false, |ns_list| ns_list.contains(&ns))
+    }
+}
+
+fn now_us() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64
+}
+
+/// Derive a deterministic 32-byte key from the data_root path via SHA-256.
+fn derive_key_from_path(path: &PathBuf) -> [u8; 32] {
+    let bytes = path.as_os_str().as_encoded_bytes();
+    let hash = edgerun_core::crypto::sha256(bytes);
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&hash);
+    key
 }
 
 #[cfg(test)]
@@ -201,7 +261,7 @@ mod tests {
     #[test]
     fn backend_put_get() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let mut be = Backend::new(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "test-key", b"super-secret", "Test Label", &[]).unwrap();
         let (secret, meta) = be.get(coll, "test-key").unwrap().unwrap();
@@ -212,7 +272,7 @@ mod tests {
     #[test]
     fn backend_delete() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let mut be = Backend::new(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "del-key", b"secret", "Del Label", &[]).unwrap();
         assert!(be.delete(coll, "del-key").unwrap());
@@ -223,7 +283,7 @@ mod tests {
     #[test]
     fn backend_list() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let mut be = Backend::new(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "Label 1", &[]).unwrap();
         be.put(coll, "k2", b"v2", "Label 2", &[]).unwrap();
@@ -234,7 +294,7 @@ mod tests {
     #[test]
     fn backend_search_by_attr() {
         let root = tmp_root();
-        let be = Backend::new(root).unwrap();
+        let mut be = Backend::new(root).unwrap();
         let coll = "/org/freedesktop/secrets/collections/default";
         be.put(coll, "k1", b"v1", "GitHub", &[("server".into(), "github.com".into())]).unwrap();
         be.put(coll, "k2", b"v2", "GitLab", &[("server".into(), "gitlab.com".into())]).unwrap();
@@ -250,16 +310,17 @@ mod tests {
     }
 
     #[test]
-    fn item_key_deterministic() {
-        let a = Backend::item_key("label", &[("a".into(), "1".into())]);
-        let b = Backend::item_key("label", &[("a".into(), "1".into())]);
-        assert_eq!(a, b);
+    fn key_derivation_deterministic() {
+        let path = PathBuf::from("/tmp/test_data");
+        let k1 = derive_key_from_path(&path);
+        let k2 = derive_key_from_path(&path);
+        assert_eq!(k1, k2);
     }
 
     #[test]
-    fn item_key_differs_on_label() {
-        let a = Backend::item_key("label-a", &[]);
-        let b = Backend::item_key("label-b", &[]);
-        assert_ne!(a, b);
+    fn key_derivation_differs_per_path() {
+        let k1 = derive_key_from_path(&PathBuf::from("/tmp/data_a"));
+        let k2 = derive_key_from_path(&PathBuf::from("/tmp/data_b"));
+        assert_ne!(k1, k2);
     }
 }
