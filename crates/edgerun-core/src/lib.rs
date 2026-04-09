@@ -10,3 +10,4 @@ pub mod util;
 pub mod validators;
 pub mod validators_proto;
 pub mod value;
+pub mod varint;

@@ -1523,8 +1523,11 @@ version = "0.1.0"
 dependencies = [
  "edgerun-core 0.1.0",
  "edgerun-json 1.0.149",
+ "edgerun-proto 0.1.0",
  "edgerun-storage 0.1.0",
  "libc 0.2.183",
+ "prost 0.14.3",
+ "prost-types 0.14.3",
 ]
 
 [[package]]
@@ -1564,6 +1567,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-http 0.1.0",
  "p256 0.13.2",
+ "sha2 0.10.9",
 ]
 
 [[package]]

@@ -1158,49 +1158,16 @@ pub enum CommandReplayResult {
 }
 
 // ---------------------------------------------------------------------------
-// Varint helpers — simple protobuf-style varint encoding for length prefixes
+// Varint helpers — use shared edgerun-core::varint for encoding
 // ---------------------------------------------------------------------------
 
-fn encode_varint(mut value: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8);
-    loop {
-        let mut byte = (value & 0x7F) as u8;
-        value >>= 7;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        out.push(byte);
-        if value == 0 {
-            break;
-        }
-    }
-    out
-}
+use edgerun_core::varint::{encode_varint, decode_varint_from_read};
 
 fn decode_varint_from_file(file: &mut File) -> Result<(u64, bool), StorageError> {
-    let mut value: u64 = 0;
-    let mut shift: u32 = 0;
-    loop {
-        let mut byte = [0u8; 1];
-        match file.read_exact(&mut byte) {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                if shift == 0 {
-                    return Ok((0, true)); // clean EOF at record boundary
-                }
-                return Err(StorageError::Decode("truncated varint".into()));
-            }
-            Err(e) => return Err(StorageError::Io(e)),
-        }
-        value |= ((byte[0] & 0x7F) as u64) << shift;
-        shift += 7;
-        if shift > 63 {
-            return Err(StorageError::Decode("varint overflow".into()));
-        }
-        if byte[0] & 0x80 == 0 {
-            break;
-        }
+    match decode_varint_from_read(file) {
+        Ok(Some(v)) => Ok((v, false)),
+        Ok(None) => Ok((0, true)),
+        Err(e) => Err(StorageError::Io(e)),
     }
-    Ok((value, false))
 }
 

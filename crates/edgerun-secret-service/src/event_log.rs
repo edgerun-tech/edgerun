@@ -1,123 +1,206 @@
-//! Append-only event log for credential operations.
+//! Append-only event log for secret operations.
 //!
-//! Records every secret creation, update, and deletion as a length-prefixed
-//! JSON record. The log is authoritative — the FileIndex can be rebuilt
-//! from it.
+//! Writes protobuf records to the standard event log path
+//! `{data_root}/events/{stream_id_hex}.log`, using the same wire format
+//! as NodeStore: `[varint length][protobuf bytes]`.
+//!
+//! Unlike the node event stream which uses `EventEnvelope`, the secret
+//! service writes payload messages directly (`SecretPutPayload`,
+//! `SecretDeletePayload`, etc.). The event type is determined by the
+//! message type. The event log is immutable — deletion is recorded
+//! by appending a `SecretDeletePayload` event.
 
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
-use edgerun_json::{from_str, JsonValue};
+use edgerun_proto::edgerun::v0::stream::{
+    SecretPutPayload, SecretDeletePayload,
+    CollectionCreatedPayload, CollectionDeletedPayload,
+};
+use prost::Message;
 
 // ===========================================================================
-// Event record
+// Stream identity
 // ===========================================================================
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum SecretOp {
-    Put { label: String, attributes: HashMap<String, String> },
-    Delete,
-    CreateCollection,
-    DeleteCollection,
+/// The stream ID used for all secret-service events.
+pub const SECRET_STREAM_ID: &[u8] = b"secret-service";
+
+// ===========================================================================
+// Event types
+// ===========================================================================
+
+/// The type of a secret event, used for decoding.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SecretEventType {
+    SecretPut,
+    SecretDelete,
+    CollectionCreated,
+    CollectionDeleted,
 }
 
-#[derive(Clone, Debug)]
-pub struct SecretEvent {
-    pub ts_us: u64,
-    pub ns: String,
-    pub key: String,
-    pub op: SecretOp,
+impl SecretEventType {
+    fn as_byte(&self) -> u8 {
+        match self {
+            Self::SecretPut => 0x01,
+            Self::SecretDelete => 0x02,
+            Self::CollectionCreated => 0x03,
+            Self::CollectionDeleted => 0x04,
+        }
+    }
+
+    fn from_byte(b: u8) -> Option<Self> {
+        match b {
+            0x01 => Some(Self::SecretPut),
+            0x02 => Some(Self::SecretDelete),
+            0x03 => Some(Self::CollectionCreated),
+            0x04 => Some(Self::CollectionDeleted),
+            _ => None,
+        }
+    }
+}
+
+/// A single event record in the log.
+pub enum SecretEvent {
+    Put(SecretPutPayload),
+    Delete(SecretDeletePayload),
+    CollectionCreated(CollectionCreatedPayload),
+    CollectionDeleted(CollectionDeletedPayload),
 }
 
 impl SecretEvent {
-    pub fn to_json(&self) -> String {
-        let (op, label, attrs) = match &self.op {
-            SecretOp::Put { label, attributes } => ("put", label, attributes),
-            SecretOp::Delete => ("delete", &String::new(), &HashMap::new()),
-            SecretOp::CreateCollection => ("create_collection", &String::new(), &HashMap::new()),
-            SecretOp::DeleteCollection => ("delete_collection", &String::new(), &HashMap::new()),
-        };
-
-        let mut attrs_map = edgerun_json::Map::new();
-        for (k, v) in attrs {
-            attrs_map.insert(k.clone(), edgerun_json::JsonValue::String(v.clone()));
+    fn event_type(&self) -> SecretEventType {
+        match self {
+            Self::Put(_) => SecretEventType::SecretPut,
+            Self::Delete(_) => SecretEventType::SecretDelete,
+            Self::CollectionCreated(_) => SecretEventType::CollectionCreated,
+            Self::CollectionDeleted(_) => SecretEventType::CollectionDeleted,
         }
-
-        let mut obj = edgerun_json::Map::new();
-        obj.insert("op".into(), edgerun_json::JsonValue::String(op.to_string()));
-        obj.insert("ns".into(), edgerun_json::JsonValue::String(self.ns.clone()));
-        obj.insert("key".into(), edgerun_json::JsonValue::String(self.key.clone()));
-        obj.insert("ts_us".into(), edgerun_json::JsonValue::from(self.ts_us));
-        obj.insert("label".into(), edgerun_json::JsonValue::String(label.clone()));
-        obj.insert("attributes".into(), edgerun_json::JsonValue::Object(attrs_map));
-        edgerun_json::to_string(&edgerun_json::JsonValue::Object(obj)).unwrap_or_default()
     }
 
-    pub fn from_json(s: &str) -> Option<Self> {
-        let v: JsonValue = from_str(s).ok()?;
-        let op_str = v.get("op").and_then(JsonValue::as_str).unwrap_or("");
-        let ns = v.get("ns").and_then(JsonValue::as_str).unwrap_or("").to_string();
-        let key = v.get("key").and_then(JsonValue::as_str).unwrap_or("").to_string();
-        let ts_us = v.get("ts_us").and_then(JsonValue::as_u64).unwrap_or(0);
-        let label = v.get("label").and_then(JsonValue::as_str).unwrap_or("").to_string();
-
-        let mut attrs = HashMap::new();
-        if let Some(attrs_obj) = v.get("attributes").and_then(JsonValue::as_object) {
-            for (k, val) in attrs_obj.iter() {
-                if let Some(vs) = val.as_str() {
-                    attrs.insert(k.clone(), vs.to_string());
-                }
-            }
+    fn payload_bytes(&self) -> Vec<u8> {
+        match self {
+            Self::Put(p) => p.encode_to_vec(),
+            Self::Delete(p) => p.encode_to_vec(),
+            Self::CollectionCreated(p) => p.encode_to_vec(),
+            Self::CollectionDeleted(p) => p.encode_to_vec(),
         }
-
-        let op = match op_str {
-            "put" => SecretOp::Put { label, attributes: attrs },
-            "delete" => SecretOp::Delete,
-            "create_collection" => SecretOp::CreateCollection,
-            "delete_collection" => SecretOp::DeleteCollection,
-            _ => return None,
-        };
-
-        Some(Self { ts_us, ns, key, op })
     }
 }
 
 // ===========================================================================
-// Append-only log
+// Event log
 // ===========================================================================
 
 /// Append-only event log for secret operations.
 ///
-/// Format: `[varint length][JSON payload]` per record.
+/// Writes to `{data_root}/events/{stream_id_hex}.log` in the same wire format
+/// as NodeStore: `[varint total_length][1-byte event_type][protobuf payload]`.
+///
+/// The event log is immutable. "Deletion" is recorded by appending a new
+/// `SecretDelete` event — the history is never altered.
 pub struct EventLog {
     file: File,
     path: PathBuf,
 }
 
 impl EventLog {
-    /// Opens or creates the event log file.
+    /// Opens or creates the event log.
     pub fn open(data_root: &Path) -> io::Result<Self> {
-        let path = data_root.join("secret_events.log");
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
+        let stream_hex = edgerun_core::util::bytes_to_hex(SECRET_STREAM_ID);
+        let events_dir = data_root.join("events");
+        fs::create_dir_all(&events_dir)?;
+        let path = events_dir.join(format!("{}.log", stream_hex));
+
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .read(true)
             .open(&path)?;
+
         Ok(Self { file, path })
     }
 
-    /// Appends an event to the log.
-    pub fn append(&mut self, event: &SecretEvent) -> io::Result<()> {
-        let json = event.to_json();
-        let bytes = json.as_bytes();
-        let len_prefix = encode_varint(bytes.len() as u64);
+    /// Record a secret put (create or rotate).
+    pub fn record_put(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        label: &str,
+        attributes: &[(String, String)],
+        blob_id: &str,
+    ) -> io::Result<()> {
+        let payload = SecretPutPayload {
+            payload_version: 1,
+            namespace: namespace.into(),
+            key: key.into(),
+            label: label.into(),
+            attributes: attributes.iter().cloned().collect(),
+            secret_blob_id: blob_id.into(),
+        };
+        self.append(SecretEvent::Put(payload))
+    }
+
+    /// Record a secret deletion.
+    pub fn record_delete(
+        &mut self,
+        namespace: &str,
+        key: &str,
+        label: &str,
+        reason: Option<&str>,
+    ) -> io::Result<()> {
+        let payload = SecretDeletePayload {
+            payload_version: 1,
+            namespace: namespace.into(),
+            key: key.into(),
+            label: label.into(),
+            reason: reason.unwrap_or("").into(),
+        };
+        self.append(SecretEvent::Delete(payload))
+    }
+
+    /// Record a collection creation.
+    pub fn record_collection_created(
+        &mut self,
+        collection_name: &str,
+        label: &str,
+    ) -> io::Result<()> {
+        let payload = CollectionCreatedPayload {
+            payload_version: 1,
+            collection_name: collection_name.into(),
+            label: label.into(),
+        };
+        self.append(SecretEvent::CollectionCreated(payload))
+    }
+
+    /// Record a collection deletion.
+    pub fn record_collection_deleted(
+        &mut self,
+        collection_name: &str,
+        items_removed: u32,
+    ) -> io::Result<()> {
+        let payload = CollectionDeletedPayload {
+            payload_version: 1,
+            collection_name: collection_name.into(),
+            items_removed,
+        };
+        self.append(SecretEvent::CollectionDeleted(payload))
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal
+    // -----------------------------------------------------------------------
+
+    fn append(&mut self, event: SecretEvent) -> io::Result<()> {
+        let payload_bytes = event.payload_bytes();
+        let total_len = 1 + payload_bytes.len(); // 1 byte type + payload
+        let len_prefix = encode_varint(total_len as u64);
+
         self.file.write_all(&len_prefix)?;
-        self.file.write_all(bytes)?;
+        self.file.write_all(&[event.event_type().as_byte()])?;
+        self.file.write_all(&payload_bytes)?;
         self.file.sync_all()?;
         Ok(())
     }
@@ -128,13 +211,35 @@ impl EventLog {
         let mut events = Vec::new();
         loop {
             match decode_varint_stream(&mut file) {
-                Ok(Some(len)) => {
-                    let mut buf = vec![0u8; len as usize];
+                Ok(Some(total_len)) => {
+                    let mut buf = vec![0u8; total_len as usize];
                     match file.read_exact(&mut buf) {
                         Ok(()) => {
-                            let json = String::from_utf8_lossy(&buf);
-                            if let Some(event) = SecretEvent::from_json(&json) {
-                                events.push(event);
+                            let event_type = SecretEventType::from_byte(buf[0]);
+                            let payload = &buf[1..];
+                            if let Some(et) = event_type {
+                                match et {
+                                    SecretEventType::SecretPut => {
+                                        if let Ok(p) = SecretPutPayload::decode(payload) {
+                                            events.push(SecretEvent::Put(p));
+                                        }
+                                    }
+                                    SecretEventType::SecretDelete => {
+                                        if let Ok(p) = SecretDeletePayload::decode(payload) {
+                                            events.push(SecretEvent::Delete(p));
+                                        }
+                                    }
+                                    SecretEventType::CollectionCreated => {
+                                        if let Ok(p) = CollectionCreatedPayload::decode(payload) {
+                                            events.push(SecretEvent::CollectionCreated(p));
+                                        }
+                                    }
+                                    SecretEventType::CollectionDeleted => {
+                                        if let Ok(p) = CollectionDeletedPayload::decode(payload) {
+                                            events.push(SecretEvent::CollectionDeleted(p));
+                                        }
+                                    }
+                                }
                             }
                         }
                         Err(_) => break,
@@ -148,111 +253,95 @@ impl EventLog {
 }
 
 // ===========================================================================
-// Varint encoding (protobuf style)
+// ===========================================================================
+// Helpers
 // ===========================================================================
 
-fn encode_varint(mut v: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(8);
-    loop {
-        let mut byte = (v & 0x7F) as u8;
-        v >>= 7;
-        if v != 0 {
-            byte |= 0x80;
-        }
-        out.push(byte);
-        if v == 0 {
-            break;
-        }
-    }
-    out
-}
+use edgerun_core::varint::{encode_varint, decode_varint_from_read as decode_varint_stream};
 
-fn decode_varint_stream<R: Read>(r: &mut R) -> io::Result<Option<u64>> {
-    let mut result: u64 = 0;
-    let mut shift: u32 = 0;
-    loop {
-        let mut byte = [0u8; 1];
-        match r.read_exact(&mut byte) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                if shift == 0 { return Ok(None); }
-                return Err(e);
-            }
-            Err(e) => return Err(e),
-        }
-        result |= ((byte[0] & 0x7F) as u64) << shift;
-        shift += 7;
-        if byte[0] & 0x80 == 0 {
-            break;
-        }
-        if shift >= 64 {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "varint too long"));
-        }
-    }
-    Ok(Some(result))
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
-    fn tmp_log() -> (PathBuf, EventLog) {
+    fn tmp_root() -> PathBuf {
         static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let p = std::env::temp_dir().join(format!("evlog_test_{}_{}", std::process::id(), n));
-        let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(&p).unwrap();
-        let log = EventLog::open(&p).unwrap();
-        (p, log)
+        let _ = fs::remove_dir_all(&p);
+        fs::create_dir_all(&p).unwrap();
+        p
     }
 
     #[test]
-    fn event_roundtrip() {
-        let (_path, _log) = tmp_log();
-        let event = SecretEvent {
-            ts_us: 12345,
-            ns: "default".into(),
-            key: "test-key".into(),
-            op: SecretOp::Put {
-                label: "Test".into(),
-                attributes: [("server".into(), "github.com".into())].into(),
-            },
-        };
-        let json = event.to_json();
-        let back = SecretEvent::from_json(&json).unwrap();
-        assert_eq!(back.ns, "default");
-        assert_eq!(back.key, "test-key");
-        assert_eq!(back.ts_us, 12345);
-        if let SecretOp::Put { label, attributes } = back.op {
-            assert_eq!(label, "Test");
-            assert_eq!(attributes["server"], "github.com");
-        } else { panic!("wrong op"); }
-    }
+    fn record_put_and_replay() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_put("default", "k1", "Key 1", &[], "blob123").unwrap();
+        log.record_put("default", "k2", "Key 2", &[("server".into(), "github.com".into())], "blob456").unwrap();
+        log.record_delete("default", "k1", "Key 1", Some("no longer needed")).unwrap();
 
-    #[test]
-    fn append_and_replay() {
-        let (path, mut log) = tmp_log();
-        log.append(&SecretEvent {
-            ts_us: 100, ns: "default".into(), key: "k1".into(),
-            op: SecretOp::Put { label: "Key 1".into(), attributes: HashMap::new() },
-        }).unwrap();
-        log.append(&SecretEvent {
-            ts_us: 200, ns: "default".into(), key: "k2".into(),
-            op: SecretOp::Put { label: "Key 2".into(), attributes: HashMap::new() },
-        }).unwrap();
-        log.append(&SecretEvent {
-            ts_us: 300, ns: "default".into(), key: "k1".into(),
-            op: SecretOp::Delete,
-        }).unwrap();
-
-        // Reopen and replay
-        let log2 = EventLog::open(&path).unwrap();
-        let events = log2.replay().unwrap();
+        let events = log.replay().unwrap();
         assert_eq!(events.len(), 3);
-        assert_eq!(events[0].key, "k1");
-        assert_eq!(events[1].key, "k2");
-        assert_eq!(events[2].op, SecretOp::Delete);
+        assert!(matches!(&events[0], SecretEvent::Put(_)));
+        assert!(matches!(&events[1], SecretEvent::Put(_)));
+        assert!(matches!(&events[2], SecretEvent::Delete(_)));
+
+        // Decode payload
+        if let SecretEvent::Put(p) = &events[0] {
+            assert_eq!(p.namespace, "default");
+            assert_eq!(p.key, "k1");
+            assert_eq!(p.label, "Key 1");
+            assert_eq!(p.secret_blob_id, "blob123");
+        } else { panic!("expected Put"); }
+    }
+
+    #[test]
+    fn seq_resumes_after_reopen() {
+        let root = tmp_root();
+        {
+            let mut log = EventLog::open(&root).unwrap();
+            log.record_put("default", "k1", "K1", &[], "b1").unwrap();
+        }
+        {
+            let mut log = EventLog::open(&root).unwrap();
+            log.record_put("default", "k2", "K2", &[], "b2").unwrap();
+        }
+        let log = EventLog::open(&root).unwrap();
+        let events = log.replay().unwrap();
+        assert_eq!(events.len(), 2);
+    }
+
+    #[test]
+    fn collection_events() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_collection_created("default", "Default").unwrap();
+        log.record_collection_deleted("default", 3).unwrap();
+
+        let events = log.replay().unwrap();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(&events[0], SecretEvent::CollectionCreated(_)));
+        assert!(matches!(&events[1], SecretEvent::CollectionDeleted(_)));
+
+        if let SecretEvent::CollectionDeleted(p) = &events[1] {
+            assert_eq!(p.items_removed, 3);
+        } else { panic!("expected CollectionDeleted"); }
+    }
+
+    #[test]
+    fn event_log_is_append_only() {
+        let root = tmp_root();
+        let mut log = EventLog::open(&root).unwrap();
+        log.record_put("default", "k1", "K1", &[], "b1").unwrap();
+        log.record_delete("default", "k1", "K1", None).unwrap();
+
+        // Replay always shows both events — deletion is an append, not a removal
+        let events1 = log.replay().unwrap();
+        assert_eq!(events1.len(), 2);
+
+        // Reopen and replay again — same result
+        let log2 = EventLog::open(&root).unwrap();
+        let events2 = log2.replay().unwrap();
+        assert_eq!(events2.len(), 2);
     }
 
     #[test]

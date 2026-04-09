@@ -270,17 +270,7 @@ fn read_frame(stream: &mut TcpStream, timeout_secs: u64) -> Option<Vec<u8>> {
 }
 
 fn encode_varint(mut v: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    loop {
-        let byte = (v & 0x7F) as u8;
-        v >>= 7;
-        if v == 0 {
-            buf.push(byte);
-            break;
-        }
-        buf.push(byte | 0x80);
-    }
-    buf
+    edgerun_core::varint::encode_varint(v)
 }
 
 fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: Option<[u8; MESH_PUBLIC_KEY_LENGTH]>) -> Result<[u8; MESH_PUBLIC_KEY_LENGTH], String> {

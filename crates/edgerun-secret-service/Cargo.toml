@@ -13,4 +13,7 @@ path = "src/main.rs"
 edgerun-storage = { path = "../edgerun-storage" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-json = { path = "../edgerun-json" }
+edgerun-proto = { path = "../edgerun-proto" }
 libc = { path = "../libc" }
+prost = { path = "../prost" }
+prost-types = { path = "../prost-types" }

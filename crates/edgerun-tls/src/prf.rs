@@ -251,16 +251,10 @@ impl TlsPrf {
         Self::sha256(&outer_msg)
     }
 
-    /// SHA-256 hash (simplified placeholder)
-    /// In production, use the edgerun-sha2 crate from workspace
-    fn sha256(_data: &[u8]) -> Vec<u8> {
-        // This is a placeholder - a full implementation would compute SHA-256
-        // For now, return a fixed hash
-        vec![
-            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
-            0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
-            0x78, 0x52, 0xb8, 0x55,
-        ]
+    /// SHA-256 hash using the workspace sha2 crate.
+    fn sha256(data: &[u8]) -> Vec<u8> {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(data).to_vec()
     }
 }
 

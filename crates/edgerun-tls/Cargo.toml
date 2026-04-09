@@ -13,3 +13,4 @@ categories = ["cryptography", "network-programming"]
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
 p256 = { path = "../edgerun-p256", default-features = false }
+sha2 = { path = "../sha2", default-features = false }

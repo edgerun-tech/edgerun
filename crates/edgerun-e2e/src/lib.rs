@@ -230,17 +230,7 @@ fn read_frame(stream: &mut TcpStream) -> Option<Vec<u8>> {
 }
 
 fn encode_varint(mut v: u64) -> Vec<u8> {
-    let mut buf = Vec::new();
-    loop {
-        let byte = (v & 0x7F) as u8;
-        v >>= 7;
-        if v == 0 {
-            buf.push(byte);
-            break;
-        }
-        buf.push(byte | 0x80);
-    }
-    buf
+    edgerun_core::varint::encode_varint(v)
 }
 
 /// Perform a TCP session handshake.
