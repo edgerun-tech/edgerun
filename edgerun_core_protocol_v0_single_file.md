@@ -1133,7 +1133,50 @@ Fields:
 - `progress_object` — optional ObjectRef
 - `action_metadata` — optional ObjectRef
 
-### 14.16 LogicalObjectDescriptor
+### 14.16 SecretPutPayload
+
+Records that a secret was created, stored, or rotated. The actual secret value
+is NOT in this payload — only metadata. The encrypted secret lives in the
+BlobStore; the blob_id is referenced here.
+
+Fields:
+- `payload_version` — required
+- `namespace` — required string (credential namespace, e.g. "default", "login")
+- `key` — required string (stable key identifier derived from label + attributes)
+- `label` — required string (human-readable label)
+- `attributes` — optional map<string, string> (key-value pairs for search)
+- `secret_blob_id` — required string (hex blob ID of the encrypted secret)
+
+### 14.17 SecretDeletePayload
+
+Records that a secret was deleted. Only metadata is recorded.
+
+Fields:
+- `payload_version` — required
+- `namespace` — required string
+- `key` — required string
+- `label` — required string
+- `reason` — optional string (reason for deletion)
+
+### 14.18 CollectionCreatedPayload
+
+Records that a secret collection was created.
+
+Fields:
+- `payload_version` — required
+- `collection_name` — required string (also used as namespace)
+- `label` — required string (human-readable display label)
+
+### 14.19 CollectionDeletedPayload
+
+Records that a secret collection was deleted.
+
+Fields:
+- `payload_version` — required
+- `collection_name` — required string
+- `items_removed` — required uint32 (count of items in the collection)
+
+### 14.20 LogicalObjectDescriptor
 
 Fields:
 - `descriptor_version` — required
@@ -1344,6 +1387,10 @@ At this point, the following families are stable enough to encode in protobuf wi
 - CommandEnvelope
 - CommandResultPayload
 - ActionLifecyclePayload
+- SecretPutPayload
+- SecretDeletePayload
+- CollectionCreatedPayload
+- CollectionDeletedPayload
 - LogicalObjectDescriptor
 - StoredRepresentationHeader
 - ChunkManifest
@@ -2727,6 +2774,11 @@ enum EventType {
   EVENT_TYPE_ACTION_STARTED = 5;
   EVENT_TYPE_ACTION_COMPLETED = 6;
   EVENT_TYPE_ACTION_FAILED = 7;
+  // Secret service events
+  EVENT_TYPE_SECRET_PUT = 8;
+  EVENT_TYPE_SECRET_DELETE = 9;
+  EVENT_TYPE_COLLECTION_CREATED = 10;
+  EVENT_TYPE_COLLECTION_DELETED = 11;
 }
 
 enum CommandDecision {
@@ -2752,7 +2804,12 @@ enum CommandType {
   COMMAND_TYPE_FETCH_OBJECT = 6;
   COMMAND_TYPE_QUERY = 7;
   COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
-  COMMAND_TYPE_CUSTOM = 1000;
+  COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
+  // Secret management commands
+  COMMAND_TYPE_PUT_SECRET = 1001;
+  COMMAND_TYPE_DELETE_SECRET = 1002;
+  COMMAND_TYPE_LIST_SECRETS = 1003;
+  COMMAND_TYPE_CUSTOM = 2000;
 }
 
 message EventEnvelope {
@@ -2836,6 +2893,39 @@ message ActionLifecyclePayload {
   edgerun.v0.common.ObjectRef error_object = 6;
   edgerun.v0.common.ObjectRef progress_object = 7;
   edgerun.v0.common.ObjectRef action_metadata = 8;
+}
+
+// Secret service payloads — stored as payload_object in EventEnvelopes.
+// The secret value is NEVER in the payload; only metadata is recorded.
+// The secret itself lives in the encrypted BlobStore.
+
+message SecretPutPayload {
+  uint32 payload_version = 1;
+  string namespace = 2;
+  string key = 3;
+  string label = 4;
+  map<string, string> attributes = 5;
+  string secret_blob_id = 6;
+}
+
+message SecretDeletePayload {
+  uint32 payload_version = 1;
+  string namespace = 2;
+  string key = 3;
+  string label = 4;
+  string reason = 5;
+}
+
+message CollectionCreatedPayload {
+  uint32 payload_version = 1;
+  string collection_name = 2;
+  string label = 3;
+}
+
+message CollectionDeletedPayload {
+  uint32 payload_version = 1;
+  string collection_name = 2;
+  uint32 items_removed = 3;
 }
 ```
 

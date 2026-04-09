@@ -34,7 +34,7 @@ pub fn to_vec<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, Error> {
 /// Serialise any `Serialize` value directly into a `String`.
 pub fn to_string<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
     let bytes = to_vec(value)?;
-    Ok(unsafe { String::from_utf8_unchecked(bytes) })
+    Ok(String::from_utf8(bytes).expect("JSON serialization produced invalid UTF-8"))
 }
 
 // ---------------------------------------------------------------------------

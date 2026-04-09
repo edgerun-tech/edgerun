@@ -8,5 +8,4 @@ plugins:
   - local: protoc-gen-prost
     out: crates/edgerun-proto/src/gen
     opt:
-      - paths=source_relative
       - enable_type_names

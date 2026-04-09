@@ -53,7 +53,7 @@ use std::io::{Read, Write};
 pub fn escape_json_string(input: &str) -> String {
     let mut out = Vec::with_capacity(input.len() + 2);
     util::write_escaped_json_string(&mut out, input);
-    unsafe { String::from_utf8_unchecked(out) }
+    String::from_utf8(out).expect("JSON escape produced invalid UTF-8")
 }
 
 /// Parses a JSON string into an owned [`JsonValue`].
@@ -346,7 +346,7 @@ where
     let json_value = to_value(value)?;
     let mut out = Vec::with_capacity(util::initial_json_capacity(&json_value) + 16);
     util::write_json_value_pretty(&mut out, &json_value, 0)?;
-    Ok(unsafe { String::from_utf8_unchecked(out) })
+    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
 }
 
 /// Serializes a [`JsonValue`] to a pretty-printed JSON string.
@@ -365,7 +365,7 @@ where
 pub fn to_string_pretty(value: &JsonValue) -> Result<String, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value) + 16);
     util::write_json_value_pretty(&mut out, value, 0)?;
-    Ok(unsafe { String::from_utf8_unchecked(out) })
+    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
 }
 
 /// Serializes a value to a pretty-printed JSON byte vector.

@@ -130,7 +130,12 @@ impl RunningWorkloads {
         }
 
         // Method 2: SIGTERM → wait 5s → SIGKILL on init PID
-        let _ = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGTERM) };
+        let term_result = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGTERM) };
+        if term_result != 0 {
+            edgerun_log::warn!("SIGTERM failed for workload {} (pid {}): {}",
+                edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
+                info.pid, std::io::Error::last_os_error());
+        }
 
         for _ in 0..50 {
             if !Self::process_exists(info.pid) {
@@ -143,10 +148,16 @@ impl RunningWorkloads {
         }
 
         // SIGKILL if still alive
-        let _ = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGKILL) };
-        edgerun_log::info!("force-killed workload {} via SIGKILL (pid {})",
-            edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
-            info.pid);
+        let kill_result = unsafe { libc::kill(info.pid as libc::pid_t, libc::SIGKILL) };
+        if kill_result != 0 {
+            edgerun_log::error!("SIGKILL failed for workload {} (pid {}): {}",
+                edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
+                info.pid, std::io::Error::last_os_error());
+        } else {
+            edgerun_log::info!("force-killed workload {} via SIGKILL (pid {})",
+                edgerun_core::util::bytes_to_hex(&info.work_id[..8]),
+                info.pid);
+        }
     }
 
     /// Check if a process is still running.

@@ -28,6 +28,9 @@ jobs:
       - name: Run Rust test suite
         run: make test
 
+      - name: Run ignored edgerun-rt concurrency tests
+        run: cargo test -p edgerun-rt -- --ignored
+
       - name: Build release binary
         run: make release-build
 

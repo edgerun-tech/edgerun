@@ -134,7 +134,7 @@ impl JsonValue {
     pub fn to_json_string(&self) -> Result<String, crate::error::JsonError> {
         let mut out = Vec::with_capacity(util::initial_json_capacity(self));
         util::write_json_value(&mut out, self)?;
-        Ok(unsafe { String::from_utf8_unchecked(out) })
+        Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
     }
 
     pub fn push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) {

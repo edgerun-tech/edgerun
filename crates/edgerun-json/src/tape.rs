@@ -334,7 +334,7 @@ impl CompiledObjectSchema {
     {
         let mut out = Vec::with_capacity(self.capacity_hint);
         self.write_json_bytes(&mut out, values)?;
-        Ok(unsafe { String::from_utf8_unchecked(out) })
+        Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
     }
 
     pub fn write_json_bytes<'a, I>(&self, out: &mut Vec<u8>, values: I) -> Result<(), JsonError>
@@ -388,7 +388,7 @@ impl CompiledRowSchema {
         let (lower, _) = iter.size_hint();
         let mut out = Vec::with_capacity(2 + lower.saturating_mul(self.row_capacity_hint + 1));
         self.write_json_bytes_from_iter(&mut out, iter)?;
-        Ok(unsafe { String::from_utf8_unchecked(out) })
+        Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
     }
 
     pub fn write_json_bytes<'a, R, I>(&self, out: &mut Vec<u8>, rows: R) -> Result<(), JsonError>
