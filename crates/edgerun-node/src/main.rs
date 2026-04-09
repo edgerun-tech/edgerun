@@ -564,7 +564,7 @@ async fn run_health_server(port: u16, state: HealthState) {
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = match edgerun_rt::TcpListener::bind(&addr).await {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(&addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind health endpoint on {}: {}", addr, e);
@@ -879,7 +879,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
                 signer: Arc::clone(&bootstrap_signer),
             };
             edgerun_rt::spawn(async move {
-                match edgerun_rt::TcpStream::connect(&peer_addr).await {
+                match edgerun_rt::ConnectFuture::new(&peer_addr).await {
                     Ok(stream) => {
                         edgerun_log::info!("connected to bootstrap peer");
                         // As initiator, generate nonce and send SessionHello first
@@ -1117,7 +1117,7 @@ async fn send_command_to_peer_async(
 
     let mut stream = edgerun_rt::timeout(
         std::time::Duration::from_secs(10),
-        edgerun_rt::TcpStream::connect(peer_addr),
+        edgerun_rt::ConnectFuture::new(peer_addr),
     ).await??;
 
     let cmd_bytes = prost::Message::encode_to_vec(command);
@@ -1151,7 +1151,7 @@ async fn send_query_to_peer(
     use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
     let mut stream = edgerun_rt::timeout(
         std::time::Duration::from_secs(10),
-        edgerun_rt::TcpStream::connect(peer_addr),
+        edgerun_rt::ConnectFuture::new(peer_addr),
     ).await??;
 
     let query_bytes = prost::Message::encode_to_vec(query);
@@ -1485,7 +1485,7 @@ async fn run_tcp_listener(
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
     signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync>,
 ) {
-    let listener = match edgerun_rt::TcpListener::bind(&listen_addr).await {
+    let listener = match edgerun_rt::AsyncTcpListener::bind(&listen_addr) {
         Ok(l) => l,
         Err(e) => {
             edgerun_log::error!("failed to bind TCP on {}: {}", listen_addr, e);
@@ -1516,12 +1516,12 @@ async fn run_tcp_listener(
 /// If `outbound_nonce` is provided, this side initiates the handshake by
 /// sending SessionHello first. Otherwise, it waits for the peer's hello.
 async fn handle_tcp_connection(
-    mut stream: edgerun_rt::TcpStream,
+    stream: Arc<edgerun_rt::AsyncTcpStream>,
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
     ctx: &SessionContext,
     outbound_nonce: Option<Vec<u8>>,
 ) {
-    let (mut reader, mut writer) = edgerun_rt::split(&mut stream);
+    let (mut reader, mut writer) = stream.split();
     let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 

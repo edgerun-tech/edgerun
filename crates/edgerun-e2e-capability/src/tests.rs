@@ -556,6 +556,71 @@ fn test_tpm_e2e_open() {
     assert!(tpm.path().to_str().unwrap().contains("tpmrm0"));
 }
 
+#[test]
+#[ignore = "requires real TPM hardware"]
+fn test_tpm_e2e_get_random() {
+    require_hardware();
+
+    use edgerun_tpm::{LinuxTpmDevice, TpmTransport};
+    use std::path::Path;
+
+    let path = Path::new("/dev/tpmrm0");
+    if !path.exists() {
+        println!("TPM device /dev/tpmrm0 not found, skipping");
+        return;
+    }
+
+    let mut tpm = LinuxTpmDevice::new(path);
+
+    // Build TPM2_GetRandom command (command code 0x0000017B)
+    // Format: tag(2) + size(4) + cc(4) + bytesRequested(2) = 12 bytes
+    // Total size = 12 = 0x0000000C
+    let bytes_requested: u16 = 32;
+    let command: Vec<u8> = vec![
+        0x80, 0x01, // tag: TPM_ST_NO_SESSIONS
+        0x00, 0x00, 0x00, 0x0C, // size: 12 bytes total
+        0x00, 0x00, 0x01, 0x7B, // cc: TPM2_GetRandom
+        (bytes_requested >> 8) as u8, // bytesRequested high
+        (bytes_requested & 0xFF) as u8, // bytesRequested low
+    ];
+
+    let response = tpm.transact(&command);
+    match response {
+        Ok(resp) => {
+            assert!(resp.len() >= 14, "response too short: {} bytes", resp.len());
+            let tag = u16::from_be_bytes([resp[0], resp[1]]);
+            let size = u32::from_be_bytes([resp[2], resp[3], resp[4], resp[5]]);
+            let rc = u32::from_be_bytes([resp[6], resp[7], resp[8], resp[9]]);
+            assert_eq!(tag, 0x8001, "response tag should be TPM_ST_NO_SESSIONS (0x8001)");
+            assert_eq!(size as usize, resp.len(), "response size mismatch");
+            assert_eq!(rc, 0x00000000, "TPM returned error code: 0x{:08X}", rc);
+
+            // Extract random bytes: after header (10) + randomBytesSize (2)
+            let rand_size = u16::from_be_bytes([resp[10], resp[11]]) as usize;
+            assert!(rand_size >= 16, "TPM returned only {} random bytes", rand_size);
+            assert!(
+                rand_size <= 32,
+                "TPM returned more random bytes than requested: {}",
+                rand_size
+            );
+            let random_bytes = &resp[12..12 + rand_size];
+            assert!(
+                random_bytes.iter().any(|&b| b != 0),
+                "TPM returned all zeros"
+            );
+
+            println!(
+                "TPM GetRandom: {} bytes = {:02X?}",
+                rand_size,
+                &random_bytes[..rand_size.min(16)]
+            );
+        }
+        Err(e) => {
+            panic!("TPM GetRandom failed: {:?}", e);
+        }
+    }
+}
+
 // ===========================================================================
 // Test 6: Full client ↔ server e2e over Unix socket with real hardware
 // ===========================================================================

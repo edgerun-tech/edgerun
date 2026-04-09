@@ -35,7 +35,7 @@ pub use semaphore::{Semaphore, Permit, TryAcquireError as SemaphoreError, Acquir
 pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use barrier::{Barrier, BarrierWaitResult};
 pub use watch::{Sender as WatchSender, Receiver as WatchReceiver};
-pub use async_tcp::{AsyncTcpStream, AsyncTcpListener, ConnectFuture};
+pub use async_tcp::{AsyncTcpStream, AsyncTcpListener, ConnectFuture, AsyncReadHalf, AsyncWriteHalf};
 
 // ===========================================================================
 // Thread-local runtime handle
@@ -644,13 +644,13 @@ where F: FnOnce() -> R + Send + 'static, R: Send + 'static
 }
 
 /// Register a connecting fd with the reactor.
-fn register_connecting_fd(fd: RawFd, waker: Waker) {
+pub(crate) fn register_connecting_fd(fd: RawFd, waker: Waker) {
     let rt = current_rt();
     rt.reactor.wait_connect(fd, waker);
 }
 
 /// Register an existing fd for read readiness notification.
-fn register_fd_read(fd: RawFd, waker: Waker) {
+pub(crate) fn register_fd_read(fd: RawFd, waker: Waker) {
     let rt = current_rt();
     rt.reactor.wait_read(fd, waker);
 }

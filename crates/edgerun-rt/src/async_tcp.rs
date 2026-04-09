@@ -1,5 +1,7 @@
 //! Non-blocking TCP connect + async I/O with separate read/write wakers.
 
+use crate::{AsyncRead, AsyncWrite, register_fd_read, register_connecting_fd};
+
 use std::future::Future;
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -329,3 +331,231 @@ impl Future for AcceptFuture<'_> {
         }
     }
 }
+
+// ===========================================================================
+// AsyncRead / AsyncWrite implementations
+// ===========================================================================
+
+
+/// Async read using the raw fd directly — no mutex needed.
+/// Each poll registers with the reactor for EPOLLIN.
+impl AsyncRead for AsyncTcpStream {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        let this = &*self;
+        unsafe {
+            let fd = this.fd;
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    crate::register_fd_read(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else if n == 0 {
+                Poll::Ready(Ok(0))
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+}
+
+/// Async write using the raw fd directly — no mutex needed.
+/// Each poll registers with the reactor for EPOLLOUT.
+impl AsyncWrite for AsyncTcpStream {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        let this = &*self;
+        unsafe {
+            let fd = this.fd;
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    (*this.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    crate::register_connecting_fd(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = &*self;
+        unsafe {
+            let res = libc::shutdown(this.fd, libc::SHUT_WR);
+            if res < 0 {
+                Poll::Ready(Err(io::Error::last_os_error()))
+            } else {
+                Poll::Ready(Ok(()))
+            }
+        }
+    }
+}
+
+// Unpin — we only access through Pin<&mut Self> in poll methods, but Arc<AsyncTcpStream> is always Unpin.
+impl Unpin for AsyncTcpStream {}
+
+// ===========================================================================
+// Split halves — independent wakers, shared fd via Arc
+// ===========================================================================
+
+pub struct AsyncReadHalf { inner: Arc<AsyncTcpStream> }
+pub struct AsyncWriteHalf { inner: Arc<AsyncTcpStream> }
+
+impl AsyncTcpStream {
+    /// Split into separate read and write halves.
+    /// Both halves share the same fd but have independent wakers.
+    /// This increments the ref count so the fd stays alive.
+    pub fn split(self: &Arc<Self>) -> (AsyncReadHalf, AsyncWriteHalf) {
+        // We need to increment refs for each half.
+        self.refs.fetch_add(2, Ordering::Relaxed);
+        (
+            AsyncReadHalf { inner: Arc::clone(self) },
+            AsyncWriteHalf { inner: Arc::clone(self) },
+        )
+    }
+}
+
+impl AsyncRead for AsyncReadHalf {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        unsafe {
+            let fd = self.inner.fd;
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    (*self.inner.read_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    crate::register_fd_read(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else if n == 0 {
+                Poll::Ready(Ok(0))
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+}
+
+impl AsyncWrite for AsyncWriteHalf {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        unsafe {
+            let fd = self.inner.fd;
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    (*self.inner.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    crate::register_connecting_fd(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        unsafe {
+            let res = libc::shutdown(self.inner.fd, libc::SHUT_WR);
+            if res < 0 {
+                Poll::Ready(Err(io::Error::last_os_error()))
+            } else {
+                Poll::Ready(Ok(()))
+            }
+        }
+    }
+}
+
+impl Unpin for AsyncReadHalf {}
+impl Unpin for AsyncWriteHalf {}
+
+/// Legacy split function for backwards compatibility with old TcpStream.
+pub fn split_legacy(stream: &mut crate::TcpStream) -> (crate::ReadHalf, crate::WriteHalf) {
+    crate::split(stream)
+}
+
+// ===========================================================================
+// AsyncRead / AsyncWrite for Arc<AsyncTcpStream>
+// ===========================================================================
+
+
+impl AsyncRead for Arc<AsyncTcpStream> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        unsafe {
+            let fd = self.fd;
+            let slice = std::slice::from_raw_parts_mut(buf.as_mut_ptr(), buf.len());
+            let n = libc::read(fd, slice.as_mut_ptr() as *mut libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    crate::register_fd_read(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else if n == 0 {
+                Poll::Ready(Ok(0))
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+}
+
+impl AsyncWrite for Arc<AsyncTcpStream> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        unsafe {
+            let fd = self.fd;
+            let n = libc::write(fd, buf.as_ptr() as *const libc::c_void, buf.len());
+            if n < 0 {
+                let e = io::Error::last_os_error();
+                if e.kind() == io::ErrorKind::WouldBlock {
+                    (*self.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    crate::register_connecting_fd(fd, cx.waker().clone());
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Err(e))
+                }
+            } else {
+                Poll::Ready(Ok(n as usize))
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        unsafe {
+            let res = libc::shutdown(self.fd, libc::SHUT_WR);
+            if res < 0 {
+                Poll::Ready(Err(io::Error::last_os_error()))
+            } else {
+                Poll::Ready(Ok(()))
+            }
+        }
+    }
+}
+
