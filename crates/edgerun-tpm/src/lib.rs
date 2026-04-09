@@ -3,7 +3,7 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-mod tss2_esapi;
+// TSS2 ESAPI module removed — we now use raw TPM commands via /dev/tpmrm0
 
 pub const TPM_ST_NO_SESSIONS: u16 = 0x8001;
 pub const TPM_ST_SESSIONS: u16 = 0x8002;
@@ -17,6 +17,7 @@ pub const TPM_CC_POLICY_COMMAND_CODE: u32 = 0x0000_016C;
 pub const TPM_CC_POLICY_PCR: u32 = 0x0000_017F;
 pub const TPM_CC_POLICY_AUTHORIZE: u32 = 0x0000_016A;
 pub const TPM_CC_CREATE_PRIMARY: u32 = 0x0000_0131;
+pub const TPM_CC_EVICT_CONTROL: u32 = 0x0000_0120;
 pub const TPM_CC_FLUSH_CONTEXT: u32 = 0x0000_0165;
 pub const TPM_CC_STARTUP: u32 = 0x0000_0144;
 pub const TPM_CC_SHUTDOWN: u32 = 0x0000_0145;
@@ -1531,98 +1532,20 @@ impl<T: TpmTransport> TpmDevice<T> {
     ///
     /// Returns the persistent handle and public key bytes.
     ///
-    /// Uses raw TSS2 ESAPI calls (tss-esapi-sys) to avoid pulling in the
-    /// full tss-esapi crate which depends on regex for TCTI string parsing.
+    /// Uses raw TPM commands via `/dev/tpmrm0` — no C library dependencies.
     pub fn create_ecdsa_p256_signing_key(
         &mut self,
         persistent_handle: u32,
     ) -> Result<TpmProvisionedKey, TpmError> {
-        use crate::tss2_esapi::*;
+        // Startup the TPM (ignore TPM_RC_INITIALIZE — already started)
+        let _ = self.startup(TPM_SU_CLEAR);
 
-        // Initialize TCTI for /dev/tpmrm0
-        let tcti_name = b"device:/dev/tpmrm0\0";
-        let mut tcti_ctx: *mut TSS2_TCTI_CONTEXT = std::ptr::null_mut();
-        let rc = unsafe { Tss2_TctiLdr_Initialize(tcti_name.as_ptr().cast(), &mut tcti_ctx) };
-        if rc != 0 {
-            return Err(TpmError::Provider(format!(
-                "Tss2_TctiLdr_Initialize failed: 0x{rc:08x}"
-            )));
-        }
-
-        // Initialize ESYS context
-        let mut esys_ctx: *mut ESYS_CONTEXT = std::ptr::null_mut();
-        let rc = unsafe { Esys_Initialize(&mut esys_ctx, tcti_ctx, std::ptr::null_mut()) };
-        if rc != 0 {
-            unsafe { Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
-            return Err(TpmError::Provider(format!(
-                "Esys_Initialize failed: 0x{rc:08x}"
-            )));
-        }
-
-        // Startup TPM
-        let rc = unsafe { Esys_Startup(esys_ctx, 0x0000 /* TPM2_SU_CLEAR */) };
-        if rc != 0 && rc != 0x0000_0120 /* TPM_RC_INITIALIZE */ {
-            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
-            return Err(TpmError::Provider(format!(
-                "Esys_Startup failed: 0x{rc:08x}"
-            )));
-        }
-
-        // Build TPMT_PUBLIC template for ECDSA P-256
-        let object_attributes = TPMA_OBJECT_SIGN_ENCRYPT
-            | TPMA_OBJECT_FIXED_TPM
-            | TPMA_OBJECT_FIXED_PARENT
-            | TPMA_OBJECT_SENSITIVE_DATA_ORIGIN
-            | TPMA_OBJECT_USER_WITH_AUTH
-            | TPMA_OBJECT_NODA;
-
-        let mut public: TPM2B_PUBLIC = unsafe { std::mem::zeroed() };
-        public.publicArea.type_ = TPM2_ALG_ECC;
-        public.publicArea.nameAlg = TPM2_ALG_SHA256;
-        public.publicArea.objectAttributes = object_attributes;
-        public.publicArea.parameters.eccDetail.scheme.scheme = TPM2_ALG_ECDSA;
-        public.publicArea.parameters.eccDetail.scheme.hashAlg = TPM2_ALG_SHA256;
-        public.publicArea.parameters.eccDetail.symmetric.algorithm = TPM2_ALG_NULL;
-        public.publicArea.parameters.eccDetail.kdf.scheme = TPM2_ALG_NULL;
-        public.publicArea.parameters.eccDetail.curveID = TPM2_ECC_NIST_P256;
-
-        let in_sensitive: TPM2B_SENSITIVE_CREATE = unsafe { std::mem::zeroed() };
-        let outside_info: TPM2B_DATA = unsafe { std::mem::zeroed() };
-        let creation_pcr: TPML_PCR_SELECTION = unsafe { std::mem::zeroed() };
-
-        let mut key_handle: ESYS_TR = ESYS_TR_NONE;
-        let mut out_public: *mut TPM2B_PUBLIC = std::ptr::null_mut();
-
-        let rc = unsafe {
-            Esys_CreatePrimary(
-                esys_ctx,
-                TPM2_RH_OWNER as ESYS_TR,
-                ESYS_TR_PASSWORD,
-                ESYS_TR_NONE,
-                ESYS_TR_NONE,
-                &in_sensitive,
-                &public,
-                &outside_info,
-                &creation_pcr,
-                &mut key_handle,
-                &mut out_public,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-            )
-        };
-        if rc != 0 {
-            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
-            return Err(TpmError::Provider(format!(
-                "Esys_CreatePrimary failed: 0x{rc:08x}"
-            )));
-        }
-
-        // Scan for an available persistent handle using raw TPM reads
+        // Scan for an available persistent handle
         let mut available_handle = persistent_handle;
         {
             let mut check_device = TpmDevice::new(LinuxTpmDevice::new("/dev/tpmrm0"));
-            for h in (0x81000001u32..=0x810000FF).step_by(1) {
+            let _ = check_device.startup(TPM_SU_CLEAR);
+            for h in (TPM_PERSISTENT_FIRST..=TPM_PERSISTENT_FIRST + 0xFF).step_by(1) {
                 if check_device.read_public(TpmHandle(h)).is_err() {
                     available_handle = h;
                     break;
@@ -1630,51 +1553,172 @@ impl<T: TpmTransport> TpmDevice<T> {
             }
         }
 
-        // Persist the key
-        let mut new_handle: ESYS_TR = ESYS_TR_NONE;
-        let rc = unsafe {
-            Esys_EvictControl(
-                esys_ctx,
-                TPM2_RH_OWNER as ESYS_TR,
-                key_handle,
-                ESYS_TR_PASSWORD,
-                ESYS_TR_NONE,
-                ESYS_TR_NONE,
-                available_handle,
-                &mut new_handle,
-            )
-        };
-        if rc != 0 {
-            unsafe { Esys_FlushContext(esys_ctx, key_handle) };
-            unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
-            return Err(TpmError::Provider(format!(
-                "Esys_EvictControl failed: 0x{rc:08x}"
+        // --- Build TPM2_CreatePrimary command ---
+        let object_attributes = TPMA_OBJECT_SIGN_ENCRYPT
+            | TPMA_OBJECT_FIXED_TPM
+            | TPMA_OBJECT_FIXED_PARENT
+            | TPMA_OBJECT_SENSITIVE_DATA_ORIGIN
+            | TPMA_OBJECT_USER_WITH_AUTH
+            | TPMA_OBJECT_NODA;
+
+        // TPMT_PUBLIC layout for ECDSA P-256 signing key
+        let mut pub_bytes = Vec::new();
+        pub_bytes.extend_from_slice(&TPM_ALG_ECC.to_be_bytes());        // type
+        pub_bytes.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());     // nameAlg
+        pub_bytes.extend_from_slice(&object_attributes.to_be_bytes());  // objectAttributes
+        pub_bytes.extend_from_slice(&0u16.to_be_bytes());               // authPolicy size=0
+        pub_bytes.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());       // symmetric.algorithm
+        pub_bytes.extend_from_slice(&TPM_ALG_ECDSA.to_be_bytes());      // scheme.scheme
+        pub_bytes.extend_from_slice(&TPM_ALG_SHA256.to_be_bytes());     // scheme.hashAlg
+        pub_bytes.extend_from_slice(&TPM_ECC_NIST_P256.to_be_bytes());  // curveID
+        pub_bytes.extend_from_slice(&TPM_ALG_NULL.to_be_bytes());       // KDF.scheme
+        pub_bytes.extend_from_slice(&0u16.to_be_bytes());               // unique.x size=0
+        pub_bytes.extend_from_slice(&0u16.to_be_bytes());               // unique.y size=0
+
+        // TPM2B_SENSITIVE_CREATE: size(2) + sensitive (empty — TPM generates seed)
+        let sensitive: Vec<u8> = vec![0u8, 0];
+
+        // outsideInfo: size(2) + data(0)
+        let outside_info: Vec<u8> = vec![0u8, 0];
+
+        // creationPCR: count(4) = 0
+        let creation_pcr: Vec<u8> = vec![0u8, 0, 0, 0];
+
+        // Build command with sessions
+        let mut cmd = Vec::new();
+        // Header: tag(2) + size(4) + commandCode(4)
+        // We need to calculate the total size first
+        let auth_area = build_auth_command(&TpmAuthCommand {
+            session_handle: TPM_RS_PW,
+            nonce: vec![],
+            session_attributes: 0,
+            hmac: vec![], // empty password
+        });
+        let params_size = 2 + pub_bytes.len() as u16  // TPM2B_PUBLIC wrapper
+            + sensitive.len() as u16
+            + outside_info.len() as u16
+            + creation_pcr.len() as u16;
+        let total_size = 10 + auth_area.len() + params_size as usize;
+
+        cmd.extend_from_slice(&TPM_ST_SESSIONS.to_be_bytes());
+        cmd.extend_from_slice(&(total_size as u32).to_be_bytes());
+        cmd.extend_from_slice(&TPM_CC_CREATE_PRIMARY.to_be_bytes());
+        cmd.extend_from_slice(&auth_area);
+        // TPMI_RH_HIERARCHY (primaryHandle) = TPM_RH_OWNER
+        cmd.extend_from_slice(&TPM_RH_OWNER.to_be_bytes());
+        // TPM2B_SENSITIVE_CREATE
+        cmd.extend_from_slice(&(sensitive.len() as u16).to_be_bytes());
+        cmd.extend_from_slice(&sensitive);
+        // TPM2B_PUBLIC
+        cmd.extend_from_slice(&(pub_bytes.len() as u16).to_be_bytes());
+        cmd.extend_from_slice(&pub_bytes);
+        // TPM2B_DATA outsideInfo
+        cmd.extend_from_slice(&(outside_info.len() as u16).to_be_bytes());
+        cmd.extend_from_slice(&outside_info);
+        // TPML_PCR_SELECTION creationPCR
+        cmd.extend_from_slice(&creation_pcr);
+
+        let response = self.transmit_command(&cmd)?;
+
+        // Parse CreatePrimary response
+        // Parameter area: objectHandle(4) + outPublic(2+pubLen) + creationData(2+dataLen)
+        //   + creationHash(2+hashLen) + creationTicket(2+ticketLen) + name(2+nameLen)
+        let mut offset = 10; // skip response header
+        let object_handle = read_u32(&response, &mut offset, "createPrimary:objectHandle")?;
+
+        let out_public_size = read_u16(&response, &mut offset, "createPrimary:outPublic")? as usize;
+        let out_public_start = offset;
+        offset += out_public_size;
+
+        let creation_data_size = read_u16(&response, &mut offset, "createPrimary:creationData")? as usize;
+        offset += creation_data_size;
+
+        let creation_hash_size = read_u16(&response, &mut offset, "createPrimary:creationHash")? as usize;
+        offset += creation_hash_size;
+
+        let creation_ticket_size = read_u16(&response, &mut offset, "createPrimary:creationTicket")? as usize;
+        offset += creation_ticket_size;
+
+        let name_size = read_u16(&response, &mut offset, "createPrimary:name")? as usize;
+        let name_start = offset;
+        offset += name_size;
+
+        // Extract public key from outPublic (skip TPMT_PUBLIC header to get to unique)
+        let pub_data = &response[out_public_start..out_public_start + out_public_size];
+        if pub_data.len() < 10 {
+            return Err(TpmError::Protocol("CreatePrimary: outPublic too short".into()));
+        }
+        let pub_type = u16::from_be_bytes([pub_data[0], pub_data[1]]);
+        if pub_type != TPM_ALG_ECC {
+            return Err(TpmError::Protocol(format!(
+                "CreatePrimary returned non-ECC key (type={pub_type:#06x})"
             )));
         }
+        // TPMT_PUBLIC layout:
+        //   type(2) + nameAlg(2) + objectAttributes(4) + authPolicy(2+len)
+        //   + parameters: symmetric(2) + scheme(4) + curveID(2) + KDF(2)
+        //   + unique: x(2+xLen) + y(2+yLen)
+        let auth_policy_len = u16::from_be_bytes([pub_data[8], pub_data[9]]) as usize;
+        if pub_data.len() < 10 + auth_policy_len {
+            return Err(TpmError::Protocol("CreatePrimary: authPolicy overrun".into()));
+        }
+        let params_offset = 10 + auth_policy_len;
+        if pub_data.len() < params_offset + 10 {
+            return Err(TpmError::Protocol("CreatePrimary: params too short".into()));
+        }
+        // unique: x(2+xLen) + y(2+yLen)
+        let unique_offset = params_offset + 10;
+        if pub_data.len() < unique_offset + 2 {
+            return Err(TpmError::Protocol("CreatePrimary: unique.x size missing".into()));
+        }
+        let x_len = u16::from_be_bytes([pub_data[unique_offset], pub_data[unique_offset + 1]]) as usize;
+        let x_start = unique_offset + 2;
+        if pub_data.len() < x_start + 2 {
+            return Err(TpmError::Protocol("CreatePrimary: unique.y size missing".into()));
+        }
+        let y_start = x_start + x_len;
+        let y_len = u16::from_be_bytes([pub_data[y_start], pub_data[y_start + 1]]) as usize;
+        let public_key_bytes = [
+            &pub_data[x_start + 2..x_start + 2 + x_len],
+            &pub_data[y_start + 2..y_start + 2 + y_len],
+        ].concat();
 
-        // Extract public key bytes (x || y) from out_public
-        let public_key_bytes = if out_public.is_null() {
-            return Err(TpmError::Protocol("null out_public from CreatePrimary".into()));
-        } else {
-            let pub_ref = unsafe { &*out_public };
-            // SAFETY: We created an ECC key, so the union contains ecc variant
-            let unique = unsafe { &pub_ref.publicArea.unique.ecc };
-            let x_bytes = &unique.x.buffer[..unique.x.size as usize];
-            let y_bytes = &unique.y.buffer[..unique.y.size as usize];
-            let mut bytes = Vec::with_capacity(64);
-            bytes.extend_from_slice(x_bytes);
-            bytes.extend_from_slice(y_bytes);
-            bytes
+        let name = response[name_start..name_start + name_size].to_vec();
+
+        // --- Persist the key with TPM2_EvictControl ---
+        let evict_auth = build_auth_command(&TpmAuthCommand {
+            session_handle: TPM_RS_PW,
+            nonce: vec![],
+            session_attributes: 0,
+            hmac: vec![],
+        });
+        let mut evict_cmd = Vec::new();
+        let evict_total = 10 + evict_auth.len() + 4 + 4; // auth + authHandle + objectHandle + persistentHandle
+        evict_cmd.extend_from_slice(&TPM_ST_SESSIONS.to_be_bytes());
+        evict_cmd.extend_from_slice(&(evict_total as u32).to_be_bytes());
+        evict_cmd.extend_from_slice(&TPM_CC_EVICT_CONTROL.to_be_bytes());
+        evict_cmd.extend_from_slice(&evict_auth);
+        evict_cmd.extend_from_slice(&TPM_RH_OWNER.to_be_bytes());  // authHandle
+        evict_cmd.extend_from_slice(&object_handle.to_be_bytes());  // objectHandle
+        evict_cmd.extend_from_slice(&available_handle.to_be_bytes()); // persistentHandle
+
+        self.transmit_command(&evict_cmd)?;
+
+        // Flush the transient handle
+        let flush_cmd = {
+            let mut c = Vec::new();
+            c.extend_from_slice(&TPM_ST_NO_SESSIONS.to_be_bytes());
+            c.extend_from_slice(&14u32.to_be_bytes());
+            c.extend_from_slice(&TPM_CC_FLUSH_CONTEXT.to_be_bytes());
+            c.extend_from_slice(&object_handle.to_be_bytes());
+            c
         };
-
-        // Cleanup
-        unsafe { Esys_FlushContext(esys_ctx, key_handle) };
-        unsafe { Esys_Finalize(&mut esys_ctx); Tss2_TctiLdr_Finalize(&mut tcti_ctx) };
+        let _ = self.transmit_command(&flush_cmd);
 
         Ok(TpmProvisionedKey {
             persistent_handle: available_handle,
             public_key_bytes,
-            name: vec![],
+            name,
         })
     }
 }

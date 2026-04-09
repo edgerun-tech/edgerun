@@ -108,6 +108,31 @@ impl RegistryClient {
         })
     }
 
+    /// Use the edgerun secret service for registry credentials.
+    ///
+    /// Credentials are looked up in the secret service backend under
+    /// `{namespace}/{registry_host}`. The stored secret should be in
+    /// `username:password` format.
+    ///
+    /// The `registry_host` parameter (e.g. `docker.io`, `ghcr.io`) is used
+    /// to select the correct credential. If set to `None`, the host will
+    /// be resolved from the image reference when pulling.
+    pub fn with_secret_service_auth(
+        data_root: &Path,
+        namespace: &str,
+        registry_host: &str,
+    ) -> Self {
+        Self {
+            auth: RegistryAuth::FromSecretService {
+                data_root: data_root.to_path_buf(),
+                namespace: namespace.into(),
+                registry_host: registry_host.into(),
+            },
+            token: None,
+            bytes_downloaded: 0,
+        }
+    }
+
     /// Perform an HTTPS GET request with auth handling.
     fn authenticated_get(
         &mut self,
@@ -434,11 +459,18 @@ impl RegistryClient {
             url, host
         );
 
-        if let RegistryAuth::Basic {
-            ref username,
-            ref password,
-        } = self.auth
-        {
+        // Resolve credentials based on auth type
+        let creds = match &self.auth {
+            RegistryAuth::Basic { username, password } => {
+                Some((username.clone(), password.clone()))
+            }
+            RegistryAuth::FromSecretService { data_root, namespace, registry_host } => {
+                crate::auth::resolve_from_secret_service(data_root, namespace, registry_host)
+            }
+            _ => None,
+        };
+
+        if let Some((username, password)) = creds {
             let auth_str = format!("{}:{}", username, password);
             let encoded = crate::base64::encode(auth_str.as_bytes());
             request.push_str(&format!("Authorization: Basic {}\r\n", encoded));
@@ -529,4 +561,80 @@ impl RegistryClient {
 enum GetResult {
     Success(Vec<u8>),
     Unauthorized(Vec<(String, String)>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn tmp_root() -> PathBuf {
+        static C: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = C.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!("oci_client_test_{}_{}", std::process::id(), n));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn new_client_is_anonymous() {
+        let client = RegistryClient::new();
+        assert!(matches!(client.auth, RegistryAuth::Anonymous));
+    }
+
+    #[test]
+    fn with_auth_sets_credentials() {
+        let client = RegistryClient::new().with_auth(RegistryAuth::Basic {
+            username: "user".into(),
+            password: "pass".into(),
+        });
+        if let RegistryAuth::Basic { username, password } = client.auth {
+            assert_eq!(username, "user");
+            assert_eq!(password, "pass");
+        } else { panic!("expected Basic"); }
+    }
+
+    #[test]
+    fn with_secret_service_auth_sets_variant() {
+        let root = tmp_root();
+        let client = RegistryClient::with_secret_service_auth(&root, "registry", "docker.io");
+        if let RegistryAuth::FromSecretService { data_root, namespace, registry_host } = client.auth {
+            assert_eq!(data_root, root);
+            assert_eq!(namespace, "registry");
+            assert_eq!(registry_host, "docker.io");
+        } else { panic!("expected FromSecretService"); }
+    }
+
+    #[test]
+    fn image_ref_parsing() {
+        let img: ImageRef = "docker.io/library/alpine:latest".parse().unwrap();
+        assert_eq!(img.registry, "docker.io");
+        assert_eq!(img.repository, "library/alpine");
+        assert_eq!(img.tag, "latest");
+    }
+
+    #[test]
+    fn image_ref_default_tag() {
+        let img: ImageRef = "myregistry/myrepo".parse().unwrap();
+        assert_eq!(img.tag, "latest");
+    }
+
+    #[test]
+    fn image_ref_docker_hub_library() {
+        let img: ImageRef = "alpine:3.18".parse().unwrap();
+        assert_eq!(img.registry, "docker.io");
+        assert_eq!(img.repository, "library/alpine");
+        assert_eq!(img.tag, "3.18");
+    }
+
+    #[test]
+    fn image_ref_display() {
+        let img = ImageRef {
+            registry: "ghcr.io".into(),
+            repository: "owner/repo".into(),
+            tag: "v1".into(),
+        };
+        assert_eq!(img.to_string(), "ghcr.io/owner/repo:v1");
+    }
 }

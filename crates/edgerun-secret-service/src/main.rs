@@ -10,13 +10,7 @@
 //!   SOCKET_PATH: /run/edgerun/secret.sock
 //!   DATA_ROOT:  ~/.local/share/edgerun/secrets
 
-mod backend;
-mod dbus_server;
-mod dbus_types;
-mod dbus_wire;
-mod event_log;
-mod session;
-
+use edgerun_secret_service::dbus_server::Server;
 use std::path::PathBuf;
 
 fn main() {
@@ -42,7 +36,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    match dbus_server::Server::bind(&socket_path, data_root) {
+    match Server::bind(&socket_path, data_root) {
         Ok(mut server) => {
             eprintln!("ready — accepting connections");
             loop {
@@ -60,7 +54,6 @@ fn main() {
 
 /// Determine the default data root directory.
 fn dirs_data_root() -> Option<PathBuf> {
-    // Try XDG_DATA_HOME first, then fall back to home directory
     if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
         return Some(PathBuf::from(data_home).join("edgerun/secrets"));
     }

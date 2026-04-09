@@ -7,3 +7,4 @@ publish.workspace = true
 
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
+libc = { path = "../libc" }

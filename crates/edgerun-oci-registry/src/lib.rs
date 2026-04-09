@@ -15,7 +15,7 @@ mod manifest;
 mod oci_spec;
 mod urlencoding;
 
-pub use auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
+pub use auth::{decode_basic_auth, parse_bearer_auth, resolve_from_secret_service, RegistryAuth};
 pub use client::{ImageRef, RegistryClient};
 pub use config::{HistoryEntry, ImageConfig, ImageConfigInner, RootFs};
 pub use errors::RegistryError;

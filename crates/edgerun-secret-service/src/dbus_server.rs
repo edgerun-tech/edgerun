@@ -7,9 +7,10 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 
 use crate::backend::Backend;
+use crate::dbus_bus::BusConnection;
 use crate::dbus_types::*;
 use crate::dbus_wire::{encode_msg, decode_msg};
-use crate::session::{SessionManager, Algorithm};
+use crate::session::{SessionManager, BiometricVerifier, NoBiometricVerifier, DEFAULT_IDLE_TIMEOUT_US};
 
 // ===========================================================================
 // Server
@@ -17,15 +18,26 @@ use crate::session::{SessionManager, Algorithm};
 
 pub struct Server {
     listener: UnixListener,
+    bus: Option<BusConnection>,
     backend: Backend,
     sessions: SessionManager,
     aliases: HashMap<String, String>, // alias name -> collection path
     serial: u32,
+    verifier: Box<dyn BiometricVerifier>,
 }
 
 impl Server {
-    /// Binds to a Unix socket path and returns a server.
+    /// Binds to a Unix socket path and tries to register on the D-Bus session bus.
     pub fn bind(socket_path: &Path, data_root: std::path::PathBuf) -> io::Result<Self> {
+        Self::bind_with_verifier(socket_path, data_root, Box::new(NoBiometricVerifier))
+    }
+
+    /// Binds with a custom biometric verifier.
+    pub fn bind_with_verifier(
+        socket_path: &Path,
+        data_root: std::path::PathBuf,
+        verifier: Box<dyn BiometricVerifier>,
+    ) -> io::Result<Self> {
         if socket_path.exists() {
             let _ = std::fs::remove_file(socket_path);
         }
@@ -36,25 +48,55 @@ impl Server {
         let listener = UnixListener::bind(socket_path)?;
         let backend = Backend::new(data_root)?;
 
+        // Try to register on the D-Bus session bus
+        let bus = BusConnection::connect("org.freedesktop.secrets");
+
         // Default "default" alias
         let mut aliases = HashMap::new();
         aliases.insert("default".into(), "/org/freedesktop/secrets/collections/default".into());
 
-        eprintln!("edgerun-secret-service: listening on {}", socket_path.display());
+        if bus.is_some() {
+            eprintln!("edgerun-secret-service: listening on {} + D-Bus session bus", socket_path.display());
+        } else {
+            eprintln!("edgerun-secret-service: listening on {} (no D-Bus session bus found)", socket_path.display());
+        }
 
         Ok(Self {
             listener,
+            bus,
             backend,
-            sessions: SessionManager::new(),
+            sessions: SessionManager::new(DEFAULT_IDLE_TIMEOUT_US),
             aliases,
             serial: 0,
+            verifier,
         })
     }
 
-    /// Accept one client connection and serve it to completion.
+    /// Accept one client connection — tries the bus first, then the standalone socket.
     pub fn accept_once(&mut self) -> io::Result<()> {
+        // Try the bus first (non-blocking check)
+        if let Some(ref mut bus) = self.bus {
+            if let Ok(Some((msg, sender))) = bus.accept_one() {
+                let reply_data = self.handle_bus_message(&sender, msg);
+                bus.send(&reply_data)?;
+                return Ok(());
+            }
+        }
+
+        // Fall back to the standalone socket
         let (stream, _) = self.listener.accept()?;
         self.serve_client(stream)
+    }
+
+    /// Handle a message received from the D-Bus session bus and return encoded reply.
+    fn handle_bus_message(&mut self, sender: &str, raw_msg: Vec<u8>) -> Vec<u8> {
+        if let Ok(msg) = decode_msg(&raw_msg) {
+            let reply = self.handle_message(sender, &msg);
+            return encode_msg(&reply);
+        }
+        // Return an error reply if we couldn't decode
+        let err = Msg::err(0, sender, "org.freedesktop.DBus.Error.InvalidArgs", "could not decode message");
+        encode_msg(&err)
     }
 
     /// Serve a single client stream.
@@ -145,28 +187,24 @@ impl Server {
     // ===========================================================================
 
     /// OpenSession (IN String algorithm, IN Variant input, OUT Variant output, OUT ObjectPath result)
+    ///
+    /// Creates a new session. The session starts locked — Unlock must be called
+    /// with successful biometric verification before secrets can be retrieved.
     fn open_session(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        let algorithm = msg.body.get(0).and_then(Val::s).unwrap_or("plain");
-        let _input = msg.body.get(1); // Variant input (ignored for plain)
+        let _algorithm = msg.body.get(0).and_then(Val::s).unwrap_or("plain");
+        let _input = msg.body.get(1); // Variant input (ignored for now)
 
-        match algorithm {
-            "plain" => {
-                let path = self.sessions.create_session(client, Algorithm::Plain);
-                Msg::ret(ser, client).body(vec![
-                    Val::Var(Box::new(Val::S("".into()))),
-                    Val::O(path),
-                ], "vo")
-            }
-            "dh-ietf1024-sha256-aes128-cbc-pkcs7" => {
-                // Not implemented yet — client should fall back to plain
-                Msg::err(ser, client, "org.freedesktop.DBus.Error.NotSupported",
-                    "dh-ietf1024-sha256-aes128-cbc-pkcs7 not yet implemented; use 'plain'")
-            }
-            _ => {
-                Msg::err(ser, client, "org.freedesktop.DBus.Error.NotSupported",
-                    &format!("unsupported algorithm: {}", algorithm))
-            }
-        }
+        let path = self.sessions.create_session(client);
+        let has_biometrics = self.verifier.is_available();
+
+        // Output: variant with available modalities info
+        let mut info_map = Vec::new();
+        info_map.push((Val::S("has-biometrics".into()), Val::Var(Box::new(Val::B(has_biometrics)))));
+
+        Msg::ret(ser, client).body(vec![
+            Val::Var(Box::new(Val::Dict(info_map))),
+            Val::O(path),
+        ], "vo")
     }
 
     /// CreateCollection (IN Dict<String,Variant> properties, IN String alias, OUT ObjectPath collection, OUT ObjectPath prompt)
@@ -194,12 +232,15 @@ impl Server {
     }
 
     /// SearchItems (IN Dict<String,String> attributes, OUT Array<ObjectPath> unlocked, OUT Array<ObjectPath> locked)
+    ///
+    /// All items are returned as "unlocked" — the actual biometric check
+    /// happens at Unlock/GetSecret time. Items that don't match the search
+    /// are simply not returned.
     fn search_items(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let attrs = msg.body.get(0).and_then(Val::dict_ss).unwrap_or_default();
         let attr_pairs: Vec<(String, String)> = attrs.into_iter().collect();
 
         let mut unlocked = Vec::new();
-        let locked = Vec::new(); // We don't implement locking, everything is "unlocked"
 
         // Search across all collections
         let collections = self.backend.list_collections().unwrap_or_default();
@@ -211,36 +252,74 @@ impl Server {
             }
         }
 
+        // Items are all potentially unlockable — locked array is empty
+        // until we implement per-item lock states
         Msg::ret(ser, client).body(vec![
             Val::Arr(unlocked),
-            Val::Arr(locked),
+            Val::Arr(vec![]),
         ], "aoao")
     }
 
     /// Unlock (IN Array<ObjectPath> objects, OUT Array<ObjectPath> unlocked, OUT ObjectPath prompt)
+    ///
+    /// Triggers biometric verification. If successful, all requested objects
+    /// are unlocked and returned. If biometrics are not available, returns an error.
     fn unlock(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        // We don't implement locking — everything is always unlocked
         let objects = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+
+        // Run biometric verification
+        if !self.verifier.is_available() {
+            return Msg::err(ser, client,
+                "org.freedesktop.Secret.Error.IsLocked",
+                "no biometric hardware available — cannot unlock");
+        }
+
+        let bio_state = self.verifier.verify();
+        if !bio_state.verified {
+            return Msg::err(ser, client,
+                "org.freedesktop.Secret.Error.IsLocked",
+                "biometric verification failed");
+        }
+
+        // Verify all sessions for this client
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+
+        self.sessions.verify_client(client, bio_state.clone(), now);
+
         let unlocked: Vec<Val> = objects.into_iter().map(Val::O).collect();
 
         Msg::ret(ser, client).body(vec![
             Val::Arr(unlocked),
-            Val::O("/".into()), // No prompt
+            Val::O("/".into()), // No prompt needed
         ], "ao")
     }
 
     /// Lock (IN Array<ObjectPath> objects, OUT Array<ObjectPath> locked, OUT ObjectPath prompt)
+    ///
+    /// Clears biometric verification state on the session. Subsequent
+    /// GetSecrets/GetSecret calls will fail until Unlock is called again.
     fn lock(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
-        // We don't implement locking
-        let _objects = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+        let objects = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
+
+        // Lock all sessions for this client
+        self.sessions.lock_client(client);
+
+        // Return all requested objects as locked
+        let locked: Vec<Val> = objects.into_iter().map(Val::O).collect();
 
         Msg::ret(ser, client).body(vec![
-            Val::Arr(vec![]),
+            Val::Arr(locked),
             Val::O("/".into()),
         ], "ao")
     }
 
     /// GetSecrets (IN Array<ObjectPath> items, IN ObjectPath session, OUT Dict<ObjectPath,Secret> secrets)
+    ///
+    /// Requires the session to be biometrically verified. Returns only
+    /// unlocked (verified) items. Locked items are silently omitted.
     fn get_secrets(&mut self, client: &str, msg: &Msg, ser: u32) -> Msg {
         let item_paths = msg.body.get(0).and_then(Val::ao).unwrap_or_default();
         let session_path = msg.body.get(1).and_then(Val::o).unwrap_or("");
@@ -256,12 +335,22 @@ impl Server {
                 "session is closed");
         }
 
+        // Check biometric verification
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+
+        if !session.is_verified(now) {
+            return Msg::err(ser, client, "org.freedesktop.Secret.Error.IsLocked",
+                "session is locked — call Unlock with biometric verification first");
+        }
+
         // Resolve each item path to (collection, key)
         let mut secrets_dict = Vec::new();
         for item_path in &item_paths {
             if let Some((coll, key)) = resolve_item_path(item_path) {
                 if let Ok(Some((secret_bytes, _meta))) = self.backend.get(&coll, &key) {
-                    // Return secret as-is (plain mode)
                     let secret_bytes_val: Vec<Val> = secret_bytes.iter().map(|&b| Val::Y(b)).collect();
                     let content_type = "text/plain; charset=utf8";
 
@@ -629,14 +718,13 @@ mod tests {
     }
 
     #[test]
-    fn open_session_plain() {
+    fn open_session_returns_path() {
         let root = tmp_root();
         let mut server = Server::bind(
             &root.join("test.sock"),
             root.clone(),
         ).unwrap();
 
-        // Build OpenSession call
         let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
             .body(vec![
                 Val::S("plain".into()),
@@ -646,32 +734,43 @@ mod tests {
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
         assert_eq!(reply.body.len(), 2);
-        // body[0] = Variant output, body[1] = ObjectPath session
         if let Val::O(session_path) = &reply.body[1] {
             assert!(session_path.starts_with("/org/freedesktop/secrets/session/"));
         } else { panic!("expected ObjectPath, got {:?}", reply.body[1]); }
+
+        // No biometrics by default
+        if let Val::Dict(info) = &reply.body[0] {
+            // has-biometrics should be false
+            if let Some((_, Val::Var(inner))) = info.iter().find(|(k, _)| k.s() == Some("has-biometrics")) {
+                if let Val::B(has_bio) = inner.as_ref() {
+                    assert!(!has_bio);
+                }
+            }
+        }
     }
 
     #[test]
-    fn open_session_rejects_dh() {
+    fn unlock_requires_biometrics() {
         let root = tmp_root();
         let mut server = Server::bind(
             &root.join("test.sock"),
             root.clone(),
         ).unwrap();
 
-        let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
-            .body(vec![
-                Val::S("dh-ietf1024-sha256-aes128-cbc-pkcs7".into()),
-                Val::Var(Box::new(Val::Arr(vec![]))),
-            ], "sv");
+        // Open session first
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        server.handle_message(":1.1", &open_msg);
 
-        let reply = server.handle_message(":1.1", &msg);
+        // Unlock without biometrics → error
+        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
+            .body(vec![
+                Val::Arr(vec![Val::O("/org/freedesktop/secrets/collections/default/item1".into())]),
+            ], "ao");
+
+        let reply = server.handle_message(":1.1", &unlock_msg);
         assert_eq!(reply.mt, MType::Err);
-        assert_eq!(reply.body.len(), 1);
-        if let Val::S(err_msg) = &reply.body[0] {
-            assert!(err_msg.contains("plain"));
-        } else { panic!("expected error string"); }
+        // Should mention no biometric hardware
     }
 
     #[test]
@@ -722,13 +821,19 @@ mod tests {
     }
 
     #[test]
-    fn unlock_returns_all_objects() {
+    fn unlock_returns_error_without_biometrics() {
         let root = tmp_root();
         let mut server = Server::bind(
             &root.join("test.sock"),
             root.clone(),
         ).unwrap();
 
+        // Open session first
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        server.handle_message(":1.1", &open_msg);
+
+        // Unlock without biometrics → error
         let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
             .body(vec![
                 Val::Arr(vec![
@@ -738,15 +843,11 @@ mod tests {
             ], "ao");
 
         let reply = server.handle_message(":1.1", &msg);
-        assert_eq!(reply.mt, MType::Return);
-        // All objects returned as unlocked (we don't implement locking)
-        if let Val::Arr(unlocked) = &reply.body[0] {
-            assert_eq!(unlocked.len(), 2);
-        } else { panic!("expected array"); }
+        assert_eq!(reply.mt, MType::Err);
     }
 
     #[test]
-    fn lock_returns_empty() {
+    fn lock_returns_requested_objects_as_locked() {
         let root = tmp_root();
         let mut server = Server::bind(
             &root.join("test.sock"),
@@ -755,13 +856,17 @@ mod tests {
 
         let msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
             .body(vec![
-                Val::Arr(vec![Val::O("/org/freedesktop/secrets/collections/default/item1".into())]),
+                Val::Arr(vec![
+                    Val::O("/org/freedesktop/secrets/collections/default/item1".into()),
+                    Val::O("/org/freedesktop/secrets/collections/default/item2".into()),
+                ]),
             ], "ao");
 
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
+        // All requested objects are returned as locked
         if let Val::Arr(locked) = &reply.body[0] {
-            assert!(locked.is_empty()); // We don't implement locking
+            assert_eq!(locked.len(), 2);
         } else { panic!("expected array"); }
     }
 
@@ -790,6 +895,112 @@ mod tests {
         // GC should remove it
         server.sessions.gc();
         assert!(server.sessions.get(&session_path).is_none());
+    }
+
+    #[test]
+    fn get_secrets_requires_unlock() {
+        let root = tmp_root();
+        let mut server = Server::bind(
+            &root.join("test.sock"),
+            root.clone(),
+        ).unwrap();
+
+        // Open session
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_reply = server.handle_message(":1.1", &open_msg);
+        let session_path = match &open_reply.body[1] {
+            Val::O(p) => p.clone(),
+            _ => panic!("expected session path"),
+        };
+
+        // Try to get secrets without unlock → error
+        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![
+                Val::Arr(vec![Val::O("/org/freedesktop/secrets/collections/default/item1".into())]),
+                Val::O(session_path.clone()),
+            ], "ao");
+
+        let reply = server.handle_message(":1.1", &get_msg);
+        assert_eq!(reply.mt, MType::Err);
+        // Should say session is locked
+    }
+
+    #[test]
+    fn unlock_and_get_secrets_with_mock_biometrics() {
+        use crate::session::BiometricVerifier;
+        use edgerun_biometrics::BiometricState;
+
+        struct MockVerifier { available: bool, verified: bool }
+        impl BiometricVerifier for MockVerifier {
+            fn verify(&self) -> BiometricState {
+                let mut s = BiometricState::default();
+                s.verified = self.verified;
+                s
+            }
+            fn is_available(&self) -> bool { self.available }
+        }
+
+        let root = tmp_root();
+        let mut server = Server::bind_with_verifier(
+            &root.join("test.sock"),
+            root.clone(),
+            Box::new(MockVerifier { available: true, verified: true }),
+        ).unwrap();
+
+        // Open session
+        let open_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "OpenSession", ":1.1")
+            .body(vec![Val::S("plain".into()), Val::Var(Box::new(Val::S("".into())))], "sv");
+        let open_reply = server.handle_message(":1.1", &open_msg);
+        let session_path = match &open_reply.body[1] {
+            Val::O(p) => p.clone(),
+            _ => panic!("expected session path"),
+        };
+
+        // Put a secret first
+        let key = Backend::item_key("Test", &[("key".into(), "value".into())]);
+        server.backend.put(
+            "/org/freedesktop/secrets/collections/default",
+            &key,
+            b"super-secret",
+            "Test",
+            &[("key".into(), "value".into())],
+        ).unwrap();
+
+        let item_path = Backend::item_path("/org/freedesktop/secrets/collections/default", &key);
+
+        // Unlock → should succeed with biometrics
+        let unlock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Unlock", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let unlock_reply = server.handle_message(":1.1", &unlock_msg);
+        assert_eq!(unlock_reply.mt, MType::Return);
+
+        // Get secrets → should succeed
+        let get_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![
+                Val::Arr(vec![Val::O(item_path.clone())]),
+                Val::O(session_path.clone()),
+            ], "ao");
+        let get_reply = server.handle_message(":1.1", &get_msg);
+        assert_eq!(get_reply.mt, MType::Return);
+        if let Val::Dict(secrets) = &get_reply.body[0] {
+            assert_eq!(secrets.len(), 1);
+        } else { panic!("expected dict"); }
+
+        // Lock → should clear session verification
+        let lock_msg = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "Lock", ":1.1")
+            .body(vec![Val::Arr(vec![Val::O(item_path.clone())])], "ao");
+        let lock_reply = server.handle_message(":1.1", &lock_msg);
+        assert_eq!(lock_reply.mt, MType::Return);
+
+        // Get secrets again → should fail (locked)
+        let get_msg2 = Msg::call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service", "GetSecrets", ":1.1")
+            .body(vec![
+                Val::Arr(vec![Val::O(item_path.clone())]),
+                Val::O(session_path.clone()),
+            ], "ao");
+        let get_reply2 = server.handle_message(":1.1", &get_msg2);
+        assert_eq!(get_reply2.mt, MType::Err);
     }
 
     #[test]

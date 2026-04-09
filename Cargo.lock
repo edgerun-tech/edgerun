@@ -1439,6 +1439,7 @@ dependencies = [
  "edgerun-core 0.1.0",
  "edgerun-json 1.0.149",
  "edgerun-oci-runtime 0.1.0",
+ "edgerun-secret-service 0.1.0",
  "flate2 1.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "tar 0.4.45 (registry+https://github.com/rust-lang/crates.io-index)",
  "zstd 0.13.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1508,11 +1509,11 @@ dependencies = [
 name = "edgerun-secret-service"
 version = "0.1.0"
 dependencies = [
+ "edgerun-biometrics 0.1.0",
  "edgerun-core 0.1.0",
  "edgerun-json 1.0.149",
  "edgerun-proto 0.1.0",
  "edgerun-storage 0.1.0",
- "libc 0.2.183",
  "prost 0.14.3",
  "prost-types 0.14.3",
 ]
@@ -1597,6 +1598,7 @@ name = "edgerun-yubikey"
 version = "0.1.0"
 dependencies = [
  "edgerun-core 0.1.0",
+ "libc 0.2.183",
 ]
 
 [[package]]

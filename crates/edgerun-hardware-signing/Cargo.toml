@@ -5,9 +5,17 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+default = []
+tpm = ["dep:edgerun-tpm"]
+android-keystore = ["dep:edgerun-android-keystore"]
+yubikey = ["dep:edgerun-yubikey"]
+# All backends
+all-hardware = ["tpm", "android-keystore", "yubikey"]
+
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
-edgerun-tpm = { path = "../edgerun-tpm" }
-edgerun-android-keystore = { path = "../edgerun-android-keystore" }
-edgerun-yubikey = { path = "../edgerun-yubikey" }
 edgerun-biometrics = { path = "../edgerun-biometrics" }
+edgerun-tpm = { path = "../edgerun-tpm", optional = true }
+edgerun-android-keystore = { path = "../edgerun-android-keystore", optional = true }
+edgerun-yubikey = { path = "../edgerun-yubikey", optional = true }

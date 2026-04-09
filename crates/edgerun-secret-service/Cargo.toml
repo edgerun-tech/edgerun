@@ -5,15 +5,19 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[lib]
+name = "edgerun_secret_service"
+path = "src/lib.rs"
+
 [[bin]]
 name = "edgerun-secret-service"
 path = "src/main.rs"
 
 [dependencies]
+edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-storage = { path = "../edgerun-storage" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-proto = { path = "../edgerun-proto" }
-libc = { path = "../libc" }
 prost = { path = "../prost" }
 prost-types = { path = "../prost-types" }

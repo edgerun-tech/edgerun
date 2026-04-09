@@ -9,6 +9,7 @@ publish.workspace = true
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-json = { path = "../edgerun-json" }
+edgerun-secret-service = { path = "../edgerun-secret-service" }
 flate2 = "1"
 tar = "0.4"
 zstd = "0.13"

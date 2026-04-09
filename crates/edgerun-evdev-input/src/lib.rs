@@ -21,12 +21,12 @@ const EV_LED: u16 = 0x11;
 const EV_FF: u16 = 0x15;
 
 // evdev ioctls
-const EVIOCGNAME: c_ulong = 0x81004506; // _IOC(_IOC_READ, 'E', 0x06, 256)
-const EVIOCGPHYS: c_ulong = 0x81004507;
-const EVIOCGUNIQ: c_ulong = 0x81004508;
-const EVIOCGBIT: c_ulong = 0x80004520; // _IOC(_IOC_READ, 'E', 0x20, len)
-const EVIOCGRAB: c_ulong = 0x40044590; // _IOC(_IOC_WRITE, 'E', 0x90, 4)
-const EVIOCREVOKE: c_ulong = 0x40044591;
+const EVIOCGNAME: c_int = 0x81004506u32 as c_int; // _IOC(_IOC_READ, 'E', 0x06, 256)
+const EVIOCGPHYS: c_int = 0x81004507u32 as c_int;
+const EVIOCGUNIQ: c_int = 0x81004508u32 as c_int;
+const EVIOCGBIT: c_int = 0x80004520u32 as c_int; // _IOC(_IOC_READ, 'E', 0x20, len)
+const EVIOCGRAB: c_int = 0x40044590u32 as c_int; // _IOC(_IOC_WRITE, 'E', 0x90, 4)
+const EVIOCREVOKE: c_int = 0x40044591u32 as c_int;
 
 // poll constants
 const POLLIN: i16 = 0x001;
@@ -138,7 +138,7 @@ pub fn query_capabilities_ev(fd: RawFd, ev_type: u16) -> Result<Vec<u8>, io::Err
 
     // EVIOCGBIT(ev, len) = _IOC(_IOC_READ, 'E', 0x20 + ev, len)
     // Use the constant EVIOCGBIT as base and adjust for the event type
-    let request = EVIOCGBIT | (ev_type as c_ulong);
+    let request = EVIOCGBIT | (ev_type as c_int);
 
     let mut buf = vec![0u8; EVIOCGBIT_BUF_LEN];
     let ret = unsafe { libc::ioctl(fd, request as _, buf.as_mut_ptr()) };
@@ -409,7 +409,7 @@ impl EvdevInputBackend {
     pub fn grab(&self, grab: bool) -> Result<(), CapabilityError> {
         let grab_val: c_int = if grab { 1 } else { 0 };
         let ret = unsafe {
-            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as c_ulong, grab_val)
+            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as c_int, grab_val)
         };
         if ret < 0 {
             Err(CapabilityError::Provider(
