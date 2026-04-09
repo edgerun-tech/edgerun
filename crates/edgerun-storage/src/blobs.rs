@@ -115,7 +115,7 @@ impl BlobStore {
     pub fn store(
         &self,
         plaintext: &[u8],
-        _recipients: &[Vec<u8>],
+        recipients: &[Vec<u8>],
     ) -> Result<String, StorageError> {
         // Derive blob ID from plaintext hash (content-addressed)
         let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(plaintext));
@@ -140,6 +140,17 @@ impl BlobStore {
         file.write_all(nonce_bytes.as_slice())?;
         file.write_all(&ciphertext)?;
         file.sync_all()?;
+
+        // Write recipient metadata as a sidecar .meta file
+        if !recipients.is_empty() {
+            let meta_path = blob_meta_path(&self.config.blob_dir, &blob_id);
+            let meta_content = recipients
+                .iter()
+                .map(|r| edgerun_core::util::bytes_to_hex(r))
+                .collect::<Vec<_>>()
+                .join("\n");
+            fs::write(&meta_path, meta_content)?;
+        }
 
         Ok(blob_id)
     }
@@ -169,10 +180,13 @@ impl BlobStore {
         let nonce = nonce.to_vec();
         let ciphertext = ciphertext.to_vec();
 
+        // Load recipient metadata from sidecar .meta file if present
+        let recipients = load_blob_recipients(&self.config.blob_dir, blob_id);
+
         Ok(Some(BlobEntry {
             ciphertext,
             nonce,
-            recipients: Vec::new(), // TODO: load from SQLite
+            recipients,
         }))
     }
 
@@ -191,6 +205,29 @@ impl BlobStore {
         cipher
             .decrypt(nonce, ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Recipient metadata helpers
+// ---------------------------------------------------------------------------
+
+/// Path to the recipient metadata sidecar file for a blob.
+fn blob_meta_path(blob_dir: &Path, blob_id: &str) -> PathBuf {
+    let prefix = &blob_id[..4.min(blob_id.len())];
+    blob_dir.join(prefix).join(format!("{}.blob.meta", blob_id))
+}
+
+/// Loads recipient IDs from the sidecar .meta file.
+/// Returns an empty Vec if the file doesn't exist.
+fn load_blob_recipients(blob_dir: &Path, blob_id: &str) -> Vec<Vec<u8>> {
+    let meta_path = blob_meta_path(blob_dir, blob_id);
+    match fs::read_to_string(&meta_path) {
+        Ok(content) => content
+            .lines()
+            .filter_map(|line| edgerun_core::util::hex_to_bytes(line).ok())
+            .collect(),
+        Err(_) => Vec::new(),
     }
 }
 

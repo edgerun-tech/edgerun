@@ -1,6 +1,9 @@
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_linux_sysfs::read_trimmed;
-use edgerun_nfc::{default_nfc_descriptor, NfcDevice, NfcDeviceInfo, NfcPowerState};
+use edgerun_nfc::{
+    default_nfc_descriptor, NdefMessage, NfcDevice, NfcDeviceInfo, NfcPowerState, NfcReader,
+    NfcScanner, NfcTarget, NfcTechnology,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,6 +19,10 @@ pub struct LinuxNfcAdapter {
 pub struct LinuxNfcBackend {
     pub adapter: LinuxNfcAdapter,
 }
+
+// ---------------------------------------------------------------------------
+// Target discovery via sysfs
+// ---------------------------------------------------------------------------
 
 pub fn discover_nfc_adapters() -> Result<Vec<LinuxNfcAdapter>, CapabilityError> {
     discover_nfc_adapters_in(Path::new("/sys/class/nfc"))
@@ -40,16 +47,31 @@ pub fn discover_nfc_adapters_in(root: &Path) -> Result<Vec<LinuxNfcAdapter>, Cap
             Some("auto") => NfcPowerState::Disabled,
             _ => NfcPowerState::Unknown,
         };
+        let protocols = read_trimmed(&path.join("protocols"));
+        let supported_technologies = parse_supported_technologies(&protocols);
         out.push(LinuxNfcAdapter {
             name,
             sysfs_path: path.clone(),
-            protocol_name: read_trimmed(&path.join("protocols")),
+            protocol_name: protocols,
             power_state,
         });
     }
     out.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(out)
 }
+
+fn parse_supported_technologies(protocols: &Option<String>) -> Vec<NfcTechnology> {
+    let Some(protocols) = protocols else { return Vec::new() };
+    protocols
+        .split_whitespace()
+        .map(NfcTechnology::from_str)
+        .filter(|t| *t != NfcTechnology::Unknown)
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// CapabilityProvider + NfcDevice
+// ---------------------------------------------------------------------------
 
 impl CapabilityProvider for LinuxNfcBackend {
     fn descriptor(&self) -> CapabilityDescriptor {
@@ -63,12 +85,63 @@ impl NfcDevice for LinuxNfcBackend {
             provider: "linux-nfc".into(),
             device_name: self.adapter.name.clone(),
             power_state: self.adapter.power_state,
-            protocol_name: self.adapter.protocol_name.clone(),
+            supported_technologies: parse_supported_technologies(&self.adapter.protocol_name),
         })
     }
 
     fn power_state(&self) -> Result<NfcPowerState, CapabilityError> {
         Ok(self.adapter.power_state)
+    }
+
+    fn set_power_state(&self, state: NfcPowerState) -> Result<NfcPowerState, CapabilityError> {
+        // Linux kernel NFC subsystem doesn't expose a standard sysfs power toggle.
+        // Power management is handled by the kernel driver or rfkill.
+        Err(CapabilityError::Unsupported(
+            "nfc power state control requires rfkill or kernel netlink interface",
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NfcScanner — requires libnfc or kernel NFC target discovery
+// ---------------------------------------------------------------------------
+
+impl NfcScanner for LinuxNfcBackend {
+    fn scan_targets(&self) -> Result<Vec<NfcTarget>, CapabilityError> {
+        // Linux kernel NFC target discovery is not exposed via sysfs.
+        // Requires libnfc (nfc_initiator_list_passive_target) or
+        // /dev/nfcX character device with ioctl.
+        Err(CapabilityError::Unsupported(
+            "nfc target scanning requires libnfc or /dev/nfcX character device — \
+             implement with nfc_initiator_list_passive_target() from libnfc",
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NfcReader — requires libnfc for NDEF read/write and APDU transceive
+// ---------------------------------------------------------------------------
+
+impl NfcReader for LinuxNfcBackend {
+    fn read_ndef(&self, _target_id: &str) -> Result<Option<NdefMessage>, CapabilityError> {
+        Err(CapabilityError::Unsupported(
+            "ndef read requires libnfc or /dev/nfcX — \
+             implement with nfc_initiator_transceive_bytes() + NDEF TLV parsing",
+        ))
+    }
+
+    fn write_ndef(&self, _target_id: &str, _message: &NdefMessage) -> Result<(), CapabilityError> {
+        Err(CapabilityError::Unsupported(
+            "ndef write requires libnfc or /dev/nfcX — \
+             implement with nfc_initiator_transceive_bytes() + NDEF TLV encoding",
+        ))
+    }
+
+    fn transceive(&self, _target_id: &str, _command: &[u8]) -> Result<Vec<u8>, CapabilityError> {
+        Err(CapabilityError::Unsupported(
+            "raw apdu transceive requires libnfc or /dev/nfcX — \
+             implement with nfc_initiator_transceive_bytes()",
+        ))
     }
 }
 
@@ -176,7 +249,7 @@ mod tests {
         assert_eq!(info.provider, "linux-nfc");
         assert_eq!(info.device_name, "nfc1");
         assert_eq!(info.power_state, NfcPowerState::Enabled);
-        assert_eq!(info.protocol_name.as_deref(), Some("felica"));
+        assert!(info.supported_technologies.contains(&NfcTechnology::NfcF));
     }
 
     #[test]

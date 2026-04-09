@@ -67,7 +67,7 @@ pub fn parse_rfc3339(value: &str) -> Result<DateTimeUtc, ParseRfc3339Error> {
     let mut nanos = 0u32;
     let mut frac_index = 19;
     if s.get(19) == Some(&b'.') {
-        let mut frac_start = 20;
+        let frac_start = 20;
         let mut frac_end = frac_start;
         while frac_end < s.len() && s[frac_end].is_ascii_digit() {
             frac_end += 1;
@@ -188,6 +188,17 @@ fn format_rfc3339_utc(dt: &DateTimeUtc) -> String {
     format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", year, month, day, hour, minute, second)
 }
 
+/// Convert `SystemTime` to a `prost_types::Timestamp`.
+/// Shared utility — replaces duplicated conversion code in session.rs,
+/// capability-policy, stream, and node lib.rs.
+pub fn system_time_to_prost(time: std::time::SystemTime) -> prost_types::Timestamp {
+    let duration = time.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    prost_types::Timestamp {
+        seconds: duration.as_secs() as i64,
+        nanos: duration.subsec_nanos() as i32,
+    }
+}
+
 pub fn canonical_time_string(value: &str) -> Option<String> {
     parse_rfc3339(value).ok().map(|t| format_rfc3339_utc(&t))
 }
@@ -262,12 +273,6 @@ pub fn bytes_to_hex_prefixed(value: &[u8]) -> String {
     format!("0x{}", bytes_to_hex(value))
 }
 
-pub fn nfc(text: &str) -> String {
-    // TODO: Implement proper NFC normalization for protocol canonicalization.
-    // For now, return the input unchanged — no production code depends on NFC.
-    text.to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -283,12 +288,5 @@ mod tests {
             canonical_time_string("2030-01-01T07:00:00+07:00").as_deref(),
             Some("2030-01-01T00:00:00Z")
         );
-    }
-
-    #[test]
-    fn nfc_passes_through_unchanged() {
-        // TODO: update when proper NFC implementation is added
-        let input = "hello";
-        assert_eq!(nfc(input), input);
     }
 }

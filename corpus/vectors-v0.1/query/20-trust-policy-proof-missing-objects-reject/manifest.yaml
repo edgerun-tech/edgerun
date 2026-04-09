@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: trust policy proof is rejected when it carries neither policy nor assignments object
+description: trust policy proof is rejected when it carries neither policy nor assignments
+  object
 tags:
 - query
 - proof

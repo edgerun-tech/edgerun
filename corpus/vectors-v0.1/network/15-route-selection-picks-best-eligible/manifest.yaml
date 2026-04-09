@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: route selection chooses the highest-scoring eligible route under normalized v0 policy
+description: route selection chooses the highest-scoring eligible route under normalized
+  v0 policy
 tags:
 - network
 - route

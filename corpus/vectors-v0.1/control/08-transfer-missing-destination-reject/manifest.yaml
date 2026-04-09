@@ -3,7 +3,8 @@ suite: control
 validator: validate_control_change
 version: 1
 priority: mandatory
-description: transfer control command is structurally invalid when the destination controller is absent
+description: transfer control command is structurally invalid when the destination
+  controller is absent
 tags:
 - control
 - validate_control_change

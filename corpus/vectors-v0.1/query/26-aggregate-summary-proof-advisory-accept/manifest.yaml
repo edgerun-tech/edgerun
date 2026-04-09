@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: aggregate summary proof is advisory-accepted when responder sets are disjoint and referenced policy object is locally available
+description: aggregate summary proof is advisory-accepted when responder sets are
+  disjoint and referenced policy object is locally available
 tags:
 - query
 - proof

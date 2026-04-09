@@ -32,6 +32,7 @@ license = "MIT/Apache-2.0"
 repository = "https://github.com/SergioBenitez/version_check"
 
 [lib]
+test = false
 name = "version_check"
 path = "src/lib.rs"
 

@@ -121,82 +121,57 @@ pub enum ProtocolRecord {
 /// When `signable` is `true`, the signature field is cleared before encoding
 /// so that the same bytes are produced regardless of which signature is attached.
 pub fn canonical_bytes(record: &ProtocolRecord, signable: bool) -> Vec<u8> {
-    macro_rules! encode_signable {
-        ($msg:expr) => {{
-            let mut msg = ($msg).clone();
-            if signable {
-                msg.signature = None;
+    macro_rules! encode_all {
+        (
+            signable: [$($signable_variant:ident),+ $(,)?],
+            plain: [$($plain_variant:ident),+ $(,)?],
+        ) => {{
+            match record {
+                // Signable variants (have a `.signature` field)
+                $(
+                    ProtocolRecord::$signable_variant(v) => {
+                        let mut buf = Vec::new();
+                        if signable {
+                            let mut msg = v.clone();
+                            msg.signature = None;
+                            prost::Message::encode(&msg, &mut buf).expect("prost encode failed");
+                        } else {
+                            prost::Message::encode(v, &mut buf).expect("prost encode failed");
+                        }
+                        buf
+                    }
+                )+
+                // Non-signable variants (encode directly, signable flag ignored)
+                $(
+                    ProtocolRecord::$plain_variant(v) => {
+                        let mut buf = Vec::new();
+                        prost::Message::encode(v, &mut buf).expect("prost encode failed");
+                        buf
+                    }
+                )+
             }
-            let mut buf = Vec::new();
-            prost::Message::encode(&msg, &mut buf).expect("prost encode failed");
-            buf
         }};
     }
 
-    match record {
-        ProtocolRecord::EventEnvelope(v) => encode_signable!(v),
-        ProtocolRecord::CommandEnvelope(v) => encode_signable!(v),
-        ProtocolRecord::DelegationRecord(v) => encode_signable!(v),
-        ProtocolRecord::RevocationRecord(v) => encode_signable!(v),
-        ProtocolRecord::SnapshotDescriptor(v) => encode_signable!(v),
-        ProtocolRecord::IdentityRecord(v) => encode_signable!(v),
-        ProtocolRecord::AssuranceClaim(v) => encode_signable!(v),
-        ProtocolRecord::QueryResultFragment(v) => encode_signable!(v),
-        ProtocolRecord::RouteAdvertisement(v) => encode_signable!(v),
-        ProtocolRecord::SessionHello(v) => encode_signable!(v),
-        ProtocolRecord::SessionAccept(v) => encode_signable!(v),
-        ProtocolRecord::RelayEnvelope(v) => encode_signable!(v),
-        // Non-signable types — encode directly
-        _ => {
-            let mut buf = Vec::new();
-            match record {
-                ProtocolRecord::IdentityRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::NodeRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ObjectRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::EventRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::HeadRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CheckpointRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CommandRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::DelegationRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::RevocationRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::SnapshotRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::StreamRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::RepresentationRef(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::Digest(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::Signature(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::TimeWindow(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CostLimit(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ScopeDescriptor(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::QueryRequest(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::FederatedAggregateDescriptor(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::NodeGenesisPayload(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CommandSentPayload(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CommandResultPayload(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ActionLifecyclePayload(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::LogicalObjectDescriptor(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::StoredRepresentationHeader(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ChunkEntry(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ChunkManifest(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::AggregateTrustPolicy(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::RouteTrustAssignment(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::RouteTrustAssignments(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::RouteSelectionPolicy(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::AssuranceRequirement(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ConstraintSet(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::CapabilityDescriptor(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::StreamHeadsProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::SnapshotSetProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::EventSetProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ObjectAssertionProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ResultFragmentProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::AggregateSummaryProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::TrustPolicyProof(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ProofBundle(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                ProtocolRecord::ReachabilityHint(v) => prost::Message::encode(v, &mut buf).unwrap(),
-                _ => unreachable!(),
-            }
-            buf
-        }
+    encode_all! {
+        signable: [
+            EventEnvelope, CommandEnvelope, DelegationRecord, RevocationRecord,
+            SnapshotDescriptor, IdentityRecord, AssuranceClaim, QueryResultFragment,
+            RouteAdvertisement, SessionHello, SessionAccept, RelayEnvelope,
+        ],
+        plain: [
+            IdentityRef, NodeRef, StreamRef, EventRef, HeadRef, CheckpointRef,
+            ObjectRef, RepresentationRef, CommandRef, DelegationRef, RevocationRef,
+            SnapshotRef, Digest, Signature, TimeWindow, CostLimit, ScopeDescriptor,
+            QueryRequest, FederatedAggregateDescriptor, NodeGenesisPayload,
+            CommandSentPayload, CommandResultPayload, ActionLifecyclePayload,
+            LogicalObjectDescriptor, StoredRepresentationHeader, ChunkEntry,
+            ChunkManifest, AggregateTrustPolicy, RouteTrustAssignment,
+            RouteTrustAssignments, RouteSelectionPolicy, AssuranceRequirement,
+            ConstraintSet, CapabilityDescriptor, StreamHeadsProof, SnapshotSetProof,
+            EventSetProof, ObjectAssertionProof, ResultFragmentProof,
+            AggregateSummaryProof, TrustPolicyProof, ProofBundle, ReachabilityHint,
+        ],
     }
 }
 

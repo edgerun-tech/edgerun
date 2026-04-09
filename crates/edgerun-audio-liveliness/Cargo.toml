@@ -1,0 +1,12 @@
+[package]
+name = "edgerun-audio-liveliness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-biometrics = { path = "../edgerun-biometrics" }
+edgerun-capabilities = { path = "../edgerun-capabilities" }
+edgerun-microphone = { path = "../edgerun-microphone" }
+edgerun-speaker = { path = "../edgerun-speaker" }

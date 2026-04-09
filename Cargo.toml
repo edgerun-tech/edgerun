@@ -48,12 +48,12 @@ members = [
   "crates/edgerun-subtle",
   "crates/edgerun-log",
   "crates/edgerun-rt",
-  "crates/edgerun-json",
   "crates/edgerun-capabilities",
   "crates/edgerun-capability-policy",
-  "crates/edgerun-machine-report",
   "crates/edgerun-remote-capability",
   "crates/edgerun-stream",
+  "crates/edgerun-oci-runtime",
+  "crates/edgerun-oci-registry",
 
   # Device & media abstraction
   "crates/edgerun-input",
@@ -62,21 +62,24 @@ members = [
   "crates/edgerun-alsa-microphone",
   "crates/edgerun-speaker",
   "crates/edgerun-alsa-speaker",
-  "crates/edgerun-audio-calibration",
   "crates/edgerun-v4l2-camera",
   "crates/edgerun-camera-biometrics",
-  "crates/edgerun-cec",
-  "crates/edgerun-linux-cec",
+  "crates/edgerun-wifi",
   "crates/edgerun-display",
   "crates/edgerun-drm-display",
-  "crates/edgerun-gpu",
-  "crates/edgerun-linux-gpu",
-  "crates/edgerun-power",
-  "crates/edgerun-linux-power",
-
-  # Biometric & identity backends
+  "crates/edgerun-audio-calibration",
+  "crates/edgerun-audio-liveliness",
   "crates/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
+  "crates/edgerun-json",
+  "crates/edgerun-machine-report",
+  "crates/edgerun-virtual-disk",
+
+  # GPU
+  "crates/edgerun-gpu",
+  "crates/edgerun-linux-gpu",
+
+  # Biometric & identity backends
   "crates/edgerun-biometrics",
   "crates/edgerun-yubikey",
   "crates/edgerun-crypto-common",
@@ -98,16 +101,16 @@ members = [
   "crates/edgerun-ecdsa",
   "crates/edgerun-p256",
   "crates/edgerun-tpm",
+  "crates/edgerun-rand_core",
   "crates/edgerun-android-keystore",
   "crates/edgerun-hardware-signing",
 
-  # Connectivity and transport backends
+  # Connectivity and mesh backends
   "crates/edgerun-bluetooth",
   "crates/edgerun-mgmt-bluetooth",
-  "crates/edgerun-wifi",
   "crates/edgerun-linux-wifi",
-  "crates/edgerun-network-interface",
   "crates/edgerun-linux-netif",
+  "crates/edgerun-network-interface",
   "crates/edgerun-usb",
   "crates/edgerun-linux-usb",
   "crates/edgerun-pci",
@@ -116,19 +119,20 @@ members = [
   "crates/edgerun-linux-nfc",
   "crates/edgerun-npu",
   "crates/edgerun-linux-npu",
+  "crates/edgerun-power",
+  "crates/edgerun-linux-power",
+  "crates/edgerun-cec",
+  "crates/edgerun-linux-cec",
   "crates/edgerun-linux-sysfs",
   "crates/edgerun-mesh",
+  "crates/edgerun-mesh-link",
+  "crates/edgerun-mesh-router",
   "crates/edgerun-mesh-session",
   "crates/edgerun-mesh-capability",
   "crates/edgerun-mesh-daemon",
-  "crates/edgerun-node",
-  "crates/edgerun-mesh-link",
-  "crates/edgerun-mesh-router",
-  "crates/edgerun-virtual-disk",
-  "crates/edgerun-storage",
-
-  # Experiments
   "crates/edgerun-amd-xdna",
+  "crates/edgerun-node",
+  "crates/edgerun-storage",
 ]
 
 [workspace.package]

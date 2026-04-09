@@ -3,7 +3,8 @@ suite: stream
 validator: validate_stream_append
 version: 1
 priority: mandatory
-description: command committed event is rejected when payload decision does not match event family
+description: command committed event is rejected when payload decision does not match
+  event family
 tags:
 - stream
 - validate_stream_append

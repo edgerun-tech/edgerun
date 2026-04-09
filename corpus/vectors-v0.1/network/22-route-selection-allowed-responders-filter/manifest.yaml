@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: route selection ignores candidates whose advertisers are outside the allowed responder set
+description: route selection ignores candidates whose advertisers are outside the
+  allowed responder set
 tags:
 - network
 - route

@@ -3,7 +3,8 @@ suite: command
 validator: validate_command
 version: 1
 priority: mandatory
-description: delegated issuer may commit when delegation chain grants required action and scope
+description: delegated issuer may commit when delegation chain grants required action
+  and scope
 tags:
 - command
 - validate_command

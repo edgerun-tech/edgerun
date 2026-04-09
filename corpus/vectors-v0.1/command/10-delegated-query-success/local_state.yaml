@@ -5,6 +5,5 @@ current_controller_set:
 replay_cache: {}
 revocations: []
 policy_profile: default-v0
-
 trust_roots:
 - user_alice

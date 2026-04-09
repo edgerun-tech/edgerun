@@ -1,10 +1,21 @@
 //! Capability discovery and server for the edgerun node daemon.
 //!
 //! Discovers hardware devices, wraps them as `RemoteCapabilityProvider`s,
-//! aggregates them into a multi-provider, and serves them over a Unix socket.
+//! aggregates them into a multi-provider, and serves them over:
+//! - Unix domain socket (local clients)
+//! - Mesh network (remote nodes via edgerun-mesh-capability)
+//!
+//! Capability grants are managed through the event stream. Grants are recorded
+//! as `EventType::CapabilityGranted` events and revoked as
+//! `EventType::CapabilityRevoked` events. On startup, the event log is
+//! replayed to rebuild the grant state.
 
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
-use edgerun_capability_policy::{PolicyContext, SimplePolicyEngine};
+use edgerun_capabilities::{
+    CapabilityDescriptor, CapabilityProvider,
+};
+use edgerun_capability_policy::{PolicyContext, PolicyEngine, RevocationReason, SimplePolicyEngine};
+use edgerun_proto::edgerun::v0::stream::EventType;
+use prost::Message;
 use edgerun_remote_capability::{
     FramedRemoteTransport, PolicyWrappedProvider, RemoteCapabilityProvider,
     serve_one,
@@ -15,21 +26,132 @@ use std::sync::Arc;
 
 #[cfg(feature = "hardware")]
 use edgerun_evdev_input::EvdevInputBackend;
-#[cfg(feature = "hardware")]
+#[cfg(feature = "all-hardware")]
 use edgerun_remote_capability::{
+    BluetoothRemoteAdapter, BluetoothConnectionRemoteAdapter,
     CameraRemoteAdapter, InputRemoteAdapter,
     MicrophoneRemoteAdapter, SpeakerRemoteAdapter,
+    WifiRemoteAdapter, WifiControlRemoteAdapter,
 };
-#[cfg(feature = "hardware")]
+#[cfg(feature = "all-hardware")]
 use edgerun_v4l2_camera::{V4l2CameraBiometricReader, discover_camera_devices};
-#[cfg(feature = "hardware")]
+#[cfg(feature = "all-hardware")]
 use edgerun_camera_biometrics::CameraBiometricPurpose;
-#[cfg(feature = "hardware")]
+#[cfg(feature = "all-hardware")]
 use edgerun_microphone::{AudioCaptureRequest, MicrophoneSampleFormat};
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// Grant projection from event stream
+// ===========================================================================
+
+/// Replays capability grant and revocation events from the event stream
+/// to rebuild a `SimplePolicyEngine` with all active grants.
+///
+/// This walks events from seq 1 through `head_seq`, processing:
+/// - `EventType::CapabilityGranted` → imports the grant object into the engine
+/// - `EventType::CapabilityRevoked` → revokes the grant in the engine
+pub fn project_capability_grants(
+    store: &edgerun_storage::NodeStore,
+    stream_id: &[u8],
+    head_seq: u64,
+) -> SimplePolicyEngine {
+    use edgerun_capability_policy::RevocationReason;
+
+    let mut engine = SimplePolicyEngine::default();
+
+    for seq in 1..=head_seq {
+        let event = match store.get_event(stream_id, seq) {
+            Ok(Some(e)) => e,
+            _ => continue,
+        };
+
+        let event_type = EventType::try_from(event.event_type).unwrap_or(EventType::Unspecified);
+
+        match event_type {
+            EventType::CapabilityGranted => {
+                // Resolve the grant object from the store
+                if let Some(object_ref) = &event.payload_object {
+                    if let Ok(Some(obj)) = store.get_object(object_ref) {
+                        if let Ok(grant) = edgerun_proto::edgerun::v0::capability::CapabilityGrant::decode(&obj.content[..]) {
+                            let _ = engine.import_grant(grant);
+                        }
+                    }
+                }
+            }
+            EventType::CapabilityRevoked => {
+                // Resolve the revocation object from the store
+                if let Some(object_ref) = &event.payload_object {
+                    if let Ok(Some(obj)) = store.get_object(object_ref) {
+                        if let Ok(revocation) = edgerun_proto::edgerun::v0::capability::CapabilityRevocation::decode(&obj.content[..]) {
+                            let _ = engine.revoke(&revocation.grant_id, RevocationReason::Superseded);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    engine
+}
+
+/// Records a capability granted event into the event stream.
+///
+/// The grant is stored as an object in the store, then an event is appended
+/// referencing it via `payload_object`.
+pub fn record_capability_grant_event(
+    store: &mut edgerun_storage::NodeStore,
+    stream_id: &[u8],
+    signer: &dyn edgerun_hardware_signing::MeshSigner,
+    grant: &edgerun_proto::edgerun::v0::capability::CapabilityGrant,
+) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+    // Store the grant as an object
+    let grant_bytes = grant.encode_to_vec();
+    let object_ref = store.put_object(&grant_bytes, 0, &[])?;
+
+    // Append signed event (using the internal function from command_dispatch)
+    let seq = crate::command_dispatch::append_signed_event(
+        store,
+        stream_id,
+        signer,
+        EventType::CapabilityGranted,
+        1,
+        Some(object_ref),
+        vec![],
+        vec![],
+    );
+
+    Ok(seq)
+}
+
+/// Records a capability revoked event into the event stream.
+pub fn record_capability_revocation_event(
+    store: &mut edgerun_storage::NodeStore,
+    stream_id: &[u8],
+    signer: &dyn edgerun_hardware_signing::MeshSigner,
+    revocation: &edgerun_proto::edgerun::v0::capability::CapabilityRevocation,
+) -> Result<Option<u64>, Box<dyn std::error::Error>> {
+    // Store the revocation as an object
+    let rev_bytes = revocation.encode_to_vec();
+    let object_ref = store.put_object(&rev_bytes, 0, &[])?;
+
+    let seq = crate::command_dispatch::append_signed_event(
+        store,
+        stream_id,
+        signer,
+        EventType::CapabilityRevoked,
+        1,
+        Some(object_ref),
+        vec![],
+        vec![],
+    );
+
+    Ok(seq)
+}
+
+// ===========================================================================
 // Multi-provider — aggregates multiple capability providers into one
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 /// A capability provider that wraps multiple underlying providers.
 ///
@@ -62,6 +184,11 @@ impl MultiCapabilityProvider {
     /// Returns the number of registered providers.
     pub fn len(&self) -> usize {
         self.providers.len()
+    }
+
+    /// Returns true if no providers are registered.
+    pub fn is_empty(&self) -> bool {
+        self.providers.is_empty()
     }
 }
 
@@ -118,6 +245,21 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
         ))
     }
 
+    fn next_event(
+        &mut self,
+        session_id: &[u8],
+    ) -> Result<Option<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionEvent>, edgerun_capabilities::CapabilityError> {
+        for provider in self.providers.values_mut() {
+            match provider.next_event(session_id) {
+                Ok(Some(event)) => return Ok(Some(event)),
+                Ok(None) => continue,
+                Err(edgerun_capabilities::CapabilityError::PermissionDenied(_)) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(None)
+    }
+
     fn close_session(
         &mut self,
         close: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose,
@@ -127,14 +269,54 @@ impl RemoteCapabilityProvider for MultiCapabilityProvider {
         }
         Ok(())
     }
+
+    fn handle_request(
+        &mut self,
+        request: &edgerun_capabilities::CapabilityRequest,
+    ) -> Result<Option<edgerun_capabilities::CapabilityGrant>, edgerun_capabilities::CapabilityError> {
+        // Try to find a provider that can handle this request
+        for provider in self.providers.values_mut() {
+            match provider.handle_request(request) {
+                Ok(Some(grant)) => return Ok(Some(grant)),
+                Ok(None) => continue,
+                Err(_) => continue,
+            }
+        }
+        Ok(None)
+    }
+
+    fn handle_grant(
+        &mut self,
+        grant: &edgerun_capabilities::CapabilityGrant,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        // Forward grant to all providers (each policy engine tracks it)
+        for provider in self.providers.values_mut() {
+            let _ = provider.handle_grant(grant);
+        }
+        Ok(())
+    }
+
+    fn handle_revocation(
+        &mut self,
+        revocation: &edgerun_capabilities::CapabilityRevocation,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        // Forward revocation to all providers
+        for provider in self.providers.values_mut() {
+            let _ = provider.handle_revocation(revocation);
+        }
+        Ok(())
+    }
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Hardware discovery
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 /// Discovers all available hardware capabilities and registers them with the
 /// multi-provider, wrapped in policy enforcement.
+///
+/// The `policy` engine should already have grants replayed from the event stream
+/// via `project_capability_grants()` before calling this function.
 pub fn discover_and_register_capabilities(
     multi: &mut MultiCapabilityProvider,
     policy: SimplePolicyEngine,
@@ -225,12 +407,77 @@ pub fn discover_and_register_capabilities(
         }
     }
 
-    let _ = (multi, policy, context);
+    #[cfg(feature = "all-hardware")]
+    {
+        // --- WiFi scanning and control (discover once, use for both) ---
+        match edgerun_linux_wifi::discover_wifi_interfaces() {
+            Ok(interfaces) => {
+                // WiFi scanning adapters
+                for (i, iface) in interfaces.iter().enumerate() {
+                    let backend = edgerun_linux_wifi::LinuxWifiBackend {
+                        interface: iface.clone(),
+                    };
+                    let instance_id = format!("wifi-{}", i);
+                    let descriptor = edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
+                    let adapter = WifiRemoteAdapter::new(backend, descriptor.clone());
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+                // WiFi control adapters (same interfaces, different adapter type)
+                for (i, iface) in interfaces.iter().enumerate() {
+                    let backend = edgerun_linux_wifi::LinuxWifiBackend {
+                        interface: iface.clone(),
+                    };
+                    let instance_id = format!("wifi-ctrl-{}", i);
+                    let descriptor = edgerun_wifi::default_wifi_descriptor("edgerun-linux-wifi", &instance_id);
+                    let adapter = WifiControlRemoteAdapter::new(backend, descriptor.clone());
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: WiFi interface discovery failed: {}", e),
+        }
+
+        // --- Bluetooth scanning and connections (discover once, use for both) ---
+        match edgerun_mgmt_bluetooth::discover_controllers() {
+            Ok(controllers) => {
+                // Bluetooth scanning adapters
+                for ctrl in &controllers {
+                    let backend = edgerun_mgmt_bluetooth::MgmtBluetoothBackend {
+                        controller: ctrl.clone(),
+                    };
+                    let instance_id = format!("bt-{}", ctrl.index);
+                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor("edgerun-mgmt-bluetooth", &instance_id);
+                    let adapter = BluetoothRemoteAdapter::new(backend, descriptor.clone());
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+                // Bluetooth connection adapters (same controllers, different adapter type)
+                for ctrl in &controllers {
+                    let backend = edgerun_mgmt_bluetooth::MgmtBluetoothBackend {
+                        controller: ctrl.clone(),
+                    };
+                    let instance_id = format!("bt-conn-{}", ctrl.index);
+                    let descriptor = edgerun_bluetooth::default_bluetooth_descriptor("edgerun-mgmt-bluetooth", &instance_id);
+                    let adapter = BluetoothConnectionRemoteAdapter::new(backend, descriptor.clone());
+                    let wrapped = PolicyWrappedProvider::with_policy(adapter, policy.clone())
+                        .with_context(context.clone());
+                    multi.register(&descriptor, Box::new(wrapped));
+                }
+            }
+            Err(e) => eprintln!("edgerund: warning: Bluetooth controller discovery failed: {}", e),
+        }
+    }
+
+    let _ = (multi, context);
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Unix socket server
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 /// Thread-safe capability server using `Arc<std::sync::Mutex<MultiCapabilityProvider>>`.
 /// Listens on a Unix domain socket and serves capabilities to connecting clients.
@@ -246,7 +493,7 @@ pub fn serve_capabilities_unix(
     }
 
     let listener = std::os::unix::net::UnixListener::bind(socket_path)?;
-    println!("edgerund: capability server listening on {}", socket_path.display());
+    eprintln!("edgerund: capability server listening on {}", socket_path.display());
 
     loop {
         match listener.accept() {
@@ -272,18 +519,62 @@ pub fn serve_capabilities_unix(
     Ok(())
 }
 
+// ===========================================================================
+// Mesh capability server
+// ===========================================================================
+
+/// Builds a mesh-capable capability server from the local multi-provider.
+///
+/// Returns `(MeshCapabilityServer, OutboundQueue, MeshEnvelopeDispatcher)`.
+/// The daemon should:
+/// 1. Register the server's inboxes with the mesh link
+/// 2. Drain the `OutboundQueue` and send frames via the mesh
+/// 3. Deliver inbound capability frames to the dispatcher
+#[cfg(feature = "all-hardware")]
+pub fn build_mesh_capability_server(
+    multi: MultiCapabilityProvider,
+) -> (
+    edgerun_mesh_capability::MeshCapabilityServer<MultiCapabilityProvider>,
+    edgerun_mesh_capability::OutboundQueue,
+    edgerun_mesh_capability::MeshEnvelopeDispatcher,
+) {
+    use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher, OutboundQueue};
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+
+    let outbound: OutboundQueue = std::rc::Rc::new(RefCell::new(VecDeque::new()));
+    let dispatcher = MeshEnvelopeDispatcher::new();
+    let server = MeshCapabilityServer::new(multi);
+    (server, outbound, dispatcher)
+}
+
+/// Processes one inbound capability envelope for the mesh server.
+/// Returns true if an envelope was processed.
+#[cfg(feature = "all-hardware")]
+pub fn mesh_capability_server_tick<P: RemoteCapabilityProvider>(
+    server: &mut edgerun_mesh_capability::MeshCapabilityServer<P>,
+) -> Result<bool, edgerun_capabilities::CapabilityError> {
+    let mut dummy_link = edgerun_mesh_link::MeshLink::new();
+    server.serve_one(&mut dummy_link)
+}
+
+// ===========================================================================
+// Builds
+// ===========================================================================
+
 /// Builds a multi-provider with all discovered capabilities.
-/// Used by the mesh capability server.
-pub fn build_multi_provider(_node_private_key: &[u8]) -> MultiCapabilityProvider {
+/// The `policy` engine should have grants replayed from the event stream first.
+pub fn build_multi_provider(
+    policy: SimplePolicyEngine,
+) -> MultiCapabilityProvider {
     let mut multi = MultiCapabilityProvider::new();
-    let policy = SimplePolicyEngine::default();
     discover_and_register_capabilities(&mut multi, policy);
     multi
 }
 
-// ---------------------------------------------------------------------------
+// ===========================================================================
 // Tests
-// ---------------------------------------------------------------------------
+// ===========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -631,9 +922,9 @@ mod tests {
 
     #[test]
     fn build_multi_provider_returns_multi() {
-        let multi = build_multi_provider(&[0u8; 32]);
+        let policy = edgerun_capability_policy::SimplePolicyEngine::default();
+        let multi = build_multi_provider(policy);
         // Without hardware, no capabilities are discovered, but the multi is valid
-        // (hardware discovery silently fails in test environments)
         let _ = multi;
     }
 

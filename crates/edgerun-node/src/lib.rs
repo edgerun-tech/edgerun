@@ -9,6 +9,7 @@
 //! record of the node's initial state.
 
 pub mod mesh_node;
+pub mod metering;
 
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
@@ -20,6 +21,7 @@ use edgerun_stream::{StreamWriter, StreamError};
 use edgerun_hardware_signing::NodeID;
 // Simple YAML config parser (no serde dependency)
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 /// Node configuration — loaded from YAML and embedded in the genesis event.
 #[derive(Clone, Debug)]
@@ -127,7 +129,7 @@ impl Node {
     /// then returns the initialized node.
     pub fn from_config(
         config: NodeConfig,
-        signer: Box<dyn edgerun_hardware_signing::MeshSigner>,
+        signer: Arc<dyn edgerun_hardware_signing::MeshSigner>,
     ) -> Result<Self, StreamError> {
         let identity = signer.node_id();
         let stream_id = config.stream_id.clone();
@@ -204,7 +206,12 @@ impl Node {
         }
     }
 
-    /// Installs a capability grant.
+    /// Installs a capability grant directly into the policy engine.
+    ///
+    /// **WARNING**: This bypasses the event stream. In production, use
+    /// `capabilities::record_capability_grant_event()` instead to ensure
+    /// the grant is recorded as a signed event.
+    #[cfg(test)]
     pub fn install_grant(&mut self, grant: CapabilityGrant) {
         let _ = self.policy.import_grant(grant);
     }
@@ -289,6 +296,7 @@ mod tests {
     use super::*;
     use edgerun_hardware_signing::MeshSigner;
     use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use std::sync::Arc;
 
     fn random_signing_key() -> p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
@@ -510,7 +518,7 @@ trust_nodes: []
     #[test]
     fn node_creates_from_config() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let expected_id = signer.node_id();
         let node = Node::from_config(config, signer).unwrap();
 
@@ -520,7 +528,7 @@ trust_nodes: []
     #[test]
     fn node_genesis_event_present() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let node = Node::from_config(config, signer).unwrap();
 
         let events = node.events();
@@ -531,7 +539,7 @@ trust_nodes: []
     #[test]
     fn node_config_accessor() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let node = Node::from_config(config.clone(), signer).unwrap();
 
         assert_eq!(node.config().stream_id, config.stream_id);
@@ -541,7 +549,7 @@ trust_nodes: []
     #[test]
     fn node_head_returns_genesis() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let node = Node::from_config(config, signer).unwrap();
 
         let head = node.head();
@@ -556,7 +564,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_with_empty_command_id() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Build a minimal command with empty command_id
@@ -594,7 +602,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_targeting_wrong_node() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
@@ -628,7 +636,7 @@ trust_nodes: []
     #[test]
     fn node_rejects_command_without_target() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let command = edgerun_proto::edgerun::v0::stream::CommandEnvelope {
@@ -660,7 +668,7 @@ trust_nodes: []
     #[test]
     fn node_records_rejection_event_for_bad_command() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         let initial_events = node.events().len();
@@ -698,7 +706,7 @@ trust_nodes: []
     #[test]
     fn node_install_grant() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Install a grant — should not panic
@@ -737,7 +745,7 @@ trust_nodes: []
     #[test]
     fn replay_cache_populated_on_accept() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = Arc::new(TestSigner::new());
         let mut node = Node::from_config(config, signer).unwrap();
 
         // Create a command that will pass structural validation but fail signature

@@ -1,4 +1,10 @@
 //! Minimal epoll-based async runtime for edgerun.
+//!
+//! ## Architecture
+//! - 1 reactor thread: epoll_wait + timer heap + waker dispatch
+//! - N worker threads: poll futures from ready queue
+//! - 1 blocking pool: bounded threads for `spawn_blocking`
+//! - Thread-local runtime handle for free-function `spawn()`
 
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::future::Future;
@@ -9,9 +15,29 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use std::thread::JoinHandle as StdJoinHandle;
 use std::time::Duration;
 
 pub use std::time::Instant;
+
+// ===========================================================================
+// Thread-local runtime handle
+// ===========================================================================
+
+thread_local! {
+    static CURRENT_RT: std::cell::RefCell<Option<Arc<RuntimeInner>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn set_current_rt(rt: Arc<RuntimeInner>) {
+    CURRENT_RT.with(|c| *c.borrow_mut() = Some(rt));
+}
+
+fn current_rt() -> Arc<RuntimeInner> {
+    CURRENT_RT.with(|c| {
+        c.borrow().clone().expect("no runtime: spawn() must be called from within a runtime")
+    })
+}
+
 // ===========================================================================
 // Ready queue
 // ===========================================================================
@@ -48,7 +74,7 @@ impl ReadyQueue {
 // Task store
 // ===========================================================================
 
-type PollFn = Box<dyn FnOnce(&mut Context<'_>) -> bool + Send>;
+type PollFn = Box<dyn FnMut(&mut Context<'_>) -> bool + Send>;
 
 struct TaskMap {
     map: Mutex<HashMap<usize, PollFn>>,
@@ -62,8 +88,13 @@ impl TaskMap {
         self.map.lock().unwrap().insert(id, f);
         id
     }
-    fn take(&self, id: usize) -> Option<PollFn> {
+    /// Take the poll function out of the map for polling (without holding the lock).
+    /// Returns the task ID and the poll function. Caller must re-insert if pending.
+    fn take_for_poll(&self, id: usize) -> Option<PollFn> {
         self.map.lock().unwrap().remove(&id)
+    }
+    fn reinsert(&self, id: usize, f: PollFn) {
+        self.map.lock().unwrap().insert(id, f);
     }
 }
 
@@ -76,14 +107,17 @@ struct WData { id: usize, q: Arc<ReadyQueue> }
 static VTABLE: RawWakerVTable = RawWakerVTable::new(wk_clone, wk_wake, wk_wake, wk_drop);
 
 unsafe fn wk_clone(d: *const ()) -> RawWaker {
-    let a = Arc::from_raw(d as *const WData);
-    let c = Arc::clone(&a);
-    std::mem::forget(a);
-    RawWaker::new(Arc::into_raw(c) as *const (), &VTABLE)
+    // Increment the strong count so both the original and clone each own a reference
+    Arc::increment_strong_count(d as *const WData);
+    RawWaker::new(d, &VTABLE)
 }
 unsafe fn wk_wake(d: *const ()) {
+    // Increment strong count before from_raw to avoid double-free when
+    // the waker is also later dropped (waker clones can both wake and drop)
+    Arc::increment_strong_count(d as *const WData);
     let a = Arc::from_raw(d as *const WData);
     a.q.push(a.id);
+    // Arc dropped here — refcount decremented (balanced by increment above)
 }
 unsafe fn wk_drop(d: *const ()) {
     let _ = Arc::from_raw(d as *const WData);
@@ -98,6 +132,7 @@ fn make_waker(id: usize, q: Arc<ReadyQueue>) -> Waker {
 // ===========================================================================
 
 struct EpollFd(libc::c_int);
+
 impl EpollFd {
     fn new() -> io::Result<Self> {
         let fd = unsafe { libc::epoll_create1(0) };
@@ -144,7 +179,6 @@ impl FdInterest {
 // ===========================================================================
 
 struct Timer { deadline: Instant, waker: Waker }
-// Manual Ord without requiring Eq on Waker
 impl Ord for Timer {
     fn cmp(&self, o: &Self) -> std::cmp::Ordering { o.deadline.cmp(&self.deadline) }
 }
@@ -211,7 +245,7 @@ impl Reactor {
     fn register_timer(&self, deadline: Instant, waker: Waker) {
         self.timers.lock().unwrap().push(Timer { deadline, waker });
     }
-    fn run(&self, queue: &Arc<ReadyQueue>) {
+    fn run(&self, _queue: &Arc<ReadyQueue>) {
         const MAX: usize = 1024;
         let mut evts: Vec<libc::epoll_event> = (0..MAX).map(|_| libc::epoll_event { events: 0, u64: 0 }).collect();
         loop {
@@ -259,20 +293,113 @@ impl Reactor {
 }
 
 // ===========================================================================
-// JoinHandle
+// Blocking thread pool
 // ===========================================================================
 
-pub struct JoinHandle<T> { rx: std::sync::mpsc::Receiver<Result<T, JoinError>> }
+struct BlockingPool {
+    tx: Mutex<std::sync::mpsc::Sender<Box<dyn FnOnce() + Send>>>,
+    cvar: Arc<Condvar>,
+    threads: Mutex<Vec<StdJoinHandle<()>>>,
+    joined: AtomicBool,
+    shutdown_flag: Arc<AtomicBool>,
+}
+
+impl BlockingPool {
+    fn new(size: usize) -> Self {
+        let (tx, rx) = std::sync::mpsc::channel::<Box<dyn FnOnce() + Send>>();
+        let rx = Arc::new(Mutex::new(rx));
+        let shutdown_flag = Arc::new(AtomicBool::new(false));
+        let threads: Vec<_> = (0..size).map(|_| {
+            let rx = Arc::clone(&rx);
+            let flag = Arc::clone(&shutdown_flag);
+            std::thread::spawn(move || {
+                while !flag.load(Ordering::Relaxed) {
+                    let job = {
+                        let guard = rx.lock().unwrap();
+                        guard.recv_timeout(Duration::from_millis(10))
+                    };
+                    match job {
+                        Ok(job) => {
+                            if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+                                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                                    s.to_string()
+                                } else if let Some(s) = panic.downcast_ref::<String>() {
+                                    s.clone()
+                                } else {
+                                    "unknown panic".to_string()
+                                };
+                                eprintln!("blocking task panicked: {}", msg);
+                            }
+                        }
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                    }
+                }
+                // Drain remaining
+                let guard = rx.lock().unwrap();
+                while let Ok(job) = guard.try_recv() {
+                    if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)) {
+                        let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "unknown panic".to_string()
+                        };
+                        eprintln!("blocking task panicked: {}", msg);
+                    }
+                }
+            })
+        }).collect();
+        Self { tx: Mutex::new(tx), cvar: Arc::new(Condvar::new()), threads: Mutex::new(threads), joined: AtomicBool::new(false), shutdown_flag }
+    }
+    fn spawn<F>(&self, f: F)
+    where F: FnOnce() + Send + 'static
+    {
+        let _ = self.tx.lock().unwrap().send(Box::new(f));
+        self.cvar.notify_one();
+    }
+    fn shutdown(&self) {
+        self.shutdown_flag.store(true, Ordering::Release);
+        self.cvar.notify_all();
+    }
+    fn join(&self) {
+        if self.joined.swap(true, Ordering::AcqRel) { return; }
+        for t in self.threads.lock().unwrap().drain(..) {
+            let _ = t.join();
+        }
+    }
+}
+
+// ===========================================================================
+// JoinHandle — Condvar-based instead of mpsc
+// ===========================================================================
+
+struct JoinInner<T> {
+    result: Mutex<Option<Result<T, JoinError>>>,
+    cvar: Condvar,
+}
+
+pub struct JoinHandle<T> { inner: Arc<JoinInner<T>> }
 impl<T> JoinHandle<T> {
-    pub fn blocking_recv(self) -> Result<T, JoinError> { self.rx.recv().unwrap_or(Err(JoinError)) }
+    pub fn blocking_recv(self) -> Result<T, JoinError> {
+        let mut guard = self.inner.result.lock().unwrap();
+        while guard.is_none() {
+            guard = self.inner.cvar.wait(guard).unwrap();
+        }
+        guard.take().unwrap()
+    }
 }
 impl<T> Future for JoinHandle<T> {
     type Output = Result<T, JoinError>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.rx.try_recv() {
-            Ok(v) => Poll::Ready(v),
-            Err(std::sync::mpsc::TryRecvError::Empty) => { cx.waker().wake_by_ref(); Poll::Pending }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => Poll::Ready(Err(JoinError)),
+        let mut guard = self.inner.result.lock().unwrap();
+        if let Some(result) = guard.take() {
+            Poll::Ready(result)
+        } else {
+            *guard = None; // still None
+            cx.waker().wake_by_ref();
+            Poll::Pending
         }
     }
 }
@@ -288,86 +415,197 @@ struct RuntimeInner {
     reactor: Arc<Reactor>,
     tasks: Arc<TaskMap>,
     queue: Arc<ReadyQueue>,
+    blocking: Arc<BlockingPool>,
+    reactor_thread: Mutex<Option<StdJoinHandle<()>>>,
+    worker_threads: Mutex<Vec<StdJoinHandle<()>>>,
 }
 
-static GLOBAL: std::sync::OnceLock<Arc<RuntimeInner>> = std::sync::OnceLock::new();
-
-fn current_rt() -> Arc<RuntimeInner> {
-    GLOBAL.get().expect("no runtime").clone()
+impl RuntimeInner {
+    fn spawn_task<F>(&self, f: F) -> JoinHandle<F::Output>
+    where F: Future + Send + 'static, F::Output: Send + 'static
+    {
+        let inner = Arc::new(JoinInner {
+            result: Mutex::new(None),
+            cvar: Condvar::new(),
+        });
+        let inner2 = Arc::clone(&inner);
+        let mut fut = Box::pin(f);
+        let id = self.tasks.insert(Box::new(move |cx| {
+            match fut.as_mut().poll(cx) {
+                Poll::Ready(v) => { 
+                    *inner2.result.lock().unwrap() = Some(Ok(v)); 
+                    inner2.cvar.notify_all();
+                    false 
+                }
+                Poll::Pending => true,
+            }
+        }));
+        self.queue.push(id);
+        JoinHandle { inner }
+    }
 }
 
-pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
-where F: Future + Send + 'static, F::Output: Send + 'static
-{
-    let rt = current_rt();
-    let (tx, rx) = std::sync::mpsc::channel();
-    let mut fut = Box::pin(f);
-    let id = rt.tasks.insert(Box::new(move |cx| {
-        match fut.as_mut().poll(cx) {
-            Poll::Ready(v) => { let _ = tx.send(Ok(v)); false }
-            Poll::Pending => true,
-        }
-    }));
-    rt.queue.push(id);
-    JoinHandle { rx }
-}
-
-pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
-where F: FnOnce() -> R + Send + 'static, R: Send + 'static
-{
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || { let _ = tx.send(Ok(f())); });
-    JoinHandle { rx }
-}
-
-pub struct Builder { workers: usize }
+pub struct Builder { workers: usize, blocking_workers: usize }
 impl Builder {
     pub fn new_multi_thread() -> Self {
-        Self { workers: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4) }
+        Self {
+            workers: std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4),
+            blocking_workers: 4,
+        }
     }
     pub fn enable_all(&mut self) -> &mut Self { self }
     pub fn build(&self) -> io::Result<Runtime> {
         let queue = Arc::new(ReadyQueue::new());
         let reactor = Arc::new(Reactor::new()?);
         let tasks = Arc::new(TaskMap::new());
+        let blocking = Arc::new(BlockingPool::new(self.blocking_workers));
 
+        // Start reactor thread
         let r2 = reactor.clone();
         let q2 = queue.clone();
-        std::thread::spawn(move || r2.run(&q2));
+        let reactor_thread = std::thread::spawn(move || r2.run(&q2));
 
+        let rt = Arc::new(RuntimeInner {
+            reactor,
+            tasks,
+            queue,
+            blocking,
+            reactor_thread: Mutex::new(Some(reactor_thread)),
+            worker_threads: Mutex::new(Vec::with_capacity(self.workers)),
+        });
+
+        // Start worker threads (need rt created first)
+        let mut worker_threads = Vec::with_capacity(self.workers);
         for _ in 0..self.workers {
-            let tasks = tasks.clone();
-            let queue = queue.clone();
-            std::thread::spawn(move || {
+            let tasks = Arc::clone(&rt.tasks);
+            let queue = Arc::clone(&rt.queue);
+            let rt = Arc::clone(&rt);
+            worker_threads.push(std::thread::spawn(move || {
+                set_current_rt(rt);
                 loop {
                     let Some(id) = queue.pop() else { break };
-                    if let Some(task) = tasks.take(id) {
-                        let w = make_waker(id, queue.clone());
-                        let mut cx = Context::from_waker(&w);
-                        // Task returns true if pending (reactor will re-enqueue via waker)
-                        // or false if done.
-                        let _ = task(&mut cx);
+                    let Some(mut task) = tasks.take_for_poll(id) else { continue };
+                    let w = make_waker(id, Arc::clone(&queue));
+                    let mut cx = Context::from_waker(&w);
+                    // Poll without holding the TaskMap lock (avoids deadlock with spawn)
+                    let still_pending = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| task(&mut cx)));
+                    match still_pending {
+                        Ok(true) => {
+                            // Still pending — re-insert for next wakeup
+                            tasks.reinsert(id, task);
+                            // Sleep briefly to prevent tight spin-loop starving other threads
+                            // (e.g., blocking pool threads that need to complete the awaited work)
+                            std::thread::sleep(Duration::from_micros(100));
+                        }
+                        Ok(false) => {
+                            // Task completed — dropped (not re-inserted)
+                        }
+                        Err(panic) => {
+                            // Task panicked — log and drop
+                            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                                s.to_string()
+                            } else if let Some(s) = panic.downcast_ref::<String>() {
+                                s.clone()
+                            } else {
+                                "unknown panic".to_string()
+                            };
+                            eprintln!("task panicked: {}", msg);
+                            // Task is dropped — not re-inserted
+                        }
                     }
                 }
-            });
+            }));
         }
+        *rt.worker_threads.lock().unwrap() = worker_threads;
 
-        let _ = GLOBAL.set(Arc::new(RuntimeInner { reactor, tasks, queue }));
-        Ok(Runtime { _p: () })
+        set_current_rt(rt.clone());
+
+        Ok(Runtime { inner: rt })
     }
 }
 
-pub struct Runtime { _p: () }
+pub struct Runtime { inner: Arc<RuntimeInner> }
 impl Runtime {
     pub fn new_multi_thread() -> Builder { Builder::new_multi_thread() }
+
+    pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
+    where F: Future + Send + 'static, F::Output: Send + 'static
+    {
+        self.inner.spawn_task(f)
+    }
+
+    pub fn spawn_blocking<F, R>(&self, f: F) -> JoinHandle<R>
+    where F: FnOnce() -> R + Send + 'static, R: Send + 'static
+    {
+        let inner = Arc::new(JoinInner {
+            result: Mutex::new(None),
+            cvar: Condvar::new(),
+        });
+        let inner2 = Arc::clone(&inner);
+        let blocking = Arc::clone(&self.inner.blocking);
+        blocking.spawn(move || { 
+            let r = f(); 
+            *inner2.result.lock().unwrap() = Some(Ok(r));
+            inner2.cvar.notify_all();
+        });
+        JoinHandle { inner }
+    }
+
     pub fn block_on<F>(&self, f: F) -> F::Output
     where F: Future + Send + 'static, F::Output: Send + 'static
     {
-        spawn(f).blocking_recv().unwrap_or_else(|_| panic!("main future dropped"))
+        set_current_rt(self.inner.clone());
+        self.inner.spawn_task(f).blocking_recv().unwrap_or_else(|_| panic!("main future dropped"))
+    }
+
+    /// Graceful shutdown: signal all components and wait for threads.
+    pub fn shutdown(&self) {
+        self.inner.reactor.shutdown();
+        self.inner.queue.shutdown();
+        self.inner.blocking.shutdown();
+
+        if let Some(handle) = self.inner.reactor_thread.lock().unwrap().take() {
+            let _ = handle.join();
+        }
+        for t in self.inner.worker_threads.lock().unwrap().drain(..) {
+            let _ = t.join();
+        }
+        self.inner.blocking.join();
+    }
+
+    pub fn inner(&self) -> Arc<RuntimeInner> {
+        self.inner.clone()
     }
 }
 
-pub fn current_handle() -> Option<Arc<RuntimeInner>> { GLOBAL.get().cloned() }
+pub fn spawn<F>(f: F) -> JoinHandle<F::Output>
+where F: Future + Send + 'static, F::Output: Send + 'static
+{
+    let rt = current_rt();
+    rt.spawn_task(f)
+}
+
+pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
+where F: FnOnce() -> R + Send + 'static, R: Send + 'static
+{
+    let inner = Arc::new(JoinInner {
+        result: Mutex::new(None),
+        cvar: Condvar::new(),
+    });
+    let inner2 = Arc::clone(&inner);
+    let rt = current_rt();
+    let blocking = Arc::clone(&rt.blocking);
+    blocking.spawn(move || { 
+        let r = f(); 
+        *inner2.result.lock().unwrap() = Some(Ok(r));
+        inner2.cvar.notify_all();
+    });
+    JoinHandle { inner }
+}
+
+pub fn current_handle() -> Option<Arc<RuntimeInner>> {
+    CURRENT_RT.with(|c| c.borrow().clone())
+}
 
 // ===========================================================================
 // Async I/O traits
@@ -382,7 +620,6 @@ pub trait AsyncWrite {
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
 }
 
-// Extension traits
 pub trait AsyncReadExt: AsyncRead + Unpin {
     fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadFut<'a, Self> where Self: Sized { ReadFut { s: self, buf } }
     fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ReadExactFut<'a, Self> where Self: Sized { ReadExactFut { s: self, buf, pos: 0 } }
@@ -393,7 +630,6 @@ pub struct ReadFut<'a, R: Unpin> { s: &'a mut R, buf: &'a mut [u8] }
 impl<R: AsyncRead + Unpin> Future for ReadFut<'_, R> {
     type Output = io::Result<usize>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: we have &mut access through the pinned self
         let this = unsafe { self.get_unchecked_mut() };
         Pin::new(&mut *this.s).poll_read(cx, this.buf)
     }
@@ -419,7 +655,7 @@ impl<R: AsyncRead + Unpin> Future for ReadExactFut<'_, R> {
 
 pub trait AsyncWriteExt: AsyncWrite + Unpin {
     fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> WriteAllFut<'a, Self> where Self: Sized { WriteAllFut { s: self, buf, pos: 0 } }
-    fn flush(&mut self) -> FlushFut<Self> where Self: Sized { FlushFut { s: self } }
+    fn flush(&mut self) -> FlushFut<'_, Self> where Self: Sized { FlushFut { s: self } }
 }
 impl<W: AsyncWrite + Unpin> AsyncWriteExt for W {}
 
@@ -497,13 +733,14 @@ impl Future for AcceptFuture<'_> {
 // TcpStream
 // ===========================================================================
 
-pub struct TcpStream { inner: StdTcp }
+pub struct TcpStream { inner: Arc<Mutex<StdTcp>> }
+
 impl TcpStream {
-    fn new(inner: StdTcp) -> Self { Self { inner } }
+    fn new(inner: StdTcp) -> Self { Self { inner: Arc::new(Mutex::new(inner)) } }
     pub fn connect<A: ToSocketAddrs>(addr: A) -> ConnectFuture {
         ConnectFuture { addrs: addr.to_socket_addrs().ok().map(|a| a.collect::<Vec<_>>()), done: false }
     }
-    pub fn peer_addr(&self) -> io::Result<SocketAddr> { self.inner.peer_addr() }
+    pub fn peer_addr(&self) -> io::Result<SocketAddr> { self.inner.lock().unwrap().peer_addr() }
 }
 
 pub struct ConnectFuture { addrs: Option<Vec<SocketAddr>>, done: bool }
@@ -530,14 +767,14 @@ impl Future for ConnectFuture {
 impl AsyncRead for TcpStream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let rt = current_rt();
-        let this = unsafe { self.get_unchecked_mut() };
-        let fd = this.inner.as_raw_fd();
-        // Use a raw pointer to read through the immutable Pin
+        let mut inner = self.inner.lock().unwrap();
+        let fd = inner.as_raw_fd();
         let mut tmp_buf = vec![0u8; buf.len()];
-        match this.inner.read(&mut tmp_buf) {
+        match inner.read(&mut tmp_buf) {
             Ok(0) => Poll::Ready(Ok(0)),
-            Ok(n) => { buf[..n].copy_from_slice(&tmp_buf[..n]); rt.reactor.clear_read(fd); Poll::Ready(Ok(n)) }
+            Ok(n) => { buf[..n].copy_from_slice(&tmp_buf[..n]); drop(inner); rt.reactor.clear_read(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                drop(inner);
                 rt.reactor.wait_read(fd, cx.waker().clone());
                 Poll::Pending
             }
@@ -549,11 +786,12 @@ impl AsyncRead for TcpStream {
 impl AsyncWrite for TcpStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         let rt = current_rt();
-        let this = unsafe { self.get_unchecked_mut() };
-        let fd = this.inner.as_raw_fd();
-        match this.inner.write(buf) {
-            Ok(n) => { rt.reactor.clear_write(fd); Poll::Ready(Ok(n)) }
+        let mut inner = self.inner.lock().unwrap();
+        let fd = inner.as_raw_fd();
+        match inner.write(buf) {
+            Ok(n) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                drop(inner);
                 rt.reactor.wait_write(fd, cx.waker().clone());
                 Poll::Pending
             }
@@ -562,41 +800,80 @@ impl AsyncWrite for TcpStream {
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        match unsafe { self.get_unchecked_mut() }.inner.shutdown(std::net::Shutdown::Write) {
+        let mut inner = self.inner.lock().unwrap();
+        match inner.shutdown(std::net::Shutdown::Write) {
             Ok(()) => Poll::Ready(Ok(())),
             Err(e) => Poll::Ready(Err(e)),
         }
     }
 }
 
-// Split
-pub struct ReadHalf<'a>(&'a mut TcpStream);
-pub struct WriteHalf<'a>(&'a mut TcpStream);
-pub fn split(s: &mut TcpStream) -> (ReadHalf<'_>, WriteHalf<'_>) {
-    // SAFETY: We create two &mut references to the same TcpStream.
-    // This is safe because ReadHalf only calls poll_read and WriteHalf only calls
-    // poll_write/flush/shutdown — they don't overlap in their mutable usage.
-    let ptr = s as *mut TcpStream;
-    unsafe { (ReadHalf(&mut *ptr), WriteHalf(&mut *ptr)) }
+// ===========================================================================
+// Split — Arc-based, safe
+// ===========================================================================
+
+pub struct ReadHalf { inner: Arc<Mutex<StdTcp>> }
+pub struct WriteHalf { inner: Arc<Mutex<StdTcp>> }
+
+/// Split a mutable TcpStream into read and write halves.
+/// Uses Arc<Mutex<>> internally — safe, concurrent access.
+pub fn split(s: &mut TcpStream) -> (ReadHalf, WriteHalf) {
+    (ReadHalf { inner: Arc::clone(&s.inner) }, WriteHalf { inner: Arc::clone(&s.inner) })
 }
-impl AsyncRead for ReadHalf<'_> {
+
+impl AsyncRead for ReadHalf {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.0).poll_read(cx, buf)
+        let rt = current_rt();
+        let mut inner = self.inner.lock().unwrap();
+        let fd = inner.as_raw_fd();
+        let mut tmp_buf = vec![0u8; buf.len()];
+        match inner.read(&mut tmp_buf) {
+            Ok(0) => Poll::Ready(Ok(0)),
+            Ok(n) => { buf[..n].copy_from_slice(&tmp_buf[..n]); drop(inner); rt.reactor.clear_read(fd); Poll::Ready(Ok(n)) }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                drop(inner);
+                rt.reactor.wait_read(fd, cx.waker().clone());
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
     }
 }
-impl AsyncWrite for WriteHalf<'_> {
+impl AsyncWrite for WriteHalf {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.0).poll_write(cx, buf)
+        let rt = current_rt();
+        let mut inner = self.inner.lock().unwrap();
+        let fd = inner.as_raw_fd();
+        match inner.write(buf) {
+            Ok(n) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(n)) }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                drop(inner);
+                rt.reactor.wait_write(fd, cx.waker().clone());
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
     }
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.0).poll_flush(cx)
+        let rt = current_rt();
+        let mut inner = self.inner.lock().unwrap();
+        let fd = inner.as_raw_fd();
+        match inner.flush() {
+            Ok(()) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(())) }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                drop(inner);
+                rt.reactor.wait_write(fd, cx.waker().clone());
+                Poll::Pending
+            }
+            Err(e) => Poll::Ready(Err(e)),
+        }
     }
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let this = unsafe { self.get_unchecked_mut() };
-        Pin::new(&mut *this.0).poll_shutdown(cx)
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut inner = self.inner.lock().unwrap();
+        match inner.shutdown(std::net::Shutdown::Write) {
+            Ok(()) => Poll::Ready(Ok(())),
+            Err(e) => Poll::Ready(Err(e)),
+        }
     }
 }
 
@@ -621,7 +898,6 @@ impl<F: Future> Future for Timeout<F> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let deadline = self.deadline;
         if Instant::now() >= deadline { return Poll::Ready(Err(Elapsed)); }
-        // SAFETY: inner is Some until we resolve
         let inner = unsafe { &mut self.get_unchecked_mut().inner };
         let fut = match inner { Some(f) => f, None => return Poll::Ready(Err(Elapsed)) };
         match unsafe { Pin::new_unchecked(fut) }.poll(cx) {
@@ -661,48 +937,145 @@ impl Future for IntervalTick<'_> {
 }
 
 // ===========================================================================
-// Channels — mpsc
+// Channels — mpsc (bounded, with backpressure)
 // ===========================================================================
 
 pub mod mpsc {
     use super::*;
+
     pub struct Sender<T> { inner: Arc<ChanInner<T>> }
     pub struct Receiver<T> { inner: Arc<ChanInner<T>> }
-    struct ChanInner<T> { q: Mutex<VecDeque<T>>, waker: Mutex<Option<Waker>>, closed: AtomicBool }
-    impl<T> Clone for Sender<T> { fn clone(&self) -> Self { Self { inner: self.inner.clone() } } }
-    pub fn channel<T>(_cap: usize) -> (Sender<T>, Receiver<T>) {
-        let inner = Arc::new(ChanInner { q: Mutex::new(VecDeque::new()), waker: Mutex::new(None), closed: AtomicBool::new(false) });
-        (Sender { inner: inner.clone() }, Receiver { inner })
+
+    struct ChanInner<T> {
+        q: Mutex<VecDeque<T>>,
+        cap: usize,
+        recv_waker: Mutex<Option<Waker>>,
+        send_waker: Mutex<Option<(Waker, T)>>,
+        send_cvar: Condvar,
+        closed: AtomicBool,
+        sender_count: Mutex<usize>,
+        sender_cvar: Condvar,
     }
-    impl<T> Sender<T> {
-        pub async fn send(&self, val: T) -> Result<(), SendError<T>> {
-            if self.inner.closed.load(Ordering::Relaxed) { return Err(SendError(val)); }
-            self.inner.q.lock().unwrap().push_back(val);
-            if let Some(w) = self.inner.waker.lock().unwrap().take() { w.wake(); }
-            Ok(())
+
+    impl<T> Clone for Sender<T> {
+        fn clone(&self) -> Self {
+            *self.inner.sender_count.lock().unwrap() += 1;
+            Self { inner: self.inner.clone() }
         }
     }
-    impl<T> Receiver<T> {
-        pub async fn recv(&mut self) -> Option<T> { RecvFut { inner: &self.inner }.await }
-        pub fn blocking_recv(&mut self) -> Option<T> {
-            loop {
-                if let Some(v) = self.inner.q.lock().unwrap().pop_front() { return Some(v); }
-                if self.inner.closed.load(Ordering::Relaxed) { return None; }
-                std::thread::sleep(std::time::Duration::from_millis(1));
+
+    impl<T> Drop for Sender<T> {
+        fn drop(&mut self) {
+            let mut count = self.inner.sender_count.lock().unwrap();
+            *count -= 1;
+            if *count == 0 {
+                self.inner.closed.store(true, Ordering::Release);
+                self.inner.recv_waker.lock().unwrap().take().map(|w| w.wake());
+                self.inner.send_cvar.notify_all();
             }
         }
     }
-    struct RecvFut<'a, T> { inner: &'a ChanInner<T> }
+
+    pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
+        let cap = cap.max(1);
+        let inner = Arc::new(ChanInner {
+            q: Mutex::new(VecDeque::with_capacity(cap)),
+            cap,
+            recv_waker: Mutex::new(None),
+            send_waker: Mutex::new(None),
+            send_cvar: Condvar::new(),
+            closed: AtomicBool::new(false),
+            sender_count: Mutex::new(1),
+            sender_cvar: Condvar::new(),
+        });
+        (Sender { inner: inner.clone() }, Receiver { inner })
+    }
+
+    impl<T> Sender<T> {
+        /// Non-blocking send. Returns Err if channel is full or closed.
+        pub fn send_nowait(&self, val: T) -> Result<(), SendError<T>> {
+            if self.inner.closed.load(Ordering::Relaxed) { return Err(SendError(val)); }
+            let mut q = self.inner.q.lock().unwrap();
+            if q.len() >= self.inner.cap { return Err(SendError(val)); }
+            q.push_back(val);
+            if let Some(w) = self.inner.recv_waker.lock().unwrap().take() { w.wake(); }
+            Ok(())
+        }
+
+        /// Async send. Returns a future that resolves when the value is enqueued.
+        pub fn send(&self, val: T) -> SendFut<T> {
+            SendFut { inner: self.inner.clone(), val: Some(val) }
+        }
+
+        pub fn try_send(&self, val: T) -> Result<(), SendError<T>> {
+            self.send_nowait(val)
+        }
+    }
+
+    pub struct SendFut<T> { inner: Arc<ChanInner<T>>, val: Option<T> }
+    impl<T> Future for SendFut<T> {
+        type Output = Result<(), SendError<T>>;
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let this = unsafe { self.get_unchecked_mut() };
+            if this.inner.closed.load(Ordering::Relaxed) {
+                return Poll::Ready(Err(SendError(this.val.take().unwrap())));
+            }
+            let mut q = this.inner.q.lock().unwrap();
+            if q.len() < this.inner.cap {
+                let val = this.val.take().unwrap();
+                q.push_back(val);
+                if let Some(w) = this.inner.recv_waker.lock().unwrap().take() { w.wake(); }
+                Poll::Ready(Ok(()))
+            } else {
+                *this.inner.send_waker.lock().unwrap() = Some((cx.waker().clone(), this.val.take().unwrap()));
+                Poll::Pending
+            }
+        }
+    }
+
+    fn wake_pending_sender<T>(inner: &ChanInner<T>) {
+        if let Some((waker, val)) = inner.send_waker.lock().unwrap().take() {
+            let _ = inner.q.lock().unwrap().push_back(val);
+            waker.wake();
+        }
+        inner.send_cvar.notify_one();
+    }
+
+    impl<T> Receiver<T> {
+        pub fn recv(&self) -> RecvFut<'_, T> { RecvFut { inner: &self.inner } }
+
+        /// Blocking receive using Condvar — no spin-sleep.
+        pub fn blocking_recv(&mut self) -> Option<T> {
+            let mut q = self.inner.q.lock().unwrap();
+            loop {
+                if let Some(v) = q.pop_front() {
+                    wake_pending_sender(&self.inner);
+                    return Some(v);
+                }
+                if self.inner.closed.load(Ordering::Relaxed) { return None; }
+                q = self.inner.send_cvar.wait(q).unwrap();
+            }
+        }
+    }
+
+    pub struct RecvFut<'a, T> { inner: &'a ChanInner<T> }
     impl<T> Future for RecvFut<'_, T> {
         type Output = Option<T>;
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            if let Some(v) = self.inner.q.lock().unwrap().pop_front() { Poll::Ready(Some(v)) }
-            else if self.inner.closed.load(Ordering::Relaxed) { Poll::Ready(None) }
-            else { *self.inner.waker.lock().unwrap() = Some(cx.waker().clone()); Poll::Pending }
+            if let Some(v) = self.inner.q.lock().unwrap().pop_front() {
+                wake_pending_sender(self.inner);
+                Poll::Ready(Some(v))
+            } else if self.inner.closed.load(Ordering::Relaxed) {
+                Poll::Ready(None)
+            } else {
+                *self.inner.recv_waker.lock().unwrap() = Some(cx.waker().clone());
+                Poll::Pending
+            }
         }
     }
+
     #[derive(Debug)] pub struct SendError<T>(pub T);
-    impl<T> std::fmt::Display for SendError<T> { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("send error") } }
+    impl<T> std::fmt::Display for SendError<T> { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "send error") } }
 }
 
 // ===========================================================================
@@ -711,13 +1084,20 @@ pub mod mpsc {
 
 pub mod oneshot {
     use super::*;
+
     pub struct Sender<T> { inner: Option<Arc<OneInner<T>>> }
     pub struct Receiver<T> { inner: Arc<OneInner<T>> }
-    struct OneInner<T> { val: Mutex<Option<T>>, waker: Mutex<Option<Waker>> }
+
+    struct OneInner<T> {
+        val: Mutex<Option<T>>,
+        waker: Mutex<Option<Waker>>,
+    }
+
     pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
         let inner = Arc::new(OneInner { val: Mutex::new(None), waker: Mutex::new(None) });
         (Sender { inner: Some(inner.clone()) }, Receiver { inner })
     }
+
     impl<T> Sender<T> {
         pub fn send(self, val: T) -> Result<(), T> {
             if let Some(inner) = &self.inner {
@@ -727,6 +1107,7 @@ pub mod oneshot {
             } else { Err(val) }
         }
     }
+
     impl<T> Drop for Sender<T> {
         fn drop(&mut self) {
             if let Some(inner) = &self.inner {
@@ -734,6 +1115,7 @@ pub mod oneshot {
             }
         }
     }
+
     impl<T> Future for Receiver<T> {
         type Output = Result<T, RecvError>;
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -741,8 +1123,9 @@ pub mod oneshot {
             else { *self.inner.waker.lock().unwrap() = Some(cx.waker().clone()); Poll::Pending }
         }
     }
+
     #[derive(Debug)] pub struct RecvError;
-    impl std::fmt::Display for RecvError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("recv error") } }
+    impl std::fmt::Display for RecvError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "recv error") } }
 }
 
 // ===========================================================================
@@ -754,7 +1137,7 @@ static GOT_SIGINT: AtomicBool = AtomicBool::new(false);
 pub fn ctrl_c() -> CtrlC {
     extern "C" fn handler(_: libc::c_int) { GOT_SIGINT.store(true, Ordering::Release); }
     static INIT: std::sync::Once = std::sync::Once::new();
-    INIT.call_once(|| { unsafe { libc::signal(libc::SIGINT, handler as libc::sighandler_t); } });
+    INIT.call_once(|| { unsafe { libc::signal(libc::SIGINT, handler as *const () as libc::sighandler_t); } });
     CtrlC { _p: () }
 }
 
@@ -775,10 +1158,6 @@ impl Future for CtrlC {
 mod tests {
     use super::*;
 
-    // -----------------------------------------------------------------------
-    // Helpers: no-op waker and context
-    // -----------------------------------------------------------------------
-
     static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
         static VTABLE_NOOP: RawWakerVTable = RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
         const fn clone_noop(_: *const ()) -> RawWaker { RawWaker::new(std::ptr::null(), &VTABLE_NOOP) }
@@ -791,609 +1170,243 @@ mod tests {
         Context::from_waker(&*NOOP_WAKER)
     }
 
-    // -----------------------------------------------------------------------
-    // ReadyQueue
-    // -----------------------------------------------------------------------
-
     #[test]
     fn ready_queue_push_pop_ordering() {
         let q = ReadyQueue::new();
-        q.push(10);
-        q.push(20);
-        q.push(30);
-        assert_eq!(q.pop(), Some(10));
-        assert_eq!(q.pop(), Some(20));
-        assert_eq!(q.pop(), Some(30));
-    }
-
-    #[test]
-    fn ready_queue_pop_empty_returns_none_after_shutdown() {
-        let q = ReadyQueue::new();
-        q.shutdown();
-        assert_eq!(q.pop(), None);
-    }
-
-    #[test]
-    fn ready_queue_drain_then_shutdown() {
-        let q = ReadyQueue::new();
-        q.push(1);
-        q.push(2);
+        q.push(1); q.push(2); q.push(3);
         assert_eq!(q.pop(), Some(1));
         assert_eq!(q.pop(), Some(2));
+        assert_eq!(q.pop(), Some(3));
+    }
+
+    #[test]
+    fn ready_queue_shutdown() {
+        let q = ReadyQueue::new();
         q.shutdown();
         assert_eq!(q.pop(), None);
     }
 
     #[test]
-    fn ready_queue_shutdown_with_items_still_drains() {
-        let q = ReadyQueue::new();
-        q.push(42);
-        q.push(99);
-        q.shutdown();
-        let mut got = Vec::new();
-        while let Some(id) = q.pop() {
-            got.push(id);
-        }
-        assert_eq!(got, vec![42, 99]);
-    }
-
-    // -----------------------------------------------------------------------
-    // TaskMap
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn task_map_insert_returns_id() {
-        let tm = TaskMap::new();
-        let id = tm.insert(Box::new(|_| false));
-        assert!(id >= 1);
+    fn task_map_insert_take() {
+        let map = TaskMap::new();
+        let id = map.insert(Box::new(|_| false));
+        let task = map.take_for_poll(id);
+        assert!(task.is_some());
+        let task = map.take_for_poll(id);
+        assert!(task.is_none());
     }
 
     #[test]
-    fn task_map_ids_are_unique_and_incrementing() {
-        let tm = TaskMap::new();
-        let id1 = tm.insert(Box::new(|_| false));
-        let id2 = tm.insert(Box::new(|_| false));
-        let id3 = tm.insert(Box::new(|_| false));
-        assert!(id1 < id2 && id2 < id3);
+    fn waker_enqueues() {
+        let q = Arc::new(ReadyQueue::new());
+        let w = make_waker(42, q.clone());
+        w.wake();
+        assert_eq!(q.pop(), Some(42));
     }
 
     #[test]
-    fn task_map_take_returns_and_removes() {
-        let tm = TaskMap::new();
-        let id = tm.insert(Box::new(|_| false));
-        assert!(tm.take(id).is_some());
-        assert!(tm.take(id).is_none());
+    fn epoll_create_and_drop() {
+        let e = EpollFd::new().unwrap();
+        drop(e);
     }
 
     #[test]
-    fn task_map_take_nonexistent() {
-        let tm = TaskMap::new();
-        assert!(tm.take(999).is_none());
+    fn epoll_add_and_del() {
+        use std::os::unix::net::UnixStream;
+        let (a, _b) = UnixStream::pair().unwrap();
+        let e = EpollFd::new().unwrap();
+        let fd = a.as_raw_fd();
+        let mut ev = libc::epoll_event { events: 0, u64: fd as u64 };
+        e.ctl(libc::EPOLL_CTL_ADD, fd, &mut ev).unwrap();
+        e.ctl(libc::EPOLL_CTL_DEL, fd, std::ptr::null_mut()).unwrap();
     }
 
     #[test]
-    fn task_map_first_id_is_one() {
-        let tm = TaskMap::new();
-        assert_eq!(tm.insert(Box::new(|_| false)), 1);
-    }
-
-    // -----------------------------------------------------------------------
-    // Timer (heap ordering)
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn timer_earliest_deadline_on_top() {
-        let base = Instant::now();
-        let mut heap = BinaryHeap::new();
-        heap.push(Timer { deadline: base + Duration::from_secs(30), waker: NOOP_WAKER.clone() });
-        heap.push(Timer { deadline: base + Duration::from_secs(5), waker: NOOP_WAKER.clone() });
-        heap.push(Timer { deadline: base + Duration::from_secs(10), waker: NOOP_WAKER.clone() });
-        assert_eq!(heap.peek().unwrap().deadline, base + Duration::from_secs(5));
-    }
-
-    #[test]
-    fn timer_pop_ordering_earliest_first() {
-        let base = Instant::now();
-        let mut heap = BinaryHeap::new();
-        heap.push(Timer { deadline: base + Duration::from_secs(3), waker: NOOP_WAKER.clone() });
-        heap.push(Timer { deadline: base + Duration::from_secs(1), waker: NOOP_WAKER.clone() });
-        heap.push(Timer { deadline: base + Duration::from_secs(2), waker: NOOP_WAKER.clone() });
-        let d1 = heap.pop().unwrap().deadline;
-        let d2 = heap.pop().unwrap().deadline;
-        let d3 = heap.pop().unwrap().deadline;
-        assert!(d1 <= d2 && d2 <= d3);
-    }
-
-    #[test]
-    fn timer_cmp() {
-        let base = Instant::now();
-        let t1 = Timer { deadline: base + Duration::from_secs(5), waker: NOOP_WAKER.clone() };
-        let t2 = Timer { deadline: base + Duration::from_secs(10), waker: NOOP_WAKER.clone() };
-        assert!(t1 > t2);
-    }
-
-    #[test]
-    fn timer_eq() {
-        let base = Instant::now();
-        let t1 = Timer { deadline: base + Duration::from_secs(5), waker: NOOP_WAKER.clone() };
-        let t2 = Timer { deadline: base + Duration::from_secs(5), waker: NOOP_WAKER.clone() };
-        assert!(t1 == t2);
-    }
-
-    // -----------------------------------------------------------------------
-    // FdInterest
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn fd_interest_starts_empty() {
+    fn fd_interest_initial() {
         let fi = FdInterest::new();
         assert!(fi.read_waker.lock().unwrap().is_none());
         assert!(fi.write_waker.lock().unwrap().is_none());
     }
 
-    // -----------------------------------------------------------------------
-    // JoinError
-    // -----------------------------------------------------------------------
-
+    // mpsc
     #[test]
-    fn join_error_display() {
-        assert_eq!(format!("{}", JoinError), "join error");
-    }
-
-    #[test]
-    fn join_error_is_std_error() {
-        let e: Box<dyn std::error::Error> = Box::new(JoinError);
-        assert_eq!(format!("{}", e), "join error");
+    fn mpsc_send_recv() {
+        let (tx, rx) = mpsc::channel::<i32>(10);
+        tx.send_nowait(42).unwrap();
+        let mut rx = rx;
+        assert_eq!(rx.blocking_recv(), Some(42));
     }
 
     #[test]
-    fn join_error_debug() {
-        let s = format!("{:?}", JoinError);
-        assert!(s.contains("JoinError"));
-    }
-
-    // -----------------------------------------------------------------------
-    // JoinHandle
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn join_handle_blocking_recv_ok() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(Ok(42i32)).unwrap();
-        let h: JoinHandle<i32> = JoinHandle { rx };
-        assert_eq!(h.blocking_recv().unwrap(), 42);
+    fn mpsc_multiple() {
+        let (tx, rx) = mpsc::channel::<i32>(10);
+        tx.send_nowait(1).unwrap();
+        tx.send_nowait(2).unwrap();
+        tx.send_nowait(3).unwrap();
+        let mut rx = rx;
+        assert_eq!(rx.blocking_recv(), Some(1));
+        assert_eq!(rx.blocking_recv(), Some(2));
+        assert_eq!(rx.blocking_recv(), Some(3));
     }
 
     #[test]
-    fn join_handle_blocking_recv_err() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(Err(JoinError)).unwrap();
-        let h: JoinHandle<i32> = JoinHandle { rx };
-        assert!(h.blocking_recv().is_err());
+    fn mpsc_backpressure() {
+        let (tx, _rx) = mpsc::channel::<i32>(2);
+        assert!(tx.send_nowait(1).is_ok());
+        assert!(tx.send_nowait(2).is_ok());
+        let err = tx.send_nowait(3);
+        assert!(err.is_err());
     }
 
     #[test]
-    fn join_handle_future_poll_ready() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        tx.send(Ok(99i32)).unwrap();
-        let mut h: JoinHandle<i32> = JoinHandle { rx };
-        let p = Pin::new(&mut h);
-        let result = p.poll(&mut ctx());
-        assert!(matches!(result, Poll::Ready(Ok(99))));
+    fn mpsc_close() {
+        let (tx, rx) = mpsc::channel::<i32>(10);
+        tx.send_nowait(1).unwrap();
+        tx.send_nowait(2).unwrap();
+        drop(tx);
+        let mut rx = rx;
+        assert_eq!(rx.blocking_recv(), Some(1));
+        assert_eq!(rx.blocking_recv(), Some(2));
+        assert_eq!(rx.blocking_recv(), None);
     }
 
     #[test]
-    fn join_handle_future_poll_pending() {
-        let (_tx, rx) = std::sync::mpsc::channel::<Result<i32, JoinError>>();
-        let mut h: JoinHandle<i32> = JoinHandle { rx };
-        let p = Pin::new(&mut h);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Pending));
+    fn mpsc_clone_send() {
+        let (tx, rx) = mpsc::channel::<i32>(10);
+        let tx2 = tx.clone();
+        tx.send_nowait(1).unwrap();
+        tx2.send_nowait(2).unwrap();
+        let mut rx = rx;
+        assert_eq!(rx.blocking_recv(), Some(1));
+        assert_eq!(rx.blocking_recv(), Some(2));
     }
 
+    // oneshot
     #[test]
-    fn join_handle_future_poll_disconnected() {
-        let rx = {
-            let (tx, rx) = std::sync::mpsc::channel::<Result<i32, JoinError>>();
-            drop(tx);
-            rx
-        };
-        let mut h: JoinHandle<i32> = JoinHandle { rx };
-        let p = Pin::new(&mut h);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(JoinError))));
-    }
-
-    // -----------------------------------------------------------------------
-    // ReadFut
-    // -----------------------------------------------------------------------
-
-    struct MockReader { result: Poll<io::Result<usize>> }
-    impl AsyncRead for MockReader {
-        fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-            match &self.result {
-                Poll::Ready(Ok(n)) => {
-                    let n = *n;
-                    for b in buf.iter_mut().take(n) { *b = 0xAB; }
-                    Poll::Ready(Ok(n))
-                }
-                Poll::Ready(Err(_)) => Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "reset"))),
-                Poll::Pending => Poll::Pending,
-            }
-        }
-    }
-
-    #[test]
-    fn readfut_ready_ok() {
-        let mut r = MockReader { result: Poll::Ready(Ok(3)) };
-        let mut buf = [0u8; 10];
-        let mut f = ReadFut { s: &mut r, buf: &mut buf };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        let result = p.poll(&mut ctx());
-        assert!(matches!(result, Poll::Ready(Ok(3))));
-        assert!(buf[..3].iter().all(|&b| b == 0xAB));
-    }
-
-    #[test]
-    fn readfut_pending() {
-        let mut r = MockReader { result: Poll::Pending };
-        let mut buf = [0u8; 10];
-        let mut f = ReadFut { s: &mut r, buf: &mut buf };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Pending));
-    }
-
-    #[test]
-    fn readfut_error() {
-        let mut r = MockReader { result: Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "reset"))) };
-        let mut buf = [0u8; 10];
-        let mut f = ReadFut { s: &mut r, buf: &mut buf };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(_))));
-    }
-
-    // -----------------------------------------------------------------------
-    // ReadExactFut
-    // -----------------------------------------------------------------------
-
-    struct MockReaderExact { calls: Arc<Mutex<usize>> }
-    impl AsyncRead for MockReaderExact {
-        fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
-            let n = buf.len().min(3);
-            *self.calls.lock().unwrap() += 1;
-            Poll::Ready(Ok(n))
-        }
-    }
-
-    #[test]
-    fn read_exact_fut_completes() {
-        let calls = Arc::new(Mutex::new(0usize));
-        let mut r = MockReaderExact { calls: calls.clone() };
-        let mut buf = [0u8; 6];
-        let mut f = ReadExactFut { s: &mut r, buf: &mut buf, pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(()))));
-        assert_eq!(*calls.lock().unwrap(), 2);
-    }
-
-    #[test]
-    fn read_exact_fut_already_done() {
-        let calls = Arc::new(Mutex::new(0usize));
-        let mut r = MockReaderExact { calls: calls.clone() };
-        let mut buf = [0u8; 0];
-        let mut f = ReadExactFut { s: &mut r, buf: &mut buf, pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(()))));
-        assert_eq!(*calls.lock().unwrap(), 0);
-    }
-
-    struct MockReaderEof;
-    impl AsyncRead for MockReaderEof {
-        fn poll_read(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &mut [u8]) -> Poll<io::Result<usize>> {
-            Poll::Ready(Ok(0))
-        }
-    }
-
-    #[test]
-    fn read_exact_fut_eof() {
-        let mut r = MockReaderEof;
-        let mut buf = [0u8; 10];
-        let mut f = ReadExactFut { s: &mut r, buf: &mut buf, pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::UnexpectedEof));
-    }
-
-    // -----------------------------------------------------------------------
-    // WriteAllFut
-    // -----------------------------------------------------------------------
-
-    struct MockWriter { calls: Arc<Mutex<usize>> }
-    impl AsyncWrite for MockWriter {
-        fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
-            let n = buf.len().min(4);
-            *self.calls.lock().unwrap() += 1;
-            Poll::Ready(Ok(n))
-        }
-        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-    }
-
-    #[test]
-    fn write_all_fut_completes() {
-        let calls = Arc::new(Mutex::new(0usize));
-        let mut w = MockWriter { calls: calls.clone() };
-        let data = [1u8, 2, 3, 4, 5, 6, 7, 8];
-        let mut f = WriteAllFut { s: &mut w, buf: &data, pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(()))));
-        assert_eq!(*calls.lock().unwrap(), 2);
-    }
-
-    #[test]
-    fn write_all_fut_empty_buf() {
-        let calls = Arc::new(Mutex::new(0usize));
-        let mut w = MockWriter { calls: calls.clone() };
-        let data: [u8; 0] = [];
-        let mut f = WriteAllFut { s: &mut w, buf: &data, pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(()))));
-        assert_eq!(*calls.lock().unwrap(), 0);
-    }
-
-    #[test]
-    fn write_all_fut_error() {
-        struct FailingWriter;
-        impl AsyncWrite for FailingWriter {
-            fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &[u8]) -> Poll<io::Result<usize>> {
-                Poll::Ready(Err(io::Error::new(io::ErrorKind::BrokenPipe, "broken")))
-            }
-            fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-            fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-        }
-        let mut w = FailingWriter;
-        let mut f = WriteAllFut { s: &mut w, buf: &[1, 2, 3], pos: 0 };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::BrokenPipe));
-    }
-
-    // -----------------------------------------------------------------------
-    // FlushFut
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn flush_fut_ready_ok() {
-        let mut w = MockWriter { calls: Arc::new(Mutex::new(0usize)) };
-        let mut f = FlushFut { s: &mut w };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(()))));
-    }
-
-    struct FailingFlusher;
-    impl AsyncWrite for FailingFlusher {
-        fn poll_write(self: Pin<&mut Self>, _cx: &mut Context<'_>, _buf: &[u8]) -> Poll<io::Result<usize>> {
-            Poll::Ready(Ok(0))
-        }
-        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-            Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, "flush failed")))
-        }
-        fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
-    }
-
-    #[test]
-    fn flush_fut_error() {
-        let mut w = FailingFlusher;
-        let mut f = FlushFut { s: &mut w };
-        let p = unsafe { Pin::new_unchecked(&mut f) };
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(_))));
-    }
-
-    // -----------------------------------------------------------------------
-    // Sleep
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn sleep_past_deadline_is_ready() {
-        let deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
-        let mut s = Sleep { deadline };
-        let p = Pin::new(&mut s);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(())));
-    }
-
-    #[test]
-    fn sleep_stores_deadline_correctly() {
-        let future_deadline = Instant::now() + Duration::from_secs(10);
-        let s = Sleep { deadline: future_deadline };
-        assert!(s.deadline > Instant::now());
-    }
-
-    // -----------------------------------------------------------------------
-    // Elapsed
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn elapsed_display() {
-        assert_eq!(format!("{}", Elapsed), "deadline elapsed");
-    }
-
-    #[test]
-    fn elapsed_is_std_error() {
-        let e: Box<dyn std::error::Error> = Box::new(Elapsed);
-        assert_eq!(format!("{}", e), "deadline elapsed");
-    }
-
-    #[test]
-    fn elapsed_debug() {
-        let s = format!("{:?}", Elapsed);
-        assert!(s.contains("Elapsed"));
-    }
-
-    // -----------------------------------------------------------------------
-    // Timeout
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn timeout_struct_stores_fields() {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        let t: Timeout<std::future::Ready<()>> = Timeout {
-            inner: Some(std::future::ready(())),
-            deadline,
-        };
-        assert!(t.deadline > Instant::now());
-    }
-
-    #[test]
-    fn timeout_past_deadline_polls_elapsed() {
-        let deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
-        let mut t: Timeout<std::future::Pending<()>> = Timeout {
-            inner: Some(std::future::pending()),
-            deadline,
-        };
-        let p = Pin::new(&mut t);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(Elapsed))));
-    }
-
-    // -----------------------------------------------------------------------
-    // Interval
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn interval_initial_next_is_approx_now_plus_duration() {
-        let d = Duration::from_millis(100);
-        let before = Instant::now();
-        let iv = interval(d);
-        let after = Instant::now();
-        let expected_min = before + d;
-        let expected_max = after + d + Duration::from_millis(50);
-        assert!(iv.next >= expected_min);
-        assert!(iv.next <= expected_max);
-    }
-
-    #[test]
-    fn interval_tick_past_deadline_is_ready() {
-        let mut iv = Interval {
-            d: Duration::from_millis(50),
-            next: Instant::now().checked_sub(Duration::from_millis(10)).unwrap(),
-            _mb: MissedTickBehavior::Skip,
-        };
-        let mut t = iv.tick();
-        let p = Pin::new(&mut t);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(())));
-        // next advanced by d
-        assert!(iv.next > Instant::now().checked_sub(Duration::from_millis(100)).unwrap());
-    }
-
-    #[test]
-    fn interval_set_missed_tick_behavior() {
-        let mut iv = interval(Duration::from_millis(100));
-        assert_eq!(iv._mb, MissedTickBehavior::Skip);
-        iv.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        assert_eq!(iv._mb, MissedTickBehavior::Skip);
-    }
-
-    #[test]
-    fn missed_tick_behavior_debug() {
-        assert!(format!("{:?}", MissedTickBehavior::Skip).contains("Skip"));
-    }
-
-    // -----------------------------------------------------------------------
-    // mpsc channel
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn mpsc_send_error_display() {
-        assert_eq!(format!("{}", mpsc::SendError("test")), "send error");
-    }
-
-    #[test]
-    fn mpsc_channel_constructs() {
-        let (tx, rx) = mpsc::channel::<i32>(16);
-        drop((tx, rx));
-    }
-
-    #[test]
-    fn mpsc_sender_clone() {
-        let (tx1, _rx) = mpsc::channel::<i32>(16);
-        let tx2 = tx1.clone();
-        drop((tx1, tx2));
-    }
-
-    // -----------------------------------------------------------------------
-    // oneshot channel
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn oneshot_recv_error_display() {
-        assert_eq!(format!("{}", oneshot::RecvError), "recv error");
-    }
-
-    #[test]
-    fn oneshot_receiver_poll_pending_then_ready() {
-        let (tx, mut rx) = oneshot::channel::<i32>();
-        let p = Pin::new(&mut rx);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Pending));
+    fn oneshot_send_recv() {
+        let (tx, rx) = oneshot::channel::<i32>();
         tx.send(42).unwrap();
-        let p = Pin::new(&mut rx);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Ok(42))));
+        let w = make_waker(1, Arc::new(ReadyQueue::new()));
+        let mut cx = Context::from_waker(&w);
+        let mut rx = rx;
+        assert!(matches!(Pin::new(&mut rx).poll(&mut cx), Poll::Ready(Ok(42))));
     }
 
     #[test]
-    fn oneshot_send_consumes_sender() {
-        let (tx, _rx) = oneshot::channel::<i32>();
-        tx.send(99).unwrap();
+    fn oneshot_drop_sender() {
+        let (tx, rx) = oneshot::channel::<i32>();
+        drop(tx);
+        let w = make_waker(1, Arc::new(ReadyQueue::new()));
+        let mut cx = Context::from_waker(&w);
+        let mut rx = rx;
+        assert!(Pin::new(&mut rx).poll(&mut cx).is_pending());
+    }
+
+    // Sleep
+    #[test]
+    fn sleep_already_elapsed() {
+        let mut s = Sleep { deadline: Instant::now() - Duration::from_secs(1) };
+        assert_eq!(Pin::new(&mut s).poll(&mut ctx()), Poll::Ready(()));
+    }
+
+    // BlockingPool
+    #[test]
+    fn blocking_pool_runs_jobs() {
+        let pool = BlockingPool::new(2);
+        let (tx, rx) = std::sync::mpsc::channel();
+        pool.spawn(move || { tx.send(42).unwrap(); });
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), 42);
+        pool.shutdown();
+        pool.join();
+    }
+
+    // Full runtime
+    #[test]
+    fn rt_spawn_and_block_on() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let result = rt.block_on(async { 1 + 2 + 3 });
+        assert_eq!(result, 6);
+        rt.shutdown();
     }
 
     #[test]
-    fn oneshot_channel_constructs() {
-        let (tx, rx) = oneshot::channel::<String>();
-        drop((tx, rx));
-    }
-
-    // -----------------------------------------------------------------------
-    // Builder
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn builder_new_multi_thread_defaults() {
-        let b = Builder::new_multi_thread();
-        assert!(b.workers >= 1);
+    fn rt_spawn_multiple() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let result = rt.block_on(async {
+            let h1 = spawn(async { 10 });
+            let h2 = spawn(async { 20 });
+            h1.await.unwrap() + h2.await.unwrap()
+        });
+        assert_eq!(result, 30);
+        rt.shutdown();
     }
 
     #[test]
-    fn builder_enable_all_returns_self() {
-        let mut b = Builder::new_multi_thread();
-        let ret = b.enable_all();
-        assert!(std::ptr::eq(ret, &b));
-    }
-
-    // -----------------------------------------------------------------------
-    // TcpListener / TcpStream futures
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn bind_future_struct_constructs() {
-        let _bf: BindFuture<std::net::SocketAddr> = BindFuture {
-            addr: Some("127.0.0.1:0".parse().unwrap()),
-            _marker: std::marker::PhantomData,
-        };
+    fn rt_sleep() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let start = Instant::now();
+        rt.block_on(async { sleep(Duration::from_millis(50)).await });
+        assert!(start.elapsed() >= Duration::from_millis(40));
+        rt.shutdown();
     }
 
     #[test]
-    fn connect_future_struct_constructs() {
-        let _cf = ConnectFuture { addrs: None, done: false };
+    fn rt_sleep_with_timeout() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let result = rt.block_on(async {
+            timeout(Duration::from_millis(50), async {
+                sleep(Duration::from_secs(10)).await;
+                42
+            }).await
+        });
+        assert!(result.is_err());
+        rt.shutdown();
     }
 
     #[test]
-    fn connect_future_with_no_addrs_returns_error() {
-        let mut cf = ConnectFuture { addrs: None, done: false };
-        let p = Pin::new(&mut cf);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::InvalidInput));
+    fn rt_spawn_blocking() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let result = rt.block_on(async {
+            let handle = spawn_blocking(|| { 42 });
+            handle.await.unwrap()
+        });
+        assert_eq!(result, 42);
+        rt.shutdown();
     }
 
     #[test]
-    fn connect_future_done_flag_returns_error() {
-        let mut cf = ConnectFuture {
-            addrs: Some(vec!["127.0.0.1:1".parse().unwrap()]),
-            done: true,
-        };
-        let p = Pin::new(&mut cf);
-        assert!(matches!(p.poll(&mut ctx()), Poll::Ready(Err(e)) if e.kind() == io::ErrorKind::Other));
+    fn rt_free_spawn_works() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        rt.block_on(async {
+            let handle = spawn(async { 100 });
+            assert_eq!(handle.await.unwrap(), 100);
+        });
+        rt.shutdown();
+    }
+
+    #[test]
+    fn tcp_listener_bind() {
+        let rt = Builder::new_multi_thread().build().unwrap();
+        let result = rt.block_on(async {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            listener.local_addr().unwrap().port()
+        });
+        assert!(result > 0);
+        rt.shutdown();
+    }
+
+    #[test]
+    fn timer_ordering() {
+        let now = Instant::now();
+        let mut heap = BinaryHeap::new();
+        let w1 = make_waker(1, Arc::new(ReadyQueue::new()));
+        let w2 = make_waker(2, Arc::new(ReadyQueue::new()));
+        let w3 = make_waker(3, Arc::new(ReadyQueue::new()));
+        heap.push(Timer { deadline: now + Duration::from_millis(300), waker: w3 });
+        heap.push(Timer { deadline: now + Duration::from_millis(100), waker: w1 });
+        heap.push(Timer { deadline: now + Duration::from_millis(200), waker: w2 });
+        assert_eq!(heap.pop().unwrap().deadline, now + Duration::from_millis(100));
+        assert_eq!(heap.pop().unwrap().deadline, now + Duration::from_millis(200));
+        assert_eq!(heap.pop().unwrap().deadline, now + Duration::from_millis(300));
     }
 }

@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: session accept is rejected when echoed nonce does not match expected session nonce
+description: session accept is rejected when echoed nonce does not match expected
+  session nonce
 tags:
 - network
 - validate_network

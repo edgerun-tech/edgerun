@@ -1,6 +1,6 @@
 # Crate layout
 
-Core workspace crates live under `rust/crates/`.
+Core workspace crates live under `crates/`.
 
 - `edgerun-core`, `edgerun-proto`, `edgerun-json`, `edgerun-capabilities`,
   `edgerun-machine-report`, `edgerun-remote-capability` (protocol core)
@@ -18,3 +18,7 @@ Core workspace crates live under `rust/crates/`.
   `edgerun-linux-pci`, `edgerun-nfc`, `edgerun-linux-nfc`, `edgerun-npu`,
   `edgerun-linux-npu`
 - Application/examples: `edgerun-amd-xdna`
+
+> **Note:** Many crates are optional dependencies of `edgerun-node` (under the
+> `all-hardware` feature) and are excluded from the default workspace members.
+> See the top-level `README.md` for details.

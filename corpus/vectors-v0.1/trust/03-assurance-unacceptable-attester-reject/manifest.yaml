@@ -3,7 +3,8 @@ suite: trust
 validator: validate_trust
 version: 1
 priority: mandatory
-description: assurance claim is rejected when attester is not acceptable under local policy
+description: assurance claim is rejected when attester is not acceptable under local
+  policy
 tags:
 - trust
 - validate_trust

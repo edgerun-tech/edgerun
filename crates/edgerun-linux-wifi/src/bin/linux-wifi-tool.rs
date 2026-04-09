@@ -122,6 +122,7 @@ fn main() {
                     frequency_mhz,
                     hidden: false,
                     secure: false,
+                    passphrase: None,
                 }) {
                     Ok(state) => println!(
                         "if={} active={} ssid={} freq_mhz={}",

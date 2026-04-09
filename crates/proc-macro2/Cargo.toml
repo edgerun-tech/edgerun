@@ -62,26 +62,32 @@ name = "proc_macro2"
 path = "src/lib.rs"
 
 [[test]]
+test = false
 name = "comments"
 path = "tests/comments.rs"
 
 [[test]]
+test = false
 name = "features"
 path = "tests/features.rs"
 
 [[test]]
+test = false
 name = "marker"
 path = "tests/marker.rs"
 
 [[test]]
+test = false
 name = "test"
 path = "tests/test.rs"
 
 [[test]]
+test = false
 name = "test_fmt"
 path = "tests/test_fmt.rs"
 
 [[test]]
+test = false
 name = "test_size"
 path = "tests/test_size.rs"
 

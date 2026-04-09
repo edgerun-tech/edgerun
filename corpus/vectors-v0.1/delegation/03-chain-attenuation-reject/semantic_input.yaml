@@ -18,7 +18,8 @@ delegation_chain:
   signature_fixture: user_alice
   signature:
     algorithm: ed25519
-    value: '0xa7e8a7d72fbc0a8599edbdab341570e868225138f53ee53b068765b9878af0be81e7d792878e8922376b0c264d453f0d9bc8b039634cd1a167787ddec65b2300'
+    value: '0x3045022076cfae0dc534cb9ae419bac983cddd96a3b8d2e8125fa8c1125a5bf991a54445022100d7824f3dcb00e3d6c47301f73ebab505e37c16a53046f8a09d2d08306dcc6d00'
+  delegation_hash: '0xa14a9c76d4a548bb9eb7c6408137203fd7fe77aeb4fa1e0ecaa10f2bf54f4eee'
 - issuer: agent_assistant
   recipient: agent_assistant
   capability:
@@ -34,4 +35,5 @@ delegation_chain:
   signature_fixture: agent_assistant
   signature:
     algorithm: ed25519
-    value: '0x191328aee4003a81a5f233947ee3505255be63d140f681758d7cdc8d5acf581ea3e089f970a774110dc9e79938508074431419b805e84ea86cd26565202dd70f'
+    value: '0x30440220321ab7e6d897fee4390bbe0adc820c39f6aa332d13d9b43676f79f13adc7d1df0220073d834c356af3a1f628db20f9a46048ecae170453cdbc2523185a2744b2fc52'
+  delegation_hash: '0xde40ce6ffad5bddd6332a51bc773864938087e96f52319c3dc5cdce5c9cf0adf'

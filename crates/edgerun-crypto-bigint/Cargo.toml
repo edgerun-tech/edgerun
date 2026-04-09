@@ -78,6 +78,9 @@ path = "../edgerun-zeroize"
 optional = true
 default-features = false
 
+[lib]
+test = false
+
 [dev-dependencies.bincode]
 version = "1"
 

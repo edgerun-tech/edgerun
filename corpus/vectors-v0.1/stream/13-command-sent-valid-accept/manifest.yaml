@@ -3,7 +3,8 @@ suite: stream
 validator: validate_stream_append
 version: 1
 priority: mandatory
-description: command sent event is accepted when payload contains command and target node
+description: command sent event is accepted when payload contains command and target
+  node
 tags:
 - stream
 - validate_stream_append

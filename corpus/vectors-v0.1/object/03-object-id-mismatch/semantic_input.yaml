@@ -5,5 +5,5 @@ object:
   descriptor:
     object_kind: OBJECT_KIND_PAYLOAD
     canonicalization_id: raw-bytes-v0
-    object_id: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    object_id: '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
   realized_bytes_hex: '0x68656c6c6f'

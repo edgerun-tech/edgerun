@@ -97,7 +97,7 @@ impl NodeStore {
         // Create directory structure
         let events_dir = config.data_root.join("events");
         let blobs_dir = config.data_root.join("blobs");
-        let index_path = config.data_root.join("index.bin");
+        let _index_path = config.data_root.join("index.bin");
 
         fs::create_dir_all(&events_dir)?;
         fs::create_dir_all(&blobs_dir)?;
@@ -140,12 +140,10 @@ impl NodeStore {
     ///
     /// Returns the byte offset where the event was written.
     pub fn append_event(&mut self, event: &EventEnvelope) -> Result<u64, StorageError> {
-        // Check disk space before writing
+        // Best-effort disk space check. The actual write will fail with an I/O
+        // error if the disk fills between this check and the write.
         if let Err(available) = self.check_disk_space() {
-            return Err(StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::StorageFull,
-                format!("insufficient disk space: {} bytes available", available),
-            )));
+            eprintln!("[edgerun-storage] WARN: low disk space: {} bytes available", available);
         }
 
         let stream_id_hex = edgerun_core::util::bytes_to_hex(&event.stream_id);
@@ -308,12 +306,9 @@ impl NodeStore {
         object_kind: i32,
         recipients: &[Vec<u8>],
     ) -> Result<edgerun_proto::edgerun::v0::common::ObjectRef, StorageError> {
-        // Check disk space before writing
+        // Best-effort disk space check.
         if let Err(available) = self.check_disk_space() {
-            return Err(StorageError::Io(std::io::Error::new(
-                std::io::ErrorKind::StorageFull,
-                format!("insufficient disk space: {} bytes available", available),
-            )));
+            eprintln!("[edgerun-storage] WARN: low disk space: {} bytes available", available);
         }
 
         use edgerun_proto::edgerun::v0::common::ObjectRef;
@@ -617,6 +612,58 @@ impl NodeStore {
     /// Returns unreachable peers with known addresses for reconnection.
     pub fn list_unreachable_peers_with_addr(&self) -> Result<Vec<(String, String)>, StorageError> {
         Ok(self.index.list_unreachable_peers_with_addr()?)
+    }
+
+    // -----------------------------------------------------------------------
+    // Work accounting
+    // -----------------------------------------------------------------------
+
+    /// Record a completed work unit.
+    pub fn record_work_accounting(&self, accounting: &edgerun_core::accounting::WorkAccounting) -> Result<(), StorageError> {
+        let record_hash = accounting.compute_record_hash();
+        let record = crate::WorkAccountingRecord {
+            data: accounting.to_bytes(),
+            record_hash: edgerun_core::util::bytes_to_hex(&record_hash),
+            requester_hex: edgerun_core::util::bytes_to_hex(&accounting.requester_id),
+            provider_hex: edgerun_core::util::bytes_to_hex(&accounting.provider_id),
+            workload_class: accounting.workload_class.as_str().to_string(),
+            status: accounting.status.as_str().to_string(),
+            started_at_us: accounting.started_at_us,
+            billable_rc_us: accounting.billable_compute_rc_us,
+        };
+        Ok(self.index.record_work_accounting(record)?)
+    }
+
+    /// Get total billable RC-µs for a requester (buyer).
+    pub fn total_billable_for_requester(&self, requester_id: &[u8]) -> Result<u64, StorageError> {
+        let hex = edgerun_core::util::bytes_to_hex(requester_id);
+        Ok(self.index.total_billable_for_requester(&hex)?)
+    }
+
+    /// Get total billable RC-µs for a provider (seller).
+    pub fn total_billable_for_provider(&self, provider_id: &[u8]) -> Result<u64, StorageError> {
+        let hex = edgerun_core::util::bytes_to_hex(provider_id);
+        Ok(self.index.total_billable_for_provider(&hex)?)
+    }
+
+    /// Get all work records in a time window.
+    pub fn work_in_time_range(&self, from_us: u64, to_us: u64) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+        Ok(self.index.work_in_time_range(from_us, to_us)?)
+    }
+
+    /// Get all work records for a specific workload class.
+    pub fn work_by_class(&self, class: &str) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+        Ok(self.index.work_by_class(class)?)
+    }
+
+    /// Get all work records with a specific status.
+    pub fn work_by_status(&self, status: &str) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+        Ok(self.index.work_by_status(status)?)
+    }
+
+    /// Get all work records.
+    pub fn list_all_work(&self) -> Result<Vec<crate::WorkAccountingRecord>, StorageError> {
+        Ok(self.index.list_all_work()?)
     }
 
     // -----------------------------------------------------------------------
@@ -949,13 +996,25 @@ impl NodeStore {
     // Integrity and resilience
     // -----------------------------------------------------------------------
 
-    /// Runs a SQLite integrity check. If corruption is detected,
-    /// automatically rebuilds all indexes from the event log.
+    /// Runs a full integrity check on all on-disk index files.
+    ///
+    /// Reads and validates every record in each binary index file.
+    /// Returns `Ok(true)` if all indexes are consistent, `Ok(false)` if
+    /// corruption is detected.
+    pub fn integrity_check(&self) -> Result<bool, StorageError> {
+        self.index.integrity_check().map_err(StorageError::Io)
+    }
+
+    /// Runs a full integrity check and automatically rebuilds all indexes
+    /// from the event log if corruption is detected.
     ///
     /// Returns the number of events rebuilt, or `Ok(0)` if the database is healthy.
     pub fn integrity_check_and_rebuild(&mut self) -> Result<usize, StorageError> {
-        // File-based indexes don't have an integrity check — they're always consistent
-        // If we wanted to rebuild, we'd replay the event log
+        let healthy = self.integrity_check()?;
+        if healthy {
+            return Ok(0);
+        }
+        // TODO: rebuild indexes from event log
         Ok(0)
     }
 

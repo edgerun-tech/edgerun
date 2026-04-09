@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: federated aggregate descriptor is accepted as derived advisory data when it references input fragments
+description: federated aggregate descriptor is accepted as derived advisory data when
+  it references input fragments
 tags:
 - query
 - validate_query

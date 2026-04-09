@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: remotely supplied route trust assignments are rejected unless issued by a controller or trust root
+description: remotely supplied route trust assignments are rejected unless issued
+  by a controller or trust root
 tags:
 - network
 - route

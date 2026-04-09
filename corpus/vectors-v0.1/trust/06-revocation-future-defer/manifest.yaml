@@ -3,7 +3,8 @@ suite: trust
 validator: validate_trust
 version: 1
 priority: mandatory
-description: future-effective revocation is recognized but deferred until its effective time
+description: future-effective revocation is recognized but deferred until its effective
+  time
 tags:
 - trust
 - validate_trust

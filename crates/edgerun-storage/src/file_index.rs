@@ -19,8 +19,6 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
-use std::cell::RefCell;
 
 // ===========================================================================
 // Simple binary serialization helpers
@@ -161,6 +159,28 @@ pub struct ControllerChange {
     pub event_seq: i64,
 }
 
+/// Persistent work accounting record.
+/// Stores the serialized WorkAccounting bytes along with query indexes.
+#[derive(Clone)]
+pub struct WorkAccountingRecord {
+    /// Serialized WorkAccounting (from edgerun_core::accounting)
+    pub data: Vec<u8>,
+    /// SHA-256 hash of the record (unique identifier)
+    pub record_hash: String,
+    /// Requester identity (for indexing)
+    pub requester_hex: String,
+    /// Provider identity (for indexing)
+    pub provider_hex: String,
+    /// Workload class string
+    pub workload_class: String,
+    /// Status string
+    pub status: String,
+    /// Start timestamp in µs
+    pub started_at_us: u64,
+    /// Billable compute RC-µs
+    pub billable_rc_us: u64,
+}
+
 // ===========================================================================
 // FileIndex
 // ===========================================================================
@@ -177,6 +197,7 @@ pub struct FileIndex {
     controller_changes: std::cell::RefCell<Vec<ControllerChange>>,
     delegations: std::cell::RefCell<HashMap<String, DelegationRecord>>,
     revocations: std::cell::RefCell<HashMap<String, RevocationRecord>>,
+    work_accounting: std::cell::RefCell<Vec<WorkAccountingRecord>>,
     data_root: PathBuf,
 }
 
@@ -199,6 +220,7 @@ impl FileIndex {
             controller_changes: std::cell::RefCell::new(Vec::new()),
             delegations: std::cell::RefCell::new(HashMap::new()),
             revocations: std::cell::RefCell::new(HashMap::new()),
+            work_accounting: std::cell::RefCell::new(Vec::new()),
             data_root: data_root.clone(),
         };
 
@@ -360,6 +382,28 @@ impl FileIndex {
             }
         }
 
+        // Load work_accounting
+        if let Ok(data) = fs::read(self.idx_dir().join("work_accounting.bin")) {
+            let data_len = data.len() as u64;
+            let mut r = std::io::Cursor::new(data);
+            while r.position() < data_len {
+                let data_len_val = read_u64(&mut r)? as usize;
+                let mut data = vec![0u8; data_len_val];
+                r.read_exact(&mut data)?;
+                let record_hash = read_str(&mut r)?;
+                let requester_hex = read_str(&mut r)?;
+                let provider_hex = read_str(&mut r)?;
+                let workload_class = read_str(&mut r)?;
+                let status = read_str(&mut r)?;
+                let started_at_us = read_u64(&mut r)?;
+                let billable_rc_us = read_u64(&mut r)?;
+                self.work_accounting.borrow_mut().push(WorkAccountingRecord {
+                    data, record_hash, requester_hex, provider_hex,
+                    workload_class, status, started_at_us, billable_rc_us,
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -493,6 +537,22 @@ impl FileIndex {
             Ok(())
         })?;
 
+        // Save work_accounting
+        self.persist("work_accounting.bin", |w| {
+            for v in self.work_accounting.borrow().iter() {
+                write_u64(w, v.data.len() as u64)?;
+                w.write_all(&v.data)?;
+                write_str(w, &v.record_hash)?;
+                write_str(w, &v.requester_hex)?;
+                write_str(w, &v.provider_hex)?;
+                write_str(w, &v.workload_class)?;
+                write_str(w, &v.status)?;
+                write_u64(w, v.started_at_us)?;
+                write_u64(w, v.billable_rc_us)?;
+            }
+            Ok(())
+        })?;
+
         Ok(())
     }
 
@@ -501,11 +561,10 @@ impl FileIndex {
     // ===========================================================================
 
     pub fn put_event(&self, stream_id: &str, seq: i64, event_hash: &[u8], file_offset: u64, envelope_version: i64) -> io::Result<()> {
-        let mut inner = Mutex::new(());
-        let _lock = inner.lock().unwrap();
-        // We can't use a real mutex on self since &self is immutable.
-        // For now, just write to the event log file.
-        let record = EventRecord {
+        // FileIndex uses RefCell for interior mutability and is accessed
+        // exclusively from the single store task thread. No cross-thread
+        // synchronization is required.
+        let _record = EventRecord {
             event_hash: event_hash.to_vec(),
             file_offset,
             envelope_version,
@@ -659,10 +718,13 @@ impl FileIndex {
     pub fn upsert_peer(&self, node_id_hex: &str, addr: Option<&str>, status: &str, is_bootstrap: bool) -> io::Result<()> {
         use std::time::{SystemTime, UNIX_EPOCH};
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        if let Some(existing) = self.peers.borrow_mut().get_mut(node_id_hex) {
-            if let Some(a) = addr { existing.addr = Some(a.to_string()); }
-            existing.status = status.to_string();
-            existing.last_seen = Some(now);
+        let exists = self.peers.borrow().contains_key(node_id_hex);
+        if exists {
+            if let Some(a) = addr {
+                self.peers.borrow_mut().get_mut(node_id_hex).unwrap().addr = Some(a.to_string());
+            }
+            self.peers.borrow_mut().get_mut(node_id_hex).unwrap().status = status.to_string();
+            self.peers.borrow_mut().get_mut(node_id_hex).unwrap().last_seen = Some(now);
         } else {
             self.peers.borrow_mut().insert(node_id_hex.to_string(), PeerRecord {
                 addr: addr.map(|s| s.to_string()),
@@ -796,6 +858,61 @@ impl FileIndex {
             .collect())
     }
 
+    // ===========================================================================
+    // Work accounting
+    // ===========================================================================
+
+    /// Record a completed work unit.
+    pub fn record_work_accounting(&self, record: WorkAccountingRecord) -> io::Result<()> {
+        self.work_accounting.borrow_mut().push(record);
+        self.save()
+    }
+
+    /// Get total billable RC-µs for a requester (buyer).
+    pub fn total_billable_for_requester(&self, requester_hex: &str) -> io::Result<u64> {
+        Ok(self.work_accounting.borrow().iter()
+            .filter(|r| r.requester_hex == requester_hex && r.status == "completed")
+            .map(|r| r.billable_rc_us)
+            .sum())
+    }
+
+    /// Get total billable RC-µs for a provider (seller).
+    pub fn total_billable_for_provider(&self, provider_hex: &str) -> io::Result<u64> {
+        Ok(self.work_accounting.borrow().iter()
+            .filter(|r| r.provider_hex == provider_hex && r.status == "completed")
+            .map(|r| r.billable_rc_us)
+            .sum())
+    }
+
+    /// Get all work records in a time window.
+    pub fn work_in_time_range(&self, from_us: u64, to_us: u64) -> io::Result<Vec<WorkAccountingRecord>> {
+        Ok(self.work_accounting.borrow().iter()
+            .filter(|r| r.started_at_us >= from_us && r.started_at_us <= to_us)
+            .cloned()
+            .collect())
+    }
+
+    /// Get all work records for a specific workload class.
+    pub fn work_by_class(&self, class: &str) -> io::Result<Vec<WorkAccountingRecord>> {
+        Ok(self.work_accounting.borrow().iter()
+            .filter(|r| r.workload_class == class)
+            .cloned()
+            .collect())
+    }
+
+    /// Get all work records with a specific status.
+    pub fn work_by_status(&self, status: &str) -> io::Result<Vec<WorkAccountingRecord>> {
+        Ok(self.work_accounting.borrow().iter()
+            .filter(|r| r.status == status)
+            .cloned()
+            .collect())
+    }
+
+    /// Get all work records.
+    pub fn list_all_work(&self) -> io::Result<Vec<WorkAccountingRecord>> {
+        Ok(self.work_accounting.borrow().iter().cloned().collect())
+    }
+
     pub fn clear(&self) -> io::Result<()> {
         self.stream_heads.borrow_mut().clear();
         self.events.borrow_mut().clear();
@@ -807,27 +924,218 @@ impl FileIndex {
         self.controller_changes.borrow_mut().clear();
         self.delegations.borrow_mut().clear();
         self.revocations.borrow_mut().clear();
+        self.work_accounting.borrow_mut().clear();
         // Clear files
         for file in &["stream_heads.bin", "events.bin", "replay_cache.bin", "fetch_queue.bin",
                       "object_presence.bin", "peers.bin", "snapshots.bin",
-                      "controller_changes.bin", "delegations.bin", "revocations.bin"] {
+                      "controller_changes.bin", "delegations.bin", "revocations.bin",
+                      "work_accounting.bin"] {
             let path = self.idx_dir().join(file);
             if path.exists() { fs::remove_file(path)?; }
         }
         self.save()
     }
 
-    // Stub methods for compatibility with SQLite-based API
+    // -----------------------------------------------------------------------
+    // Integrity and maintenance
+    // -----------------------------------------------------------------------
+
+    /// Verifies that all index files on disk can be read and parsed without
+    /// errors. Returns `Ok(false)` if any file is corrupted.
+    ///
+    /// This reads each `.bin` file and validates record boundaries, string
+    /// lengths, and u64 fields. It does NOT modify the in-memory state.
     pub fn integrity_check(&self) -> io::Result<bool> {
-        Ok(true) // File-based indexes are always consistent
+        let idx_dir = self.idx_dir();
+        if !idx_dir.exists() {
+            return Ok(true); // No indexes yet — trivially consistent
+        }
+
+        let bin_files = [
+            "stream_heads.bin",
+            "events.bin",
+            "replay_cache.bin",
+            "peers.bin",
+            "snapshots.bin",
+            "delegations.bin",
+            "revocations.bin",
+            "object_presence.bin",
+            "controller_changes.bin",
+            "fetch_queue.bin",
+            "work_accounting.bin",
+        ];
+
+        for file in &bin_files {
+            let path = idx_dir.join(file);
+            if !path.exists() {
+                continue; // Empty index — file hasn't been created yet
+            }
+
+            let data = fs::read(&path)?;
+            if !validate_bin_file(&data, file) {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
     }
 
     pub fn wal_checkpoint(&self) -> io::Result<i64> {
-        Ok(0) // No WAL to checkpoint
+        Ok(0) // No WAL to checkpoint — data is in memory + .bin files
     }
 
     pub fn wal_size_bytes(&self) -> io::Result<u64> {
         Ok(0) // No WAL
     }
+}
 
+// ---------------------------------------------------------------------------
+// Binary format validation helpers
+// ---------------------------------------------------------------------------
+
+/// Validates that a binary index file can be fully parsed without errors.
+/// Returns `true` if all records parse cleanly, `false` on any corruption.
+pub fn validate_bin_file(data: &[u8], filename: &str) -> bool {
+    if data.is_empty() {
+        return true;
+    }
+
+    let data_len = data.len() as u64;
+    let mut r = std::io::Cursor::new(data);
+
+    match filename {
+        "stream_heads.bin" => validate_stream_heads(&mut r, data_len),
+        "events.bin" => validate_events_log(&mut r, data_len),
+        "replay_cache.bin" => validate_replay_cache(&mut r, data_len),
+        "peers.bin" => validate_peers(&mut r, data_len),
+        "snapshots.bin" => validate_simple_kv(&mut r, data_len),
+        "delegations.bin" => validate_delegations(&mut r, data_len),
+        "revocations.bin" => validate_revocations(&mut r, data_len),
+        "object_presence.bin" => validate_object_presence(&mut r, data_len),
+        "controller_changes.bin" => validate_append_only(&mut r, data_len),
+        "fetch_queue.bin" => validate_append_only(&mut r, data_len),
+        "work_accounting.bin" => validate_append_only(&mut r, data_len),
+        _ => false,
+    }
+}
+
+fn validate_string_record(r: &mut std::io::Cursor<&[u8]>, _data_len: u64) -> bool {
+    read_str(r).is_ok()
+}
+
+fn validate_stream_heads(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; }
+        if read_u64(r).is_err() { return false; }
+        let hash_len = match read_u64(r) {
+            Ok(v) => v as usize,
+            Err(_) => return false,
+        };
+        if hash_len > 1024 { return false; } // Sanity check
+        let mut buf = vec![0u8; hash_len];
+        if r.read_exact(&mut buf).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_events_log(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // stream_id
+        if read_str(r).is_err() { return false; } // event_id
+        if read_u64(r).is_err() { return false; } // seq
+        if read_u64(r).is_err() { return false; } // offset
+        let hash_len = match read_u64(r) {
+            Ok(v) => v as usize,
+            Err(_) => return false,
+        };
+        if hash_len > 1024 { return false; }
+        let mut buf = vec![0u8; hash_len];
+        if r.read_exact(&mut buf).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_replay_cache(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // target_node
+        if read_str(r).is_err() { return false; } // command_hash
+        if read_str(r).is_err() { return false; } // entry data
+    }
+    true
+}
+
+fn validate_peers(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // key
+        if read_option_str(r).is_err() { return false; } // addr
+        if read_str(r).is_err() { return false; } // status
+        // last_seen (option u64)
+        let mut tag = [0u8; 1];
+        if r.read_exact(&mut tag).is_err() { return false; }
+        if tag[0] == 1 && read_u64(r).is_err() { return false; }
+        if read_u64(r).is_err() { return false; } // first_seen
+        let mut t = [0u8; 1];
+        if r.read_exact(&mut t).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_simple_kv(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // key
+        if read_str(r).is_err() { return false; } // value
+    }
+    true
+}
+
+fn validate_delegations(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // key (delegation_id)
+        if read_str(r).is_err() { return false; } // issuer_hex
+        if read_str(r).is_err() { return false; } // recipient_hex
+        if read_str(r).is_err() { return false; } // capability_hex
+        // expires_at: Option<i64>
+        let mut tag = [0u8; 1];
+        if r.read_exact(&mut tag).is_err() { return false; }
+        if tag[0] == 1 && read_u64(r).is_err() { return false; }
+        // is_revoked
+        let mut t = [0u8; 1];
+        if r.read_exact(&mut t).is_err() { return false; }
+        // stored_at
+        if read_u64(r).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_revocations(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // key
+        if read_str(r).is_err() { return false; } // issuer_hex
+        if read_str(r).is_err() { return false; } // target_type
+        if read_str(r).is_err() { return false; } // target_hex
+        // effective_at: Option<i64>
+        let mut tag = [0u8; 1];
+        if r.read_exact(&mut tag).is_err() { return false; }
+        if tag[0] == 1 && read_u64(r).is_err() { return false; }
+        // revoked_at
+        if read_u64(r).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_object_presence(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // object_id
+        if read_str(r).is_err() { return false; } // rep_id
+        if read_str(r).is_err() { return false; } // blob_id
+        if read_str(r).is_err() { return false; } // status
+    }
+    true
+}
+
+fn validate_append_only(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; }
+    }
+    true
 }

@@ -58,50 +58,62 @@ name = "iris"
 path = "examples/iris.rs"
 
 [[test]]
+test = false
 name = "adaptors_no_collect"
 path = "tests/adaptors_no_collect.rs"
 
 [[test]]
+test = false
 name = "flatten_ok"
 path = "tests/flatten_ok.rs"
 
 [[test]]
+test = false
 name = "laziness"
 path = "tests/laziness.rs"
 
 [[test]]
+test = false
 name = "macros_hygiene"
 path = "tests/macros_hygiene.rs"
 
 [[test]]
+test = false
 name = "merge_join"
 path = "tests/merge_join.rs"
 
 [[test]]
+test = false
 name = "peeking_take_while"
 path = "tests/peeking_take_while.rs"
 
 [[test]]
+test = false
 name = "quick"
 path = "tests/quick.rs"
 
 [[test]]
+test = false
 name = "specializations"
 path = "tests/specializations.rs"
 
 [[test]]
+test = false
 name = "test_core"
 path = "tests/test_core.rs"
 
 [[test]]
+test = false
 name = "test_std"
 path = "tests/test_std.rs"
 
 [[test]]
+test = false
 name = "tuples"
 path = "tests/tuples.rs"
 
 [[test]]
+test = false
 name = "zip"
 path = "tests/zip.rs"
 

@@ -26,6 +26,10 @@ const MGMT_OP_SET_CONNECTABLE: u16 = 0x0007;
 const MGMT_OP_SET_PAIRABLE: u16 = 0x0009;
 const MGMT_OP_SET_LOCAL_NAME: u16 = 0x000f;
 const MGMT_OP_GET_CONNECTIONS: u16 = 0x0015;
+const MGMT_OP_CONNECT: u16 = 0x000e;
+const MGMT_OP_DISCONNECT: u16 = 0x0014;
+const MGMT_OP_PAIR_DEVICE: u16 = 0x0019;
+const MGMT_OP_CANCEL_PAIRING: u16 = 0x001b;
 const MGMT_OP_START_DISCOVERY: u16 = 0x0023;
 const MGMT_OP_STOP_DISCOVERY: u16 = 0x0024;
 
@@ -390,6 +394,29 @@ fn format_bdaddr_le(bytes: &[u8]) -> String {
         .map(|b| format!("{b:02X}"))
         .collect::<Vec<_>>()
         .join(":")
+}
+
+/// Parse a BDADDR string (e.g. "AA:BB:CC:DD:EE:FF") into little-endian bytes
+/// as used by the kernel mgmt protocol.
+fn parse_bdaddr(addr: &str) -> Result<[u8; 6], CapabilityError> {
+    let parts: Vec<&str> = addr.split(':').collect();
+    if parts.len() != 6 {
+        return Err(CapabilityError::Provider(
+            format!("invalid BDADDR format: {}", addr).into(),
+        ));
+    }
+    let mut bytes = [0u8; 6];
+    for (i, part) in parts.iter().enumerate() {
+        bytes[i] = u8::from_str_radix(part, 16).map_err(|e| {
+            CapabilityError::Provider(
+                format!("invalid BDADDR component '{}': {}", part, e).into(),
+            )
+        })?;
+    }
+    // The string is in normal order (AA:BB:CC:DD:EE:FF), but the kernel
+    // expects little-endian, so reverse.
+    bytes.reverse();
+    Ok(bytes)
 }
 
 fn decode_c_string(bytes: &[u8]) -> String {
@@ -1331,6 +1358,69 @@ impl MgmtBluetoothBackend {
             offset += 7;
         }
         Ok(out)
+    }
+
+    /// Connect to a remote Bluetooth device.
+    ///
+    /// Uses the kernel mgmt `MGMT_OP_CONNECT` command. The `addr_type` parameter
+    /// specifies the address type: 0x01=BR/EDR, 0x02=LE Public, 0x04=LE Random.
+    /// Use 0x00 to auto-detect.
+    pub fn connect_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
+        let addr_bytes = parse_bdaddr(bdaddr)?;
+        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+
+        // Payload: 6-byte BD_ADDR + 1-byte address type
+        let mut payload = Vec::with_capacity(7);
+        payload.extend_from_slice(&addr_bytes);
+        payload.push(auto_type);
+
+        let socket = MgmtSocket::open()?;
+        let _result = socket.command(MGMT_OP_CONNECT, self.controller.index, &payload)?;
+        Ok(())
+    }
+
+    /// Disconnect from a remote Bluetooth device.
+    pub fn disconnect_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
+        let addr_bytes = parse_bdaddr(bdaddr)?;
+        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+
+        let mut payload = Vec::with_capacity(7);
+        payload.extend_from_slice(&addr_bytes);
+        payload.push(auto_type);
+
+        let socket = MgmtSocket::open()?;
+        let _result = socket.command(MGMT_OP_DISCONNECT, self.controller.index, &payload)?;
+        Ok(())
+    }
+
+    /// Initiate pairing with a remote device.
+    /// Returns immediately; pairing completion is reported via `MGMT_EV_DEVICE_CONNECTED`
+    /// or `MGMT_EV_CONNECT_FAILED` events.
+    pub fn pair_device(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
+        let addr_bytes = parse_bdaddr(bdaddr)?;
+        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+
+        let mut payload = Vec::with_capacity(7);
+        payload.extend_from_slice(&addr_bytes);
+        payload.push(auto_type);
+
+        let socket = MgmtSocket::open()?;
+        let _result = socket.command(MGMT_OP_PAIR_DEVICE, self.controller.index, &payload)?;
+        Ok(())
+    }
+
+    /// Cancel an ongoing pairing attempt.
+    pub fn cancel_pairing(&self, bdaddr: &str, addr_type: u8) -> Result<(), CapabilityError> {
+        let addr_bytes = parse_bdaddr(bdaddr)?;
+        let auto_type = if addr_type != 0 { addr_type } else { MGMT_ADDR_ALL };
+
+        let mut payload = Vec::with_capacity(7);
+        payload.extend_from_slice(&addr_bytes);
+        payload.push(auto_type);
+
+        let socket = MgmtSocket::open()?;
+        let _result = socket.command(MGMT_OP_CANCEL_PAIRING, self.controller.index, &payload)?;
+        Ok(())
     }
 }
 

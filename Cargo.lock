@@ -893,6 +893,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-linux-npu 0.1.0",
  "edgerun-npu 0.1.0",
+ "libc 0.2.184 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -908,6 +909,16 @@ version = "0.1.0"
 dependencies = [
  "edgerun-alsa-microphone 0.1.0",
  "edgerun-alsa-speaker 0.1.0",
+ "edgerun-capabilities 0.1.0",
+ "edgerun-microphone 0.1.0",
+ "edgerun-speaker 0.1.0",
+]
+
+[[package]]
+name = "edgerun-audio-liveliness"
+version = "0.1.0"
+dependencies = [
+ "edgerun-biometrics 0.1.0",
  "edgerun-capabilities 0.1.0",
  "edgerun-microphone 0.1.0",
  "edgerun-speaker 0.1.0",
@@ -964,6 +975,8 @@ dependencies = [
  "prost 0.14.3",
  "prost-types 0.14.3",
  "rand_core 0.6.4",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "sha2 0.10.9",
 ]
 
 [[package]]
@@ -989,6 +1002,7 @@ dependencies = [
  "edgerun-capabilities 0.1.0",
  "edgerun-input 0.1.0",
  "edgerun-linux-sysfs 0.1.0",
+ "libc 0.2.183",
 ]
 
 [[package]]
@@ -1122,6 +1136,10 @@ dependencies = [
  "edgerun-linux-sysfs 0.1.0",
  "edgerun-network-interface 0.1.0",
  "edgerun-wifi 0.1.0",
+ "hmac 0.12.1",
+ "libc 0.2.183",
+ "pbkdf2 0.12.2",
+ "sha1 0.10.6",
 ]
 
 [[package]]
@@ -1254,19 +1272,50 @@ version = "0.1.0"
 dependencies = [
  "edgerun-alsa-microphone 0.1.0",
  "edgerun-alsa-speaker 0.1.0",
+ "edgerun-amd-xdna 0.1.0",
+ "edgerun-audio-calibration 0.1.0",
+ "edgerun-audio-liveliness 0.1.0",
+ "edgerun-biometrics 0.1.0",
+ "edgerun-bluetooth 0.1.0",
  "edgerun-camera-biometrics 0.1.0",
  "edgerun-capabilities 0.1.0",
  "edgerun-capability-policy 0.1.0",
+ "edgerun-cec 0.1.0",
  "edgerun-core 0.1.0",
+ "edgerun-display 0.1.0",
+ "edgerun-drm-display 0.1.0",
  "edgerun-evdev-input 0.1.0",
+ "edgerun-fingerprint 0.1.0",
+ "edgerun-goodix-fingerprint 0.1.0",
+ "edgerun-gpu 0.1.0",
  "edgerun-hardware-signing 0.1.0",
+ "edgerun-json 0.1.0",
+ "edgerun-linux-cec 0.1.0",
+ "edgerun-linux-gpu 0.1.0",
  "edgerun-linux-netif 0.1.0",
+ "edgerun-linux-nfc 0.1.0",
+ "edgerun-linux-npu 0.1.0",
+ "edgerun-linux-pci 0.1.0",
+ "edgerun-linux-power 0.1.0",
+ "edgerun-linux-usb 0.1.0",
+ "edgerun-linux-wifi 0.1.0",
  "edgerun-log 0.1.0",
+ "edgerun-machine-report 0.1.0",
  "edgerun-mesh 0.1.0",
+ "edgerun-mesh-capability 0.1.0",
+ "edgerun-mesh-daemon 0.1.0",
  "edgerun-mesh-link 0.1.0",
  "edgerun-mesh-router 0.1.0",
+ "edgerun-mesh-session 0.1.0",
+ "edgerun-mgmt-bluetooth 0.1.0",
  "edgerun-microphone 0.1.0",
  "edgerun-network-interface 0.1.0",
+ "edgerun-nfc 0.1.0",
+ "edgerun-npu 0.1.0",
+ "edgerun-oci-registry 0.1.0",
+ "edgerun-oci-runtime 0.1.0",
+ "edgerun-pci 0.1.0",
+ "edgerun-power 0.1.0",
  "edgerun-proto 0.1.0",
  "edgerun-remote-capability 0.1.0",
  "edgerun-rt 0.1.0",
@@ -1274,11 +1323,18 @@ dependencies = [
  "edgerun-storage 0.1.0",
  "edgerun-stream 0.1.0",
  "edgerun-tpm 0.1.0",
+ "edgerun-usb 0.1.0",
  "edgerun-v4l2-camera 0.1.0",
+ "edgerun-virtual-disk 0.1.0",
+ "edgerun-wifi 0.1.0",
  "edgerun-yubikey 0.1.0",
+ "libc 0.2.184 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lifegraph-json 1.0.149",
  "p256 0.13.2",
  "prost 0.14.3",
  "prost-types 0.14.3",
+ "rand_core 0.6.4",
+ "rand_core 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1286,6 +1342,29 @@ name = "edgerun-npu"
 version = "0.1.0"
 dependencies = [
  "edgerun-capabilities 0.1.0",
+]
+
+[[package]]
+name = "edgerun-oci-registry"
+version = "0.1.0"
+dependencies = [
+ "edgerun-core 0.1.0",
+ "edgerun-oci-runtime 0.1.0",
+ "flate2 1.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lifegraph-json 1.0.149",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tar 0.4.45 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ureq 2.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zstd 0.13.3 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "edgerun-oci-runtime"
+version = "0.1.0"
+dependencies = [
+ "libc 0.2.184 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lifegraph-json 1.0.149",
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2279,6 +2358,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lifegraph-json"
+version = "1.0.149"
+dependencies = [
+ "serde 1.0.228 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3161,7 +3247,9 @@ version = "0.23.37"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "aws-lc-rs 1.16.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.29 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell 1.21.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ring 0.17.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-pki-types 1.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustls-webpki 0.103.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "subtle 2.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4051,6 +4139,21 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "ureq"
+version = "2.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "base64 0.22.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "flate2 1.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "log 0.4.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "once_cell 1.21.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls 0.23.37 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustls-pki-types 1.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "url 2.5.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "webpki-roots 0.26.11 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "url"
 version = "2.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4232,6 +4335,22 @@ dependencies = [
 
 [[package]]
 name = "webpki-root-certs"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "rustls-pki-types 1.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "webpki-roots 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "webpki-roots"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
@@ -4721,6 +4840,31 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
+[[package]]
+name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "zstd-safe 7.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "zstd-sys 2.0.16+zstd.1.5.7 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.16+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "cc 1.2.59 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pkg-config 0.3.32 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
 [metadata]
 "checksum addchain 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2e33f6a175ec6a9e0aca777567f9ff7c3deefc255660df887e7fa3585e9801d8"
 "checksum adler2 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
@@ -5064,6 +5208,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum unicode-ident 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)" = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 "checksum unicode-xid 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 "checksum untrusted 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+"checksum ureq 2.12.1 (registry+https://github.com/rust-lang/crates.io-index)" = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
 "checksum url 2.5.8 (registry+https://github.com/rust-lang/crates.io-index)" = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
 "checksum utf8_iter 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 "checksum valuable 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
@@ -5086,6 +5231,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum web-sys 0.3.94 (registry+https://github.com/rust-lang/crates.io-index)" = "cd70027e39b12f0849461e08ffc50b9cd7688d942c1c8e3c7b22273236b4dd0a"
 "checksum web-time 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 "checksum webpki-root-certs 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "804f18a4ac2676ffb4e8b5b5fa9ae38af06df08162314f96a68d2a363e21a8ca"
+"checksum webpki-roots 0.26.11 (registry+https://github.com/rust-lang/crates.io-index)" = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
+"checksum webpki-roots 1.0.6 (registry+https://github.com/rust-lang/crates.io-index)" = "22cfaf3c063993ff62e73cb4311efde4db1efb31ab78a3e5c457939ad5cc0bed"
 "checksum winapi 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)" = "5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419"
 "checksum winapi-i686-pc-windows-gnu 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 "checksum winapi-util 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)" = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
@@ -5147,3 +5294,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum zerovec 0.11.6 (registry+https://github.com/rust-lang/crates.io-index)" = "90f911cbc359ab6af17377d242225f4d75119aec87ea711a880987b18cd7b239"
 "checksum zerovec-derive 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)" = "625dc425cab0dca6dc3c3319506e6593dcb08a9f387ea3b284dbd52a92c40555"
 "checksum zmij 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)" = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+"checksum zstd 0.13.3 (registry+https://github.com/rust-lang/crates.io-index)" = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+"checksum zstd-safe 7.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+"checksum zstd-sys 2.0.16+zstd.1.5.7 (registry+https://github.com/rust-lang/crates.io-index)" = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"

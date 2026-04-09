@@ -1,5 +1,9 @@
+pub mod accounting;
+pub mod benchmark;
 pub mod command;
+pub mod conformance;
 pub mod crypto;
+pub mod fixed_point;
 pub mod protocol;
 pub mod result;
 pub mod util;

@@ -39,6 +39,7 @@ use edgerun_mesh_link::MeshLink;
 use edgerun_mesh_router::MeshRouter;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
+use std::sync::Arc;
 use crate::{Node, NodeConfig};
 
 /// A mesh-connected edgerun node.
@@ -52,6 +53,8 @@ pub struct MeshNode {
     mesh_link: MeshLink,
     /// The mesh router for discovery and routing.
     router: MeshRouter,
+    /// Hardware signer for signing outbound mesh frames.
+    signer: Arc<dyn MeshSigner>,
 }
 
 impl MeshNode {
@@ -66,7 +69,8 @@ impl MeshNode {
         signer: Box<dyn MeshSigner>,
     ) -> Result<Self, String> {
         let identity = signer.node_id();
-        let node = Node::from_config(config, signer)
+        let signer_arc: Arc<dyn MeshSigner> = Arc::from(signer);
+        let node = Node::from_config(config, Arc::clone(&signer_arc))
             .map_err(|e| format!("failed to create node: {}", e))?;
         let mut mesh_link = MeshLink::new();
         mesh_link.set_local_node_id(identity);
@@ -76,6 +80,7 @@ impl MeshNode {
             node,
             mesh_link,
             router,
+            signer: signer_arc,
         })
     }
 
@@ -133,15 +138,18 @@ impl MeshNode {
     fn sign_frame(&mut self, frame: &mut MeshFrame) {
         frame.header.src = self.node.identity();
         let preimage = frame.signed_preimage();
-        
         let digest = edgerun_core::crypto::sha256(&preimage);
         let mut digest_bytes = [0u8; 32];
         digest_bytes.copy_from_slice(&digest);
-        // Sign via the node's internal signer — this is a limitation of the current design
-        // For production, we'd need to expose the signer or have the MeshLink handle signing
-        // For now, leave signature as zeros (will fail verification on receiver)
-        // In production, the MeshLink would sign frames during drain_pending_frames
-        let _ = digest_bytes;
+        match self.signer.sign_digest(&digest_bytes) {
+            Ok(sig) => {
+                frame.signature = sig;
+            }
+            Err(e) => {
+                edgerun_log::warn!("failed to sign mesh frame: {}", e);
+                // Frame goes out unsigned — receiver will reject, but we don't block
+            }
+        }
     }
 
     /// Drains all pending outbound frames and returns them as raw wire data.
@@ -176,6 +184,9 @@ impl MeshNode {
     }
 
     /// Installs a capability grant.
+    /// **WARNING**: This bypasses the event stream. Use
+    /// `capabilities::record_capability_grant_event()` in production.
+    #[cfg(test)]
     pub fn install_grant(&mut self, grant: CapabilityGrant) {
         self.node.install_grant(grant);
     }
@@ -267,7 +278,7 @@ metadata:
     fn mesh_node_creates_with_genesis() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
         let signer = Box::new(TestSigner::new());
-        let node = MeshNode::from_config(config, signer).unwrap();
+        let node = MeshNode::from_config(config, Box::new(TestSigner::new())).unwrap();
 
         // Should have genesis event
         assert_eq!(node.events().len(), 1);
@@ -277,9 +288,9 @@ metadata:
     #[test]
     fn mesh_node_has_identity() {
         let config = NodeConfig::from_yaml(TEST_CONFIG).unwrap();
-        let signer = Box::new(TestSigner::new());
+        let signer = TestSigner::new();
         let expected_id = signer.node_id();
-        let node = MeshNode::from_config(config, signer).unwrap();
+        let node = MeshNode::from_config(config, Box::new(signer)).unwrap();
 
         assert_eq!(node.identity(), expected_id);
     }

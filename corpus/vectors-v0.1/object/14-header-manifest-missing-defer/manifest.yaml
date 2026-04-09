@@ -3,7 +3,8 @@ suite: object
 validator: validate_object_retrieval
 version: 1
 priority: mandatory
-description: manifest-chunked representation defers when manifest is required but absent
+description: manifest-chunked representation defers when manifest is required but
+  absent
 tags:
 - object
 - validate_object_retrieval

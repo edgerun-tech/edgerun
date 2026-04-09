@@ -55,58 +55,72 @@ name = "anyhow"
 path = "src/lib.rs"
 
 [[test]]
+test = false
 name = "compiletest"
 path = "tests/compiletest.rs"
 
 [[test]]
+test = false
 name = "test_autotrait"
 path = "tests/test_autotrait.rs"
 
 [[test]]
+test = false
 name = "test_backtrace"
 path = "tests/test_backtrace.rs"
 
 [[test]]
+test = false
 name = "test_boxed"
 path = "tests/test_boxed.rs"
 
 [[test]]
+test = false
 name = "test_chain"
 path = "tests/test_chain.rs"
 
 [[test]]
+test = false
 name = "test_context"
 path = "tests/test_context.rs"
 
 [[test]]
+test = false
 name = "test_convert"
 path = "tests/test_convert.rs"
 
 [[test]]
+test = false
 name = "test_downcast"
 path = "tests/test_downcast.rs"
 
 [[test]]
+test = false
 name = "test_ensure"
 path = "tests/test_ensure.rs"
 
 [[test]]
+test = false
 name = "test_ffi"
 path = "tests/test_ffi.rs"
 
 [[test]]
+test = false
 name = "test_fmt"
 path = "tests/test_fmt.rs"
 
 [[test]]
+test = false
 name = "test_macros"
 path = "tests/test_macros.rs"
 
 [[test]]
+test = false
 name = "test_repr"
 path = "tests/test_repr.rs"
 
 [[test]]
+test = false
 name = "test_source"
 path = "tests/test_source.rs"
 

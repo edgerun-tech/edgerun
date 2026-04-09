@@ -3,7 +3,8 @@ suite: trust
 validator: validate_trust
 version: 1
 priority: mandatory
-description: replacement revocation is accepted when it keeps the same target and narrows the prior effective scope
+description: replacement revocation is accepted when it keeps the same target and
+  narrows the prior effective scope
 tags:
 - trust
 - revocation

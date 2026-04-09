@@ -10,7 +10,7 @@ name = "edgerund"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["all-hardware"]
 hardware = [
     "dep:edgerun-evdev-input",
     "dep:edgerun-alsa-speaker",
@@ -19,6 +19,48 @@ hardware = [
     "dep:edgerun-v4l2-camera",
     "dep:edgerun-camera-biometrics",
     "dep:edgerun-speaker",
+    "dep:edgerun-audio-liveliness",
+]
+all-hardware = [
+    "hardware",
+    # GPU / display
+    "dep:edgerun-gpu",
+    "dep:edgerun-linux-gpu",
+    "dep:edgerun-display",
+    "dep:edgerun-drm-display",
+    # Input / biometrics
+    "dep:edgerun-fingerprint",
+    "dep:edgerun-goodix-fingerprint",
+    "dep:edgerun-audio-calibration",
+    "dep:edgerun-biometrics",
+    # Connectivity
+    "dep:edgerun-bluetooth",
+    "dep:edgerun-mgmt-bluetooth",
+    "dep:edgerun-wifi",
+    "dep:edgerun-linux-wifi",
+    "dep:edgerun-usb",
+    "dep:edgerun-linux-usb",
+    "dep:edgerun-pci",
+    "dep:edgerun-linux-pci",
+    "dep:edgerun-nfc",
+    "dep:edgerun-linux-nfc",
+    "dep:edgerun-npu",
+    "dep:edgerun-linux-npu",
+    "dep:edgerun-power",
+    "dep:edgerun-linux-power",
+    "dep:edgerun-cec",
+    "dep:edgerun-linux-cec",
+    "dep:edgerun-amd-xdna",
+    # Mesh extras
+    "dep:edgerun-mesh-session",
+    "dep:edgerun-mesh-daemon",
+    "dep:edgerun-mesh-capability",
+    # Storage
+    "dep:edgerun-virtual-disk",
+    # Misc
+    "dep:edgerun-json",
+    "dep:edgerun-machine-report",
+    "dep:edgerun-rand_core",
 ]
 
 [dependencies]
@@ -40,6 +82,7 @@ prost-types.workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
 
 edgerun-log = { path = "../edgerun-log" }
+libc = "0.2"
 
 # Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
@@ -54,7 +97,58 @@ edgerun-microphone = { path = "../edgerun-microphone", optional = true }
 edgerun-v4l2-camera = { path = "../edgerun-v4l2-camera", optional = true }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics", optional = true }
 edgerun-speaker = { path = "../edgerun-speaker", optional = true }
+edgerun-audio-liveliness = { path = "../edgerun-audio-liveliness", optional = true }
+
+# GPU / display
+edgerun-gpu = { path = "../edgerun-gpu", optional = true }
+edgerun-linux-gpu = { path = "../edgerun-linux-gpu", optional = true }
+edgerun-display = { path = "../edgerun-display", optional = true }
+edgerun-drm-display = { path = "../edgerun-drm-display", optional = true }
+
+# Input / biometrics
+edgerun-fingerprint = { path = "../edgerun-fingerprint", optional = true }
+edgerun-goodix-fingerprint = { path = "../edgerun-goodix-fingerprint", optional = true }
+edgerun-audio-calibration = { path = "../edgerun-audio-calibration", optional = true }
+edgerun-biometrics = { path = "../edgerun-biometrics", optional = true }
+
+# Connectivity
+edgerun-bluetooth = { path = "../edgerun-bluetooth", optional = true }
+edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth", optional = true }
+edgerun-wifi = { path = "../edgerun-wifi", optional = true }
+edgerun-linux-wifi = { path = "../edgerun-linux-wifi", optional = true }
+edgerun-usb = { path = "../edgerun-usb", optional = true }
+edgerun-linux-usb = { path = "../edgerun-linux-usb", optional = true }
+edgerun-pci = { path = "../edgerun-pci", optional = true }
+edgerun-linux-pci = { path = "../edgerun-linux-pci", optional = true }
+edgerun-nfc = { path = "../edgerun-nfc", optional = true }
+edgerun-linux-nfc = { path = "../edgerun-linux-nfc", optional = true }
+edgerun-npu = { path = "../edgerun-npu", optional = true }
+edgerun-linux-npu = { path = "../edgerun-linux-npu", optional = true }
+edgerun-power = { path = "../edgerun-power", optional = true }
+edgerun-linux-power = { path = "../edgerun-linux-power", optional = true }
+edgerun-cec = { path = "../edgerun-cec", optional = true }
+edgerun-linux-cec = { path = "../edgerun-linux-cec", optional = true }
+edgerun-amd-xdna = { path = "../edgerun-amd-xdna", optional = true }
+
+# Mesh extras
+edgerun-mesh-session = { path = "../edgerun-mesh-session", optional = true }
+edgerun-mesh-daemon = { path = "../edgerun-mesh-daemon", optional = true }
+edgerun-mesh-capability = { path = "../edgerun-mesh-capability", optional = true }
+
+# Storage
+edgerun-virtual-disk = { path = "../edgerun-virtual-disk", optional = true }
+
+# Misc
+edgerun-json = { path = "../edgerun-json", optional = true }
+edgerun-machine-report = { path = "../edgerun-machine-report", optional = true }
+edgerun-rand_core = { path = "../edgerun-rand_core", optional = true, package = "rand_core" }
+
+# OCI container runtime (required for ExecuteWorkload)
+edgerun-oci-registry = { path = "../edgerun-oci-registry" }
+edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
+lifegraph-json = { path = "/home/ken/lifegraph-json", features = ["serde"] }
 
 [dev-dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }
+rand_core = { version = "0.6", features = ["getrandom"] }

@@ -1,0 +1,11 @@
+[package]
+name = "edgerun-oci-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+lifegraph-json = { path = "/home/ken/lifegraph-json", features = ["serde"] }
+libc = "0.2"

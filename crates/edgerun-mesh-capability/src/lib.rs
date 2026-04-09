@@ -264,7 +264,7 @@ impl<P: RemoteCapabilityProvider> MeshCapabilityServer<P> {
         Ok(false)
     }
 
-    fn process_envelope(
+    pub(crate) fn process_envelope(
         &mut self,
         _sender: &NodeID,
         envelope: CapabilityRemoteEnvelope,
@@ -1610,5 +1610,95 @@ mod tests {
         let payload = make_envelope(None).encode_to_vec();
         let frame = make_mesh_frame(remote, payload);
         assert!(!dispatcher.deliver(&frame));
+    }
+
+    // =======================================================================
+    // Integration Tests
+    // =======================================================================
+
+    /// Integration test: End-to-end capability session open via mesh transport.
+    ///
+    /// Simulates a client on one node sending a SessionOpen to a server on
+    /// another node via the mesh capability transport, and receiving the
+    /// SessionAccept response.
+    #[test]
+    fn integration_capability_session_open_via_mesh() {
+        let client_id = node_id(0xAA);
+
+        // Server side: MockProvider that accepts all sessions
+        let mut mock = MockProvider::default();
+        mock.fail_on_open = false;
+        let mut server = MeshCapabilityServer::new(mock);
+
+        // Client side
+        let outbound: OutboundQueue = Rc::new(RefCell::new(VecDeque::new()));
+        let mut dispatcher = MeshEnvelopeDispatcher::new();
+        let mut client = MeshCapabilityClient::new(client_id, outbound.clone(), &mut dispatcher);
+
+        // Client sends SessionOpen to server
+        let open = make_session_open(1, b"test-session".to_vec());
+        client
+            .transport_mut()
+            .send(make_envelope(Some(capability_remote_envelope::Message::SessionOpen(open.clone()))))
+            .unwrap();
+
+        // Verify outbound has the envelope
+        assert_eq!(outbound.borrow().len(), 1);
+        let (dest, payload) = outbound.borrow_mut().pop_front().unwrap();
+        assert_eq!(dest, client_id); // sent to the client's remote target
+
+        // Simulate mesh delivery: server receives the envelope
+        let envelope = CapabilityRemoteEnvelope::decode(&payload[..]).unwrap();
+        if let Some(capability_remote_envelope::Message::SessionOpen(session_open)) = envelope.message {
+            // Server processes the session open
+            let accept = server.provider_mut().open_session(&session_open).unwrap();
+            assert!(accept.accepted, "server should accept the session");
+            assert_eq!(accept.session_id, session_open.session_id);
+            assert_eq!(accept.granted_operations, session_open.requested_operations);
+        } else {
+            panic!("expected SessionOpen message");
+        }
+    }
+
+    /// Integration test: Capability invocation round-trip via mesh transport.
+    ///
+    /// Verifies the full lifecycle: SessionOpen → SessionAccept → Invocation → Result.
+    #[test]
+    fn integration_capability_invocation_roundtrip_via_mesh() {
+        let client_id = node_id(0xAA);
+        let session_id = b"invoke-test".to_vec();
+
+        // Server: accepts sessions and allows invokes
+        let mut mock = MockProvider::default();
+        mock.fail_on_open = false;
+        mock.fail_on_invoke = false;
+        let mut server = MeshCapabilityServer::new(mock);
+
+        // Step 1: Session open
+        let open = make_session_open(1, session_id.clone());
+        let accept = server.provider_mut().open_session(&open).unwrap();
+        assert!(accept.accepted);
+
+        // Step 2: Client sends invocation
+        let invocation = make_invocation(b"inv-1".to_vec(), session_id.clone());
+        let invoke_envelope = CapabilityRemoteEnvelope {
+            message: Some(capability_remote_envelope::Message::Invocation(invocation.clone())),
+        };
+
+        // Step 3: Server processes invocation
+        let response = server.process_envelope(&client_id, invoke_envelope).unwrap();
+        assert!(response.is_some());
+
+        // Step 4: Verify result
+        if let Some(resp_env) = response {
+            if let Some(capability_remote_envelope::Message::Result(result)) = resp_env.message {
+                assert!(result.success, "invocation should succeed");
+                assert_eq!(result.invocation_id, invocation.invocation_id);
+            } else {
+                panic!("expected Result message");
+            }
+        } else {
+            panic!("server should have responded to invocation");
+        }
     }
 }

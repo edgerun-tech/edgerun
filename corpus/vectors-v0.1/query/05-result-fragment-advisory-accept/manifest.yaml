@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: responder-local query result fragment is accepted as advisory when it includes backing references
+description: responder-local query result fragment is accepted as advisory when it
+  includes backing references
 tags:
 - query
 - validate_query

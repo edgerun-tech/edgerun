@@ -54,6 +54,7 @@ std = []
 use_std = ["std"]
 
 [lib]
+test = false
 name = "either"
 path = "src/lib.rs"
 

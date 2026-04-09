@@ -3,7 +3,8 @@ suite: trust
 validator: validate_trust
 version: 1
 priority: mandatory
-description: scope override is rejected when it broadens beyond the original delegation scope
+description: scope override is rejected when it broadens beyond the original delegation
+  scope
 tags:
 - trust
 - revocation

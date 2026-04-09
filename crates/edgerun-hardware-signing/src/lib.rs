@@ -754,6 +754,30 @@ mod tests {
         }
     }
 
+    /// Builds a fake TPM ECDSA signature buffer:
+    ///   scheme(2) + hashAlg(2) + r_size(2) + r(32) + s_size(2) + s(32)
+    fn fake_tpm_ecdsa_signature(message: &[u8]) -> Vec<u8> {
+        let mut sig = Vec::with_capacity(72);
+        // scheme: TPM_ALG_ECDSA = 0x0018
+        sig.extend_from_slice(&0x0018u16.to_be_bytes());
+        // hashAlg: TPM_ALG_SHA256 = 0x000B
+        sig.extend_from_slice(&0x000Bu16.to_be_bytes());
+        // r (32 bytes) — derive from message for determinism
+        let mut r = [0u8; 32];
+        let len = message.len().min(32);
+        r[..len].copy_from_slice(&message[..len]);
+        sig.extend_from_slice(&(r.len() as u16).to_be_bytes());
+        sig.extend_from_slice(&r);
+        // s (32 bytes) — different from r
+        let mut s = [0u8; 32];
+        for (i, b) in s.iter_mut().enumerate() {
+            *b = message.get(i).copied().unwrap_or(0).wrapping_add(0x55);
+        }
+        sig.extend_from_slice(&(s.len() as u16).to_be_bytes());
+        sig.extend_from_slice(&s);
+        sig
+    }
+
     impl TpmSigningKey for FakeTpmKey {
         fn key_info(&self) -> Result<TpmKeyInfo, TpmError> {
             let algorithm = if self.pkcs1v15_key {
@@ -770,6 +794,8 @@ mod tests {
             })
         }
         fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, TpmError> {
+            // Returns raw message for direct sign_record_with_tpm_checked tests.
+            // The adapter tests use TpmAdapterFakeKey for proper TPM format.
             Ok(message.to_vec())
         }
     }
@@ -790,7 +816,26 @@ mod tests {
             })
         }
         fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, TpmError> {
+            // Returns raw message for key_info-only tests
             Ok(message.to_vec())
+        }
+    }
+
+    /// Fake TPM key that returns properly formatted ECDSA signatures for adapter tests
+    struct TpmAdapterFakeKey;
+
+    impl TpmSigningKey for TpmAdapterFakeKey {
+        fn key_info(&self) -> Result<TpmKeyInfo, TpmError> {
+            Ok(TpmKeyInfo {
+                key_name: "tpm-adapter-fake".into(),
+                algorithm: TpmSignatureAlgorithm::EcdsaP256Sha256,
+                public_key: vec![1, 2, 3],
+                attestation_blob: None,
+                assurance_level: TpmAssuranceLevel::DiscreteTpm,
+            })
+        }
+        fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, TpmError> {
+            Ok(fake_tpm_ecdsa_signature(message))
         }
     }
 
@@ -2055,10 +2100,18 @@ mod tests {
 
     #[test]
     fn tpm_adapter_sign_message() {
-        let adapter = TpmHardwareKeyAdapter::new(FakeTpmKey::new());
+        let adapter = TpmHardwareKeyAdapter::new(TpmAdapterFakeKey);
         let message = b"test message";
         let sig = adapter.sign_message(message).unwrap();
-        assert_eq!(sig, message.to_vec());
+        // Adapter strips TPM ECDSA wrapper: returns r(32) || s(32) = 64 bytes
+        assert_eq!(sig.len(), 64);
+        // r is message bytes zero-padded to 32
+        assert_eq!(&sig[..12], message.as_slice());
+        assert_eq!(&sig[12..32], &[0u8; 20]);
+        // s is message bytes + 0x55
+        for (i, &b) in message.iter().enumerate() {
+            assert_eq!(sig[32 + i], b.wrapping_add(0x55));
+        }
     }
 
     #[test]
@@ -2314,6 +2367,7 @@ mod tests {
             &[2u8; 32],
         )
         .unwrap();
+        // FakeTpmKey returns the raw message directly
         assert_eq!(
             sig,
             signature_input_for_record("edgerun:v0:sig:test", &[2u8; 32])
@@ -2332,6 +2386,7 @@ mod tests {
             &[3u8; 32],
         )
         .unwrap();
+        // PKCS#1v1.5 returns raw message
         assert_eq!(sig, signature_input_for_record("tag", &[3u8; 32]));
     }
 
@@ -2344,11 +2399,15 @@ mod tests {
                 allowed_algorithms: vec![],
                 ..Default::default()
             },
-            "tag",
-            &[4u8; 32],
+            "edgerun:v0:sig:test",
+            &[2u8; 32],
         )
         .unwrap();
-        assert_eq!(sig, signature_input_for_record("tag", &[4u8; 32]));
+        // FakeTpmKey returns the raw message directly
+        assert_eq!(
+            sig,
+            signature_input_for_record("edgerun:v0:sig:test", &[2u8; 32])
+        );
     }
 
     // =========================================================================

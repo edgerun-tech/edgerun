@@ -158,6 +158,10 @@ pub enum EventType {
     ActionStarted = 5,
     ActionCompleted = 6,
     ActionFailed = 7,
+    CapabilityGranted = 8,
+    CapabilityRevoked = 9,
+    DelegationCreated = 10,
+    RevocationCreated = 11,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -174,6 +178,10 @@ impl EventType {
             Self::ActionStarted => "EVENT_TYPE_ACTION_STARTED",
             Self::ActionCompleted => "EVENT_TYPE_ACTION_COMPLETED",
             Self::ActionFailed => "EVENT_TYPE_ACTION_FAILED",
+            Self::CapabilityGranted => "EVENT_TYPE_CAPABILITY_GRANTED",
+            Self::CapabilityRevoked => "EVENT_TYPE_CAPABILITY_REVOKED",
+            Self::DelegationCreated => "EVENT_TYPE_DELEGATION_CREATED",
+            Self::RevocationCreated => "EVENT_TYPE_REVOCATION_CREATED",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -187,6 +195,10 @@ impl EventType {
             "EVENT_TYPE_ACTION_STARTED" => Some(Self::ActionStarted),
             "EVENT_TYPE_ACTION_COMPLETED" => Some(Self::ActionCompleted),
             "EVENT_TYPE_ACTION_FAILED" => Some(Self::ActionFailed),
+            "EVENT_TYPE_CAPABILITY_GRANTED" => Some(Self::CapabilityGranted),
+            "EVENT_TYPE_CAPABILITY_REVOKED" => Some(Self::CapabilityRevoked),
+            "EVENT_TYPE_DELEGATION_CREATED" => Some(Self::DelegationCreated),
+            "EVENT_TYPE_REVOCATION_CREATED" => Some(Self::RevocationCreated),
             _ => None,
         }
     }
@@ -264,6 +276,7 @@ pub enum CommandType {
     FetchObject = 6,
     Query = 7,
     ExecuteWorkload = 8,
+    TerminateWorkload = 9,
     Custom = 1000,
 }
 impl CommandType {
@@ -282,6 +295,7 @@ impl CommandType {
             Self::FetchObject => "COMMAND_TYPE_FETCH_OBJECT",
             Self::Query => "COMMAND_TYPE_QUERY",
             Self::ExecuteWorkload => "COMMAND_TYPE_EXECUTE_WORKLOAD",
+            Self::TerminateWorkload => "COMMAND_TYPE_TERMINATE_WORKLOAD",
             Self::Custom => "COMMAND_TYPE_CUSTOM",
         }
     }
@@ -297,6 +311,7 @@ impl CommandType {
             "COMMAND_TYPE_FETCH_OBJECT" => Some(Self::FetchObject),
             "COMMAND_TYPE_QUERY" => Some(Self::Query),
             "COMMAND_TYPE_EXECUTE_WORKLOAD" => Some(Self::ExecuteWorkload),
+            "COMMAND_TYPE_TERMINATE_WORKLOAD" => Some(Self::TerminateWorkload),
             "COMMAND_TYPE_CUSTOM" => Some(Self::Custom),
             _ => None,
         }

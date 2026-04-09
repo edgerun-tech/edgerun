@@ -3,7 +3,8 @@ suite: trust
 validator: validate_trust
 version: 1
 priority: mandatory
-description: assurance claim is rejected when issued_at is in the future relative to local evaluation time
+description: assurance claim is rejected when issued_at is in the future relative
+  to local evaluation time
 tags:
 - trust
 - assurance

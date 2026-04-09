@@ -391,30 +391,12 @@ fn extract_public_key(identity: &Option<IdentityRef>) -> Option<[u8; 64]> {
 }
 
 fn verify_ecdsa_p256(public_key: &[u8; 64], digest: &[u8], signature: &[u8]) -> bool {
-    let vk = match node_id_to_verifying_key(public_key) {
-        Some(vk) => vk,
-        None => return false,
-    };
-
-    let digest_array: [u8; 32] = match digest.try_into() {
-        Ok(d) => d,
-        Err(_) => return false,
-    };
-
-    // Signature is raw r||s (64 bytes)
-    if signature.len() != 64 {
+    if digest.len() != 32 || signature.len() != 64 {
         return false;
     }
-
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
-    let r = p256::FieldBytes::from_slice(&signature[..32]);
-    let s = p256::FieldBytes::from_slice(&signature[32..]);
-    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(*r, *s) {
-        Ok(sig) => sig,
-        Err(_) => return false,
-    };
-
-    vk.verify_prehash(&digest_array, &ecdsa_sig).is_ok()
+    let digest_array: [u8; 32] = digest.try_into().unwrap();
+    let sig_array: [u8; 64] = signature.try_into().unwrap();
+    crate::crypto::verify_ecdsa_p256_raw(public_key, &digest_array, &sig_array)
 }
 
 // ---------------------------------------------------------------------------

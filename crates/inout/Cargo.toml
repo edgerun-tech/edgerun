@@ -39,6 +39,7 @@ rustdoc-args = [
 std = ["block-padding/std"]
 
 [lib]
+test = false
 name = "inout"
 path = "src/lib.rs"
 

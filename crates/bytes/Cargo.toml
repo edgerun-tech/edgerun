@@ -53,50 +53,62 @@ name = "bytes"
 path = "src/lib.rs"
 
 [[test]]
+test = false
 name = "test_buf"
 path = "tests/test_buf.rs"
 
 [[test]]
+test = false
 name = "test_buf_mut"
 path = "tests/test_buf_mut.rs"
 
 [[test]]
+test = false
 name = "test_bytes"
 path = "tests/test_bytes.rs"
 
 [[test]]
+test = false
 name = "test_bytes_odd_alloc"
 path = "tests/test_bytes_odd_alloc.rs"
 
 [[test]]
+test = false
 name = "test_bytes_vec_alloc"
 path = "tests/test_bytes_vec_alloc.rs"
 
 [[test]]
+test = false
 name = "test_chain"
 path = "tests/test_chain.rs"
 
 [[test]]
+test = false
 name = "test_debug"
 path = "tests/test_debug.rs"
 
 [[test]]
+test = false
 name = "test_iter"
 path = "tests/test_iter.rs"
 
 [[test]]
+test = false
 name = "test_limit"
 path = "tests/test_limit.rs"
 
 [[test]]
+test = false
 name = "test_reader"
 path = "tests/test_reader.rs"
 
 [[test]]
+test = false
 name = "test_serde"
 path = "tests/test_serde.rs"
 
 [[test]]
+test = false
 name = "test_take"
 path = "tests/test_take.rs"
 

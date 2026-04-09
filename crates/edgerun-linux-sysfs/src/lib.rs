@@ -161,6 +161,57 @@ pub fn fill_ifr_name(dst: &mut [c_char; 16], name: &str) {
 // Test helpers
 // ---------------------------------------------------------------------------
 
+/// Build parent-child relationships for a list of devices.
+///
+/// For each device, validates that the parent reference points to a known device,
+/// clears orphaned parent references, and populates child lists.
+///
+/// # Arguments
+/// * `devices` - Mutable slice of devices to update
+/// * `get_key` - Closure to extract the device's unique key
+/// * `get_parent` - Closure to extract the optional parent key reference
+/// * `clear_parent` - Closure to clear the parent reference on a device
+/// * `set_children` - Closure to set the children list on a device
+pub fn build_parent_child_relationships<T>(
+    devices: &mut [T],
+    get_key: impl Fn(&T) -> &str,
+    get_parent: impl Fn(&T) -> Option<&str>,
+    clear_parent: impl Fn(&mut T),
+    set_children: impl Fn(&mut T, Vec<String>),
+) {
+    let known: std::collections::HashSet<String> = devices.iter().map(|d| get_key(d).to_string()).collect();
+    
+    // Clear orphaned parent references
+    for device in &mut *devices {
+        if !get_parent(device).is_some_and(|p| known.contains(p)) {
+            clear_parent(device);
+        }
+    }
+    
+    // Build children map
+    let mut children: HashMap<String, Vec<String>> = HashMap::new();
+    for device in &*devices {
+        if let Some(parent) = get_parent(device) {
+            children
+                .entry(parent.to_string())
+                .or_default()
+                .push(get_key(device).to_string());
+        }
+    }
+    
+    // Assign sorted children to each device
+    for device in &mut *devices {
+        if let Some(ids) = children.get(get_key(device)) {
+            let mut ids = ids.clone();
+            ids.sort();
+            set_children(device, ids);
+        }
+    }
+    
+    // Sort devices by key
+    devices.sort_by(|a, b| get_key(a).cmp(get_key(b)));
+}
+
 /// Create a unique temporary directory under the system temp dir.
 /// `prefix` is the test-name portion (e.g. `"edgerun-linux-pci"`).
 #[must_use]

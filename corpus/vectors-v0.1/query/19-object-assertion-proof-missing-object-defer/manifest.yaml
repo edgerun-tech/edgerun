@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: object assertion proof is deferred when it claims existence but the object is not locally available
+description: object assertion proof is deferred when it claims existence but the object
+  is not locally available
 tags:
 - query
 - proof

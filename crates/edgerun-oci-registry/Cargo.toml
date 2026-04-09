@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-oci-registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
+edgerun-core = { path = "../edgerun-core" }
+serde = { version = "1", features = ["derive"] }
+lifegraph-json = { path = "/home/ken/lifegraph-json", features = ["serde"] }
+flate2 = "1"
+tar = "0.4"
+zstd = "0.13"
+ureq = "2"

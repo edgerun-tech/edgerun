@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: reachability hint is accepted as advisory metadata when its validity window is sound
+description: reachability hint is accepted as advisory metadata when its validity
+  window is sound
 tags:
 - network
 - validate_network

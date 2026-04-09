@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: proof bundle is deferred when the declared payload object is required locally but unavailable
+description: proof bundle is deferred when the declared payload object is required
+  locally but unavailable
 tags:
 - query
 - proof

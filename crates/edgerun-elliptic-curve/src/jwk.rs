@@ -164,13 +164,13 @@ impl FromStr for JwkEcKey {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        serde_json::from_str(s).map_err(|_| Error)
+        lifegraph_json::from_str(s).map_err(|_| Error)
     }
 }
 
 impl ToString for JwkEcKey {
     fn to_string(&self) -> String {
-        serde_json::to_string(self).expect("JWK encoding error")
+        lifegraph_json::to_string(self).expect("JWK encoding error")
     }
 }
 

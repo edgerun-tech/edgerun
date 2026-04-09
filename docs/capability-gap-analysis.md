@@ -1,8 +1,12 @@
 # edgerun Crates: Hardware Capability Support and Gaps
 
-This document summarizes each crate in `rust/crates` with:
+This document summarizes each crate in `crates/` with:
 - what is implemented (surface API / traits / features)
 - what is missing to reach a *full hardware capability* implementation
+
+> **Note:** Many hardware adapter crates are optional dependencies of `edgerun-node`
+> (under the `all-hardware` feature flag) and are excluded from the default workspace
+> to avoid compilation failures on systems without the required hardware headers.
 
 ## 3. edgerun-alsa-microphone
 - Has: backend stub, capability descriptor, trait implementationscode

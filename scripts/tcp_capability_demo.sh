@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RUST_DIR="$ROOT/rust"
 ADDR="${1:-127.0.0.1:47070}"
 SERVER_LOG="${TMPDIR:-/tmp}/edgerun-capability-demo-server.log"
 CLIENT_LOG="${TMPDIR:-/tmp}/edgerun-capability-demo-client.log"
@@ -15,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-cd "$RUST_DIR"
+cd "$ROOT"
 
 echo "[demo] starting server on tcp:$ADDR"
 cargo run -q -p edgerun-remote-capability --bin capability-demo-server -- tcp "$ADDR" \

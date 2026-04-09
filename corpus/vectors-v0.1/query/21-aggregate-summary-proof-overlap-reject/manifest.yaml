@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: aggregate summary proof is rejected when included and excluded responders overlap
+description: aggregate summary proof is rejected when included and excluded responders
+  overlap
 tags:
 - query
 - proof

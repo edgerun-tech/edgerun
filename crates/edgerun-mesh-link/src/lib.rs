@@ -2367,4 +2367,112 @@ mod tests {
         // No transports, so no actual send, but queue is drained
         assert_eq!(link.pending_count(), 0);
     }
+
+
+    // =======================================================================
+    // Integration Tests
+    // =======================================================================
+
+    /// Integration test: Signed discovery frame creation, signing, wire format.
+    ///
+    /// Verifies that a discovery frame can be created, signed, serialized to
+    /// wire format, parsed back, and the signature still verifies.
+    #[test]
+    fn integration_discovery_frame_roundtrip() {
+        use edgerun_mesh::{LocalNode, FrameType, MeshFrame};
+        use edgerun_mesh_router::{MeshRouter, DiscoveryPacket};
+
+        let (my_node_id, signing_key) = make_real_keypair();
+
+        // Create a discovery packet
+        let mut local = LocalNode::new(my_node_id);
+        let router = MeshRouter::new(local.clone());
+        let disc_packet = DiscoveryPacket::from_local(&mut local, router.routing_table());
+        let payload = disc_packet.encode();
+
+        // Create and sign the frame (broadcast destination)
+        let mut frame = MeshFrame {
+            header: edgerun_mesh::MeshFrameHeader {
+                dest: node_id(0xFF),
+                src: my_node_id,
+                ttl: 16,
+                frame_type: FrameType::Discovery,
+            },
+            payload,
+            signature: [0u8; 64],
+        };
+        edgerun_mesh::sign_frame(&mut frame, &signing_key);
+
+        // Verify signature
+        assert!(frame.verify_signature(), "discovery frame signature should be valid");
+        assert_eq!(frame.header.frame_type, FrameType::Discovery);
+        assert_eq!(frame.header.src, my_node_id);
+
+        // Wire format round-trip
+        let wire = frame.to_wire();
+        let parsed = MeshFrame::from_wire(&wire).unwrap();
+        assert_eq!(parsed.header.dest, frame.header.dest);
+        assert_eq!(parsed.header.src, frame.header.src);
+        assert_eq!(parsed.header.ttl, frame.header.ttl);
+        assert_eq!(parsed.header.frame_type, frame.header.frame_type);
+        assert_eq!(parsed.payload, frame.payload);
+        assert_eq!(parsed.signature, frame.signature);
+        assert!(parsed.verify_signature(), "parsed frame signature should verify");
+    }
+
+    /// Integration test: Discovery frame queued and processed through router.
+    ///
+    /// Verifies that a discovery frame queued via MeshLink can be drained,
+    /// parsed, and processed by a MeshRouter to update routing state.
+    #[test]
+    fn integration_discovery_to_routing() {
+        use edgerun_mesh::{LocalNode, FrameType, MeshFrame};
+        use edgerun_mesh_router::{MeshRouter, DiscoveryPacket};
+
+        let (node_a_id, signing_key_a) = make_real_keypair();
+        let (node_b_id, _) = make_real_keypair();
+
+        // Create a signed discovery frame from A
+        let mut local_a = LocalNode::new(node_a_id);
+        let router_a = MeshRouter::new(local_a.clone());
+        let disc_packet = DiscoveryPacket::from_local(&mut local_a, router_a.routing_table());
+        let payload = disc_packet.encode();
+
+        let mut frame = MeshFrame {
+            header: edgerun_mesh::MeshFrameHeader {
+                dest: node_id(0xFF),
+                src: node_a_id,
+                ttl: 16,
+                frame_type: FrameType::Discovery,
+            },
+            payload,
+            signature: [0u8; 64],
+        };
+        edgerun_mesh::sign_frame(&mut frame, &signing_key_a);
+
+        // Queue the frame in MeshLink
+        let mut link_a = MeshLink::new();
+        link_a.set_local_node_id(node_a_id);
+        link_a.queue_frame(frame);
+
+        // Drain and deliver to B
+        let frames = link_a.drain_pending_frames_raw();
+        assert_eq!(frames.len(), 1, "should have one queued frame");
+
+        let mut router_b = MeshRouter::new(LocalNode::new(node_b_id));
+        for frame in frames {
+            assert!(frame.verify_signature(), "frame from A should be signed");
+
+            // Parse discovery payload and process through B's router
+            if let Some(packet) = DiscoveryPacket::decode(&frame.payload) {
+                router_b.process_discovery(node_a_id, &packet, 1000);
+            }
+        }
+
+        // B should have learned about A
+        assert!(router_b.has_route_to(&node_a_id),
+            "B should have route to A after processing discovery frame");
+        assert_eq!(router_b.next_hop_for(&node_a_id), Some(node_a_id),
+            "B's next hop to A should be A directly");
+    }
 }

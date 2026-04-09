@@ -6,7 +6,7 @@ managed:
       value: edgerun-reference-core/gen
 plugins:
   - local: protoc-gen-prost
-    out: rust/crates/edgerun-proto/src/gen
+    out: crates/edgerun-proto/src/gen
     opt:
       - paths=source_relative
       - enable_type_names

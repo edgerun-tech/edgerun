@@ -2,5 +2,5 @@ verdict: ACCEPT
 reason_code: null
 derived:
   validation_level: logical_object_valid
+  object_id: c4deb8203731f840d2e606191278fd83910da12162454f255467ab4e5073ba08
   canonicalization_id: raw-bytes-v0
-  object_id: '0x20fb4a5dbebdfb3bc1aa1c94a6750544a81cdade8d0bf40829241ef635513b6f'

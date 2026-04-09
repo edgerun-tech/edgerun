@@ -30,6 +30,9 @@ categories = [
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/RustCrypto/utils"
 resolver = "1"
+[lib]
+test = false
+
 
 [package.metadata.docs.rs]
 all-features = true

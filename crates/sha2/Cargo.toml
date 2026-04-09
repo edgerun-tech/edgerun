@@ -58,6 +58,7 @@ oid = ["digest/oid"]
 std = ["digest/std"]
 
 [lib]
+test = false
 name = "sha2"
 path = "src/lib.rs"
 

@@ -3,7 +3,8 @@ suite: object
 validator: validate_object_retrieval
 version: 1
 priority: mandatory
-description: chunked representation validates when all chunks are present and digests match
+description: chunked representation validates when all chunks are present and digests
+  match
 tags:
 - object
 - validate_object_retrieval

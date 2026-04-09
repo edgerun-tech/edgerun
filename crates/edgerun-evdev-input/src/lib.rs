@@ -7,7 +7,9 @@ use edgerun_linux_sysfs::read_trimmed;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::os::fd::AsRawFd;
+use std::os::raw::{c_int, c_ulong};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 const EV_SYN: u16 = 0x00;
 const EV_KEY: u16 = 0x01;
@@ -15,6 +17,21 @@ const EV_REL: u16 = 0x02;
 const EV_ABS: u16 = 0x03;
 const EV_MSC: u16 = 0x04;
 const EV_SW: u16 = 0x05;
+const EV_LED: u16 = 0x11;
+const EV_FF: u16 = 0x15;
+
+// evdev ioctls
+const EVIOCGNAME: c_ulong = 0x81004506; // _IOC(_IOC_READ, 'E', 0x06, 256)
+const EVIOCGPHYS: c_ulong = 0x81004507;
+const EVIOCGUNIQ: c_ulong = 0x81004508;
+const EVIOCGBIT: c_ulong = 0x80004520; // _IOC(_IOC_READ, 'E', 0x20, len)
+const EVIOCGRAB: c_ulong = 0x40044590; // _IOC(_IOC_WRITE, 'E', 0x90, 4)
+const EVIOCREVOKE: c_ulong = 0x40044591;
+
+// poll constants
+const POLLIN: i16 = 0x001;
+const POLLERR: i16 = 0x008;
+const POLLHUP: i16 = 0x010;
 
 const KEY_A: usize = 30;
 const BTN_MOUSE: usize = 0x110;
@@ -243,7 +260,162 @@ impl EvdevInputBackend {
             .read(true)
             .open(&path)
             .map_err(|e| CapabilityError::Provider(format!("open {}: {e}", path.display())))?;
+
+        // Set non-blocking mode for event loop support
+        let fd = file.as_raw_fd();
+        let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
+        if flags >= 0 {
+            unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) };
+        }
+
         Ok(Self { info, file })
+    }
+
+    /// Read events with a timeout. Returns empty Vec if timeout expires.
+    /// This is the primary event loop method — it uses poll() to wait
+    /// for events with a deadline, then reads all available events.
+    pub fn read_events_timeout(
+        &mut self,
+        max_events: usize,
+        timeout: Duration,
+    ) -> Result<Vec<InputEventRecord>, CapabilityError> {
+        let event_size = std::mem::size_of::<LinuxInputEvent>();
+        let mut buf = vec![0u8; event_size * max_events];
+        let mut total_read = 0;
+        let deadline = Instant::now() + timeout;
+
+        loop {
+            // Check if we've hit the deadline
+            let now = Instant::now();
+            if now >= deadline {
+                break;
+            }
+
+            // Poll the file descriptor
+            let remaining = deadline - now;
+            let timeout_ms = remaining.as_millis().min(i32::MAX as u128) as i32;
+
+            let mut pollfd = libc::pollfd {
+                fd: self.file.as_raw_fd(),
+                events: POLLIN,
+                revents: 0,
+            };
+
+            let ret = unsafe {
+                libc::poll(&mut pollfd, 1, timeout_ms)
+            };
+
+            if ret < 0 {
+                let err = std::io::Error::last_os_error();
+                if err.kind() == std::io::ErrorKind::Interrupted {
+                    continue; // EINTR, retry
+                }
+                return Err(CapabilityError::Provider(
+                    format!("poll evdev fd {}: {}", self.file.as_raw_fd(), err).into(),
+                ));
+            }
+
+            if ret == 0 {
+                break; // Timeout
+            }
+
+            // Check for errors
+            if pollfd.revents & (POLLERR | POLLHUP) != 0 {
+                return Err(CapabilityError::Provider(
+                    format!("evdev fd {} error/hangup", self.file.as_raw_fd()).into(),
+                ));
+            }
+
+            // Read available events
+            let remaining_bytes = buf.len() - total_read;
+            if remaining_bytes < event_size {
+                break; // Buffer full
+            }
+
+            match self.file.read(&mut buf[total_read..total_read + remaining_bytes]) {
+                Ok(0) => {
+                    // EOF — device disconnected
+                    return Err(CapabilityError::Provider(
+                        format!("evdev fd {} EOF (device disconnected)", self.file.as_raw_fd()).into(),
+                    ));
+                }
+                Ok(n) => {
+                    total_read += n;
+                }
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::WouldBlock {
+                        continue; // No data yet, poll again
+                    }
+                    return Err(CapabilityError::Provider(
+                        format!("read evdev fd {}: {}", self.file.as_raw_fd(), e).into(),
+                    ));
+                }
+            }
+        }
+
+        // Parse the events we collected
+        if total_read % event_size != 0 {
+            return Err(CapabilityError::Provider(
+                "evdev read returned partial input_event records".into(),
+            ));
+        }
+
+        let mut out = Vec::new();
+        for chunk in buf[..total_read].chunks_exact(event_size) {
+            let event = unsafe { (chunk.as_ptr() as *const LinuxInputEvent).read_unaligned() };
+            out.push(InputEventRecord {
+                timestamp_sec: event.time.tv_sec,
+                timestamp_usec: event.time.tv_usec,
+                kind: event_kind(event.type_),
+                code: event.code,
+                value: event.value,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Read all currently available events without blocking.
+    /// Returns empty Vec if no events are pending.
+    pub fn read_events_nonblocking(
+        &mut self,
+        max_events: usize,
+    ) -> Result<Vec<InputEventRecord>, CapabilityError> {
+        self.read_events_timeout(max_events, Duration::ZERO)
+    }
+
+    /// Grab exclusive access to the device (EVIOCGRAB).
+    /// While grabbed, no other process receives events from this device.
+    pub fn grab(&self, grab: bool) -> Result<(), CapabilityError> {
+        let grab_val: c_int = if grab { 1 } else { 0 };
+        let ret = unsafe {
+            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as c_ulong, grab_val)
+        };
+        if ret < 0 {
+            Err(CapabilityError::Provider(
+                format!("EVIOCGRAB failed: {}", std::io::Error::last_os_error()).into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Get device name via EVIOCGNAME ioctl (more reliable than sysfs).
+    pub fn ioctl_device_name(&self) -> Result<String, CapabilityError> {
+        let mut buf = [0u8; 256];
+        let ret = unsafe {
+            libc::ioctl(self.file.as_raw_fd(), EVIOCGNAME, buf.as_mut_ptr())
+        };
+        if ret < 0 {
+            return Err(CapabilityError::Provider(
+                format!("EVIOCGNAME failed: {}", std::io::Error::last_os_error()).into(),
+            ));
+        }
+        let len = ret as usize;
+        let name = std::str::from_utf8(&buf[..len])
+            .map_err(|e| CapabilityError::Provider(format!("invalid device name: {}", e).into()))?
+            .trim_end_matches('\0')
+            .to_string();
+        Ok(name)
     }
 }
 
@@ -268,28 +440,8 @@ impl InputDevice for EvdevInputBackend {
 
     fn read_events(&mut self, max_events: usize) -> Result<Vec<InputEventRecord>, CapabilityError> {
         validate_event_read_request(max_events)?;
-        let event_size = std::mem::size_of::<LinuxInputEvent>();
-        let mut buf = vec![0u8; event_size * max_events];
-        let bytes_read = self.file.read(&mut buf).map_err(|e| {
-            CapabilityError::Provider(format!("read evdev fd {}: {e}", self.file.as_raw_fd()))
-        })?;
-        if bytes_read % event_size != 0 {
-            return Err(CapabilityError::Provider(
-                "evdev read returned partial input_event records".into(),
-            ));
-        }
-        let mut out = Vec::new();
-        for chunk in buf[..bytes_read].chunks_exact(event_size) {
-            let event = unsafe { (chunk.as_ptr() as *const LinuxInputEvent).read_unaligned() };
-            out.push(InputEventRecord {
-                timestamp_sec: event.time.tv_sec,
-                timestamp_usec: event.time.tv_usec,
-                kind: event_kind(event.type_),
-                code: event.code,
-                value: event.value,
-            });
-        }
-        Ok(out)
+        // Non-blocking: return whatever events are available right now
+        self.read_events_nonblocking(max_events)
     }
 }
 

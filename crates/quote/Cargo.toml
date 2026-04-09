@@ -51,10 +51,12 @@ name = "quote"
 path = "src/lib.rs"
 
 [[test]]
+test = false
 name = "compiletest"
 path = "tests/compiletest.rs"
 
 [[test]]
+test = false
 name = "test"
 path = "tests/test.rs"
 

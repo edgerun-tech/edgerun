@@ -24,6 +24,7 @@ use edgerun_core::protocol::{
 };
 use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
 use prost_types::Timestamp;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Stream writer
@@ -34,14 +35,14 @@ pub struct StreamWriter {
     stream_id: Vec<u8>,
     head: Option<EventEnvelope>,
     events: Vec<EventEnvelope>,
-    signer: Box<dyn MeshSigner>,
+    signer: Arc<dyn MeshSigner>,
 }
 
 impl StreamWriter {
     /// Creates a new stream writer, producing the genesis event.
     pub fn new(
         stream_id: String,
-        signer: Box<dyn MeshSigner>,
+        signer: Arc<dyn MeshSigner>,
         recorded_at_ms: i64,
     ) -> Result<Self, StreamError> {
         let stream_id_bytes = stream_id.as_bytes().to_vec();
@@ -324,6 +325,7 @@ impl std::error::Error for StreamError {}
 mod tests {
     use super::*;
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
+    use std::sync::Arc;
 
     fn random_signing_key() -> p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
@@ -383,7 +385,7 @@ mod tests {
     fn append_creates_contiguous_sequence() {
         let signer = TestSigner::new();
         let mut writer =
-            StreamWriter::new("stream-1".into(), Box::new(signer), 1000).unwrap();
+            StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
 
         for i in 0..3 {
             writer
@@ -501,7 +503,7 @@ mod tests {
         let signer = TestSigner::new();
         let writer_id = signer.node_id();
         let mut writer =
-            StreamWriter::new("stream-1".into(), Box::new(signer), 1000).unwrap();
+            StreamWriter::new("stream-1".into(), Arc::new(signer), 1000).unwrap();
 
         let mut events = Vec::new();
         events.push(writer.head().unwrap().clone());
@@ -559,7 +561,7 @@ mod tests {
     #[test]
     fn stream_writer_new_produces_signed_genesis() {
         let signer = TestSigner::new();
-        let writer = StreamWriter::new("s".into(), Box::new(signer), 5000).unwrap();
+        let writer = StreamWriter::new("s".into(), Arc::new(signer), 5000).unwrap();
         let genesis = writer.head().unwrap();
         assert!(genesis.signature.is_some());
         let sig = genesis.signature.as_ref().unwrap();
@@ -570,7 +572,7 @@ mod tests {
     #[test]
     fn stream_writer_events_have_contiguous_seq() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         for i in 0..10 {
             let ev = w.append(1, 1, i).unwrap();
             assert_eq!(ev.seq, (i + 1) as u64);
@@ -580,7 +582,7 @@ mod tests {
     #[test]
     fn stream_writer_events_have_correct_prev_hash() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let genesis = w.head().unwrap().clone();
         let genesis_hash = compute_event_hash(&genesis);
         let ev1 = w.append(1, 1, 0).unwrap();
@@ -590,7 +592,7 @@ mod tests {
     #[test]
     fn stream_writer_events_are_signed() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(1, 1, 0).unwrap();
         assert!(ev.signature.is_some());
         assert_eq!(ev.signature.as_ref().unwrap().value.len(), 64);
@@ -599,7 +601,7 @@ mod tests {
     #[test]
     fn stream_writer_stream_id_accessor() {
         let signer = TestSigner::new();
-        let w = StreamWriter::new("my-stream".into(), Box::new(signer), 0).unwrap();
+        let w = StreamWriter::new("my-stream".into(), Arc::new(signer), 0).unwrap();
         assert_eq!(w.stream_id(), b"my-stream");
     }
 
@@ -607,14 +609,14 @@ mod tests {
     fn stream_writer_writer_accessor() {
         let signer = TestSigner::new();
         let expected = signer.node_id();
-        let w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         assert_eq!(w.writer(), expected);
     }
 
     #[test]
     fn stream_writer_events_accessor() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         w.append(1, 1, 0).unwrap();
         w.append(2, 1, 1).unwrap();
         assert_eq!(w.events().len(), 3); // genesis + 2 appended
@@ -628,7 +630,7 @@ mod tests {
     #[test]
     fn append_increments_event_type_and_version() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(42, 7, 0).unwrap();
         assert_eq!(ev.event_type, 42);
         assert_eq!(ev.event_version, 7);
@@ -637,7 +639,7 @@ mod tests {
     #[test]
     fn append_records_timestamp() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(1, 1, 9_999_999).unwrap();
         let ts = ev.recorded_at.unwrap();
         assert_eq!(ts.seconds, 9999);
@@ -647,7 +649,7 @@ mod tests {
     #[test]
     fn append_produces_empty_related_lists() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(1, 1, 0).unwrap();
         assert!(ev.related_events.is_empty());
         assert!(ev.related_commands.is_empty());
@@ -872,7 +874,7 @@ mod tests {
     #[test]
     fn validate_stream_long_chain_validates_correctly() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("long-chain".into(), Box::new(signer.clone()), 0).unwrap();
+        let mut w = StreamWriter::new("long-chain".into(), Arc::new(signer.clone()), 0).unwrap();
         for i in 0..50 {
             w.append(1, 1, i).unwrap();
         }
@@ -919,7 +921,7 @@ mod tests {
     #[test]
     fn event_envelope_version_is_one() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         assert_eq!(w.head().unwrap().envelope_version, 1);
         let ev = w.append(1, 1, 0).unwrap();
         assert_eq!(ev.envelope_version, 1);
@@ -928,7 +930,7 @@ mod tests {
     #[test]
     fn event_effective_at_is_none_by_default() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(1, 1, 0).unwrap();
         assert!(ev.effective_at.is_none());
     }
@@ -936,7 +938,7 @@ mod tests {
     #[test]
     fn event_metadata_is_none_by_default() {
         let signer = TestSigner::new();
-        let mut w = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let mut w = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
         let ev = w.append(1, 1, 0).unwrap();
         assert!(ev.event_metadata.is_none());
     }
@@ -1122,7 +1124,7 @@ mod tests {
     fn stream_writer_clone_impl_trait() {
         // Verify TestSigner works as Box<dyn MeshSigner>
         let signer = TestSigner::new();
-        let _ = StreamWriter::new("s".into(), Box::new(signer), 0).unwrap();
+        let _ = StreamWriter::new("s".into(), Arc::new(signer), 0).unwrap();
     }
 
     #[test]

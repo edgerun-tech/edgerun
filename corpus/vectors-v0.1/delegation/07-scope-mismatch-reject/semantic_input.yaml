@@ -18,4 +18,5 @@ delegation_chain:
   signature_fixture: user_alice
   signature:
     algorithm: ed25519
-    value: '0x54faf309234079a19215e645041b65ae4c6a6528eddbe9a80aac8d658ad0dc496c85f14e147fe1a22997af35d3b40be378a0fce2d5b91b3ea27d80d805bace03'
+    value: '0x30460221009e0af571d7b79fb29703beeead21a3a926e289e25054e15fec3380280ce8fd9b022100eb898c7144e01d991c905a35a728ed5b74a63e5f0f0e002edcf51d5d8560fa4d'
+  delegation_hash: '0x9d933634f3a2699b3fbce456766d84ed56051eeb9f449a7c9ed8f7312a2cb21d'

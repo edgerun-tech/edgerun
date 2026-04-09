@@ -5,6 +5,7 @@ package edgerun.v0.stream;
 import "google/protobuf/timestamp.proto";
 import "edgerun/v0/common.proto";
 import "edgerun/v0/trust.proto";
+import "edgerun/v0/capability.proto";
 
 enum EventType {
   EVENT_TYPE_UNSPECIFIED = 0;
@@ -15,6 +16,10 @@ enum EventType {
   EVENT_TYPE_ACTION_STARTED = 5;
   EVENT_TYPE_ACTION_COMPLETED = 6;
   EVENT_TYPE_ACTION_FAILED = 7;
+  EVENT_TYPE_CAPABILITY_GRANTED = 8;
+  EVENT_TYPE_CAPABILITY_REVOKED = 9;
+  EVENT_TYPE_DELEGATION_CREATED = 10;
+  EVENT_TYPE_REVOCATION_CREATED = 11;
 }
 
 enum CommandDecision {
@@ -40,6 +45,7 @@ enum CommandType {
   COMMAND_TYPE_FETCH_OBJECT = 6;
   COMMAND_TYPE_QUERY = 7;
   COMMAND_TYPE_EXECUTE_WORKLOAD = 8;
+  COMMAND_TYPE_TERMINATE_WORKLOAD = 9;
   COMMAND_TYPE_CUSTOM = 1000;
 }
 

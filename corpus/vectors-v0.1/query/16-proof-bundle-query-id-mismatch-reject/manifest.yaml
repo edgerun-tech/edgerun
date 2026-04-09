@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: proof bundle is rejected when source query id does not match the active query
+description: proof bundle is rejected when source query id does not match the active
+  query
 tags:
 - query
 - proof

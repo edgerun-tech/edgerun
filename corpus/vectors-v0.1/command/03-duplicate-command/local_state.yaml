@@ -3,7 +3,7 @@ local_node: node_server
 current_controller_set:
 - user_alice
 replay_cache:
-  '0xa0083be711f3622f925ace2c79f2735aa7db736dd2a3c993752d83dd4902ec8a':
-    command_id: 'cmd_same'
+  '0x160d74751f9b6a9e61caeaac2df28273aaf7d361156528e4d1deb8f23efc9034':
+    command_id: cmd_same
     decision: committed
 policy_profile: default-v0

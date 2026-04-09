@@ -3,7 +3,8 @@ suite: object
 validator: validate_object_retrieval
 version: 1
 priority: mandatory
-description: chunk manifest is rejected when chunk_count does not match number of entries
+description: chunk manifest is rejected when chunk_count does not match number of
+  entries
 tags:
 - object
 - validate_object_retrieval

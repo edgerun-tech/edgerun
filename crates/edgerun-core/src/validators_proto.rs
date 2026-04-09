@@ -145,11 +145,42 @@ fn compute_event_hash(event: &EventEnvelope) -> crate::protocol::Digest {
     }
 }
 
-fn verify_event_signature(_event: &EventEnvelope, _key: &[u8; 64]) -> bool {
-    // Full verification requires the same DER/raw signature handling
-    // as in command.rs. For now, signature presence is validated above.
-    // TODO: wire up the same from_scalars verification from command.rs
-    true
+fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
+    let Some(sig) = &event.signature else {
+        return false;
+    };
+
+    if sig.algorithm != 1 {
+        return false;
+    }
+
+    if sig.value.len() != 64 {
+        return false;
+    }
+
+    let vk = match crate::crypto::node_id_to_verifying_key(key) {
+        Some(vk) => vk,
+        None => return false,
+    };
+
+    let record = ProtocolRecord::EventEnvelope(event.clone());
+    let canonical = canonical_bytes(&record, true);
+    let record_hash = crate::crypto::sha256(&canonical);
+
+    let sig_input = crate::crypto::signature_input(
+        crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+        &record_hash,
+    );
+
+    use p256::ecdsa::signature::hazmat::PrehashVerifier;
+    let Ok(ecdsa_sig) = p256::ecdsa::Signature::from_scalars(
+        *p256::FieldBytes::from_slice(&sig.value[..32]),
+        *p256::FieldBytes::from_slice(&sig.value[32..]),
+    ) else {
+        return false;
+    };
+
+    vk.verify_prehash(&sig_input, &ecdsa_sig).is_ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -624,5 +655,97 @@ mod tests {
         let result = validate_snapshot(&snapshot, &[b"trusted".to_vec()]);
         assert_eq!(result.verdict, crate::result::Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    // ------------------------------------------------------------------
+    // Event signature verification — regression tests to catch no-op
+    // verify_event_signature implementations.
+    // ------------------------------------------------------------------
+
+    /// Signs an event with a real ECDSA P-256 key and attaches the signature.
+    fn sign_event_envelope(event: &EventEnvelope, signing_key: &p256::ecdsa::SigningKey) -> EventEnvelope {
+        let record = ProtocolRecord::EventEnvelope(event.clone());
+        let canonical = canonical_bytes(&record, true);
+        let record_hash = crate::crypto::sha256(&canonical);
+
+        let sig = crate::crypto::sign_record(
+            signing_key,
+            crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
+            &record_hash,
+        );
+
+        let mut event = event.clone();
+        event.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: sig,
+        });
+        event
+    }
+
+    #[test]
+    fn event_signature_valid_is_accepted() {
+        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
+
+        let genesis = make_genesis_event();
+        let signed = sign_event_envelope(&genesis, &signing_key);
+
+        let result = validate_stream_append(&signed, None, Some(&node_id));
+        assert_eq!(result.verdict, crate::result::Verdict::Accept);
+    }
+
+    #[test]
+    fn event_signature_invalid_is_rejected() {
+        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
+
+        let genesis = make_genesis_event();
+        let mut signed = sign_event_envelope(&genesis, &signing_key);
+
+        // Tamper with one byte of the signature
+        if let Some(ref mut sig) = signed.signature {
+            sig.value[0] ^= 0xFF;
+        }
+
+        let result = validate_stream_append(&signed, None, Some(&node_id));
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::CryptoInvalid));
+    }
+
+    #[test]
+    fn event_signature_wrong_key_is_rejected() {
+        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
+
+        let other_key = p256::ecdsa::SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
+
+        let genesis = make_genesis_event();
+        let signed = sign_event_envelope(&genesis, &other_key);
+
+        // Verify with the WRONG key
+        let result = validate_stream_append(&signed, None, Some(&node_id));
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::CryptoInvalid));
+    }
+
+    #[test]
+    fn event_signature_bogus_bytes_are_rejected() {
+        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
+
+        let mut event = make_genesis_event();
+        // Put garbage in the signature value — this must NOT be accepted.
+        event.signature = Some(crate::protocol::Signature {
+            algorithm: 1,
+            value: vec![0xDE; 64],
+        });
+
+        let result = validate_stream_append(&event, None, Some(&node_id));
+        assert_eq!(result.verdict, crate::result::Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::CryptoInvalid));
     }
 }

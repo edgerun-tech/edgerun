@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: aggregate trust policy is advisory-accepted when issued by a configured trust root
+description: aggregate trust policy is advisory-accepted when issued by a configured
+  trust root
 tags:
 - network
 - route

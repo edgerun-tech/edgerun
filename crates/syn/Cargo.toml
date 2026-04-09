@@ -93,114 +93,142 @@ name = "syn"
 path = "src/lib.rs"
 
 [[test]]
+test = false
 name = "regression"
 path = "tests/regression.rs"
 
 [[test]]
+test = false
 name = "test_asyncness"
 path = "tests/test_asyncness.rs"
 
 [[test]]
+test = false
 name = "test_attribute"
 path = "tests/test_attribute.rs"
 
 [[test]]
+test = false
 name = "test_derive_input"
 path = "tests/test_derive_input.rs"
 
 [[test]]
+test = false
 name = "test_expr"
 path = "tests/test_expr.rs"
 
 [[test]]
+test = false
 name = "test_generics"
 path = "tests/test_generics.rs"
 
 [[test]]
+test = false
 name = "test_grouping"
 path = "tests/test_grouping.rs"
 
 [[test]]
+test = false
 name = "test_ident"
 path = "tests/test_ident.rs"
 
 [[test]]
+test = false
 name = "test_item"
 path = "tests/test_item.rs"
 
 [[test]]
+test = false
 name = "test_lit"
 path = "tests/test_lit.rs"
 
 [[test]]
+test = false
 name = "test_meta"
 path = "tests/test_meta.rs"
 
 [[test]]
+test = false
 name = "test_parse_buffer"
 path = "tests/test_parse_buffer.rs"
 
 [[test]]
+test = false
 name = "test_parse_quote"
 path = "tests/test_parse_quote.rs"
 
 [[test]]
+test = false
 name = "test_parse_stream"
 path = "tests/test_parse_stream.rs"
 
 [[test]]
+test = false
 name = "test_pat"
 path = "tests/test_pat.rs"
 
 [[test]]
+test = false
 name = "test_path"
 path = "tests/test_path.rs"
 
 [[test]]
+test = false
 name = "test_precedence"
 path = "tests/test_precedence.rs"
 
 [[test]]
+test = false
 name = "test_punctuated"
 path = "tests/test_punctuated.rs"
 
 [[test]]
+test = false
 name = "test_receiver"
 path = "tests/test_receiver.rs"
 
 [[test]]
+test = false
 name = "test_round_trip"
 path = "tests/test_round_trip.rs"
 
 [[test]]
+test = false
 name = "test_shebang"
 path = "tests/test_shebang.rs"
 
 [[test]]
+test = false
 name = "test_size"
 path = "tests/test_size.rs"
 
 [[test]]
+test = false
 name = "test_stmt"
 path = "tests/test_stmt.rs"
 
 [[test]]
+test = false
 name = "test_token_trees"
 path = "tests/test_token_trees.rs"
 
 [[test]]
+test = false
 name = "test_ty"
 path = "tests/test_ty.rs"
 
 [[test]]
+test = false
 name = "test_unparenthesize"
 path = "tests/test_unparenthesize.rs"
 
 [[test]]
+test = false
 name = "test_visibility"
 path = "tests/test_visibility.rs"
 
 [[test]]
+test = false
 name = "zzz_stable"
 path = "tests/zzz_stable.rs"
 

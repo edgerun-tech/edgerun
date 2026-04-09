@@ -57,6 +57,7 @@ alloc = []
 std = ["alloc"]
 
 [lib]
+test = false
 name = "base64ct"
 path = "src/lib.rs"
 

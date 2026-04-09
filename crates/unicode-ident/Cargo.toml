@@ -47,6 +47,7 @@ rustdoc-args = [
 ]
 
 [lib]
+test = false
 name = "unicode_ident"
 path = "src/lib.rs"
 

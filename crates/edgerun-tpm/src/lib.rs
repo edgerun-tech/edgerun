@@ -4653,7 +4653,9 @@ mod tests {
         .unwrap();
         assert!(matches!(parsed, TpmParsedSignature::Ecc { .. }));
         assert_eq!(device.transport().commands.len(), 1);
-        assert_eq!(&device.transport().commands[0][0..2], &TPM_ST_NO_SESSIONS.to_be_bytes());
+        // None mode now uses an empty password auth session (TPM_ST_SESSIONS)
+        // because persisted keys with userWithAuth require at least an empty password session
+        assert_eq!(&device.transport().commands[0][0..2], &TPM_ST_SESSIONS.to_be_bytes());
     }
 
     #[test]

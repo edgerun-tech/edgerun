@@ -22,7 +22,7 @@ pub mod store;
 
 pub use error::StorageError;
 pub use blobs::{BlobStore, BlobKeySource, BlobEntry, blob_file_path};
-pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry};
+pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry, WorkAccountingRecord};
 pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
 
 #[cfg(test)]
@@ -639,11 +639,49 @@ mod tests {
 
         let recipients = vec![vec![1u8; 64], vec![2u8; 64], vec![3u8; 64]];
         let blob_id = store.put_blob(b"shared", &recipients).unwrap();
-        // Recipients are stored in SQLite; the BlobEntry loads them
         let entry = store.get_blob(&blob_id).unwrap().unwrap();
-        // In v0, recipients come from SQLite and may not be loaded in load()
-        // Just verify blob was stored
-        assert!(!blob_id.is_empty());
+        // Verify recipients are persisted and loaded back
+        assert_eq!(entry.recipients.len(), 3);
+        assert_eq!(entry.recipients[0], vec![1u8; 64]);
+        assert_eq!(entry.recipients[1], vec![2u8; 64]);
+        assert_eq!(entry.recipients[2], vec![3u8; 64]);
+    }
+
+    #[test]
+    fn blob_without_recipients_has_empty_list() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let mut store = NodeStore::open(&config).unwrap();
+
+        let blob_id = store.put_blob(b"no recipients", &[]).unwrap();
+        let entry = store.get_blob(&blob_id).unwrap().unwrap();
+        assert!(entry.recipients.is_empty());
+    }
+
+    #[test]
+    fn blob_recipients_survive_restart() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let recipients = vec![vec![0xAA; 64], vec![0xBB; 64]];
+
+        // First open: store blob with recipients
+        {
+            let mut store = NodeStore::open(&config).unwrap();
+            let blob_id = store.put_blob(b"persistent shared", &recipients).unwrap();
+            let entry = store.get_blob(&blob_id).unwrap().unwrap();
+            assert_eq!(entry.recipients.len(), 2);
+        }
+
+        // Second open: recipients should still be loadable
+        {
+            let store = NodeStore::open(&config).unwrap();
+            // Need to re-derive blob_id from content
+            let blob_id = edgerun_core::util::bytes_to_hex(&edgerun_core::crypto::sha256(b"persistent shared"));
+            let entry = store.get_blob(&blob_id).unwrap().unwrap();
+            assert_eq!(entry.recipients.len(), 2);
+            assert_eq!(entry.recipients[0], vec![0xAA; 64]);
+            assert_eq!(entry.recipients[1], vec![0xBB; 64]);
+        }
     }
 
     #[test]
@@ -1421,5 +1459,61 @@ mod tests {
         assert_eq!(result.object_id, vec![1, 2, 3]);
         assert_eq!(result.object_kind, 42);
         assert_eq!(result.content, b"hello");
+    }
+
+    // --- Index integrity ---
+
+    #[test]
+    fn integrity_check_passes_on_fresh_store() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let store = NodeStore::open(&config).unwrap();
+        assert!(store.integrity_check().unwrap());
+    }
+
+    #[test]
+    fn integrity_check_passes_after_writes() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let mut store = NodeStore::open(&config).unwrap();
+
+        // Write data that populates multiple index files
+        let _ = store.put_blob(b"test data", &[vec![1; 64]]);
+        store.store_delegation("deleg-test", "root", "user", "test-capability", None).unwrap();
+
+        assert!(store.integrity_check().unwrap());
+    }
+
+    #[test]
+    fn integrity_check_detects_corrupted_data() {
+        use crate::file_index::validate_bin_file;
+
+        // Test corrupted data first (simplest cases)
+        let corrupted: Vec<u8> = vec![100u8, 0, 0, 0, 0, 0, 0, 0, 0xAB, 0xCD];
+        let r1 = validate_bin_file(&corrupted, "peers.bin");
+        assert!(!r1, "should detect truncated string");
+
+        let corrupted2: Vec<u8> = vec![0];
+        let r2 = validate_bin_file(&corrupted2, "peers.bin");
+        assert!(!r2, "should detect incomplete record");
+
+        // Valid peers.bin data (with tag byte for Option<String> addr)
+        let valid_peers: Vec<u8> = {
+            let mut v = Vec::new();
+            v.extend_from_slice(&4u64.to_le_bytes());  // key len
+            v.extend_from_slice(b"peer");
+            v.push(1);  // tag: Some
+            v.extend_from_slice(&7u64.to_le_bytes());  // addr len
+            v.extend_from_slice(b"1.2.3.4");
+            v.extend_from_slice(&9u64.to_le_bytes());  // status len
+            v.extend_from_slice(b"connected");
+            v.push(1);  // last_seen tag: Some
+            v.extend_from_slice(&1000u64.to_le_bytes());
+            v.extend_from_slice(&1000u64.to_le_bytes());  // first_seen
+            v.push(1);  // is_bootstrap
+            v
+        };
+        let r3 = validate_bin_file(&valid_peers, "peers.bin");
+        assert!(r3, "valid peers should pass");
     }
 }

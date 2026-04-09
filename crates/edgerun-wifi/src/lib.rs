@@ -53,6 +53,7 @@ pub struct WifiAccessPointConfig {
     pub frequency_mhz: Option<u32>,
     pub hidden: bool,
     pub secure: bool,
+    pub passphrase: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -122,9 +123,20 @@ pub fn validate_access_point_config(
         ));
     }
     if config.secure {
-        return Err(edgerun_capabilities::CapabilityError::Unsupported(
-            "secure wifi access point setup is not implemented yet",
-        ));
+        match &config.passphrase {
+            None => {
+                return Err(edgerun_capabilities::CapabilityError::InvalidRequest(
+                    "wifi secure access point requires a passphrase",
+                ));
+            }
+            Some(passphrase) => {
+                if passphrase.len() < 8 || passphrase.len() > 63 {
+                    return Err(edgerun_capabilities::CapabilityError::InvalidRequest(
+                        "wifi passphrase must be 8-63 characters",
+                    ));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -327,6 +339,7 @@ mod tests {
             frequency_mhz: Some(2437),
             hidden: true,
             secure: false,
+            passphrase: None,
         };
         assert_eq!(config.ssid, "MyAP");
         assert!(config.hidden);
@@ -340,8 +353,10 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         };
         assert!(config.frequency_mhz.is_none());
+        assert!(config.passphrase.is_none());
     }
 
     // --- WifiAccessPointState ---
@@ -441,6 +456,7 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         };
         assert!(validate_access_point_config(&config).is_ok());
     }
@@ -452,6 +468,7 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -469,6 +486,7 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -486,6 +504,7 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         })
         .unwrap_err();
         assert_eq!(
@@ -503,24 +522,98 @@ mod tests {
             frequency_mhz: None,
             hidden: false,
             secure: false,
+            passphrase: None,
         };
         assert!(validate_access_point_config(&config).is_ok());
     }
 
     #[test]
-    fn secure_config_fails_with_unsupported() {
+    fn secure_config_without_passphrase_fails() {
         let err = validate_access_point_config(&WifiAccessPointConfig {
             ssid: "MyAP".to_string(),
             frequency_mhz: None,
             hidden: false,
             secure: true,
+            passphrase: None,
         })
         .unwrap_err();
         assert_eq!(
             err,
-            edgerun_capabilities::CapabilityError::Unsupported(
-                "secure wifi access point setup is not implemented yet"
+            edgerun_capabilities::CapabilityError::InvalidRequest(
+                "wifi secure access point requires a passphrase"
             )
         );
+    }
+
+    #[test]
+    fn secure_config_with_short_passphrase_fails() {
+        let err = validate_access_point_config(&WifiAccessPointConfig {
+            ssid: "MyAP".to_string(),
+            frequency_mhz: None,
+            hidden: false,
+            secure: true,
+            passphrase: Some("short".to_string()),
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            edgerun_capabilities::CapabilityError::InvalidRequest(
+                "wifi passphrase must be 8-63 characters"
+            )
+        );
+    }
+
+    #[test]
+    fn secure_config_with_long_passphrase_fails() {
+        let err = validate_access_point_config(&WifiAccessPointConfig {
+            ssid: "MyAP".to_string(),
+            frequency_mhz: None,
+            hidden: false,
+            secure: true,
+            passphrase: Some("a".repeat(64)),
+        })
+        .unwrap_err();
+        assert_eq!(
+            err,
+            edgerun_capabilities::CapabilityError::InvalidRequest(
+                "wifi passphrase must be 8-63 characters"
+            )
+        );
+    }
+
+    #[test]
+    fn secure_config_with_valid_passphrase_passes() {
+        let config = WifiAccessPointConfig {
+            ssid: "MyAP".to_string(),
+            frequency_mhz: None,
+            hidden: false,
+            secure: true,
+            passphrase: Some("mywifipassphrase".to_string()),
+        };
+        assert!(validate_access_point_config(&config).is_ok());
+    }
+
+    #[test]
+    fn secure_config_with_exactly_8_char_passphrase_passes() {
+        let config = WifiAccessPointConfig {
+            ssid: "MyAP".to_string(),
+            frequency_mhz: None,
+            hidden: false,
+            secure: true,
+            passphrase: Some("12345678".to_string()),
+        };
+        assert!(validate_access_point_config(&config).is_ok());
+    }
+
+    #[test]
+    fn secure_config_with_exactly_63_char_passphrase_passes() {
+        let config = WifiAccessPointConfig {
+            ssid: "MyAP".to_string(),
+            frequency_mhz: None,
+            hidden: false,
+            secure: true,
+            passphrase: Some("a".repeat(63)),
+        };
+        assert!(validate_access_point_config(&config).is_ok());
     }
 }

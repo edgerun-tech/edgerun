@@ -3,7 +3,8 @@ suite: query
 validator: validate_query
 version: 1
 priority: mandatory
-description: object assertion proof is rejected when it claims non-existence for an object already locally present
+description: object assertion proof is rejected when it claims non-existence for an
+  object already locally present
 tags:
 - query
 - proof

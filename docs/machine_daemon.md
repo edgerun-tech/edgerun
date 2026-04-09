@@ -1,87 +1,121 @@
-# Machine daemon: trust establishment, delegation bootstrap, and transport
+# Machine daemon: edgerund
 
 ## Goal
-Run the Rust machine daemon as the bootstrap layer that can:
 
-- load local controller and trust-root state
-- load query-policy defaults
-- establish signed peer sessions
-- optionally advertise direct routes to known peers
-- provide transport/session scaffolding for later delegation and executor policy work
+The `edgerund` binary (from the `edgerun-node` crate) is the primary machine daemon. It provides:
 
-## Current Rust implementation
+- TPM/YubiKey/software key provisioning for hardware-backed node identity
+- Mesh networking for peer discovery and routing (via `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-router`)
+- Command processing with ECDSA signature verification and delegation chain validation
+- OCI workload execution (container runtime with namespaces, cgroups v2, pivot_root)
+- Resource metering and RC-µs billing (compute marketplace)
+- Structured logging and health endpoint
+- Graceful signal handling (SIGINT/SIGTERM) and optional PID 1 init mode
 
-A first Rust scaffold now exists in `rust/crates/edgerun-machine-daemon`.
+## Current implementation
 
-It currently provides:
+The daemon lives in `crates/edgerun-node/` with the binary entry point at `crates/edgerun-node/src/main.rs`.
 
-- machine config loading from YAML or JSON
-- bootstrap projection into local validator state
-- signed `SessionHello` generation
-- signed `SessionAccept` verification
-- signed `RouteAdvertisement` generation
-- abstract peer transport hooks so the daemon is not tied to a specific RPC stack yet
-- tests for config parsing, bootstrap projection, successful peer establishment, and nonce mismatch rejection
+### CLI interface
 
-## Config schema
+```bash
+# Generate node identity (TPM, YubiKey, or software key)
+edgerund init --config node.yaml [--name NAME] [--software]
 
-```yaml
-version: 1
-controllers:
-  - node_server
-trust_roots:
-  - node_server
-query_policy:
-  proof_bundle_max_bytes: 1048576
-  metadata_only_query_classes:
-    - QUERY_CLASS_OBJECT_FETCH
-peers:
-  - name: node_phone
-    target_node: node_phone
-    address: quic://10.10.10.42:8080
-    transport_features: ["proto", "grpc-over-quic"]
-    protocol_versions: [1]
-    reconnect_interval: 30s
-    advertise_route: true
-    route_ttl: 2m
+# Start the daemon
+edgerund run --config node.yaml \
+  [--listen 0.0.0.0:8080] \
+  [--health-port 8888] \
+  [--log-level info] \
+  [--init]
+
+# Show node identity
+edgerund status --config node.yaml
 ```
 
-## Current flow
+### Key provisioning (`edgerund init`)
 
-1. Load machine config.
-2. Project controllers, trust roots, and query policy into bootstrap state.
-3. Build a signed `SessionHello`.
-4. Send it over an abstract peer transport.
-5. Verify the returned `SessionAccept`:
-   - nonce echo matches
-   - selected protocol version is supported
-   - selected transport features are a subset of what we offered
-   - signature verifies against the known peer identity
-6. Optionally advertise a signed direct route.
+1. Detects available hardware backends in priority order: TPM 2.0 (`/dev/tpmrm0`) → YubiKey (PIV slot 9a) → software key (`--software` flag)
+2. For TPM: creates ECDSA P-256 signing key via TSS2 ESAPI, persists to a TPM persistent handle (0x81000001–0x810000FF), derives NodeID from public key coordinates
+3. For YubiKey: reads existing ECDSA P-256 key from PIV slot 9a
+4. For software: generates an insecure in-memory key (dev-only)
+5. Writes YAML config with NodeID, signer type, and handle reference
+6. Runs performance benchmarks and caches `perf_cert.bin`
 
-## Why the transport is abstract right now
+### Daemon runtime (`edgerund run`)
 
-The current implementation intentionally avoids locking the daemon to one transport dependency too early.
-That keeps the trust/session logic reusable whether the eventual transport becomes:
+1. Loads config and signer (TPM, YubiKey, or software)
+2. Initializes structured logging
+3. Optionally installs PID 1 signal handlers (`--init` flag or when running as PID 1)
+4. Creates async runtime (`edgerun-rt`)
+5. Initializes mesh networking stack (edgerun-mesh + edgerun-mesh-link + edgerun-mesh-router)
+6. Starts TCP listener for peer connections (`--listen`)
+7. Starts health HTTP endpoint (`--health-port`)
+8. Enters main event loop: process commands, route mesh frames, manage workloads
 
-- a custom framed transport
-- local IPC
-- a capability-session bridge
+### Mesh networking
 
-## What is still missing
+The mesh stack provides peer-to-peer networking:
 
-This is bootstrap scaffolding, not the finished federation runtime.
+- **edgerun-mesh**: Frame types (130-byte header with dest/src NodeID, TTL, frame type), ECDSA-signed frames, routing table
+- **edgerun-mesh-link**: Raw Ethernet and UDP link layer, multicast discovery
+- **edgerun-mesh-router**: Bellman-Ford shortest-path routing, dead peer detection, multi-hop frame forwarding
 
-Still missing:
+### Command processing
 
-- actual network client/server transport implementation
-- persistent session store
-- trust-root and controller mutation flows from signed records
-- full delegation-chain evaluation in daemon command paths
-- route expiry handling and route scoring
-- executor integration
-- machine daemon binary / service wrapper
+Commands arrive via TCP or mesh frames. The processing pipeline:
+1. Parse `CommandEnvelope` (protobuf)
+2. Verify ECDSA signature against sender's public key
+3. Verify delegation chain and controller authorization
+4. Dispatch to handler (e.g., `ExecuteWorkload`, queries)
+5. Record events to append-only log
+6. Return signed response
 
-## Best next step
+### Workload execution (ExecuteWorkload)
 
-Build the concrete transport adapter next, then hang the current signed session/bootstrap logic off it instead of redoing the trust logic inside the transport layer.
+Three-phase execution:
+1. **Pull**: Download OCI image from registry, track network/storage I/O
+2. **Resource limits**: Apply cgroups v2 limits (memory, CPU weight, PIDs)
+3. **Run**: Fork, unshare namespaces, pivot_root, drop privileges, exec container
+
+The `WorkMeter` (in `edgerun-node/src/metering.rs`) tracks resource consumption and calculates billable RC-µs using the node's `PerformanceCertificate`.
+
+### Storage
+
+- `edgerun-storage`: Append-only event log + SQLite index + encrypted blob store
+- AES-GCM encryption for stored objects with persistent blob keys
+
+## Architecture diagram
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                        edgerund                          │
+├─────────────────────────────────────────────────────────┤
+│  CLI: init / run / status                               │
+├─────────────────────────────────────────────────────────┤
+│  Identity: TPM 2.0 │ YubiKey │ Software (dev only)      │
+├─────────────────────────────────────────────────────────┤
+│  Mesh: edgerun-mesh + mesh-link + mesh-router           │
+│    Frame types │ ECDSA signing │ Bellman-Ford routing   │
+├─────────────────────────────────────────────────────────┤
+│  Command dispatch: signature verify │ delegation chain  │
+├─────────────────────────────────────────────────────────┤
+│  Workload: OCI pull │ cgroups v2 │ namespaces │ exec    │
+│  Metering: WorkMeter → RC-µs billing                   │
+├─────────────────────────────────────────────────────────┤
+│  Storage: event log │ SQLite index │ AES-GCM blobs     │
+├─────────────────────────────────────────────────────────┤
+│  Health endpoint: HTTP /health on configurable port     │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Systemd integration
+
+Two service files are provided in `systemd/`:
+
+- **edgerund.service**: Standard daemon with `Type=notify`, security hardening (NoNewPrivileges, ProtectSystem, PrivateTmp, etc.), device access for TPM/ALSA/V4L2/input
+- **edgerund-init.service**: PID 1 replacement with `Type=idle`, `--init` flag, less restrictive sandbox (PID 1 needs broader access)
+
+## Historical note
+
+An earlier design iteration used a separate `edgerun-machine-daemon` crate with a YAML-based peer configuration, `SessionHello`/`SessionAccept` handshakes, and abstract peer transport hooks. That design has been superseded by the current `edgerun-node` architecture, which integrates mesh networking, command processing, and workload execution into a single unified daemon.

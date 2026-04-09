@@ -3,7 +3,8 @@ suite: network
 validator: validate_network
 version: 1
 priority: mandatory
-description: session accept is rejected when selected protocol version is unsupported locally
+description: session accept is rejected when selected protocol version is unsupported
+  locally
 tags:
 - network
 - validate_network

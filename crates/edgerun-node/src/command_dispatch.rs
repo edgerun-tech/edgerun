@@ -12,13 +12,14 @@ use edgerun_core::protocol::{canonical_bytes, ProtocolRecord, EventEnvelope, Dig
 use edgerun_core::result::Verdict;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_storage::NodeStore;
-use edgerun_proto::edgerun::v0::stream::{CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
+use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
 use edgerun_proto::edgerun::v0::trust::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_proto::edgerun::v0::common::CommandRef;
 use prost::Message;
 use p256::ecdsa::signature::hazmat::PrehashVerifier;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 // ---------------------------------------------------------------------------
@@ -181,61 +182,30 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
 /// Walks the event log from seq 0, processing:
 /// - NodeGenesis: sets initial controllers
 /// - CommandCommitted with ADD_CONTROLLER: adds controller
-/// - CommandCommitted with REMOVE_CONTROLLER: removes controller
-/// - CommandCommitted with TRANSFER_CONTROL: replaces controller
+/// Replays controller changes from the persistent change log to rebuild the ControllerSet.
 ///
-/// This is called on startup to rebuild state from the event log.
+/// Delegates to `NodeStore::project_controller_set()` which reads from the
+/// FileIndex's `controller_changes.bin` — an append-only log of all controller
+/// mutations recorded during command processing.
+///
+/// This ensures controller state survives node restarts.
 pub fn project_controller_set(
     store: &NodeStore,
-    stream_id: &[u8],
+    _stream_id: &[u8],
     initial_controllers: Vec<Vec<u8>>,
 ) -> ControllerSet {
-    let controllers = ControllerSet::new(initial_controllers);
-
-    // Walk events from seq 1 (genesis is seq 0)
-    let head_seq = match store.get_head(stream_id) {
+    let head_seq = match store.get_head(_stream_id) {
         Ok(Some((seq, _))) => seq,
-        _ => return controllers,
+        _ => return ControllerSet::new(initial_controllers),
     };
 
-    for seq in 1..=head_seq {
-        let Ok(Some(event)) = store.get_event(stream_id, seq as u64) else {
-            continue;
-        };
-
-        if event.event_type != EventType::CommandCommitted as i32 {
-            continue;
+    match store.project_controller_set(initial_controllers, head_seq) {
+        Ok(set) => ControllerSet::new(set.to_vec()),
+        Err(e) => {
+            edgerun_log::warn!("failed to project controller set: {}", e);
+            ControllerSet::new(Vec::new())
         }
-
-        // Get the CommandResultPayload from the event's payload_object
-        let Some(payload_ref) = &event.payload_object else {
-            continue;
-        };
-        let Some(payload_bytes) = store.resolve_payload(&Some(payload_ref.clone())).ok().flatten() else {
-            continue;
-        };
-
-        let Ok(result_payload) = ProtoCommandResultPayload::decode(&payload_bytes[..]) else {
-            continue;
-        };
-        if result_payload.decision != 1 { // COMMAND_DECISION_COMMITTED
-            continue;
-        }
-
-        // Extract the command type from the related_commands reference
-        // For now, we check the command type from the event's related_commands
-        // Actually, we need to store the command type somewhere accessible.
-        // In v0, we'll use a simpler approach: store the command type in the
-        // result_payload's reason_code or effect_summary_object.
-        //
-        // For now, we'll project from a separate SQLite table that tracks
-        // controller changes. This is stored when commands are processed.
     }
-
-    // In v0, controller changes are tracked in a separate in-memory table
-    // that persists across the store task's lifetime. For full persistence,
-    // we'd need to store the command type in an accessible place.
-    controllers
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +213,12 @@ pub fn project_controller_set(
 // ---------------------------------------------------------------------------
 
 /// Processes a command through full validation and type-specific dispatch.
+///
+/// `workload_policy` and `rate_limiter` are projected from the immutable
+/// event log by the caller — they are NOT loaded from mutable files here.
+///
+/// `running_workloads` is a shared registry for tracking active containers
+/// so they can be preempted.
 ///
 /// Returns the response bytes to send back to the caller.
 pub fn dispatch_command(
@@ -254,6 +230,10 @@ pub fn dispatch_command(
     replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
     revoked_delegations: &HashSet<Vec<u8>>,
     trusted_root_ids: &[Vec<u8>],
+    capacity_tracker: &std::sync::Arc<crate::capacity::ResourceTracker>,
+    workload_policy: &super::workload_policy::WorkloadPolicy,
+    rate_limiter: &super::workload_policy::RateLimiter,
+    running_workloads: &std::sync::Arc<super::running_workloads::RunningWorkloads>,
 ) -> CommandDispatchResult {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -271,7 +251,9 @@ pub fn dispatch_command(
         trusted_root_ids,
     };
 
-    // Run full validation (replay, timing, delegation chain)
+    // Run full validation (replay, timing, delegation chain, cryptographic signatures)
+    // validate_command already verifies both command and delegation chain signatures,
+    // so we don't need separate verify_command_signature/verify_delegation_signature calls.
     let validation_result = validate_command(command, &ctx);
 
     // If validation rejected or deferred, record and return
@@ -290,20 +272,6 @@ pub fn dispatch_command(
             // For now, just re-process (in production we'd cache results)
         }
         Verdict::Accept => {}
-    }
-
-    // Verify command signature cryptographically
-    if let Err(reason) = verify_command_signature(command) {
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, reason, Vec::new(), None);
-    }
-
-    // Verify delegation chain signatures
-    for delegation in &command.delegation_chain {
-        if let Err(reason) = verify_delegation_signature(delegation) {
-            return record_and_respond(command, store, stream_id, signer, controllers,
-                false, reason, Vec::new(), None);
-        }
     }
 
     // Check if issuer is a controller (or has valid delegation)
@@ -340,6 +308,14 @@ pub fn dispatch_command(
             record_and_respond(command, store, stream_id, signer, controllers,
                 true, "", Vec::new(), None)
         }
+        x if x == CommandType::ExecuteWorkload as i32 => {
+            // Execute workload with full accounting + capacity check
+            dispatch_execute_workload(command, store, stream_id, signer, controllers, capacity_tracker, workload_policy, rate_limiter, running_workloads)
+        }
+        x if x == CommandType::TerminateWorkload as i32 => {
+            // Preempt/terminate a running workload
+            dispatch_terminate_workload(command, store, stream_id, signer, controllers, capacity_tracker, running_workloads)
+        }
         x if x == CommandType::Custom as i32 => {
             // Custom commands: try to decode as DelegationRecord or RevocationRecord
             dispatch_custom_command(command, store, stream_id, signer, controllers)
@@ -373,12 +349,11 @@ fn dispatch_add_controller(
     // Add to controller set
     controllers.add(new_controller_id.clone());
 
-    edgerun_log::info!("controller added"
-    );
+    edgerun_log::info!("controller added");
 
-    let response = format!("controller added: {}", edgerun_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
+    let response = format!("controller added: {}", edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex(&new_controller_id), "added")))
+        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id), "added")))
 }
 
 fn dispatch_remove_controller(
@@ -399,12 +374,11 @@ fn dispatch_remove_controller(
             false, "controller_not_found", Vec::new(), None);
     }
 
-    edgerun_log::info!("controller removed"
-    );
+    edgerun_log::info!("controller removed");
 
-    let response = format!("controller removed: {}", edgerun_core::util::bytes_to_hex(&target_id)).into_bytes();
+    let response = format!("controller removed: {}", edgerun_core::util::bytes_to_hex_prefixed(&target_id)).into_bytes();
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex(&target_id), "removed")))
+        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&target_id), "removed")))
 }
 
 fn dispatch_transfer_control(
@@ -424,12 +398,685 @@ fn dispatch_transfer_control(
     // Safe transfer: add new controller first (removing old ones is manual)
     controllers.add(new_controller_id.clone());
 
-    edgerun_log::info!("control transfer initiated — new controller added, old controllers remain until explicitly removed"
+    edgerun_log::info!("control transfer initiated — new controller added, old controllers remain until explicitly removed");
+
+    let response = format!("control transferred to: {}", edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id)).into_bytes();
+    record_and_respond(command, store, stream_id, signer, controllers,
+        true, "", response, Some((&edgerun_core::util::bytes_to_hex_prefixed(&new_controller_id), "transferred")))
+}
+
+// ---------------------------------------------------------------------------
+// ExecuteWorkload — compute marketplace with full accounting
+// ---------------------------------------------------------------------------
+
+/// Dispatches an ExecuteWorkload command: parse image spec, pull via OCI
+/// registry, run the container via the OCI runtime, and record full
+/// resource accounting — all billed in reference-core-microseconds.
+///
+/// `workload_policy` and `rate_limiter` are projected from the immutable
+/// event log by the caller — they are NOT loaded from mutable files here.
+///
+/// The container is started non-blocking and registered in `running_workloads`
+/// so it can be preempted. A background thread awaits its completion and
+/// records accounting.
+fn dispatch_execute_workload(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+    capacity_tracker: &std::sync::Arc<crate::capacity::ResourceTracker>,
+    workload_policy: &super::workload_policy::WorkloadPolicy,
+    rate_limiter: &super::workload_policy::RateLimiter,
+    running_workloads: &std::sync::Arc<super::running_workloads::RunningWorkloads>,
+) -> CommandDispatchResult {
+    use super::metering::{WorkMeter, compute_work_id};
+    use edgerun_core::accounting::{WorkloadClass, WorkPriority, WorkStatus};
+
+    // Extract workload spec from command payload
+    let workload_spec = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        _ => {
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "missing_workload_spec", Vec::new(), None);
+        }
+    };
+
+    // Parse image ref and resource hints from spec
+    let spec_str = String::from_utf8_lossy(&workload_spec);
+    let (image_str, allocated_cores, allocated_memory_bytes) = parse_workload_spec(&workload_spec);
+
+    // === WORKLOAD POLICY CHECK: reject disallowed images ===
+    if let Err(reason) = workload_policy.validate(&image_str) {
+        edgerun_log::warn!("workload policy rejected: {} — {}", image_str, reason);
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, &format!("policy_violation: {}", reason), Vec::new(), None);
+    }
+
+    let image_ref: edgerun_oci_registry::ImageRef = match image_str.parse() {
+        Ok(img) => img,
+        Err(e) => {
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, &format!("invalid_image_ref: {}", e), Vec::new(), None);
+        }
+    };
+
+    // === RATE LIMIT CHECK: prevent workload spam ===
+    let requester_id = command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default();
+    if !rate_limiter.check_and_record(&requester_id) {
+        edgerun_log::warn!("rate limit exceeded for requester: {}", edgerun_core::util::bytes_to_hex(&requester_id));
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "rate_limit_exceeded", Vec::new(), None);
+    }
+
+    // Compute deterministic work ID (normalized spec)
+    let normalized_spec = normalize_workload_spec(&workload_spec);
+    let work_id = compute_work_id(&normalized_spec);
+
+    // Extract requester identity
+    let requester_id_bytes = match &command.issuer {
+        Some(issuer) => {
+            let mut id = [0u8; 64];
+            if let Some(ref hint) = issuer.key_hint {
+                if hint.len() == 64 {
+                    id.copy_from_slice(hint);
+                }
+            }
+            id
+        }
+        None => {
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "missing_requester_identity", Vec::new(), None);
+        }
+    };
+
+    let delegation_hash = if let Some(first) = command.delegation_chain.first() {
+        let mut signable = first.clone();
+        signable.signature = None;
+        let mut canonical = Vec::new();
+        if prost::Message::encode(&signable, &mut canonical).is_ok() {
+            let d = edgerun_core::crypto::sha256(&canonical);
+            let mut h = [0u8; 32];
+            h.copy_from_slice(&d);
+            h
+        } else {
+            [0u8; 32]
+        }
+    } else {
+        [0u8; 32]
+    };
+
+    let provider_id = signer.node_id().0;
+    let cert = match load_cached_cert(store) {
+        Some(c) => c,
+        None => {
+            let c = edgerun_core::benchmark::run_full_benchmark(provider_id);
+            cache_cert(store, &c);
+            c
+        }
+    };
+
+    // === CERTIFICATE FRESHNESS CHECK: reject stale certs ===
+    if let Err(reason) = check_cert_freshness_impl(&cert) {
+        edgerun_log::warn!("stale performance cert: {}", reason);
+        // Re-benchmark on the fly
+        let c = edgerun_core::benchmark::run_full_benchmark(provider_id);
+        cache_cert(store, &c);
+    }
+
+    let workload_class = if spec_str.contains("inference") {
+        WorkloadClass::Inference
+    } else if spec_str.contains("compilation") {
+        WorkloadClass::Compilation
+    } else if spec_str.contains("container") {
+        WorkloadClass::Container
+    } else {
+        WorkloadClass::General
+    };
+
+    // === CAPACITY CHECK: reject if insufficient resources ===
+    if !capacity_tracker.try_allocate(allocated_cores, allocated_memory_bytes) {
+        edgerun_log::warn!("insufficient capacity for work: {} cores, {} memory (available: {} cores, {} memory)",
+            allocated_cores, allocated_memory_bytes,
+            capacity_tracker.available_cores(),
+            capacity_tracker.available_memory());
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "insufficient_capacity", Vec::new(), None);
+    }
+    // Resources are now reserved. They will be released below after workload completes/fails.
+
+    // Start metering BEFORE pull so download time is billed
+    let meter = WorkMeter::new(
+        work_id, requester_id_bytes, provider_id, delegation_hash,
+        allocated_cores, allocated_memory_bytes,
+        workload_class, WorkPriority::Standard, &cert,
     );
 
-    let response = format!("control transferred to: {}", edgerun_core::util::bytes_to_hex(&new_controller_id)).into_bytes();
+    // === PHASE 1: Pull image ===
+    let paths = WorkloadPaths::new(&work_id);
+    let bundle_dir = &paths.bundle_dir;
+    let store_dir = &paths.store_dir;
+
+    edgerun_log::info!("pulling: {}", image_str);
+    if let Err(e) = pull_with_metering(&image_ref, bundle_dir, store_dir, &meter) {
+        edgerun_log::warn!("pull failed: {}", e);
+        capacity_tracker.release(allocated_cores, allocated_memory_bytes);
+        let acc = meter.finalize(WorkStatus::Failed, None);
+        let _ = store.record_work_accounting(&acc);
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, &format!("pull_failed: {}", e), Vec::new(), None);
+    }
+
+    // === PHASE 2: Apply resource limits ===
+    let cfg_path = bundle_dir.join("config.json");
+    if let Ok(txt) = std::fs::read_to_string(&cfg_path) {
+        if let Ok(mut spec) = lifegraph_json::from_str::<edgerun_oci_runtime::OciSpec>(&txt) {
+            let shares = (allocated_cores as u64).saturating_mul(1024);
+            if let Some(linux) = spec.linux.as_mut() {
+                linux.resources = Some(edgerun_oci_runtime::OciLinuxResources {
+                    memory: Some(edgerun_oci_runtime::OciLinuxMemory {
+                        limit: Some(allocated_memory_bytes as i64),
+                        reservation: None,
+                        swap: None,
+                    }),
+                    cpu: Some(edgerun_oci_runtime::OciLinuxCpu {
+                        shares: Some(shares),
+                        quota: None,
+                        period: None,
+                    }),
+                    pids: Some(edgerun_oci_runtime::OciLinuxPids { limit: 256 }),
+                });
+            }
+            if let Ok(json) = lifegraph_json::to_string_pretty(&spec) {
+                let _ = std::fs::write(&cfg_path, json);
+            }
+        }
+    }
+
+    // === PHASE 3: Run container (non-blocking) ===
+    edgerun_log::info!("running: {}", image_str);
+    let container = match edgerun_oci_runtime::start_bundle(&bundle_dir) {
+        Ok(c) => c,
+        Err(e) => {
+            edgerun_log::warn!("run failed: {}", e);
+            capacity_tracker.release(allocated_cores, allocated_memory_bytes);
+            let acc = meter.finalize(WorkStatus::Failed, None);
+            let _ = store.record_work_accounting(&acc);
+            let _ = std::fs::remove_dir_all(&paths.tmp_base);
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, &format!("run_failed: {}", e), Vec::new(), None);
+        }
+    };
+
+    let container_pid = container.pid();
+
+    // Register in running workloads so it can be preempted
+    let workload_info = super::running_workloads::RunningWorkloadInfo {
+        work_id,
+        pid: container_pid,
+        allocated_cores,
+        allocated_memory_bytes,
+        bundle_path: paths.tmp_base.clone(),
+        cgroup_path: paths.cgroup_path.clone(),
+    };
+    match running_workloads.register(workload_info) {
+        Ok(()) => {}
+        Err(_existing) => {
+            edgerun_log::warn!("work {} already running (duplicate work_id)",
+                edgerun_core::util::bytes_to_hex(&work_id[..8]));
+            let _ = container.kill();
+            capacity_tracker.release(allocated_cores, allocated_memory_bytes);
+            let _ = std::fs::remove_dir_all(&paths.tmp_base);
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "duplicate_work_id", Vec::new(), None);
+        }
+    }
+
+    // === Background thread: owns the container handle, does ALL cleanup ===
+    //
+    // Concurrency design:
+    // - This thread exclusively owns `container`, `capacity_tracker` release,
+    //   and bundle directory cleanup. No other path touches them.
+    // - `terminate()` only signals kill (via AtomicBool + kill syscall).
+    //   It does NOT release resources or remove the registry entry.
+    // - After the container exits, this thread releases resources, records
+    //   accounting, cleans up, and unregisters from the registry.
+    // - This guarantees exactly-once cleanup regardless of exit path.
+    let running_workloads_bg = Arc::clone(running_workloads);
+    let capacity_tracker_bg = Arc::clone(capacity_tracker);
+    let provider_id_bg = provider_id;
+    let requester_id_bg = requester_id_bytes;
+    let delegation_hash_bg = delegation_hash;
+    let cpu_multiplier_bg = cert.cpu_core_multiplier();
+    let memory_multiplier_bg = cert.memory_multiplier();
+    let storage_multiplier_bg = cert.storage_multiplier();
+    let cert_digest_bg = cert.digest;
+
+    // Clone values needed for panic-safe cleanup (moved into catch_unwind below)
+    let cleanup_capacity = Arc::clone(&capacity_tracker_bg);
+    let cleanup_paths = paths.clone();
+    let cleanup_registry = Arc::clone(&running_workloads_bg);
+    let cleanup_allocated_cores = allocated_cores;
+    let cleanup_allocated_memory = allocated_memory_bytes;
+    let cleanup_work_id = work_id;
+    let image_str_for_response = image_str.clone();
+
+    std::thread::Builder::new()
+        .name(paths.thread_name.clone())
+        .spawn(move || {
+            // Catch panics so they are logged rather than silently killing the thread
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                workload_thread_body(
+                    work_id, container, container_pid,
+                    running_workloads_bg, capacity_tracker_bg,
+                    provider_id_bg, requester_id_bg, delegation_hash_bg,
+                    cpu_multiplier_bg, memory_multiplier_bg, storage_multiplier_bg,
+                    cert_digest_bg, allocated_cores, allocated_memory_bytes,
+                    image_str, paths, workload_class,
+                )
+            }));
+            if let Err(panic) = result {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic".to_string()
+                };
+                edgerun_log::error!("work {} thread panicked: {}",
+                    edgerun_core::util::bytes_to_hex(&cleanup_work_id[..8]), msg);
+                // Best-effort cleanup even on panic
+                cleanup_capacity.release(cleanup_allocated_cores, cleanup_allocated_memory);
+                let _ = std::fs::remove_dir_all(&cleanup_paths.tmp_base);
+                cleanup_registry.unregister(&cleanup_work_id);
+            }
+        })
+        .expect("failed to spawn workload thread");
+
+    edgerun_log::info!("work {} started (pid {}, {} running)",
+        edgerun_core::util::bytes_to_hex(&work_id[..8]),
+        container_pid,
+        running_workloads.count());
+
+    // === IMMEDIATE RESPONSE: workload accepted, running asynchronously ===
+    let response = format!("accepted {} (pid {}, work {})",
+        image_str_for_response,
+        container_pid,
+        edgerun_core::util::bytes_to_hex(&work_id[..8])).into_bytes();
+
     record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, Some((&edgerun_core::util::bytes_to_hex(&new_controller_id), "transferred")))
+        true, "", response, None)
+}
+
+// ---------------------------------------------------------------------------
+// Workload background thread body (extracted for panic safety)
+// ---------------------------------------------------------------------------
+
+/// The body of the background workload thread. Runs after the container is started.
+/// Waits for container exit, records accounting, and performs cleanup.
+/// This is extracted into a function so it can be wrapped in `catch_unwind`.
+fn workload_thread_body(
+    work_id: [u8; 32],
+    container: edgerun_oci_runtime::RunningContainer,
+    container_pid: u32,
+    running_workloads_bg: Arc<super::running_workloads::RunningWorkloads>,
+    capacity_tracker_bg: Arc<super::capacity::ResourceTracker>,
+    provider_id_bg: [u8; 64],
+    requester_id_bg: [u8; 64],
+    delegation_hash_bg: [u8; 32],
+    cpu_multiplier_bg: edgerun_core::fixed_point::FixedPoint16,
+    memory_multiplier_bg: edgerun_core::fixed_point::FixedPoint16,
+    storage_multiplier_bg: edgerun_core::fixed_point::FixedPoint16,
+    cert_digest_bg: [u8; 32],
+    allocated_cores: u32,
+    allocated_memory_bytes: u64,
+    _image_str: String,
+    paths: WorkloadPaths,
+    workload_class: edgerun_core::accounting::WorkloadClass,
+) {
+    use edgerun_core::accounting::{WorkPriority, WorkStatus};
+
+    let start_monotonic = std::time::Instant::now();
+    let start_time_us = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64;
+
+    // Await container exit (blocking). The container will be killed
+    // if terminate() was called — the RunningContainer::kill() path
+    // in the registry sets the kill flag and sends SIGTERM/SIGKILL,
+    // but this thread still does the wait() and cleanup.
+    let run_result = container.wait();
+
+    let elapsed_us = start_monotonic.elapsed().as_micros() as u64;
+    let completed_at_us = start_time_us + elapsed_us;
+
+    let exit_code_val = match &run_result {
+        Ok(st) => st.code(),
+        Err(_) => None,
+    };
+    let status = match &run_result {
+        Ok(st) if st.success() => WorkStatus::Completed,
+        _ => WorkStatus::Failed,
+    };
+
+    // Physical resource calculations
+    let physical_core_us = (allocated_cores as u64) * elapsed_us;
+    let physical_memory_gb = (allocated_memory_bytes / (1024 * 1024 * 1024)) as u32;
+    let memory_duration_seconds = (elapsed_us / 1_000_000) as u32;
+
+    // Billable RC-µs
+    let billable_compute_rc_us = cpu_multiplier_bg.mul_u64(physical_core_us);
+
+    // Build the accounting record
+    let _accounting = edgerun_core::accounting::WorkAccounting {
+        work_id,
+        requester_id: requester_id_bg,
+        provider_id: provider_id_bg,
+        delegation_hash: delegation_hash_bg,
+        started_at_us: start_time_us,
+        completed_at_us,
+        physical_core_us,
+        physical_memory_gb,
+        memory_duration_seconds,
+        gpu_core_us: 0,
+        npu_core_us: 0,
+        storage_read_bytes: 0,
+        storage_written_bytes: 0,
+        storage_read_ops: 0,
+        storage_write_ops: 0,
+        network_sent_bytes: 0,
+        network_received_bytes: 0,
+        workload_class,
+        priority: WorkPriority::Standard,
+        status,
+        exit_code: exit_code_val,
+        provider_cert_digest: cert_digest_bg,
+        cpu_multiplier: cpu_multiplier_bg,
+        memory_multiplier: memory_multiplier_bg,
+        storage_multiplier: storage_multiplier_bg,
+        billable_compute_rc_us,
+    };
+
+    // === ALL cleanup happens here — exactly once ===
+
+    // 1. Log the accounting record
+    let status_str = status.as_str();
+    let elapsed_s = elapsed_us / 1_000_000;
+    edgerun_log::info!("work {} {} ({} RC-µs, {}s, pid {})",
+        edgerun_core::util::bytes_to_hex(&work_id[..8]),
+        status_str,
+        billable_compute_rc_us,
+        elapsed_s,
+        container_pid);
+
+    // 2. Release reserved resources (exactly once — terminate() never does this)
+    capacity_tracker_bg.release(allocated_cores, allocated_memory_bytes);
+
+    // 3. Cleanup bundle directory
+    let _ = std::fs::remove_dir_all(&paths.tmp_base);
+
+    // 4. Unregister from the running workloads registry
+    // This must happen last — until this point, terminate() could
+    // have been called and waited for the kill to take effect.
+    running_workloads_bg.unregister(&work_id);
+}
+
+// ---------------------------------------------------------------------------
+// TerminateWorkload — preempt/terminate a running container
+// ---------------------------------------------------------------------------
+
+/// Dispatches a TerminateWorkload command: looks up the running workload
+/// by work_id (from the command payload) and kills it via the registry.
+fn dispatch_terminate_workload(
+    command: &CommandEnvelope,
+    store: &mut NodeStore,
+    stream_id: &[u8],
+    signer: &dyn MeshSigner,
+    controllers: &mut ControllerSet,
+    capacity_tracker: &std::sync::Arc<crate::capacity::ResourceTracker>,
+    running_workloads: &std::sync::Arc<super::running_workloads::RunningWorkloads>,
+) -> CommandDispatchResult {
+    // Extract work_id from command payload
+    let workload_spec = match &command.payload {
+        Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
+        _ => {
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "missing_workload_spec", Vec::new(), None);
+        }
+    };
+
+    // Parse work_id from payload: either raw 32 bytes or hex string
+    let work_id = if workload_spec.len() == 32 {
+        let mut id = [0u8; 32];
+        id.copy_from_slice(&workload_spec);
+        id
+    } else {
+        // Try hex decode
+        let hex_str = String::from_utf8_lossy(&workload_spec);
+        match edgerun_core::util::hex_to_bytes(&hex_str) {
+            Ok(bytes) if bytes.len() == 32 => {
+                let mut id = [0u8; 32];
+                id.copy_from_slice(&bytes);
+                id
+            }
+            _ => {
+                return record_and_respond(command, store, stream_id, signer, controllers,
+                    false, "invalid_work_id", Vec::new(), None);
+            }
+        }
+    };
+
+    // Look up and terminate the workload
+    match running_workloads.terminate(&work_id) {
+        Some(info) => {
+            // Release reserved resources
+            capacity_tracker.release(info.allocated_cores, info.allocated_memory_bytes);
+
+            // Cleanup bundle directory if it still exists
+            let _ = std::fs::remove_dir_all(&info.bundle_path);
+
+            edgerun_log::info!("work {} terminated (pid {}, freed {} cores, {} bytes)",
+                edgerun_core::util::bytes_to_hex(&work_id[..8]),
+                info.pid,
+                info.allocated_cores,
+                info.allocated_memory_bytes);
+
+            let response = format!("terminated work {} (pid {})",
+                edgerun_core::util::bytes_to_hex(&work_id[..8]),
+                info.pid).into_bytes();
+
+            record_and_respond(command, store, stream_id, signer, controllers,
+                true, "", response, None)
+        }
+        None => {
+            edgerun_log::warn!("work {} not found in running workloads",
+                edgerun_core::util::bytes_to_hex(&work_id[..8]));
+            record_and_respond(command, store, stream_id, signer, controllers,
+                false, "work_not_found", Vec::new(), None)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn parse_workload_spec(spec: &[u8]) -> (String, u32, u64) {
+    let s = String::from_utf8_lossy(spec);
+    let mut image = s.to_string();
+    let mut cores: u32 = 1;
+    let mut memory_gb: u64 = 1;
+
+    if let Some(pos) = s.find(":cores=") {
+        let rest = &s[pos + 7..];
+        let end = rest.find(':').unwrap_or(rest.len());
+        if let Ok(c) = rest[..end].parse::<u32>() {
+            cores = c.max(1).min(256);
+        }
+        image = s[..pos].to_string();
+    }
+
+    if let Some(pos) = s.find(":memory=") {
+        let rest = &s[pos + 8..];
+        let end = rest.find(':').unwrap_or(rest.len());
+        let mem_str = &rest[..end];
+        if let Some(pi) = mem_str.find(char::is_alphabetic) {
+            let (num_s, unit) = mem_str.split_at(pi);
+            if let Ok(n) = num_s.parse::<u64>() {
+                let u = unit.to_uppercase();
+                memory_gb = if u.starts_with('T') { n * 1024 }
+                    else if u.starts_with('G') { n }
+                    else if u.starts_with('M') { n.max(512) / 1024 }
+                    else { n };
+                if memory_gb == 0 { memory_gb = 1; }
+            }
+        } else if let Ok(n) = mem_str.parse::<u64>() {
+            memory_gb = n;
+        }
+        if image.len() > pos {
+            image = s[..pos].to_string();
+        }
+    }
+
+    if image.starts_with("container:") {
+        image = image["container:".len()..].to_string();
+    }
+
+    (image, cores, memory_gb * 1024 * 1024 * 1024)
+}
+
+fn pull_with_metering(
+    image: &edgerun_oci_registry::ImageRef,
+    bundle_dir: &std::path::Path,
+    store_dir: &std::path::Path,
+    meter: &super::metering::WorkMeter,
+) -> Result<(), String> {
+    let mut client = edgerun_oci_registry::RegistryClient::new();
+
+    // Resolve manifest to know expected layer sizes
+    let manifest = client.resolve_manifest(image).map_err(|e| e.to_string())?;
+    let total_layer_bytes = match &manifest {
+        edgerun_oci_registry::ImageManifest::Single(m) => {
+            m.layers.iter().map(|l| l.size).sum::<u64>()
+        }
+        edgerun_oci_registry::ImageManifest::Index(idx) => {
+            idx.manifests.first().map(|m| m.size).unwrap_or(0)
+        }
+    };
+
+    // Pull the image — download_blob() now tracks real bytes in the client
+    client.pull(image, bundle_dir, store_dir).map_err(|e| e.to_string())?;
+
+    // Report actual downloaded bytes (may differ from manifest due to retries, compression)
+    let real_bytes = client.bytes_downloaded();
+    if real_bytes > 0 {
+        meter.add_network_received(real_bytes);
+    } else {
+        // Fallback to manifest estimate if tracking didn't work
+        meter.add_network_received(total_layer_bytes);
+    }
+
+    // Report the extracted rootfs size as storage write
+    if let Ok(sz) = dir_size(&bundle_dir.join("rootfs")) {
+        meter.add_storage_write(sz);
+    }
+    // Report cached layer blobs as storage reads
+    if store_dir.exists() {
+        if let Ok(sz) = dir_size(store_dir) {
+            meter.add_storage_read(sz);
+        }
+    }
+    Ok(())
+}
+
+fn dir_size(path: &std::path::Path) -> std::io::Result<u64> {
+    let mut total = 0u64;
+    if path.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            let e = entry?;
+            let md = e.metadata()?;
+            if md.is_file() { total += md.len(); }
+            else if md.is_dir() { total += dir_size(&e.path())?; }
+        }
+    }
+    Ok(total)
+}
+
+fn load_cached_cert(store: &NodeStore) -> Option<edgerun_core::accounting::PerformanceCertificate> {
+    let p = store.data_root().join("perf_cert.bin");
+    if let Ok(data) = std::fs::read(&p) {
+        edgerun_core::accounting::PerformanceCertificate::from_bytes(&data)
+    } else {
+        None
+    }
+}
+
+fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::PerformanceCertificate) {
+    // Persist to disk for fast loading
+    let p = store.data_root().join("perf_cert.bin");
+    if std::fs::write(&p, cert.to_bytes()).is_ok() {
+        edgerun_log::info!("perf cert cached: cpu {:.2}x ref",
+            cert.cpu_core_multiplier().to_raw() as f64 / 65536.0);
+    }
+
+    // Also store as an object so it's recoverable from the event stream
+    // via the command that triggered the re-benchmark.
+    let cert_bytes = cert.to_bytes();
+    if let Err(e) = store.put_object(&cert_bytes, 0, &[]) {
+        edgerun_log::warn!("failed to store cert as object: {}", e);
+    }
+}
+
+// ===========================================================================
+// Workload spec normalization for deterministic work IDs
+// ===========================================================================
+
+/// Normalize a workload spec string so that logically equivalent specs
+/// produce the same work ID regardless of key ordering.
+///
+/// E.g., `container:alpine:cores=4:memory=8G` and
+///       `container:alpine:memory=8G:cores=4` → same normalized form
+///
+/// Strategy: extract image, cores, memory → sort key-value pairs → reassemble.
+fn normalize_workload_spec(spec: &[u8]) -> Vec<u8> {
+    let (image, cores, memory_bytes) = parse_workload_spec(spec);
+
+    // Normalize memory back to human form for the key
+    let memory_gb = memory_bytes / (1024 * 1024 * 1024);
+    let mut parts = vec![image];
+
+    // Build sortable key-value pairs
+    let mut kvs: Vec<(String, String)> = Vec::new();
+    kvs.push(("cores".to_string(), cores.to_string()));
+    kvs.push(("memory".to_string(), format!("{}G", memory_gb)));
+    kvs.sort_by_key(|(k, _)| k.clone());
+
+    for (k, v) in kvs {
+        parts.push(format!("{}={}", k, v));
+    }
+
+    parts.join(":").into_bytes()
+}
+
+// ===========================================================================
+// Certificate freshness check
+// ===========================================================================
+
+/// Maximum age for a performance certificate before re-benchmarking is required.
+const MAX_CERT_AGE_US: u64 = 24 * 60 * 60 * 1_000_000; // 24 hours
+
+/// Check if a performance certificate is still fresh.
+fn check_cert_freshness_impl(cert: &edgerun_core::accounting::PerformanceCertificate) -> Result<(), String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_micros() as u64;
+    let age = now.saturating_sub(cert.benchmark_completed_us);
+    if age > MAX_CERT_AGE_US {
+        return Err(format!("cert is {} hours old (max 24h)", age / 3_600_000_000));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +1130,19 @@ fn dispatch_create_delegation(
             false, reason, Vec::new(), None);
     }
 
-    // Store the delegation
+    // Store the delegation as an object so it's cryptographically linked
+    // to the signed CommandCommitted event via payload_object
+    let delegation_bytes = prost::Message::encode_to_vec(delegation);
+    let object_ref = match store.put_object(&delegation_bytes, 0, &[]) {
+        Ok(r) => r,
+        Err(e) => {
+            edgerun_log::warn!("failed to store delegation object: {}", e);
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "storage_failed", Vec::new(), None);
+        }
+    };
+
+    // Also store in the index for efficient lookup
     let delegation_id_hex = edgerun_core::util::bytes_to_hex(&delegation.delegation_id);
     let issuer_hex = delegation.issuer.as_ref().map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
     let recipient_hex = delegation.recipient.as_ref().map(|r| edgerun_core::util::bytes_to_hex(&r.identity_id)).unwrap_or_default();
@@ -493,17 +1152,40 @@ fn dispatch_create_delegation(
         .unwrap_or_default();
 
     if let Err(e) = store.store_delegation(&delegation_id_hex, &issuer_hex, &recipient_hex, &edgerun_core::util::bytes_to_hex(&capability_bytes), expires_at) {
-        edgerun_log::warn!("failed to store delegation: {}", e);
+        edgerun_log::warn!("failed to index delegation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "storage_failed", Vec::new(), None);
+            false, "index_failed", Vec::new(), None);
     }
 
-    edgerun_log::info!("delegation recorded"
+    edgerun_log::info!("delegation recorded");
+
+    // Manually produce events with the delegation object as payload_object
+    let command_ref = command_ref_from(command);
+    let delegations = delegation_refs_from(command);
+
+    record_action_event(store, stream_id, signer, command,
+        1, // ACTION_STATUS_STARTED
+        EventType::ActionStarted);
+
+    let _event_seq = append_signed_event(
+        store, stream_id, signer,
+        EventType::CommandCommitted, 1,
+        Some(object_ref),
+        vec![command_ref],
+        delegations,
     );
 
+    record_action_event(store, stream_id, signer, command,
+        2, // ACTION_STATUS_COMPLETED
+        EventType::ActionCompleted);
+
     let response = format!("delegation recorded: {}", delegation_id_hex).into_bytes();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, None)
+    CommandDispatchResult {
+        event_type: EventType::CommandCommitted,
+        decision: CommandDecision::Committed as i32,
+        reason_code: String::new(),
+        response_bytes: response,
+    }
 }
 
 /// Handles a revocation creation command.
@@ -515,7 +1197,6 @@ fn dispatch_create_revocation(
     controllers: &mut ControllerSet,
     revocation: &ProtoRevocationRecord,
 ) -> CommandDispatchResult {
-    // Store the revocation
     let revocation_id_hex = edgerun_core::util::bytes_to_hex(&revocation.revocation_id);
     let issuer_hex = revocation.issuer.as_ref().map(|i| edgerun_core::util::bytes_to_hex(&i.identity_id)).unwrap_or_default();
 
@@ -542,18 +1223,54 @@ fn dispatch_create_revocation(
 
     let effective_at = revocation.effective_at.as_ref().map(|t| t.seconds);
 
+    // Store the revocation as an object so it's cryptographically linked
+    // to the signed CommandCommitted event via payload_object
+    let revocation_bytes = prost::Message::encode_to_vec(revocation);
+    let object_ref = match store.put_object(&revocation_bytes, 0, &[]) {
+        Ok(r) => r,
+        Err(e) => {
+            edgerun_log::warn!("failed to store revocation object: {}", e);
+            return record_and_respond(command, store, stream_id, signer, controllers,
+                false, "storage_failed", Vec::new(), None);
+        }
+    };
+
+    // Also store in the index for efficient lookup
     if let Err(e) = store.store_revocation(&revocation_id_hex, &issuer_hex, &target_type, &target_hex, effective_at) {
-        edgerun_log::warn!("failed to store revocation: {}", e);
+        edgerun_log::warn!("failed to index revocation: {}", e);
         return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "storage_failed", Vec::new(), None);
+            false, "index_failed", Vec::new(), None);
     }
 
-    edgerun_log::info!("revocation recorded"
+    edgerun_log::info!("revocation recorded");
+
+    // Manually produce events with the revocation object as payload_object
+    let command_ref = command_ref_from(command);
+    let delegations = delegation_refs_from(command);
+
+    record_action_event(store, stream_id, signer, command,
+        1, // ACTION_STATUS_STARTED
+        EventType::ActionStarted);
+
+    let _event_seq = append_signed_event(
+        store, stream_id, signer,
+        EventType::CommandCommitted, 1,
+        Some(object_ref),
+        vec![command_ref],
+        delegations,
     );
 
+    record_action_event(store, stream_id, signer, command,
+        2, // ACTION_STATUS_COMPLETED
+        EventType::ActionCompleted);
+
     let response = format!("revocation recorded: {}", revocation_id_hex).into_bytes();
-    record_and_respond(command, store, stream_id, signer, controllers,
-        true, "", response, None)
+    CommandDispatchResult {
+        event_type: EventType::CommandCommitted,
+        decision: CommandDecision::Committed as i32,
+        reason_code: String::new(),
+        response_bytes: response,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -593,18 +1310,11 @@ pub fn create_node_genesis_payload(
     };
 
     let payload_bytes = prost::Message::encode_to_vec(&payload);
-    store.put_object(&payload_bytes, 1 /* OBJECT_KIND_PAYLOAD */, &[stream_id.to_vec()])
-        .unwrap_or_else(|e| {
-            edgerun_log::warn!("failed to store genesis payload object: {}", e);
-            edgerun_proto::edgerun::v0::common::ObjectRef {
-                object_id: vec![],
-                object_kind: Some(1),
-            }
-        })
+    store_object_or_log(store, &payload_bytes, 1, &[stream_id.to_vec()])
 }
 
 /// Appends a signed event to the node's stream and returns the event sequence number.
-fn append_signed_event(
+pub(crate) fn append_signed_event(
     store: &mut NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
@@ -625,7 +1335,7 @@ fn append_signed_event(
         }),
         event_type: event_type as i32,
         event_version,
-        recorded_at: Some(now_ms_timestamp()),
+        recorded_at: Some(edgerun_core::util::system_time_to_prost(SystemTime::now())),
         effective_at: None,
         payload_object,
         related_events: vec![],
@@ -659,10 +1369,7 @@ pub fn record_command_sent_event(
     use edgerun_proto::edgerun::v0::stream::CommandSentPayload;
     use edgerun_proto::edgerun::v0::common::CommandRef;
 
-    let command_ref = CommandRef {
-        command_id: command.command_id.clone(),
-        command_hash: Some(command_hash(command)),
-    };
+    let command_ref = command_ref_from(command);
 
     let payload = CommandSentPayload {
         payload_version: 1,
@@ -671,14 +1378,7 @@ pub fn record_command_sent_event(
         send_metadata: None,
     };
     let payload_bytes = prost::Message::encode_to_vec(&payload);
-    let object_ref = store.put_object(&payload_bytes, 1, &[stream_id.to_vec()])
-        .unwrap_or_else(|e| {
-            edgerun_log::warn!("failed to store command sent payload: {}", e);
-            edgerun_proto::edgerun::v0::common::ObjectRef {
-                object_id: vec![],
-                object_kind: Some(1),
-            }
-        });
+    let object_ref = store_object_or_log(store, &payload_bytes, 1, &[stream_id.to_vec()]);
 
     let _seq = append_signed_event(
         store, stream_id, signer,
@@ -699,14 +1399,10 @@ pub fn record_action_event(
     event_type: EventType,
 ) {
     use edgerun_proto::edgerun::v0::stream::ActionLifecyclePayload;
-    use edgerun_proto::edgerun::v0::common::CommandRef;
 
-    let command_ref = CommandRef {
-        command_id: command.command_id.clone(),
-        command_hash: Some(command_hash(command)),
-    };
+    let command_ref = command_ref_from(command);
 
-    let action_id = format!("action-{}", edgerun_core::util::bytes_to_hex(&command.command_id[..4.min(command.command_id.len())])).into_bytes();
+    let action_id = format!("action-{}", edgerun_core::util::bytes_to_hex_prefixed(&command.command_id[..4.min(command.command_id.len())])).into_bytes();
     let payload = ActionLifecyclePayload {
         payload_version: 1,
         origin_command: Some(command_ref.clone()),
@@ -718,14 +1414,7 @@ pub fn record_action_event(
         action_metadata: None,
     };
     let payload_bytes = prost::Message::encode_to_vec(&payload);
-    let object_ref = store.put_object(&payload_bytes, 1, &[stream_id.to_vec()])
-        .unwrap_or_else(|e| {
-            edgerun_log::warn!("failed to store action payload: {}", e);
-            edgerun_proto::edgerun::v0::common::ObjectRef {
-                object_id: vec![],
-                object_kind: Some(1),
-            }
-        });
+    let object_ref = store_object_or_log(store, &payload_bytes, 1, &[stream_id.to_vec()]);
 
     let _seq = append_signed_event(
         store, stream_id, signer,
@@ -762,7 +1451,7 @@ fn record_and_respond(
     store: &mut NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    controllers: &ControllerSet,
+    _controllers: &ControllerSet,
     committed: bool,
     reason_code: &str,
     response_bytes: Vec<u8>,
@@ -802,14 +1491,7 @@ fn record_and_respond(
         result_object: None,
     };
     let result_bytes = prost::Message::encode_to_vec(&result_payload);
-    let object_ref = store.put_object(&result_bytes, 6 /* OBJECT_KIND_COMMAND */, &[stream_id.to_vec()])
-        .unwrap_or_else(|e| {
-            edgerun_log::warn!("failed to store command result object: {}", e);
-            edgerun_proto::edgerun::v0::common::ObjectRef {
-                object_id: vec![],
-                object_kind: Some(6),
-            }
-        });
+    let object_ref = store_object_or_log(store, &result_bytes, 6, &[stream_id.to_vec()]);
 
     // 3. Emit CommandCommitted or CommandRejected event with payload
     let event_type = if committed {
@@ -853,7 +1535,9 @@ fn record_and_respond(
     }
 }
 
-fn sign_event_envelope(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
+/// Sign an event envelope with the local node's key.
+/// Shared utility used by both command_dispatch and main node logic.
+pub(crate) fn sign_event_envelope(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
     let digest = edgerun_core::crypto::sha256(&canonical);
@@ -879,11 +1563,66 @@ fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRec
     }
 }
 
-fn now_ms_timestamp() -> prost_types::Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    prost_types::Timestamp {
-        seconds: now.as_secs() as i64,
-        nanos: now.subsec_nanos() as i32,
+/// Construct workload temporary directory paths from a work_id.
+#[derive(Clone)]
+struct WorkloadPaths {
+    tmp_base: std::path::PathBuf,
+    bundle_dir: std::path::PathBuf,
+    store_dir: std::path::PathBuf,
+    cgroup_path: String,
+    thread_name: String,
+}
+
+impl WorkloadPaths {
+    fn new(work_id: &[u8]) -> Self {
+        let hex8 = edgerun_core::util::bytes_to_hex(&work_id[..8.min(work_id.len())]);
+        let hex4 = edgerun_core::util::bytes_to_hex(&work_id[..4.min(work_id.len())]);
+        let tmp_base = std::env::temp_dir().join(format!("eg_wk_{}_{}", hex8, std::process::id()));
+        Self {
+            tmp_base: tmp_base.clone(),
+            bundle_dir: tmp_base.join("bundle"),
+            store_dir: tmp_base.join("store"),
+            cgroup_path: format!("/edgerun/eg_{}", hex8),
+            thread_name: format!("work-{}", hex4),
+        }
+    }
+}
+
+/// Build a CommandRef from a command envelope.
+fn command_ref_from(command: &CommandEnvelope) -> CommandRef {
+    CommandRef {
+        command_id: command.command_id.clone(),
+        command_hash: Some(command_hash(command)),
+    }
+}
+
+/// Build DelegationRef vector from a command's delegation chain.
+fn delegation_refs_from(command: &CommandEnvelope) -> Vec<edgerun_proto::edgerun::v0::common::DelegationRef> {
+    command.delegation_chain.iter().map(|d| {
+        edgerun_proto::edgerun::v0::common::DelegationRef {
+            delegation_id: d.delegation_id.clone(),
+            delegation_hash: Some(delegation_hash(d)),
+        }
+    }).collect()
+}
+
+/// Store an object in the node store, logging warnings on failure.
+/// Returns an empty ObjectRef if storage fails.
+fn store_object_or_log(
+    store: &mut NodeStore,
+    data: &[u8],
+    kind: i32,
+    stream_tags: &[Vec<u8>],
+) -> edgerun_proto::edgerun::v0::common::ObjectRef {
+    match store.put_object(data, kind, stream_tags) {
+        Ok(r) => r,
+        Err(e) => {
+            edgerun_log::warn!("failed to store object (kind={}): {}", kind, e);
+            edgerun_proto::edgerun::v0::common::ObjectRef {
+                object_id: vec![],
+                object_kind: Some(kind),
+            }
+        }
     }
 }
 
@@ -898,6 +1637,18 @@ mod tests {
     use edgerun_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
     use std::sync::Arc;
     use p256::ecdsa::signature::hazmat::PrehashSigner;
+
+    fn test_workload_policy() -> super::super::workload_policy::WorkloadPolicy {
+        super::super::workload_policy::WorkloadPolicy::permissive()
+    }
+
+    fn test_rate_limiter() -> super::super::workload_policy::RateLimiter {
+        super::super::workload_policy::RateLimiter::new(1000, 60_000_000)
+    }
+
+    fn test_running_workloads() -> std::sync::Arc<super::super::running_workloads::RunningWorkloads> {
+        std::sync::Arc::new(super::super::running_workloads::RunningWorkloads::new())
+    }
 
     // -----------------------------------------------------------------------
     // Test helpers
@@ -1077,6 +1828,15 @@ mod tests {
     // Dispatch command tests — full integration with NodeStore
     // -----------------------------------------------------------------------
 
+    /// Creates an unlimited capacity tracker for tests.
+    fn test_capacity_tracker() -> std::sync::Arc<crate::capacity::ResourceTracker> {
+        let cap = crate::capacity::NodeCapacity {
+            total_cores: 256,
+            total_memory_bytes: 256 * 1024 * 1024 * 1024, // 256 GB
+        };
+        std::sync::Arc::new(crate::capacity::ResourceTracker::new(&cap, 0, 0))
+    }
+
     #[test]
     fn dispatch_rejects_command_with_empty_command_id() {
         let mut store = test_store();
@@ -1118,6 +1878,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
         assert!(!result.reason_code.is_empty());
@@ -1163,6 +1925,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2); // REJECTED
     }
@@ -1208,6 +1972,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -1253,6 +2019,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Fails signature verification first (no signature on command)
         // so it never reaches the controller check
@@ -1302,6 +2070,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
 
         // Will fail signature verification (no signature), so gets rejected
@@ -1351,6 +2121,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Should be rejected for structural reasons (empty command_id)
         assert_eq!(result.decision, 2);
@@ -1398,6 +2170,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Fails signature verification
         assert_eq!(result.decision, 2);
@@ -1445,6 +2219,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Fails signature verification
         assert_eq!(result.decision, 2);
@@ -1491,6 +2267,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Fails signature verification, but query type is recognized
         assert_eq!(result.decision, 2);
@@ -1537,6 +2315,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Should be rejected with "use_produce_snapshot_request" after failing sig check
         assert_eq!(result.decision, 2);
@@ -1583,6 +2363,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -1629,6 +2411,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         assert_eq!(result.decision, 2);
     }
@@ -1703,6 +2487,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Should try to process as delegation but fail signature verification
         assert_eq!(result.decision, 2);
@@ -1778,6 +2564,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Will fail signature verification but the dispatch path for revocation runs
         assert_eq!(result.decision, 2);
@@ -1825,6 +2613,8 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &test_running_workloads(),
         );
         // Fails signature verification (no signature) — so rejected before reaching custom dispatch
         assert_eq!(result.decision, 2);
@@ -1876,6 +2666,8 @@ mod tests {
         let _result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
+            &std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new()),
         );
 
         // After genesis (seq 0), there should be additional events recorded

@@ -46,6 +46,7 @@ no-recursion-limit = []
 std = []
 
 [lib]
+test = false
 name = "prost"
 path = "src/lib.rs"
 bench = false

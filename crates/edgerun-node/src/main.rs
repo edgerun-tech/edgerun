@@ -17,8 +17,17 @@
 use edgerun_log;
 
 mod capabilities;
+mod capacity;
 mod command_dispatch;
 mod ingress;
+mod metering;
+mod session;
+mod init;
+mod workload_policy;
+mod hardware;
+mod running_workloads;
+
+use command_dispatch::sign_event_envelope;
 
 use edgerun_hardware_signing::{
     HardwareMeshSigner, MeshSigner, NodeID,
@@ -28,6 +37,7 @@ use edgerun_tpm::{
     LinuxTpmSigningKey, TpmHandle,
 };
 use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot, YubiKeySigningKey, PcscContext};
+use edgerun_core::util::system_time_to_prost;
 use p256::ecdsa::SigningKey;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use std::env;
@@ -56,6 +66,8 @@ enum Command {
         listen: Option<SocketAddr>,
         health_port: Option<u16>,
         log_level: String,
+        /// Run in init mode (PID 1 signal handling) even if not PID 1.
+        init_mode: bool,
     },
     Status {
         config: PathBuf,
@@ -95,6 +107,7 @@ fn parse_args() -> Result<Command, String> {
             let mut listen = None;
             let mut health_port = None;
             let mut log_level = "info".to_string();
+            let mut init_mode = false;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -102,14 +115,15 @@ fn parse_args() -> Result<Command, String> {
                     "--listen" => { i += 1; listen = Some(args[i].parse().map_err(|e| format!("invalid listen address: {}", e))?); }
                     "--health-port" => { i += 1; health_port = Some(args[i].parse().map_err(|e| format!("invalid port: {}", e))?); }
                     "--log-level" => { i += 1; log_level = args[i].clone(); }
+                    "--init" => { init_mode = true; }
                     "--help" | "-h" => {
-                        return Err("Usage: edgerund run [--config path] [--listen addr] [--health-port port] [--log-level level]".into());
+                        return Err("Usage: edgerund run [--config path] [--listen addr] [--health-port port] [--log-level level] [--init]".into());
                     }
                     other => return Err(format!("unknown option: {}", other)),
                 }
                 i += 1;
             }
-            Ok(Command::Run { config, listen, health_port, log_level })
+            Ok(Command::Run { config, listen, health_port, log_level, init_mode })
         }
         "status" => {
             let mut config = PathBuf::from("node.yaml");
@@ -145,10 +159,22 @@ fn main() {
         Command::Init { config, name, software } => {
             cmd_init(&config, name, software);
         }
-        Command::Run { config, listen, health_port, log_level } => {
+        Command::Run { config, listen, health_port, log_level, init_mode } => {
             // Initialize structured logging
             env::set_var("RUST_LOG", &log_level);
             edgerun_log::init_from_env();
+
+            // Install init signal handlers if explicitly requested or running as PID 1
+            let is_init = init_mode || init::is_pid_one();
+            if is_init {
+                if init_mode {
+                    eprintln!("edgerund running in init mode (--init)");
+                } else {
+                    eprintln!("edgerund running as PID 1 (init mode)");
+                }
+                init::install_signal_handlers();
+                init::init_setup();
+            }
 
             let rt = edgerun_rt::Builder::new_multi_thread()
                 .enable_all()
@@ -158,7 +184,7 @@ fn main() {
                     std::process::exit(1);
                 });
             rt.block_on(async move {
-                cmd_run(&config, listen, health_port).await;
+                cmd_run(&config, listen, health_port, is_init).await;
             });
         }
         Command::Status { config } => {
@@ -341,6 +367,23 @@ initial_grants: []
     println!();
     println!("Start the node with:");
     println!("  edgerund run --config {} --listen 0.0.0.0:8080", path.display());
+    println!();
+
+    // Run benchmarks and cache performance certificate
+    println!("Running performance benchmarks...");
+    let cert = edgerun_core::benchmark::run_full_benchmark(node_id.0);
+    let data_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let cert_path = data_dir.join("perf_cert.bin");
+    if let Err(e) = std::fs::write(&cert_path, cert.to_bytes()) {
+        eprintln!("warning: failed to cache perf cert: {}", e);
+    } else {
+        let mult = cert.cpu_core_multiplier().to_raw() as f64 / 65536.0;
+        println!("  CPU:      {:.2}x reference", mult);
+        println!("  Mem BW:   {} MB/s", cert.mem_bandwidth_mbps);
+        println!("  Mem Lat:  {} ns", cert.mem_latency_ns);
+        println!("  Stor IOPS: {}", cert.storage_random_iops);
+        println!("  Cert:     {}", cert_path.display());
+    }
 }
 
 fn check_yubikey_available() -> bool {
@@ -388,12 +431,13 @@ fn find_available_tpm_handle(start: u32, end: u32) -> Result<u32, String> {
 // ---------------------------------------------------------------------------
 
 fn cmd_status(path: &PathBuf) {
-    if !path.exists() {
-        eprintln!("error: config not found at {}. Run `edgerund init` first.", path.display());
-        std::process::exit(1);
-    }
-
-    let yaml = fs::read_to_string(path).unwrap();
+    let yaml = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("error: config not found at {}: {}. Run `edgerund init` first.", path.display(), e);
+            std::process::exit(1);
+        }
+    };
     let config: NodeConfig = parse_config(&yaml).unwrap_or_else(|e| {
         eprintln!("error: invalid config: {}", e);
         std::process::exit(1);
@@ -418,6 +462,12 @@ fn cmd_status(path: &PathBuf) {
         .map(|i| &i.name)
         .collect();
     println!("  UP interfaces: {:?}", up_interfaces);
+
+    // Hardware inventory
+    println!();
+    println!("Hardware Inventory:");
+    let hw = hardware::HardwareInventory::discover();
+    println!("{}", hw.summary());
 }
 
 // ---------------------------------------------------------------------------
@@ -551,18 +601,6 @@ async fn run_health_server(port: u16, state: HealthState) {
     }
 }
 
-/// Handles a TCP connection to a bootstrap peer.
-///
-/// Sends a ping-like message and maintains the connection for query/command exchange.
-async fn handle_bootstrap_connection(
-    stream: edgerun_rt::TcpStream,
-    store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
-    _peer_id_hex: &str,
-) {
-    // Use the same TCP frame handler as regular connections
-    handle_tcp_connection(stream, store_tx).await;
-}
-
 /// Periodically attempts to reconnect to unreachable peers.
 ///
 /// Runs on a timer, tracks unreachable peers and attempts TCP reconnection
@@ -616,13 +654,14 @@ async fn run_peer_reconnection(
     }
 }
 
-async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: Option<u16>) {
-    if !path.exists() {
-        edgerun_log::error!("config not found at {}. Run `edgerund init` first.", path.display());
-        std::process::exit(1);
-    }
-
-    let yaml = fs::read_to_string(path).unwrap();
+async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: Option<u16>, is_init: bool) {
+    let yaml = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) => {
+            edgerun_log::error!("config not found at {}: {}. Run `edgerund init` first.", path.display(), e);
+            std::process::exit(1);
+        }
+    };
     let config: NodeConfig = parse_config(&yaml).unwrap_or_else(|e| {
         edgerun_log::error!("invalid config: {}", e);
         std::process::exit(1);
@@ -632,8 +671,8 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     let node_id = signer.node_id();
     let private_key_bytes = extract_private_key_bytes(&config);
 
-    let node_name = config.name.as_deref().unwrap_or("(unnamed)").to_string();
-    let signer_type = config.signer.as_ref().map(|s| s.signer_type.clone()).unwrap_or_else(|| "unconfigured".to_string());
+    let _node_name = config.name.as_deref().unwrap_or("(unnamed)").to_string();
+    let _signer_type = config.signer.as_ref().map(|s| s.signer_type.clone()).unwrap_or_else(|| "unconfigured".to_string());
 
     edgerun_log::info!("edgerund starting"
     );
@@ -663,6 +702,38 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         std::process::exit(1);
     });
 
+    // Initialize resource capacity tracker (reserve 1 core + 512MB for system)
+    let capacity = capacity::NodeCapacity::discover();
+    let tracker = std::sync::Arc::new(capacity::ResourceTracker::new(
+        &capacity,
+        1,                              // reserve 1 core for system
+        512 * 1024 * 1024,             // reserve 512MB for system
+    ));
+    edgerun_log::info!("capacity: {} cores, {} memory — available: {} cores, {} memory",
+        capacity.total_cores,
+        capacity::format_bytes(capacity.total_memory_bytes),
+        tracker.available_cores(),
+        capacity::format_bytes(tracker.available_memory()),
+    );
+
+    // Load workload content policy (optional file next to config)
+    let policy_path = path.parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("workload_policy.txt");
+    let workload_policy = match workload_policy::load_policy_file(&policy_path) {
+        Ok(p) => {
+            if !p.allowed_registries.is_empty() || !p.blocked_images.is_empty() || !p.pinned_digests.is_empty() {
+                edgerun_log::info!("workload policy loaded: {} registries, {} blocked, {} pinned",
+                    p.allowed_registries.len(), p.blocked_images.len(), p.pinned_digests.len());
+            }
+            p
+        }
+        Err(e) => {
+            edgerun_log::warn!("failed to load workload policy: {}", e);
+            workload_policy::WorkloadPolicy::permissive()
+        }
+    };
+
     // Create genesis if new node
     let stream_id_bytes = config.stream_id.as_bytes();
     if store.get_head(stream_id_bytes).unwrap().is_none() {
@@ -685,7 +756,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
             prev_event_hash: None,
             event_type: EventType::NodeGenesis as i32,
             event_version: 1,
-            recorded_at: Some(now_ms_timestamp()),
+            recorded_at: Some(system_time_to_prost(SystemTime::now())),
             effective_at: None,
             payload_object: Some(payload_object_ref),
             related_events: vec![],
@@ -706,18 +777,24 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         });
         edgerun_log::info!("genesis event created (seq=0)");
     } else {
-        let (head_seq, _) = store.get_head(stream_id_bytes).unwrap().unwrap();
+        let (_head_seq, _) = store.get_head(stream_id_bytes).unwrap().unwrap();
         edgerun_log::info!("loaded stream");
     }
 
     // --- Unix socket capability server ---
     let socket_path = data_root.join("capabilities.sock");
     {
+        // Replay grants from event stream into policy engine
+        let policy = if let Ok(Some((head_seq, _))) = store.get_head(stream_id_bytes) {
+            capabilities::project_capability_grants(&store, stream_id_bytes, head_seq as u64)
+        } else {
+            edgerun_capability_policy::SimplePolicyEngine::default()
+        };
+
         let mut multi = capabilities::MultiCapabilityProvider::new();
-        let policy = edgerun_capability_policy::SimplePolicyEngine::default();
         capabilities::discover_and_register_capabilities(&mut multi, policy);
         let cap_count = multi.len();
-        edgerun_log::info!("discovered capability providers");
+        edgerun_log::info!("discovered {} capability providers", cap_count);
 
         if cap_count > 0 {
             let multi_arc = Arc::new(std::sync::Mutex::new(multi));
@@ -727,7 +804,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
                     edgerun_log::error!("capability server error: {}", e);
                 }
             });
-            edgerun_log::info!("capability server listening");
+            edgerun_log::info!("capability server listening on {}", socket_path.display());
         }
     }
 
@@ -751,7 +828,7 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     let bootstrap_peers = parse_bootstrap_peers(&config.bootstrap_peers);
     let unreachable_peers = store.list_unreachable_peers_with_addr().unwrap_or_default();
     for peer in &bootstrap_peers {
-        if let Err(e) = store.upsert_peer(&peer.node_id_hex, Some(&peer.addr), "unknown", true) {
+        if let Err(_e) = store.upsert_peer(&peer.node_id_hex, Some(&peer.addr), "unknown", true) {
             edgerun_log::warn!("failed to record bootstrap peer");
         }
     }
@@ -765,7 +842,8 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     let store_handle = edgerun_rt::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
                        mesh_command_rx,
-                       global_rate_limiter, message_hash_cache, allowed_peers, node_id);
+                       global_rate_limiter, message_hash_cache, allowed_peers, node_id,
+                       tracker, workload_policy);
     });
 
     let mesh_handle = edgerun_rt::spawn_blocking(move || {
@@ -774,10 +852,12 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
 
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
+        let tcp_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
         let _tcp_handle = edgerun_rt::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
+            tcp_signer,
         ));
         edgerun_log::info!("TCP listener started");
     } else {
@@ -787,19 +867,26 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     // --- Bootstrap peer connections ---
     if !bootstrap_peers.is_empty() {
         edgerun_log::info!("connecting to bootstrap peers");
+        let bootstrap_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
+        let bootstrap_node_id = node_id;
         for peer in &bootstrap_peers {
             // Attempt TCP connection
             let peer_addr = peer.addr.clone();
             let peer_id_hex = peer.node_id_hex.clone();
             let conn_store_tx = store_tx.clone();
+            let ctx = SessionContext {
+                node_id: bootstrap_node_id,
+                signer: Arc::clone(&bootstrap_signer),
+            };
             edgerun_rt::spawn(async move {
                 match edgerun_rt::TcpStream::connect(&peer_addr).await {
                     Ok(stream) => {
                         edgerun_log::info!("connected to bootstrap peer");
-                        // Handle as a regular TCP connection (bidirectional)
-                        handle_bootstrap_connection(stream, conn_store_tx, &peer_id_hex).await;
+                        // As initiator, generate nonce and send SessionHello first
+                        let nonce = session::generate_nonce();
+                        handle_tcp_connection(stream, conn_store_tx, &ctx, Some(nonce)).await;
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         edgerun_log::warn!("failed to connect to bootstrap peer");
                     }
                 }
@@ -808,9 +895,12 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     }
 
     // --- Fetch queue consumer: processes pending fetch requests by querying peers ---
-    // Note: The fetch consumer needs its own store access. We can't share the same
-    // NodeStore with the store task (it's not Send), so we open a separate connection
-    // to the same SQLite database for read-only fetch queue operations.
+    //
+    // NOTE: This opens a second FileIndex to the same data directory as the store
+    // task. Both instances read/write the same binary index files (fetch_queue.bin).
+    // This is a known data race. The fix is to route fetch queue operations through
+    // the store task via the existing mpsc channel (add FetchDequeue/FetchMarkDone
+    // variants to StoreRequest).
     let fetch_store_path = data_root.join("index.sqlite3");
     let fetch_peers = bootstrap_peers.clone();
     let fetch_node_id = node_id;
@@ -826,16 +916,30 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     });
 
     // Wait for shutdown signal
-    let shutdown = edgerun_rt::spawn(async {
-        edgerun_rt::ctrl_c().await.ok();
-        edgerun_log::info!("shutting down");
+    let shutdown = edgerun_rt::spawn(async move {
+        if is_init {
+            // In init mode, poll the shutdown flag (set by signal handler)
+            loop {
+                if init::SHUTDOWN_REQUESTED.load(std::sync::atomic::Ordering::Relaxed) {
+                    edgerun_log::info!("shutdown requested (init mode)");
+                    break;
+                }
+                edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        } else {
+            // Normal mode: wait for ctrl_c
+            edgerun_rt::ctrl_c().await.ok();
+            edgerun_log::info!("shutdown requested (normal mode)");
+        }
     });
     let _ = shutdown.await;
 
     // Cleanup
+    edgerun_log::info!("shutting down");
     drop(store_tx);
     let _ = store_handle.await;
     let _ = mesh_handle.await;
+    edgerun_log::info!("shutdown complete");
 }
 
 // ---------------------------------------------------------------------------
@@ -936,14 +1040,42 @@ async fn run_fetch_queue_consumer(
 
             // Send query over TCP to the peer
             match send_query_to_peer(&peer_addr, &query).await {
-                Ok(_fragment_bytes) => {
+                Ok(fragment_bytes) => {
                     edgerun_log::info!("fetch query succeeded");
                     fetched = true;
+
+                    // Try to decode the response and store fetched objects
+                    if let Ok(fragment) =
+                        edgerun_proto::edgerun::v0::access::QueryResultFragment::decode(&fragment_bytes[..])
+                    {
+                        // Log any object refs returned
+                        for obj_ref in &fragment.object_refs {
+                            if !obj_ref.object_id.is_empty() {
+                                let obj_id_hex = obj_ref.object_id.iter()
+                                    .map(|b| format!("{:02x}", b))
+                                    .collect::<String>();
+                                edgerun_log::info!("fetched object reference: {}", obj_id_hex);
+                            }
+                        }
+
+                        // Log event refs returned
+                        for event_ref in &fragment.event_refs {
+                            edgerun_log::info!("fetched event reference");
+                            let _ = event_ref;
+                        }
+
+                        // In a full implementation, we'd:
+                        // 1. Decode bundled_result_object if present
+                        // 2. Store fetched objects via store.put_object()
+                        // 3. Record fetch events in our stream
+                        // For now, we just log and mark the fetch as done
+                    }
+
                     // Mark as done
                     let _ = index.mark_fetch_done(fetch_entry.id);
                     break;
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::debug!("peer query failed, trying next");
                 }
             }
@@ -1061,10 +1193,23 @@ fn run_store_task(
     mut message_hash_cache: ingress::RecentHashCache,
     allowed_peers: Vec<Vec<u8>>,
     responder_node_id: NodeID,
+    capacity_tracker: std::sync::Arc<capacity::ResourceTracker>,
+    workload_policy: workload_policy::WorkloadPolicy,
 ) {
-    // Initialize controller set from the node's config
+    let rate_limiter = workload_policy::RateLimiter::new(
+        100,    // max 100 workloads per requester
+        60_000_000, // within a 60-second window
+    );
+    let running_workloads = std::sync::Arc::new(running_workloads::RunningWorkloads::new());
+    // Initialize controller set from the node's config, then replay from
+    // the persistent change log so controller state survives restarts.
     let initial_controllers = config_controllers_from_signer(&*signer);
-    let mut controllers = command_dispatch::ControllerSet::new(initial_controllers.clone());
+    let mut controllers = command_dispatch::project_controller_set(
+        &store,
+        stream_id,
+        initial_controllers,
+    );
+    edgerun_log::info!("controller set projected: {} controllers", controllers.to_vec().len());
     let mut replay_cache: std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)> = std::collections::HashMap::new();
 
     // Load active revocations from the database
@@ -1093,7 +1238,9 @@ fn run_store_task(
         let req = if let Ok(mesh_req) = mesh_command_rx.try_recv() {
             // Process mesh command and route reply back through mesh
             process_mesh_command_sync(mesh_req, &mut store, stream_id, signer,
-                &mut controllers, &mut replay_cache, &revoked_delegations, &trusted_root_ids);
+                &mut controllers, &mut replay_cache, &revoked_delegations, &trusted_root_ids,
+                &capacity_tracker, &workload_policy, &rate_limiter,
+                &running_workloads);
             request_counter += 1;
             continue;
         } else if let Some(store_req) = rx.blocking_recv() {
@@ -1175,17 +1322,17 @@ fn run_store_task(
         // 4. Process the request
         match req {
             StoreRequest::Command { command, reply_tx, .. } => {
-                // Full command dispatch: validation, delegation check, type dispatch
-                // (handled in run_store_task via controllers and replay_cache)
                 let result = command_dispatch::dispatch_command(
                     &command, &mut store, stream_id, signer,
                     &mut controllers, &mut replay_cache,
                     &revoked_delegations, &trusted_root_ids,
+                    &capacity_tracker, &workload_policy, &rate_limiter,
+                    &running_workloads,
                 );
                 let _ = reply_tx.send(StoreResponse::Ok(result.response_bytes));
             }
             StoreRequest::Query { query, reply_tx, .. } => {
-                let result = execute_query(&query, &mut store, stream_id, &responder_node_id);
+                let result = execute_query(&query, &mut store, stream_id, &responder_node_id, &*signer);
                 let _ = reply_tx.send(StoreResponse::Ok(result));
             }
             StoreRequest::ProduceSnapshot { view_type, completeness, reply_tx } => {
@@ -1226,7 +1373,7 @@ fn run_store_task(
                         edgerun_log::info!("outbound command succeeded");
                         let _ = reply_tx.send(StoreResponse::Ok(response));
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         edgerun_log::error!("outbound command failed");
                         let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
                     }
@@ -1247,10 +1394,10 @@ fn run_store_task(
         if request_counter.is_multiple_of(100) {
             match store.integrity_check_and_rebuild() {
                 Ok(0) => {} // Healthy
-                Ok(rebuilt) => {
+                Ok(_rebuilt) => {
                     edgerun_log::warn!("SQLite corruption detected and indexes rebuilt");
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::error!("integrity check and rebuild failed");
                 }
             }
@@ -1271,7 +1418,7 @@ fn run_store_task(
         if request_counter.is_multiple_of(200) {
             match store.check_disk_space() {
                 Ok(()) => {}
-                Err(available_bytes) => {
+                Err(_available_bytes) => {
                     edgerun_log::error!("CRITICAL: disk space critically low, writes may fail"
                     );
                 }
@@ -1290,6 +1437,10 @@ fn process_mesh_command_sync(
     replay_cache: &mut std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
     revoked_delegations: &std::collections::HashSet<Vec<u8>>,
     trusted_root_ids: &[Vec<u8>],
+    capacity_tracker: &std::sync::Arc<capacity::ResourceTracker>,
+    workload_policy: &workload_policy::WorkloadPolicy,
+    rate_limiter: &workload_policy::RateLimiter,
+    running_workloads: &std::sync::Arc<running_workloads::RunningWorkloads>,
 ) {
     let source = req.source;
     let raw_bytes = req.raw_bytes.clone();
@@ -1303,6 +1454,8 @@ fn process_mesh_command_sync(
         &req.command, store, stream_id, signer,
         controllers, replay_cache,
         revoked_delegations, trusted_root_ids,
+        capacity_tracker, workload_policy, rate_limiter,
+        running_workloads,
     );
 
     // Route reply back through mesh to the original sender
@@ -1319,10 +1472,18 @@ fn process_mesh_command_sync(
 
 const TCP_MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
 
+/// Context for session handling — holds node identity and signing capability.
+#[derive(Clone)]
+struct SessionContext {
+    node_id: NodeID,
+    signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync>,
+}
+
 async fn run_tcp_listener(
     listen_addr: SocketAddr,
-    _node_id: NodeID,
+    node_id: NodeID,
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync>,
 ) {
     let listener = match edgerun_rt::TcpListener::bind(&listen_addr).await {
         Ok(l) => l,
@@ -1332,13 +1493,16 @@ async fn run_tcp_listener(
         }
     };
 
+    let ctx = SessionContext { node_id, signer };
+
     loop {
         match listener.accept().await {
-            Ok((stream, peer_addr)) => {
+            Ok((stream, _peer_addr)) => {
                 let conn_store_tx = store_tx.clone();
+                let ctx = ctx.clone();
                 edgerun_rt::spawn(async move {
                     edgerun_log::debug!("TCP connection accepted");
-                    handle_tcp_connection(stream, conn_store_tx).await;
+                    handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
                 });
             }
             Err(e) => {
@@ -1348,31 +1512,270 @@ async fn run_tcp_listener(
     }
 }
 
-/// Handles a plain TCP connection.
+/// Handles a plain TCP connection with session handshake.
+/// If `outbound_nonce` is provided, this side initiates the handshake by
+/// sending SessionHello first. Otherwise, it waits for the peer's hello.
 async fn handle_tcp_connection(
     mut stream: edgerun_rt::TcpStream,
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
+    ctx: &SessionContext,
+    outbound_nonce: Option<Vec<u8>>,
 ) {
     let (mut reader, mut writer) = edgerun_rt::split(&mut stream);
     let mut read_buf = Vec::with_capacity(4096);
     let mut conn_rate_limiter = ingress::TokenBucket::new(100, 50);
 
-    handle_tcp_stream_common(
+    // Session handshake
+    let session_state = if let Some(nonce) = outbound_nonce {
+        // We're the initiator — send hello first
+        match perform_session_handshake_as_initiator(
+            &mut reader,
+            &mut writer,
+            &mut read_buf,
+            ctx,
+            &nonce,
+        ).await {
+            Some(state) => {
+                edgerun_log::info!("session established with peer (initiator)");
+                state
+            }
+            None => {
+                edgerun_log::debug!("session handshake failed as initiator");
+                return;
+            }
+        }
+    } else {
+        // We're the responder — wait for peer's hello
+        match perform_session_handshake_as_responder(
+            &mut reader,
+            &mut writer,
+            &mut read_buf,
+            ctx,
+        ).await {
+            Some(state) => {
+                edgerun_log::info!("session established with peer (responder)");
+                state
+            }
+            None => {
+                edgerun_log::debug!("session handshake failed as responder");
+                return;
+            }
+        }
+    };
+
+    handle_tcp_stream_common_with_session(
         &mut reader,
         &mut writer,
         &mut read_buf,
         &mut conn_rate_limiter,
         &store_tx,
+        &session_state,
     ).await;
 }
 
-/// Common frame handling logic for TCP connections.
-async fn handle_tcp_stream_common<R, W>(
+/// Performs the session handshake as the initiator (client side).
+/// Sends SessionHello first, then waits for SessionAccept.
+async fn perform_session_handshake_as_initiator<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    _read_buf: &mut Vec<u8>,
+    ctx: &SessionContext,
+    nonce: &[u8],
+) -> Option<session::SessionState>
+where
+    R: edgerun_rt::AsyncRead + Unpin,
+    W: edgerun_rt::AsyncWrite + Unpin,
+{
+    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+
+    // Build and send SessionHello
+    let hello = match session::build_session_hello(
+        &ctx.node_id,
+        None, // No specific target
+        nonce,
+        &*ctx.signer,
+    ) {
+        Ok(h) => h,
+        Err(e) => {
+            edgerun_log::warn!("failed to build SessionHello: {}", e);
+            return None;
+        }
+    };
+
+    let hello_bytes = session::encode_hello(&hello);
+    let frame = encode_tcp_frame(&hello_bytes);
+    if writer.write_all(&frame).await.is_err() {
+        return None;
+    }
+    if writer.flush().await.is_err() {
+        return None;
+    }
+
+    // Read the response frame (should be SessionAccept)
+    let mut resp_buf = Vec::with_capacity(4096);
+    while resp_buf.len() < 8 {
+        let mut chunk = [0u8; 64];
+        match reader.read(&mut chunk).await {
+            Ok(0) => return None,
+            Ok(n) => resp_buf.extend_from_slice(&chunk[..n]),
+            Err(_) => return None,
+        }
+    }
+
+    let frame_len = u64::from_be_bytes(resp_buf[..8].try_into().unwrap()) as usize;
+    if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
+        return None;
+    }
+
+    let total_needed = 8 + frame_len;
+    while resp_buf.len() < total_needed {
+        let mut chunk = vec![0u8; 4096.min(total_needed - resp_buf.len())];
+        match reader.read(&mut chunk).await {
+            Ok(0) => return None,
+            Ok(n) => resp_buf.extend_from_slice(&chunk[..n]),
+            Err(_) => return None,
+        }
+    }
+
+    let payload: Vec<u8> = resp_buf.drain(..total_needed).skip(8).collect();
+
+    // Decode as SessionAccept
+    let accept = match session::decode_accept(&payload) {
+        Ok(a) => a,
+        Err(_) => {
+            edgerun_log::debug!("response is not a SessionAccept");
+            return None;
+        }
+    };
+
+    // Verify the SessionAccept
+    let peer_node_id = match session::verify_session_accept(&accept, nonce) {
+        Ok(id) => id,
+        Err(e) => {
+            edgerun_log::warn!("SessionAccept verification failed: {}", e);
+            return None;
+        }
+    };
+
+    let protocol_version = accept.selected_protocol_version;
+    let transport_features = accept.selected_transport_features.clone();
+
+    Some(session::SessionState {
+        peer_node_id,
+        peer_identity: accept.responder.clone()?,
+        protocol_version,
+        transport_features,
+        is_initiator: true,
+    })
+}
+
+/// Performs the session handshake as the responder (server side).
+/// Waits for SessionHello, verifies it, sends SessionAccept.
+async fn perform_session_handshake_as_responder<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    read_buf: &mut Vec<u8>,
+    ctx: &SessionContext,
+) -> Option<session::SessionState>
+where
+    R: edgerun_rt::AsyncRead + Unpin,
+    W: edgerun_rt::AsyncWrite + Unpin,
+{
+    use edgerun_rt::{AsyncReadExt, AsyncWriteExt};
+
+    // Read the first frame (should be SessionHello)
+    while read_buf.len() < 8 {
+        let mut chunk = [0u8; 64];
+        match reader.read(&mut chunk).await {
+            Ok(0) => return None,
+            Ok(n) => read_buf.extend_from_slice(&chunk[..n]),
+            Err(_) => return None,
+        }
+    }
+
+    let frame_len = u64::from_be_bytes(read_buf[..8].try_into().unwrap()) as usize;
+    if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
+        return None;
+    }
+
+    let total_needed = 8 + frame_len;
+    while read_buf.len() < total_needed {
+        let mut chunk = vec![0u8; 4096.min(total_needed - read_buf.len())];
+        match reader.read(&mut chunk).await {
+            Ok(0) => return None,
+            Ok(n) => read_buf.extend_from_slice(&chunk[..n]),
+            Err(_) => return None,
+        }
+    }
+
+    let payload: Vec<u8> = read_buf.drain(..total_needed).skip(8).collect();
+
+    // Try to decode as SessionHello
+    let hello = match session::decode_hello(&payload) {
+        Ok(h) => h,
+        Err(_) => {
+            edgerun_log::debug!("first frame is not a SessionHello");
+            return None;
+        }
+    };
+
+    // Verify the SessionHello
+    let peer_node_id = match session::verify_session_hello(&hello) {
+        Ok(id) => id,
+        Err(e) => {
+            edgerun_log::warn!("SessionHello verification failed: {}", e);
+            return None;
+        }
+    };
+
+    // Select protocol version and transport features
+    let protocol_version = session::select_protocol_version(&hello.supported_protocol_versions)?;
+    let transport_features = session::select_transport_features(&hello.supported_transport_features);
+
+    // Build and send SessionAccept
+    let nonce = hello.session_nonce.clone();
+    let accept = match session::build_session_accept(
+        &ctx.node_id,
+        &nonce,
+        protocol_version,
+        transport_features.clone(),
+        &*ctx.signer,
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            edgerun_log::warn!("failed to build SessionAccept: {}", e);
+            return None;
+        }
+    };
+
+    let accept_bytes = session::encode_accept(&accept);
+    let frame = encode_tcp_frame(&accept_bytes);
+    if writer.write_all(&frame).await.is_err() {
+        return None;
+    }
+    if writer.flush().await.is_err() {
+        return None;
+    }
+
+    edgerun_log::info!("session established");
+
+    Some(session::SessionState {
+        peer_node_id,
+        peer_identity: hello.initiator.clone()?,
+        protocol_version,
+        transport_features,
+        is_initiator: false,
+    })
+}
+
+/// Common frame handling logic for TCP connections with session state.
+async fn handle_tcp_stream_common_with_session<R, W>(
     reader: &mut R,
     writer: &mut W,
     read_buf: &mut Vec<u8>,
     conn_rate_limiter: &mut ingress::TokenBucket,
     store_tx: &edgerun_rt::mpsc::Sender<StoreRequest>,
+    _session: &session::SessionState,
 ) where
     R: edgerun_rt::AsyncRead + Unpin,
     W: edgerun_rt::AsyncWrite + Unpin,
@@ -1437,6 +1840,14 @@ async fn handle_tcp_stream_common<R, W>(
             return;
         }
 
+        // Try SessionHello (in case peer sends another hello)
+        if let Ok(_hello) =
+            edgerun_proto::edgerun::v0::network::SessionHello::decode(&payload[..])
+        {
+            edgerun_log::debug!("ignoring duplicate SessionHello");
+            continue;
+        }
+
         // Try CommandEnvelope
         if let Ok(command) =
             edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&payload[..])
@@ -1461,7 +1872,7 @@ async fn handle_tcp_stream_common<R, W>(
                             return;
                         }
                     }
-                    Ok(StoreResponse::Rejected(reason)) => {
+                    Ok(StoreResponse::Rejected(_reason)) => {
                         edgerun_log::debug!("TCP snapshot production screened");
                         return;
                     }
@@ -1526,7 +1937,7 @@ async fn handle_tcp_stream_common<R, W>(
                             return;
                         }
                     }
-                    Ok(StoreResponse::Rejected(reason)) => {
+                    Ok(StoreResponse::Rejected(_reason)) => {
                         edgerun_log::debug!("TCP fetch object screened");
                         return;
                     }
@@ -1548,7 +1959,7 @@ async fn handle_tcp_stream_common<R, W>(
                         return;
                     }
                 }
-                Ok(StoreResponse::Rejected(reason)) => {
+                Ok(StoreResponse::Rejected(_reason)) => {
                     edgerun_log::debug!("TCP message screened");
                     return;
                 }
@@ -1575,7 +1986,7 @@ async fn handle_tcp_stream_common<R, W>(
                         return;
                     }
                 }
-                Ok(StoreResponse::Rejected(reason)) => {
+                Ok(StoreResponse::Rejected(_reason)) => {
                     edgerun_log::debug!("TCP query screened");
                     return;
                 }
@@ -1648,8 +2059,9 @@ fn check_query_cost(
 fn execute_query(
     query: &edgerun_proto::edgerun::v0::access::QueryRequest,
     store: &mut NodeStore,
-    _local_stream_id: &[u8],
+    local_stream_id: &[u8],
     responder_node_id: &NodeID,
+    signer: &dyn edgerun_hardware_signing::MeshSigner,
 ) -> Vec<u8> {
     use edgerun_proto::edgerun::v0::access::{QueryClass, QueryResultFragment, ResultCompleteness};
     use edgerun_proto::edgerun::v0::common::{EventRef, ObjectRef};
@@ -1689,7 +2101,7 @@ fn execute_query(
                         });
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::warn!("query HEAD failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
@@ -1742,7 +2154,7 @@ fn execute_query(
                         }
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::warn!("query EVENT_RANGE failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
@@ -1759,7 +2171,7 @@ fn execute_query(
                             object_refs.push(obj_ref.clone());
                         }
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         edgerun_log::warn!("query OBJECT_EXISTENCE failed");
                         completeness = ResultCompleteness::Partial as i32;
                     }
@@ -1778,7 +2190,7 @@ fn execute_query(
                     Ok(None) => {
                         completeness = ResultCompleteness::Partial as i32;
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         edgerun_log::warn!("query OBJECT_FETCH failed");
                         completeness = ResultCompleteness::Partial as i32;
                     }
@@ -1805,7 +2217,7 @@ fn execute_query(
                         completeness = ResultCompleteness::MetadataOnly as i32;
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::warn!("query SNAPSHOT failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
@@ -1833,7 +2245,7 @@ fn execute_query(
                         });
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     edgerun_log::warn!("query SEARCH failed");
                     completeness = ResultCompleteness::Partial as i32;
                 }
@@ -1903,7 +2315,7 @@ fn execute_query(
         }
     }
 
-    let fragment = QueryResultFragment {
+    let mut fragment = QueryResultFragment {
         fragment_version: 1,
         query_id: query.query_id.clone(),
         responder: Some(edgerun_proto::edgerun::v0::common::IdentityRef {
@@ -1911,7 +2323,7 @@ fn execute_query(
             identity_kind: Some(2), // NODE
             key_hint: None,
         }),
-        answered_at: Some(now_ms_timestamp()),
+        answered_at: Some(system_time_to_prost(SystemTime::now())),
         completeness,
         snapshot_refs,
         event_refs,
@@ -1922,6 +2334,22 @@ fn execute_query(
         result_metadata: None,
         signature: None,
     };
+
+    // Sign the query response
+    {
+        use edgerun_core::protocol::{ProtocolRecord, canonical_bytes};
+        let record = ProtocolRecord::QueryResultFragment(fragment.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = edgerun_core::crypto::sha256(&canonical);
+        let mut digest_bytes = [0u8; 32];
+        digest_bytes.copy_from_slice(&digest);
+        if let Ok(sig) = signer.sign_digest(&digest_bytes) {
+            fragment.signature = Some(edgerun_core::protocol::Signature {
+                algorithm: 1,
+                value: sig.to_vec(),
+            });
+        }
+    }
 
     let fragment_bytes = prost::Message::encode_to_vec(&fragment);
 
@@ -1953,7 +2381,7 @@ fn build_query_denial(
             identity_kind: Some(2),
             key_hint: None,
         }),
-        answered_at: Some(now_ms_timestamp()),
+        answered_at: Some(system_time_to_prost(SystemTime::now())),
         completeness: ResultCompleteness::Denied as i32,
         snapshot_refs: vec![],
         event_refs: vec![],
@@ -2053,7 +2481,7 @@ fn run_mesh_loop(
                 edgerun_log::warn!("discovery failed: {}", e);
             }
             let dead = router.tick_heartbeat();
-            for d in &dead {
+            for _d in &dead {
                 edgerun_log::info!("peer dead");
             }
         }
@@ -2064,23 +2492,6 @@ fn run_mesh_loop(
 
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-}
-
-fn sign_event_envelope(event: &mut edgerun_core::protocol::EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
-    use edgerun_core::protocol::{ProtocolRecord, canonical_bytes};
-    
-    let record = ProtocolRecord::EventEnvelope(event.clone());
-    let canonical = canonical_bytes(&record, true);
-    let digest = edgerun_core::crypto::sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    let sig = signer.sign_digest(&digest_bytes)
-        .map_err(|e| format!("signing failed: {}", e))?;
-    event.signature = Some(edgerun_core::protocol::Signature {
-        algorithm: 1,
-        value: sig.to_vec(),
-    });
-    Ok(())
 }
 
 fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
@@ -2101,14 +2512,6 @@ fn extract_private_key_bytes(config: &NodeConfig) -> Vec<u8> {
     }
     eprintln!("error: no software signer with private_key_hex found in config");
     std::process::exit(1);
-}
-
-fn now_ms_timestamp() -> prost_types::Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    prost_types::Timestamp {
-        seconds: now.as_secs() as i64,
-        nanos: now.subsec_nanos() as i32,
-    }
 }
 
 // ---------------------------------------------------------------------------

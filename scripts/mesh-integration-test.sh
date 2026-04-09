@@ -74,7 +74,7 @@ trap cleanup EXIT
 section "Building mesh-tool binary"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR/../rust"
+cd "$SCRIPT_DIR/.."
 cargo build -p edgerun-mesh-daemon --bin mesh-tool --quiet 2>&1
 MESH_TOOL="$(pwd)/target/debug/mesh-tool"
 echo "  mesh-tool: $MESH_TOOL"
@@ -315,7 +315,7 @@ fi
 
 rm -f /tmp/udp-recv-output.txt /tmp/udp-send-output.txt
 rm -rf /tmp/test-udp-mesh
-cd "$SCRIPT_DIR/../rust"
+cd "$SCRIPT_DIR/.."
 
 # ────────────────────────────────────────────────────────────────
 # Test 6: Mesh discovery packet encoding/decoding

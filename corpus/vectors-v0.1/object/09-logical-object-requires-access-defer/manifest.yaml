@@ -3,7 +3,8 @@ suite: object
 validator: validate_object_retrieval
 version: 1
 priority: mandatory
-description: logical object realization may defer when representation is valid but access is unavailable
+description: logical object realization may defer when representation is valid but
+  access is unavailable
 tags:
 - object
 - validate_object_retrieval
