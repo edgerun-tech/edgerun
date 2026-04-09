@@ -29,7 +29,7 @@ docker-build:
 
 # Run comprehensive E2E test suite (software only, no hardware required)
 e2e:
-	cargo test -p edgerun-e2e-full -- --ignored
+	cargo test -p edgerun-e2e -- --ignored
 
 # Run full E2E suite including hardware tests (requires HARDWARE_E2E=1)
 e2e-full:

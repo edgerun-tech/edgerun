@@ -227,7 +227,7 @@ else
 fi
 
 echo -n "  Building E2E test crate... "
-if cargo test -p edgerun-e2e-full --no-run --quiet 2>&1; then
+if cargo test -p edgerun-e2e --no-run --quiet 2>&1; then
     echo -e "${GREEN}ok${NC}"
     pass "E2E test crate built"
 else
@@ -242,12 +242,12 @@ fi
 section "Running End-to-End Tests"
 
 echo -e "  ${YELLOW}Note: All tests are #[ignore] and require --ignored flag${NC}"
-echo -e "  Running with: ${CYAN}cargo test -p edgerun-e2e-full -- --ignored${NC}"
+echo -e "  Running with: ${CYAN}cargo test -p edgerun-e2e -- --ignored${NC}"
 echo ""
 
 # Run the E2E tests and capture output
 set +e
-TEST_OUTPUT=$(cargo test -p edgerun-e2e-full -- --ignored --nocapture 2>&1)
+TEST_OUTPUT=$(cargo test -p edgerun-e2e -- --ignored --nocapture 2>&1)
 TEST_EXIT=$?
 set -e
 

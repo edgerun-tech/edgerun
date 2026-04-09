@@ -1006,10 +1006,20 @@ dependencies = [
 name = "edgerun-e2e"
 version = "0.1.0"
 dependencies = [
+ "edgerun-capabilities 0.1.0",
  "edgerun-core 0.1.0",
  "edgerun-hardware-signing 0.1.0",
+ "edgerun-mesh 0.1.0",
+ "edgerun-mesh-link 0.1.0",
+ "edgerun-mesh-router 0.1.0",
+ "edgerun-mesh-session 0.1.0",
+ "edgerun-oci-registry 0.1.0",
+ "edgerun-oci-runtime 0.1.0",
  "edgerun-proto 0.1.0",
+ "edgerun-remote-capability 0.1.0",
  "edgerun-rt 0.1.0",
+ "edgerun-storage 0.1.0",
+ "hex 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "p256 0.13.2",
  "prost 0.14.3",
  "prost-types 0.14.3",
@@ -1041,29 +1051,6 @@ dependencies = [
  "edgerun-tpm 0.1.0",
  "edgerun-v4l2-camera 0.1.0",
  "prost 0.14.3",
-]
-
-[[package]]
-name = "edgerun-e2e-full"
-version = "0.1.0"
-dependencies = [
- "edgerun-capabilities 0.1.0",
- "edgerun-core 0.1.0",
- "edgerun-hardware-signing 0.1.0",
- "edgerun-mesh 0.1.0",
- "edgerun-mesh-link 0.1.0",
- "edgerun-mesh-router 0.1.0",
- "edgerun-mesh-session 0.1.0",
- "edgerun-oci-registry 0.1.0",
- "edgerun-oci-runtime 0.1.0",
- "edgerun-proto 0.1.0",
- "edgerun-remote-capability 0.1.0",
- "edgerun-rt 0.1.0",
- "edgerun-storage 0.1.0",
- "hex 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "p256 0.13.2",
- "prost 0.14.3",
- "prost-types 0.14.3",
 ]
 
 [[package]]
