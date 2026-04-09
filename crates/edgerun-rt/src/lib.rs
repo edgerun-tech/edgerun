@@ -20,6 +20,23 @@ use std::time::Duration;
 
 pub use std::time::Instant;
 
+mod notify;
+mod semaphore;
+mod rwlock;
+mod barrier;
+mod watch;
+mod async_tcp;
+pub mod mpsc;
+pub mod oneshot;
+pub mod unbounded;
+
+pub use notify::{Notify, Notified};
+pub use semaphore::{Semaphore, Permit, TryAcquireError as SemaphoreError, AcquireError};
+pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use barrier::{Barrier, BarrierWaitResult};
+pub use watch::{Sender as WatchSender, Receiver as WatchReceiver};
+pub use async_tcp::{AsyncTcpStream, AsyncTcpListener, ConnectFuture};
+
 // ===========================================================================
 // Thread-local runtime handle
 // ===========================================================================
@@ -225,6 +242,14 @@ impl Reactor {
         }
     }
     fn wait_write(&self, fd: RawFd, waker: Waker) {
+        if let Some(s) = self.fds.lock().unwrap().get(&fd) {
+            *s.write_waker.lock().unwrap() = Some(waker);
+            s.update(&self.epoll, fd);
+        }
+    }
+    fn wait_connect(&self, fd: RawFd, waker: Waker) {
+        // For connecting sockets, we wait for write readiness (connect complete).
+        // Also register for read in case of immediate error.
         if let Some(s) = self.fds.lock().unwrap().get(&fd) {
             *s.write_waker.lock().unwrap() = Some(waker);
             s.update(&self.epoll, fd);
@@ -618,6 +643,18 @@ where F: FnOnce() -> R + Send + 'static, R: Send + 'static
     JoinHandle { inner }
 }
 
+/// Register a connecting fd with the reactor.
+fn register_connecting_fd(fd: RawFd, waker: Waker) {
+    let rt = current_rt();
+    rt.reactor.wait_connect(fd, waker);
+}
+
+/// Register an existing fd for read readiness notification.
+fn register_fd_read(fd: RawFd, waker: Waker) {
+    let rt = current_rt();
+    rt.reactor.wait_read(fd, waker);
+}
+
 pub fn current_handle() -> Option<Arc<RuntimeInner>> {
     CURRENT_RT.with(|c| c.borrow().clone())
 }
@@ -752,14 +789,14 @@ pub struct TcpStream { inner: Arc<Mutex<StdTcp>> }
 
 impl TcpStream {
     fn new(inner: StdTcp) -> Self { Self { inner: Arc::new(Mutex::new(inner)) } }
-    pub fn connect<A: ToSocketAddrs>(addr: A) -> ConnectFuture {
-        ConnectFuture { addrs: addr.to_socket_addrs().ok().map(|a| a.collect::<Vec<_>>()), done: false }
+    pub fn connect<A: ToSocketAddrs>(addr: A) -> ConnectFutureLegacy {
+        ConnectFutureLegacy { addrs: addr.to_socket_addrs().ok().map(|a| a.collect::<Vec<_>>()), done: false }
     }
     pub fn peer_addr(&self) -> io::Result<SocketAddr> { self.inner.lock().unwrap().peer_addr() }
 }
 
-pub struct ConnectFuture { addrs: Option<Vec<SocketAddr>>, done: bool }
-impl Future for ConnectFuture {
+pub struct ConnectFutureLegacy { addrs: Option<Vec<SocketAddr>>, done: bool }
+impl Future for ConnectFutureLegacy {
     type Output = io::Result<TcpStream>;
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -953,20 +990,6 @@ impl Future for IntervalTick<'_> {
 
 // ===========================================================================
 
-// ===========================================================================
-// Channels
-// ===========================================================================
-
-pub mod mpsc;
-pub mod oneshot;
-pub mod unbounded;
-
-// Concurrency primitives
-pub mod notify;
-pub mod semaphore;
-pub mod rwlock;
-pub mod barrier;
-pub mod watch;
 
 // ===========================================================================
 // Signal — ctrl_c
@@ -991,6 +1014,9 @@ impl Future for CtrlC {
 }
 
 // ===========================================================================
+// Signal — ctrl_c
+// ===========================================================================
+
 // Tests
 // ===========================================================================
 
