@@ -542,7 +542,7 @@ struct MeshCommandRequest {
     command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
     raw_bytes: Vec<u8>,
     source: NodeID,
-    reply_tx: std::sync::mpsc::Sender<MeshReply>,
+    reply_tx: edgerun_rt::oneshot::Sender<MeshReply>,
 }
 
 // ---------------------------------------------------------------------------
@@ -836,8 +836,8 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
     // --- Mesh poll loop (blocking thread) ---
     // Creates direct channels between mesh loop and store task
     let mesh_node_id = node_id;
-    let (mesh_command_tx, mesh_command_rx) = std::sync::mpsc::channel::<MeshCommandRequest>();
-    let (_mesh_reply_tx, mesh_reply_rx) = std::sync::mpsc::channel::<MeshReply>();
+    let (mesh_command_tx, mesh_command_rx) = edgerun_rt::mpsc::channel::<MeshCommandRequest>(256);
+    let (mesh_reply_tx, mesh_reply_rx) = edgerun_rt::mpsc::channel::<MeshReply>(256);
 
     let store_handle = edgerun_rt::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
@@ -1188,7 +1188,7 @@ fn run_store_task(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     mut rx: edgerun_rt::mpsc::Receiver<StoreRequest>,
-    mesh_command_rx: std::sync::mpsc::Receiver<MeshCommandRequest>,
+    mesh_command_rx: edgerun_rt::mpsc::Receiver<MeshCommandRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
     allowed_peers: Vec<Vec<u8>>,
@@ -2402,8 +2402,8 @@ fn build_query_denial(
 
 fn run_mesh_loop(
     node_id: NodeID,
-    mesh_command_tx: std::sync::mpsc::Sender<MeshCommandRequest>,
-    mesh_reply_rx: std::sync::mpsc::Receiver<MeshReply>,
+    mesh_command_tx: edgerun_rt::mpsc::Sender<MeshCommandRequest>,
+    mesh_reply_rx: edgerun_rt::mpsc::Receiver<MeshReply>,
 ) {
     let local = LocalNode::new(node_id);
     let mut mesh_link = MeshLink::new();
@@ -2448,7 +2448,7 @@ fn run_mesh_loop(
                     if let Ok(command) =
                         edgerun_proto::edgerun::v0::stream::CommandEnvelope::decode(&frame.payload[..])
                     {
-                        let (reply_tx, reply_rx) = std::sync::mpsc::channel();
+                        let (reply_tx, reply_rx) = edgerun_rt::oneshot::channel();
                         let _ = mesh_command_tx.send(MeshCommandRequest {
                             command,
                             raw_bytes: frame.payload.clone(),
@@ -2456,7 +2456,7 @@ fn run_mesh_loop(
                             reply_tx,
                         });
                         // Wait for reply and queue it back through mesh
-                        if let Ok(reply) = reply_rx.recv() {
+                        if let Ok(reply) = reply_rx.blocking_recv() {
                             let reply_frame = MeshFrame::from_payload(reply.source, reply.response_bytes);
                             mesh_link.queue_frame(reply_frame);
                         }
