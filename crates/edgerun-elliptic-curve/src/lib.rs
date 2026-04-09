@@ -84,8 +84,6 @@ extern crate std;
 pub mod point;
 pub mod scalar;
 
-#[cfg(feature = "dev")]
-pub mod dev;
 #[cfg(feature = "ecdh")]
 pub mod ecdh;
 #[cfg(feature = "hash2curve")]

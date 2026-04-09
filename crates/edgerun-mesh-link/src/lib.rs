@@ -34,13 +34,9 @@ const MESH_MCAST_PORT: u16 = 47080;
 const ETH_P_MESH: u16 = MESH_ETHERTYPE.to_be();
 
 // Packet socket options (reserved for future BPF filtering)
-#[allow(dead_code)]
 const SO_ATTACH_FILTER: c_int = 26;
-#[allow(dead_code)]
 const SOL_PACKET: c_int = 263;
-#[allow(dead_code)]
 const PACKET_ADD_MEMBERSHIP: c_int = 1;
-#[allow(dead_code)]
 const PACKET_MR_MULTICAST: c_int = 0;
 
 // ---------------------------------------------------------------------------
@@ -94,7 +90,6 @@ struct SockaddrLl {
 /// A raw Ethernet socket bound to a specific interface for our EtherType.
 pub struct RawEthernetSocket {
     fd: c_int,
-    #[allow(dead_code)]
     ifindex: c_int,
 }
 
@@ -213,7 +208,6 @@ const AF_INET: c_int = 2;
 const SOCK_DGRAM: c_int = 2;
 const IPPROTO_UDP: c_int = 17;
 // IP multicast options (reserved for future use with explicit group management)
-#[allow(dead_code)]
 const IP_ADD_MEMBERSHIP: c_int = 35;
 const IP_MULTICAST_IF: c_int = 32;
 

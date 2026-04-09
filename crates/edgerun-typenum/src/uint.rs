@@ -140,7 +140,6 @@ impl Unsigned for UTerm {
 /// ```rust
 /// use typenum::{UInt, UTerm, B0, B1};
 ///
-/// # #[allow(dead_code)]
 /// type U6 = UInt<UInt<UInt<UTerm, B1>, B1>, B0>;
 /// ```
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Debug, Default)]

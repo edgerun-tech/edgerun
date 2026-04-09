@@ -120,6 +120,5 @@ mod doctests_only {
     ///    }
     /// }
     /// ```
-    #[allow(dead_code)]
     pub enum DocTests {}
 }

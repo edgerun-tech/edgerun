@@ -73,7 +73,7 @@ impl RunningWorkloads {
     /// Returns `Ok(())` if registered, `Err(existing)` if a workload with
     /// the same work_id is already in the registry.
     pub fn register(&self, info: RunningWorkloadInfo) -> Result<(), RunningWorkloadInfo> {
-        let mut map = self.workloads.write().unwrap();
+        let mut map = self.workloads.write().expect("workloads map poisoned");
         if map.contains_key(&info.work_id) {
             return Err(info);
         }
@@ -87,7 +87,7 @@ impl RunningWorkloads {
 
     /// Look up a running workload by work_id.
     pub fn get(&self, work_id: &[u8; 32]) -> Option<RunningWorkloadInfo> {
-        let map = self.workloads.read().unwrap();
+        let map = self.workloads.read().expect("workloads map poisoned");
         map.get(work_id).map(|e| e.info.clone())
     }
 
@@ -103,7 +103,7 @@ impl RunningWorkloads {
     /// Returns `Some(info)` if the workload was found, `None` if not.
     pub fn terminate(&self, work_id: &[u8; 32]) -> Option<RunningWorkloadInfo> {
         let entry = {
-            let map = self.workloads.read().unwrap();
+            let map = self.workloads.read().expect("workloads map poisoned");
             map.get(work_id).map(|e| {
                 e.kill_requested.store(true, Ordering::Release);
                 e.info.clone()
@@ -156,7 +156,7 @@ impl RunningWorkloads {
 
     /// Check if kill was requested for a workload (for the background thread).
     pub fn is_kill_requested(&self, work_id: &[u8; 32]) -> bool {
-        let map = self.workloads.read().unwrap();
+        let map = self.workloads.read().expect("workloads map poisoned");
         map.get(work_id).map(|e| e.kill_requested.load(Ordering::Acquire)).unwrap_or(false)
     }
 
@@ -164,7 +164,7 @@ impl RunningWorkloads {
     /// Called by the background thread after it has released resources and
     /// cleaned up the bundle directory.
     pub fn unregister(&self, work_id: &[u8; 32]) -> Option<RunningWorkloadInfo> {
-        let mut map = self.workloads.write().unwrap();
+        let mut map = self.workloads.write().expect("workloads map poisoned");
         let entry = map.remove(work_id)?;
         self.total_completed.fetch_add(1, Ordering::Relaxed);
         Some(entry.info)
@@ -175,7 +175,7 @@ impl RunningWorkloads {
     /// should wait for background threads to finish.
     pub fn terminate_all(&self) -> Vec<RunningWorkloadInfo> {
         let all_ids: Vec<[u8; 32]> = {
-            let map = self.workloads.read().unwrap();
+            let map = self.workloads.read().expect("workloads map poisoned");
             map.keys().copied().collect()
         };
 
@@ -190,7 +190,7 @@ impl RunningWorkloads {
 
     /// Return the number of currently running workloads.
     pub fn count(&self) -> usize {
-        self.workloads.write().unwrap().len()
+        self.workloads.write().expect("workloads map poisoned").len()
     }
 
     /// Total workloads ever started since this registry was created.

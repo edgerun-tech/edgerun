@@ -79,7 +79,6 @@
 macro_rules! custom_punctuation {
     ($ident:ident, $($tt:tt)+) => {
         pub struct $ident {
-            #[allow(dead_code)]
             pub spans: $crate::custom_punctuation_repr!($($tt)+),
         }
 

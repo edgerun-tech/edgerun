@@ -19,4 +19,12 @@ edgerun-alsa-speaker = { path = "../edgerun-alsa-speaker" }
 edgerun-v4l2-camera = { path = "../edgerun-v4l2-camera" }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
 edgerun-tpm = { path = "../edgerun-tpm" }
+edgerun-display = { path = "../edgerun-display" }
+edgerun-npu = { path = "../edgerun-npu" }
+edgerun-fingerprint = { path = "../edgerun-fingerprint" }
+edgerun-drm-display = { path = "../edgerun-drm-display" }
+edgerun-linux-npu = { path = "../edgerun-linux-npu" }
+edgerun-goodix-fingerprint = { path = "../edgerun-goodix-fingerprint" }
+edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
+edgerun-linux-wifi = { path = "../edgerun-linux-wifi" }
 prost.workspace = true

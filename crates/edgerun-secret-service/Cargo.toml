@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-secret-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "edgerun-secret-service"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-storage = { path = "../edgerun-storage" }
+edgerun-core = { path = "../edgerun-core" }
+edgerun-json = { path = "../edgerun-json" }
+libc = { path = "../libc" }

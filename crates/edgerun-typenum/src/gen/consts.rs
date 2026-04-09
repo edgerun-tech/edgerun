@@ -18,7 +18,6 @@ These alias definitions look like this:
 ```rust
 use typenum::{B0, B1, UInt, UTerm};
 
-# #[allow(dead_code)]
 type U6 = UInt<UInt<UInt<UTerm, B1>, B1>, B0>;
 ```
 
@@ -36,9 +35,7 @@ These alias definitions look like this:
 ```rust
 use typenum::{B0, B1, UInt, UTerm, PInt, NInt};
 
-# #[allow(dead_code)]
 type P6 = PInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>>;
-# #[allow(dead_code)]
 type N6 = NInt<UInt<UInt<UInt<UTerm, B1>, B1>, B0>>;
 ```
 

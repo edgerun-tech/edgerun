@@ -306,6 +306,13 @@ impl Reactor {
                                 if let Some(w) = s.write_waker.lock().unwrap().take() { w.wake(); }
                             }
                             s.update(&self.epoll, fd);
+                            // If both wakers are gone, the fd is no longer needed —
+                            // remove it from the reactor's map to prevent leaks.
+                            let rp = s.read_waker.lock().unwrap().is_some();
+                            let wp = s.write_waker.lock().unwrap().is_some();
+                            if !rp && !wp {
+                                self.deregister_fd(fd);
+                            }
                         }
                     }
                 }

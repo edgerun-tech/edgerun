@@ -1,0 +1,11 @@
+[package]
+name = "edgerun-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Dependency-free HTTP client and types using only std"
+readme = "README.md"
+documentation = "https://docs.rs/edgerun-http"
+keywords = ["http", "client", "request", "response", "std"]
+categories = ["network-programming", "web-programming", "web-programming::http-client"]

@@ -60,7 +60,7 @@ impl ResourceTracker {
     /// Try to allocate resources. Returns true if successful.
     /// Atomic: both cores and memory are checked and updated under a single lock.
     pub fn try_allocate(&self, cores: u32, memory_bytes: u64) -> bool {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("capacity state poisoned");
         let cores_ok = cores <= self.total_cores.saturating_sub(state.allocated_cores);
         let mem_ok = memory_bytes <= self.total_memory_bytes.saturating_sub(state.allocated_memory);
         if cores_ok && mem_ok {
@@ -74,26 +74,26 @@ impl ResourceTracker {
 
     /// Release previously allocated resources.
     pub fn release(&self, cores: u32, memory_bytes: u64) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().expect("capacity state poisoned");
         state.allocated_cores = state.allocated_cores.saturating_sub(cores);
         state.allocated_memory = state.allocated_memory.saturating_sub(memory_bytes);
     }
 
     /// Available cores right now.
     pub fn available_cores(&self) -> u32 {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().expect("capacity state poisoned");
         self.total_cores.saturating_sub(state.allocated_cores)
     }
 
     /// Available memory right now.
     pub fn available_memory(&self) -> u64 {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().expect("capacity state poisoned");
         self.total_memory_bytes.saturating_sub(state.allocated_memory)
     }
 
     /// Current utilization as percentage (0-100).
     pub fn core_utilization_pct(&self) -> u32 {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().expect("capacity state poisoned");
         if self.total_cores == 0 { return 0; }
         (state.allocated_cores * 100) / self.total_cores
     }

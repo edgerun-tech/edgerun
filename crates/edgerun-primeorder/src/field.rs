@@ -116,7 +116,6 @@ macro_rules! impl_mont_field_element {
             /// Does *not* perform a check that the field element does not overflow the order.
             ///
             /// This method is primarily intended for defining internal constants.
-            #[allow(dead_code)]
             pub(crate) const fn from_hex(hex: &str) -> Self {
                 Self::from_uint_unchecked(<$uint>::from_be_hex(hex))
             }

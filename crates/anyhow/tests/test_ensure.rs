@@ -57,7 +57,6 @@ trait Trait: Sized {
 impl<T> Trait for T {}
 
 enum Enum<T: ?Sized> {
-    #[allow(dead_code)]
     Thing(PhantomData<T>),
     Generic,
 }
@@ -393,7 +392,6 @@ fn test_path() {
 
     #[derive(PartialOrd, PartialEq, Debug)]
     enum E<'a, T> {
-        #[allow(dead_code)]
         T(&'a T),
         U,
     }
@@ -495,9 +493,7 @@ fn test_trailer() {
 fn test_whitespace() {
     #[derive(Debug)]
     pub struct Point {
-        #[allow(dead_code)]
         pub x: i32,
-        #[allow(dead_code)]
         pub y: i32,
     }
 

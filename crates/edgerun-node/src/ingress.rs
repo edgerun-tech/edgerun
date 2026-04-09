@@ -132,7 +132,6 @@ pub fn quick_message_hash(bytes: &[u8]) -> u64 {
 
 /// Result of ingress screening.
 #[derive(Debug, PartialEq)]
-#[allow(dead_code)]
 pub enum IngressResult {
     /// Message passed all cheap checks — proceed to crypto/authority work.
     Allow,

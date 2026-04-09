@@ -109,7 +109,7 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
     let mut signable_cmd = command.clone();
     signable_cmd.signature = None;
     let mut canonical = Vec::new();
-    prost::Message::encode(&signable_cmd, &mut canonical).unwrap();
+    prost::Message::encode(&signable_cmd, &mut canonical).map_err(|_| "encode_failed")?;
     let digest = edgerun_core::crypto::sha256(&canonical);
 
     let mut sig_bytes = [0u8; 64];
@@ -156,7 +156,7 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
     let mut signable = delegation.clone();
     signable.signature = None;
     let mut canonical = Vec::new();
-    prost::Message::encode(&signable, &mut canonical).unwrap();
+    prost::Message::encode(&signable, &mut canonical).map_err(|_| "encode_failed")?;
     let digest = edgerun_core::crypto::sha256(&canonical);
 
     let r = p256::FieldBytes::from_slice(&sig.value[..32]);
@@ -570,7 +570,7 @@ fn dispatch_execute_workload(
     // === PHASE 2: Apply resource limits ===
     let cfg_path = bundle_dir.join("config.json");
     if let Ok(txt) = std::fs::read_to_string(&cfg_path) {
-        if let Ok(mut spec) = lifegraph_json::from_str::<edgerun_oci_runtime::OciSpec>(&txt) {
+        if let Ok(mut spec) = edgerun_oci_runtime::json::parse_oci_spec(txt.as_bytes()) {
             let shares = (allocated_cores as u64).saturating_mul(1024);
             if let Some(linux) = spec.linux.as_mut() {
                 linux.resources = Some(edgerun_oci_runtime::OciLinuxResources {
@@ -578,19 +578,23 @@ fn dispatch_execute_workload(
                         limit: Some(allocated_memory_bytes as i64),
                         reservation: None,
                         swap: None,
+                        kernel: None,
+                        kernel_tcp: None,
                     }),
                     cpu: Some(edgerun_oci_runtime::OciLinuxCpu {
                         shares: Some(shares),
                         quota: None,
                         period: None,
+                        realtime_runtime: None,
+                        realtime_period: None,
+                        cpus: None,
+                        mems: None,
                     }),
                     pids: Some(edgerun_oci_runtime::OciLinuxPids { limit: 256 }),
                 });
             }
-            if let Ok(json) = lifegraph_json::to_string_pretty(&spec) {
-                let _ = std::fs::write(&cfg_path, json);
+            let json = spec.to_json_string_pretty();
             }
-        }
     }
 
     // === PHASE 3: Run container (non-blocking) ===
@@ -1556,7 +1560,8 @@ fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRec
     let mut signable = delegation.clone();
     signable.signature = None;
     let mut canonical = Vec::new();
-    prost::Message::encode(&signable, &mut canonical).unwrap();
+    prost::Message::encode(&signable, &mut canonical)
+        .expect("prost encode failed for delegation");
     Digest {
         algorithm: 1,
         value: edgerun_core::crypto::sha256(&canonical).to_vec(),

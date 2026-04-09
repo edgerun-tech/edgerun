@@ -16,12 +16,14 @@
 //! Loss of indexes does not invalidate already stored records.
 
 pub mod blobs;
+pub mod credentials;
 pub mod error;
 pub mod file_index;
 pub mod store;
 
 pub use error::StorageError;
-pub use blobs::{BlobStore, BlobKeySource, BlobEntry, blob_file_path};
+pub use blobs::{BlobStore, BlobKeySource, BlobEntry, BlobStoreConfig, blob_file_path};
+pub use credentials::CredentialStore;
 pub use file_index::{FileIndex, EventIndexEntry, ReplayEntry, FetchEntry, WorkAccountingRecord};
 pub use store::{NodeStore, NodeStoreConfig, CommandReplayResult, ObjectResult, ControllerSet};
 
@@ -1515,5 +1517,85 @@ mod tests {
         };
         let r3 = validate_bin_file(&valid_peers, "peers.bin");
         assert!(r3, "valid peers should pass");
+    }
+
+    // -- Credential store via NodeStore --
+
+    #[test]
+    fn node_store_put_and_get_credential() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let store = NodeStore::open(&config).unwrap();
+
+        store.put_credential("api", "github", b"ghp_xxx123", Some("GitHub PAT")).unwrap();
+        let secret = store.get_credential("api", "github").unwrap();
+        assert_eq!(secret, Some(b"ghp_xxx123".to_vec()));
+    }
+
+    #[test]
+    fn node_store_get_missing_credential() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+        let store = NodeStore::open(&config).unwrap();
+
+        assert!(store.get_credential("api", "nonexistent").unwrap().is_none());
+    }
+
+    #[test]
+    fn node_store_delete_credential() {
+        let data_root = tmp_data_root();
+        let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
+
+        store.put_credential("db", "postgres", b"pass123", None).unwrap();
+        assert!(store.exists_credential("db", "postgres").unwrap());
+
+        let deleted = store.delete_credential("db", "postgres").unwrap();
+        assert!(deleted);
+        assert!(!store.exists_credential("db", "postgres").unwrap());
+    }
+
+    #[test]
+    fn node_store_list_credentials() {
+        let data_root = tmp_data_root();
+        let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
+
+        store.put_credential("wifi", "home", b"home-pass", None).unwrap();
+        store.put_credential("wifi", "office", b"office-pass", Some("WPA2")).unwrap();
+        store.put_credential("api", "github", b"ghp", None).unwrap();
+
+        let creds = store.list_credentials("wifi").unwrap();
+        assert_eq!(creds.len(), 2);
+        assert_eq!(creds[0].0, "home");
+        assert_eq!(creds[1].0, "office");
+        assert_eq!(creds[1].1, Some("WPA2".to_string()));
+    }
+
+    #[test]
+    fn node_store_credential_survives_restart() {
+        let data_root = tmp_data_root();
+        let config = test_config(data_root.clone());
+
+        {
+            let store = NodeStore::open(&config).unwrap();
+            store.put_credential("persistent", "key", b"persistent-value", None).unwrap();
+        }
+
+        {
+            let store = NodeStore::open(&config).unwrap();
+            let secret = store.get_credential("persistent", "key").unwrap();
+            assert_eq!(secret, Some(b"persistent-value".to_vec()));
+        }
+    }
+
+    #[test]
+    fn node_store_overwrite_credential() {
+        let data_root = tmp_data_root();
+        let store = NodeStore::open(&test_config(data_root.clone())).unwrap();
+
+        store.put_credential("api", "stripe", b"sk_old", None).unwrap();
+        store.put_credential("api", "stripe", b"sk_new", Some("rotated")).unwrap();
+
+        let secret = store.get_credential("api", "stripe").unwrap();
+        assert_eq!(secret, Some(b"sk_new".to_vec()));
     }
 }

@@ -21,7 +21,6 @@ use crate::{
 /// assert_eq!(<U5 as Same<U5>>::Output::to_u32(), 5);
 ///
 /// // Only an error if we use it:
-/// # #[allow(dead_code)]
 /// type Undefined = <U5 as Same<U4>>::Output;
 /// // Compiler error:
 /// // Undefined::to_u32();

@@ -4,7 +4,6 @@ use std::mem::size_of_val;
 
 #[test]
 fn test_size() {
-    #[allow(dead_code)]
     #[path = "../src/tables.rs"]
     mod tables;
 

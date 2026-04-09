@@ -167,12 +167,6 @@ bits = [
     "dep:tap",
 ]
 default = ["arithmetic"]
-dev = [
-    "arithmetic",
-    "dep:hex-literal",
-    "pem",
-    "pkcs8",
-]
 ecdh = [
     "arithmetic",
     "digest",

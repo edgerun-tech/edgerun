@@ -580,12 +580,10 @@ mod tests {
     use super::*;
 
     /// Ensure that `AeadInPlace` is object-safe
-    #[allow(dead_code)]
     type DynAeadInPlace<N, T, O> =
         dyn AeadInPlace<NonceSize = N, TagSize = T, CiphertextOverhead = O>;
 
     /// Ensure that `AeadMutInPlace` is object-safe
-    #[allow(dead_code)]
     type DynAeadMutInPlace<N, T, O> =
         dyn AeadMutInPlace<NonceSize = N, TagSize = T, CiphertextOverhead = O>;
 }

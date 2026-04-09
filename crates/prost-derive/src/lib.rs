@@ -162,7 +162,6 @@ fn try_message(input: TokenStream) -> Result<TokenStream, Error> {
         quote!()
     } else {
         quote! {
-            #[allow(dead_code)]
             impl #impl_generics #ident #ty_generics #where_clause {
                 #(#methods)*
             }

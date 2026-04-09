@@ -6,7 +6,7 @@
 use std::ffi::CString;
 use std::fs;
 use std::io;
-use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
+use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,6 +17,8 @@ use std::process::Command;
 
 extern "C" {
     fn unshare(flags: c_int) -> c_int;
+    fn syscall(number: c_long, ...) -> c_long;
+    fn kill(pid: c_int, sig: c_int) -> c_int;
     fn mount(
         source: *const c_char,
         target: *const c_char,
@@ -34,10 +36,10 @@ extern "C" {
     fn sethostname(name: *const c_char, len: usize) -> c_int;
 }
 
-/// Call the seccomp syscall directly via libc::syscall.
+/// Call the seccomp syscall directly.
 /// On x86_64, seccomp is syscall #317.
 fn do_seccomp(operation: c_uint, flags: c_uint, args: *const c_void) -> c_int {
-    unsafe { libc::syscall(317, operation, flags, args) as c_int }
+    unsafe { syscall(317, operation, flags, args) as c_int }
 }
 
 // ===========================================================================
@@ -73,6 +75,8 @@ mod ms {
 
 const MNT_DETACH: c_int = 2;
 const S_IFCHR: c_uint = 0o020000;
+const SIGTERM: c_int = 15;
+const SIGKILL: c_int = 9;
 
 /// prctl options
 mod prctl {
@@ -241,184 +245,8 @@ fn create_device(path: &str, major: u64, minor: u64, mode: u32) {
 // OCI config.json
 // ===========================================================================
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct OciSpec {
-    pub version: String,
-    #[serde(default)]
-    pub process: Option<OciProcess>,
-    #[serde(default)]
-    pub root: Option<OciRoot>,
-    pub hostname: Option<String>,
-    #[serde(default)]
-    pub linux: Option<OciLinux>,
-    #[serde(default)]
-    pub mounts: Option<Vec<OciMount>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciProcess {
-    #[serde(default)]
-    pub terminal: Option<bool>,
-    #[serde(default)]
-    pub user: Option<OciUser>,
-    #[serde(default)]
-    pub args: Option<Vec<String>>,
-    #[serde(default)]
-    pub env: Option<Vec<String>>,
-    #[serde(default)]
-    pub cwd: Option<String>,
-    #[serde(default)]
-    pub capabilities: Option<OciCapabilities>,
-    #[serde(default)]
-    pub rlimits: Option<Vec<OciRlimit>>,
-    #[serde(default)]
-    pub no_new_privileges: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciUser {
-    pub uid: Option<u32>,
-    pub gid: Option<u32>,
-    #[serde(default)]
-    pub additional_gids: Option<Vec<u32>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciCapabilities {
-    #[serde(default)]
-    pub bounding: Option<Vec<String>>,
-    #[serde(default)]
-    pub effective: Option<Vec<String>>,
-    #[serde(default)]
-    pub inheritable: Option<Vec<String>>,
-    #[serde(default)]
-    pub permitted: Option<Vec<String>>,
-    #[serde(default)]
-    pub ambient: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciRlimit {
-    #[serde(rename = "type")]
-    pub r#type: String,
-    pub hard: u64,
-    pub soft: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciRoot {
-    pub path: String,
-    #[serde(default)]
-    pub readonly: Option<bool>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinux {
-    #[serde(default)]
-    pub uid_mappings: Option<Vec<OciIdMapping>>,
-    #[serde(default)]
-    pub gid_mappings: Option<Vec<OciIdMapping>>,
-    #[serde(default)]
-    pub resources: Option<OciLinuxResources>,
-    #[serde(default)]
-    pub cgroups_path: Option<String>,
-    #[serde(default)]
-    pub namespaces: Option<Vec<OciNamespace>>,
-    #[serde(default)]
-    pub devices: Option<Vec<OciLinuxDevice>>,
-    #[serde(default)]
-    pub masked_paths: Option<Vec<String>>,
-    #[serde(default)]
-    pub readonly_paths: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciIdMapping {
-    pub container_id: u32,
-    pub host_id: u32,
-    pub size: u32,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinuxResources {
-    #[serde(default)]
-    pub memory: Option<OciLinuxMemory>,
-    #[serde(default)]
-    pub cpu: Option<OciLinuxCpu>,
-    #[serde(default)]
-    pub pids: Option<OciLinuxPids>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinuxMemory {
-    pub limit: Option<i64>,
-    pub reservation: Option<i64>,
-    pub swap: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinuxCpu {
-    pub shares: Option<u64>,
-    pub quota: Option<i64>,
-    pub period: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinuxPids {
-    pub limit: i64,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciNamespace {
-    #[serde(rename = "type")]
-    pub ns_type: String,
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciLinuxDevice {
-    pub path: String,
-    #[serde(rename = "type")]
-    pub dev_type: String,
-    pub major: i64,
-    pub minor: i64,
-    #[serde(default)]
-    pub file_mode: Option<u32>,
-    #[serde(default)]
-    pub uid: Option<u32>,
-    #[serde(default)]
-    pub gid: Option<u32>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-pub struct OciMount {
-    pub destination: String,
-    #[serde(rename = "type")]
-    pub mount_type: Option<String>,
-    #[serde(default)]
-    pub source: Option<String>,
-    #[serde(default)]
-    pub options: Option<Vec<String>>,
-}
-
-/// Default namespaces for an OCI container.
+pub mod json;
+pub use json::*;
 pub fn default_namespaces() -> Vec<OciNamespace> {
     vec![
         OciNamespace { ns_type: "user".into(), path: None },
@@ -431,7 +259,13 @@ pub fn default_namespaces() -> Vec<OciNamespace> {
 }
 
 /// Resolve namespace clone flags from OCI namespace type strings.
+/// Returns `ns::CONTAINER` (all six namespaces) when the spec has no
+/// explicit namespace configuration — the OCI default is to create new
+/// namespaces for the container.
 pub fn namespace_flags(namespaces: &[OciNamespace]) -> c_int {
+    if namespaces.is_empty() {
+        return ns::CONTAINER;
+    }
     let mut flags: c_int = 0;
     for ns in namespaces {
         flags |= match ns.ns_type.as_str() {
@@ -667,7 +501,7 @@ fn setup_rootfs(
 pub fn run_bundle(bundle_path: &Path) -> io::Result<std::process::ExitStatus> {
     let config_path = bundle_path.join("config.json");
     let config_data = fs::read(&config_path)?;
-    let spec: OciSpec = lifegraph_json::from_slice(&config_data)
+    let spec: OciSpec = json::parse_oci_spec(&config_data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
     run_spec(&spec)
 }
@@ -852,8 +686,7 @@ pub fn create_bundle(
 /// Serialize an OCI spec to config.json in a bundle directory.
 pub fn write_bundle(bundle_path: &Path, spec: &OciSpec) -> io::Result<()> {
     fs::create_dir_all(bundle_path)?;
-    let json = lifegraph_json::to_string_pretty(spec)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    let json = spec.to_json_string_pretty();
     fs::write(bundle_path.join("config.json"), json)?;
     Ok(())
 }
@@ -880,7 +713,7 @@ impl RunningContainer {
         let pid = self.child.id();
 
         // Try SIGTERM first
-        let _ = unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+        let _ = unsafe { kill(pid as c_int, SIGTERM) };
 
         // Wait up to 5 seconds for graceful exit
         for _ in 0..50 {
@@ -891,7 +724,7 @@ impl RunningContainer {
         }
 
         // SIGKILL if still alive
-        let _ = unsafe { libc::kill(pid as libc::pid_t, libc::SIGKILL) };
+        let _ = unsafe { kill(pid as c_int, SIGKILL) };
         self.child.wait()
     }
 
@@ -914,7 +747,7 @@ impl RunningContainer {
 pub fn start_bundle(bundle_path: &Path) -> io::Result<RunningContainer> {
     let config_path = bundle_path.join("config.json");
     let config_data = fs::read(&config_path)?;
-    let spec: OciSpec = lifegraph_json::from_slice(&config_data)
+    let spec: OciSpec = json::parse_oci_spec(&config_data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
     start_spec(&spec)
 }
@@ -1032,8 +865,8 @@ mod tests {
             linux: None,
             mounts: None,
         };
-        let json = lifegraph_json::to_string(&spec).unwrap();
-        let parsed: OciSpec = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let json = spec.to_json_string_pretty();
+        let parsed: OciSpec = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.version, "1.0.2");
     }
 
@@ -1124,8 +957,8 @@ mod tests {
             ]),
         };
 
-        let json = lifegraph_json::to_string(&spec).unwrap();
-        let parsed: OciSpec = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let json = spec.to_json_string_pretty();
+        let parsed: OciSpec = json::parse_oci_spec(json.as_bytes()).unwrap();
 
         // Verify all fields round-tripped
         assert_eq!(parsed.version, spec.version);
@@ -1146,7 +979,7 @@ mod tests {
     #[test]
     fn oci_spec_deserializes_missing_optional_fields() {
         let json = r#"{"version":"1.0.2","root":{"path":"/rootfs"}}"#;
-        let spec: OciSpec = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let spec: OciSpec = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(spec.version, "1.0.2");
         assert!(spec.process.is_none());
         assert!(spec.hostname.is_none());
@@ -1517,8 +1350,8 @@ mod tests {
             source: Some("proc".into()),
             options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
         };
-        let json = lifegraph_json::to_string(&mount).unwrap();
-        let parsed: OciMount = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let json = mount.to_json_pretty(0);
+        let parsed: OciMount = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.destination, "/proc");
         assert_eq!(parsed.mount_type, Some("proc".into()));
         assert_eq!(parsed.options.as_ref().unwrap().len(), 3);
@@ -1531,6 +1364,7 @@ mod tests {
     #[test]
     fn oci_linux_resources_roundtrip() {
         let res = OciLinuxResources {
+            pids: None,
             memory: Some(OciLinuxMemory {
                 limit: Some(1073741824),
                 reservation: Some(536870912),
@@ -1543,8 +1377,8 @@ mod tests {
             }),
             pids: Some(OciLinuxPids { limit: 256 }),
         };
-        let json = lifegraph_json::to_string(&res).unwrap();
-        let parsed: OciLinuxResources = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let json = res.to_json_pretty(0);
+        let parsed: OciLinuxResources = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.memory.as_ref().unwrap().limit, Some(1073741824));
         assert_eq!(parsed.cpu.as_ref().unwrap().shares, Some(2048));
         assert_eq!(parsed.pids.as_ref().unwrap().limit, 256);
@@ -1563,8 +1397,8 @@ mod tests {
             permitted: Some(vec!["CAP_NET_BIND_SERVICE".into()]),
             ambient: Some(vec![]),
         };
-        let json = lifegraph_json::to_string(&caps).unwrap();
-        let parsed: OciCapabilities = lifegraph_json::from_slice(json.as_bytes()).unwrap();
+        let json = caps.to_json_pretty(0);
+        let parsed: OciCapabilities = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.bounding.as_ref().unwrap().len(), 1);
         assert_eq!(parsed.effective.as_ref().unwrap()[0], "CAP_NET_BIND_SERVICE");
     }

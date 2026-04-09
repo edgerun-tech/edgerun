@@ -504,7 +504,6 @@ enum StoreRequest {
         reply_tx: edgerun_rt::oneshot::Sender<StoreResponse>,
     },
     /// Send a command to a remote peer over TCP and record CommandSent event.
-    #[allow(dead_code)]
     SendCommand {
         peer_addr: String,
         command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
@@ -528,7 +527,6 @@ struct MeshReply {
 }
 
 /// An outbound command to be sent to a remote peer.
-#[allow(dead_code)]
 struct OutboundCommand {
     peer_addr: String,
     command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
@@ -736,7 +734,11 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
 
     // Create genesis if new node
     let stream_id_bytes = config.stream_id.as_bytes();
-    if store.get_head(stream_id_bytes).unwrap().is_none() {
+    let head_result = store.get_head(stream_id_bytes).unwrap_or_else(|e| {
+        edgerun_log::error!("failed to read stream head: {}", e);
+        std::process::exit(1);
+    });
+    if head_result.is_none() {
         use edgerun_core::protocol::EventEnvelope;
         use edgerun_proto::edgerun::v0::stream::EventType;
 
@@ -777,7 +779,11 @@ async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_port: O
         });
         edgerun_log::info!("genesis event created (seq=0)");
     } else {
-        let (_head_seq, _) = store.get_head(stream_id_bytes).unwrap().unwrap();
+        let head = store.get_head(stream_id_bytes).unwrap_or_else(|e| {
+            edgerun_log::error!("failed to read stream head: {}", e);
+            std::process::exit(1);
+        }).expect("stream head should exist after genesis check");
+        let (_head_seq, _) = head;
         edgerun_log::info!("loaded stream");
     }
 
@@ -1103,9 +1109,12 @@ fn send_command_to_peer(
     // Spawn the async operation and wait for it
     let peer_addr = peer_addr.to_string();
     let command = command.clone();
-    edgerun_rt::spawn(async move {
+    match edgerun_rt::spawn(async move {
         send_command_to_peer_async(&peer_addr, &command).await
-    }).blocking_recv().unwrap()
+    }).blocking_recv() {
+        Ok(result) => result,
+        Err(_) => Err("command response channel closed unexpectedly".into()),
+    }
 }
 
 /// Async version of send_command_to_peer — no store mutation, just network I/O.
@@ -1622,7 +1631,10 @@ where
         }
     }
 
-    let frame_len = u64::from_be_bytes(resp_buf[..8].try_into().unwrap()) as usize;
+    let frame_len = match <[u8; 8]>::try_from(&resp_buf[..8]) {
+        Ok(arr) => u64::from_be_bytes(arr) as usize,
+        Err(_) => return None,
+    };
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -1693,7 +1705,10 @@ where
         }
     }
 
-    let frame_len = u64::from_be_bytes(read_buf[..8].try_into().unwrap()) as usize;
+    let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
+        Ok(arr) => u64::from_be_bytes(arr) as usize,
+        Err(_) => return None,
+    };
     if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
         return None;
     }
@@ -1804,7 +1819,13 @@ async fn handle_tcp_stream_common_with_session<R, W>(
             }
         }
 
-        let frame_len = u64::from_be_bytes(read_buf[..8].try_into().unwrap()) as usize;
+        let frame_len = match <[u8; 8]>::try_from(&read_buf[..8]) {
+            Ok(arr) => u64::from_be_bytes(arr) as usize,
+            Err(_) => {
+                edgerun_log::warn!("TCP frame length header invalid");
+                return;
+            }
+        };
         if frame_len == 0 || frame_len > TCP_MAX_FRAME_SIZE {
             edgerun_log::warn!("TCP frame length invalid or too large");
             return;
@@ -2022,7 +2043,6 @@ fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 /// Result of query cost evaluation.
-#[allow(dead_code)]
 enum QueryCostCheck {
     Allowed { max_bytes: Option<usize>, max_results: Option<usize> },
     Denied { reason: &'static str },

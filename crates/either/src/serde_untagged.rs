@@ -22,10 +22,10 @@
 //!     inner: Either::Left(vec!["Hello".to_string()])
 //! };
 //! // notice: no tags are emitted.
-//! assert_eq!(lifegraph_json::to_string(&data)?, r#"["Hello"]"#);
+//! assert_eq!(edgerun_json::to_string(&data)?, r#"["Hello"]"#);
 //!
 //! // deserialization
-//! let data: IntOrString = lifegraph_json::from_str(
+//! let data: IntOrString = edgerun_json::from_str(
 //!     r#"{"a": 0, "b": 14}"#
 //! )?;
 //! println!("found {:?}", data);

@@ -120,7 +120,6 @@ unsafe impl<T> ArrayLength<T> for UTerm {
 }
 
 /// Internal type used to generate a struct of appropriate size
-#[allow(dead_code)]
 #[repr(C)]
 #[doc(hidden)]
 pub struct GenericArrayImplEven<T, U> {
@@ -142,7 +141,6 @@ impl<T: Clone, U: Clone> Clone for GenericArrayImplEven<T, U> {
 impl<T: Copy, U: Copy> Copy for GenericArrayImplEven<T, U> {}
 
 /// Internal type used to generate a struct of appropriate size
-#[allow(dead_code)]
 #[repr(C)]
 #[doc(hidden)]
 pub struct GenericArrayImplOdd<T, U> {
@@ -174,7 +172,6 @@ unsafe impl<T, N: ArrayLength<T>> ArrayLength<T> for UInt<N, B1> {
 }
 
 /// Struct representing a generic array - `GenericArray<T, N>` works like [T; N]
-#[allow(dead_code)]
 #[repr(transparent)]
 pub struct GenericArray<T, U: ArrayLength<T>> {
     data: U::ArrayType,

@@ -5,8 +5,8 @@ use edgerun_input::{
 };
 use edgerun_linux_sysfs::read_trimmed;
 use std::fs::{self, File, OpenOptions};
-use std::io::Read;
-use std::os::fd::AsRawFd;
+use std::io::{self, Read};
+use std::os::fd::{AsRawFd, RawFd};
 use std::os::raw::{c_int, c_ulong};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -127,6 +127,27 @@ fn bitmap_contains(words: &[u64], bit: usize) -> bool {
     }
     let bit_index = bit % 64;
     (words[word_index] & (1u64 << bit_index)) != 0
+}
+
+/// Query device capabilities via EVIOCGBIT ioctl on an open evdev fd.
+///
+/// Returns the capability bitmap for the given event type (EV_KEY, EV_REL,
+/// EV_ABS, etc.) directly from the kernel, as an alternative to sysfs reading.
+pub fn query_capabilities_ev(fd: RawFd, ev_type: u16) -> Result<Vec<u8>, io::Error> {
+    const EVIOCGBIT_BUF_LEN: usize = 32; // 256 bits per event type
+
+    // EVIOCGBIT(ev, len) = _IOC(_IOC_READ, 'E', 0x20 + ev, len)
+    // Use the constant EVIOCGBIT as base and adjust for the event type
+    let request = EVIOCGBIT | (ev_type as c_ulong);
+
+    let mut buf = vec![0u8; EVIOCGBIT_BUF_LEN];
+    let ret = unsafe { libc::ioctl(fd, request as _, buf.as_mut_ptr()) };
+    if ret < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let bytes_written = ret as usize;
+    buf.truncate(bytes_written.min(EVIOCGBIT_BUF_LEN));
+    Ok(buf)
 }
 
 fn classify_device(keys: &[u64], rel: &[u64], abs: &[u64], sw: &[u64]) -> InputDeviceKind {

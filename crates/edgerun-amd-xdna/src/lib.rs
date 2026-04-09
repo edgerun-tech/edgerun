@@ -245,6 +245,65 @@ fn get_bo_info(fd: RawFd, bo_handle: u32) -> Result<(u64, u64, u64), CapabilityE
     Ok((info.map_offset, info.vaddr, info.xdna_addr))
 }
 
+// ============================================================================
+// Device info and power management
+// ============================================================================
+
+#[repr(C)]
+struct AmdxdnaDrmGetInfo {
+    param: u32,
+    buf_size: u32,
+    buffer: u64,
+}
+
+#[repr(C)]
+struct AmdxdnaDrmSetState {
+    param: u32,
+    buf_size: u32,
+    buffer: u64,
+}
+
+/// Query device information via DRM_AMDXDNA_GET_INFO.
+fn get_device_info<T>(fd: RawFd, param: u32, buf: &mut T) -> Result<(), CapabilityError> {
+    let mut req = AmdxdnaDrmGetInfo {
+        param,
+        buf_size: std::mem::size_of::<T>() as u32,
+        buffer: buf as *mut T as u64,
+    };
+
+    let ioctl = drm_iowr(DRM_AMDXDNA_GET_INFO, std::mem::size_of::<AmdxdnaDrmGetInfo>() as u32);
+    let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut req) };
+    if ret < 0 {
+        return Err(CapabilityError::Provider(format!(
+            "DRM_AMDXDNA_GET_INFO(0x{param:02x}) failed: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(())
+}
+
+/// Set the NPU power mode via DRM_AMDXDNA_SET_STATE.
+pub fn set_power_mode(fd: RawFd, mode: u8) -> Result<(), CapabilityError> {
+    let mut power_mode = mode;
+    let mut req = AmdxdnaDrmSetState {
+        param: 0, // state type: 0 = power mode
+        buf_size: 1,
+        buffer: &mut power_mode as *mut u8 as u64,
+    };
+
+    let ioctl = drm_iowr(DRM_AMDXDNA_SET_STATE, std::mem::size_of::<AmdxdnaDrmSetState>() as u32);
+    let ret = unsafe { libc::ioctl(fd, ioctl as _, &mut req) };
+    if ret < 0 {
+        return Err(CapabilityError::Provider(format!(
+            "DRM_AMDXDNA_SET_STATE(power_mode={mode}) failed: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+    Ok(())
+}
+
+/// Buffer object information (map_offset, vaddr, xdna_addr).
+
 /// Sync buffer object to/from device.
 fn sync_bo(fd: RawFd, bo_handle: u32, direction: u32, offset: u64, size: u64) -> Result<(), CapabilityError> {
     let mut sync = AmdxdnaDrmSyncBo {
@@ -296,6 +355,16 @@ fn exec_cmd(
     }
 
     Ok(exec.seq)
+}
+
+/// Submit a dependency command — waits for a syncobj signal before proceeding.
+pub fn submit_dependency(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
+    exec_cmd(fd, hwctx, AMDXDNA_CMD_SUBMIT_DEPENDENCY, args_ptr, arg_count)
+}
+
+/// Submit a signal command — signals a syncobj for other commands to wait on.
+pub fn submit_signal(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
+    exec_cmd(fd, hwctx, AMDXDNA_CMD_SUBMIT_SIGNAL, args_ptr, arg_count)
 }
 
 /// Wait for a command to complete using syncobj.
@@ -385,8 +454,8 @@ impl AieModel {
     pub fn load(fd: RawFd, xclbin_data: &[u8]) -> Result<Self, CapabilityError> {
         let (num_cus, cu_addrs) = Self::parse_xclbin(xclbin_data)?;
 
-        // Allocate device heap BO for the XCLBIN
-        let bo_handle = create_bo(fd, xclbin_data.len(), AMDXDNA_BO_DEV_HEAP)?;
+        // Allocate device heap BO for the XCLBIN using AMDXDNA_BO_DEV for device-mapped memory
+        let bo_handle = create_bo(fd, xclbin_data.len(), AMDXDNA_BO_DEV)?;
 
         // Get BO info for mmap
         let (map_offset, _vaddr, xdna_addr) = get_bo_info(fd, bo_handle)?;
@@ -602,6 +671,11 @@ impl XdnaBuffer {
         self.handle
     }
 
+    /// DRM mmap offset for this buffer — used to map device memory.
+    pub fn map_offset(&self) -> u64 {
+        self.map_offset
+    }
+
     pub fn sync_to_device(&self) -> Result<(), CapabilityError> {
         sync_bo(self.fd, self.handle, SYNC_DIRECT_TO_DEVICE, 0, self.size as u64)
     }
@@ -722,6 +796,63 @@ impl XdnaContext {
 
     pub fn syncobj(&self) -> u32 {
         self.syncobj
+    }
+
+    /// Query device firmware version info.
+    pub fn device_fw_version(&self) -> Result<[u8; 8], CapabilityError> {
+        const AIE_INFO_FW_VERSION: u32 = 0;
+        let mut version = [0u8; 8];
+        get_device_info(self.fd.as_raw_fd(), AIE_INFO_FW_VERSION, &mut version)?;
+        Ok(version)
+    }
+
+    /// Set the NPU power mode.
+    ///
+    /// # Arguments
+    /// * `mode` — One of `POWER_MODE_DEFAULT`, `POWER_MODE_LOW`, `POWER_MODE_MEDIUM`,
+    ///   `POWER_MODE_HIGH`, or `POWER_MODE_TURBO`.
+    pub fn set_power_mode(&self, mode: u8) -> Result<(), CapabilityError> {
+        set_power_mode(self.fd.as_raw_fd(), mode)
+    }
+
+    /// Set the NPU to default power mode.
+    pub fn set_power_mode_default(&self) -> Result<(), CapabilityError> {
+        self.set_power_mode(POWER_MODE_DEFAULT)
+    }
+
+    /// Set the NPU to high performance power mode.
+    pub fn set_power_mode_high(&self) -> Result<(), CapabilityError> {
+        self.set_power_mode(POWER_MODE_HIGH)
+    }
+
+    /// Set the NPU to turbo power mode.
+    pub fn set_power_mode_turbo(&self) -> Result<(), CapabilityError> {
+        self.set_power_mode(POWER_MODE_TURBO)
+    }
+
+    /// Set the NPU to low power mode (power saving).
+    pub fn set_power_mode_low(&self) -> Result<(), CapabilityError> {
+        self.set_power_mode(POWER_MODE_LOW)
+    }
+
+    /// Set the NPU to medium power mode (balanced).
+    pub fn set_power_mode_medium(&self) -> Result<(), CapabilityError> {
+        self.set_power_mode(POWER_MODE_MEDIUM)
+    }
+
+    /// Submit a command dependency (waits for a syncobj signal).
+    pub fn submit_dependency(&self, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
+        submit_dependency(self.fd.as_raw_fd(), self.hwctx, args_ptr, arg_count)
+    }
+
+    /// Submit a command signal (signals a syncobj for others to wait on).
+    pub fn submit_signal(&self, args_ptr: u64, arg_count: u32) -> Result<u64, CapabilityError> {
+        submit_signal(self.fd.as_raw_fd(), self.hwctx, args_ptr, arg_count)
+    }
+
+    /// Create a device heap buffer object (for XCLBIN or large allocations).
+    pub fn create_device_heap(&self, size: usize) -> Result<XdnaBuffer, CapabilityError> {
+        XdnaBuffer::new(self.fd.as_raw_fd(), size, AMDXDNA_BO_DEV_HEAP)
     }
 
     /// Create a buffer object in this context.

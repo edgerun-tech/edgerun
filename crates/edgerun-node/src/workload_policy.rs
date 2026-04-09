@@ -166,10 +166,10 @@ impl RateLimiter {
     pub fn check_and_record(&self, requester_id: &[u8]) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .expect("system time before UNIX epoch")
             .as_micros() as u64;
 
-        let mut map = self.submissions.lock().unwrap();
+        let mut map = self.submissions.lock().expect("rate limit map poisoned");
         let entries = map.entry(requester_id.to_vec()).or_insert_with(Vec::new);
 
         // Prune old entries outside the window

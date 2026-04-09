@@ -70,9 +70,7 @@ where
     Kind: BufferKind,
 {
     fn default() -> Self {
-        if BlockSize::USIZE == 0 {
-            panic!("Block size can not be equal to zero");
-        }
+        debug_assert_ne!(BlockSize::USIZE, 0, "Block size cannot be zero");
         Self {
             buffer: Default::default(),
             pos: 0,
@@ -117,7 +115,7 @@ where
     #[inline(always)]
     pub fn try_new(buf: &[u8]) -> Result<Self, Error> {
         if BlockSize::USIZE == 0 {
-            panic!("Block size can not be equal to zero");
+            return Err(Error);
         }
         let pos = buf.len();
         if !Kind::invariant(pos, BlockSize::USIZE) {
@@ -293,9 +291,10 @@ where
         suffix: &[u8],
         mut compress: impl FnMut(&Block<BlockSize>),
     ) {
-        if suffix.len() > BlockSize::USIZE {
-            panic!("suffix is too long");
-        }
+        debug_assert!(
+            suffix.len() <= BlockSize::USIZE,
+            "suffix is too long"
+        );
         let pos = self.get_pos();
         self.buffer[pos] = delim;
         for b in &mut self.buffer[pos + 1..] {

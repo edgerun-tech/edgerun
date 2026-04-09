@@ -392,9 +392,9 @@ where
 
 #[cfg(all(test, feature = "arithmetic"))]
 mod tests {
-    use elliptic_curve::dev::MockCurve;
+    use p256::NistP256;
 
-    type Signature = crate::Signature<MockCurve>;
+    type Signature = crate::Signature<NistP256>;
 
     const EXAMPLE_SIGNATURE: [u8; 64] = [
         0xf3, 0xac, 0x80, 0x61, 0xb5, 0x14, 0x79, 0x5b, 0x88, 0x43, 0xe3, 0xd6, 0x62, 0x95, 0x27,

@@ -21,7 +21,7 @@ use edgerun_core::fixed_point::FixedPoint16;
 fn now_us() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .expect("system time before UNIX epoch")
         .as_micros() as u64
 }
 

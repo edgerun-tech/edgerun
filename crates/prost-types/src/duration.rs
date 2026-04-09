@@ -46,9 +46,9 @@ impl Duration {
                 self.nanos = -NANOS_MAX;
             }
         }
-        // TODO: should this be checked?
-        // debug_assert!(self.seconds >= -315_576_000_000 && self.seconds <= 315_576_000_000,
-        //               "invalid duration: {:?}", self);
+        // Validate range: Protobuf Duration must be within [-10_000 years, +10_000 years]
+        debug_assert!(self.seconds >= -315_576_000_000 && self.seconds <= 315_576_000_000,
+                      "invalid duration: {:?}", self);
     }
 
     /// Returns a normalized copy of the duration to a canonical format.

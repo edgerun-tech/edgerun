@@ -235,19 +235,19 @@ impl HkdfSha256 {
 
     /// Expand the PRK to `length` bytes.
     /// Equivalent to `hkdf.expand(info, length)`.
+    /// RFC 5869: T(i) = HMAC-SHA256(PRK, T(i-1) || info || i)
     pub fn expand(&self, info: &[u8], length: usize) -> Vec<u8> {
         let hash_len = 32;
         let n = (length + hash_len - 1) / hash_len; // ceil(length / 32)
         let mut okm = Vec::with_capacity(n * hash_len);
         let mut prev = Vec::new();
         for i in 1..=n {
-            let mut h = Sha256Hasher::new();
-            if !prev.is_empty() {
-                h.update(&prev);
-            }
-            h.update(info);
-            h.update(&[i as u8]);
-            prev = h.finalize();
+            // T(i) = HMAC-SHA256(PRK, T(i-1) || info || i)
+            let mut msg = Vec::with_capacity(prev.len() + info.len() + 1);
+            msg.extend_from_slice(&prev);
+            msg.extend_from_slice(info);
+            msg.push(i as u8);
+            prev = hmac_sha256(&self.prk, &msg);
             okm.extend_from_slice(&prev);
         }
         okm.truncate(length);
@@ -333,11 +333,11 @@ pub fn signature_input(sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
 /// Signs the signature input (domain_tag || 0x00 || record_hash) using
 /// ECDSA P-256 with SHA-256 via the signing key's prehash signer.
 ///
-/// Returns the raw 64-byte signature (r || s).
-pub fn sign_record(private_key: &SigningKey, sig_domain_tag: &str, record_hash: &[u8]) -> Vec<u8> {
+/// Returns the raw 64-byte signature (r || s), or an error if signing fails.
+pub fn sign_record(private_key: &SigningKey, sig_domain_tag: &str, record_hash: &[u8]) -> Result<Vec<u8>, p256::ecdsa::Error> {
     let sig_input = signature_input(sig_domain_tag, record_hash);
-    let sig: Signature = private_key.sign_prehash(&sig_input).unwrap();
-    sig.to_bytes().to_vec()
+    let sig: Signature = private_key.sign_prehash(&sig_input)?;
+    Ok(sig.to_bytes().to_vec())
 }
 
 /// Verifies an ECDSA P-256 signature over the signature input.
@@ -434,7 +434,7 @@ mod tests {
         let signing = test_signing_key();
         let verifying = signing.verifying_key();
         let record_hash = vec![2; 32];
-        let sig = sign_record(&signing, "edgerun:v0:sig:test", &record_hash);
+        let sig = sign_record(&signing, "edgerun:v0:sig:test", &record_hash).unwrap();
         assert_eq!(sig.len(), 64);
         assert!(verify_record(
             &verifying,
@@ -449,7 +449,7 @@ mod tests {
         let signing = test_signing_key();
         let verifying = signing.verifying_key();
         let record_hash = vec![3; 32];
-        let sig = sign_record(&signing, "edgerun:v0:sig:test-a", &record_hash);
+        let sig = sign_record(&signing, "edgerun:v0:sig:test-a", &record_hash).unwrap();
         assert!(!verify_record(
             &verifying,
             "edgerun:v0:sig:test-b",

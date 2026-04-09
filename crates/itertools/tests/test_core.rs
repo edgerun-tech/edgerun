@@ -18,7 +18,6 @@ use crate::it::Itertools;
 use core::iter;
 use itertools as it;
 
-#[allow(dead_code)]
 fn get_esi_then_esi<I: ExactSizeIterator + Clone>(it: I) {
     fn is_esi(_: impl ExactSizeIterator) {}
     is_esi(it.clone().get(1..4));
@@ -29,7 +28,6 @@ fn get_esi_then_esi<I: ExactSizeIterator + Clone>(it: I) {
     is_esi(it.get(..));
 }
 
-#[allow(dead_code)]
 fn get_dei_esi_then_dei_esi<I: DoubleEndedIterator + ExactSizeIterator + Clone>(it: I) {
     fn is_dei_esi(_: impl DoubleEndedIterator + ExactSizeIterator) {}
     is_dei_esi(it.clone().get(1..4));

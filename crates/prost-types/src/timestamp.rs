@@ -38,9 +38,9 @@ impl Timestamp {
             }
         }
 
-        // TODO: should this be checked?
-        // debug_assert!(self.seconds >= -62_135_596_800 && self.seconds <= 253_402_300_799,
-        //               "invalid timestamp: {:?}", self);
+        // Validate range: Protobuf Timestamp must be within [0001-01-01T00:00:00Z, 9999-12-31T23:59:59.999999999Z]
+        debug_assert!(self.seconds >= -62_135_596_800 && self.seconds <= 253_402_300_799,
+                      "invalid timestamp: {:?}", self);
     }
 
     /// Normalizes the timestamp to a canonical format, returning the original value if it cannot be

@@ -54,6 +54,10 @@ members = [
   "crates/edgerun-stream",
   "crates/edgerun-oci-runtime",
   "crates/edgerun-oci-registry",
+  "crates/edgerun-http",
+  "crates/edgerun-tls",
+  "crates/edgerun-http2",
+  "crates/edgerun-http3",
 
   # Device & media abstraction
   "crates/edgerun-input",
@@ -134,9 +138,12 @@ members = [
   "crates/edgerun-amd-xdna",
   "crates/edgerun-node",
   "crates/edgerun-storage",
+  "crates/edgerun-secret-service",
 
   # End-to-end hardware tests
+  "crates/edgerun-e2e",
   "crates/edgerun-e2e-capability",
+  "crates/edgerun-e2e-full",
 ]
 
 [workspace.package]

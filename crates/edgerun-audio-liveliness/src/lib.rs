@@ -187,6 +187,11 @@ impl VoiceActivityDetector {
     /// Analyze PCM audio for voice activity.
     ///
     /// Returns (speech_detected, confidence, first_speech_offset_ms).
+    ///
+    /// Enforces:
+    /// - Frames must exceed `threshold_dbfs` to count as speech.
+    /// - Total speech must span at least `min_speech_duration_ms`.
+    /// - Gaps in speech within a burst must not exceed `max_silence_gap_ms`.
     pub fn analyze_s16le(&self, pcm: &[u8], sample_rate_hz: u32) -> (bool, f32, Option<u32>) {
         if pcm.is_empty() {
             return (false, 0.0, None);
@@ -196,50 +201,96 @@ impl VoiceActivityDetector {
         let frame_size = (sample_rate_hz / 50) as usize * 2; // 20ms in bytes (S16LE)
         let frame_duration_ms = 20;
 
-        let mut speech_frames = 0;
+        // Track speech bursts: consecutive speech frames separated by
+        /// silence no larger than `max_silence_gap_ms`.
+        #[derive(Default)]
+        struct SpeechBurst {
+            first_frame: usize,
+            last_frame: usize,
+            speech_frames: usize,
+        }
+
+        impl SpeechBurst {
+            fn duration_ms(&self, frame_ms: u32) -> u32 {
+                if self.last_frame >= self.first_frame {
+                    ((self.last_frame - self.first_frame + 1) as u32) * frame_ms
+                } else {
+                    0
+                }
+            }
+
+            fn silence_gap_ms(&self, current_frame: usize, frame_ms: u32) -> u32 {
+                if current_frame > self.last_frame {
+                    ((current_frame - self.last_frame - 1) as u32) * frame_ms
+                } else {
+                    0
+                }
+            }
+        }
+
+        let mut bursts: Vec<SpeechBurst> = Vec::new();
         let mut total_frames = 0;
-        let mut first_speech_frame: Option<usize> = None;
-        let mut max_energy = f32::MIN;
         let mut total_energy = 0.0f32;
+        let mut first_speech_frame: Option<usize> = None;
 
         for chunk in pcm.chunks(frame_size) {
             if chunk.len() < 2 {
                 break;
             }
 
-            // Calculate RMS energy for this frame
-            let energy = calculate_rms_energy_s16le(chunk);
+            let (energy, _peak) = analyze_frame_s16le(chunk);
             total_energy += energy;
-            max_energy = max_energy.max(energy);
             total_frames += 1;
 
             let is_speech = energy > self.threshold_dbfs;
             if is_speech {
-                speech_frames += 1;
                 if first_speech_frame.is_none() {
                     first_speech_frame = Some(total_frames - 1);
+                }
+
+                // Either extend current burst or start a new one
+                if let Some(last) = bursts.last_mut() {
+                    let gap = last.silence_gap_ms(total_frames - 1, frame_duration_ms);
+                    if gap <= self.max_silence_gap_ms {
+                        // Extend current burst
+                        last.last_frame = total_frames - 1;
+                        last.speech_frames += 1;
+                    } else {
+                        // Gap too large — start new burst
+                        bursts.push(SpeechBurst {
+                            first_frame: total_frames - 1,
+                            last_frame: total_frames - 1,
+                            speech_frames: 1,
+                        });
+                    }
+                } else {
+                    bursts.push(SpeechBurst {
+                        first_frame: total_frames - 1,
+                        last_frame: total_frames - 1,
+                        speech_frames: 1,
+                    });
                 }
             }
         }
 
-        if total_frames == 0 {
+        if total_frames == 0 || bursts.is_empty() {
             return (false, 0.0, None);
         }
 
-        // Calculate speech ratio
-        let speech_ratio = speech_frames as f32 / total_frames as f32;
-        let avg_energy = total_energy / total_frames as f32;
+        // Find the longest valid burst that meets the minimum duration
+        let valid_burst = bursts
+            .iter()
+            .filter(|b| b.duration_ms(frame_duration_ms) >= self.min_speech_duration_ms)
+            .max_by_key(|b| b.speech_frames);
 
-        // Speech is detected if:
-        // 1. At least some frames exceed threshold
-        // 2. Speech ratio is reasonable (> 10%)
-        // 3. Average energy is above threshold
-        let speech_detected = speech_frames > 0
-            && speech_ratio > 0.1
-            && avg_energy > self.threshold_dbfs;
+        let speech_detected = valid_burst.is_some();
+        let speech_frames = valid_burst.map(|b| b.speech_frames).unwrap_or(0);
+
+        let avg_energy = total_energy / total_frames as f32;
 
         // Confidence based on speech ratio and energy
         let confidence = if speech_detected {
+            let speech_ratio = speech_frames as f32 / total_frames as f32;
             let ratio_confidence = (speech_ratio * 2.0).min(1.0); // 50%+ speech = 1.0
             let energy_confidence = ((avg_energy - self.threshold_dbfs) / 30.0).clamp(0.0, 1.0);
             (ratio_confidence + energy_confidence) / 2.0
@@ -680,34 +731,6 @@ fn rand_number() -> u32 {
         .unwrap_or_default()
         .as_millis() as u64;
     ((seed.wrapping_mul(6364136223846793005).wrapping_add(1)) >> 33) as u32 % 999 + 1
-}
-
-/// Calculate RMS energy of S16LE PCM frame in dBFS.
-fn calculate_rms_energy_s16le(pcm: &[u8]) -> f32 {
-    if pcm.len() < 2 {
-        return f32::MIN;
-    }
-
-    let mut sum_sq = 0i64;
-    let mut count = 0i64;
-
-    for chunk in pcm.chunks_exact(2) {
-        let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as i64;
-        sum_sq += sample * sample;
-        count += 1;
-    }
-
-    if count == 0 {
-        return f32::MIN;
-    }
-
-    let rms = (sum_sq as f64 / count as f64).sqrt() as f32;
-    // Convert to dBFS (full scale = 32767 for S16)
-    if rms < 1.0 {
-        f32::MIN
-    } else {
-        20.0 * (rms / 32767.0).log10()
-    }
 }
 
 /// Analyze a single S16LE frame, returning (RMS dBFS, peak dBFS).

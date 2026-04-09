@@ -17,7 +17,6 @@ struct Iris {
     data: [f32; 4],
 }
 
-#[allow(dead_code)] // fields are currently ignored
 #[derive(Clone, Debug)]
 enum ParseError {
     Numeric(ParseFloatError),

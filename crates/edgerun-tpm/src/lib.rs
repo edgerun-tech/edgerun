@@ -3,6 +3,8 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+mod tss2_esapi;
+
 pub const TPM_ST_NO_SESSIONS: u16 = 0x8001;
 pub const TPM_ST_SESSIONS: u16 = 0x8002;
 pub const TPM_RC_SUCCESS: u32 = 0;
@@ -1535,21 +1537,7 @@ impl<T: TpmTransport> TpmDevice<T> {
         &mut self,
         persistent_handle: u32,
     ) -> Result<TpmProvisionedKey, TpmError> {
-        use tss_esapi_sys::*;
-
-        // TPM 2.0 spec constants
-        const TPM2_ALG_ECC: u16 = 0x0023;
-        const TPM2_ALG_SHA256: u16 = 0x000B;
-        const TPM2_ALG_ECDSA: u16 = 0x0018;
-        const TPM2_ALG_NULL: u16 = 0x0010;
-        const TPM2_ECC_NIST_P256: u16 = 0x0003;
-        const TPM2_RH_OWNER: u32 = 0x4000_0001;
-        const TPMA_OBJECT_SIGN_ENCRYPT: u32 =    0x0004_0000;
-        const TPMA_OBJECT_FIXED_TPM: u32 =       0x0000_0002;
-        const TPMA_OBJECT_FIXED_PARENT: u32 =    0x0000_0010;
-        const TPMA_OBJECT_SENSITIVE_DATA_ORIGIN: u32 = 0x0000_0020;
-        const TPMA_OBJECT_USER_WITH_AUTH: u32 =  0x0000_0040;
-        const TPMA_OBJECT_NODA: u32 =            0x0000_0400;
+        use crate::tss2_esapi::*;
 
         // Initialize TCTI for /dev/tpmrm0
         let tcti_name = b"device:/dev/tpmrm0\0";
@@ -1593,7 +1581,7 @@ impl<T: TpmTransport> TpmDevice<T> {
         public.publicArea.nameAlg = TPM2_ALG_SHA256;
         public.publicArea.objectAttributes = object_attributes;
         public.publicArea.parameters.eccDetail.scheme.scheme = TPM2_ALG_ECDSA;
-        public.publicArea.parameters.eccDetail.scheme.details.ecdsa.hashAlg = TPM2_ALG_SHA256;
+        public.publicArea.parameters.eccDetail.scheme.hashAlg = TPM2_ALG_SHA256;
         public.publicArea.parameters.eccDetail.symmetric.algorithm = TPM2_ALG_NULL;
         public.publicArea.parameters.eccDetail.kdf.scheme = TPM2_ALG_NULL;
         public.publicArea.parameters.eccDetail.curveID = TPM2_ECC_NIST_P256;

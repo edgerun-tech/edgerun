@@ -88,7 +88,11 @@ default-features = false
 
 [dev-dependencies.elliptic-curve]
 path = "../edgerun-elliptic-curve"
-features = ["dev"]
+default-features = false
+
+[dev-dependencies.p256]
+path = "../edgerun-p256"
+features = ["ecdsa"]
 default-features = false
 
 [dev-dependencies.hex-literal]
@@ -109,7 +113,6 @@ default = ["digest"]
 dev = [
     "arithmetic",
     "digest",
-    "elliptic-curve/dev",
     "hazmat",
 ]
 digest = [

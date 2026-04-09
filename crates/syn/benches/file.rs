@@ -19,7 +19,6 @@ extern crate test;
 #[path = "../tests/macros/mod.rs"]
 mod macros;
 
-#[allow(dead_code)]
 #[path = "../tests/repo/mod.rs"]
 mod repo;
 

@@ -672,7 +672,7 @@ mod tests {
             signing_key,
             crate::crypto::HASH_DOMAIN_EVENT_ENVELOPE,
             &record_hash,
-        );
+        ).expect("signing failed");
 
         let mut event = event.clone();
         event.signature = Some(crate::protocol::Signature {

@@ -48,6 +48,11 @@ pub use capability_signature::{
     verify_invocation, verify_request, verify_grant, verify_result, verify_revocation,
 };
 
+mod new_adapters;
+pub use new_adapters::{
+    DisplayRemoteAdapter, FingerprintRemoteAdapter, NpuRemoteAdapter,
+};
+
 pub struct RemoteInvocationResult {
     pub result: CapabilityResult,
     pub inline_payload: Vec<u8>,

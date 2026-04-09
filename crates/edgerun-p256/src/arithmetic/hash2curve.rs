@@ -111,7 +111,6 @@ mod tests {
     use proptest::{num::u64::ANY, prelude::ProptestConfig, proptest};
     use sha2::Sha256;
 
-    #[allow(dead_code)] // TODO(tarcieri): fix commented out code
     #[test]
     fn hash_to_curve() {
         struct TestVector {

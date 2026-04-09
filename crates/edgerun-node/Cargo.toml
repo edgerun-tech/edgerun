@@ -82,7 +82,7 @@ prost-types.workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
 
 edgerun-log = { path = "../edgerun-log" }
-libc = "0.2"
+libc = { path = "../libc" }
 
 # Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
@@ -146,9 +146,7 @@ edgerun-rand_core = { path = "../edgerun-rand_core", optional = true, package = 
 # OCI container runtime (required for ExecuteWorkload)
 edgerun-oci-registry = { path = "../edgerun-oci-registry" }
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
-lifegraph-json = { path = "/home/ken/lifegraph-json", features = ["serde"] }
 
 [dev-dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }
-rand_core = { version = "0.6", features = ["getrandom"] }

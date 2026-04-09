@@ -1069,6 +1069,84 @@ impl NodeStore {
     pub fn data_root(&self) -> &std::path::Path {
         &self.config.data_root
     }
+
+    // -----------------------------------------------------------------------
+    // Credential store — named encrypted secrets
+    // -----------------------------------------------------------------------
+
+    /// Store a secret under the given namespace and name.
+    ///
+    /// The secret is encrypted with AES-256-GCM using the node's blob
+    /// encryption key (derived from the node identity or hardware-sealed).
+    ///
+    /// If a credential with the same `(namespace, name)` already exists,
+    /// it is overwritten.
+    pub fn put_credential(
+        &self,
+        namespace: &str,
+        name: &str,
+        secret: &[u8],
+        description: Option<&str>,
+    ) -> Result<(), StorageError> {
+        // Encrypt and store as a blob (no recipients — node decrypts with its own key)
+        let blob_id = self.blobs.store(secret, &[])?;
+
+        // Index the mapping
+        self.index.put_credential(namespace, name, &blob_id, description)?;
+
+        Ok(())
+    }
+
+    /// Retrieve a secret by namespace and name.
+    ///
+    /// Returns `Ok(None)` if the credential does not exist.
+    pub fn get_credential(
+        &self,
+        namespace: &str,
+        name: &str,
+    ) -> Result<Option<Vec<u8>>, StorageError> {
+        let Some(record) = self.index.get_credential(namespace, name)? else {
+            return Ok(None);
+        };
+
+        let Some(entry) = self.blobs.load(&record.blob_id)? else {
+            return Ok(None);
+        };
+
+        let plaintext = self.blobs.decrypt(&entry.nonce, &entry.ciphertext)?;
+        Ok(Some(plaintext))
+    }
+
+    /// Delete a credential by namespace and name.
+    ///
+    /// Returns `true` if the credential existed, `false` if it was already gone.
+    pub fn delete_credential(
+        &self,
+        namespace: &str,
+        name: &str,
+    ) -> Result<bool, StorageError> {
+        self.index.delete_credential(namespace, name).map_err(StorageError::Io)
+    }
+
+    /// List all credential names in a namespace.
+    ///
+    /// Returns `(name, description, stored_at)` tuples sorted by name.
+    pub fn list_credentials(
+        &self,
+        namespace: &str,
+    ) -> Result<Vec<(String, Option<String>, i64)>, StorageError> {
+        Ok(self.index.list_credentials(namespace)?)
+    }
+
+    /// List all namespaces that have stored credentials.
+    pub fn list_credential_namespaces(&self) -> Result<Vec<String>, StorageError> {
+        Ok(self.index.list_credential_namespaces()?)
+    }
+
+    /// Check if a credential exists.
+    pub fn exists_credential(&self, namespace: &str, name: &str) -> Result<bool, StorageError> {
+        Ok(self.index.get_credential(namespace, name)?.is_some())
+    }
 }
 
 /// Result of checking a command against the replay cache.

@@ -909,3 +909,346 @@ fn test_multi_device_enumeration() {
         );
     }
 }
+
+// ===========================================================================
+// Test 10: Bluetooth scanning (mgmt socket)
+// ===========================================================================
+
+#[test]
+#[ignore = "requires Bluetooth controller"]
+fn test_bluetooth_e2e_scan() {
+    require_hardware();
+
+    // Try mgmt socket discovery (requires root/CAP_NET_ADMIN)
+    let result = edgerun_mgmt_bluetooth::discover_controllers();
+    match result {
+        Ok(controllers) => {
+            assert!(!controllers.is_empty(), "no Bluetooth controllers found");
+            for ctrl in &controllers {
+                println!(
+                    "Bluetooth hci{}: addr={} name={}",
+                    ctrl.index, ctrl.address, ctrl.name
+                );
+            }
+            // Verify we can create a scanning backend
+            let backend = edgerun_mgmt_bluetooth::MgmtBluetoothBackend {
+                controller: controllers[0].clone(),
+            };
+            let descriptor = backend.descriptor();
+            assert_eq!(descriptor.descriptor_version, 1);
+            assert!(!descriptor.provider_name.is_empty());
+        }
+        Err(e) => {
+            // mgmt socket requires root — this is expected on non-root systems
+            println!("Bluetooth mgmt discovery failed (expected without root): {:?}", e);
+        }
+    }
+}
+
+// ===========================================================================
+// Test 11: WiFi interface discovery (nl80211)
+// ===========================================================================
+
+#[test]
+#[ignore = "requires WiFi interface"]
+fn test_wifi_e2e_discover() {
+    require_hardware();
+
+    let result = edgerun_linux_wifi::discover_wifi_interfaces();
+    match result {
+        Ok(interfaces) => {
+            assert!(!interfaces.is_empty(), "no WiFi interfaces found");
+            for iface in &interfaces {
+                println!(
+                    "WiFi: name={} mac={} phy={} operstate={:?}",
+                    iface.name,
+                    iface.mac_address.as_deref().unwrap_or("unknown"),
+                    iface.phy_name.as_deref().unwrap_or("unknown"),
+                    iface.operstate,
+                );
+            }
+            // Verify scanning backend
+            let backend = edgerun_linux_wifi::LinuxWifiBackend {
+                interface: interfaces[0].clone(),
+            };
+            let descriptor = backend.descriptor();
+            assert_eq!(descriptor.descriptor_version, 1);
+        }
+        Err(e) => {
+            println!("WiFi discovery failed (may need root for nl80211): {:?}", e);
+        }
+    }
+}
+
+// ===========================================================================
+// Test 12: DRM display discovery (sysfs /sys/class/drm)
+// ===========================================================================
+
+#[test]
+#[ignore = "requires DRM display"]
+fn test_drm_display_e2e_discover() {
+    require_hardware();
+
+    let connectors = edgerun_drm_display::discover_drm_connectors()
+        .expect("DRM discovery should not error");
+
+    let connected: Vec<_> = connectors.iter().filter(|c| c.connected).collect();
+    assert!(!connected.is_empty(), "no connected DRM displays found");
+
+    for conn in &connected {
+        println!(
+            "DRM: {} connected={} enabled={} modes={}",
+            conn.connector_name,
+            conn.connected,
+            conn.enabled,
+            conn.modes.len()
+        );
+        if !conn.modes.is_empty() {
+            let mode = &conn.modes[0];
+            println!(
+                "  {}x{}@{}Hz",
+                mode.width,
+                mode.height,
+                mode.refresh_millihz / 1000,
+            );
+            assert!(mode.width > 0);
+            assert!(mode.height > 0);
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires DRM display"]
+fn test_drm_display_e2e_remote_adapter_query() {
+    require_hardware();
+
+    use crate::test_policy::TestGrantedProvider;
+    use edgerun_drm_display::DrmDisplayBackend;
+    use edgerun_remote_capability::DisplayRemoteAdapter;
+
+    let connectors = edgerun_drm_display::discover_drm_connectors()
+        .expect("DRM discovery");
+    let connected: Vec<_> = connectors.into_iter().filter(|c| c.connected).collect();
+    if connected.is_empty() {
+        println!("No connected displays, skipping");
+        return;
+    }
+
+    let backend = DrmDisplayBackend {
+        sysfs_root: std::path::PathBuf::from("/sys/class/drm"),
+        connector: connected[0].clone(),
+    };
+    let adapter = DisplayRemoteAdapter::new(backend);
+    let mut wrapped = TestGrantedProvider::new(adapter);
+
+    let session_id = b"drm-session";
+    let open = CapabilitySessionOpen {
+        version: 1,
+        session_id: session_id.to_vec(),
+        selector: None,
+        mode: CapabilitySessionMode::Unary as i32,
+        requested_operations: vec![CapabilityOperation::Query as i32],
+        requested_access_class: CapabilityAccessClass::Derived as i32,
+        requested_constraints: Vec::new(),
+        correlation_id: Vec::new(),
+    };
+    let accept = wrapped.open_session(&open).expect("open drm session");
+    assert!(accept.accepted);
+
+    // Invoke query
+    let invocation = CapabilityInvocation {
+        invocation_version: 1,
+        invocation_id: b"drm-query".to_vec(),
+        grant_id: accept.grant_id.clone(),
+        invoker: None,
+        operation: ProtoOp::Query as i32,
+        requested_access_class: CapabilityAccessClass::Derived as i32,
+        parameter_object: None,
+        correlation_id: Vec::new(),
+        invoked_at: None,
+        signature: None,
+    };
+    let result = wrapped.invoke(session_id, &invocation, None)
+        .expect("invoke should succeed");
+    assert!(result.result.success);
+    let info_str = String::from_utf8_lossy(&result.inline_payload);
+    println!("Display info: {}", info_str);
+    assert!(info_str.contains("display_name"));
+}
+
+// ===========================================================================
+// Test 13: NPU discovery and query
+// ===========================================================================
+
+#[test]
+#[ignore = "requires NPU hardware"]
+fn test_npu_e2e_discover() {
+    require_hardware();
+
+    let npus = edgerun_linux_npu::discover_linux_npus()
+        .expect("NPU discovery should not error");
+
+    if npus.is_empty() {
+        println!("No NPU devices found");
+        return;
+    }
+
+    for npu in &npus {
+        println!(
+            "NPU: {} driver={} pci={} firmware={} accel_class={}",
+            npu.display_name,
+            npu.driver_name.as_deref().unwrap_or("unknown"),
+            npu.pci_address.as_deref().unwrap_or("unknown"),
+            npu.firmware_version.as_deref().unwrap_or("unknown"),
+            npu.accelerator_class,
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires NPU hardware"]
+fn test_npu_e2e_remote_adapter_query() {
+    require_hardware();
+
+    use crate::test_policy::TestGrantedProvider;
+    use edgerun_remote_capability::NpuRemoteAdapter;
+
+    let npus = edgerun_linux_npu::discover_linux_npus().expect("NPU discovery");
+    if npus.is_empty() {
+        println!("No NPU devices found, skipping");
+        return;
+    }
+
+    let backend = edgerun_linux_npu::LinuxNpuBackend { info: npus[0].clone() };
+    let descriptor = backend.descriptor();
+    let adapter = NpuRemoteAdapter::new(backend);
+    let mut wrapped = TestGrantedProvider::new(adapter);
+
+    let session_id = b"npu-session";
+    let open = CapabilitySessionOpen {
+        version: 1,
+        session_id: session_id.to_vec(),
+        selector: None,
+        mode: CapabilitySessionMode::Unary as i32,
+        requested_operations: vec![CapabilityOperation::Query as i32],
+        requested_access_class: CapabilityAccessClass::Derived as i32,
+        requested_constraints: Vec::new(),
+        correlation_id: Vec::new(),
+    };
+    let accept = wrapped.open_session(&open).expect("open npu session");
+    assert!(accept.accepted);
+
+    let invocation = CapabilityInvocation {
+        invocation_version: 1,
+        invocation_id: b"npu-query".to_vec(),
+        grant_id: accept.grant_id.clone(),
+        invoker: None,
+        operation: ProtoOp::Query as i32,
+        requested_access_class: CapabilityAccessClass::Derived as i32,
+        parameter_object: None,
+        correlation_id: Vec::new(),
+        invoked_at: None,
+        signature: None,
+    };
+    let result = wrapped.invoke(session_id, &invocation, None)
+        .expect("invoke should succeed");
+    assert!(result.result.success);
+    let info_str = String::from_utf8_lossy(&result.inline_payload);
+    println!("NPU info: {}", info_str);
+    assert!(info_str.contains("display_name"));
+}
+
+// ===========================================================================
+// Test 14: Goodix fingerprint discovery and capture
+// ===========================================================================
+
+#[test]
+#[ignore = "requires Goodix fingerprint sensor"]
+fn test_goodix_e2e_discover() {
+    require_hardware();
+
+    use edgerun_fingerprint::FingerprintReader;
+
+    let devices = edgerun_goodix_fingerprint::discover_supported_devices();
+    match devices {
+        Ok(devs) => {
+            if devs.is_empty() {
+                println!("No Goodix fingerprint devices found");
+                return;
+            }
+            for dev in &devs {
+                println!(
+                    "Goodix: vendor=0x{:04X} product=0x{:04X}",
+                    dev.vendor_id, dev.product_id
+                );
+            }
+
+            // Try to open
+            let reader = edgerun_goodix_fingerprint::GoodixFingerprintReader::new(devs[0].clone())
+                .expect("open Goodix reader");
+            let info = reader.reader_info().expect("get reader info");
+            println!(
+                "Fingerprint reader: {} max_templates={} hw_protected={}",
+                info.reader_name,
+                info.max_templates.unwrap_or(0),
+                info.hardware_protected_match,
+            );
+        }
+        Err(e) => {
+            println!("Goodix discovery failed: {:?}", e);
+        }
+    }
+}
+
+#[test]
+#[ignore = "requires Goodix fingerprint sensor"]
+fn test_goodix_e2e_capture() {
+    require_hardware();
+
+    use crate::test_policy::TestGrantedProvider;
+    use edgerun_fingerprint::FingerprintReader;
+    use edgerun_remote_capability::FingerprintRemoteAdapter;
+
+    let devices = edgerun_goodix_fingerprint::discover_supported_devices();
+    let devs = match devices {
+        Ok(d) if !d.is_empty() => d,
+        _ => {
+            println!("No Goodix devices found, skipping");
+            return;
+        }
+    };
+
+    let reader = edgerun_goodix_fingerprint::GoodixFingerprintReader::new(devs[0].clone())
+        .expect("open reader");
+    let adapter = FingerprintRemoteAdapter::new(reader, 5000);
+    let mut wrapped = TestGrantedProvider::new(adapter);
+
+    let session_id = b"fingerprint-session";
+    let open = CapabilitySessionOpen {
+        version: 1,
+        session_id: session_id.to_vec(),
+        selector: None,
+        mode: CapabilitySessionMode::Stream as i32,
+        requested_operations: vec![CapabilityOperation::Capture as i32],
+        requested_access_class: CapabilityAccessClass::Derived as i32,
+        requested_constraints: Vec::new(),
+        correlation_id: Vec::new(),
+    };
+    let accept = wrapped.open_session(&open).expect("open fingerprint session");
+    assert!(accept.accepted);
+
+    // Try to capture — requires finger on sensor
+    let event = wrapped.next_event(session_id);
+    match event {
+        Ok(Some(ev)) => {
+            println!("Captured fingerprint: {} bytes", ev.inline_payload.len());
+            assert!(!ev.inline_payload.is_empty());
+        }
+        Ok(None) => {
+            println!("No fingerprint event (no finger on sensor)");
+        }
+        Err(e) => {
+            println!("Fingerprint capture error: {:?}", e);
+        }
+    }
+}

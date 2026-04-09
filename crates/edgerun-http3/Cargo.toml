@@ -1,0 +1,11 @@
+[package]
+name = "edgerun-http3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Dependency-free HTTP/3 implementation with QUIC transport, QPACK compression, and stream multiplexing"
+readme = "README.md"
+documentation = "https://docs.rs/edgerun-http3"
+keywords = ["http3", "quic", "qpack", "udp", "multiplex"]
+categories = ["network-programming", "web-programming"]

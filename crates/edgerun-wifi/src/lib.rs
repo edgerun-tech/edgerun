@@ -73,6 +73,37 @@ pub trait WifiController: CapabilityProvider {
         &self,
         state: WifiPowerState,
     ) -> Result<WifiPowerState, edgerun_capabilities::CapabilityError>;
+    fn connect(
+        &self,
+        ssid: &str,
+        passphrase: Option<&str>,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        let _ = (ssid, passphrase);
+        Err(edgerun_capabilities::CapabilityError::Unsupported(
+            "wifi connect is not supported by this backend",
+        ))
+    }
+    fn disconnect(&self) -> Result<(), edgerun_capabilities::CapabilityError> {
+        Err(edgerun_capabilities::CapabilityError::Unsupported(
+            "wifi disconnect is not supported by this backend",
+        ))
+    }
+    /// Get the current regulatory domain (country code).
+    fn regulatory_domain(&self) -> Result<Option<String>, edgerun_capabilities::CapabilityError> {
+        Err(edgerun_capabilities::CapabilityError::Unsupported(
+            "regulatory domain query is not supported by this backend",
+        ))
+    }
+    /// Set the regulatory domain (country code, ISO 3166-1 alpha-2).
+    fn set_regulatory_domain(
+        &self,
+        country_code: &str,
+    ) -> Result<(), edgerun_capabilities::CapabilityError> {
+        let _ = country_code;
+        Err(edgerun_capabilities::CapabilityError::Unsupported(
+            "regulatory domain set is not supported by this backend",
+        ))
+    }
 }
 
 pub trait WifiScanner: CapabilityProvider {

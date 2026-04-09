@@ -8,4 +8,4 @@ publish.workspace = true
 [dependencies]
 edgerun-linux-npu = { path = "../edgerun-linux-npu" }
 edgerun-npu = { path = "../edgerun-npu" }
-libc = "0.2"
+libc = { path = "../libc" }

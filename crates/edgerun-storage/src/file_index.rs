@@ -152,6 +152,17 @@ pub struct RevocationRecord {
     pub stored_at: i64,
 }
 
+/// Credential index entry — maps namespace/name → blob_id.
+#[derive(Clone)]
+pub struct CredentialRecord {
+    /// The blob_id where the encrypted credential is stored.
+    pub blob_id: String,
+    /// Human-readable description (optional, stored for auditing).
+    pub description: Option<String>,
+    /// When the credential was stored.
+    pub stored_at: i64,
+}
+
 #[derive(Clone)]
 pub struct ControllerChange {
     pub controller_hex: String,
@@ -197,6 +208,7 @@ pub struct FileIndex {
     controller_changes: std::cell::RefCell<Vec<ControllerChange>>,
     delegations: std::cell::RefCell<HashMap<String, DelegationRecord>>,
     revocations: std::cell::RefCell<HashMap<String, RevocationRecord>>,
+    credentials: std::cell::RefCell<HashMap<String, CredentialRecord>>,
     work_accounting: std::cell::RefCell<Vec<WorkAccountingRecord>>,
     data_root: PathBuf,
 }
@@ -220,6 +232,7 @@ impl FileIndex {
             controller_changes: std::cell::RefCell::new(Vec::new()),
             delegations: std::cell::RefCell::new(HashMap::new()),
             revocations: std::cell::RefCell::new(HashMap::new()),
+            credentials: std::cell::RefCell::new(HashMap::new()),
             work_accounting: std::cell::RefCell::new(Vec::new()),
             data_root: data_root.clone(),
         };
@@ -404,6 +417,21 @@ impl FileIndex {
             }
         }
 
+        // Load credentials
+        if let Ok(data) = fs::read(self.idx_dir().join("credentials.bin")) {
+            let data_len = data.len() as u64;
+            let mut r = std::io::Cursor::new(data);
+            while r.position() < data_len {
+                let key = read_str(&mut r)?;
+                let blob_id = read_str(&mut r)?;
+                let description = read_option_str(&mut r)?;
+                let stored_at = read_u64(&mut r)? as i64;
+                self.credentials.borrow_mut().insert(key, CredentialRecord {
+                    blob_id, description, stored_at,
+                });
+            }
+        }
+
         Ok(())
     }
 
@@ -549,6 +577,17 @@ impl FileIndex {
                 write_str(w, &v.status)?;
                 write_u64(w, v.started_at_us)?;
                 write_u64(w, v.billable_rc_us)?;
+            }
+            Ok(())
+        })?;
+
+        // Save credentials
+        self.persist("credentials.bin", |w| {
+            for (k, v) in self.credentials.borrow().iter() {
+                write_str(w, k)?;
+                write_str(w, &v.blob_id)?;
+                write_option_str(w, v.description.as_deref())?;
+                write_u64(w, v.stored_at as u64)?;
             }
             Ok(())
         })?;
@@ -913,6 +952,69 @@ impl FileIndex {
         Ok(self.work_accounting.borrow().iter().cloned().collect())
     }
 
+    // ===========================================================================
+    // Credential index
+    // ===========================================================================
+
+    /// Store a credential mapping — maps `{namespace}/{name}` → `blob_id`.
+    ///
+    /// The actual encrypted secret is stored via the `BlobStore`; this index
+    /// only tracks the mapping so credentials can be retrieved by name.
+    pub fn put_credential(&self, namespace: &str, name: &str, blob_id: &str, description: Option<&str>) -> io::Result<()> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
+        let key = format!("{}/{}", namespace, name);
+        self.credentials.borrow_mut().insert(key, CredentialRecord {
+            blob_id: blob_id.to_string(),
+            description: description.map(|s| s.to_string()),
+            stored_at: now,
+        });
+        self.save()
+    }
+
+    /// Look up the blob_id for a named credential.
+    pub fn get_credential(&self, namespace: &str, name: &str) -> io::Result<Option<CredentialRecord>> {
+        let key = format!("{}/{}", namespace, name);
+        Ok(self.credentials.borrow().get(&key).cloned())
+    }
+
+    /// Delete a credential from the index. Returns `true` if it existed.
+    ///
+    /// Note: this only removes the index entry — the encrypted blob on
+    /// disk is left in place (content-addressed, can be garbage collected later).
+    pub fn delete_credential(&self, namespace: &str, name: &str) -> io::Result<bool> {
+        let key = format!("{}/{}", namespace, name);
+        let existed = self.credentials.borrow_mut().remove(&key).is_some();
+        if existed {
+            self.save()?;
+        }
+        Ok(existed)
+    }
+
+    /// List all credential names in a namespace.
+    pub fn list_credentials(&self, namespace: &str) -> io::Result<Vec<(String, Option<String>, i64)>> {
+        let prefix = format!("{}/", namespace);
+        let mut results: Vec<_> = self.credentials.borrow().iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, v)| {
+                let name = k.strip_prefix(&prefix).unwrap_or(k).to_string();
+                (name, v.description.clone(), v.stored_at)
+            })
+            .collect();
+        results.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(results)
+    }
+
+    /// List all namespaces that have stored credentials.
+    pub fn list_credential_namespaces(&self) -> io::Result<Vec<String>> {
+        let mut namespaces: Vec<_> = self.credentials.borrow().keys()
+            .filter_map(|k| k.split_once('/').map(|(ns, _)| ns.to_string()))
+            .collect();
+        namespaces.sort();
+        namespaces.dedup();
+        Ok(namespaces)
+    }
+
     pub fn clear(&self) -> io::Result<()> {
         self.stream_heads.borrow_mut().clear();
         self.events.borrow_mut().clear();
@@ -924,12 +1026,13 @@ impl FileIndex {
         self.controller_changes.borrow_mut().clear();
         self.delegations.borrow_mut().clear();
         self.revocations.borrow_mut().clear();
+        self.credentials.borrow_mut().clear();
         self.work_accounting.borrow_mut().clear();
         // Clear files
         for file in &["stream_heads.bin", "events.bin", "replay_cache.bin", "fetch_queue.bin",
                       "object_presence.bin", "peers.bin", "snapshots.bin",
                       "controller_changes.bin", "delegations.bin", "revocations.bin",
-                      "work_accounting.bin"] {
+                      "credentials.bin", "work_accounting.bin"] {
             let path = self.idx_dir().join(file);
             if path.exists() { fs::remove_file(path)?; }
         }
@@ -959,6 +1062,7 @@ impl FileIndex {
             "snapshots.bin",
             "delegations.bin",
             "revocations.bin",
+            "credentials.bin",
             "object_presence.bin",
             "controller_changes.bin",
             "fetch_queue.bin",
@@ -1011,6 +1115,7 @@ pub fn validate_bin_file(data: &[u8], filename: &str) -> bool {
         "snapshots.bin" => validate_simple_kv(&mut r, data_len),
         "delegations.bin" => validate_delegations(&mut r, data_len),
         "revocations.bin" => validate_revocations(&mut r, data_len),
+        "credentials.bin" => validate_credentials(&mut r, data_len),
         "object_presence.bin" => validate_object_presence(&mut r, data_len),
         "controller_changes.bin" => validate_append_only(&mut r, data_len),
         "fetch_queue.bin" => validate_append_only(&mut r, data_len),
@@ -1119,6 +1224,16 @@ fn validate_revocations(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if tag[0] == 1 && read_u64(r).is_err() { return false; }
         // revoked_at
         if read_u64(r).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_credentials(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; } // key (namespace/name)
+        if read_str(r).is_err() { return false; } // blob_id
+        if read_option_str(r).is_err() { return false; } // description
+        if read_u64(r).is_err() { return false; } // stored_at
     }
     true
 }

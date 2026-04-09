@@ -526,7 +526,6 @@ pub fn base_dir_filter(entry: &DirEntry) -> bool {
     !EXCLUDE_FILES.contains(&path_string)
 }
 
-#[allow(dead_code)]
 pub fn edition(path: &Path) -> &'static str {
     if path.ends_with("dyn-2015-no-warnings-without-lints.rs") {
         "2015"
@@ -535,7 +534,6 @@ pub fn edition(path: &Path) -> &'static str {
     }
 }
 
-#[allow(dead_code)]
 pub fn abort_after() -> usize {
     match env::var("ABORT_AFTER_FAILURE") {
         Ok(s) => s.parse().expect("failed to parse ABORT_AFTER_FAILURE"),

@@ -24,7 +24,6 @@ pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         send_cvar: Condvar::new(),
         closed: AtomicBool::new(false),
         sender_count: Mutex::new(1),
-        sender_cvar: Condvar::new(),
     });
     (
         Sender { inner: inner.clone() },
@@ -43,7 +42,6 @@ struct ChanInner<T> {
     send_cvar: Condvar,
     closed: AtomicBool,
     sender_count: Mutex<usize>,
-    sender_cvar: Condvar,
 }
 
 impl<T> ChanInner<T> {

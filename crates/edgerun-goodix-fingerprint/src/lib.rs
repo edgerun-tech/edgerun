@@ -50,12 +50,9 @@ const GOODIX_TIMEOUT_ACK_MS: u32 = 2000;
 const GOODIX_TIMEOUT_DATA_MS: u32 = 5000;
 pub(crate) const GOODIX_SUCCESS: u8 = 0x00;
 pub(crate) const GOODIX_FAILED: u8 = 0x80;
-#[allow(dead_code)]
 pub(crate) const GOODIX_ERROR_FINGER_ID_NOEXIST: u8 = 0x9c;
-#[allow(dead_code)]
 pub(crate) const GOODIX_ERROR_TEMPLATE_INCOMPLETE: u8 = 0xb8;
 pub(crate) const GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT: u8 = 0xc7;
-#[allow(dead_code)]
 pub(crate) const GOODIX_ERROR_NO_AVAILABLE_SPACE: u8 = 0x8f;
 const GOODIX_MAX_STORED_PRINTS: u8 = 20;
 const GOODIX_SENSOR_CONFIG_SIZE: usize = 128;
@@ -269,15 +266,13 @@ const IOC_NRSHIFT: u32 = 0;
 const IOC_TYPESHIFT: u32 = IOC_NRSHIFT + IOC_NRBITS;
 const IOC_SIZESHIFT: u32 = IOC_TYPESHIFT + IOC_TYPEBITS;
 const IOC_DIRSHIFT: u32 = IOC_SIZESHIFT + IOC_SIZEBITS;
-#[allow(dead_code)]
-const IOC_NONE: u32 = 0;
 const IOC_WRITE: u32 = 1;
 const IOC_READ: u32 = 2;
 const USBDEVFS_TYPE: u8 = b'U';
 const USBDEVFS_CONTROL: c_ulong = iowr::<UsbdevfsCtrlTransfer>(USBDEVFS_TYPE, 0) as c_ulong;
 const USBDEVFS_BULK: c_ulong = iowr::<UsbdevfsBulkTransfer>(USBDEVFS_TYPE, 2) as c_ulong;
-const USBDEVFS_CLAIMINTERFACE: c_ulong = ior::<CUInt>(USBDEVFS_TYPE, 15) as c_ulong;
-const USBDEVFS_RELEASEINTERFACE: c_ulong = ior::<CUInt>(USBDEVFS_TYPE, 16) as c_ulong;
+const USBDEVFS_CLAIMINTERFACE: c_ulong = iow::<CUInt>(USBDEVFS_TYPE, 15) as c_ulong;
+const USBDEVFS_RELEASEINTERFACE: c_ulong = iow::<CUInt>(USBDEVFS_TYPE, 16) as c_ulong;
 
 type CUInt = u32;
 
@@ -290,7 +285,6 @@ const fn ioc(dir: u32, ty: u8, nr: u8, size: usize) -> u32 {
 const fn ior<T>(ty: u8, nr: u8) -> u32 {
     ioc(IOC_READ, ty, nr, core::mem::size_of::<T>())
 }
-#[allow(dead_code)]
 const fn iow<T>(ty: u8, nr: u8) -> u32 {
     ioc(IOC_WRITE, ty, nr, core::mem::size_of::<T>())
 }
@@ -544,9 +538,28 @@ fn capture_quality_from_raw(value: u8) -> edgerun_fingerprint::FingerprintCaptur
 }
 
 fn ensure_goodix_ok(result: u8, context: &'static str) -> Result<(), GoodixFingerprintError> {
+    if result == GOODIX_SUCCESS {
+        return Ok(());
+    }
     if result >= GOODIX_FAILED {
+        // Classify known error codes for better diagnostics
+        let err_msg = match result {
+            GOODIX_ERROR_FINGER_ID_NOEXIST => {
+                "finger ID does not exist"
+            }
+            GOODIX_ERROR_TEMPLATE_INCOMPLETE => {
+                "template incomplete — try re-enrolling"
+            }
+            GOODIX_ERROR_WAIT_FINGER_UP_TIMEOUT => {
+                "timeout waiting for finger lift"
+            }
+            GOODIX_ERROR_NO_AVAILABLE_SPACE => {
+                "no available storage space — delete some templates"
+            }
+            _ => "unknown error",
+        };
         return Err(GoodixFingerprintError::Parse(format!(
-            "Goodix {context} failed: 0x{result:02x}"
+            "Goodix {context} failed: 0x{result:02x} ({err_msg})"
         )));
     }
     Ok(())

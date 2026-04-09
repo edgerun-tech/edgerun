@@ -4497,7 +4497,6 @@ pub trait Itertools: Iterator {
     /// # use itertools::Itertools;
     /// struct Character {
     ///   first_name: &'static str,
-    ///   # #[allow(dead_code)]
     ///   last_name:  &'static str,
     /// }
     ///

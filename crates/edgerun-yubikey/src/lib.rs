@@ -896,7 +896,6 @@ fn parse_piv_metadata(
     })
 }
 
-#[allow(dead_code)]
 pub(crate) fn list_pcsc_readers() -> Result<Vec<YubiKeyReaderInfo>, YubiKeyError> {
     PcscContext::establish()?.list_readers()
 }
@@ -917,7 +916,6 @@ pub(crate) fn signature_input_for_record(sig_domain_tag: &str, record_hash: &[u8
     signature_input(sig_domain_tag, record_hash)
 }
 
-#[allow(dead_code)]
 pub(crate) fn sign_record_with_yubikey(
     key: &dyn YubiKeySigningKey,
     sig_domain_tag: &str,

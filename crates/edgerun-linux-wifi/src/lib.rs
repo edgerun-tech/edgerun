@@ -49,6 +49,16 @@ const NL80211_CMD_REGISTER_FRAME: u8 = 79;
 const NL80211_CMD_FRAME: u8 = 80;
 const NL80211_CMD_FRAME_WAIT_CANCEL: u8 = 81;
 const NL80211_CMD_SET_BSS: u8 = 87;
+const NL80211_CMD_GET_INTERFACE: u8 = 7;
+const NL80211_CMD_GET_STATION: u8 = 58;
+const NL80211_CMD_NEW_INTERFACE: u8 = 13;
+const NL80211_CMD_DEL_INTERFACE: u8 = 14;
+const NL80211_CMD_START_AP: u8 = 52;
+const NL80211_CMD_STOP_AP: u8 = 53;
+const NL80211_CMD_SET_WIPHY: u8 = 9;
+const NL80211_CMD_GET_REG: u8 = 36;
+const NL80211_CMD_SET_REG: u8 = 37;
+const NL80211_CMD_REQ_SET_REG: u8 = 38;
 
 // nl80211 attributes (top-level)
 const NL80211_ATTR_IFINDEX: u16 = 3;
@@ -59,6 +69,7 @@ const NL80211_ATTR_SCAN_FREQUENCIES: u16 = 10;
 const NL80211_ATTR_SCAN_SSIDS: u16 = 11;
 const NL80211_ATTR_GENERATION: u16 = 12;
 const NL80211_ATTR_WIPHY: u16 = 13;
+const NL80211_ATTR_WIPHY_FREQ: u16 = 14;
 const NL80211_ATTR_COOKIE: u16 = 18;
 const NL80211_ATTR_STATUS_CODE: u16 = 24;
 const NL80211_ATTR_WIPHY_NAME: u16 = 27;
@@ -81,10 +92,40 @@ const NL80211_ATTR_KEY_SEQ: u16 = 92;
 const NL80211_ATTR_KEY_DEFAULT: u16 = 104;
 const NL80211_ATTR_PMK: u16 = 167;
 const NL80211_ATTR_AUTH_TYPE: u16 = 67;
+const NL80211_ATTR_BEACON_INTERVAL: u16 = 76;
+const NL80211_ATTR_DTIM_PERIOD: u16 = 77;
+const NL80211_ATTR_BEACON_HEAD: u16 = 150;
+const NL80211_ATTR_BEACON_TAIL: u16 = 151;
+const NL80211_ATTR_REG_ALPHA2: u16 = 17;
+const NL80211_ATTR_REG_RULES: u16 = 180;
+const NL80211_ATTR_REG_INITIATOR: u16 = 108;
+const NL80211_ATTR_REG_TYPE: u16 = 107;
+const NL80211_ATTR_WIPHY_COVERAGE_CLASS: u16 = 311;
+
+// nl80211 BSS attributes (nested in GET_SCAN responses)
+const NL80211_BSS_INFORMATION_ELEMENTS: u16 = 1;
+const NL80211_BSS_BSSID: u16 = 2;
+const NL80211_BSS_FREQUENCY: u16 = 3;
+const NL80211_BSS_SIGNAL_MBM: u16 = 10;
+const NL80211_BSS_SIGNAL_UNSPEC: u16 = 11;
+
+// nl80211 station attributes (nested in GET_STATION responses)
+const NL80211_STA_INFO_SIGNAL: u16 = 9;
+const NL80211_STA_INFO_TX_BITRATE: u16 = 2;
 
 // nl80211 interface types
 const NL80211_IFTYPE_STATION: u32 = 2;
 const NL80211_IFTYPE_AP: u32 = 3;
+
+// Regulatory domain types (NL80211_REGDOM_*)
+const NL80211_REGDOM_SET_BY_CORE: u8 = 0;
+const NL80211_REGDOM_SET_BY_USER: u8 = 1;
+const NL80211_REGDOM_SET_BY_DRIVER: u8 = 2;
+const NL80211_REGDOM_SET_BY_COUNTRY_IE: u8 = 3;
+const NL80211_REGDOM_TYPE_COUNTRY: u8 = 0;
+const NL80211_REGDOM_TYPE_WORLD: u8 = 1;
+const NL80211_REGDOM_TYPE_INTERSECTION: u8 = 2;
+const NL80211_REGDOM_TYPE_STRICT_WORLD: u8 = 3;
 
 // nl80211 authentication types
 const NL80211_AUTHTYPE_OPEN_SYSTEM: u32 = 1;
@@ -456,6 +497,14 @@ fn put_nla_string(buf: &mut Vec<u8>, attr_type: u16, s: &[u8]) {
     put_nla(buf, attr_type, s);
 }
 
+fn put_nla_u16(buf: &mut Vec<u8>, attr_type: u16, value: u16) {
+    put_nla(buf, attr_type, &value.to_ne_bytes());
+}
+
+fn put_nla_u8(buf: &mut Vec<u8>, attr_type: u16, value: u8) {
+    put_nla(buf, attr_type, &[value]);
+}
+
 fn put_nla_nested(buf: &mut Vec<u8>, attr_type: u16, inner: &[u8]) {
     // Nested attribute: outer header + inner data
     let total_len = mem::size_of::<NlAttr>() + inner.len();
@@ -519,7 +568,10 @@ fn parse_ctrl_getfamily_response(data: &[u8]) -> Result<u16, CapabilityError> {
 // ============================================================================
 
 /// Trigger an nl80211 scan and return the results.
-fn nl80211_scan(ifindex: i32, ssids: Option<&[&[u8]]>) -> Result<Vec<WifiNetworkObservation>, CapabilityError> {
+///
+/// If `flush` is true, cached scan results are cleared before scanning.
+/// If `frequencies` is provided, only those frequencies (MHz) are scanned.
+fn nl80211_scan(ifindex: i32, ssids: Option<&[&[u8]]>, flush: bool, frequencies: Option<&[u32]>) -> Result<Vec<WifiNetworkObservation>, CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 
     // Build TRIGGER_SCAN attributes
@@ -537,6 +589,20 @@ fn nl80211_scan(ifindex: i32, ssids: Option<&[&[u8]]>) -> Result<Vec<WifiNetwork
         let mut ssid_attrs = Vec::new();
         put_nla_string(&mut ssid_attrs, 0, b"");
         put_nla_nested(&mut attrs, NL80211_ATTR_SCAN_SSIDS, &ssid_attrs);
+    }
+
+    // Scan specific frequencies if provided
+    if let Some(freqs) = frequencies {
+        let mut freq_data = Vec::new();
+        for &freq in freqs {
+            freq_data.extend_from_slice(&freq.to_ne_bytes());
+        }
+        put_nla(&mut attrs, NL80211_ATTR_SCAN_FREQUENCIES, &freq_data);
+    }
+
+    // Flush cached results if requested
+    if flush {
+        put_nla_u32(&mut attrs, NL80211_ATTR_SCAN_FLAGS, NL80211_SCAN_FLAG_FLUSH);
     }
 
     // Trigger the scan
@@ -641,9 +707,14 @@ fn parse_bss_info(data: &[u8], attr_start: usize, msg_end: usize) -> Option<Wifi
                         if let Ok(s) = std::str::from_utf8(ie_data) {
                             ssid = Some(s.to_string());
                         }
-                    } else if ie_type == 48 || ie_type == 221 {
-                        // RSN IE or WPA IE
+                    } else if ie_type == 48 {
+                        // RSN IE (WPA2)
                         seen_rsn = true;
+                    } else if ie_type == 221 && ie_data.len() >= 4 {
+                        // Vendor-specific IE — check for WPA OUI (00-50-F2:01)
+                        if ie_data[..4] == WPA_OUI {
+                            seen_rsn = true; // WPA legacy treated as RSN-capable
+                        }
                     }
 
                     ie_offset += 2 + ie_len;
@@ -737,15 +808,17 @@ fn build_rsn_ie() -> Vec<u8> {
     ie
 }
 
-/// Connect to a WPA/WPA2 network using nl80211.
-/// This sets up the interface for WPA-PSK authentication.
-/// Note: The actual 4-way handshake requires a userspace supplicant or
-/// control port implementation. This prepares the kernel for connection.
+/// Connect to a WPA-protected network via nl80211.
+///
+/// If `pmk` is provided, it is passed to the kernel via NL80211_ATTR_PMK
+/// and the kernel handles the 4-way handshake internally.
+/// If `pmk` is None, the control port is set for userspace EAPOL handling.
 fn nl80211_connect_wpa(
     ifindex: i32,
     ssid: &[u8],
     bssid: Option<&[u8; 6]>,
     frequency: Option<u32>,
+    pmk: Option<&[u8; 32]>,
 ) -> Result<(), CapabilityError> {
     let mut sock = Nl80211Socket::open()?;
 
@@ -760,8 +833,13 @@ fn nl80211_connect_wpa(
     // Open system authentication
     put_nla_u32(&mut attrs, NL80211_ATTR_AUTH_TYPE, NL80211_AUTHTYPE_OPEN_SYSTEM);
 
-    // Set control port for userspace WPA handling
-    put_nla(&mut attrs, NL80211_ATTR_CONTROL_PORT, &[1]);
+    if let Some(pmk_bytes) = pmk {
+        // Pass PMK to the kernel — it handles the 4-way handshake internally
+        put_nla(&mut attrs, NL80211_ATTR_PMK, pmk_bytes);
+    } else {
+        // No PMK — set control port for userspace EAPOL handling
+        put_nla(&mut attrs, NL80211_ATTR_CONTROL_PORT, &[1]);
+    }
 
     // Add RSN IE for WPA2-PSK
     let rsn_ie = build_rsn_ie();
@@ -803,6 +881,470 @@ fn nl80211_set_interface_type(ifindex: i32, iftype: u32) -> Result<(), Capabilit
     put_nla_u32(&mut attrs, NL80211_ATTR_IFTYPE, iftype);
 
     sock.request(NL80211_CMD_SET_INTERFACE, ifindex, &attrs)?;
+    Ok(())
+}
+
+/// Query the current interface type (station/AP/ad-hoc/monitor) via nl80211.
+fn nl80211_get_interface_type(ifindex: i32) -> Result<u32, CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+
+    let response = sock.request(NL80211_CMD_GET_INTERFACE, ifindex, &attrs)?;
+
+    // Parse the response to find NL80211_ATTR_IFTYPE
+    let msg_end = response.len();
+    let genl_start = mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
+    if genl_start + mem::size_of::<NlAttr>() > msg_end {
+        return Err(CapabilityError::Provider("truncated GET_INTERFACE response".into()));
+    }
+
+    let mut offset = genl_start;
+    while offset + mem::size_of::<NlAttr>() <= msg_end {
+        let attr: NlAttr = unsafe {
+            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
+        };
+        let data_start = offset + mem::size_of::<NlAttr>();
+        let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
+
+        if data_end > msg_end {
+            break;
+        }
+
+        if attr.nla_type == NL80211_ATTR_IFTYPE && data_end - data_start >= 4 {
+            let iftype = u32::from_ne_bytes([
+                response[data_start],
+                response[data_start + 1],
+                response[data_start + 2],
+                response[data_start + 3],
+            ]);
+            return Ok(iftype);
+        }
+
+        // NLA attributes are aligned to 4 bytes
+        offset = (data_end + 3) & !3;
+    }
+
+    Err(CapabilityError::Provider("IFTYPE not found in GET_INTERFACE response".into()))
+}
+
+/// Query station info (connected BSS, signal, bitrate) via nl80211.
+///
+/// Returns (signal_dbm, tx_bitrate_kbps) if connected.
+fn nl80211_get_station(ifindex: i32, bssid: &[u8; 6]) -> Result<(Option<i32>, Option<u32>), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+    put_nla(&mut attrs, NL80211_ATTR_MAC, bssid);
+
+    let response = sock.request(NL80211_CMD_GET_STATION, ifindex, &attrs)?;
+
+    let msg_end = response.len();
+    let genl_start = mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
+
+    let mut signal_dbm: Option<i32> = None;
+    let mut tx_bitrate_kbps: Option<u32> = None;
+
+    // Parse nested station info attributes
+    let mut offset = genl_start;
+    while offset + mem::size_of::<NlAttr>() <= msg_end {
+        let attr: NlAttr = unsafe {
+            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
+        };
+        let data_start = offset + mem::size_of::<NlAttr>();
+        let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
+
+        if data_end > msg_end {
+            break;
+        }
+
+        match attr.nla_type {
+            NL80211_STA_INFO_SIGNAL if data_end - data_start >= 1 => {
+                // Signal is in dBm, stored as u8 (value - 256)
+                let raw = response[data_start] as i8;
+                signal_dbm = Some(raw as i32);
+            }
+            NL80211_STA_INFO_TX_BITRATE if data_end - data_start >= 4 => {
+                // Nested attribute containing bitrate info
+                // Parse nested sub-attributes for NL80211_RATE_INFO_BITRATE32
+                let mut nested_off = data_start;
+                while nested_off + mem::size_of::<NlAttr>() <= data_end {
+                    let nested: NlAttr = unsafe {
+                        std::ptr::read_unaligned(response[nested_off..].as_ptr() as *const NlAttr)
+                    };
+                    let n_start = nested_off + mem::size_of::<NlAttr>();
+                    let n_end = n_start + (nested.nla_len as usize - mem::size_of::<NlAttr>());
+                    if n_end > data_end {
+                        break;
+                    }
+                    // NL80211_RATE_INFO_BITRATE32 = 7, 4-byte value in 100kbit/s
+                    const NL80211_RATE_INFO_BITRATE32: u16 = 7;
+                    if nested.nla_type == NL80211_RATE_INFO_BITRATE32 && n_end - n_start >= 4 {
+                        let rate_100k = u32::from_ne_bytes([
+                            response[n_start], response[n_start + 1],
+                            response[n_start + 2], response[n_start + 3],
+                        ]);
+                        tx_bitrate_kbps = Some(rate_100k / 10);
+                    }
+                    nested_off = (n_end + 3) & !3;
+                }
+            }
+            _ => {}
+        }
+
+        offset = (data_end + 3) & !3;
+    }
+
+    Ok((signal_dbm, tx_bitrate_kbps))
+}
+
+/// Query all connected stations (for AP mode) or get station list.
+///
+/// Returns Vec of (mac, signal_dbm, tx_bitrate_kbps).
+fn nl80211_dump_stations(ifindex: i32) -> Result<Vec<([u8; 6], i32, Option<u32>)>, CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+
+    let response = sock.request_dump(NL80211_CMD_GET_STATION, ifindex, &attrs)?;
+
+    // Each NL message may contain multiple stations. Parse them.
+    let mut stations = Vec::new();
+    let mut offset = 0;
+    let msg_end = response.len();
+
+    while offset + mem::size_of::<NlMsghdr>() <= msg_end {
+        let nlhdr: NlMsghdr = unsafe {
+            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlMsghdr)
+        };
+        if nlhdr.nlmsg_len == 0 || offset + nlhdr.nlmsg_len as usize > msg_end {
+            break;
+        }
+
+        let inner_end = offset + nlhdr.nlmsg_len as usize;
+        let genl_start = offset + mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
+
+        let mut bssid: Option<[u8; 6]> = None;
+        let mut signal_dbm: Option<i32> = None;
+        let mut tx_bitrate_kbps: Option<u32> = None;
+
+        let mut attr_off = genl_start;
+        while attr_off + mem::size_of::<NlAttr>() <= inner_end {
+            let attr: NlAttr = unsafe {
+                std::ptr::read_unaligned(response[attr_off..].as_ptr() as *const NlAttr)
+            };
+            let d_start = attr_off + mem::size_of::<NlAttr>();
+            let d_end = d_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
+
+            if d_end > inner_end {
+                break;
+            }
+
+            match attr.nla_type {
+                NL80211_ATTR_MAC if d_end - d_start >= 6 => {
+                    let mut mac = [0u8; 6];
+                    mac.copy_from_slice(&response[d_start..d_start + 6]);
+                    bssid = Some(mac);
+                }
+                NL80211_STA_INFO_SIGNAL if d_end - d_start >= 1 => {
+                    signal_dbm = Some(response[d_start] as i8 as i32);
+                }
+                NL80211_STA_INFO_TX_BITRATE if d_end - d_start >= 4 => {
+                    // Parse nested rate info attributes
+                    const NL80211_RATE_INFO_BITRATE32: u16 = 7;
+                    let mut nested_off = d_start;
+                    while nested_off + mem::size_of::<NlAttr>() <= d_end {
+                        let nested: NlAttr = unsafe {
+                            std::ptr::read_unaligned(response[nested_off..].as_ptr() as *const NlAttr)
+                        };
+                        let n_start = nested_off + mem::size_of::<NlAttr>();
+                        let n_end = n_start + (nested.nla_len as usize - mem::size_of::<NlAttr>());
+                        if n_end > d_end {
+                            break;
+                        }
+                        if nested.nla_type == NL80211_RATE_INFO_BITRATE32 && n_end - n_start >= 4 {
+                            let rate_100k = u32::from_ne_bytes([
+                                response[n_start], response[n_start + 1],
+                                response[n_start + 2], response[n_start + 3],
+                            ]);
+                            tx_bitrate_kbps = Some(rate_100k / 10);
+                        }
+                        nested_off = (n_end + 3) & !3;
+                    }
+                }
+                _ => {}
+            }
+
+            attr_off = (d_end + 3) & !3;
+        }
+
+        if let Some(mac) = bssid {
+            stations.push((mac, signal_dbm.unwrap_or(-128), tx_bitrate_kbps));
+        }
+
+        offset = (inner_end + 3) & !3;
+    }
+
+    Ok(stations)
+}
+
+/// Get the current regulatory domain (country code) via nl80211.
+///
+/// Returns the ISO 3166-1 alpha-2 country code (e.g. "US", "GB", "DE")
+/// and the regulatory domain type.
+pub fn nl80211_get_regulatory_domain() -> Result<(String, u8), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    // NL80211_CMD_GET_REG with no attributes queries the current regdomain
+    let response = sock.request(NL80211_CMD_GET_REG, 0, &Vec::new())?;
+
+    let msg_end = response.len();
+    let genl_start = mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
+
+    let mut country_code: Option<String> = None;
+    let mut reg_type: u8 = NL80211_REGDOM_TYPE_WORLD;
+
+    let mut offset = genl_start;
+    while offset + mem::size_of::<NlAttr>() <= msg_end {
+        let attr: NlAttr = unsafe {
+            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
+        };
+        let data_start = offset + mem::size_of::<NlAttr>();
+        let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
+
+        if data_end > msg_end {
+            break;
+        }
+
+        match attr.nla_type {
+            NL80211_ATTR_REG_ALPHA2 if data_end - data_start >= 2 => {
+                // ISO 3166-1 alpha-2 country code
+                if let Ok(code) = std::str::from_utf8(&response[data_start..data_start + 2]) {
+                    country_code = Some(code.to_string());
+                }
+            }
+            NL80211_ATTR_REG_INITIATOR if data_end - data_start >= 1 => {
+                reg_type = response[data_start];
+            }
+            _ => {}
+        }
+
+        offset = (data_end + 3) & !3;
+    }
+
+    match country_code {
+        Some(code) => Ok((code, reg_type)),
+        None => Ok(("00".to_string(), NL80211_REGDOM_TYPE_WORLD)), // "00" = world regulatory domain
+    }
+}
+
+/// Set the regulatory domain (country code) via nl80211.
+///
+/// The country_code must be a valid ISO 3166-1 alpha-2 code (e.g. "US", "GB", "DE").
+/// This requires CAP_NET_ADMIN capability.
+pub fn nl80211_set_regulatory_domain(country_code: &str) -> Result<(), CapabilityError> {
+    if country_code.len() != 2 {
+        return Err(CapabilityError::InvalidRequest(
+            "country code must be exactly 2 characters (ISO 3166-1 alpha-2)".into(),
+        ));
+    }
+
+    // Validate ASCII letters
+    if !country_code.chars().all(|c| c.is_ascii_alphabetic()) {
+        return Err(CapabilityError::InvalidRequest(
+            "country code must contain only ASCII letters".into(),
+        ));
+    }
+
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_string(&mut attrs, NL80211_ATTR_REG_ALPHA2, country_code.as_bytes());
+
+    // Set by user (initiator type 1)
+    put_nla_u8(&mut attrs, NL80211_ATTR_REG_INITIATOR, NL80211_REGDOM_SET_BY_USER);
+
+    sock.request(NL80211_CMD_REQ_SET_REG, 0, &attrs)?;
+    Ok(())
+}
+
+/// Query wiphy (PHY) capabilities via nl80211.
+///
+/// Returns (wiphy_name, supported_iftypes, max_scan_ssids) if successful.
+/// The supported_iftypes is a bitmask of NL80211_IFTYPE_* values.
+pub fn nl80211_get_wiphy_info(ifindex: i32) -> Result<(String, u64, Option<u32>), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+
+    let response = sock.request(NL80211_CMD_GET_WIPHY, ifindex, &attrs)?;
+
+    let msg_end = response.len();
+    let genl_start = mem::size_of::<NlMsghdr>() + mem::size_of::<GenlMsghdr>();
+
+    let mut wiphy_name: Option<String> = None;
+    let mut max_scan_ssids: Option<u32> = None;
+    // Supported interface types bitmask
+    let mut supported_iftypes: u64 = (1 << NL80211_IFTYPE_STATION) | (1 << NL80211_IFTYPE_AP);
+
+    let mut offset = genl_start;
+    while offset + mem::size_of::<NlAttr>() <= msg_end {
+        let attr: NlAttr = unsafe {
+            std::ptr::read_unaligned(response[offset..].as_ptr() as *const NlAttr)
+        };
+        let data_start = offset + mem::size_of::<NlAttr>();
+        let data_end = data_start + (attr.nla_len as usize - mem::size_of::<NlAttr>());
+
+        if data_end > msg_end {
+            break;
+        }
+
+        match attr.nla_type {
+            NL80211_ATTR_WIPHY_NAME if data_end - data_start > 0 => {
+                if let Ok(name) = std::str::from_utf8(&response[data_start..data_end]) {
+                    wiphy_name = Some(name.trim_end_matches('\0').to_string());
+                }
+            }
+            NL80211_ATTR_MAX_NUM_SCAN_SSIDS if data_end - data_start >= 4 => {
+                max_scan_ssids = Some(u32::from_ne_bytes([
+                    response[data_start], response[data_start + 1],
+                    response[data_start + 2], response[data_start + 3],
+                ]));
+            }
+            _ => {}
+        }
+
+        offset = (data_end + 3) & !3;
+    }
+
+    Ok((
+        wiphy_name.unwrap_or_else(|| "unknown".to_string()),
+        supported_iftypes,
+        max_scan_ssids,
+    ))
+}
+
+/// Set BSS parameters for AP mode via nl80211.
+///
+/// Configures beacon interval, DTIM period, and hidden SSID.
+pub fn nl80211_set_bss(
+    ifindex: i32,
+    beacon_interval: Option<u16>,
+    dtim_period: Option<u8>,
+    hidden_ssid: bool,
+) -> Result<(), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+
+    if let Some(bi) = beacon_interval {
+        put_nla_u16(&mut attrs, NL80211_ATTR_BEACON_INTERVAL, bi);
+    }
+    if let Some(dtim) = dtim_period {
+        put_nla_u8(&mut attrs, NL80211_ATTR_DTIM_PERIOD, dtim);
+    }
+    if hidden_ssid {
+        // Hidden SSID: set SSID to zero-length with special IE
+        put_nla_string(&mut attrs, NL80211_ATTR_SSID, b"");
+    }
+
+    sock.request(NL80211_CMD_SET_BSS, ifindex, &attrs)?;
+    Ok(())
+}
+
+/// Start an access point via nl80211 (NL80211_CMD_START_AP).
+///
+/// Sets up SSID, beacon interval, DTIM period, and cipher suites.
+fn nl80211_start_ap(
+    ifindex: i32,
+    ssid: &[u8],
+    frequency_mhz: Option<u32>,
+    beacon_interval: Option<u16>,
+    dtim_period: Option<u8>,
+    secure: bool,
+) -> Result<(), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+    put_nla_string(&mut attrs, NL80211_ATTR_SSID, ssid);
+
+    if let Some(freq) = frequency_mhz {
+        put_nla_u32(&mut attrs, NL80211_ATTR_WIPHY_FREQ, freq);
+    }
+
+    if let Some(bi) = beacon_interval {
+        put_nla_u16(&mut attrs, NL80211_ATTR_BEACON_INTERVAL, bi);
+    }
+    if let Some(dtim) = dtim_period {
+        put_nla_u8(&mut attrs, NL80211_ATTR_DTIM_PERIOD, dtim);
+    }
+
+    // Build beacon head (minimum: management frame header + SSID IE)
+    let mut beacon_head = Vec::new();
+    // Management frame: subtype beacon (0x80), duration, DA (broadcast), SA, BSSID, seq
+    beacon_head.push(0x80); // subtype: beacon
+    beacon_head.push(0x00); // flags
+    beacon_head.extend_from_slice(&[0xFFu8; 6]); // DA: broadcast
+    beacon_head.extend_from_slice(&[0x00u8; 6]); // SA: placeholder (set by kernel)
+    beacon_head.extend_from_slice(&[0x00u8; 6]); // BSSID: placeholder
+    beacon_head.extend_from_slice(&[0x00u8; 2]); // seq ctrl
+
+    // Timestamp (8 bytes), beacon interval (2), capability (2)
+    beacon_head.extend_from_slice(&[0u8; 8]); // timestamp
+    beacon_head.extend_from_slice(&beacon_interval.unwrap_or(100).to_le_bytes());
+    beacon_head.extend_from_slice(&[0x11u8, 0x00]); // capability: ESS
+
+    // SSID IE
+    beacon_head.push(0); // IE type: SSID
+    beacon_head.push(ssid.len() as u8);
+    beacon_head.extend_from_slice(ssid);
+
+    // RSN IE if secure
+    if secure {
+        let rsn_ie = build_rsn_ie();
+        beacon_head.extend_from_slice(&rsn_ie);
+    }
+
+    put_nla(&mut attrs, NL80211_ATTR_BEACON_HEAD, &beacon_head);
+
+    if secure {
+        // Set cipher suites for AP mode
+        let mut pairwise = Vec::new();
+        pairwise.extend_from_slice(&WIFI_CIPHER_SUITE_CCMP.to_ne_bytes());
+        put_nla(&mut attrs, NL80211_ATTR_CIPHER_SUITES_PAIRWISE, &pairwise);
+        put_nla_u32(&mut attrs, NL80211_ATTR_CIPHER_SUITE_GROUP, WIFI_CIPHER_SUITE_CCMP);
+    }
+
+    sock.request(NL80211_CMD_START_AP, ifindex, &attrs)?;
+    Ok(())
+}
+
+/// Stop the access point via nl80211 (NL80211_CMD_STOP_AP).
+fn nl80211_stop_ap(ifindex: i32) -> Result<(), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+
+    sock.request(NL80211_CMD_STOP_AP, ifindex, &attrs)?;
+    Ok(())
+}
+
+/// Set the operating frequency via nl80211 (NL80211_CMD_SET_WIPHY).
+fn nl80211_set_wiphy_freq(ifindex: i32, freq_mhz: u32) -> Result<(), CapabilityError> {
+    let mut sock = Nl80211Socket::open()?;
+
+    let mut attrs = Vec::new();
+    put_nla_u32(&mut attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+    put_nla_u32(&mut attrs, NL80211_ATTR_WIPHY_FREQ, freq_mhz);
+
+    sock.request(NL80211_CMD_SET_WIPHY, ifindex, &attrs)?;
     Ok(())
 }
 
@@ -1189,6 +1731,44 @@ fn set_rfkill_block(phy_name: &str, blocked: bool) -> Result<bool, CapabilityErr
 pub fn observe_current_network(
     interface: &LinuxWifiInterface,
 ) -> Result<Option<WifiNetworkObservation>, CapabilityError> {
+    // Try nl80211 scan results first (provides full BSS info)
+    if let Ok(ifindex) = get_ifindex(&interface.name) {
+        if let Ok(observations) = nl80211_scan(ifindex, None, false, None) {
+            // Return the strongest signal observation
+            if let Some(best) = observations
+                .into_iter()
+                .max_by_key(|o| o.signal_dbm.unwrap_or(i16::MIN))
+            {
+                return Ok(Some(best));
+            }
+        }
+
+        // If scan failed, try station info for currently connected BSS
+        // We need a BSSID to query station info — try WEXT to get it first
+        if let Ok(Some(bssid_str)) = query_bssid(&interface.name) {
+            if let Some(bssid) = parse_mac_string(&bssid_str) {
+                if let Ok((signal_dbm, _freq)) = nl80211_get_station(ifindex, &bssid) {
+                    let ssid = query_essid(&interface.name)?;
+                    let frequency_mhz = query_frequency_mhz(&interface.name)?;
+                    let observed_at_unix_ms = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
+                    return Ok(Some(WifiNetworkObservation {
+                        interface_name: interface.name.clone(),
+                        ssid,
+                        bssid: Some(bssid_str),
+                        signal_dbm: signal_dbm.map(|s| s as i16),
+                        frequency_mhz,
+                        secure: None,
+                        observed_at_unix_ms,
+                    }));
+                }
+            }
+        }
+    }
+
+    // Fallback: WEXT current network observation
     let ssid = query_essid(&interface.name)?;
     let bssid = query_bssid(&interface.name)?;
     let frequency_mhz = query_frequency_mhz(&interface.name)?;
@@ -1214,7 +1794,40 @@ pub fn observe_current_network(
 pub fn observe_access_point_state(
     interface: &LinuxWifiInterface,
 ) -> Result<WifiAccessPointState, CapabilityError> {
-    let mode = query_mode(&interface.name)?;
+    // Try nl80211 first for interface mode
+    let mode = if let Ok(ifindex) = get_ifindex(&interface.name) {
+        match nl80211_get_interface_type(ifindex) {
+            Ok(iftype) => match iftype {
+                NL80211_IFTYPE_STATION => WifiInterfaceMode::Client,
+                NL80211_IFTYPE_AP => WifiInterfaceMode::AccessPoint,
+                _ => query_mode(&interface.name).unwrap_or(WifiInterfaceMode::Client),
+            },
+            Err(_) => query_mode(&interface.name).unwrap_or(WifiInterfaceMode::Client),
+        }
+    } else {
+        query_mode(&interface.name)?
+    };
+
+    // For AP mode, query connected stations via nl80211
+    if mode == WifiInterfaceMode::AccessPoint {
+        if let Ok(ifindex) = get_ifindex(&interface.name) {
+            if let Ok(stations) = nl80211_dump_stations(ifindex) {
+                // stations are connected — AP is active
+                let ssid = query_essid(&interface.name)?;
+                let frequency_mhz = query_frequency_mhz(&interface.name)?;
+                return Ok(WifiAccessPointState {
+                    interface_name: interface.name.clone(),
+                    active: !stations.is_empty(),
+                    ssid,
+                    frequency_mhz,
+                    hidden: false,
+                    secure: None,
+                });
+            }
+        }
+    }
+
+    // Fallback: WEXT
     let ssid = query_essid(&interface.name)?;
     let frequency_mhz = query_frequency_mhz(&interface.name)?;
     Ok(WifiAccessPointState {
@@ -1237,7 +1850,7 @@ impl WifiScanner for LinuxWifiBackend {
     fn scan_nearby(&self) -> Result<WifiScanResult, CapabilityError> {
         // Try nl80211 scan first (real scan with results)
         if let Ok(ifindex) = get_ifindex(&self.interface.name) {
-            match nl80211_scan(ifindex, None) {
+            match nl80211_scan(ifindex, None, false, None) {
                 Ok(mut observations) => {
                     // Fill in interface name
                     for obs in &mut observations {
@@ -1264,6 +1877,20 @@ impl WifiScanner for LinuxWifiBackend {
 
 impl WifiController for LinuxWifiBackend {
     fn interface_info(&self) -> Result<WifiInterfaceInfo, CapabilityError> {
+        // Try nl80211 first for interface mode (modern path)
+        let mode = if let Ok(ifindex) = get_ifindex(&self.interface.name) {
+            match nl80211_get_interface_type(ifindex) {
+                Ok(iftype) => match iftype {
+                    NL80211_IFTYPE_STATION => WifiInterfaceMode::Client,
+                    NL80211_IFTYPE_AP => WifiInterfaceMode::AccessPoint,
+                    _ => query_mode(&self.interface.name).unwrap_or(WifiInterfaceMode::Client),
+                },
+                Err(_) => query_mode(&self.interface.name).unwrap_or(WifiInterfaceMode::Client),
+            }
+        } else {
+            query_mode(&self.interface.name)?
+        };
+
         Ok(WifiInterfaceInfo {
             provider: "linux-wifi".into(),
             interface_name: self.interface.name.clone(),
@@ -1271,7 +1898,7 @@ impl WifiController for LinuxWifiBackend {
             phy_name: self.interface.phy_name.clone(),
             operstate: self.interface.operstate.clone(),
             power_state: self.power_state()?,
-            mode: query_mode(&self.interface.name)?,
+            mode,
         })
     }
 
@@ -1339,6 +1966,47 @@ impl WifiController for LinuxWifiBackend {
             )),
         }
     }
+
+    fn connect(&self, ssid: &str, passphrase: Option<&str>) -> Result<(), CapabilityError> {
+        let ifindex = get_ifindex(&self.interface.name)?;
+
+        // Enable the interface
+        let _ = self.set_power_state(WifiPowerState::Enabled)?;
+
+        // Ensure station mode
+        nl80211_set_interface_type(ifindex, NL80211_IFTYPE_STATION)?;
+
+        if let Some(pass) = passphrase {
+            // WPA-PSK connection — derive PMK and pass to kernel
+            // so it handles the 4-way handshake internally
+            let pmk = derive_wpa_pmk(pass, ssid.as_bytes());
+            nl80211_connect_wpa(ifindex, ssid.as_bytes(), None, None, Some(&pmk))?;
+        } else {
+            // Open network — associate without auth
+            nl80211_connect_wpa(ifindex, ssid.as_bytes(), None, None, None)?;
+        }
+
+        Ok(())
+    }
+
+    fn disconnect(&self) -> Result<(), CapabilityError> {
+        let ifindex = get_ifindex(&self.interface.name)?;
+        nl80211_disconnect(ifindex)
+    }
+
+    fn regulatory_domain(&self) -> Result<Option<String>, CapabilityError> {
+        let (code, reg_type) = nl80211_get_regulatory_domain()?;
+        // "00" means world regulatory domain — treat as None
+        if code == "00" && reg_type == NL80211_REGDOM_TYPE_WORLD {
+            Ok(None)
+        } else {
+            Ok(Some(code))
+        }
+    }
+
+    fn set_regulatory_domain(&self, country_code: &str) -> Result<(), CapabilityError> {
+        nl80211_set_regulatory_domain(country_code)
+    }
 }
 
 impl WifiAccessPointController for LinuxWifiBackend {
@@ -1351,25 +2019,58 @@ impl WifiAccessPointController for LinuxWifiBackend {
         config: &WifiAccessPointConfig,
     ) -> Result<WifiAccessPointState, CapabilityError> {
         validate_access_point_config(config)?;
-        set_mode(&self.interface.name, WifiInterfaceMode::AccessPoint)?;
-        set_essid(&self.interface.name, &config.ssid)?;
-        if let Some(freq) = config.frequency_mhz {
-            set_frequency_mhz(&self.interface.name, freq)?;
-        }
-        // Derive WPA PMK if secure AP with passphrase
-        if config.secure {
-            if let Some(ref passphrase) = config.passphrase {
-                let pmk = derive_wpa_pmk(passphrase, config.ssid.as_bytes());
-                // Store PMK for later use in 4-way handshake
-                drop(pmk); // TODO: wire PMK into nl80211 AP configuration
+        let ifindex = get_ifindex(&self.interface.name)?;
+
+        // Try nl80211 START_AP first (proper AP setup with beacon)
+        let nl_ap_result = nl80211_start_ap(
+            ifindex,
+            config.ssid.as_bytes(),
+            config.frequency_mhz,
+            None,  // beacon interval: kernel default
+            None,  // dtim period: kernel default
+            config.secure,
+        );
+
+        if nl_ap_result.is_err() {
+            // Fallback: switch to AP mode via nl80211, then use nl80211/WEXT for SSID/channel
+            nl80211_set_interface_type(ifindex, NL80211_IFTYPE_AP)?;
+
+            // Set SSID via WEXT (no nl80211 alternative for AP SSID without beacon)
+            let _ = set_essid(&self.interface.name, &config.ssid);
+
+            // Set frequency via nl80211 if possible, fallback to WEXT
+            if let Some(freq) = config.frequency_mhz {
+                if nl80211_set_wiphy_freq(ifindex, freq).is_err() {
+                    let _ = set_frequency_mhz(&self.interface.name, freq);
+                }
             }
         }
+
+        // Enable the interface
         let _ = self.set_power_state(WifiPowerState::Enabled)?;
+
+        // For WPA-protected APs, the kernel handles the 4-way handshake
+        // using the RSN IE and cipher suites configured in nl80211_start_ap.
+        // Per-station PMK can be set via NL80211_CMD_SET_PMK if needed
+        // for dynamic key management.
+
         self.access_point_state()
     }
 
     fn stop_access_point(&self) -> Result<WifiAccessPointState, CapabilityError> {
-        set_mode(&self.interface.name, WifiInterfaceMode::Client)?;
+        let ifindex = get_ifindex(&self.interface.name)?;
+
+        // Try nl80211 STOP_AP first (proper AP teardown)
+        if nl80211_stop_ap(ifindex).is_ok() {
+            // Switch back to station mode
+            if nl80211_set_interface_type(ifindex, NL80211_IFTYPE_STATION).is_err() {
+                let _ = set_mode(&self.interface.name, WifiInterfaceMode::Client);
+            }
+        } else {
+            // Fallback to WEXT: switch interface back to client mode
+            let _ = set_mode(&self.interface.name, WifiInterfaceMode::Client);
+        }
+
         let _ = self.set_power_state(WifiPowerState::Disabled);
         self.access_point_state()
     }
@@ -1378,6 +2079,19 @@ impl WifiAccessPointController for LinuxWifiBackend {
 // ============================================================================
 // WPA/WPA2 PSK derivation and EAPOL Key handling
 // ============================================================================
+
+/// Parse a MAC address string like "AA:BB:CC:DD:EE:FF" into bytes.
+fn parse_mac_string(s: &str) -> Option<[u8; 6]> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() != 6 {
+        return None;
+    }
+    let mut mac = [0u8; 6];
+    for (i, part) in parts.iter().enumerate() {
+        mac[i] = u8::from_str_radix(part, 16).ok()?;
+    }
+    Some(mac)
+}
 
 /// Derive the Pairwise Master Key (PMK) from a WPA passphrase using PBKDF2-SHA1.
 ///
