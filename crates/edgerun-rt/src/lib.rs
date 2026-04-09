@@ -372,12 +372,14 @@ impl BlockingPool {
 }
 
 // ===========================================================================
-// JoinHandle — Condvar-based instead of mpsc
+// JoinHandle — waker-based async, Condvar for blocking_recv
 // ===========================================================================
 
 struct JoinInner<T> {
     result: Mutex<Option<Result<T, JoinError>>>,
     cvar: Condvar,
+    /// Waker for async await. Set when a task polls and finds no result yet.
+    waker: Mutex<Option<Waker>>,
 }
 
 pub struct JoinHandle<T> { inner: Arc<JoinInner<T>> }
@@ -397,8 +399,8 @@ impl<T> Future for JoinHandle<T> {
         if let Some(result) = guard.take() {
             Poll::Ready(result)
         } else {
-            *guard = None; // still None
-            cx.waker().wake_by_ref();
+            // Register our waker so the task-completion code can wake us.
+            *self.inner.waker.lock().unwrap() = Some(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -427,15 +429,20 @@ impl RuntimeInner {
         let inner = Arc::new(JoinInner {
             result: Mutex::new(None),
             cvar: Condvar::new(),
+            waker: Mutex::new(None),
         });
         let inner2 = Arc::clone(&inner);
         let mut fut = Box::pin(f);
         let id = self.tasks.insert(Box::new(move |cx| {
             match fut.as_mut().poll(cx) {
-                Poll::Ready(v) => { 
-                    *inner2.result.lock().unwrap() = Some(Ok(v)); 
+                Poll::Ready(v) => {
+                    *inner2.result.lock().unwrap() = Some(Ok(v));
                     inner2.cvar.notify_all();
-                    false 
+                    // Wake any async task awaiting on this JoinHandle.
+                    if let Some(waker) = inner2.waker.lock().unwrap().take() {
+                        waker.wake();
+                    }
+                    false
                 }
                 Poll::Pending => true,
             }
@@ -540,13 +547,17 @@ impl Runtime {
         let inner = Arc::new(JoinInner {
             result: Mutex::new(None),
             cvar: Condvar::new(),
+            waker: Mutex::new(None),
         });
         let inner2 = Arc::clone(&inner);
         let blocking = Arc::clone(&self.inner.blocking);
-        blocking.spawn(move || { 
-            let r = f(); 
+        blocking.spawn(move || {
+            let r = f();
             *inner2.result.lock().unwrap() = Some(Ok(r));
             inner2.cvar.notify_all();
+            if let Some(waker) = inner2.waker.lock().unwrap().take() {
+                waker.wake();
+            }
         });
         JoinHandle { inner }
     }
@@ -591,14 +602,18 @@ where F: FnOnce() -> R + Send + 'static, R: Send + 'static
     let inner = Arc::new(JoinInner {
         result: Mutex::new(None),
         cvar: Condvar::new(),
+        waker: Mutex::new(None),
     });
     let inner2 = Arc::clone(&inner);
     let rt = current_rt();
     let blocking = Arc::clone(&rt.blocking);
-    blocking.spawn(move || { 
-        let r = f(); 
+    blocking.spawn(move || {
+        let r = f();
         *inner2.result.lock().unwrap() = Some(Ok(r));
         inner2.cvar.notify_all();
+        if let Some(waker) = inner2.waker.lock().unwrap().take() {
+            waker.wake();
+        }
     });
     JoinHandle { inner }
 }
@@ -937,196 +952,21 @@ impl Future for IntervalTick<'_> {
 }
 
 // ===========================================================================
-// Channels — mpsc (bounded, with backpressure)
-// ===========================================================================
-
-pub mod mpsc {
-    use super::*;
-
-    pub struct Sender<T> { inner: Arc<ChanInner<T>> }
-    pub struct Receiver<T> { inner: Arc<ChanInner<T>> }
-
-    struct ChanInner<T> {
-        q: Mutex<VecDeque<T>>,
-        cap: usize,
-        recv_waker: Mutex<Option<Waker>>,
-        send_waker: Mutex<Option<(Waker, T)>>,
-        send_cvar: Condvar,
-        closed: AtomicBool,
-        sender_count: Mutex<usize>,
-        sender_cvar: Condvar,
-    }
-
-    impl<T> Clone for Sender<T> {
-        fn clone(&self) -> Self {
-            *self.inner.sender_count.lock().unwrap() += 1;
-            Self { inner: self.inner.clone() }
-        }
-    }
-
-    impl<T> Drop for Sender<T> {
-        fn drop(&mut self) {
-            let mut count = self.inner.sender_count.lock().unwrap();
-            *count -= 1;
-            if *count == 0 {
-                self.inner.closed.store(true, Ordering::Release);
-                self.inner.recv_waker.lock().unwrap().take().map(|w| w.wake());
-                self.inner.send_cvar.notify_all();
-            }
-        }
-    }
-
-    pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
-        let cap = cap.max(1);
-        let inner = Arc::new(ChanInner {
-            q: Mutex::new(VecDeque::with_capacity(cap)),
-            cap,
-            recv_waker: Mutex::new(None),
-            send_waker: Mutex::new(None),
-            send_cvar: Condvar::new(),
-            closed: AtomicBool::new(false),
-            sender_count: Mutex::new(1),
-            sender_cvar: Condvar::new(),
-        });
-        (Sender { inner: inner.clone() }, Receiver { inner })
-    }
-
-    impl<T> Sender<T> {
-        /// Non-blocking send. Returns Err if channel is full or closed.
-        pub fn send_nowait(&self, val: T) -> Result<(), SendError<T>> {
-            if self.inner.closed.load(Ordering::Relaxed) { return Err(SendError(val)); }
-            let mut q = self.inner.q.lock().unwrap();
-            if q.len() >= self.inner.cap { return Err(SendError(val)); }
-            q.push_back(val);
-            if let Some(w) = self.inner.recv_waker.lock().unwrap().take() { w.wake(); }
-            Ok(())
-        }
-
-        /// Async send. Returns a future that resolves when the value is enqueued.
-        pub fn send(&self, val: T) -> SendFut<T> {
-            SendFut { inner: self.inner.clone(), val: Some(val) }
-        }
-
-        pub fn try_send(&self, val: T) -> Result<(), SendError<T>> {
-            self.send_nowait(val)
-        }
-    }
-
-    pub struct SendFut<T> { inner: Arc<ChanInner<T>>, val: Option<T> }
-    impl<T> Future for SendFut<T> {
-        type Output = Result<(), SendError<T>>;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            let this = unsafe { self.get_unchecked_mut() };
-            if this.inner.closed.load(Ordering::Relaxed) {
-                return Poll::Ready(Err(SendError(this.val.take().unwrap())));
-            }
-            let mut q = this.inner.q.lock().unwrap();
-            if q.len() < this.inner.cap {
-                let val = this.val.take().unwrap();
-                q.push_back(val);
-                if let Some(w) = this.inner.recv_waker.lock().unwrap().take() { w.wake(); }
-                Poll::Ready(Ok(()))
-            } else {
-                *this.inner.send_waker.lock().unwrap() = Some((cx.waker().clone(), this.val.take().unwrap()));
-                Poll::Pending
-            }
-        }
-    }
-
-    fn wake_pending_sender<T>(inner: &ChanInner<T>) {
-        if let Some((waker, val)) = inner.send_waker.lock().unwrap().take() {
-            let _ = inner.q.lock().unwrap().push_back(val);
-            waker.wake();
-        }
-        inner.send_cvar.notify_one();
-    }
-
-    impl<T> Receiver<T> {
-        pub fn recv(&self) -> RecvFut<'_, T> { RecvFut { inner: &self.inner } }
-
-        /// Blocking receive using Condvar — no spin-sleep.
-        pub fn blocking_recv(&mut self) -> Option<T> {
-            let mut q = self.inner.q.lock().unwrap();
-            loop {
-                if let Some(v) = q.pop_front() {
-                    wake_pending_sender(&self.inner);
-                    return Some(v);
-                }
-                if self.inner.closed.load(Ordering::Relaxed) { return None; }
-                q = self.inner.send_cvar.wait(q).unwrap();
-            }
-        }
-    }
-
-    pub struct RecvFut<'a, T> { inner: &'a ChanInner<T> }
-    impl<T> Future for RecvFut<'_, T> {
-        type Output = Option<T>;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            if let Some(v) = self.inner.q.lock().unwrap().pop_front() {
-                wake_pending_sender(self.inner);
-                Poll::Ready(Some(v))
-            } else if self.inner.closed.load(Ordering::Relaxed) {
-                Poll::Ready(None)
-            } else {
-                *self.inner.recv_waker.lock().unwrap() = Some(cx.waker().clone());
-                Poll::Pending
-            }
-        }
-    }
-
-    #[derive(Debug)] pub struct SendError<T>(pub T);
-    impl<T> std::fmt::Display for SendError<T> { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "send error") } }
-}
 
 // ===========================================================================
-// Channels — oneshot
+// Channels
 // ===========================================================================
 
-pub mod oneshot {
-    use super::*;
+pub mod mpsc;
+pub mod oneshot;
+pub mod unbounded;
 
-    pub struct Sender<T> { inner: Option<Arc<OneInner<T>>> }
-    pub struct Receiver<T> { inner: Arc<OneInner<T>> }
-
-    struct OneInner<T> {
-        val: Mutex<Option<T>>,
-        waker: Mutex<Option<Waker>>,
-    }
-
-    pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
-        let inner = Arc::new(OneInner { val: Mutex::new(None), waker: Mutex::new(None) });
-        (Sender { inner: Some(inner.clone()) }, Receiver { inner })
-    }
-
-    impl<T> Sender<T> {
-        pub fn send(self, val: T) -> Result<(), T> {
-            if let Some(inner) = &self.inner {
-                *inner.val.lock().unwrap() = Some(val);
-                if let Some(w) = inner.waker.lock().unwrap().take() { w.wake(); }
-                Ok(())
-            } else { Err(val) }
-        }
-    }
-
-    impl<T> Drop for Sender<T> {
-        fn drop(&mut self) {
-            if let Some(inner) = &self.inner {
-                if let Some(w) = inner.waker.lock().unwrap().take() { w.wake(); }
-            }
-        }
-    }
-
-    impl<T> Future for Receiver<T> {
-        type Output = Result<T, RecvError>;
-        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-            if let Some(v) = self.inner.val.lock().unwrap().take() { Poll::Ready(Ok(v)) }
-            else { *self.inner.waker.lock().unwrap() = Some(cx.waker().clone()); Poll::Pending }
-        }
-    }
-
-    #[derive(Debug)] pub struct RecvError;
-    impl std::fmt::Display for RecvError { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "recv error") } }
-}
+// Concurrency primitives
+pub mod notify;
+pub mod semaphore;
+pub mod rwlock;
+pub mod barrier;
+pub mod watch;
 
 // ===========================================================================
 // Signal — ctrl_c
@@ -1154,7 +994,6 @@ impl Future for CtrlC {
 // Tests
 // ===========================================================================
 
-#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1299,7 +1138,8 @@ mod tests {
         let w = make_waker(1, Arc::new(ReadyQueue::new()));
         let mut cx = Context::from_waker(&w);
         let mut rx = rx;
-        assert!(Pin::new(&mut rx).poll(&mut cx).is_pending());
+        // When sender is dropped without sending, receiver gets Err immediately.
+        assert!(matches!(Pin::new(&mut rx).poll(&mut cx), Poll::Ready(Err(_))));
     }
 
     // Sleep

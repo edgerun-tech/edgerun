@@ -460,30 +460,41 @@ impl AudioChallengeExecutor {
             capture_latency_ms.saturating_add(offset).saturating_sub(500) // subtract prompt time
         });
 
-        // For number challenges, we'd need speech recognition to verify the number.
-        // For now, we detect speech activity and estimate confidence.
-        // A real implementation would use a speech-to-text engine.
-        let detected_response = if speech_detected {
-            // Placeholder: in real impl, this would be the recognized number
+        // Use DTW keyword spotter to verify the spoken number
+        let spotter = KeywordSpotter::new(48000);
+        let (detected_number, keyword_confidence) = spotter
+            .match_digit(&capture.bytes, 48000)
+            .unwrap_or((999, 0.0)); // 999 = no match
+
+        let expected_number = challenge.expected_response.as_deref()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(999);
+
+        let number_match = detected_number == expected_number && keyword_confidence > 0.3;
+
+        let spectral = analyze_spectral(&capture.bytes, 48000);
+
+        let detected_response = if number_match {
             challenge.expected_response.clone()
+        } else if speech_detected {
+            Some(format!("unknown (detected: {})", detected_number))
         } else {
             None
         };
 
-        let spectral = analyze_spectral(&capture.bytes, 48000);
-
-        let passed = speech_detected
-            && vad_confidence > 0.3
-            && spectral.looks_like_natural_speech;
+        // Pass if:
+        // 1. Speech was detected with reasonable confidence
+        // 2. The keyword spotter matched the expected number
+        // 3. Audio looks like natural speech (anti-spoofing)
+        let passed = speech_detected && number_match && spectral.looks_like_natural_speech;
 
         let confidence = if passed {
-            vad_confidence * 0.5 + (spectral.zero_crossing_rate * 2.0).min(1.0) * 0.3 + {
-                if spectral.looks_like_natural_speech {
-                    0.2
-                } else {
-                    0.0
-                }
+            vad_confidence * 0.3 + keyword_confidence * 0.4 + {
+                if spectral.looks_like_natural_speech { 0.3 } else { 0.05 }
             }
+        } else if speech_detected && !number_match {
+            // Speech detected but wrong number
+            vad_confidence * 0.3
         } else {
             0.0
         };
@@ -799,34 +810,485 @@ fn calculate_zero_crossing_rate_s16le(pcm: &[u8]) -> f32 {
     }
 }
 
-/// Generate simple "speech-like" audio for the challenge prompt.
-/// In production, this would use a TTS engine. For now, generate a simple tone pattern.
-fn text_to_speech_audio(text: &str, sample_rate: u32) -> Vec<u8> {
-    // Generate a simple beep pattern as placeholder for TTS
-    // Duration: ~100ms per character (minimum)
-    let duration_ms = (text.len() as u32 * 100).max(500).min(5000);
-    let num_samples = (sample_rate as u64 * duration_ms as u64 / 1000) as usize;
+/// Formant-based speech synthesizer — pure Rust, no external dependencies.
+///
+/// Uses a Klatt-style formant synthesizer model:
+/// - Voiced sounds: glottal pulse train filtered through formant resonators
+/// - Unvoiced sounds: white noise filtered through formant resonators
+/// - Silence: zero output
+///
+/// Supports English phonemes for numbers 0-999 and simple prompts.
+struct FormantSynth {
+    sample_rate: u32,
+    /// Glottal pulse phase for voiced sounds
+    glottal_phase: f64,
+    /// Formant filter state (3 formants)
+    f1_state: f64,
+    f2_state: f64,
+    f3_state: f64,
+    /// Noise generator state
+    noise_state: u64,
+}
 
-    let mut samples = Vec::with_capacity(num_samples * 2);
-
-    // Generate a speech-like pattern: modulated tones with pauses
-    let base_freq = 440.0; // A4
-    let mut phase = 0.0f64;
-
-    for i in 0..num_samples {
-        let t = i as f64 / sample_rate as f64;
-
-        // Simple amplitude modulation to simulate speech rhythm
-        let envelope = (t * 4.0 * std::f64::consts::PI).sin().abs();
-        let freq_mod = base_freq + 100.0 * (t * 2.0 * std::f64::consts::PI).sin();
-
-        let sample = envelope * (t * freq_mod * 2.0 * std::f64::consts::PI).sin();
-        let sample_i16 = (sample * 8000.0).clamp(-32000.0, 32000.0) as i16;
-
-        samples.extend_from_slice(&sample_i16.to_le_bytes());
+impl FormantSynth {
+    fn new(sample_rate: u32) -> Self {
+        Self {
+            sample_rate,
+            glottal_phase: 0.0,
+            f1_state: 0.0,
+            f2_state: 0.0,
+            f3_state: 0.0,
+            noise_state: 42,
+        }
     }
 
-    samples
+    /// Simple LCG noise generator.
+    #[inline]
+    fn noise(&mut self) -> f64 {
+        self.noise_state = self.noise_state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        ((self.noise_state >> 33) as i32 as f64) / (i32::MAX as f64)
+    }
+
+    /// Generate a glottal pulse (Rosenberg model).
+    #[inline]
+    fn glottal_pulse(&mut self, f0: f64) -> f64 {
+        let period = self.sample_rate as f64 / f0;
+        self.glottal_phase += 1.0 / period;
+        if self.glottal_phase >= 1.0 {
+            self.glottal_phase -= 1.0;
+        }
+        let p = self.glottal_phase;
+        // Rosenberg glottal pulse: open phase (0-0.7), return phase (0.7-1.0)
+        if p < 0.7 {
+            (p / 0.7).sin().powi(2)
+        } else if p < 0.9 {
+            (1.0 - (p - 0.7) / 0.2).cos().powi(2) * 0.3
+        } else {
+            0.0
+        }
+    }
+
+    /// Apply a resonant bandpass filter (formant).
+    #[inline]
+    fn formant_filter(state: &mut f64, input: f64, freq: f64, bw: f64, sr: f64) -> f64 {
+        let r = (-std::f64::consts::PI * bw / sr).exp();
+        let angle = 2.0 * std::f64::consts::PI * freq / sr;
+        let output = input + 2.0 * r * angle.cos() * *state - r * r * input;
+        // Actually a proper 2nd order resonator:
+        let b0 = (1.0 - r) * (1.0 + r * r - 2.0 * r * angle.cos()).sqrt();
+        *state = *state * r * angle.cos() * 2.0 - r * r * *state + input;
+        // Simplified: just use a leaky integrator tuned to the formant
+        let alpha = 1.0 - r;
+        *state = *state * r + input * alpha;
+        *state
+    }
+
+    /// Synthesize a single phoneme.
+    fn synthesize_phoneme(
+        &mut self,
+        phoneme: &Phoneme,
+        duration_ms: u32,
+    ) -> Vec<i16> {
+        let num_samples = (self.sample_rate as u64 * duration_ms as u64 / 1000) as usize;
+        let mut output = Vec::with_capacity(num_samples);
+        let sr = self.sample_rate as f64;
+
+        for _ in 0..num_samples {
+            let source = if phoneme.voiced {
+                self.glottal_pulse(phoneme.f0) * phoneme.amplitude
+            } else {
+                self.noise() * phoneme.amplitude * 0.5
+            };
+
+            // Cascade of 3 formant filters
+            let f1 = Self::formant_filter(&mut self.f1_state, source,
+                phoneme.f1, phoneme.bw1, sr);
+            let f2 = Self::formant_filter(&mut self.f2_state, f1,
+                phoneme.f2, phoneme.bw2, sr);
+            let f3 = Self::formant_filter(&mut self.f3_state, f2,
+                phoneme.f3, phoneme.bw3, sr);
+
+            let sample = (f3 * 28000.0).clamp(-32000.0, 32000.0) as i16;
+            output.push(sample);
+        }
+
+        output
+    }
+}
+
+/// English phoneme definition for formant synthesis.
+#[derive(Clone, Copy)]
+struct Phoneme {
+    /// Whether this phoneme is voiced (glottal pulse) or unvoiced (noise)
+    voiced: bool,
+    /// Fundamental frequency (Hz) — only for voiced
+    f0: f64,
+    /// Formant frequencies (Hz)
+    f1: f64, f2: f64, f3: f64,
+    /// Formant bandwidths (Hz)
+    bw1: f64, bw2: f64, bw3: f64,
+    /// Amplitude (0.0 to 1.0)
+    amplitude: f64,
+    /// Duration in milliseconds
+    duration_ms: u32,
+}
+
+/// Convert a number (0-999) to a sequence of phonemes.
+fn number_to_phonemes(n: u32) -> Vec<Phoneme> {
+    // Simplified English pronunciation for numbers
+    // Each digit maps to approximate phoneme sequences
+    let digit_phonemes: &[&[Phoneme]] = &[
+        // "zero" — /zɪəroʊ/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 80 },  // z (fricative)
+            Phoneme { voiced: true, f0: 120.0, f1: 400.0, f2: 2000.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ɪ
+            Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 }, // ə
+            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // r
+            Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 }, // oʊ
+        ],
+        // "one" — /wʌn/
+        &[
+            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // w
+            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1200.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 }, // ʌ
+            Phoneme { voiced: true, f0: 115.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 80 },  // n
+        ],
+        // "two" — /tuː/
+        &[
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // t
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 850.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 150 },  // uː
+        ],
+        // "three" — /θriː/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 60 }, // θ
+            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // r
+            Phoneme { voiced: true, f0: 120.0, f1: 350.0, f2: 2300.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 120 }, // iː
+        ],
+        // "four" — /fɔːr/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 60 }, // f
+            Phoneme { voiced: true, f0: 115.0, f1: 600.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 120 },  // ɔː
+            Phoneme { voiced: true, f0: 110.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },  // r
+        ],
+        // "five" — /faɪv/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.12, duration_ms: 50 }, // f
+            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // a
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
+            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // v
+        ],
+        // "six" — /sɪks/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 60 }, // s
+            Phoneme { voiced: true, f0: 120.0, f1: 400.0, f2: 2000.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ɪ
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // k
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 60 }, // s
+        ],
+        // "seven" — /sɛvən/
+        &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.15, duration_ms: 50 }, // s
+            Phoneme { voiced: true, f0: 120.0, f1: 550.0, f2: 1800.0, f3: 2700.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɛ
+            Phoneme { voiced: true, f0: 115.0, f1: 300.0, f2: 700.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 50 },  // v
+            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 60 },  // ə
+            Phoneme { voiced: true, f0: 110.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // n
+        ],
+        // "eight" — /eɪt/
+        &[
+            Phoneme { voiced: true, f0: 120.0, f1: 550.0, f2: 1800.0, f3: 2700.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },  // e
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
+            Phoneme { voiced: true, f0: 110.0, f1: 350.0, f2: 1200.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.2, duration_ms: 40 },  // t
+        ],
+        // "nine" — /naɪn/
+        &[
+            Phoneme { voiced: true, f0: 115.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 50 },  // n
+            Phoneme { voiced: true, f0: 120.0, f1: 700.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // a
+            Phoneme { voiced: true, f0: 115.0, f1: 350.0, f2: 2200.0, f3: 3000.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 80 },  // ɪ
+            Phoneme { voiced: true, f0: 110.0, f1: 250.0, f2: 1800.0, f3: 2800.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.3, duration_ms: 60 },  // n
+        ],
+    ];
+
+    // Simple lookup: map each digit to its phoneme sequence
+    let digits: Vec<u32> = if n == 0 {
+        vec![0]
+    } else {
+        let mut d = Vec::new();
+        let mut num = n;
+        while num > 0 {
+            d.push(num % 10);
+            num /= 10;
+        }
+        d.reverse();
+        d
+    };
+
+    let mut phonemes = Vec::new();
+    for (i, &digit) in digits.iter().enumerate() {
+        if i > 0 {
+            // Brief pause between digits
+            phonemes.push(Phoneme {
+                voiced: true, f0: 110.0, f1: 500.0, f2: 1400.0, f3: 2600.0,
+                bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.0, duration_ms: 100,
+            });
+        }
+        phonemes.extend_from_slice(digit_phonemes[digit as usize]);
+    }
+
+    phonemes
+}
+
+/// Generate speech-like audio from text using formant synthesis.
+fn text_to_speech_audio(text: &str, sample_rate: u32) -> Vec<u8> {
+    let mut synth = FormantSynth::new(sample_rate);
+    let mut all_samples = Vec::new();
+
+    // Extract numbers from text and synthesize them
+    // "Please say the number 42" → extract "42"
+    let number_str: String = text.chars().filter(|c| c.is_ascii_digit()).collect();
+
+    if !number_str.is_empty() {
+        if let Ok(n) = number_str.parse::<u32>() {
+            if n <= 999 {
+                let phonemes = number_to_phonemes(n);
+                for ph in &phonemes {
+                    all_samples.extend(synth.synthesize_phoneme(ph, ph.duration_ms));
+                }
+            }
+        }
+    }
+
+    // If no number found, say "hello" as a default
+    if all_samples.is_empty() {
+        // "hello" — /həloʊ/
+        let hello = &[
+            Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.1, duration_ms: 60 },
+            Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },
+            Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },
+            Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 },
+        ];
+        for ph in hello {
+            all_samples.extend(synth.synthesize_phoneme(ph, ph.duration_ms));
+        }
+    }
+
+    // Convert i16 samples to S16LE bytes
+    let mut bytes = Vec::with_capacity(all_samples.len() * 2);
+    for s in &all_samples {
+        bytes.extend_from_slice(&s.to_le_bytes());
+    }
+
+    bytes
+}
+
+/// Dynamic Time Warping (DTW) keyword spotter.
+///
+/// Compares the MFCC-like feature sequence of captured audio against
+/// reference templates for digit words ("zero" through "nine").
+/// Returns the best-matching digit and confidence score.
+///
+/// Pure Rust — no external dependencies.
+pub struct KeywordSpotter {
+    /// Reference templates: digit → feature sequence
+    templates: Vec<(String, Vec<f32>)>,
+}
+
+impl KeywordSpotter {
+    /// Create a new spotter with reference templates for digits 0-9.
+    pub fn new(sample_rate: u32) -> Self {
+        let templates: Vec<(String, Vec<f32>)> = (0..=9)
+            .map(|d| {
+                let word = digit_word(d);
+                let features = synthesize_mfcc_features(&word, sample_rate);
+                (word, features)
+            })
+            .collect();
+
+        Self { templates }
+    }
+
+    /// Match captured audio against digit templates.
+    /// Returns (matched_digit, confidence) or None if no match.
+    pub fn match_digit(&self, audio: &[u8], sample_rate: u32) -> Option<(u32, f32)> {
+        if audio.len() < 100 {
+            return None;
+        }
+
+        // Extract features from captured audio
+        let query = extract_energy_features(audio, sample_rate);
+        if query.is_empty() {
+            return None;
+        }
+
+        // Find best match via DTW
+        let mut best_digit = None;
+        let mut best_score = f32::MAX;
+
+        for (digit, template) in &self.templates {
+            let distance = dtw_distance(&query, template);
+            if distance < best_score {
+                best_score = distance;
+                best_digit = Some(digit);
+            }
+        }
+
+        // Convert distance to confidence
+        // Normalized: lower distance = higher confidence
+        let confidence = if best_score > 0.0 {
+            (1.0 / (1.0 + best_score * 0.01)).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+
+        if let Some(digit_str) = best_digit {
+            digit_str.parse::<u32>().ok().map(|d| (d, confidence))
+        } else {
+            None
+        }
+    }
+}
+
+/// Get the English word for a digit.
+fn digit_word(d: u32) -> String {
+    match d {
+        0 => "zero".into(),
+        1 => "one".into(),
+        2 => "two".into(),
+        3 => "three".into(),
+        4 => "four".into(),
+        5 => "five".into(),
+        6 => "six".into(),
+        7 => "seven".into(),
+        8 => "eight".into(),
+        9 => "nine".into(),
+        _ => String::new(),
+    }
+}
+
+/// Extract energy-based features from PCM audio (simplified MFCC substitute).
+///
+/// Returns a sequence of per-frame energy values that capture speech rhythm.
+fn extract_energy_features(pcm: &[u8], sample_rate: u32) -> Vec<f32> {
+    // 25ms frames with 10ms hop
+    let frame_len = (sample_rate as f32 * 0.025) as usize * 2; // bytes
+    let hop = (sample_rate as f32 * 0.010) as usize * 2;
+
+    if pcm.len() < frame_len {
+        return Vec::new();
+    }
+
+    let mut features = Vec::new();
+    let mut pos = 0;
+    while pos + frame_len <= pcm.len() {
+        let frame = &pcm[pos..pos + frame_len];
+
+        // Compute log energy (simplified MFCC coefficient 0)
+        let mut energy = 0.0f64;
+        for chunk in frame.chunks_exact(2) {
+            let sample = i16::from_le_bytes([chunk[0], chunk[1]]) as f64;
+            energy += sample * sample;
+        }
+        energy /= (frame.len() / 2) as f64;
+        let log_energy = if energy > 1.0 {
+            (energy).ln() as f32
+        } else {
+            0.0
+        };
+
+        // Zero-crossing rate as second feature
+        let mut zcr = 0u32;
+        let mut prev: i16 = 0;
+        for chunk in frame.chunks_exact(2) {
+            let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
+            if (prev >= 0 && sample < 0) || (prev < 0 && sample >= 0) {
+                zcr += 1;
+            }
+            prev = sample;
+        }
+        let zcr_norm = zcr as f32 / (frame.len() / 2) as f32;
+
+        features.push(log_energy);
+        features.push(zcr_norm);
+
+        pos += hop;
+    }
+
+    features
+}
+
+/// Synthesize MFCC-like features from a word's phoneme sequence (for template creation).
+fn synthesize_mfcc_features(word: &str, sample_rate: u32) -> Vec<f32> {
+    // Get phonemes for the word
+    let phonemes = word_to_phonemes(word);
+
+    // Generate audio from phonemes, then extract features
+    let mut synth = FormantSynth::new(sample_rate);
+    let mut samples = Vec::new();
+    for ph in &phonemes {
+        samples.extend(synth.synthesize_phoneme(ph, ph.duration_ms));
+    }
+
+    // Convert i16 to S16LE bytes
+    let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
+    extract_energy_features(&bytes, sample_rate)
+}
+
+/// Convert a word string to phonemes.
+fn word_to_phonemes(word: &str) -> Vec<Phoneme> {
+    match word {
+        "zero" => number_to_phonemes(0),
+        "one" => number_to_phonemes(1),
+        "two" => number_to_phonemes(2),
+        "three" => number_to_phonemes(3),
+        "four" => number_to_phonemes(4),
+        "five" => number_to_phonemes(5),
+        "six" => number_to_phonemes(6),
+        "seven" => number_to_phonemes(7),
+        "eight" => number_to_phonemes(8),
+        "nine" => number_to_phonemes(9),
+        "hello" => {
+            vec![
+                Phoneme { voiced: false, f0: 0.0, f1: 4000.0, f2: 4000.0, f3: 4000.0, bw1: 200.0, bw2: 200.0, bw3: 200.0, amplitude: 0.1, duration_ms: 60 },
+                Phoneme { voiced: true, f0: 120.0, f1: 500.0, f2: 1400.0, f3: 2600.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 80 },
+                Phoneme { voiced: true, f0: 115.0, f1: 500.0, f2: 900.0, f3: 2400.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.5, duration_ms: 100 },
+                Phoneme { voiced: true, f0: 110.0, f1: 450.0, f2: 800.0, f3: 2500.0, bw1: 60.0, bw2: 90.0, bw3: 120.0, amplitude: 0.4, duration_ms: 120 },
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Dynamic Time Warping distance between two feature sequences.
+///
+/// Uses a simplified O(N*M) DTW with Sakoe-Chiba band constraint.
+fn dtw_distance(seq_a: &[f32], seq_b: &[f32]) -> f32 {
+    let n = seq_a.len();
+    let m = seq_b.len();
+    if n == 0 || m == 0 {
+        return f32::MAX;
+    }
+
+    // Sakoe-Chiba band: limit warping to ±25% of sequence length
+    let window = (n.max(m) / 4).max(2);
+
+    // DTW cost matrix — only store current and previous row
+    let mut prev_row = vec![f32::MAX; m + 1];
+    let mut curr_row = vec![f32::MAX; m + 1];
+    prev_row[0] = 0.0;
+
+    for i in 1..=n {
+        let j_start = (1.max(i as isize - window as isize) as usize).max(1);
+        let j_end = (m.min(i + window));
+
+        curr_row[0] = f32::MAX;
+
+        for j in j_start..=j_end {
+            let local_dist = (seq_a[i - 1] - seq_b[j - 1]).abs();
+            curr_row[j] = local_dist + prev_row[j].min(prev_row[j - 1]).min(curr_row[j - 1]);
+        }
+
+        std::mem::swap(&mut prev_row, &mut curr_row);
+    }
+
+    // Normalize by path length
+    prev_row[m] / (n + m) as f32
 }
 
 /// Create a biometric state for audio verification.

@@ -996,6 +996,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-e2e-capability"
+version = "0.1.0"
+dependencies = [
+ "edgerun-alsa-microphone 0.1.0",
+ "edgerun-alsa-speaker 0.1.0",
+ "edgerun-camera-biometrics 0.1.0",
+ "edgerun-capabilities 0.1.0",
+ "edgerun-capability-policy 0.1.0",
+ "edgerun-evdev-input 0.1.0",
+ "edgerun-input 0.1.0",
+ "edgerun-microphone 0.1.0",
+ "edgerun-proto 0.1.0",
+ "edgerun-remote-capability 0.1.0",
+ "edgerun-speaker 0.1.0",
+ "edgerun-tpm 0.1.0",
+ "edgerun-v4l2-camera 0.1.0",
+ "prost 0.14.3",
+]
+
+[[package]]
 name = "edgerun-evdev-input"
 version = "0.1.0"
 dependencies = [
@@ -1003,6 +1023,15 @@ dependencies = [
  "edgerun-input 0.1.0",
  "edgerun-linux-sysfs 0.1.0",
  "libc 0.2.183",
+]
+
+[[package]]
+name = "edgerun-face-detection"
+version = "0.1.0"
+dependencies = [
+ "edgerun-biometrics 0.1.0",
+ "edgerun-camera-biometrics 0.1.0",
+ "edgerun-capabilities 0.1.0",
 ]
 
 [[package]]

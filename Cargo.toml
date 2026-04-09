@@ -69,6 +69,7 @@ members = [
   "crates/edgerun-drm-display",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
+  "crates/edgerun-face-detection",
   "crates/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
   "crates/edgerun-json",
@@ -133,6 +134,9 @@ members = [
   "crates/edgerun-amd-xdna",
   "crates/edgerun-node",
   "crates/edgerun-storage",
+
+  # End-to-end hardware tests
+  "crates/edgerun-e2e-capability",
 ]
 
 [workspace.package]
