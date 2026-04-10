@@ -182,6 +182,7 @@ pub struct DrmModePageFlip {
 
 pub mod page_flip {
     pub const PAGE_FLIP_EVENT: libc::c_uint = 0x01;
+    pub const PAGE_FLIP_ASYNC: libc::c_uint = 0x02;
 }
 
 pub mod connector_status {

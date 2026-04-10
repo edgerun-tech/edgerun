@@ -60,6 +60,7 @@ pub use const_oid;
 // X.509 certificate generation / parsing
 // ---------------------------------------------------------------------------
 pub use x509_cert;
+pub use rcgen;
 
 // ---------------------------------------------------------------------------
 // Core crypto primitives

@@ -257,8 +257,22 @@ fn main() {
     let mut surfaces = SurfaceTree::new();
     let mut buffers = BufferRegistry::new();
     let mut shm = ShmManager::new();
+
+    // Create output to compute scale factor
+    let output = Output::from_drm(
+        0,
+        conn.type_name(),
+        mode.hdisplay as u32,
+        mode.vdisplay as u32,
+        mode.vrefresh * 1000,
+        conn.mm_width,
+        conn.mm_height,
+        conn.type_name(),
+    );
+    let output_scale = output.scale;
+
     let mut shell = Shell::new(0);
-    shell.set_output_size(mode.hdisplay as i32, mode.vdisplay as i32, (mode.vrefresh * 1000) as i32, conn.mm_width as i32, conn.mm_height as i32);
+    shell.set_output_size(mode.hdisplay as i32, mode.vdisplay as i32, (mode.vrefresh * 1000) as i32, conn.mm_width as i32, conn.mm_height as i32, output_scale);
     let mut seat_obj = Seat::new(0);
     let mut keymap_obj = Keymap::estonian_nodeadkeys();
     let mut modifiers = Modifiers::default();
@@ -311,17 +325,6 @@ fn main() {
     let single_pixel_buffer_global = { global_name += 1; global_name };
     let fractional_scale_global = { global_name += 1; global_name };
     let tearing_control_global = { global_name += 1; global_name };
-
-    let _output = Output::from_drm(
-        0,
-        conn.type_name(),
-        mode.hdisplay as u32,
-        mode.vdisplay as u32,
-        mode.vrefresh * 1000,
-        conn.mm_width,
-        conn.mm_height,
-        conn.type_name(),
-    );
 
     // Input
     let mut input_mgr = EvdevManager::new();
@@ -387,6 +390,7 @@ fn main() {
     let mut client_relative_pointer_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_gesture_swipe_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_gesture_pinch_ids: HashMap<u32, u32> = HashMap::new();
+    let mut client_tearing_control_ids: HashMap<u32, u32> = HashMap::new();
 
     // Track which client-side pool id maps to which internal pool
     let mut client_pool_map: HashMap<u32, HashMap<u32, u32>> = HashMap::new();
@@ -638,6 +642,7 @@ fn main() {
                                 &mut text_input_state,
                                 &mut ime_state,
                                 &mut text_input_serial,
+                                &mut client_tearing_control_ids,
                             );
                         }
 
@@ -676,6 +681,7 @@ fn main() {
                             client_relative_pointer_ids.remove(&client_id);
                             client_gesture_swipe_ids.remove(&client_id);
                             client_gesture_pinch_ids.remove(&client_id);
+                            client_tearing_control_ids.remove(&client_id);
                             dmabuf_pending.remove(&client_id);
                             server.remove_client(client_id);
                         }

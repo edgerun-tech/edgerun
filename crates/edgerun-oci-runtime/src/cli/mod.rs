@@ -109,7 +109,7 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
     Some((opts, command, command_args))
 }
 
-fn print_usage() {
+pub fn print_usage() {
     eprintln!("Usage: edgerun-oci [global-options] <command> [command-options]");
     eprintln!();
     eprintln!("Commands:");
@@ -161,4 +161,16 @@ pub fn parse_delete_args(args: &[String]) -> (bool, Option<&str>) {
     }
 
     (force, id)
+}
+
+/// Check if a process is alive by sending signal 0.
+pub fn is_process_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as std::os::raw::c_int, 0) == 0 }
+}
+
+/// Extract container ID from command args, returning an error if missing.
+pub fn require_container_id(args: &[String]) -> std::io::Result<&str> {
+    args.first()
+        .map(|s| s.as_str())
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "container ID required"))
 }

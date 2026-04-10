@@ -33,6 +33,9 @@ pub struct Surface {
     pub viewport_src: Option<(f64, f64, f64, f64)>,
     /// Viewport destination size (w, h). (-1, -1) = use buffer size.
     pub viewport_dst: Option<(i32, i32)>,
+    /// Tearing hint from wp_tearing_control_v1.
+    /// 0 = default, 1 = sync (VSync), 2 = async (allow tearing)
+    pub tearing_hint: u32,
 }
 
 /// A buffer attached to a surface.
@@ -199,6 +202,7 @@ impl SurfaceTree {
             height: 0,
             viewport_src: None,
             viewport_dst: None,
+            tearing_hint: 0,
         });
     }
 
@@ -246,6 +250,13 @@ impl SurfaceTree {
     pub fn set_buffer_transform(&mut self, id: u32, transform: i32) {
         if let Some(s) = self.surfaces.get_mut(&id) {
             s.buffer_transform = transform;
+        }
+    }
+
+    /// Set tearing control hint.
+    pub fn set_tearing_hint(&mut self, id: u32, hint: u32) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.tearing_hint = hint;
         }
     }
 

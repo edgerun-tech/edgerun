@@ -9,9 +9,7 @@ use std::io;
 use crate::state::{load_state, save_state, fifo_path};
 
 pub fn cmd_start(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    let id = args.first().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
-    })?;
+    let id = crate::cli::require_container_id(args)?;
 
     let mut state = load_state(id)?;
     if state.status != "created" {

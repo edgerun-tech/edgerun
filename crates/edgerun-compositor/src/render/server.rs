@@ -125,8 +125,25 @@ pub fn render_and_flip(
         old_fb_ids.push(fb_id);
     }
 
+    // Determine page flip flags based on topmost surface tearing hint.
+    // Check the frontmost toplevel for async/tearing preference.
+    let mut flip_flags = crate::drm::ioctl::page_flip::PAGE_FLIP_EVENT;
+    for &tl_id in &shell.stack {
+        if let Some(tl) = shell.toplevels.get(&tl_id) {
+            let surface_id = tl.surface_id;
+            if let Some(surface) = surfaces.get(surface_id) {
+                if surface.buffer.is_some() {
+                    if surface.tearing_hint == 2 {
+                        flip_flags |= crate::drm::ioctl::page_flip::PAGE_FLIP_ASYNC;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     let user_data = kms::next_flip_serial();
-    let _ = kms::page_flip(drm_device.as_raw_fd(), crtc_id, new_fb_id, user_data);
+    let _ = kms::page_flip(drm_device.as_raw_fd(), crtc_id, new_fb_id, flip_flags, user_data);
 }
 
 /// Blit a surface buffer onto the pixel array.

@@ -982,6 +982,7 @@ mod tests_mesh_software {
 #[cfg(test)]
 mod tests_protocol_conformance {
     use super::*;
+    use edgerun_crypto::sha256;
 
     #[test]
     fn e2e_protobuf_roundtrip() {

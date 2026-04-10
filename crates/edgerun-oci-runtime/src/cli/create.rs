@@ -37,9 +37,7 @@ extern "C" fn clone_trampoline(data: *mut libc::c_void) -> libc::c_int {
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(std::path::Path::new("."));
-    let id = args.first().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container ID is required for create")
-    })?;
+    let id = crate::cli::require_container_id(args)?;
 
     // Check for duplicate ID
     if state_file_path(id).exists() {
@@ -78,7 +76,7 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let child_data = Box::new(CloneChildData {
         bundle: std::ffi::CString::new(bundle.to_string_lossy().as_bytes()).unwrap(),
         fifo: std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap(),
-        id: std::ffi::CString::new(id.as_str()).unwrap(),
+        id: std::ffi::CString::new(id.as_bytes()).unwrap(),
     });
     let child_data_ptr = Box::into_raw(child_data);
 

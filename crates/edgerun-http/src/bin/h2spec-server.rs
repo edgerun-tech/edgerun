@@ -78,7 +78,21 @@ fn handle_connection(config: Arc<ServerConfig>, mut stream: TcpStream) -> io::Re
 
     // Perform TLS handshake
     while conn.is_handshaking() {
-        conn.complete_io(&mut stream)?;
+        match conn.complete_io(&mut stream) {
+            Ok(_) => {}
+            Err(ref e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                eprintln!("TLS handshake EOF");
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("TLS handshake error: {e}");
+                return Err(e);
+            }
+        }
+    }
+
+    if conn.is_handshaking() {
+        eprintln!("Handshake loop exited but still handshaking!");
     }
 
     // Now read/write through conn.reader() and conn.writer()

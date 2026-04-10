@@ -329,8 +329,6 @@ pub fn setup_rootfs(
     readonly: Option<&[String]>,
     spec_devices: Option<&[OciLinuxDevice]>,
     mount_label: Option<&str>,
-    _strict_masked: bool,
-    _strict_readonly: bool,
 ) -> io::Result<()> {
     let rootfs = Path::new(&root.path);
     if !rootfs.is_dir() {

@@ -1,9 +1,4 @@
 //! User namespace mapping and capability management.
-//!
-//! - Writes uid_map/gid_map from the OCI spec (not hardcoded values).
-//! - Sets all capability sets: bounding, effective, inheritable, permitted, ambient.
-
-#![allow(dead_code)]
 
 use std::fs;
 use std::io;

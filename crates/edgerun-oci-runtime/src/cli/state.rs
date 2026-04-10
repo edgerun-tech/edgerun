@@ -3,22 +3,18 @@
 /// Outputs container state JSON to stdout.
 
 use std::io;
-use std::os::raw::c_int;
 
 use crate::state::load_state;
 
 pub fn cmd_state(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
-    let id = args.first().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
-    })?;
+    let id = crate::cli::require_container_id(args)?;
 
     let state = load_state(id)?;
 
     // Check if process is still alive
     let mut updated_state = state.clone();
     if let Some(pid) = state.pid {
-        let alive = unsafe { libc::kill(pid as c_int, 0) == 0 };
-        if !alive && state.status == "running" {
+        if !crate::cli::is_process_alive(pid) && state.status == "running" {
             updated_state.status = "stopped".to_string();
             let _ = crate::state::save_state(&updated_state, id);
         }

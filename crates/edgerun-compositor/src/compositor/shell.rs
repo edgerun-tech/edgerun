@@ -145,6 +145,8 @@ pub struct Shell {
     /// Physical dimensions in mm.
     pub output_mm_width: i32,
     pub output_mm_height: i32,
+    /// Output scale factor (integer, e.g., 1, 2).
+    pub output_scale: i32,
     /// Positioner state (accumulated before GET_POPUP is called).
     pub positioners: std::collections::HashMap<u32, PositionerState>,
 
@@ -185,6 +187,7 @@ impl Shell {
             output_refresh_mhz: 60000,
             output_mm_width: 0,
             output_mm_height: 0,
+            output_scale: 1,
             positioners: std::collections::HashMap::new(),
             idle_inhibitors: HashSet::new(),
             inhibitor_to_surface: HashMap::new(),
@@ -215,12 +218,13 @@ impl Shell {
     }
 
     /// Set output dimensions and physical properties.
-    pub fn set_output_size(&mut self, width: i32, height: i32, refresh_mhz: i32, mm_width: i32, mm_height: i32) {
+    pub fn set_output_size(&mut self, width: i32, height: i32, refresh_mhz: i32, mm_width: i32, mm_height: i32, scale: i32) {
         self.output_width = width;
         self.output_height = height;
         self.output_refresh_mhz = refresh_mhz;
         self.output_mm_width = mm_width;
         self.output_mm_height = mm_height;
+        self.output_scale = scale.max(1);
     }
 
     /// Create or update positioner state.

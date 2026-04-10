@@ -111,10 +111,7 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
     // Build the command
     let process = spec.process.clone().unwrap_or_default();
     let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
-    let env = process.env.clone().unwrap_or_else(|| vec![
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into(),
-        "TERM=xterm".into(),
-    ]);
+    let env = process.env.clone().unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
     let cwd = process.cwd.clone().unwrap_or_else(|| "/".into());
 
     let resources = spec.linux.as_ref().and_then(|l| l.resources.clone());

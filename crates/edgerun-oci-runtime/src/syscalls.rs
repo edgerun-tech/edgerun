@@ -96,16 +96,6 @@ pub mod prctl_const {
     pub const PR_CAP_AMBIENT_CLEAR_ALL: c_int = 4;
 }
 
-/// Set AppArmor profile for the current process.
-/// Uses /proc/self/attr/apparmor/current (or legacy /proc/self/attr/current).
-pub fn do_set_apparmor_profile(profile: &str) -> std::io::Result<()> {
-    // Try the modern path first, fall back to legacy
-    let content = format!("exec {}", profile);
-    match std::fs::write("/proc/self/attr/apparmor/current", &content) {
-        Ok(_) => Ok(()),
-        Err(_) => std::fs::write("/proc/self/attr/current", &content),
-    }
-}
 
 /// Set process umask.
 pub fn do_umask(mask: u32) -> u32 {

@@ -10,7 +10,6 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 
 use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
-use crate::default_namespaces;
 use crate::rootfs::{setup_rootfs, apply_sysctl, set_rootfs_propagation};
 use crate::seccomp::apply_seccomp_from_spec;
 use crate::syscalls::{
@@ -20,6 +19,12 @@ use crate::userns::{
     apply_security_hardening, set_capabilities, do_setgid, do_setuid,
     set_supplementary_gids,
 };
+
+/// Default environment variables when none are specified in the OCI spec.
+pub const DEFAULT_ENV: &[&str] = &[
+    "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "TERM=xterm",
+];
 
 /// Extract all container-relevant config from a spec into a flat struct
 /// that can be cloned into a `pre_exec` closure.
@@ -261,8 +266,6 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         cfg.readonly_paths.as_deref(),
         if devices.is_empty() { None } else { Some(&devices) },
         mount_label,
-        true,  // strict masked paths
-        true,  // strict readonly paths
     )?;
 
     // 13. Rootfs propagation
@@ -452,8 +455,6 @@ pub fn setup_child_for_create(spec: &OciSpec, bundle: &std::path::Path) -> io::R
         cfg.readonly_paths.as_deref(),
         if devices.is_empty() { None } else { Some(&devices) },
         mount_label,
-        true,
-        true,
     )?;
 
     set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
@@ -471,23 +472,26 @@ pub fn setup_child_for_create(spec: &OciSpec, bundle: &std::path::Path) -> io::R
 
 /// Exec the container process.
 fn exec_container_process(spec: &OciSpec) {
+    use crate::init::pid1_init_script;
+    use std::process::{Command, Stdio};
+    use std::os::unix::process::CommandExt;
+
     let process = spec.process.clone().unwrap_or_default();
     let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
-    let env = process.env.clone().unwrap_or_else(|| vec![
-        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into(),
-        "TERM=xterm".into(),
-    ]);
+    let env = process.env.clone().unwrap_or_else(|| DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
     let cwd = process.cwd.clone().unwrap_or("/".into());
 
-    let use_pid1 = has_pid_ns(spec);
-    let init_script = if use_pid1 {
+    let cfg = ContainerConfig::from_spec(spec).unwrap_or_else(|e| {
+        eprintln!("failed to parse container config: {}", e);
+        std::process::exit(1)
+    });
+    let init_script = if cfg.has_pid_ns() {
         pid1_init_script(&args)
     } else {
         String::new()
     };
 
-    use std::process::{Command, Stdio};
-    let mut cmd = if use_pid1 {
+    let mut cmd = if cfg.has_pid_ns() {
         let mut c = Command::new("/bin/sh");
         c.arg("-c");
         c.arg(&init_script);
@@ -508,46 +512,6 @@ fn exec_container_process(spec: &OciSpec) {
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
 
-    use std::os::unix::process::CommandExt;
     let _ = cmd.exec();
     std::process::exit(1);
-}
-
-fn has_pid_ns(spec: &OciSpec) -> bool {
-    let linux = spec.linux.as_ref();
-    let ns_list = linux.and_then(|l| l.namespaces.as_ref()).map(|x| x.as_slice()).unwrap_or(&[]);
-    if ns_list.is_empty() { return true; }
-    for ns in ns_list {
-        if ns.ns_type == "pid" && ns.path.is_none() { return true; }
-    }
-    false
-}
-
-fn pid1_init_script(args: &[String]) -> String {
-    let workload = args.iter()
-        .map(|a| a.replace('\'', "'\\''"))
-        .map(|a| format!("'{}'", a))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    format!(
-        r#"#!/bin/sh
-cleanup() {{
-    kill -$1 $PID 2>/dev/null
-}}
-trap 'cleanup 15' TERM
-trap 'cleanup 2' INT
-trap 'cleanup 3' QUIT
-{workload} &
-PID=$!
-while true; do
-    wait $PID 2>/dev/null
-    EXIT_CODE=$?
-    while kill -0 $PID 2>/dev/null; do
-        sleep 0.1
-    done
-    exit $EXIT_CODE
-done
-"#
-    )
 }

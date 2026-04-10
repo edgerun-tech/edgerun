@@ -49,11 +49,12 @@ pub fn set_crtc(
 }
 
 /// Queue a page flip. The `user_data` value will be returned in the vblank event.
-pub fn page_flip(fd: RawFd, crtc_id: u32, fb_id: u32, user_data: u64) -> io::Result<()> {
+/// `flags` can include page_flip::PAGE_FLIP_EVENT | page_flip::PAGE_FLIP_ASYNC.
+pub fn page_flip(fd: RawFd, crtc_id: u32, fb_id: u32, flags: u32, user_data: u64) -> io::Result<()> {
     let mut flip = DrmModePageFlip {
         crtc_id,
         fb_id,
-        flags: page_flip::PAGE_FLIP_EVENT,
+        flags,
         reserved: 0,
         user_data,
     };

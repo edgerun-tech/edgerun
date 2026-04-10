@@ -11,36 +11,7 @@
 //! Usage: wrap the workload process by calling `run_as_pid1()` which
 //! execs a shell that runs the workload and then loops reaping zombies.
 
-#![allow(dead_code)]
-
 use std::io;
-use std::os::raw::c_int;
-
-extern "C" {
-    fn waitpid(pid: c_int, status: *mut c_int, options: c_int) -> c_int;
-    fn kill(pid: c_int, sig: c_int) -> c_int;
-}
-
-const WNOHANG: c_int = 1;
-const SIGTERM: c_int = 15;
-const SIGINT: c_int = 2;
-const SIGQUIT: c_int = 3;
-const SIGCHLD: c_int = 17;
-
-/// Reap all zombie children. Returns the number of zombies reaped.
-/// This should be called periodically in the init loop.
-pub fn reap_zombies() -> io::Result<usize> {
-    let mut count = 0;
-    loop {
-        let mut status: c_int = 0;
-        let ret = unsafe { waitpid(-1, &mut status, WNOHANG) };
-        if ret <= 0 {
-            break;
-        }
-        count += 1;
-    }
-    Ok(count)
-}
 
 /// Generate a shell wrapper that acts as PID 1 init + signal forwarder.
 ///

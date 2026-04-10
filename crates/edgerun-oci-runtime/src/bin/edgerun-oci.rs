@@ -7,7 +7,7 @@
 //! - `kill` — Send signal to container process
 //! - `delete` — Stop and cleanup container state
 
-use edgerun_oci_runtime::cli::{self, parse_args};
+use edgerun_oci_runtime::cli::{self, parse_args, print_usage};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -38,19 +38,4 @@ fn main() {
         eprintln!("edgerun-oci: {}: {}", command, e);
         std::process::exit(1);
     }
-}
-
-fn print_usage() {
-    eprintln!("Usage: edgerun-oci [global-options] <command> [command-options]");
-    eprintln!();
-    eprintln!("Commands:");
-    eprintln!("  create <container-id>  Create a container");
-    eprintln!("  start <container-id>   Start a created container");
-    eprintln!("  state <container-id>   Output state of a container");
-    eprintln!("  kill <container-id>    Send signal to container");
-    eprintln!("  delete <container-id>  Delete container resources");
-    eprintln!();
-    eprintln!("Global options:");
-    eprintln!("  --bundle <path>    Path to bundle directory");
-    eprintln!("  --pid-file <path>  Path to write container PID");
 }

@@ -36,6 +36,19 @@ pub struct OutputMode {
 }
 
 impl Output {
+    /// Compute scale factor from DPI (dots per inch).
+    /// Standard DPI is ~96. Scale is rounded to nearest integer.
+    pub fn compute_scale(mm_size: i32, pixels: i32) -> i32 {
+        if mm_size <= 0 || pixels <= 0 {
+            return 1;
+        }
+        let inches = mm_size as f64 / 25.4;
+        let dpi = pixels as f64 / inches;
+        // Standard DPI is 96, scale = dpi / 96, rounded to nearest integer
+        let scale = dpi / 96.0;
+        scale.round().max(1.0) as i32
+    }
+
     /// Create an output for a DRM connector.
     pub fn from_drm(
         id: u32,
@@ -62,7 +75,7 @@ impl Output {
             physical_height: mm_height as i32,
             mode,
             modes: vec![mode],
-            scale: 1,
+            scale: Self::compute_scale(mm_width as i32, width as i32),
             subpixel: 0, // unknown
             x: 0,
             y: 0,

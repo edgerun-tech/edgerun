@@ -230,7 +230,7 @@ pub fn process_message(
     shell: &mut Shell,
     seat: &mut Seat,
     _keymap: &mut Keymap,
-    _modifiers: &mut Modifiers,
+    modifiers: &mut Modifiers,
     cursor: &mut Cursor,
     presentation_tracker: &mut PresentationFeedbackTracker,
     client_registries: &mut HashMap<u32, Registry>,
@@ -268,6 +268,7 @@ pub fn process_message(
     text_input_state: &mut Option<TextInputState>,
     ime_state: &mut Option<IMEState>,
     text_input_serial: &mut u32,
+    client_tearing_control_ids: &mut HashMap<u32, u32>,
 ) {
     let interface: &str = {
         let reg = match client_registries.get(&client_id) {
@@ -401,7 +402,7 @@ pub fn process_message(
                                 // scale (v3+)
                                 if version >= 3 {
                                     let mut scale_args = Vec::new();
-                                    scale_args.extend_from_slice(&1i32.to_le_bytes());
+                                    scale_args.extend_from_slice(&shell.output_scale.to_le_bytes());
                                     client.send_message(wire::Message {
                                         sender_id: id,
                                         opcode: 3, // scale
@@ -1160,17 +1161,63 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(token_id, "xdg_activation_token_v1", 1, client_id);
                     }
-                    // Send a done event with a simple token
-                    if let Some(client) = server.client_mut(client_id) {
-                        client.send_message(xdg_activation::activation_done_event(
-                            token_id,
-                            &format!("edgerun-token-{}", token_id),
-                        ));
-                    }
+                    // Token is created, client can set properties on it before activate
                 }
                 xdg_activation::xdg_activation_request::ACTIVATE => {
-                    // Client wants to activate a window - just ack it
-                    // In a full implementation, you'd focus the requested surface
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let _token = cursor_obj.string().ok().flatten().unwrap_or(crate::wire::WireString(String::new()));
+                    let surface_id = cursor_obj.object().unwrap_or(0);
+
+                    // Find the toplevel that owns this surface and activate it
+                    if let Some(tl) = shell.toplevel_for_surface(surface_id) {
+                        let tl_id = tl.id;
+                        // Bring to front
+                        shell.activate(tl_id);
+
+                        // Set keyboard focus to this surface
+                        let serial = *config_serial;
+                        *config_serial += 1;
+                        if let Some(surface) = surfaces.get_mut(surface_id) {
+                            // Surface exists, send keyboard enter if not already focused
+                            if seat.keyboard_focus() != Some(surface_id) {
+                                if let Some(old_sid) = seat.keyboard_focus() {
+                                    for (&cid, &kb_id) in client_keyboard_ids.iter() {
+                                        if let Some(client) = server.client_mut(cid) {
+                                            client.send_message(wl_seat::keyboard_leave_event(
+                                                kb_id, serial, old_sid));
+                                        }
+                                    }
+                                }
+                                seat.set_keyboard_focus(Some(surface_id));
+                                for (&cid, &kb_id) in client_keyboard_ids.iter() {
+                                    if let Some(client) = server.client_mut(cid) {
+                                        client.send_message(wl_seat::keyboard_enter_event(
+                                            kb_id, serial, surface_id, &[]));
+                                        client.send_message(wl_seat::keyboard_modifiers_event(
+                                            kb_id, serial,
+                                            if modifiers.shift { 1 } else { 0 },
+                                            if modifiers.caps { 2 } else { 0 },
+                                            0, 0,
+                                        ));
+                                    }
+                                }
+
+                                // Send configure to the activated toplevel
+                                let output_w = shell.output_width;
+                                let output_h = shell.output_height;
+                                let cfg_serial = shell.configure_toplevel_with_state(tl_id, output_w, output_h);
+                                if let Some(client) = server.client_mut(client_id) {
+                                    let state = shell.toplevel_state_bytes(tl_id).to_vec();
+                                    client.send_message(xdg_shell::xdg_toplevel_configure_event(
+                                        tl_id, output_w, output_h, &state));
+                                }
+
+                                eprintln!("[edgerun-compositor] Activated surface {} (toplevel {})", surface_id, tl_id);
+                            }
+                        }
+                    } else {
+                        eprintln!("[edgerun-compositor] Activation failed: surface {} not a toplevel", surface_id);
+                    }
                 }
                 xdg_activation::xdg_activation_request::DESTROY => {}
                 _ => {}
@@ -2769,9 +2816,41 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(buffer_id, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_V1, 1, client_id);
                     }
-                    // Store color info — compositor can create a 1x1 SHM buffer with this color
-                    let _color = single_pixel_buffer::SinglePixelColor { red, green, blue, alpha };
-                    eprintln!("[edgerun-compositor] Single pixel buffer created: rgba=({},{},{},{})", red, green, blue, alpha);
+
+                    // Create an actual 1x1 SHM buffer with the specified color.
+                    // The buffer is 4 bytes (1x1 RGBA8888).
+                    let fd = unsafe {
+                        libc::memfd_create(b"edgerun-single-pixel\0".as_ptr() as *const libc::c_char, 0)
+                    };
+                    if fd >= 0 {
+                        // Set size to 4 bytes
+                        unsafe { libc::ftruncate(fd, 4) };
+
+                        // Write the RGBA pixel to the memfd
+                        let pixel: [u8; 4] = [
+                            red as u8,
+                            green as u8,
+                            blue as u8,
+                            alpha as u8,
+                        ];
+                        unsafe {
+                            libc::pwrite(fd, pixel.as_ptr() as *const libc::c_void, 4, 0);
+                        }
+
+                        // Register as a real SHM buffer (1x1, stride=4, XRGB8888 format)
+                        buffers.register(buffer_id, ShmBufferInfo {
+                            pool_fd: fd,
+                            offset: 0,
+                            width: 1,
+                            height: 1,
+                            stride: 4,
+                            format: wl_shm::format::XRGB8888,
+                        });
+
+                        eprintln!("[edgerun-compositor] Single pixel buffer created: id={} rgba=({},{},{},{})", buffer_id, red, green, blue, alpha);
+                    } else {
+                        eprintln!("[edgerun-compositor] Failed to create memfd for single pixel buffer");
+                    }
                 }
                 single_pixel_buffer::manager_request::DESTROY => {}
                 _ => {}
@@ -2799,9 +2878,11 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(scale_id, fractional_scale::WP_FRACTIONAL_SCALE_V1, 1, client_id);
                     }
-                    // Send preferred scale (1.0x = 120)
+                    // Send preferred scale based on actual output scale
+                    // scale factor * 120 (e.g., 1.0x = 120, 2.0x = 240, 1.5x = 180)
+                    let scale_value = (shell.output_scale * 120) as u32;
                     if let Some(client) = server.client_mut(client_id) {
-                        client.send_message(fractional_scale::preferred_scale_event(scale_id, 120));
+                        client.send_message(fractional_scale::preferred_scale_event(scale_id, scale_value));
                         let _ = client.flush();
                     }
                 }
@@ -2826,10 +2907,12 @@ pub fn process_message(
                 tearing_control::manager_request::GET_TEARING_CONTROL => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     let control_id = cursor_obj.new_id().unwrap_or(0);
-                    let _surface_id = cursor_obj.object().unwrap_or(0);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(control_id, tearing_control::WP_TEARING_CONTROL_V1, 1, client_id);
                     }
+                    // Track mapping: tearing_control_object -> surface
+                    client_tearing_control_ids.insert(control_id, surface_id);
                 }
                 tearing_control::manager_request::DESTROY => {}
                 _ => {}
@@ -2839,15 +2922,19 @@ pub fn process_message(
             match msg.opcode {
                 tearing_control::tearing_control_request::SET_PRESENTATION_HINT => {
                     let hint = ArgCursor::from_message(&msg).uint().unwrap_or(0);
+                    // Apply the hint to the associated surface
+                    if let Some(&surface_id) = client_tearing_control_ids.get(&msg.sender_id) {
+                        surfaces.set_tearing_hint(surface_id, hint);
+                    }
                     match hint {
                         tearing_control::hint::DEFAULT => {
-                            eprintln!("[edgerun-compositor] Tearing control: default");
+                            eprintln!("[edgerun-compositor] Tearing control: default (surface {})", msg.sender_id);
                         }
                         tearing_control::hint::SYNC => {
-                            eprintln!("[edgerun-compositor] Tearing control: sync (VSync)");
+                            eprintln!("[edgerun-compositor] Tearing control: sync/VSync (surface {})", msg.sender_id);
                         }
                         tearing_control::hint::ASYNC => {
-                            eprintln!("[edgerun-compositor] Tearing control: async (allow tearing)");
+                            eprintln!("[edgerun-compositor] Tearing control: async/tearing allowed (surface {})", msg.sender_id);
                         }
                         _ => {}
                     }
@@ -2856,6 +2943,7 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    client_tearing_control_ids.remove(&msg.sender_id);
                 }
                 _ => {}
             }
