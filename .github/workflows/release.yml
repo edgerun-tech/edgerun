@@ -33,8 +33,6 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
 
       - name: Install cross-compilation tools
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -45,9 +43,8 @@ jobs:
       - name: Build release binary
         run: |
           mkdir -p dist
-          cd rust
           CROSS_COMPILE_TARGET=${{ matrix.target }} cargo build --release -p edgerun-node --bin edgerund --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/edgerund ../dist/${{ matrix.artifact_name }}
+          cp target/${{ matrix.target }}/release/edgerund dist/${{ matrix.artifact_name }}
 
       - name: Generate release checksum
         run: |

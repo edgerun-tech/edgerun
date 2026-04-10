@@ -895,7 +895,6 @@ name = "edgerun-demo"
 version = "0.1.0"
 dependencies = [
  "edgerun-html-render",
- "edgerun-layout",
  "edgerun-rasterizer",
 ]
 
