@@ -68,14 +68,14 @@ fn main() {
     // ─── Open DRM device ──────────────────────────────────────
     let devices = drm::find_card_devices();
     if devices.is_empty() {
-        eprintln!("No DRM devices found!");
+        eprintln!("[edgerun-compositor] No DRM devices found!");
         std::process::exit(1);
     }
 
     let drm_device = match DrmDevice::open(&devices[0]) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Failed to open DRM device {}: {}", devices[0], e);
+            eprintln!("[edgerun-compositor] Failed to open DRM device {}: {}", devices[0], e);
             std::process::exit(1);
         }
     };
@@ -86,12 +86,9 @@ fn main() {
     let _ = drm_device.set_client_cap(drm::ioctl::client_cap::UNIVERSAL_PLANES, 1);
 
     // Acquire DRM master — required for KMS (mode setting, page flips).
-    // On card nodes, only one session can be master at a time.
-    // If this fails, another session (e.g., host compositor) holds master.
     if let Err(e) = drm_device.set_master() {
-        eprintln!("Failed to acquire DRM master: {}", e);
-        eprintln!("Ensure no other compositor/display server is using this DRM device.");
-        eprintln!("Try running from a TTY (Ctrl+Alt+F3) with no graphical session.");
+        eprintln!("[edgerun-compositor] Failed to acquire DRM master: {}", e);
+        eprintln!("[edgerun-compositor] Switch to a TTY (Ctrl+Alt+F3) and run again.");
         std::process::exit(1);
     }
     println!("[edgerun-compositor] DRM master acquired");
@@ -369,6 +366,7 @@ fn main() {
     let mut client_output_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_keyboard_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_pointer_ids: HashMap<u32, u32> = HashMap::new();
+    let mut client_touch_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_dmabuf_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_data_device_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_data_source_ids: HashMap<u32, u32> = HashMap::new();
@@ -390,6 +388,7 @@ fn main() {
     let mut xdg_surface_to_wl_surface: HashMap<u32, u32> = HashMap::new();
 
     let mut config_serial: u32 = 1;
+    let mut touch_state = dispatch::TouchState::new();
     let mut frame_count: u64 = 0;
     let _start_time = Instant::now();
     let mut old_fb_ids: Vec<u32> = Vec::new(); // Track old FB IDs for cleanup
@@ -592,7 +591,8 @@ fn main() {
                                 &mut client_compositor_ids, &mut client_shm_ids,
                                 &mut client_seat_ids, &mut client_xdg_base_ids,
                                 &mut client_output_ids, &mut client_keyboard_ids,
-                                &mut client_pointer_ids, &mut client_dmabuf_ids,
+                                &mut client_pointer_ids, &mut client_touch_ids,
+                                &mut client_dmabuf_ids,
                                 &mut client_pool_map,
                                 &mut client_data_device_ids, &mut client_data_source_ids,
                                 &mut client_subcompositor_ids,
@@ -628,6 +628,7 @@ fn main() {
                             client_output_ids.remove(&client_id);
                             client_keyboard_ids.remove(&client_id);
                             client_pointer_ids.remove(&client_id);
+                            client_touch_ids.remove(&client_id);
                             client_dmabuf_ids.remove(&client_id);
                             client_data_device_ids.remove(&client_id);
                             client_data_source_ids.remove(&client_id);
@@ -683,8 +684,10 @@ fn main() {
                             &mut input_mgr, dev_id, &mut seat_obj, &mut keymap_obj,
                             &mut modifiers, &mut server, &surfaces, &mut shell,
                             &client_keyboard_ids, &client_pointer_ids,
+                            &client_touch_ids,
                             &client_relative_pointer_ids,
                             &client_compositor_ids, &mut cursor,
+                            &mut touch_state,
                         );
                     }
                 }

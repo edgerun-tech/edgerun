@@ -16,20 +16,32 @@
 pub mod json;
 pub use json::*;
 
-mod syscalls;
-mod seccomp;
-mod userns;
-mod cgroups;
-mod rootfs;
+pub mod syscalls;
+pub mod seccomp;
+pub mod userns;
+pub mod cgroups;
+pub mod rootfs;
 mod bundle;
-mod container;
+pub mod process;
+mod handle;
+mod lifecycle;
+mod hooks;
 mod init;
 
 // Re-export public API
 pub use bundle::{create_bundle, write_bundle};
 pub use cgroups::shares_to_weight;
-pub use container::{run_bundle, run_spec, start_bundle, start_spec, RunningContainer};
+pub use container::{run_bundle, run_spec, start_bundle, start_spec, RunningContainer, delete_container};
 pub use rootfs::{apply_whiteouts, build_rootfs};
+pub use hooks::{
+    ContainerState, HookError,
+    execute_prestart_hooks, execute_create_runtime_hooks,
+    execute_create_container_hooks, execute_start_container_hooks,
+    execute_poststart_hooks, execute_poststop_hooks,
+};
+
+// Thin re-exports so `container` module still works as a facade
+mod container;
 
 // ===========================================================================
 // Namespace helpers (need to be here since they use syscalls::ns)
@@ -94,6 +106,7 @@ mod tests {
             hostname: None,
             linux: None,
             mounts: None,
+            annotations: None,
         };
         let json = spec.to_json_string();
         let parsed: OciSpec = json::parse_oci_spec(json.as_bytes()).unwrap();
@@ -110,6 +123,7 @@ mod tests {
                     uid: Some(1000),
                     gid: Some(1000),
                     additional_gids: Some(vec![100, 200]),
+                    umask: None,
                 }),
                 args: Some(vec!["/bin/sh".into(), "-c".into(), "echo hello".into()]),
                 env: Some(vec!["PATH=/usr/bin".into(), "HOME=/root".into()]),
@@ -127,6 +141,9 @@ mod tests {
                     soft: 65536,
                 }]),
                 no_new_privileges: Some(true),
+                oom_score_adj: None,
+                apparmor_profile: None,
+                selinux_label: None,
             }),
             root: Some(OciRoot {
                 path: "/var/lib/edgerun/bundles/test/rootfs".into(),
@@ -145,6 +162,7 @@ mod tests {
                     size: 1,
                 }]),
                 resources: Some(OciLinuxResources {
+                    devices: None,
                     memory: Some(OciLinuxMemory {
                         limit: Some(536870912),
                         reservation: None,
@@ -162,6 +180,9 @@ mod tests {
                         mems: None,
                     }),
                     pids: Some(OciLinuxPids { limit: 128 }),
+                    block_io: None,
+                    hugepage_limits: None,
+                    network: None,
                 }),
                 cgroups_path: Some("/edgerun/test".into()),
                 namespaces: Some(default_namespaces()),
@@ -177,6 +198,10 @@ mod tests {
                 masked_paths: Some(vec!["/proc/acpi".into()]),
                 readonly_paths: Some(vec!["/proc/sys".into()]),
                 mount_label: None,
+                rootfs_propagation: Some("private".into()),
+                sysctl: Some([("net.ipv4.ip_forward".into(), "1".into())].into()),
+                hooks: None,
+                seccomp: None,
             }),
             mounts: Some(vec![
                 OciMount {
@@ -184,14 +209,17 @@ mod tests {
                     mount_type: Some("proc".into()),
                     source: Some("proc".into()),
                     options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
+                    label: None,
                 },
                 OciMount {
                     destination: "/sys".into(),
                     mount_type: Some("sysfs".into()),
                     source: Some("sysfs".into()),
                     options: Some(vec!["ro".into(), "nosuid".into(), "nodev".into(), "noexec".into()]),
+                    label: None,
                 },
             ]),
+            annotations: None,
         };
 
         let json = spec.to_json_string();
@@ -537,6 +565,7 @@ mod tests {
             mount_type: Some("proc".into()),
             source: Some("proc".into()),
             options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
+            label: None,
         };
         let json = edgerun_json::to_string(&mount).unwrap();
         let parsed: OciMount = edgerun_json::from_slice::<OciMount>(json.as_bytes()).unwrap();
@@ -552,6 +581,7 @@ mod tests {
     #[test]
     fn oci_linux_resources_roundtrip() {
         let res = OciLinuxResources {
+            devices: None,
             pids: Some(OciLinuxPids { limit: 256 }),
             memory: Some(OciLinuxMemory {
                 limit: Some(1073741824),
@@ -569,6 +599,9 @@ mod tests {
                 cpus: None,
                 mems: None,
             }),
+            block_io: None,
+            hugepage_limits: None,
+            network: None,
         };
         let json = edgerun_json::to_string(&res).unwrap();
         let parsed: OciLinuxResources = edgerun_json::from_slice::<OciLinuxResources>(json.as_bytes()).unwrap();
@@ -596,3 +629,31 @@ mod tests {
         assert_eq!(parsed.effective.as_ref().unwrap()[0], "CAP_NET_BIND_SERVICE");
     }
 }
+
+    #[test]
+    fn parse_go_generated_config() {
+        // Read the Go-generated config.json
+        let data = std::fs::read("/tmp/go-config.json");
+        if data.is_err() {
+            // Skip if file doesn't exist
+            return;
+        }
+        let data = data.unwrap();
+
+        // First parse as JsonValue
+        let v_result: Result<edgerun_json::Value, _> = edgerun_json::serde_api::from_slice(&data);
+        eprintln!("DEBUG: JsonValue parse: {}", if v_result.is_ok() { "OK" } else { "FAIL" });
+        if let Err(e) = &v_result {
+            eprintln!("DEBUG: JsonValue error: {}", e);
+        }
+
+        // Then parse as OciSpec
+        match json::parse_oci_spec(&data) {
+            Ok(spec) => {
+                assert!(!spec.version.is_empty(), "version should not be empty");
+            }
+            Err(e) => {
+                panic!("Failed to parse Go-generated config: {}", e);
+            }
+        }
+    }

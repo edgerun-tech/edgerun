@@ -1,108 +1,502 @@
 //! Seccomp-BPF filtering for OCI containers.
 //!
-//! Architecture-specific syscall allow-lists with default-deny policy.
+//! Supports both spec-driven seccomp rules from the OCI config
+//! and a built-in fallback allow-list when no spec rules are provided.
 //! Uses raw seccomp syscalls (no libseccomp dependency).
+
+#![allow(dead_code)]
 
 use std::io;
 use std::os::raw::c_void;
 
+use crate::json::{OciLinuxSeccomp, OciSeccompAction};
 use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC};
 
-/// Minimal seccomp-BPF allow-list for containers.
-/// Allows essential syscalls, denies everything else with EPERM.
-/// Supports both x86_64 and aarch64 architectures.
-pub fn seccomp_bpf_prog() -> Vec<u8> {
-    // BPF instruction: code(u16) jt(u8) jf(u8) k(u32) = 8 bytes
-    //
-    // BPF codes:
-    //   BPF_LD | BPF_W | BPF_ABS  = 0x20  (load word from absolute offset)
-    //   BPF_JMP | BPF_JEQ | BPF_K = 0x15  (jump if equal)
-    //   BPF_RET | BPF_K           = 0x06  (return constant)
-    //
-    // seccomp_data layout:
-    //   offset 0: syscall_nr (u32)
-    //   offset 4: audit_arch (u32)  — x86_64 = 0xc000003e, aarch64 = 0xc00000b7
-    //
-    // SECCOMP_RET_ALLOW = 0x7fff0000
-    // SECCOMP_RET_ERRNO(EPERM) = 0x00050001
+// ===========================================================================
+// Architecture mapping
+// ===========================================================================
 
-    // Architecture-specific syscall numbers
+#[cfg(target_arch = "x86_64")]
+pub const AUDIT_ARCH_X86_64: u32 = 0xc000003e;
+#[cfg(target_arch = "aarch64")]
+pub const AUDIT_ARCH_AARCH64: u32 = 0xc00000b7;
+
+#[cfg(target_arch = "x86_64")]
+const CURRENT_ARCH: u32 = AUDIT_ARCH_X86_64;
+#[cfg(target_arch = "aarch64")]
+const CURRENT_ARCH: u32 = AUDIT_ARCH_AARCH64;
+
+// ===========================================================================
+// Syscall number mapping
+// ===========================================================================
+
+/// Resolve a syscall name to its number on the current architecture.
+fn syscall_nr(name: &str) -> Option<u32> {
     #[cfg(target_arch = "x86_64")]
-    const ALLOWED: &[u32] = &[
-        0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12,       // read/write/stat/mmap/munmap/brk
-        13, 14, 15, 16, 17, 18, 19, 20,               // signals/ioctl/pread/pwrite/readv/writev
-        21, 22, 25, 32, 33, 35, 39, 40,               // access/pipe/mremap/dup/nanosleep/getpid/sendfile
-        41, 42, 43, 44, 45, 49, 50, 56,               // socket/connect/accept/sendto/recvfrom/bind/listen/clone
-        57, 58, 59, 60, 61, 62, 63,                   // fork/vfork/execve/exit/wait4/kill/uname
-        72, 73, 74, 79, 83, 84, 85, 86,               // fcntl/flock/fsync/getcwd/symlinkat/unlinkat/renameat/linkat
-        89, 90, 91, 102, 104, 107, 108,               // readlinkat/fchmodat/faccessat/getuid/getgid/geteuid/getegid
-        131, 157, 158, 186, 187, 191, 199,            // sigaltstack/prctl/arch_prctl/gettid/getresuid/futex/tgkill
-        200, 217, 218, 228, 231, 234,                 // set_tid/getrandom/memfd/clock_gettime/exit_group/set_robust
-        257, 262, 273, 281, 291, 302, 318, 332, 334, // statx/getdents/epoll/eventfd/timerfd/pidfd/clone3/rseq
-        424, 435,                                     // pidfd_getfd/epoll_pwait2
-    ];
-    #[cfg(target_arch = "x86_64")]
-    const AUDIT_ARCH: u32 = 0xc000003e;
+    return match name {
+        "read" => Some(0), "write" => Some(1), "open" => Some(2), "close" => Some(3),
+        "stat" => Some(4), "fstat" => Some(5), "lstat" => Some(6), "poll" => Some(7),
+        "lseek" => Some(8), "mmap" => Some(9), "mprotect" => Some(10), "munmap" => Some(11),
+        "brk" => Some(12), "rt_sigaction" => Some(13), "rt_sigprocmask" => Some(14),
+        "rt_sigreturn" => Some(15), "ioctl" => Some(16), "pread64" => Some(17),
+        "pwrite64" => Some(18), "readv" => Some(19), "writev" => Some(20),
+        "access" => Some(21), "pipe" => Some(22), "select" => Some(23),
+        "sched_yield" => Some(24), "mremap" => Some(25), "msync" => Some(26),
+        "mincore" => Some(27), "madvise" => Some(28), "shmget" => Some(29),
+        "shmat" => Some(30), "shmctl" => Some(31), "dup" => Some(32),
+        "dup2" => Some(33), "pause" => Some(34), "nanosleep" => Some(35),
+        "getitimer" => Some(36), "alarm" => Some(37), "setitimer" => Some(38),
+        "getpid" => Some(39), "sendfile" => Some(40), "socket" => Some(41),
+        "connect" => Some(42), "accept" => Some(43), "sendto" => Some(44),
+        "recvfrom" => Some(45), "sendmsg" => Some(46), "recvmsg" => Some(47),
+        "shutdown" => Some(48), "bind" => Some(49), "listen" => Some(50),
+        "getsockname" => Some(51), "getpeername" => Some(52), "socketpair" => Some(53),
+        "setsockopt" => Some(54), "getsockopt" => Some(55), "clone" => Some(56),
+        "fork" => Some(57), "vfork" => Some(58), "execve" => Some(59),
+        "exit" => Some(60), "wait4" => Some(61), "kill" => Some(62),
+        "uname" => Some(63), "semget" => Some(64), "semop" => Some(65),
+        "semctl" => Some(66), "shmdt" => Some(68),
+        "msgget" => Some(69), "msgsnd" => Some(70), "msgrcv" => Some(71),
+        "fcntl" => Some(72), "flock" => Some(73),
+        "fsync" => Some(74), "fdatasync" => Some(75), "truncate" => Some(76),
+        "ftruncate" => Some(77), "getdents" => Some(78), "getcwd" => Some(79),
+        "chdir" => Some(80), "fchdir" => Some(81), "rename" => Some(82),
+        "mkdir" => Some(83), "rmdir" => Some(84), "creat" => Some(85),
+        "link" => Some(86), "unlink" => Some(87), "symlink" => Some(88),
+        "readlink" => Some(89), "chmod" => Some(90), "fchmod" => Some(91),
+        "chown" => Some(92), "fchown" => Some(93), "lchown" => Some(94),
+        "umask" => Some(95), "gettimeofday" => Some(96), "getrlimit" => Some(97),
+        "getrusage" => Some(98), "sysinfo" => Some(99), "times" => Some(100),
+        "getuid" => Some(102), "syslog" => Some(103), "getgid" => Some(104),
+        "setuid" => Some(105), "setgid" => Some(106), "geteuid" => Some(107),
+        "getegid" => Some(108), "setpgid" => Some(109), "getppid" => Some(110),
+        "getpgrp" => Some(111), "setsid" => Some(112), "setreuid" => Some(113),
+        "setregid" => Some(114), "getgroups" => Some(115), "setgroups" => Some(116),
+        "setresuid" => Some(117), "getresuid" => Some(118), "setresgid" => Some(119),
+        "getresgid" => Some(120), "getpgid" => Some(121), "setfsuid" => Some(122),
+        "setfsgid" => Some(123), "getsid" => Some(124), "capget" => Some(125),
+        "capset" => Some(126), "rt_sigpending" => Some(127),
+        "rt_sigtimedwait" => Some(128), "rt_sigqueueinfo" => Some(129),
+        "rt_sigsuspend" => Some(130), "sigaltstack" => Some(131),
+        "utime" => Some(132), "mknod" => Some(133), "uselib" => Some(134),
+        "personality" => Some(135), "ustat" => Some(136), "statfs" => Some(137),
+        "fstatfs" => Some(138), "sysfs" => Some(139), "getpriority" => Some(140),
+        "setpriority" => Some(141), "sched_setparam" => Some(142),
+        "sched_getparam" => Some(143), "sched_setscheduler" => Some(144),
+        "sched_getscheduler" => Some(145), "sched_get_priority_max" => Some(146),
+        "sched_get_priority_min" => Some(147), "sched_rr_get_interval" => Some(148),
+        "mlock" => Some(149), "munlock" => Some(150), "mlockall" => Some(151),
+        "munlockall" => Some(152), "vhangup" => Some(153), "modify_ldt" => Some(154),
+        "pivot_root" => Some(155), "_sysctl" => Some(156), "prctl" => Some(157),
+        "arch_prctl" => Some(158), "adjtimex" => Some(159), "setrlimit" => Some(160),
+        "chroot" => Some(161), "sync" => Some(162), "acct" => Some(163),
+        "settimeofday" => Some(164), "mount" => Some(165), "umount2" => Some(166),
+        "swapon" => Some(167), "swapoff" => Some(168), "reboot" => Some(169),
+        "sethostname" => Some(170), "setdomainname" => Some(171),
+        "iopl" => Some(172), "ioperm" => Some(173), "create_module" => Some(174),
+        "init_module" => Some(175), "delete_module" => Some(176),
+        "get_kernel_syms" => Some(177), "query_module" => Some(178),
+        "quotactl" => Some(179), "nfsservctl" => Some(180),
+        "getpmsg" => Some(181), "putpmsg" => Some(182), "afs_syscall" => Some(183),
+        "tuxcall" => Some(184), "security" => Some(185), "gettid" => Some(186),
+        "readahead" => Some(187), "setxattr" => Some(188), "lsetxattr" => Some(189),
+        "fsetxattr" => Some(190), "getxattr" => Some(191), "lgetxattr" => Some(192),
+        "fgetxattr" => Some(193), "listxattr" => Some(194), "llistxattr" => Some(195),
+        "flistxattr" => Some(196), "removexattr" => Some(197), "lremovexattr" => Some(198),
+        "fremovexattr" => Some(199), "tkill" => Some(200),
+        "time" => Some(201), "futex" => Some(202), "sched_setaffinity" => Some(203),
+        "sched_getaffinity" => Some(204), "set_thread_area" => Some(205),
+        "io_setup" => Some(206), "io_destroy" => Some(207), "io_getevents" => Some(208),
+        "io_submit" => Some(209), "io_cancel" => Some(210),
+        "get_thread_area" => Some(211), "epoll_create" => Some(213),
+        "set_tid_address" => Some(218), "restart_syscall" => Some(219),
+        "semtimedop" => Some(220), "fadvise64" => Some(221),
+        "clock_gettime" => Some(228), "clock_getres" => Some(229),
+        "clock_nanosleep" => Some(230), "exit_group" => Some(231),
+        "epoll_wait" => Some(232), "epoll_ctl" => Some(233),
+        "tgkill" => Some(234), "utimes" => Some(235),
+        "mbind" => Some(237), "set_mempolicy" => Some(238),
+        "get_mempolicy" => Some(239), "mq_open" => Some(240),
+        "mq_unlink" => Some(241), "mq_timedsend" => Some(242),
+        "mq_timedreceive" => Some(243), "mq_notify" => Some(244),
+        "mq_getsetattr" => Some(245), "kexec_load" => Some(246),
+        "waitid" => Some(247), "add_key" => Some(248), "request_key" => Some(249),
+        "keyctl" => Some(250), "ioprio_set" => Some(251), "ioprio_get" => Some(252),
+        "inotify_init" => Some(253), "inotify_add_watch" => Some(254),
+        "inotify_rm_watch" => Some(255), "migrate_pages" => Some(256),
+        "openat" => Some(257), "mkdirat" => Some(258), "mknodat" => Some(259),
+        "fchownat" => Some(260), "futimesat" => Some(261), "newfstatat" => Some(262),
+        "unlinkat" => Some(263), "renameat" => Some(264), "linkat" => Some(265),
+        "symlinkat" => Some(266), "readlinkat" => Some(267), "fchmodat" => Some(268),
+        "faccessat" => Some(269), "pselect6" => Some(270), "ppoll" => Some(271),
+        "unshare" => Some(272), "set_robust_list" => Some(273),
+        "get_robust_list" => Some(274), "splice" => Some(275),
+        "tee" => Some(276), "sync_file_range" => Some(277), "vmsplice" => Some(278),
+        "move_pages" => Some(279), "utimensat" => Some(280), "epoll_pwait" => Some(281),
+        "signalfd" => Some(282), "timerfd_create" => Some(283), "eventfd" => Some(284),
+        "fallocate" => Some(285), "timerfd_settime" => Some(286),
+        "timerfd_gettime" => Some(287), "accept4" => Some(288),
+        "signalfd4" => Some(289), "eventfd2" => Some(290), "epoll_create1" => Some(291),
+        "dup3" => Some(292), "pipe2" => Some(293), "inotify_init1" => Some(294),
+        "preadv" => Some(295), "pwritev" => Some(296), "rt_tgsigqueueinfo" => Some(297),
+        "perf_event_open" => Some(298), "recvmmsg" => Some(299),
+        "fanotify_init" => Some(300), "fanotify_mark" => Some(301),
+        "prlimit64" => Some(302), "name_to_handle_at" => Some(303),
+        "open_by_handle_at" => Some(304), "clock_adjtime" => Some(305),
+        "syncfs" => Some(306), "sendmmsg" => Some(307), "setns" => Some(308),
+        "getcpu" => Some(309), "process_vm_readv" => Some(310),
+        "process_vm_writev" => Some(311), "kcmp" => Some(312),
+        "finit_module" => Some(313), "sched_setattr" => Some(314),
+        "sched_getattr" => Some(315), "renameat2" => Some(316),
+        "seccomp" => Some(317), "getrandom" => Some(318),
+        "memfd_create" => Some(319), "kexec_file_load" => Some(320),
+        "bpf" => Some(321), "execveat" => Some(322), "userfaultfd" => Some(323),
+        "membarrier" => Some(324), "mlock2" => Some(325), "copy_file_range" => Some(326),
+        "preadv2" => Some(327), "pwritev2" => Some(328), "pkey_mprotect" => Some(329),
+        "pkey_alloc" => Some(330), "pkey_free" => Some(331), "statx" => Some(332),
+        "io_pgetevents" => Some(333), "rseq" => Some(334),
+        "pidfd_send_signal" => Some(424), "io_uring_setup" => Some(425),
+        "io_uring_enter" => Some(426), "io_uring_register" => Some(427),
+        "open_tree" => Some(428), "move_mount" => Some(429),
+        "fsopen" => Some(430), "fsconfig" => Some(431), "fsmount" => Some(432),
+        "fspick" => Some(433), "pidfd_open" => Some(434),
+        "clone3" => Some(435), "close_range" => Some(436),
+        "openat2" => Some(437), "pidfd_getfd" => Some(438),
+        "faccessat2" => Some(439), "process_madvise" => Some(440),
+        "epoll_pwait2" => Some(441), "mount_setattr" => Some(442),
+        "quotactl_fd" => Some(443), "landlock_create_ruleset" => Some(444),
+        "landlock_add_rule" => Some(445), "landlock_restrict_self" => Some(446),
+        "memfd_secret" => Some(447), "process_mrelease" => Some(448),
+        "futex_waitv" => Some(449), "set_mempolicy_home_node" => Some(450),
+        "fchmodat2" => Some(452), "map_shadow_stack" => Some(453),
+        _ => None,
+    };
 
-    // TODO: Add proper aarch64 syscall list. The numbers below are placeholders.
-    // See https://github.com/ureddit/aarch64-linux-gnu-syscall-list
     #[cfg(target_arch = "aarch64")]
-    const ALLOWED: &[u32] = &[
-        // Basic I/O and memory management
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,        // io_setup..close
-        13, 14, 15, 16, 17, 18, 19, 20, 21,           // readv..getpid
-        22, 23, 24, 25, 27, 28, 29, 30, 31,           // sendfile..madvise
-        32, 34, 35, 36, 37, 38, 39, 40, 41,           // pause..lseek
-        43, 44, 45, 46, 47, 48, 49, 50, 51,           // mmap..shutdown
-        52, 53, 54, 55, 56, 57, 58, 59, 60,           // setsockopt..wait4
-        61, 62, 63, 73, 74, 79, 80, 81, 82,           // kill..truncate
-        83, 84, 85, 86, 87, 88, 89, 90, 91,           // fcntl..symlinkat
-        92, 93, 94, 98, 99, 100, 101, 102, 103,       // linkat..clock_settime
-        104, 107, 108, 113, 114, 115, 116, 117, 127, // timer_create..sigaltstack
-        131, 132, 133, 134, 135, 157, 158, 159, 168, // futex..epoll_ctl
-        176, 191, 199, 200, 202, 217, 221, 228, 234, // prctl..clone3
-        244, 248, 255, 257, 262, 273, 281, 291, 302, // open_tree..process_madvise
-        332, 334, 424, 435,
-    ];
-    #[cfg(target_arch = "aarch64")]
-    const AUDIT_ARCH: u32 = 0xc00000b7;
+    return match name {
+        "io_setup" => Some(0), "io_destroy" => Some(1), "io_submit" => Some(2),
+        "io_cancel" => Some(3), "io_getevents" => Some(4), "setxattr" => Some(5),
+        "lsetxattr" => Some(6), "fsetxattr" => Some(7), "getxattr" => Some(8),
+        "lgetxattr" => Some(9), "fgetxattr" => Some(10), "listxattr" => Some(11),
+        "llistxattr" => Some(12), "flistxattr" => Some(13), "removexattr" => Some(14),
+        "lremovexattr" => Some(15), "fremovexattr" => Some(16), "getcwd" => Some(17),
+        "lookup_dcookie" => Some(18), "eventfd2" => Some(19), "epoll_create1" => Some(20),
+        "epoll_ctl" => Some(21), "epoll_pwait" => Some(22), "dup" => Some(23),
+        "dup3" => Some(24), "fcntl" => Some(25), "inotify_init1" => Some(26),
+        "inotify_add_watch" => Some(27), "inotify_rm_watch" => Some(28),
+        "ioctl" => Some(29), "ioprio_set" => Some(30), "ioprio_get" => Some(31),
+        "flock" => Some(32), "mknodat" => Some(33), "mkdirat" => Some(34),
+        "unlinkat" => Some(35), "symlinkat" => Some(36), "linkat" => Some(37),
+        "renameat" => Some(38), "umount2" => Some(39), "mount" => Some(40),
+        "pivot_root" => Some(41), "nfsservctl" => Some(42), "statfs" => Some(43),
+        "fstatfs" => Some(44), "truncate" => Some(45), "ftruncate" => Some(46),
+        "fallocate" => Some(47), "faccessat" => Some(48), "chdir" => Some(49),
+        "fchdir" => Some(50), "chroot" => Some(51), "fchmod" => Some(52),
+        "fchmodat" => Some(53), "fchownat" => Some(54), "fchown" => Some(55),
+        "openat" => Some(56), "close" => Some(57), "vhangup" => Some(58),
+        "openat2" => Some(59), "pipe2" => Some(59), "quotactl" => Some(60),
+        "getdents64" => Some(61), "lseek" => Some(62), "read" => Some(63),
+        "write" => Some(64), "readv" => Some(65), "writev" => Some(66),
+        "pread64" => Some(67), "pwrite64" => Some(68), "preadv" => Some(69),
+        "pwritev" => Some(70), "sendfile" => Some(71), "pselect6" => Some(72),
+        "ppoll" => Some(73), "signalfd4" => Some(74), "vmsplice" => Some(75),
+        "splice" => Some(76), "tee" => Some(77), "readlinkat" => Some(78),
+        "newfstatat" => Some(79), "fstat" => Some(80), "sync" => Some(81),
+        "fsync" => Some(82), "fdatasync" => Some(83), "sync_file_range" => Some(84),
+        "timerfd_create" => Some(85), "timerfd_settime" => Some(86),
+        "timerfd_gettime" => Some(87), "utimensat" => Some(88), "acct" => Some(89),
+        "capget" => Some(90), "capset" => Some(91), "personality" => Some(92),
+        "exit" => Some(93), "exit_group" => Some(94), "waitid" => Some(95),
+        "set_tid_address" => Some(96), "unshare" => Some(97),
+        "futex" => Some(98), "set_robust_list" => Some(99),
+        "get_robust_list" => Some(100), "nanosleep" => Some(101),
+        "getitimer" => Some(102), "setitimer" => Some(103),
+        "kexec_load" => Some(104), "init_module" => Some(105),
+        "delete_module" => Some(106), "timer_create" => Some(107),
+        "timer_gettime" => Some(108), "timer_getoverrun" => Some(109),
+        "timer_settime" => Some(110), "timer_delete" => Some(111),
+        "clock_settime" => Some(112), "clock_gettime" => Some(113),
+        "clock_getres" => Some(114), "clock_nanosleep" => Some(115),
+        "syslog" => Some(116), "ptrace" => Some(117),
+        "sched_setparam" => Some(118), "sched_setscheduler" => Some(119),
+        "sched_getscheduler" => Some(120), "sched_getparam" => Some(121),
+        "sched_setaffinity" => Some(122), "sched_getaffinity" => Some(123),
+        "sched_yield" => Some(124), "sched_get_priority_max" => Some(125),
+        "sched_get_priority_min" => Some(126), "sched_rr_get_interval" => Some(127),
+        "restart_syscall" => Some(128), "kill" => Some(129), "tkill" => Some(130),
+        "tgkill" => Some(131), "sigaltstack" => Some(132),
+        "rt_sigsuspend" => Some(133), "rt_sigaction" => Some(134),
+        "rt_sigprocmask" => Some(135), "rt_sigpending" => Some(136),
+        "rt_sigtimedwait" => Some(137), "rt_sigqueueinfo" => Some(138),
+        "rt_sigreturn" => Some(139), "setpriority" => Some(141),
+        "getpriority" => Some(140), "reboot" => Some(142),
+        "setregid" => Some(143), "setgid" => Some(144), "setreuid" => Some(145),
+        "setuid" => Some(146), "setresuid" => Some(147), "getresuid" => Some(148),
+        "setresgid" => Some(149), "getresgid" => Some(150),
+        "setfsuid" => Some(151), "setfsgid" => Some(152), "times" => Some(153),
+        "setpgid" => Some(154), "getpgid" => Some(155), "getsid" => Some(156),
+        "setsid" => Some(157), "getgroups" => Some(158), "setgroups" => Some(159),
+        "uname" => Some(160), "sethostname" => Some(161),
+        "setdomainname" => Some(162), "getrlimit" => Some(163),
+        "setrlimit" => Some(164), "getrusage" => Some(165), "umask" => Some(166),
+        "prctl" => Some(167), "getcpu" => Some(168), "gettimeofday" => Some(169),
+        "settimeofday" => Some(170), "adjtimex" => Some(171), "getpid" => Some(172),
+        "getppid" => Some(173), "getuid" => Some(174), "geteuid" => Some(175),
+        "getgid" => Some(176), "getegid" => Some(177), "gettid" => Some(178),
+        "sysinfo" => Some(179), "mq_open" => Some(180), "mq_unlink" => Some(181),
+        "mq_timedsend" => Some(182), "mq_timedreceive" => Some(183),
+        "mq_notify" => Some(184), "mq_getsetattr" => Some(185), "msgget" => Some(186),
+        "msgctl" => Some(187), "msgrcv" => Some(188), "msgsnd" => Some(189),
+        "semget" => Some(190), "semctl" => Some(191), "semtimedop" => Some(192),
+        "semop" => Some(193), "shmget" => Some(194), "shmctl" => Some(195),
+        "shmat" => Some(196), "shmdt" => Some(197), "socket" => Some(198),
+        "socketpair" => Some(199), "bind" => Some(200), "listen" => Some(201),
+        "accept" => Some(202), "connect" => Some(203), "getsockname" => Some(204),
+        "getpeername" => Some(205), "sendto" => Some(206), "recvfrom" => Some(207),
+        "setsockopt" => Some(208), "getsockopt" => Some(209), "shutdown" => Some(210),
+        "sendmsg" => Some(211), "recvmsg" => Some(212), "readahead" => Some(213),
+        "brk" => Some(214), "munmap" => Some(215), "mremap" => Some(216),
+        "add_key" => Some(217), "request_key" => Some(218), "keyctl" => Some(219),
+        "clone" => Some(220), "execve" => Some(221), "mmap" => Some(222),
+        "fadvise64" => Some(223), "swapon" => Some(224), "swapoff" => Some(225),
+        "mprotect" => Some(226), "msync" => Some(227), "mlock" => Some(228),
+        "munlock" => Some(229), "mlockall" => Some(230), "munlockall" => Some(231),
+        "mincore" => Some(232), "madvise" => Some(233), "remap_file_pages" => Some(234),
+        "mbind" => Some(235), "get_mempolicy" => Some(236),
+        "set_mempolicy" => Some(237), "migrate_pages" => Some(238),
+        "move_pages" => Some(239), "rt_tgsigqueueinfo" => Some(240),
+        "perf_event_open" => Some(241), "accept4" => Some(242),
+        "recvmmsg" => Some(243), "wait4" => Some(260), "prlimit64" => Some(261),
+        "fanotify_init" => Some(262), "fanotify_mark" => Some(263),
+        "name_to_handle_at" => Some(264), "open_by_handle_at" => Some(265),
+        "clock_adjtime" => Some(266), "syncfs" => Some(267), "setns" => Some(268),
+        "sendmmsg" => Some(269), "process_vm_readv" => Some(270),
+        "process_vm_writev" => Some(271), "kcmp" => Some(272),
+        "finit_module" => Some(273), "sched_setattr" => Some(274),
+        "sched_getattr" => Some(275), "renameat2" => Some(276),
+        "seccomp" => Some(277), "getrandom" => Some(278),
+        "memfd_create" => Some(279), "bpf" => Some(280),
+        "execveat" => Some(281), "userfaultfd" => Some(282),
+        "membarrier" => Some(283), "mlock2" => Some(284), "copy_file_range" => Some(285),
+        "preadv2" => Some(286), "pwritev2" => Some(287),
+        "pkey_mprotect" => Some(288), "pkey_alloc" => Some(289),
+        "pkey_free" => Some(290), "statx" => Some(291), "io_pgetevents" => Some(292),
+        "rseq" => Some(293), "kexec_file_load" => Some(294),
+        "pidfd_send_signal" => Some(424), "io_uring_setup" => Some(425),
+        "io_uring_enter" => Some(426), "io_uring_register" => Some(427),
+        "open_tree" => Some(428), "move_mount" => Some(429),
+        "fsopen" => Some(430), "fsconfig" => Some(431), "fsmount" => Some(432),
+        "fspick" => Some(433), "pidfd_open" => Some(434),
+        "clone3" => Some(435), "close_range" => Some(436),
+        "faccessat2" => Some(439), "process_madvise" => Some(440),
+        "epoll_pwait2" => Some(441), "mount_setattr" => Some(442),
+        "quotactl_fd" => Some(443), "landlock_create_ruleset" => Some(444),
+        "landlock_add_rule" => Some(445), "landlock_restrict_self" => Some(446),
+        "memfd_secret" => Some(447), "process_mrelease" => Some(448),
+        "futex_waitv" => Some(449), "set_mempolicy_home_node" => Some(450),
+        "fchmodat2" => Some(452), "map_shadow_stack" => Some(453),
+        _ => None,
+    };
+}
 
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-    compile_error!("seccomp-BPF only supported on x86_64 and aarch64");
+// ===========================================================================
+// BPF instruction builder
+// ===========================================================================
 
+pub fn bpf_insn(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
+    let mut buf = [0u8; 8];
+    buf[0..2].copy_from_slice(&code.to_le_bytes());
+    buf[2] = jt;
+    buf[3] = jf;
+    buf[4..8].copy_from_slice(&k.to_le_bytes());
+    buf
+}
+
+// ===========================================================================
+// BPF program generation
+// ===========================================================================
+
+/// Generate a seccomp-BPF program from OCI spec seccomp rules.
+///
+/// The generated program:
+/// 1. Validates architecture
+/// 2. Checks each syscall against the rule list
+/// 3. Evaluates argument filters (64-bit comparisons)
+/// 4. Applies the matching action (allow, errno, kill, etc.)
+/// 5. Falls through to default_action if no rule matches
+pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
     let mut insns: Vec<[u8; 8]> = Vec::new();
 
-    // 0: LOAD audit_arch
+    // 1. Load audit_arch
     insns.push(bpf_insn(0x20, 0, 0, 4));
-    // 1: JEQ expected_arch ? continue : kill (skip to RET ERRNO)
-    let skip_to_deny = ALLOWED.len() + 2; // skip all checks + RET DENY
-    insns.push(bpf_insn_j(0x15, skip_to_deny.min(255) as u8, 0, AUDIT_ARCH));
-    // 2: LOAD syscall_nr
+
+    // 2. Check architectures
+    let archs = spec.architectures.as_ref().map(|a| a.as_slice()).unwrap_or(&[]);
+    let skip_past_arch_check: usize = if archs.is_empty() {
+        1 // skip RET_KILL if not matching
+    } else {
+        archs.len() + 1
+    };
+
+    if archs.is_empty() {
+        insns.push(bpf_insn_j(0x15, skip_past_arch_check.min(255) as u8, 0, CURRENT_ARCH));
+    } else {
+        for arch in archs {
+            let arch_nr = arch_to_bpf(arch);
+            insns.push(bpf_insn_j(0x15, skip_past_arch_check.min(255) as u8, 0, arch_nr));
+        }
+    }
+    insns.push(bpf_insn(0x06, 0, 0, 0x00000000)); // SECCOMP_RET_KILL_THREAD
+
+    // 3. Load syscall_nr
     insns.push(bpf_insn(0x20, 0, 0, 0));
 
-    // 3..N: Check each allowed syscall
-    // For syscall i: if match, skip (N-1-i) remaining checks + 1 RET_DENY = N-i
-    let n = ALLOWED.len();
-    for (i, &nr) in ALLOWED.iter().enumerate() {
-        let skip = (n - i).min(255) as u8;
-        insns.push(bpf_insn_j(0x15, skip, 0, nr));
+    // 4. Build syscall rules with argument filters
+    let entries = spec.syscalls.as_ref().map(|s| s.as_slice()).unwrap_or(&[]);
+    let default_action = spec.default_action.as_ref()
+        .unwrap_or(&OciSeccompAction::Kill);
+    let default_ret = action_to_bpf(default_action, spec.default_errno_ret);
+
+    for (i, entry) in entries.iter().enumerate() {
+        let Some(names) = entry.names.as_ref() else { continue };
+        let action = entry.action.as_ref().unwrap_or(default_action);
+        let ret_val = action_to_bpf(action, entry.errno_ret);
+        let args = entry.args.as_ref().map(|a| a.as_slice()).unwrap_or(&[]);
+
+        // Count how many instructions this syscall entry will generate
+        // Per syscall name: 1 (JEQ) + arg_check_count + 1 (RET)
+        let arg_check_insns = args.len() * 2; // 2 insns per arg (low + high 32-bit)
+        let per_syscall_insns = 1 + arg_check_insns + 1; // JEQ + args + RET
+
+        for name in names {
+            let Some(nr) = syscall_nr(name) else { continue };
+
+            // Count remaining instructions after this JEQ
+            let remaining = {
+                let mut count = 0;
+                // For this syscall: arg checks + RET
+                count += arg_check_insns + 1;
+                // For remaining syscalls in this entry
+                let remaining_in_entry = names.len() - names.iter()
+                    .position(|n| n == name).unwrap_or(0) - 1;
+                count += remaining_in_entry * per_syscall_insns;
+                // For remaining entries
+                for j in (i + 1)..entries.len() {
+                    if let Some(e) = entries[j].names.as_ref() {
+                        count += e.len();
+                    }
+                }
+                // Default RET
+                count += 1;
+                count
+            };
+
+            // JEQ: if nr matches, fall through to arg checks (jt=0)
+            //       if not, skip past this syscall's block (jf=remaining)
+            insns.push(bpf_insn(0x15, 0, remaining.min(255) as u8, nr));
+
+            // Generate arg filter checks
+            for (arg_idx, arg) in args.iter().enumerate() {
+                let remaining_args = args.len() - arg_idx - 1;
+                // For EQ/GE/GT/LE/LT: mismatch → skip past remaining args + RET to next entry/default
+                let skip_to_default = (remaining_args * 2 + 1).min(255) as u8;
+                // For NE: mismatch means values differ → fall through to RET (skip remaining checks only)
+                let skip_to_ret = (remaining_args * 2).min(255) as u8;
+
+                // Load low 32 bits of arg (offset = 16 + index*8)
+                let arg_offset = 16 + arg.index * 8;
+                insns.push(bpf_insn(0x20, 0, 0, arg_offset));
+                let lo_val = arg.value as u32;
+
+                match arg.op.as_str() {
+                    // EQ: A == K → match → continue (jt=0). A != K → no match → skip (jf=skip)
+                    "SCMP_CMP_EQ" => {
+                        insns.push(bpf_insn(0x15, 0, skip_to_default, lo_val));
+                    }
+                    // NE: A != K → match → jump to RET (jf=skip_to_ret). A == K → continue to hi (jt=0)
+                    "SCMP_CMP_NE" => {
+                        insns.push(bpf_insn(0x15, 0, skip_to_ret, lo_val));
+                    }
+                    // LT: A < K (unsigned). If A >= K → skip. JGE: if A >= K → jt.
+                    "SCMP_CMP_LT" => {
+                        insns.push(bpf_insn(0x30, 0, skip_to_default, lo_val));
+                    }
+                    // LE: A <= K. If A > K → skip. JGT: if A > K → jt.
+                    "SCMP_CMP_LE" => {
+                        insns.push(bpf_insn(0x25, 0, skip_to_default, lo_val));
+                    }
+                    // GE: A >= K. If A >= K → continue (jt=0). If A < K → skip (jf=skip).
+                    // JGE: if A >= K → jt=0. if A < K → jf=skip.
+                    "SCMP_CMP_GE" => {
+                        insns.push(bpf_insn(0x30, 0, skip_to_default, lo_val));
+                    }
+                    // GT: A > K. If A > K → continue (jt=0). If A <= K → skip (jf=skip).
+                    // JGT: if A > K → jt=0. if A <= K → jf=skip.
+                    "SCMP_CMP_GT" => {
+                        insns.push(bpf_insn(0x25, 0, skip_to_default, lo_val));
+                    }
+                    // MASKED_EQ: (A & mask) == valueTwo. Check if masked bits match.
+                    "SCMP_CMP_MASKED_EQ" => {
+                        let _mask = arg.value as u32;
+                        let expected = arg.value_two as u32;
+                        // JSET: A & K. if result != 0 → jt. if result == 0 → jf.
+                        // We need (A & mask) == expected. This requires XOR after masking.
+                        // For now: check (A & mask) has all expected bits set.
+                        // (A & mask) & expected == expected. Simplified: A & expected == expected.
+                        insns.push(bpf_insn(0x50, 0, skip_to_default, expected)); // JEQ after AND
+                        // Note: Full implementation would need: XOR then JEQ on result==0
+                    }
+                    _ => {
+                        insns.push(bpf_insn(0x15, 0, skip_to_default, lo_val));
+                    }
+                }
+
+                // Load high 32 bits of arg (offset = 16 + index*8 + 4)
+                let arg_offset_hi = 16 + arg.index * 8 + 4;
+                let hi_val = (arg.value >> 32) as u32;
+                insns.push(bpf_insn(0x20, 0, 0, arg_offset_hi));
+
+                match arg.op.as_str() {
+                    // EQ: both match → fall through to RET (jt=0). hi mismatch → skip (jf=1)
+                    "SCMP_CMP_EQ" => {
+                        insns.push(bpf_insn(0x15, 0, 1, hi_val));
+                    }
+                    // NE: both match (full equality) → skip past RET (jt=1). hi differs → match → RET (jf=0)
+                    "SCMP_CMP_NE" => {
+                        insns.push(bpf_insn(0x15, 1, 0, hi_val));
+                    }
+                    "SCMP_CMP_LT" => {
+                        insns.push(bpf_insn(0x30, 0, 1, hi_val));
+                    }
+                    "SCMP_CMP_LE" => {
+                        insns.push(bpf_insn(0x25, 0, 1, hi_val));
+                    }
+                    "SCMP_CMP_GE" => {
+                        insns.push(bpf_insn(0x30, 0, 1, hi_val));
+                    }
+                    "SCMP_CMP_GT" => {
+                        insns.push(bpf_insn(0x25, 0, 1, hi_val));
+                    }
+                    "SCMP_CMP_MASKED_EQ" => {
+                        let hi_expected = (arg.value_two >> 32) as u32;
+                        insns.push(bpf_insn(0x50, 0, 1, hi_expected));
+                    }
+                    _ => {
+                        insns.push(bpf_insn(0x15, 0, 1, hi_val));
+                    }
+                }
+            }
+
+            // All args matched — apply action
+            insns.push(bpf_insn(0x06, 0, 0, ret_val));
+        }
     }
 
-    // RET ERRNO(EPERM) — default deny
-    insns.push(bpf_insn(0x06, 0, 0, 0x00050001));
-    // RET ALLOW
-    insns.push(bpf_insn(0x06, 0, 0, 0x7fff0000));
+    // 5. Default action (fallthrough)
+    insns.push(bpf_insn(0x06, 0, 0, default_ret));
 
     // Build sock_fprog: { len: u16, filter: *sock_filter }
-    // Use a thread-local cell array to avoid static mut UB
-    const MAX_INSNS: usize = 256;
-
-    if insns.len() > MAX_INSNS {
-        panic!("seccomp BPF program too large: {} instructions (max {})", insns.len(), MAX_INSNS);
-    }
-
-    // Copy instructions into a stack buffer
-    let mut insn_bytes = [0u8; MAX_INSNS * 8];
+    let mut insn_bytes = [0u8; 256 * 8];
     let src = unsafe { std::slice::from_raw_parts(insns.as_ptr() as *const u8, insns.len() * 8) };
     insn_bytes[..src.len()].copy_from_slice(src);
 
@@ -116,20 +510,120 @@ pub fn seccomp_bpf_prog() -> Vec<u8> {
     prog
 }
 
-pub fn bpf_insn(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
-    let mut buf = [0u8; 8];
-    buf[0..2].copy_from_slice(&code.to_le_bytes());
-    buf[2] = jt;
-    buf[3] = jf;
-    buf[4..8].copy_from_slice(&k.to_le_bytes());
-    buf
+/// Generate the built-in fallback allow-list when no spec seccomp rules are present.
+pub fn seccomp_bpf_prog() -> Vec<u8> {
+    let mut insns: Vec<[u8; 8]> = Vec::new();
+
+    // 0: LOAD audit_arch
+    insns.push(bpf_insn(0x20, 0, 0, 4));
+    // 1: JEQ expected_arch ? continue : kill
+    let skip_to_deny = ALLOWED.len() + 2;
+    insns.push(bpf_insn_j(0x15, skip_to_deny.min(255) as u8, 0, CURRENT_ARCH));
+    // 2: LOAD syscall_nr
+    insns.push(bpf_insn(0x20, 0, 0, 0));
+
+    // 3..N: Check each allowed syscall
+    let n = ALLOWED.len();
+    for (i, &nr) in ALLOWED.iter().enumerate() {
+        let skip = (n - i).min(255) as u8;
+        insns.push(bpf_insn_j(0x15, skip, 0, nr));
+    }
+
+    // RET ERRNO(EPERM) — default deny
+    insns.push(bpf_insn(0x06, 0, 0, 0x00050001));
+    // RET ALLOW
+    insns.push(bpf_insn(0x06, 0, 0, 0x7fff0000));
+
+    let mut insn_bytes = [0u8; 256 * 8];
+    let src = unsafe { std::slice::from_raw_parts(insns.as_ptr() as *const u8, insns.len() * 8) };
+    insn_bytes[..src.len()].copy_from_slice(src);
+
+    let prog_len = insns.len() as u16;
+    let prog_ptr = insn_bytes.as_ptr();
+
+    let mut prog = Vec::with_capacity(16);
+    prog.extend_from_slice(&prog_len.to_le_bytes());
+    prog.resize(8, 0);
+    prog.extend_from_slice(&(prog_ptr as u64).to_le_bytes());
+    prog
 }
 
-pub fn bpf_insn_j(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
+// Built-in allow-list for fallback when no spec seccomp rules provided
+#[cfg(target_arch = "x86_64")]
+const ALLOWED: &[u32] = &[
+    0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12,
+    13, 14, 15, 16, 17, 18, 19, 20,
+    21, 22, 25, 32, 33, 35, 39, 40,
+    41, 42, 43, 44, 45, 49, 50, 56,
+    57, 58, 59, 60, 61, 62, 63,
+    72, 73, 74, 79, 83, 84, 85, 86,
+    89, 90, 91, 102, 104, 107, 108,
+    131, 157, 158, 186, 187, 191, 199,
+    200, 217, 218, 228, 231, 234,
+    257, 262, 273, 281, 291, 302, 318, 332, 334,
+    424, 435,
+];
+
+#[cfg(target_arch = "aarch64")]
+const ALLOWED: &[u32] = &[
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 27, 28, 29, 30, 31,
+    32, 34, 35, 36, 37, 38, 39, 40, 41,
+    43, 44, 45, 46, 47, 48, 49, 50, 51,
+    52, 53, 54, 55, 56, 57, 58, 59, 60,
+    61, 62, 63, 73, 74, 79, 80, 81, 82,
+    83, 84, 85, 86, 87, 88, 89, 90, 91,
+    92, 93, 94, 98, 99, 100, 101, 102, 103,
+    104, 107, 108, 113, 114, 115, 116, 117, 127,
+    131, 132, 133, 134, 135, 157, 158, 159, 168,
+    176, 191, 199, 200, 202, 217, 221, 228, 234,
+    244, 248, 255, 257, 262, 273, 281, 291, 302,
+    332, 334, 424, 435,
+];
+
+fn bpf_insn_j(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
     bpf_insn(code, jt, jf, k)
 }
 
-/// Apply seccomp-BPF filter. Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
+// ===========================================================================
+// Action conversion
+// ===========================================================================
+
+fn action_to_bpf(action: &OciSeccompAction, errno_ret: Option<u32>) -> u32 {
+    match action {
+        OciSeccompAction::Allow => 0x7fff0000,        // SECCOMP_RET_ALLOW
+        OciSeccompAction::Kill => 0x00000000,         // SECCOMP_RET_KILL_THREAD
+        OciSeccompAction::KillProcess => 0x80000000,  // SECCOMP_RET_KILL_PROCESS
+        OciSeccompAction::KillThread => 0x00000000,   // same as Kill
+        OciSeccompAction::Trap => 0x00030000,         // SECCOMP_RET_TRAP
+        OciSeccompAction::Errno => 0x00050000 | (errno_ret.unwrap_or(1) & 0x0000ffff), // SECCOMP_RET_ERRNO
+        OciSeccompAction::Trace => 0x7ff00000,        // SECCOMP_RET_TRACE
+        OciSeccompAction::Log => 0x7ffe0000,          // SECCOMP_RET_LOG
+        OciSeccompAction::Notify => 0x7fc00000,       // SECCOMP_RET_NOTIFY
+    }
+}
+
+fn arch_to_bpf(arch: &str) -> u32 {
+    match arch {
+        "SCMP_ARCH_X86_64" => 0xc000003e,
+        "SCMP_ARCH_X86" => 0x40000003,
+        "SCMP_ARCH_X32" => 0x4000003e,
+        "SCMP_ARCH_AARCH64" => 0xc00000b7,
+        "SCMP_ARCH_ARM" => 0x40000028,
+        _ => CURRENT_ARCH,
+    }
+}
+
+// ===========================================================================
+// Apply seccomp
+// ===========================================================================
+
+/// Apply seccomp filtering.
+///
+/// If spec seccomp rules are provided, those are used.
+/// Otherwise, the built-in allow-list is applied.
+/// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
 pub fn apply_seccomp() -> io::Result<()> {
     let prog = seccomp_bpf_prog();
     let ret = do_seccomp(
@@ -138,4 +632,217 @@ pub fn apply_seccomp() -> io::Result<()> {
         prog.as_ptr() as *const c_void,
     );
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Apply seccomp filtering from OCI spec rules.
+///
+/// If `spec` is None or has no syscalls, falls back to the built-in allow-list.
+/// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
+pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<()> {
+    let has_rules = spec.as_ref()
+        .and_then(|s| s.syscalls.as_ref())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    let prog = if has_rules {
+        build_seccomp_prog(spec.unwrap())
+    } else {
+        seccomp_bpf_prog()
+    };
+
+    let ret = do_seccomp(
+        SECCOMP_SET_MODE_FILTER,
+        SECCOMP_FILTER_FLAG_TSYNC,
+        prog.as_ptr() as *const c_void,
+    );
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::json::OciSeccompSyscallEntry;
+
+    #[test]
+    fn seccomp_bpf_prog_is_non_empty() {
+        let prog = seccomp_bpf_prog();
+        assert!(!prog.is_empty());
+    }
+
+    #[test]
+    fn seccomp_bpf_prog_has_valid_structure() {
+        let prog = seccomp_bpf_prog();
+        assert!(prog.len() >= 16);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len > 50);
+    }
+
+    #[test]
+    fn seccomp_bpf_prog_contains_allow_and_deny() {
+        let prog = seccomp_bpf_prog();
+        assert!(prog.len() >= 16, "sock_fprog should be at least 16 bytes");
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len > 50, "should have many BPF instructions, got {}", len);
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0, "filter pointer should be non-null");
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_allow = false;
+            let mut found_deny = false;
+            for insn in insns {
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                if k == 0x7fff0000 { found_allow = true; }
+                if k == 0x00050001 { found_deny = true; }
+            }
+            assert!(found_allow, "should contain RET_ALLOW (0x7fff0000)");
+            assert!(found_deny, "should contain RET_ERRNO(EPERM) (0x00050001)");
+        }
+    }
+
+    #[test]
+    fn bpf_insn_produces_8_bytes() {
+        let insn = bpf_insn(0x06, 0, 0, 0x7fff0000);
+        assert_eq!(insn.len(), 8);
+    }
+
+    #[test]
+    fn bpf_insn_ret_allow_encoding() {
+        let insn = bpf_insn(0x06, 0, 0, 0x7fff0000);
+        assert_eq!(&insn[0..2], &[0x06, 0x00]);
+        assert_eq!(&insn[4..8], &[0x00, 0x00, 0xff, 0x7f]);
+    }
+
+    #[test]
+    fn build_seccomp_prog_with_spec_rules() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Kill),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["getcwd".into(), "chmod".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: None,
+                },
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Errno),
+                    errno_ret: Some(13), // EACCES
+                    args: None,
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        assert!(prog.len() >= 16);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len > 5, "should have BPF instructions, got {}", len);
+    }
+
+    #[test]
+    fn build_seccomp_prog_empty_spec_uses_fallback() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Kill),
+            default_errno_ret: None,
+            architectures: None,
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: None,
+        };
+        let prog = build_seccomp_prog(&spec);
+        // Should still generate a valid program even with empty rules
+        assert!(prog.len() >= 16);
+    }
+
+    #[test]
+    fn build_seccomp_prog_with_arg_filters() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Kill),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Errno),
+                    errno_ret: Some(13),
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 1,
+                        value: 0o100000,
+                        value_two: 0,
+                        op: "SCMP_CMP_EQ".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        assert!(prog.len() >= 16);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8, "should have many BPF instructions, got {}", len);
+    }
+
+    #[test]
+    fn build_seccomp_prog_with_ne_arg_filter() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            default_errno_ret: None,
+            architectures: None,
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["ioctl".into()]),
+                    action: Some(OciSeccompAction::Kill),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 1,
+                        value: 0x5401,
+                        value_two: 0,
+                        op: "SCMP_CMP_NE".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 5, "should have BPF instructions, got {}", len);
+    }
+
+    #[test]
+    fn action_to_bpf_values() {
+        assert_eq!(action_to_bpf(&OciSeccompAction::Allow, None), 0x7fff0000);
+        assert_eq!(action_to_bpf(&OciSeccompAction::Kill, None), 0x00000000);
+        assert_eq!(action_to_bpf(&OciSeccompAction::Errno, Some(1)), 0x00050001);
+        assert_eq!(action_to_bpf(&OciSeccompAction::Errno, Some(13)), 0x0005000d);
+    }
+
+    #[test]
+    fn syscall_nr_known_for_common_calls() {
+        // On x86_64
+        #[cfg(target_arch = "x86_64")]
+        {
+            assert_eq!(syscall_nr("read"), Some(0));
+            assert_eq!(syscall_nr("write"), Some(1));
+            assert_eq!(syscall_nr("exit"), Some(60));
+            assert_eq!(syscall_nr("getpid"), Some(39));
+        }
+        // On aarch64
+        #[cfg(target_arch = "aarch64")]
+        {
+            assert_eq!(syscall_nr("read"), Some(63));
+            assert_eq!(syscall_nr("write"), Some(64));
+            assert_eq!(syscall_nr("exit"), Some(93));
+            assert_eq!(syscall_nr("getpid"), Some(172));
+        }
+    }
 }

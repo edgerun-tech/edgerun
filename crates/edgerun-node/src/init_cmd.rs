@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_yubikey::YubiKeySigningKey;
 

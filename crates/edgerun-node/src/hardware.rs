@@ -20,10 +20,6 @@ pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
-    Vec::new()
-}
 
 #[cfg(feature = "all-hardware")]
 pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
@@ -36,10 +32,6 @@ pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Fingerprint
@@ -65,10 +57,6 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
     readers
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_fingerprint_readers() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Bluetooth
@@ -91,10 +79,6 @@ pub fn discover_bluetooth_controllers() -> Vec<String> {
     controllers
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_bluetooth_controllers() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // WiFi
@@ -111,10 +95,6 @@ pub fn discover_wifi_interfaces() -> Vec<edgerun_linux_wifi::LinuxWifiInterface>
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_wifi_interfaces() -> Vec<edgerun_linux_wifi::LinuxWifiInterface> {
-    Vec::new()
-}
 
 // ===========================================================================
 // USB
@@ -131,10 +111,6 @@ pub fn discover_usb_devices() -> Vec<edgerun_linux_usb::LinuxUsbDevice> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_usb_devices() -> Vec<edgerun_linux_usb::LinuxUsbDevice> {
-    Vec::new()
-}
 
 // ===========================================================================
 // PCI
@@ -151,10 +127,6 @@ pub fn discover_pci_devices() -> Vec<edgerun_linux_pci::LinuxPciDevice> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_pci_devices() -> Vec<edgerun_linux_pci::LinuxPciDevice> {
-    Vec::new()
-}
 
 // ===========================================================================
 // NFC
@@ -176,10 +148,6 @@ pub fn discover_nfc_adapters() -> Vec<String> {
     adapters
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_nfc_adapters() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // NPU (including AMD xDNA)
@@ -212,10 +180,6 @@ pub fn discover_npu_devices() -> Vec<String> {
     devices
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_npu_devices() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Power
@@ -254,10 +218,6 @@ pub fn discover_power_supplies() -> Vec<String> {
     supplies
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_power_supplies() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // CEC (Consumer Electronics Control over HDMI)
@@ -279,10 +239,6 @@ pub fn discover_cec_adapters() -> Vec<String> {
     adapters
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_cec_adapters() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Input (evdev)
@@ -305,10 +261,6 @@ pub fn discover_input_devices() -> Vec<String> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_input_devices() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Audio Input (ALSA microphone)
@@ -332,10 +284,6 @@ pub fn discover_audio_input() -> Vec<String> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_audio_input() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Audio Output (ALSA speaker)
@@ -358,10 +306,6 @@ pub fn discover_audio_output() -> Vec<String> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_audio_output() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Camera (V4L2)
@@ -393,10 +337,6 @@ pub fn discover_cameras() -> Vec<String> {
     }
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn discover_cameras() -> Vec<String> {
-    Vec::new()
-}
 
 // ===========================================================================
 // Audio Calibration
@@ -430,15 +370,6 @@ pub fn run_audio_calibration(
     run_speaker_mic_sweep(&config).map_err(|e| format!("audio calibration failed: {}", e))
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn run_audio_calibration(
-    _speaker_card: u32,
-    _speaker_device: u32,
-    _mic_card: u32,
-    _mic_device: u32,
-) -> Result<Vec<edgerun_audio_calibration::AudioSweepStepResult>, String> {
-    Err("audio calibration not available".into())
-}
 
 // ===========================================================================
 // Biometrics
@@ -449,26 +380,19 @@ pub fn get_biometric_state() -> edgerun_biometrics::BiometricState {
     edgerun_biometrics::BiometricState::default()
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn get_biometric_state() -> edgerun_biometrics::BiometricState {
-    edgerun_biometrics::BiometricState::default()
-}
 
 // ===========================================================================
 // Android Keystore
 // ===========================================================================
 
-#[cfg(feature = "all-hardware")]
+/// Check if we're running on Android with KeyStore.
+/// Uses only stdlib, always available.
 pub fn check_android_keystore_available() -> bool {
     // Check if we're running on Android with KeyStore
     std::path::Path::new("/system/bin/keystore2").exists()
         || std::env::var("ANDROID_DATA").is_ok()
 }
 
-#[cfg(not(feature = "all-hardware"))]
-pub fn check_android_keystore_available() -> bool {
-    false
-}
 
 // ===========================================================================
 // Android Hardware (NDK-backed providers)
@@ -614,7 +538,8 @@ impl HardwareInventory {
         }
     }
 
-    #[cfg(not(target_os = "android"))]
+    /// Discover all hardware on Linux machines (requires `all-hardware` feature).
+    #[cfg(all(not(target_os = "android"), feature = "all-hardware"))]
     pub fn discover() -> Self {
         // On Linux: use existing Linux drivers
         let gpus = discover_gpus();
@@ -709,6 +634,38 @@ impl HardwareInventory {
         lines.push(format!("  Location:        {}", self.location.len()));
         lines.push(format!("  Keystore:        {}", self.keystore.len()));
         lines.join("\n")
+    }
+
+    /// Stub discover for Linux builds without `all-hardware` feature.
+    /// Returns an empty hardware inventory.
+    #[cfg(all(not(target_os = "android"), not(feature = "all-hardware")))]
+    pub fn discover() -> Self {
+        Self {
+            platform: "linux",
+            gpus: vec![],
+            displays: vec![],
+            input_devices: vec![],
+            audio_input: vec![],
+            audio_output: vec![],
+            sensors: vec![],
+            camera: vec![],
+            fingerprint_readers: vec![],
+            bluetooth_controllers: vec![],
+            wifi_interfaces: vec![],
+            usb_devices: vec![],
+            pci_devices: vec![],
+            nfc_adapters: vec![],
+            npu_devices: vec![],
+            power_supplies: vec![],
+            cec_adapters: vec![],
+            biometric: vec![],
+            location: vec![],
+            keystore: if check_android_keystore_available() {
+                vec!["available".into()]
+            } else {
+                vec![]
+            },
+        }
     }
 }
 

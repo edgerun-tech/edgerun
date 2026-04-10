@@ -17,6 +17,25 @@ pub mod edgerun {
         pub mod common {
             include!("gen/edgerun.v0.common.rs");
         }
+        pub mod html {
+            pub mod elements {
+                include!("gen/edgerun.v0.html.elements.rs");
+            }
+            pub mod attributes {
+                include!("gen/edgerun.v0.html.attributes.rs");
+            }
+        }
+        pub mod css {
+            pub mod properties {
+                include!("gen/edgerun.v0.css.properties.rs");
+            }
+            pub mod value_types {
+                include!("gen/edgerun.v0.css.value_types.rs");
+            }
+            pub mod at_rules {
+                include!("gen/edgerun.v0.css.at_rules.rs");
+            }
+        }
         pub mod identity {
             include!("gen/edgerun.v0.identity.rs");
         }

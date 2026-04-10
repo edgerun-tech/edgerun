@@ -191,6 +191,20 @@ pub mod xdg_toplevel_event {
     // sig: array(capabilities)
 }
 
+/// Build a toplevel configure_bounds event (v4+).
+pub fn xdg_toplevel_configure_bounds_event(toplevel_id: u32, width: i32, height: i32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&width.to_le_bytes());
+    args.extend_from_slice(&height.to_le_bytes());
+    Message {
+        sender_id: toplevel_id,
+        opcode: xdg_toplevel_event::CONFIGURE_BOUNDS,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
 /// Build a toplevel configure event.
 pub fn xdg_toplevel_configure_event(
     toplevel_id: u32,

@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use edgerun_crypto::sha2::Digest;
 use edgerun_capabilities::{
     validate_descriptor, validate_grant, CapabilityAccessClass, CapabilityConstraint,
     CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityGrant,

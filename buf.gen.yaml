@@ -5,7 +5,21 @@ managed:
     - file_option: go_package_prefix
       value: edgerun-reference-core/gen
 plugins:
+  # Protocol types (edgerun.v0)
   - local: protoc-gen-prost
     out: crates/edgerun-proto/src/gen
     opt:
       - enable_type_names
+    strategy: all
+  # HTML types (edgerun.v0.html)
+  - local: protoc-gen-prost
+    out: crates/edgerun-html/src/gen
+    opt:
+      - enable_type_names
+    strategy: all
+  # CSS types (edgerun.v0.css)
+  - local: protoc-gen-prost
+    out: crates/edgerun-css/src/gen
+    opt:
+      - enable_type_names
+    strategy: all

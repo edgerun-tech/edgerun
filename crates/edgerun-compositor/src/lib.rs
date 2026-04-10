@@ -20,3 +20,4 @@ pub mod r#loop;
 pub mod gpu;
 pub mod logind;
 pub mod vt;
+pub mod font;

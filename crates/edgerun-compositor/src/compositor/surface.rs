@@ -242,6 +242,13 @@ impl SurfaceTree {
         }
     }
 
+    /// Set buffer transform (rotation/flip).
+    pub fn set_buffer_transform(&mut self, id: u32, transform: i32) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.buffer_transform = transform;
+        }
+    }
+
     /// Set viewport source rectangle.
     pub fn set_viewport_source(&mut self, id: u32, x: f64, y: f64, w: f64, h: f64) {
         if let Some(s) = self.surfaces.get_mut(&id) {

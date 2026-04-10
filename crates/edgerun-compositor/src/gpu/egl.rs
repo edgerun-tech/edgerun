@@ -96,6 +96,10 @@ pub const EGL_DRM_BUFFER_USE_SCANOUT_MESA: EGLenum = 0x00000001;
 // EGLImage target
 pub const EGL_GL_TEXTURE_2D_KHR: EGLenum = 0x30B1;
 
+// GBM buffer usage
+pub const GBM_BO_USE_SCANOUT: u32 = 1 << 0;
+pub const GBM_BO_USE_RENDERING: u32 = 1 << 1;
+
 pub type PFNEGLGETPLATFORMDISPLAYEXTPROC =
     unsafe extern "system" fn(platform: EGLenum, native_display: *mut c_void, attrib_list: *const EGLint) -> EGLDisplay;
 pub type PFNEGLGETDISPLAYPROC =
@@ -126,6 +130,10 @@ pub type PFNEGLDESTROYSYNCPROC =
     unsafe extern "system" fn(dpy: EGLDisplay, sync: *mut c_void) -> EGLBoolean;
 pub type PFNEGLWAITSYNCPROC =
     unsafe extern "system" fn(dpy: EGLDisplay, sync: *mut c_void, flags: EGLint) -> EGLint;
+pub type PFNEGLTERMINATEPROC =
+    unsafe extern "system" fn(dpy: EGLDisplay) -> EGLBoolean;
+pub type PFNEGLDESTROYSURFACEPROC =
+    unsafe extern "system" fn(dpy: EGLDisplay, surface: EGLSurface) -> EGLBoolean;
 
 pub struct Egl {
     pub lib: *mut c_void,
@@ -141,6 +149,8 @@ pub struct Egl {
     pub eglBindAPI: PFNEGLBINDAPIPROC,
     pub eglCreateImage: PFNEGLCREATEIMAGEPROC,
     pub eglDestroyImage: PFNEGLDESTROYIMAGEPROC,
+    pub eglTerminate: PFNEGLTERMINATEPROC,
+    pub eglDestroySurface: PFNEGLDESTROYSURFACEPROC,
 }
 
 unsafe impl Send for Egl {}
@@ -171,39 +181,53 @@ impl Egl {
         let lib = {
             let l = dlopen("libEGL.so.1");
             if !l.is_null() {
+                eprintln!("[egl] Loaded libEGL.so.1");
                 l
             } else {
                 let l = dlopen("libEGL.so");
-                if l.is_null() { return None; }
+                if l.is_null() {
+                    eprintln!("[egl] Failed to load libEGL.so.1 or libEGL.so");
+                    return None;
+                }
+                eprintln!("[egl] Loaded libEGL.so");
                 l
             }
         };
 
-        if lib.is_null() {
-            eprintln!("[egl] Failed to load libEGL.so.1 or libEGL.so");
-            return None;
+        macro_rules! resolve {
+            ($name:expr) => {{
+                let sym = dlsym(lib, $name);
+                if sym.is_none() {
+                    eprintln!("[egl] Failed to resolve symbol: {}", $name);
+                }
+                sym
+            }};
+            ($name:expr, $alt:expr) => {{
+                let sym = dlsym(lib, $name).or_else(|| dlsym(lib, $alt));
+                if sym.is_none() {
+                    eprintln!("[egl] Failed to resolve symbols: {} or {}", $name, $alt);
+                }
+                sym
+            }};
         }
 
-        let egl: Self = Self {
+        Some(Self {
             lib,
-            eglGetPlatformDisplay: dlsym(lib, "eglGetPlatformDisplayEXT")
-                .or_else(|| dlsym(lib, "eglGetPlatformDisplay"))?,
-            eglGetDisplay: dlsym(lib, "eglGetDisplay")?,
-            eglQueryString: dlsym(lib, "eglQueryString")?,
-            eglGetError: dlsym(lib, "eglGetError")?,
-            eglInitialize: dlsym(lib, "eglInitialize")?,
-            eglChooseConfig: dlsym(lib, "eglChooseConfig")?,
-            eglCreateContext: dlsym(lib, "eglCreateContext")?,
-            eglDestroyContext: dlsym(lib, "eglDestroyContext")?,
-            eglMakeCurrent: dlsym(lib, "eglMakeCurrent")?,
-            eglBindAPI: dlsym(lib, "eglBindAPI")?,
-            eglCreateImage: dlsym(lib, "eglCreateImage")
-                .or_else(|| dlsym(lib, "eglCreateImageKHR"))?,
-            eglDestroyImage: dlsym(lib, "eglDestroyImage")
-                .or_else(|| dlsym(lib, "eglDestroyImageKHR"))?,
-        };
-
-        Some(egl)
+            eglGetPlatformDisplay: resolve!("eglGetPlatformDisplayEXT", "eglGetPlatformDisplay")?,
+            eglGetDisplay: resolve!("eglGetDisplay")?,
+            eglQueryString: resolve!("eglQueryString")?,
+            eglGetError: resolve!("eglGetError")?,
+            eglInitialize: resolve!("eglInitialize")?,
+            eglChooseConfig: resolve!("eglChooseConfig")?,
+            eglCreateContext: resolve!("eglCreateContext")?,
+            eglDestroyContext: resolve!("eglDestroyContext")?,
+            eglMakeCurrent: resolve!("eglMakeCurrent")?,
+            eglBindAPI: resolve!("eglBindAPI")?,
+            eglCreateImage: resolve!("eglCreateImage", "eglCreateImageKHR")?,
+            eglDestroyImage: resolve!("eglDestroyImage", "eglDestroyImageKHR")?,
+            eglTerminate: resolve!("eglTerminate")?,
+            eglDestroySurface: resolve!("eglDestroySurface")?,
+        })
     }
 
     pub fn get_error(&self) -> EGLenum {
@@ -221,6 +245,105 @@ impl Egl {
 }
 
 impl Drop for Egl {
+    fn drop(&mut self) {
+        if !self.lib.is_null() {
+            unsafe { libc::dlclose(self.lib) };
+        }
+    }
+}
+
+// ─── GBM bindings ─────────────────────────────────────────────
+
+pub type GbmDevice = c_void;
+pub type GbmSurface = c_void;
+pub type GbmBo = c_void;
+
+pub type PFNGBM_CREATE_DEVICE = unsafe extern "system" fn(fd: c_int) -> *mut GbmDevice;
+pub type PFNGBM_DEVICE_DESTROY = unsafe extern "system" fn(gbm: *mut GbmDevice);
+pub type PFNGBM_DEVICE_GET_FD = unsafe extern "system" fn(gbm: *mut GbmDevice) -> c_int;
+pub type PFNGBM_CREATE_SURFACE = unsafe extern "system" fn(
+    gbm: *mut GbmDevice, width: u32, height: u32, format: u32, flags: u32,
+) -> *mut GbmSurface;
+pub type PFNGBM_SURFACE_DESTROY = unsafe extern "system" fn(gs: *mut GbmSurface);
+pub type PFNGBM_SURFACE_LOCK_FRONT_BUFFER = unsafe extern "system" fn(
+    gs: *mut GbmSurface,
+) -> *mut GbmBo;
+pub type PFNGBM_BO_GET_HANDLE = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PFNGBM_BO_GET_STRIDE = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PFNGBM_BO_GET_FORMAT = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PFNGBM_BO_GET_WIDTH = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PFNGBM_BO_GET_HEIGHT = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PFNGBM_BO_UNMAP = unsafe extern "system" fn(bo: *mut GbmBo);
+pub type PFNGBM_BO_MAP = unsafe extern "system" fn(
+    bo: *mut GbmBo, offset: u32, width: u32, height: u32,
+    flags: i32, stride: *mut u32, map_data: *mut *mut c_void,
+) -> *mut c_void;
+pub type PFNGBM_BO_RELEASE = unsafe extern "system" fn(bo: *mut GbmBo);
+pub type PFNGBM_SURFACE_RELEASE_BUFFER = unsafe extern "system" fn(
+    gs: *mut GbmSurface, bo: *mut GbmBo,
+);
+pub type PFNGBM_DEVICE_IS_FORMAT_SUPPORTED = unsafe extern "system" fn(
+    gbm: *mut GbmDevice, format: u32, width: u32, height: u32,
+) -> i32;
+
+pub struct Gbm {
+    pub lib: *mut c_void,
+    pub gbm_create_device: PFNGBM_CREATE_DEVICE,
+    pub gbm_device_destroy: PFNGBM_DEVICE_DESTROY,
+    pub gbm_device_get_fd: PFNGBM_DEVICE_GET_FD,
+    pub gbm_create_surface: PFNGBM_CREATE_SURFACE,
+    pub gbm_surface_destroy: PFNGBM_SURFACE_DESTROY,
+    pub gbm_bo_get_handle: PFNGBM_BO_GET_HANDLE,
+    pub gbm_bo_get_stride: PFNGBM_BO_GET_STRIDE,
+    pub gbm_bo_get_format: PFNGBM_BO_GET_FORMAT,
+    pub gbm_bo_get_width: PFNGBM_BO_GET_WIDTH,
+    pub gbm_bo_get_height: PFNGBM_BO_GET_HEIGHT,
+    pub gbm_bo_map: PFNGBM_BO_MAP,
+    pub gbm_bo_unmap: PFNGBM_BO_UNMAP,
+    pub gbm_bo_release: PFNGBM_BO_RELEASE,
+    pub gbm_surface_release_buffer: PFNGBM_SURFACE_RELEASE_BUFFER,
+}
+
+unsafe impl Send for Gbm {}
+unsafe impl Sync for Gbm {}
+
+impl Gbm {
+    pub fn open() -> Option<Self> {
+        let lib = {
+            let l = dlopen("libgbm.so.1");
+            if l.is_null() {
+                let l = dlopen("libgbm.so");
+                if l.is_null() {
+                    eprintln!("[gbm] Failed to load libgbm.so");
+                    return None;
+                }
+                l
+            } else {
+                l
+            }
+        };
+
+        Some(Self {
+            lib,
+            gbm_create_device: dlsym(lib, "gbm_create_device")?,
+            gbm_device_destroy: dlsym(lib, "gbm_device_destroy")?,
+            gbm_device_get_fd: dlsym(lib, "gbm_device_get_fd")?,
+            gbm_create_surface: dlsym(lib, "gbm_surface_create")?,
+            gbm_surface_destroy: dlsym(lib, "gbm_surface_destroy")?,
+            gbm_bo_get_handle: dlsym(lib, "gbm_bo_get_handle")?,
+            gbm_bo_get_stride: dlsym(lib, "gbm_bo_get_stride")?,
+            gbm_bo_get_format: dlsym(lib, "gbm_bo_get_format")?,
+            gbm_bo_get_width: dlsym(lib, "gbm_bo_get_width")?,
+            gbm_bo_get_height: dlsym(lib, "gbm_bo_get_height")?,
+            gbm_bo_map: dlsym(lib, "gbm_bo_map")?,
+            gbm_bo_unmap: dlsym(lib, "gbm_bo_unmap")?,
+            gbm_bo_release: dlsym(lib, "gbm_bo_release")?,
+            gbm_surface_release_buffer: dlsym(lib, "gbm_surface_release_buffer")?,
+        })
+    }
+}
+
+impl Drop for Gbm {
     fn drop(&mut self) {
         if !self.lib.is_null() {
             unsafe { libc::dlclose(self.lib) };

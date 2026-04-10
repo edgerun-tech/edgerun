@@ -1,4 +1,4 @@
-//! Seat management — keyboard, pointer, focus tracking.
+//! Seat management — keyboard, pointer, touch, focus tracking.
 
 /// Input seat state.
 pub struct Seat {
@@ -12,6 +12,8 @@ pub struct Seat {
     keyboard_focus: Option<u32>,
     /// Currently focused pointer surface.
     pointer_focus: Option<u32>,
+    /// Currently focused touch surface.
+    touch_focus: Option<u32>,
     /// Pointer position (compositor-global).
     pub pointer_x: f64,
     pub pointer_y: f64,
@@ -27,6 +29,7 @@ impl Seat {
             capabilities: 0,
             keyboard_focus: None,
             pointer_focus: None,
+            touch_focus: None,
             pointer_x: 0.0,
             pointer_y: 0.0,
             serial: 1,
@@ -60,6 +63,16 @@ impl Seat {
         }
     }
 
+    /// Set touch focus to a surface. Returns true if focus changed.
+    pub fn set_touch_focus(&mut self, surface_id: Option<u32>) -> bool {
+        if self.touch_focus != surface_id {
+            self.touch_focus = surface_id;
+            true
+        } else {
+            false
+        }
+    }
+
     /// Get the currently focused keyboard surface.
     pub fn keyboard_focus(&self) -> Option<u32> {
         self.keyboard_focus
@@ -68,6 +81,11 @@ impl Seat {
     /// Get the currently focused pointer surface.
     pub fn pointer_focus(&self) -> Option<u32> {
         self.pointer_focus
+    }
+
+    /// Get the currently focused touch surface.
+    pub fn touch_focus(&self) -> Option<u32> {
+        self.touch_focus
     }
 }
 
@@ -84,6 +102,7 @@ mod tests {
         assert_eq!(seat.pointer_y, 0.0);
         assert!(seat.keyboard_focus.is_none());
         assert!(seat.pointer_focus.is_none());
+        assert!(seat.touch_focus.is_none());
     }
 
     #[test]
@@ -100,12 +119,9 @@ mod tests {
         assert!(seat.keyboard_focus().is_none());
         assert!(seat.set_keyboard_focus(Some(5)));
         assert_eq!(seat.keyboard_focus(), Some(5));
-        // Setting same focus returns false
         assert!(!seat.set_keyboard_focus(Some(5)));
-        // Setting different focus returns true
         assert!(seat.set_keyboard_focus(Some(6)));
         assert_eq!(seat.keyboard_focus(), Some(6));
-        // Clearing focus returns true
         assert!(seat.set_keyboard_focus(None));
         assert!(seat.keyboard_focus().is_none());
     }
@@ -118,5 +134,17 @@ mod tests {
         assert_eq!(seat.pointer_focus(), Some(5));
         assert!(!seat.set_pointer_focus(Some(5)));
         assert!(seat.set_pointer_focus(Some(6)));
+    }
+
+    #[test]
+    fn test_touch_focus_change() {
+        let mut seat = Seat::new(1);
+        assert!(seat.touch_focus().is_none());
+        assert!(seat.set_touch_focus(Some(5)));
+        assert_eq!(seat.touch_focus(), Some(5));
+        assert!(!seat.set_touch_focus(Some(5)));
+        assert!(seat.set_touch_focus(Some(6)));
+        assert!(seat.set_touch_focus(None));
+        assert!(seat.touch_focus().is_none());
     }
 }

@@ -29,3 +29,16 @@ var/bin/
 var/ci/
 var/go-build-cache/
 var/coverage/
+
+# Compiled binaries and archives
+*.tar.gz
+runtimetest
+**/runtimetest
+
+# Large spec archives and generated docs (keep html_spec.html/md, exclude w3c_specs/)
+docs/w3c_specs/
+
+# Embedded git repos (cloned test/spec repos)
+specs/h1spec/
+specs/hpack-test-case/
+specs/http2-frame-test-case/

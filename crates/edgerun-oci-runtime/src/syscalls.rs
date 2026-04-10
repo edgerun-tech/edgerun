@@ -2,6 +2,8 @@
 //!
 //! No libc crate — just direct `extern "C"` declarations and `std::os::raw`.
 
+#![allow(dead_code)]
+
 use std::ffi::CString;
 use std::io;
 use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
@@ -94,6 +96,27 @@ pub mod prctl_const {
     pub const PR_CAP_AMBIENT_CLEAR_ALL: c_int = 4;
 }
 
+/// Set AppArmor profile for the current process.
+/// Uses /proc/self/attr/apparmor/current (or legacy /proc/self/attr/current).
+pub fn do_set_apparmor_profile(profile: &str) -> std::io::Result<()> {
+    // Try the modern path first, fall back to legacy
+    let content = format!("exec {}", profile);
+    match std::fs::write("/proc/self/attr/apparmor/current", &content) {
+        Ok(_) => Ok(()),
+        Err(_) => std::fs::write("/proc/self/attr/current", &content),
+    }
+}
+
+/// Set process umask.
+pub fn do_umask(mask: u32) -> u32 {
+    // umask syscall number: x86_64=95, aarch64=166
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { syscall(95, mask) as u32 };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { syscall(166, mask) as u32 };
+    ret
+}
+
 /// seccomp operations.
 pub const SECCOMP_SET_MODE_FILTER: c_uint = 1;
 pub const SECCOMP_FILTER_FLAG_TSYNC: c_uint = 1;
@@ -162,39 +185,48 @@ pub fn do_prctl_cap_bset_drop(cap_name: &str) -> io::Result<()> {
 /// Returns the numeric value for known capabilities, or u32::MAX for unknown.
 pub fn cap_name_to_int(name: &str) -> u32 {
     match name.strip_prefix("CAP_").unwrap_or(name) {
-        "CHOWN" => 0,
-        "DAC_OVERRIDE" => 1,
-        "DAC_READ_SEARCH" => 2,
-        "FOWNER" => 3,
-        "FSETID" => 4,
-        "KILL" => 5,
-        "SETGID" => 6,
-        "SETUID" => 7,
-        "SETPCAP" => 8,
-        "LINUX_IMMUTABLE" => 9,
-        "NET_BIND_SERVICE" => 10,
-        "NET_BROADCAST" => 11,
-        "NET_ADMIN" => 12,
-        "NET_RAW" => 13,
-        "IPC_LOCK" => 14,
-        "IPC_OWNER" => 15,
-        "SYS_MODULE" => 16,
-        "SYS_RAWIO" => 17,
-        "SYS_CHROOT" => 18,
-        "SYS_PTRACE" => 19,
-        "SYS_PACCT" => 20,
-        "SYS_ADMIN" => 21,
-        "SYS_BOOT" => 22,
-        "SYS_NICE" => 23,
-        "SYS_RESOURCE" => 24,
-        "SYS_TIME" => 25,
-        "SYS_TTY_CONFIG" => 26,
-        "MKNOD" => 27,
-        "LEASE" => 28,
-        "AUDIT_WRITE" => 29,
-        "AUDIT_CONTROL" => 30,
-        "SETFCAP" => 31,
-        _ => u32::MAX, // Unknown — skip
+        "CHOWN"              => 0,
+        "DAC_OVERRIDE"       => 1,
+        "DAC_READ_SEARCH"    => 2,
+        "FOWNER"             => 3,
+        "FSETID"             => 4,
+        "KILL"               => 5,
+        "SETGID"             => 6,
+        "SETUID"             => 7,
+        "SETPCAP"            => 8,
+        "LINUX_IMMUTABLE"    => 9,
+        "NET_BIND_SERVICE"   => 10,
+        "NET_BROADCAST"      => 11,
+        "NET_ADMIN"          => 12,
+        "NET_RAW"            => 13,
+        "IPC_LOCK"           => 14,
+        "IPC_OWNER"          => 15,
+        "SYS_MODULE"         => 16,
+        "SYS_RAWIO"          => 17,
+        "SYS_CHROOT"         => 18,
+        "SYS_PTRACE"         => 19,
+        "SYS_PACCT"          => 20,
+        "SYS_ADMIN"          => 21,
+        "SYS_BOOT"           => 22,
+        "SYS_NICE"           => 23,
+        "SYS_RESOURCE"       => 24,
+        "SYS_TIME"           => 25,
+        "SYS_TTY_CONFIG"     => 26,
+        "MKNOD"              => 27,
+        "LEASE"              => 28,
+        "AUDIT_WRITE"        => 29,
+        "AUDIT_CONTROL"      => 30,
+        "SETFCAP"            => 31,
+        "MAC_OVERRIDE"       => 32,
+        "MAC_ADMIN"          => 33,
+        "SYSLOG"             => 34,
+        "WAKE_ALARM"         => 35,
+        "BLOCK_SUSPEND"      => 36,
+        "AUDIT_READ"         => 37,
+        "PERFMON"            => 38,
+        "BPF"                => 39,
+        "CHECKPOINT_RESTORE" => 40,
+        _ => u32::MAX, // Unknown — will cause error in caps_to_bitmask
     }
 }
 
@@ -253,6 +285,20 @@ pub fn do_setrlimit(resource: u32, soft: u64, hard: u64) -> io::Result<()> {
     let ret = unsafe {
         syscall(267, 0, resource, &new_rlim as *const _, 0 as *mut u64) as c_int
     };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Set a namespace via setns syscall.
+/// `fd` is a file descriptor for the namespace file (e.g., from opening /proc/PID/ns/mnt).
+/// `ns_type` is one of the CLONE_NEW* flags.
+///
+/// Returns 0 on success, -1 on error.
+pub fn do_setns(fd: c_int, ns_type: c_int) -> io::Result<()> {
+    // setns syscall number: x86_64=308, aarch64=268
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { syscall(308, fd, ns_type) as c_int };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { syscall(268, fd, ns_type) as c_int };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 

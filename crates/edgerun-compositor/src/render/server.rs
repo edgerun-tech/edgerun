@@ -93,7 +93,8 @@ pub fn render_and_flip(
                 continue;
             }
             if let Some(ref buf) = surface.buffer {
-                blit_surface_buffer(buf, pixels, surface.x, surface.y, width, height, stride, shm);
+                let transform = surface.buffer_transform;
+                blit_surface_buffer(buf, pixels, surface.x, surface.y, width, height, stride, shm, transform);
             }
         }
 
@@ -102,7 +103,8 @@ pub fn render_and_flip(
             if let Some(sub_surface) = surfaces.get(sub.surface_id) {
                 if sub_surface.buffer.is_some() {
                     if let Some(ref buf) = sub_surface.buffer {
-                        blit_surface_buffer(buf, pixels, sub.x, sub.y, width, height, stride, shm);
+                        let transform = sub_surface.buffer_transform;
+                        blit_surface_buffer(buf, pixels, sub.x, sub.y, width, height, stride, shm, transform);
                     }
                 }
             }
@@ -140,6 +142,7 @@ fn blit_surface_buffer(
     output_height: u32,
     output_stride: u32,
     shm: &ShmManager,
+    transform: i32,
 ) {
     match buf {
         SurfaceBuffer::Shm { pool_fd, offset, width: buf_w, height: buf_h, stride: buf_stride, format } => {
@@ -150,6 +153,7 @@ fn blit_surface_buffer(
                     blit_pixels(
                         data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
                         origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                        transform,
                     );
                 }
             } else {
@@ -171,6 +175,7 @@ fn blit_surface_buffer(
                     blit_pixels(
                         data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
                         origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                        transform,
                     );
                 }
                 unsafe { libc::munmap(mapping, pool_size) };
@@ -204,6 +209,7 @@ fn blit_surface_buffer(
             blit_pixels(
                 data, *format, *buf_w as u32, *buf_h as u32, buf_stride,
                 origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                transform,
             );
 
             unsafe { libc::munmap(mapping, pool_size) };
@@ -215,6 +221,7 @@ fn blit_surface_buffer(
 
 /// Shared pixel blitting logic — handles format conversion and clipping.
 /// Uses integer alpha blending for performance (no f32).
+/// Applies buffer transform (rotation/flip) before compositing.
 fn blit_pixels(
     src_data: &[u8],
     format: u32,
@@ -227,17 +234,38 @@ fn blit_pixels(
     output_height: u32,
     output_stride: u32,
     pixels: &mut [u8],
+    transform: i32,
 ) {
-    for sy in 0..buf_h {
-        for sx in 0..buf_w {
-            let dx = origin_x + sx as i32;
-            let dy = origin_y + sy as i32;
-            if dx < 0 || dy < 0 || dx as u32 >= output_width || dy as u32 >= output_height {
+    // Transform values match Wayland wl_output.transform
+    // 0=normal, 1=90deg CW, 2=180deg, 3=270deg
+    // 4=flipped, 5=flipped+90, 6=flipped+180, 7=flipped+270
+    let rotated = transform == 1 || transform == 3 || transform == 5 || transform == 7;
+    let draw_w = if rotated { buf_h } else { buf_w };
+    let draw_h = if rotated { buf_w } else { buf_h };
+
+    for dy in 0..draw_h {
+        for dx_local in 0..draw_w {
+            // Map output pixel back to source coordinates, applying inverse transform
+            let (sx, sy) = match transform {
+                0 => (dx_local, dy),                         // normal
+                1 => (buf_w - 1 - dy, dx_local),             // 90 CW
+                2 => (buf_w - 1 - dx_local, buf_h - 1 - dy), // 180
+                3 => (dy, buf_h - 1 - dx_local),             // 270 CW (=90 CCW)
+                4 => (buf_w - 1 - dx_local, dy),             // flipped horizontal
+                5 => (buf_w - 1 - dy, buf_h - 1 - dx_local), // flipped+90
+                6 => (dx_local, buf_h - 1 - dy),             // flipped+180 (=vertical flip)
+                7 => (dy, dx_local),                         // flipped+270
+                _ => (dx_local, dy),                         // default: normal
+            };
+
+            let out_x = origin_x + dx_local as i32;
+            let out_y = origin_y + dy as i32;
+            if out_x < 0 || out_y < 0 || out_x as u32 >= output_width || out_y as u32 >= output_height {
                 continue;
             }
             let src_off = sy as usize * buf_stride as usize + sx as usize * 4;
             if src_off + 4 > src_data.len() { continue; }
-            let dst_off = (dy as u32 * output_stride + dx as u32 * 4) as usize;
+            let dst_off = (out_y as u32 * output_stride + out_x as u32 * 4) as usize;
             if dst_off + 4 > pixels.len() { continue; }
 
             // Target framebuffer is XRGB8888 (little-endian memory: [B, G, R, X])

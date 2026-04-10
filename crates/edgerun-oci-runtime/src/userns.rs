@@ -3,6 +3,8 @@
 //! - Writes uid_map/gid_map from the OCI spec (not hardcoded values).
 //! - Sets all capability sets: bounding, effective, inheritable, permitted, ambient.
 
+#![allow(dead_code)]
+
 use std::fs;
 use std::io;
 
@@ -53,16 +55,22 @@ pub fn apply_security_hardening(no_new_privs: bool) -> io::Result<()> {
 // ===========================================================================
 
 /// Convert a list of capability names to a bitmask.
-/// Unknown capability names are silently skipped.
-fn caps_to_bitmask(cap_names: &[String]) -> u64 {
+/// Returns an error if any capability name is invalid (not recognized by the kernel).
+fn caps_to_bitmask(cap_names: &[String]) -> io::Result<u64> {
     let mut mask: u64 = 0;
     for name in cap_names {
         let cap = cap_name_to_int(name);
+        if cap == u32::MAX {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid capability name: {}", name),
+            ));
+        }
         if cap < 64 {
             mask |= 1u64 << cap;
         }
     }
-    mask
+    Ok(mask)
 }
 
 /// Set all process capabilities from the OCI spec.
@@ -75,6 +83,9 @@ fn caps_to_bitmask(cap_names: &[String]) -> u64 {
 /// - **inheritable**: Capabilities preserved across execve
 /// - **permitted**: Capabilities the process is allowed to use
 /// - **ambient**: Capabilities inherited by child processes (requires no_new_privs=false)
+///
+/// Invalid capability names cause an error (per OCI spec: "Any value which cannot be
+/// mapped to a relevant kernel interface MUST cause an error").
 pub fn set_capabilities(
     effective: Option<&[String]>,
     permitted: Option<&[String]>,
@@ -82,9 +93,9 @@ pub fn set_capabilities(
     bounding: Option<&[String]>,
     ambient: Option<&[String]>,
 ) -> io::Result<()> {
-    let eff_mask = caps_to_bitmask(effective.unwrap_or(&[]));
-    let perm_mask = caps_to_bitmask(permitted.unwrap_or(&[]));
-    let inh_mask = caps_to_bitmask(inheritable.unwrap_or(&[]));
+    let eff_mask = caps_to_bitmask(effective.unwrap_or(&[]))?;
+    let perm_mask = caps_to_bitmask(permitted.unwrap_or(&[]))?;
+    let inh_mask = caps_to_bitmask(inheritable.unwrap_or(&[]))?;
 
     // 1. Set effective, permitted, and inheritable via capset
     do_capset(eff_mask, perm_mask, inh_mask)?;
@@ -114,6 +125,8 @@ pub fn set_capabilities(
 /// `bounding_caps` is the list of capabilities to KEEP (e.g., `["CAP_NET_BIND_SERVICE"]`).
 /// All other known capabilities are dropped via prctl(PR_CAPBSET_DROP).
 ///
+/// Invalid capability names cause an error (per OCI spec).
+///
 /// This must be called BEFORE dropping privileges (setuid/setgid).
 pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
     // All known Linux capabilities that we can attempt to drop.
@@ -126,12 +139,25 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
         "CAP_SYS_CHROOT", "CAP_SYS_PTRACE", "CAP_SYS_PACCT", "CAP_SYS_ADMIN",
         "CAP_SYS_BOOT", "CAP_SYS_NICE", "CAP_SYS_RESOURCE", "CAP_SYS_TIME",
         "CAP_SYS_TTY_CONFIG", "CAP_MKNOD", "CAP_LEASE", "CAP_AUDIT_WRITE",
-        "CAP_AUDIT_CONTROL", "CAP_SETFCAP",
+        "CAP_AUDIT_CONTROL", "CAP_SETFCAP", "CAP_MAC_OVERRIDE", "CAP_MAC_ADMIN",
+        "CAP_SYSLOG", "CAP_WAKE_ALARM", "CAP_BLOCK_SUSPEND", "CAP_AUDIT_READ",
+        "CAP_PERFMON", "CAP_BPF", "CAP_CHECKPOINT_RESTORE",
     ];
 
     let keep: Vec<&str> = bounding_caps
         .map(|caps| caps.iter().map(|s| s.as_str()).collect())
         .unwrap_or_default();
+
+    // First validate that all keep-listed capabilities are valid
+    for &cap_name in &keep {
+        let cap = cap_name_to_int(cap_name);
+        if cap == u32::MAX {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid capability name: {}", cap_name),
+            ));
+        }
+    }
 
     for &cap in ALL_CAPS {
         let cap_stripped = cap.strip_prefix("CAP_").unwrap_or(cap);

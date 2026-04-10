@@ -5,6 +5,8 @@
 //! - Device creation from spec's `linux.devices`
 //! - Overlay whiteout char device handling (0:0 device check)
 
+#![allow(unused_variables)]
+
 use std::ffi::CString;
 use std::fs;
 use std::io;
@@ -39,12 +41,10 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
     flags
 }
 
-fn setup_mount(mount: &OciMount) -> io::Result<()> {
+fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     let dest = Path::new(&mount.destination);
 
     // Validate: mount destination must be absolute and not escape rootfs.
-    // After pivot_root, "/" is the container root, so we check the path
-    // doesn't use ".." to escape (defense-in-depth).
     if !dest.is_absolute() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -75,7 +75,15 @@ fn setup_mount(mount: &OciMount) -> io::Result<()> {
     let source = mount.source.as_deref().unwrap_or("");
     let fstype = mount.mount_type.as_deref().unwrap_or("");
     let flags = mount_flags_from_opts(mount.options.as_deref());
-    let data = mount.options.as_ref().map(|o| o.join(",")).unwrap_or_default();
+
+    // Build data string: options + optional SELinux label
+    let mut data = mount.options.as_ref().map(|o| o.join(",")).unwrap_or_default();
+    if let Some(label) = mount_label {
+        if !data.is_empty() {
+            data.push(',');
+        }
+        data.push_str(label);
+    }
 
     if fstype == "bind" || flags & ms::BIND != 0 {
         if Path::new(source).is_dir() {
@@ -276,12 +284,17 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> io::Result<()> {
 ///
 /// `root.readonly` enforces a read-only rootfs when set to true.
 /// `spec_devices` is the list of devices from `linux.devices` in the OCI spec.
+/// `mount_label` is the SELinux mount label from `linux.mountLabel`.
+/// `strict_masked`/`strict_readonly` make mount failures fatal.
 pub fn setup_rootfs(
     root: &OciRoot,
     mounts: Option<&[OciMount]>,
     masked: Option<&[String]>,
     readonly: Option<&[String]>,
     spec_devices: Option<&[OciLinuxDevice]>,
+    mount_label: Option<&str>,
+    _strict_masked: bool,
+    _strict_readonly: bool,
 ) -> io::Result<()> {
     let rootfs = Path::new(&root.path);
     if !rootfs.is_dir() {
@@ -367,39 +380,91 @@ pub fn setup_rootfs(
     let _ = std::os::unix::fs::symlink("pts/ptmx", "/dev/ptmx");
 
     // Additional mounts from spec
-    if let Some(mounts) = mounts {
-        for m in mounts {
-            if let Err(e) = setup_mount(m) {
-                // Log mount errors but continue — some optional mounts may not be creatable
-                let _ = std::fs::write("/dev/kmsg", format!("edgerun: mount {:?} failed: {}", m.destination, e));
-            }
+    if let Some(spec_mounts) = mounts {
+        for m in spec_mounts {
+            setup_mount(m, mount_label)?;
         }
     }
 
 
-    // Masked paths — security-sensitive, log failures
+    // Masked paths — security-sensitive paths masked with /dev/null
     if let Some(paths) = masked {
         for p in paths {
-            if let Err(e) = do_mount("/dev/null", p, "", ms::BIND, "") {
-                let _ = std::fs::write("/dev/kmsg", format!("edgerun: masked path {:?} failed: {}", p, e));
-            }
+            do_mount("/dev/null", p, "", ms::BIND, "").map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("failed to mask path {}: {}", p, e),
+                )
+            })?;
         }
     }
 
-    // Readonly paths — log failures (container may remain writable)
+    // Readonly Paths — bind mount and remount read-only
     if let Some(paths) = readonly {
         for p in paths {
-            if let Err(e) = do_mount(p, p, "", ms::BIND | ms::REC, "") {
-                let _ = std::fs::write("/dev/kmsg", format!("edgerun: readonly bind {:?} failed: {}", p, e));
-            } else if let Err(e) = do_mount(
+            do_mount(p, p, "", ms::BIND | ms::REC, "").map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("failed to bind readonly path {}: {}", p, e),
+                )
+            })?;
+            do_mount(
                 p, p, "",
                 ms::BIND | ms::REMOUNT | ms::RDONLY | ms::NOSUID | ms::NODEV | ms::NOEXEC,
                 "",
-            ) {
-                let _ = std::fs::write("/dev/kmsg", format!("edgerun: readonly remount {:?} failed: {}", p, e));
-            }
+            ).map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("failed to remount readonly path {}: {}", p, e),
+                )
+            })?;
         }
     }
 
     Ok(())
+}
+
+// ===========================================================================
+// Sysctl parameter setting
+// ===========================================================================
+
+/// Apply sysctl parameters from the OCI spec.
+///
+/// Sysctl keys like `net.ipv4.ip_forward` are written to `/proc/sys/net/ipv4/ip_forward`.
+/// This must be called after /proc is mounted.
+pub fn apply_sysctl(sysctl: Option<&std::collections::HashMap<String, String>>) -> io::Result<()> {
+    let Some(params) = sysctl else { return Ok(()) };
+
+    for (key, value) in params {
+        // Convert dots to slashes: net.ipv4.ip_forward → net/ipv4/ip_forward
+        let proc_path = format!("/proc/sys/{}", key.replace('.', "/"));
+        if let Err(e) = fs::write(&proc_path, value) {
+            // Log but don't fail — some sysctls may not be available in all environments
+            let _ = std::fs::write("/dev/kmsg", format!("edgerun: sysctl {:?} failed: {}", key, e));
+        }
+    }
+
+    Ok(())
+}
+
+// ===========================================================================
+// Rootfs propagation
+// ===========================================================================
+
+/// Set rootfs propagation mode.
+///
+/// Valid modes: "shared", "slave", "private", "unbindable".
+/// This must be called after pivot_root, when "/" is the container root.
+pub fn set_rootfs_propagation(mode: Option<&str>) -> io::Result<()> {
+    let Some(mode) = mode else { return Ok(()) };
+
+    let flags = match mode {
+        "shared"     => ms::REC | 0x100,   // MS_SHARED = 0x100
+        "slave"      => ms::REC | 0x200,   // MS_SLAVE = 0x200
+        "unbindable" => ms::REC | 0x400,   // MS_UNBINDABLE = 0x400
+        "private"    => ms::REC | ms::PRIVATE, // MS_PRIVATE = 1<<18
+        _ => return Ok(()), // Unknown mode — use default
+    };
+
+    do_mount("", "/", "", flags, "")
 }

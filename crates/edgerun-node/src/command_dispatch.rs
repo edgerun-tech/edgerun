@@ -631,6 +631,10 @@ fn dispatch_execute_workload(
                         mems: None,
                     }),
                     pids: Some(edgerun_oci_runtime::OciLinuxPids { limit: 256 }),
+                    block_io: None,
+                    devices: None,
+                    hugepage_limits: None,
+                    network: None,
                 });
             }
             let json = spec.to_json_string_pretty();

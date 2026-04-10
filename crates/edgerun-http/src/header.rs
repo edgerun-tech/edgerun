@@ -12,8 +12,12 @@ impl HeaderName {
         if name.is_empty() {
             return Err("Header name cannot be empty".to_string());
         }
-        if name.contains(|c: char| c.is_control() || c == ':' || c == ' ') {
-            return Err(format!("Invalid header name: {}", name));
+        // RFC 9110 Section 5.6.2: token = 1*tchar
+        // tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*"
+        //       / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
+        //       / DIGIT / ALPHA
+        if !name.bytes().all(is_tchar) {
+            return Err(format!("Invalid header name: {name}"));
         }
         Ok(HeaderName(name))
     }
@@ -21,6 +25,16 @@ impl HeaderName {
     /// Get the header name as a string
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// Check if a byte is a valid HTTP token character (RFC 9110 Section 5.6.2).
+fn is_tchar(b: u8) -> bool {
+    match b {
+        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+'
+        | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~' => true,
+        b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z' => true,
+        _ => false,
     }
 }
 
@@ -49,8 +63,14 @@ pub struct HeaderValue(String);
 impl HeaderValue {
     /// Create a new header value
     pub fn new(value: String) -> Result<Self, String> {
-        if value.contains(|c: char| c.is_control() && c != '\t' && c != ' ') {
-            return Err(format!("Invalid header value: {}", value));
+        // RFC 9110 Section 5.5: field values can contain visible ASCII
+        // (0x21-0x7E), SP (0x20), and HTAB (0x09). No other control chars.
+        if !value.bytes().all(|b| {
+            b == 0x09            // HTAB
+                || b == 0x20     // SP
+                || (0x21..=0x7E).contains(&b)  // visible ASCII
+        }) {
+            return Err(format!("Invalid header value: {value}"));
         }
         Ok(HeaderValue(value))
     }

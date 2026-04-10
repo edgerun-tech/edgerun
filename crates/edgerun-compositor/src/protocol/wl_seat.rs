@@ -412,3 +412,54 @@ pub mod touch_event {
     pub const FRAME: u16 = 6;
     // sig: none
 }
+
+// ─── wl_touch event builders ────────────────────────────────
+
+/// Build touch down event.
+pub fn touch_down_event(
+    touch_id: u32,
+    serial: u32,
+    time: u32,
+    surface_id: u32,
+    touch_slot: i32,
+    x: f64,
+    y: f64,
+) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&serial.to_le_bytes());
+    args.extend_from_slice(&time.to_le_bytes());
+    args.extend_from_slice(&surface_id.to_le_bytes());
+    args.extend_from_slice(&touch_slot.to_le_bytes());
+    args.extend_from_slice(&(x.to_bits() as i64).to_le_bytes());
+    args.extend_from_slice(&(y.to_bits() as i64).to_le_bytes());
+    message(touch_id, touch_event::DOWN, args)
+}
+
+/// Build touch up event.
+pub fn touch_up_event(touch_id: u32, serial: u32, time: u32, touch_slot: i32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&serial.to_le_bytes());
+    args.extend_from_slice(&time.to_le_bytes());
+    args.extend_from_slice(&touch_slot.to_le_bytes());
+    message(touch_id, touch_event::UP, args)
+}
+
+/// Build touch motion event.
+pub fn touch_motion_event(touch_id: u32, time: u32, touch_slot: i32, x: f64, y: f64) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&time.to_le_bytes());
+    args.extend_from_slice(&touch_slot.to_le_bytes());
+    args.extend_from_slice(&(x.to_bits() as i64).to_le_bytes());
+    args.extend_from_slice(&(y.to_bits() as i64).to_le_bytes());
+    message(touch_id, touch_event::MOTION, args)
+}
+
+/// Build touch frame event.
+pub fn touch_frame_event(touch_id: u32) -> Message {
+    message_empty(touch_id, touch_event::FRAME)
+}
+
+/// Build touch cancel event.
+pub fn touch_cancel_event(touch_id: u32) -> Message {
+    message_empty(touch_id, touch_event::CANCEL)
+}

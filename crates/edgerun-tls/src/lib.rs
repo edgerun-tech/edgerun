@@ -44,6 +44,7 @@ pub mod record;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 
+use edgerun_crypto::rand_core::RngCore;
 use crate::certificate::Certificate;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{ClientHelloBuilder, ServerHello};

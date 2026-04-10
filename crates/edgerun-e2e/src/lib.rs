@@ -30,7 +30,7 @@ use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 
-use edgerun_core::crypto::{fill_random, sha256};
+use edgerun_crypto::sha2::Digest;
 use edgerun_hardware_signing::{MeshSigner, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 use edgerun_proto::edgerun::v0::{
     common::{IdentityKind, IdentityRef, NodeRef},
@@ -71,7 +71,7 @@ struct TestSigner {
 impl TestSigner {
     fn new() -> Self {
         let mut seed = [0u8; 32];
-        fill_random(&mut seed);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut seed);
         Self::from_seed(seed)
     }
 
@@ -275,7 +275,7 @@ fn encode_varint(mut v: u64) -> Vec<u8> {
 
 fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: Option<[u8; MESH_PUBLIC_KEY_LENGTH]>) -> Result<[u8; MESH_PUBLIC_KEY_LENGTH], String> {
     let mut nonce = vec![0u8; 32];
-    fill_random(&mut nonce);
+    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce);
 
     let hello = SessionHello {
         message_version: 1,
@@ -295,12 +295,12 @@ fn session_handshake(stream: &mut TcpStream, signer: &TestSigner, target_node: O
 
     let hello_bytes = SessionHello::encode_to_vec(&hello);
     // Sign with domain separation: SHA-256(domain || 0x00 || SHA-256(hello_bytes))
-    let record_hash = edgerun_core::crypto::sha256(&hello_bytes);
+    let record_hash = edgerun_crypto::sha256(&hello_bytes);
     let mut sig_input = Vec::with_capacity(28 + 1 + 32);
     sig_input.extend_from_slice(edgerun_core::crypto::SIG_DOMAIN_SESSION_HELLO.as_bytes());
     sig_input.push(0);
     sig_input.extend_from_slice(&record_hash);
-    let digest = edgerun_core::crypto::sha256(&sig_input);
+    let digest = edgerun_crypto::sha256(&sig_input);
     let mut digest_bytes = [0u8; 32];
     digest_bytes.copy_from_slice(&digest);
     let sig = signer.sign_digest(&digest_bytes).map_err(|e| e.to_string())?;
@@ -518,7 +518,7 @@ mod tests_session {
 
         let client_signer = TestSigner::new();
         let mut nonce = vec![0u8; 32];
-        fill_random(&mut nonce);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce);
 
         // Send hello with forged signature
         let hello = SessionHello {

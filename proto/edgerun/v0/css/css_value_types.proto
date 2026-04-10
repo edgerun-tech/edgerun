@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+package edgerun.v0.css.value_types;
+
+/// CSS Value Type Definitions — generated from W3C CSS specifications.
+/// DO NOT EDIT. Regenerate with: scripts/generate_css_proto.py
+
+/// All CSS value types.
+/// Total: 66 value types.
+enum CssValueType {
+  CSS_VALUE_TYPE_UNSPECIFIED = 0;
+  EM = 1; // em (value)
+  REM = 2; // rem (value)
+  EX = 3; // ex (value)
+  REX = 4; // rex (value)
+  CAP = 5; // cap (value)
+  RCAP = 6; // rcap (value)
+  CH = 7; // ch (value)
+  RCH = 8; // rch (value)
+  IC = 9; // ic (value)
+  RIC = 10; // ric (value)
+  LH = 11; // lh (value)
+  RLH = 12; // rlh (value)
+  VW = 13; // vw (value)
+  SVW = 14; // svw (value)
+  LVW = 15; // lvw (value)
+  DVW = 16; // dvw (value)
+  VH = 17; // vh (value)
+  SVH = 18; // svh (value)
+  LVH = 19; // lvh (value)
+  DVH = 20; // dvh (value)
+  VI = 21; // vi (value)
+  SVI = 22; // svi (value)
+  LVI = 23; // lvi (value)
+  DVI = 24; // dvi (value)
+  VB = 25; // vb (value)
+  SVB = 26; // svb (value)
+  LVB = 27; // lvb (value)
+  DVB = 28; // dvb (value)
+  VMIN = 29; // vmin (value)
+  SVMIN = 30; // svmin (value)
+  LVMIN = 31; // lvmin (value)
+  DVMIN = 32; // dvmin (value)
+  VMAX = 33; // vmax (value)
+  SVMAX = 34; // svmax (value)
+  LVMAX = 35; // lvmax (value)
+  DVMAX = 36; // dvmax (value)
+  CM = 37; // cm (value)
+  MM = 38; // mm (value)
+  Q = 39; // Q (value)
+  IN = 40; // in (value)
+  PC = 41; // pc (value)
+  PT = 42; // pt (value)
+  PX = 43; // px (value)
+  DEG = 44; // deg (value)
+  GRAD = 45; // grad (value)
+  RAD = 46; // rad (value)
+  TURN = 47; // turn (value)
+  S = 48; // s (value)
+  MS = 49; // ms (value)
+  HZ = 50; // Hz (value)
+  KHZ = 51; // kHz (value)
+  DPI = 52; // dpi (value)
+  DPCM = 53; // dpcm (value)
+  DPPX = 54; // dppx (value)
+  X = 55; // x (value)
+  NONE = 56; // none (value)
+  NEAREST = 57; // nearest (value)
+  UP = 58; // up (value)
+  DOWN = 59; // down (value)
+  TO_ZERO = 60; // to-zero (value)
+  LINE_WIDTH = 61; // line-width (value)
+  E = 62; // e (value)
+  PI = 63; // pi (value)
+  INFINITY = 64; // infinity (value)
+  NAN = 66; // NaN (value)
+}
+
+/// Definition of a CSS value type.
+message ValueTypeDef {
+  CssValueType value_type = 1;
+  string name = 2;
+  string kind = 3; // "value" or "type"
+}
+
+/// A CSS value of any type.
+message CssValue {
+  oneof value {
+    string keyword = 1;
+    string identifier = 2;
+    string string_value = 3;
+    double number_value = 4;
+    double length_value = 5;
+    string length_unit = 6;
+    double percentage_value = 7;
+    CssColor color = 8;
+    CssFunction function = 9;
+    CssUrl url = 10;
+  }
+}
+
+/// CSS color value.
+message CssColor {
+  oneof color {
+    string named_color = 1;
+    CssRgb rgb = 2;
+    CssHsl hsl = 3;
+    CssHwb hwb = 4;
+    CssLab lab = 5;
+    CssLch lch = 6;
+    string oklch = 7;
+    string oklab = 8;
+    string current_color = 9;
+    string hex = 10;
+  }
+}
+
+message CssRgb {
+  double r = 1;
+  double g = 2;
+  double b = 3;
+  optional double alpha = 4;
+}
+
+message CssHsl {
+  double h = 1;
+  double s = 2;
+  double l = 3;
+  optional double alpha = 4;
+}
+
+message CssHwb {
+  double h = 1;
+  double w = 2;
+  double b = 3;
+  optional double alpha = 4;
+}
+
+message CssLab {
+  double l = 1;
+  double a = 2;
+  double b = 3;
+  optional double alpha = 4;
+}
+
+message CssLch {
+  double l = 1;
+  double c = 2;
+  double h = 3;
+  optional double alpha = 4;
+}
+
+/// CSS function call (e.g., calc(), var(), env()).
+message CssFunction {
+  string name = 1;
+  repeated CssValue arguments = 2;
+}
+
+/// CSS url() value.
+message CssUrl {
+  string url = 1;
+}
+
+/// Common CSS keywords.
+enum CssKeyword {
+  CSS_KEYWORD_UNSPECIFIED = 0;
+  CSS_KEYWORD_AUTO = 1;
+  CSS_KEYWORD_NONE = 2;
+  CSS_KEYWORD_INHERIT = 3;
+  CSS_KEYWORD_INITIAL = 4;
+  CSS_KEYWORD_UNSET = 5;
+  CSS_KEYWORD_REVERT = 6;
+  CSS_KEYWORD_REVERT_LAYER = 7;
+  CSS_KEYWORD_CURRENT_COLOR = 8;
+}

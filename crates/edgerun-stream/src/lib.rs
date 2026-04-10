@@ -314,6 +314,7 @@ impl std::error::Error for StreamError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
     use std::sync::Arc;
 

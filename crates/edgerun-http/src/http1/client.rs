@@ -1,7 +1,7 @@
-//! HTTP client
+//! HTTP/1.1 client
 
-use crate::request::Request;
-use crate::response::Response;
+use crate::http1::request::Request;
+use crate::http1::response::Response;
 use crate::{Error, Result};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -42,27 +42,27 @@ impl Client {
         let addr = format!("{}:{}", host, port);
         let sock_addr = SocketAddr::from_str(&addr)
             .map_err(|e| Error::InvalidUri(format!("Invalid address: {}", e)))?;
-        let mut stream = if let Some(timeout) = self.timeout {
-            TcpStream::connect_timeout(&sock_addr, timeout)?
+
+        if uri.is_https() {
+            self.execute_https(request, &sock_addr, host)
         } else {
-            TcpStream::connect(sock_addr)?
+            self.execute_http(request, &sock_addr)
+        }
+    }
+
+    /// Execute an HTTP request over plain TCP
+    fn execute_http(&self, request: &Request, addr: &SocketAddr) -> Result<Response> {
+        let mut stream = if let Some(timeout) = self.timeout {
+            TcpStream::connect_timeout(addr, timeout)?
+        } else {
+            TcpStream::connect(addr)?
         };
 
-        // For HTTPS, we'd need TLS support, but for now we'll just use plain TCP
-        // A full TLS implementation would require native-tls or rustls
-        if uri.is_https() {
-            return Err(Error::ProtocolError(
-                "HTTPS not supported without TLS feature".to_string(),
-            ));
-        }
-
-        // Send the request
         let request_str = request.to_http_string();
         stream.write_all(request_str.as_bytes())?;
         stream.flush()?;
 
-        // Read the response
-        let mut reader = BufReader::new(stream);
+        let mut reader = BufReader::new(&mut stream);
         let mut response_str = String::new();
 
         // Read headers
@@ -96,8 +96,41 @@ impl Client {
             response_str.push_str(&String::from_utf8_lossy(&body));
         }
 
-        // Parse response
         Response::from_http(&response_str)
+    }
+
+    /// Execute an HTTPS request using edgerun-tls for TLS 1.3
+    #[cfg(feature = "tls")]
+    fn execute_https(&self, request: &Request, addr: &SocketAddr, host: &str) -> Result<Response> {
+        let tcp = if let Some(timeout) = self.timeout {
+            TcpStream::connect_timeout(addr, timeout)?
+        } else {
+            TcpStream::connect(addr)?
+        };
+
+        let mut tls = edgerun_tls::TlsStream::client(tcp, host)
+            .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {}", e)))?;
+
+        // Write the request
+        let request_str = request.to_http_string();
+        tls.write_all(request_str.as_bytes())
+            .map_err(|e| Error::Network(e))?;
+        tls.flush().map_err(|e| Error::Network(e))?;
+
+        // Read the response
+        let mut response_str = String::new();
+        tls.read_to_string(&mut response_str)
+            .map_err(|e| Error::Network(e))?;
+
+        Response::from_http(&response_str)
+    }
+
+    /// Execute an HTTPS request (TLS not available — returns error)
+    #[cfg(not(feature = "tls"))]
+    fn execute_https(&self, _request: &Request, _addr: &SocketAddr, _host: &str) -> Result<Response> {
+        Err(Error::ProtocolError(
+            "HTTPS requires the 'tls' feature (edgerun-tls)".to_string(),
+        ))
     }
 
     /// Send a GET request

@@ -10,6 +10,7 @@ use std::io::{self, BufReader, Read};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
+use edgerun_crypto::sha2::Digest;
 use crate::errors::RegistryError;
 
 // ===========================================================================

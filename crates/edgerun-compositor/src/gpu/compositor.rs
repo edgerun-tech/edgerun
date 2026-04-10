@@ -8,13 +8,13 @@
 //! 5. Render textured quads back-to-front
 //! 6. glReadPixels back to DRM dumb buffer for scanout
 
-use std::os::raw::c_int;
+use std::os::raw::{c_int, c_void};
 
 use crate::compositor::surface::{SurfaceBuffer, SurfaceTree};
 use crate::compositor::shell::Shell;
 use crate::drm;
 use crate::drm::dumb::DumbBuffer;
-use crate::gpu::egl::{self, Egl, EGLImage};
+use crate::gpu::egl::{self, Egl, Gbm, EGLImage, GBM_BO_USE_RENDERING, GBM_BO_USE_SCANOUT};
 use crate::gpu::gl;
 use crate::render::shm::ShmManager;
 use crate::render::cursor::{self, Cursor};
@@ -31,11 +31,12 @@ struct GlTexture {
 /// GL compositor state.
 pub struct GlCompositor {
     egl: Egl,
+    gbm: Gbm,
+    gbm_device: *mut egl::GbmDevice,
+    gbm_surface: *mut egl::GbmSurface,
     gl_ctx: gl::Gl,
     egl_display: egl::EGLDisplay,
     egl_context: egl::EGLContext,
-    /// Offscreen pbuffer surface (needed for context current).
-    #[allow(dead_code)]
     egl_surface: egl::EGLSurface,
     /// FBO for offscreen rendering
     fbo: u32,
@@ -90,32 +91,43 @@ fn buffer_cache_key(surface_id: u32, buf: &SurfaceBuffer) -> u64 {
 }
 
 impl GlCompositor {
-    pub fn new(_drm_fd: c_int, width: u32, height: u32) -> Option<Self> {
-        let egl = Egl::open()?;
-        let gl_ctx = gl::Gl::open()?;
+    pub fn new(drm_fd: c_int, width: u32, height: u32) -> Option<Self> {
+        eprintln!("[gl-compositor] Starting GPU compositor init, drm_fd={}, {}x{}", drm_fd, width, height);
+        eprintln!("[gl-compositor] Loading EGL...");
+        let egl = Egl::open().or_else(|| { eprintln!("[gl-compositor] Egl::open FAILED"); None })?;
+        eprintln!("[gl-compositor] EGL loaded OK");
+        eprintln!("[gl-compositor] Loading GL...");
+        let gl_ctx = gl::Gl::open().or_else(|| { eprintln!("[gl-compositor] Gl::open FAILED"); None })?;
+        eprintln!("[gl-compositor] GL loaded OK");
+        eprintln!("[gl-compositor] Loading GBM...");
+        let gbm = Gbm::open().or_else(|| { eprintln!("[gl-compositor] Gbm::open FAILED"); None })?;
+        eprintln!("[gl-compositor] GBM loaded OK");
 
-        // Try EGL_EXT_platform_device first (no GBM dependency)
+        // Create GBM device from DRM fd
+        let gbm_device = unsafe { (gbm.gbm_create_device)(drm_fd) };
+        if gbm_device.is_null() {
+            eprintln!("[gl-compositor] gbm_create_device failed");
+            return None;
+        }
+        eprintln!("[gl-compositor] GBM device created from DRM fd {}", drm_fd);
+
+        // Create EGL display from GBM device
         let egl_display = unsafe {
-            let device_attribs = [egl::EGL_NONE];
+            let attribs = [egl::EGL_NONE];
             (egl.eglGetPlatformDisplay)(
-                egl::EGL_PLATFORM_DEVICE_EXT,
-                std::ptr::null_mut(),
-                device_attribs.as_ptr(),
+                egl::EGL_PLATFORM_GBM_KHR,
+                gbm_device as *mut _,
+                attribs.as_ptr(),
             )
         };
 
-        let egl_display = if egl_display == egl::EGL_NO_DISPLAY {
-            eprintln!("[gl-compositor] EGL_PLATFORM_DEVICE_EXT failed, trying eglGetDisplay(DEFAULT)");
-            unsafe { (egl.eglGetDisplay)(std::ptr::null_mut()) }
-        } else {
-            egl_display
-        };
-
         if egl_display == egl::EGL_NO_DISPLAY {
-            eprintln!("[gl-compositor] All EGL display methods failed (error: {:x})",
+            eprintln!("[gl-compositor] eglGetPlatformDisplay(GBM) failed (error: {:x})",
                 unsafe { (egl.eglGetError)() });
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
             return None;
         }
+        eprintln!("[gl-compositor] EGL display created via GBM");
 
         // Initialize EGL
         let mut major = 0;
@@ -123,6 +135,7 @@ impl GlCompositor {
         let init_result = unsafe { (egl.eglInitialize)(egl_display, &mut major, &mut minor) };
         if init_result == egl::EGL_FALSE {
             eprintln!("[gl-compositor] eglInitialize failed (error: {:x})", unsafe { (egl.eglGetError)() });
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
             return None;
         }
         eprintln!("[gl-compositor] EGL {}.{} initialized", major, minor);
@@ -139,7 +152,7 @@ impl GlCompositor {
             egl::EGL_BLUE_SIZE, 8,
             egl::EGL_ALPHA_SIZE, 8,
             egl::EGL_RENDERABLE_TYPE, egl::EGL_OPENGL_ES2_BIT,
-            egl::EGL_SURFACE_TYPE, egl::EGL_PBUFFER_BIT,
+            egl::EGL_SURFACE_TYPE, egl::EGL_WINDOW_BIT,
             egl::EGL_NONE,
         ];
 
@@ -156,6 +169,7 @@ impl GlCompositor {
         };
         if choose_result == egl::EGL_FALSE || num_configs == 0 {
             eprintln!("[gl-compositor] eglChooseConfig failed (error: {:x})", unsafe { (egl.eglGetError)() });
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
             return None;
         }
 
@@ -174,28 +188,60 @@ impl GlCompositor {
         };
         if egl_context == egl::EGL_NO_CONTEXT {
             eprintln!("[gl-compositor] eglCreateContext failed (error: {:x})", unsafe { (egl.eglGetError)() });
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
             return None;
         }
 
-        // Create a tiny pbuffer surface just to make context current
-        // (we use FBO for actual rendering)
-        let create_pbuffer: Option<unsafe extern "system" fn(egl::EGLDisplay, egl::EGLConfig, *const c_int) -> egl::EGLSurface> = {
-            let c_name = std::ffi::CString::new("eglCreatePbufferSurface").unwrap();
-            let sym = unsafe { libc::dlsym(egl.lib, c_name.as_ptr()) };
-            if sym.is_null() { None } else { Some(unsafe { std::mem::transmute(sym) }) }
+        // Create GBM surface for EGL window
+        let gbm_surface = unsafe {
+            (gbm.gbm_create_surface)(
+                gbm_device, width, height,
+                egl::DRM_FORMAT_XRGB8888,
+                GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING,
+            )
         };
+        if gbm_surface.is_null() {
+            eprintln!("[gl-compositor] gbm_surface_create failed");
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
+            return None;
+        }
 
-        let tiny_attribs = [egl::EGL_WIDTH, 1, egl::EGL_HEIGHT, 1, egl::EGL_NONE];
-        let egl_surface = if let Some(fn_create) = create_pbuffer {
-            unsafe { fn_create(egl_display, config, tiny_attribs.as_ptr()) }
-        } else {
-            egl::EGL_NO_SURFACE
-        };
-
-        if egl_surface != egl::EGL_NO_SURFACE {
-            unsafe {
-                (egl.eglMakeCurrent)(egl_display, egl_surface, egl_surface, egl_context);
+        // Create EGL surface from GBM surface
+        let egl_surface = unsafe {
+            let surface_attribs = [egl::EGL_NONE];
+            let create_window: Option<unsafe extern "system" fn(egl::EGLDisplay, egl::EGLConfig, *mut c_void, *const c_int) -> egl::EGLSurface> = {
+                let c_name = std::ffi::CString::new("eglCreatePlatformWindowSurface").unwrap();
+                let sym = libc::dlsym(egl.lib, c_name.as_ptr());
+                if sym.is_null() { None } else { Some(std::mem::transmute(sym)) }
+            };
+            if let Some(fn_create) = create_window {
+                fn_create(egl_display, config, gbm_surface as *mut _, surface_attribs.as_ptr())
+            } else {
+                // Fallback: eglCreateWindowSurface
+                let create_win: Option<unsafe extern "system" fn(egl::EGLDisplay, egl::EGLConfig, *mut c_void, *const c_int) -> egl::EGLSurface> = {
+                    let c_name = std::ffi::CString::new("eglCreateWindowSurface").unwrap();
+                    let sym = libc::dlsym(egl.lib, c_name.as_ptr());
+                    if sym.is_null() { None } else { Some(std::mem::transmute(sym)) }
+                };
+                if let Some(fn_win) = create_win {
+                    fn_win(egl_display, config, gbm_surface as *mut _, std::ptr::null())
+                } else {
+                    egl::EGL_NO_SURFACE
+                }
             }
+        };
+
+        if egl_surface == egl::EGL_NO_SURFACE {
+            eprintln!("[gl-compositor] eglCreateWindowSurface failed (error: {:x})",
+                unsafe { (egl.eglGetError)() });
+            unsafe { (gbm.gbm_surface_destroy)(gbm_surface) };
+            unsafe { (gbm.gbm_device_destroy)(gbm_device) };
+            return None;
+        }
+
+        // Make context current
+        unsafe {
+            (egl.eglMakeCurrent)(egl_display, egl_surface, egl_surface, egl_context);
         }
 
         // Create FBO
@@ -302,6 +348,9 @@ impl GlCompositor {
 
         Some(Self {
             egl,
+            gbm,
+            gbm_device,
+            gbm_surface,
             gl_ctx,
             egl_display,
             egl_context,
@@ -520,13 +569,15 @@ impl GlCompositor {
             let surface_id = toplevel.surface_id;
             if let Some(surface) = surfaces.get(surface_id) {
                 if let Some(ref buf) = surface.buffer {
-                    self.render_surface(shm, surface_id, buf, surface.x, surface.y, width, height);
+                    let transform = surface.buffer_transform;
+                    self.render_surface(shm, surface_id, buf, surface.x, surface.y, width, height, transform);
                 }
             }
             for sub in shell.subsurfaces.for_parent(surface_id) {
                 if let Some(sub_surface) = surfaces.get(sub.surface_id) {
                     if let Some(ref buf) = sub_surface.buffer {
-                        self.render_surface(shm, sub.surface_id, buf, sub.x, sub.y, width, height);
+                        let transform = sub_surface.buffer_transform;
+                        self.render_surface(shm, sub.surface_id, buf, sub.x, sub.y, width, height, transform);
                     }
                 }
             }
@@ -558,22 +609,42 @@ impl GlCompositor {
         }
     }
 
-    fn render_surface(&mut self, shm: &ShmManager, surface_id: u32, buf: &SurfaceBuffer, x: i32, y: i32, output_width: u32, output_height: u32) {
+    fn render_surface(&mut self, shm: &ShmManager, surface_id: u32, buf: &SurfaceBuffer, x: i32, y: i32, output_width: u32, output_height: u32, transform: i32) {
         let (tex, surf_w, surf_h) = match self.get_or_create_texture(shm, surface_id, buf) {
             Some(t) => t,
             None => return,
         };
 
+        // For rotated surfaces, swap the drawn dimensions
+        let rotated = transform == 1 || transform == 3 || transform == 5 || transform == 7;
+        let draw_w = if rotated { surf_h } else { surf_w };
+        let draw_h = if rotated { surf_w } else { surf_h };
+
         let x0 = (x as f32) / (output_width as f32) * 2.0 - 1.0;
         let y0 = -((y as f32) / (output_height as f32) * 2.0 - 1.0);
-        let w = (surf_w as f32) / (output_width as f32) * 2.0;
-        let h = (surf_h as f32) / (output_height as f32) * 2.0;
+        let w = (draw_w as f32) / (output_width as f32) * 2.0;
+        let h = (draw_h as f32) / (output_height as f32) * 2.0;
+
+        // Texture coordinates with rotation applied
+        // Standard quad texcoords: (0,1) (1,1) (1,0) (0,0) = bottom-left origin
+        // For transform 1 (90 CW): rotate texcoords 90 CW
+        let (t0, t1, t2, t3) = match transform {
+            0 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),
+            1 => ((1.0, 1.0), (1.0, 0.0), (0.0, 0.0), (0.0, 1.0)),  // 90 CW
+            2 => ((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0)),  // 180
+            3 => ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)),  // 270 CW
+            4 => ((1.0, 1.0), (0.0, 1.0), (0.0, 0.0), (1.0, 0.0)),  // flipped H
+            5 => ((1.0, 0.0), (0.0, 0.0), (0.0, 1.0), (1.0, 1.0)),  // flipped+90 (same as 180 texcoords — handled by rotated dims)
+            6 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),  // flipped+180 (same as normal — handled by rotated dims)
+            7 => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),  // flipped+270
+            _ => ((0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)),
+        };
 
         let vertices: [f32; 16] = [
-            x0, y0, 0.0, 1.0,
-            x0 + w, y0, 1.0, 1.0,
-            x0 + w, y0 + h, 1.0, 0.0,
-            x0, y0 + h, 0.0, 0.0,
+            x0, y0,       t0.0, t0.1,
+            x0 + w, y0,   t1.0, t1.1,
+            x0 + w, y0 + h, t2.0, t2.1,
+            x0, y0 + h,   t3.0, t3.1,
         ];
 
         unsafe {
@@ -675,6 +746,27 @@ impl Drop for GlCompositor {
             unsafe {
                 (self.gl_ctx.glDeleteTextures)(1, &tex.id);
             }
+        }
+
+        // Clean up EGL
+        if self.egl_surface != egl::EGL_NO_SURFACE {
+            unsafe { (self.egl.eglDestroySurface)(self.egl_display, self.egl_surface) };
+        }
+        if self.egl_context != egl::EGL_NO_CONTEXT {
+            unsafe { (self.egl.eglDestroyContext)(self.egl_display, self.egl_context) };
+        }
+        if self.egl_display != egl::EGL_NO_DISPLAY {
+            unsafe { (self.egl.eglTerminate)(self.egl_display) };
+        }
+
+        // Clean up GBM
+        if !self.gbm_surface.is_null() {
+            unsafe { (self.gbm.gbm_surface_destroy)(self.gbm_surface) };
+            self.gbm_surface = std::ptr::null_mut();
+        }
+        if !self.gbm_device.is_null() {
+            unsafe { (self.gbm.gbm_device_destroy)(self.gbm_device) };
+            self.gbm_device = std::ptr::null_mut();
         }
     }
 }

@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+edgerun-crypto.workspace = true
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-json = { path = "../edgerun-json", features = ["serde"] }

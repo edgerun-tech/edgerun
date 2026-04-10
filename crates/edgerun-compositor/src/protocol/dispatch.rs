@@ -47,12 +47,79 @@ use crate::wire::decode::ArgCursor;
 use crate::wire::encode::*;
 use crate::compositor::dmabuf::DmabufParams;
 
+/// Touch input state — tracks active touch slots and their positions.
+pub struct TouchState {
+    /// Map from evdev touch slot (ABS_MT_SLOT) to touch position and surface.
+    pub slots: HashMap<i32, TouchSlot>,
+    /// Current active slot.
+    pub current_slot: i32,
+    /// Next touch object ID to assign.
+    pub next_touch_id: u32,
+}
+
+/// A single touch slot state.
+#[derive(Debug, Clone)]
+pub struct TouchSlot {
+    pub touch_id: u32,
+    pub surface_id: Option<u32>,
+    pub client_id: Option<u32>,
+    pub x: f64,
+    pub y: f64,
+    pub active: bool,
+}
+
+impl TouchState {
+    pub fn new() -> Self {
+        Self {
+            slots: HashMap::new(),
+            current_slot: 0,
+            next_touch_id: 1,
+        }
+    }
+}
+
 /// Clipboard data source.
 pub struct DataSource {
     pub id: u32,
     pub owner_client_id: u32,
     pub mime_types: Vec<String>,
 }
+
+/// Global objects advertised to clients via wl_registry.global.
+/// Each entry: (interface_name, version).
+/// The global *name* (u32) is assigned dynamically in main.rs, but the
+/// interface name and version are static here for sending global events.
+const GLOBALS: &[(&str, u32)] = &[
+    ("wl_compositor", 4),
+    ("wl_shm", 1),
+    ("wl_seat", 7),
+    ("xdg_wm_base", 6),
+    ("wl_output", 4),
+    ("zwp_linux_dmabuf_v1", 4),
+    ("wl_data_device_manager", 3),
+    ("wl_subcompositor", 1),
+    ("zxdg_decoration_manager_v1", 1),
+    ("wp_viewporter", 1),
+    ("wp_cursor_shape_manager_v1", 1),
+    ("xdg_activation_v1", 1),
+    ("wp_presentation", 1),
+    ("zwp_relative_pointer_manager_v1", 1),
+    ("zwp_pointer_gestures_v1", 1),
+    ("zwp_text_input_manager_v1", 1),
+    ("zwp_idle_inhibit_manager_v1", 1),
+    ("zwp_pointer_constraints_v1", 1),
+    ("zxdg_output_manager_v1", 3),
+    ("zxdg_exporter_v2", 1),
+    ("zxdg_importer_v2", 1),
+    ("linux_drm_syncobj_v1", 1),
+    ("linux_drm_syncobj_surface_v1", 1),
+    ("linux_drm_syncobj_timeline_v1", 1),
+    ("zwlr_screencopy_manager_v1", 3),
+    ("zwp_text_input_manager_v3", 1),
+    ("zwp_input_method_manager_v2", 1),
+    ("zwlr_primary_selection_manager_v1", 1),
+    ("zwlr_data_control_manager_v1", 2),
+];
 
 /// Dispatch a single Wayland message to the appropriate protocol handler.
 #[allow(clippy::too_many_arguments)]
@@ -78,6 +145,7 @@ pub fn process_message(
     client_output_ids: &mut HashMap<u32, u32>,
     client_keyboard_ids: &mut HashMap<u32, u32>,
     client_pointer_ids: &mut HashMap<u32, u32>,
+    client_touch_ids: &mut HashMap<u32, u32>,
     client_dmabuf_ids: &mut HashMap<u32, u32>,
     client_pool_map: &mut HashMap<u32, HashMap<u32, u32>>,
     client_data_device_ids: &mut HashMap<u32, u32>,
@@ -124,6 +192,15 @@ pub fn process_message(
                         reg.register(registry_id, "wl_registry", 1, client_id);
                     }
                     client_registry_ids.insert(client_id, registry_id);
+
+                    // Send global events for all advertised globals
+                    if let Some(client) = server.client_mut(client_id) {
+                        for (global_name_idx, (interface, version)) in GLOBALS.iter().enumerate() {
+                            let name = (global_name_idx + 1) as u32;
+                            let evt = wl_core::global_event(name, interface, *version);
+                            client.send_message(evt);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -162,7 +239,7 @@ pub fn process_message(
                         "wl_seat" => {
                             client_seat_ids.insert(client_id, id);
                             seat.id = id;
-                            seat.capabilities = wl_seat::capability::KEYBOARD | wl_seat::capability::POINTER;
+                            seat.capabilities = wl_seat::capability::KEYBOARD | wl_seat::capability::POINTER | wl_seat::capability::TOUCH;
                             if let Some(client) = server.client_mut(client_id) {
                                 client.send_message(wl_seat::seat_capabilities_event(id, seat.capabilities));
                                 // seat_name is v7+ — only send if client bound at v7+
@@ -318,6 +395,14 @@ pub fn process_message(
                     }
                     surfaces.create(surface_id);
                 }
+                wl_compositor::compositor_request::CREATE_REGION => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let region_id = cursor_obj.new_id().unwrap_or(0);
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.register(region_id, "wl_region", 1, client_id);
+                    }
+                    // Region created — state tracked per-surface via SET_OPAQUE_REGION/SET_INPUT_REGION
+                }
                 _ => {}
             }
         }
@@ -371,13 +456,62 @@ pub fn process_message(
                         }
                     }
                     surfaces.commit(msg.sender_id);
+
+                    // P0: Send enter event for this surface on all output objects
+                    if let Some(surface) = surfaces.get(msg.sender_id) {
+                        if surface.buffer.is_some() {
+                            for (&cid, &output_id) in client_output_ids.iter() {
+                                if let Some(client) = server.client_mut(cid) {
+                                    client.send_message(wl_compositor::surface_enter_event(
+                                        msg.sender_id, output_id,
+                                    ));
+                                }
+                                // Also send preferred_buffer_scale (v4)
+                                if let Some(client) = server.client_mut(cid) {
+                                    client.send_message(wl_compositor::surface_preferred_buffer_scale_event(
+                                        msg.sender_id, surface.buffer_scale as u32,
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
                 wl_compositor::surface_request::SET_BUFFER_SCALE => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     let scale = cursor_obj.int().unwrap_or(1);
                     surfaces.set_buffer_scale(msg.sender_id, scale);
                 }
+                wl_compositor::surface_request::SET_BUFFER_TRANSFORM => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let transform = cursor_obj.int().unwrap_or(0);
+                    surfaces.set_buffer_transform(msg.sender_id, transform);
+                }
+                wl_compositor::surface_request::SET_OPAQUE_REGION => {
+                    let region_id = ArgCursor::from_message(&msg).object().unwrap_or(0);
+                    // A non-null region_id means the surface is opaque where the region is.
+                    // null (0) clears the opaque region → surface is fully transparent.
+                    if let Some(surface) = surfaces.get_mut(msg.sender_id) {
+                        surface.opaque = region_id != 0;
+                    }
+                }
+                wl_compositor::surface_request::SET_INPUT_REGION => {
+                    let _region_id = ArgCursor::from_message(&msg).object().unwrap_or(0);
+                    // Input region is tracked for hit-testing. For now we accept it;
+                    // a full implementation would store the region and use it for pointer hit tests.
+                }
                 wl_compositor::surface_request::DESTROY => {
+                    // P0: Send leave event for this surface on all output objects
+                    if let Some(surface) = surfaces.get(msg.sender_id) {
+                        if surface.buffer.is_some() {
+                            for (&cid, &output_id) in client_output_ids.iter() {
+                                if let Some(client) = server.client_mut(cid) {
+                                    client.send_message(wl_compositor::surface_leave_event(
+                                        msg.sender_id, output_id,
+                                    ));
+                                }
+                            }
+                        }
+                    }
                     surfaces.destroy(msg.sender_id);
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
@@ -515,6 +649,12 @@ pub fn process_message(
                                         dup_fd,
                                         keymap_size,
                                     ));
+                                    // P0: REPEAT_INFO — tell client the auto-repeat rate
+                                    client.send_message(wl_seat::keyboard_repeat_info_event(
+                                        kb_id,
+                                        25, // 25 chars/sec
+                                        300, // 300ms delay
+                                    ));
                                     let _ = client.flush();
                                 }
                             }
@@ -536,7 +676,20 @@ pub fn process_message(
                     client_pointer_ids.insert(client_id, ptr_id);
                     eprintln!("[edgerun-compositor] Client {} created wl_pointer id={} (v{})", client_id, ptr_id, ptr_version);
                 }
-                wl_seat::seat_request::GET_TOUCH => {}
+                wl_seat::seat_request::GET_TOUCH => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let touch_id = cursor_obj.new_id().unwrap_or(0);
+                    let touch_version = if let Some(res) = client_registries.get(&client_id).and_then(|r| r.get(msg.sender_id)) {
+                        res.version.min(7)
+                    } else {
+                        7
+                    };
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.register(touch_id, "wl_touch", touch_version, client_id);
+                    }
+                    client_touch_ids.insert(client_id, touch_id);
+                    eprintln!("[edgerun-compositor] Client {} created wl_touch id={} (v{})", client_id, touch_id, touch_version);
+                }
                 wl_seat::seat_request::RELEASE => {}
                 _ => {}
             }
@@ -1396,6 +1549,12 @@ pub fn process_message(
                     if let Some(client) = server.client_mut(client_id) {
                         let state = shell.toplevel_state_bytes(toplevel_id);
                         client.send_message(xdg_shell::xdg_surface_configure_event(msg.sender_id, serial));
+                        // P0: configure_bounds (v4+) — tells client the available space
+                        client.send_message(xdg_shell::xdg_toplevel_configure_bounds_event(
+                            toplevel_id,
+                            shell.output_width,
+                            shell.output_height,
+                        ));
                         client.send_message(xdg_shell::xdg_toplevel_configure_event(
                             toplevel_id,
                             shell.output_width,
@@ -2117,9 +2276,11 @@ pub fn process_input_for_device(
     shell: &mut Shell,
     client_keyboard_ids: &HashMap<u32, u32>,
     client_pointer_ids: &HashMap<u32, u32>,
+    client_touch_ids: &HashMap<u32, u32>,
     client_relative_pointer_ids: &HashMap<u32, u32>,
     _client_compositor_ids: &HashMap<u32, u32>,
     cursor: &mut Cursor,
+    touch_state: &mut TouchState,
 ) {
     for event in input_mgr.read_events(dev_id, 64) {
         match event.kind {
@@ -2256,6 +2417,155 @@ pub fn process_input_for_device(
                             dx_fixed, dy_fixed, dx_fixed, dy_fixed,
                         ));
                     }
+                }
+            }
+            edgerun_input::InputEventKind::AbsoluteMotion => {
+                // Touch input: evdev sends ABS_MT_* events
+                // ABS_MT_SLOT (0x3f): select touch slot
+                // ABS_MT_TRACKING_ID (0x39): touch down/up identifier
+                // ABS_MT_POSITION_X (0x35): X position
+                // ABS_MT_POSITION_Y (0x36): Y position
+                const ABS_MT_SLOT: u16 = 0x3f;
+                const ABS_MT_TRACKING_ID: u16 = 0x39;
+                const ABS_MT_POSITION_X: u16 = 0x35;
+                const ABS_MT_POSITION_Y: u16 = 0x36;
+                const ABS_X: u16 = 0x00;
+                const ABS_Y: u16 = 0x01;
+
+                match event.code {
+                    ABS_MT_SLOT => {
+                        // Switch active touch slot
+                        touch_state.current_slot = event.value;
+                        touch_state.slots.entry(event.value).or_insert_with(|| TouchSlot {
+                            touch_id: touch_state.next_touch_id,
+                            surface_id: None,
+                            client_id: None,
+                            x: 0.0,
+                            y: 0.0,
+                            active: false,
+                        });
+                    }
+                    ABS_MT_TRACKING_ID => {
+                        // -1 = touch up, >= 0 = touch down with this ID
+                        let slot = touch_state.current_slot;
+                        if event.value < 0 {
+                            // Touch up
+                            if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
+                                if touch_slot.active {
+                                    let serial = seat.next_serial();
+                                    for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+                                        if let Some(client) = server.client_mut(cid) {
+                                            client.send_message(wl_seat::touch_up_event(
+                                                touch_obj_id, serial,
+                                                event.timestamp_sec as u32,
+                                                slot,
+                                            ));
+                                            client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+                                        }
+                                    }
+                                    touch_slot.active = false;
+                                }
+                            }
+                        } else {
+                            // Touch down
+                            let slot_entry = touch_state.slots.entry(slot).or_insert_with(|| TouchSlot {
+                                touch_id: touch_state.next_touch_id,
+                                surface_id: seat.touch_focus(),
+                                client_id: None,
+                                x: 0.0,
+                                y: 0.0,
+                                active: false,
+                            });
+                            slot_entry.touch_id = event.value as u32;
+                            slot_entry.active = true;
+                            slot_entry.surface_id = seat.touch_focus();
+
+                            let serial = seat.next_serial();
+                            let surface_id = slot_entry.surface_id.unwrap_or(0);
+                            for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+                                if let Some(client) = server.client_mut(cid) {
+                                    client.send_message(wl_seat::touch_down_event(
+                                        touch_obj_id, serial,
+                                        event.timestamp_sec as u32,
+                                        surface_id, slot,
+                                        slot_entry.x, slot_entry.y,
+                                    ));
+                                    client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+                                }
+                            }
+                            touch_state.next_touch_id += 1;
+                        }
+                    }
+                    ABS_MT_POSITION_X => {
+                        let slot = touch_state.current_slot;
+                        if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
+                            // Normalize to 0.0-1.0 range (evdev ABS_X max is typically screen width)
+                            touch_slot.x = event.value as f64 / 32767.0;
+                            if touch_slot.active {
+                                let serial = seat.next_serial();
+                                for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+                                    if let Some(client) = server.client_mut(cid) {
+                                        client.send_message(wl_seat::touch_motion_event(
+                                            touch_obj_id, event.timestamp_sec as u32,
+                                            slot, touch_slot.x, touch_slot.y,
+                                        ));
+                                        client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ABS_MT_POSITION_Y => {
+                        let slot = touch_state.current_slot;
+                        if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
+                            touch_slot.y = event.value as f64 / 32767.0;
+                            if touch_slot.active {
+                                let serial = seat.next_serial();
+                                for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+                                    if let Some(client) = server.client_mut(cid) {
+                                        client.send_message(wl_seat::touch_motion_event(
+                                            touch_obj_id, event.timestamp_sec as u32,
+                                            slot, touch_slot.x, touch_slot.y,
+                                        ));
+                                        client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ABS_X | ABS_Y => {
+                        // Single-touch ABS events (for touchscreens that don't use MT protocol)
+                        // Treat as a single touch slot
+                        let slot = 0;
+                        touch_state.current_slot = slot;
+                        let touch_slot = touch_state.slots.entry(slot).or_insert_with(|| TouchSlot {
+                            touch_id: 0,
+                            surface_id: seat.touch_focus(),
+                            client_id: None,
+                            x: 0.0,
+                            y: 0.0,
+                            active: true,
+                        });
+
+                        if event.code == ABS_X {
+                            touch_slot.x = event.value as f64 / 32767.0;
+                        } else {
+                            touch_slot.y = event.value as f64 / 32767.0;
+                        }
+
+                        // Send motion event
+                        let serial = seat.next_serial();
+                        for (&cid, &touch_obj_id) in client_touch_ids.iter() {
+                            if let Some(client) = server.client_mut(cid) {
+                                client.send_message(wl_seat::touch_motion_event(
+                                    touch_obj_id, event.timestamp_sec as u32,
+                                    slot, touch_slot.x, touch_slot.y,
+                                ));
+                                client.send_message(wl_seat::touch_frame_event(touch_obj_id));
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
             _ => {}

@@ -1,0 +1,521 @@
+syntax = "proto3";
+
+package edgerun.v0.html.attributes;
+
+/// HTML Element-Specific Attribute Messages.
+/// Each message represents the attribute set for one HTML element.
+/// DO NOT EDIT. Regenerate with: scripts/generate_html_proto.py
+
+/// Global HTML attributes common to most elements.
+message GlobalAttributes {
+  string id = 1;
+  repeated string classes = 2;
+  string style = 3;
+  string title = 4;
+  string lang = 5;
+  TextDirection dir = 6;
+  int64 tabindex = 7;
+  string accesskey = 8;
+  bool hidden = 9;
+  bool inert = 10;
+  PopoverState popover = 11;
+  string slot = 12;
+  bool translate = 13;
+}
+
+enum TextDirection {
+  TEXT_DIRECTION_UNSPECIFIED = 0;
+  TEXT_DIRECTION_LTR = 1;
+  TEXT_DIRECTION_RTL = 2;
+  TEXT_DIRECTION_AUTO = 3;
+}
+
+enum PopoverState {
+  POPOVER_STATE_UNSPECIFIED = 0;
+  POPOVER_STATE_AUTO = 1;
+  POPOVER_STATE_MANUAL = 2;
+}
+
+/// Attributes for the <base> element.
+message BaseAttributes {
+  // Element: <base>
+
+  // Document base URL
+  string href = 1;
+  // Default navigable for hyperlink navigation and form submission
+  string target = 2;
+}
+
+/// Attributes for the <link> element.
+message LinkAttributes {
+  // Element: <link>
+
+  // Address of the hyperlink
+  string href = 1;
+  // How the element handles crossorigin requests
+  string crossorigin = 2;
+  // Relationship between the document containing the hyperlink and the destination resource
+  repeated string rel = 3;
+  // Applicable media
+  string media = 4;
+  // Integrity metadata used in Subresource Integrity checks [\[SRI\]](#refsSRI)
+  string integrity = 5;
+  // Language of the linked resource
+  string hreflang = 6;
+  // Hint for the type of the referenced resource
+  string type = 7;
+  // Referrer policy for fetches initiated by the element
+  string referrerpolicy = 8;
+  // Sizes of the icons (for
+  repeated string sizes = 9;
+  // Images to use in different situations, e.g., high-resolution displays, small monitors, etc. (for
+  string imagesrcset = 10;
+  // Image sizes for different page layouts (for [rel](#attr-link-rel)=\"[preload](#link-type-preload)\")
+  string imagesizes = 11;
+  // Destination for a preload request (for
+  string as = 12;
+  // Whether the element is potentially render-blocking
+  bool blocking = 13;
+  // Color to use when customizing a site's icon (for [rel](#attr-link-rel)=\"mask-icon\")
+  string color = 14;
+  // Whether the link is disabled
+  bool disabled = 15;
+  // Sets the priority for fetches initiated by the element
+  string fetchpriority = 16;
+}
+
+/// Attributes for the <meta> element.
+message MetaAttributes {
+  // Element: <meta>
+
+  // Metadata name
+  string name = 1;
+  // Value of the element
+  string content = 2;
+  // Character encoding declaration
+  string charset = 3;
+  // Applicable media
+  string media = 4;
+}
+
+/// Attributes for the <style> element.
+message StyleAttributes {
+  // Element: <style>
+
+  // Applicable media
+  string media = 1;
+  // Whether the element is potentially render-blocking
+  bool blocking = 2;
+}
+
+/// Attributes for the <ol> element.
+message OlAttributes {
+  // Element: <ol>
+
+  // Number the list backwards
+  bool reversed = 1;
+  // Starting value of the list
+  uint32 start = 2;
+  // Kind of list marker
+  string type = 3;
+}
+
+/// Attributes for the <li> element.
+/// a list item
+message LiAttributes {
+  // Element: <li>
+
+  // Ordinal value of the list item
+  double value = 1;
+}
+
+/// Attributes for the <a> element.
+/// a hyperlink (a hypertext anchor) labeled by its contents
+message AAttributes {
+  // Element: <a>
+
+  // Address of the hyperlink
+  string href = 1;
+  // Navigable for hyperlink navigation
+  string target = 2;
+  // Whether to download the resource instead of navigating to it, and its filename if so
+  string download = 3;
+  // URLs to ping
+  repeated string ping = 4;
+  // Relationship between the location in the document containing the hyperlink and the destination resource
+  repeated string rel = 5;
+  // Language of the linked resource
+  string hreflang = 6;
+  // Hint for the type of the referenced resource
+  string type = 7;
+  // Referrer policy for fetches initiated by the element
+  string referrerpolicy = 8;
+}
+
+/// Attributes for the <q> element.
+/// some phrasing content quoted from another source
+message QAttributes {
+  // Element: <q>
+
+  // Link to the source of the quotation or more information about the edit
+  string cite = 1;
+}
+
+/// Attributes for the <data> element.
+message DataAttributes {
+  // Element: <data>
+
+  // Machine-readable value
+  double value = 1;
+}
+
+/// Attributes for the <time> element.
+message TimeAttributes {
+  // Element: <time>
+
+  // Machine-readable value
+  string datetime = 1;
+}
+
+/// Attributes for the <ins> element.
+/// an addition to the document
+message InsAttributes {
+  // Element: <ins>
+
+  // Link to the source of the quotation or more information about the edit
+  string cite = 1;
+  // Date and (optionally) time of the change
+  string datetime = 2;
+}
+
+/// Attributes for the <del> element.
+/// a removal from the document
+message DelAttributes {
+  // Element: <del>
+
+  // Link to the source of the quotation or more information about the edit
+  string cite = 1;
+  // Date and (optionally) time of the change
+  string datetime = 2;
+}
+
+/// Attributes for the <img> element.
+/// the element's image data
+message ImgAttributes {
+  // Element: <img>
+
+  // Replacement text for use when images are not available
+  string alt = 1;
+  // Address of the resource
+  string src = 2;
+  // Images to use in different situations, e.g., high-resolution displays, small monitors, etc.
+  string srcset = 3;
+  // Image sizes for different page layouts
+  repeated string sizes = 4;
+  // How the element handles crossorigin requests
+  string crossorigin = 5;
+  // Name of image map to use
+  string usemap = 6;
+  // Whether the image is a server-side image map
+  string ismap = 7;
+  // Horizontal dimension
+  uint32 width = 8;
+  // Vertical dimension
+  uint32 height = 9;
+  // Referrer policy for fetches initiated by the element
+  string referrerpolicy = 10;
+  // Decoding hint to use when processing this image for presentation
+  string decoding = 11;
+  // Used when determining loading deferral
+  string loading = 12;
+  // Sets the priority for fetches initiated by the element
+  string fetchpriority = 13;
+}
+
+/// Attributes for the <embed> element.
+/// nothing:
+message EmbedAttributes {
+  // Element: <embed>
+
+  // Address of the resource
+  string src = 1;
+  // Type of embedded resource
+  string type = 2;
+  // Horizontal dimension
+  uint32 width = 3;
+  // Vertical dimension
+  uint32 height = 4;
+}
+
+/// Attributes for the <video> element.
+/// its poster frame, if any, or else <a href=\"https://drafts
+message VideoAttributes {
+  // Element: <video>
+
+  // Address of the resource
+  string src = 1;
+  // How the element handles crossorigin requests
+  string crossorigin = 2;
+  // Poster frame to show prior to video playback
+  string poster = 3;
+  // Hints how much buffering the media resource will likely need
+  string preload = 4;
+  // Hint that the media resource can be started automatically when the page is loaded
+  bool autoplay = 5;
+  // Encourage the user agent to display video content within the element's playback area
+  bool playsinline = 6;
+  // Whether to loop the media resource
+  bool loop = 7;
+  // Whether to mute the media resource by default
+  bool muted = 8;
+  // Show user agent controls
+  bool controls = 9;
+  // Used when determining loading deferral
+  string loading = 10;
+  // Horizontal dimension
+  uint32 width = 11;
+  // Vertical dimension
+  uint32 height = 12;
+}
+
+/// Attributes for the <audio> element.
+/// a sound or audio stream
+message AudioAttributes {
+  // Element: <audio>
+
+  // Address of the resource
+  string src = 1;
+  // How the element handles crossorigin requests
+  string crossorigin = 2;
+  // Hints how much buffering the media resource will likely need
+  string preload = 3;
+  // Hint that the media resource can be started automatically when the page is loaded
+  bool autoplay = 4;
+  // Whether to loop the media resource
+  bool loop = 5;
+  // Whether to mute the media resource by default
+  bool muted = 6;
+  // Show user agent controls
+  bool controls = 7;
+  // Used when determining loading deferral
+  string loading = 8;
+}
+
+/// Attributes for the <track> element.
+message TrackAttributes {
+  // Element: <track>
+
+  // The type of text track
+  string kind = 1;
+  // Address of the resource
+  string src = 2;
+  // Language of the text track
+  string srclang = 3;
+  // User-visible label
+  string label = 4;
+  // Enable the track if no other text track is more suitable
+  bool default = 5;
+}
+
+/// Attributes for the <map> element.
+/// its children
+message MapAttributes {
+  // Element: <map>
+
+  // Name of image map to reference from the [usemap](#attr-hyperlink-usemap) attribute
+  string name = 1;
+}
+
+/// Attributes for the <area> element.
+message AreaAttributes {
+  // Element: <area>
+
+  // Replacement text for use when images are not available
+  string alt = 1;
+  // Coordinates for the shape to be created in an image map
+  string coords = 2;
+  // The kind of shape to be created in an image map
+  string shape = 3;
+  // Address of the hyperlink
+  string href = 4;
+  // Navigable for hyperlink navigation
+  string target = 5;
+  // Whether to download the resource instead of navigating to it, and its filename if so
+  string download = 6;
+  // URLs to ping
+  repeated string ping = 7;
+  // Relationship between the location in the document containing the hyperlink and the destination resource
+  repeated string rel = 8;
+  // Referrer policy for fetches initiated by the element
+  string referrerpolicy = 9;
+}
+
+/// Attributes for the <col> element.
+/// one or more columns in the column group represented by that [colgroup](#the-colgroup-element)
+message ColAttributes {
+  // Element: <col>
+
+  // Number of columns spanned by the element
+  uint32 span = 1;
+}
+
+/// Attributes for the <td> element.
+/// a data cell in a table
+message TdAttributes {
+  // Element: <td>
+
+  // Number of columns that the cell is to span
+  uint32 colspan = 1;
+  // Number of rows that the cell is to span
+  uint32 rowspan = 2;
+  // The header cells for this cell
+  string headers = 3;
+}
+
+/// Attributes for the <th> element.
+/// a header cell in a table
+message ThAttributes {
+  // Element: <th>
+
+  // Number of columns that the cell is to span
+  uint32 colspan = 1;
+  // Number of rows that the cell is to span
+  uint32 rowspan = 2;
+  // The header cells for this cell
+  string headers = 3;
+  // Specifies which cells the header cell applies to
+  string scope = 4;
+  // Alternative label to use for the header cell when referencing the cell in other contexts
+  string abbr = 5;
+}
+
+/// Attributes for the <form> element.
+message FormAttributes {
+  // Element: <form>
+
+  // URL to use for form submission
+  string action = 1;
+  // Default setting for autofill feature for controls in the form
+  string autocomplete = 2;
+  // Entry list encoding type to use for form submission
+  string enctype = 3;
+  // Variant to use for form submission
+  string method = 4;
+  // Name of form to use in the
+  string name = 5;
+  // Bypass form control validation for form submission
+  bool novalidate = 6;
+  // Navigable for form submission
+  string target = 7;
+}
+
+/// Attributes for the <label> element.
+/// a caption in a user interface
+message LabelAttributes {
+  // Element: <label>
+
+  // Associate the label with form control
+  string for = 1;
+}
+
+/// Attributes for the <input> element.
+/// a typed data field, usually with a form control to allow the user to edit the data
+message InputAttributes {
+  // Element: <input>
+
+  // Hint for expected file type in file upload controls
+  repeated string accept = 1;
+  // Allow the color's alpha component to be set
+  string alpha = 2;
+  // Replacement text for use when images are not available
+  string alt = 3;
+  // Hint for form autofill feature
+  string autocomplete = 4;
+  // Whether the control is checked
+  bool checked = 5;
+  // The color space of the serialized color
+  string colorspace = 6;
+  // Name of form control to use for sending the element's directionality in form submission
+  string dirname = 7;
+  // Whether the form control is disabled
+  bool disabled = 8;
+  // Associates the element with a
+  string form = 9;
+  // URL to use for form submission
+  string formaction = 10;
+  // Entry list encoding type to use for form submission
+  string formenctype = 11;
+  // Variant to use for form submission
+  string formmethod = 12;
+  // Bypass form control validation for form submission
+  bool formnovalidate = 13;
+  // Navigable for form submission
+  string formtarget = 14;
+  // Vertical dimension
+  uint32 height = 15;
+  // List of autocomplete options
+  string list = 16;
+  // Maximum value
+  double max = 17;
+  // Maximum length of value
+  uint32 maxlength = 18;
+  // Minimum value
+  double min = 19;
+  // Minimum length of value
+  uint32 minlength = 20;
+  // Whether to allow multiple values
+  bool multiple = 21;
+  // Name of the element to use for form submission and in the [form.elements](#dom-form-elements) API
+  string name = 22;
+  // Pattern to be matched by the form control's value
+  string pattern = 23;
+  // User-visible label to be placed within the form control
+  string placeholder = 24;
+  // Targets a popover element to toggle, show, or hide
+  string popovertarget = 25;
+  // Indicates whether a targeted popover element is to be toggled, shown, or hidden
+  string popovertargetaction = 26;
+  // Whether to allow the value to be edited by the user
+  bool readonly = 27;
+  // Whether the control is required for form submission
+  bool required = 28;
+  // Size of the control
+  uint32 size = 29;
+  // Address of the resource
+  string src = 30;
+  // Granularity to be matched by the form control's value
+  double step = 31;
+  // Type of form control
+  string type = 32;
+  // Value of the form control
+  double value = 33;
+  // Horizontal dimension
+  uint32 width = 34;
+}
+
+/// Attributes for the <meter> element.
+message MeterAttributes {
+  // Element: <meter>
+
+  // Current value of the element
+  double value = 1;
+  // Lower bound of range
+  double min = 2;
+  // Upper bound of range
+  double max = 3;
+  // High limit of low range
+  double low = 4;
+  // Low limit of high range
+  double high = 5;
+  // Optimum value in gauge
+  double optimum = 6;
+}
+
+/// Attributes for the <slot> element.
+/// its <a href=\"https://dom
+message SlotAttributes {
+  // Element: <slot>
+
+  // Name of shadow tree slot
+  string name = 1;
+}

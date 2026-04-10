@@ -437,7 +437,7 @@ dependencies = [
  "edgerun-proto",
  "jni",
  "libc",
- "log",
+ "log 0.4.29",
  "ndk-context",
  "ndk-sys",
  "once_cell",
@@ -539,6 +539,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-compositor-tests"
+version = "0.1.0"
+dependencies = [
+ "edgerun-compositor",
+ "libc",
+]
+
+[[package]]
 name = "edgerun-core"
 version = "0.1.0"
 dependencies = [
@@ -582,6 +590,14 @@ dependencies = [
  "subtle",
  "typenum",
  "zeroize",
+]
+
+[[package]]
+name = "edgerun-css"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
 ]
 
 [[package]]
@@ -712,16 +728,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-html"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-http"
 version = "0.1.0"
-
-[[package]]
-name = "edgerun-http2"
-version = "0.1.0"
-
-[[package]]
-name = "edgerun-http3"
-version = "0.1.0"
+dependencies = [
+ "edgerun-tls",
+ "hpack-patched",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "edgerun-input"
@@ -1031,6 +1053,7 @@ name = "edgerun-oci-registry"
 version = "0.1.0"
 dependencies = [
  "edgerun-core",
+ "edgerun-crypto",
  "edgerun-json",
  "edgerun-oci-runtime",
  "edgerun-secret-service",
@@ -1046,7 +1069,9 @@ name = "edgerun-oci-runtime"
 version = "0.1.0"
 dependencies = [
  "edgerun-json",
+ "libc",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1378,6 +1403,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hpack-patched"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83dd68e9ac6f591cf72a960f6ab2c40dcf6d173ee829f9ff3a0b69be8413a8e8"
+dependencies = [
+ "log 0.3.9",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1431,7 +1465,7 @@ dependencies = [
  "cfg-if 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "combine",
  "jni-sys 0.3.1",
- "log",
+ "log 0.4.29",
  "thiserror 1.0.69",
  "walkdir",
  "windows-sys 0.45.0",
@@ -1508,6 +1542,15 @@ name = "linux-raw-sys"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+
+[[package]]
+name = "log"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
+dependencies = [
+ "log 0.4.29",
+]
 
 [[package]]
 name = "log"

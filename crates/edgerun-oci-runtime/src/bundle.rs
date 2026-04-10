@@ -29,6 +29,7 @@ pub fn create_bundle(
                 uid: Some(0),
                 gid: Some(0),
                 additional_gids: None,
+                umask: None,
             }),
             capabilities: None,
             ..Default::default()
@@ -53,6 +54,7 @@ pub fn create_bundle(
             ..Default::default()
         }),
         mounts: Some(vec![]),
+        annotations: None,
     }
 }
 

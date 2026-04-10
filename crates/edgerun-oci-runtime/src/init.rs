@@ -11,7 +11,8 @@
 //! Usage: wrap the workload process by calling `run_as_pid1()` which
 //! execs a shell that runs the workload and then loops reaping zombies.
 
-use std::ffi::CString;
+#![allow(dead_code)]
+
 use std::io;
 use std::os::raw::c_int;
 

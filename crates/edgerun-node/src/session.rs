@@ -3,6 +3,7 @@
 //! Implements the signed SessionHello/SessionAccept handshake per §9 of the spec.
 //! After session establishment, peers exchange RouteAdvertisements.
 
+use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::NodeID;
 use edgerun_proto::edgerun::v0::{
     common::{IdentityKind, IdentityRef, NodeRef},

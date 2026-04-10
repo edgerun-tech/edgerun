@@ -9,11 +9,13 @@ description = "Wayland protocol conformance tests for edgerun-compositor"
 name = "edgerun_compositor_tests"
 path = "src/lib.rs"
 
-[[test]]
-name = "protocol_conformance"
-path = "src/lib.rs"
+[[bin]]
+name = "protocol-conformance"
+path = "src/bin/protocol-conformance.rs"
 
 [dependencies]
-wayland-client = "0.31"
-wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
 libc = "0.2"
+edgerun-compositor = { path = "../edgerun-compositor" }
+
+[dev-dependencies]
+edgerun-compositor = { path = "../edgerun-compositor" }

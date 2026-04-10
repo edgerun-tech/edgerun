@@ -1,4 +1,4 @@
-//! HTTP request types
+//! HTTP/1.1 request types
 
 use crate::header::HeaderMap;
 use crate::method::Method;
@@ -21,9 +21,107 @@ impl Request {
         RequestBuilder::new()
     }
 
+    /// Parse an HTTP/1.1 request from a raw string.
+    ///
+    /// Handles the request line, headers, and body based on Content-Length.
+    /// Supports all request target forms: origin-form, absolute-form,
+    /// authority-form, and asterisk-form.
+    pub fn from_http(raw: &str) -> Result<Self> {
+        // Find the end of the request line
+        let line_end = raw.find("\r\n").ok_or_else(|| {
+            crate::Error::InvalidRequest("No request line".to_string())
+        })?;
+
+        // Parse request line: METHOD SP REQUEST-TARGET SP HTTP-VERSION
+        let request_line = &raw[..line_end];
+        let mut parts = request_line.splitn(3, ' ');
+        let method_str = parts.next().ok_or_else(|| {
+            crate::Error::InvalidRequest("Empty request line".to_string())
+        })?;
+        let target = parts.next().ok_or_else(|| {
+            crate::Error::InvalidRequest("No request target".to_string())
+        })?;
+        let _version = parts.next().ok_or_else(|| {
+            crate::Error::InvalidRequest("No HTTP version".to_string())
+        })?;
+
+        let method: Method = method_str.parse().map_err(crate::Error::InvalidRequest)?;
+        let uri = Uri::parse(target).map_err(crate::Error::InvalidRequest)?;
+
+        // Parse headers and body
+        let after_line = &raw[line_end + 2..];
+        let (headers, body) = Self::parse_headers_and_body(after_line)?;
+
+        Ok(Request {
+            method,
+            uri,
+            headers,
+            body: Some(body).filter(|b| !b.is_empty()),
+        })
+    }
+
+    /// Parse headers (until blank line) and body (based on Content-Length).
+    fn parse_headers_and_body(raw: &str) -> Result<(HeaderMap, Vec<u8>)> {
+        let mut headers = HeaderMap::new();
+        let mut pos = 0;
+        let bytes = raw.as_bytes();
+
+        // Parse headers until blank line
+        while pos < bytes.len() {
+            // Find end of line
+            let line_end = bytes[pos..]
+                .windows(2)
+                .position(|w| w == b"\r\n")
+                .map(|i| pos + i);
+
+            match line_end {
+                Some(end) if end == pos => {
+                    // Blank line — end of headers
+                    pos = end + 2;
+                    break;
+                }
+                Some(end) => {
+                    let line = std::str::from_utf8(&bytes[pos..end])
+                        .map_err(|_| crate::Error::InvalidRequest("Invalid UTF-8 in headers".to_string()))?;
+
+                    if let Some(colon) = line.find(':') {
+                        let name = line[..colon].trim();
+                        let value = line[colon + 1..].trim();
+                        if !name.is_empty() {
+                            headers.insert(name, value);
+                        }
+                    }
+                    pos = end + 2;
+                }
+                None => {
+                    // No more \r\n — treat rest as body
+                    break;
+                }
+            }
+        }
+
+        // Body is everything after the blank line
+        let remaining = &bytes[pos..];
+
+        // Determine body length from Content-Length if present
+        let body_len = if let Some(cl) = headers.get("content-length") {
+            cl.as_str()
+                .parse::<usize>()
+                .ok()
+                .unwrap_or(remaining.len())
+                .min(remaining.len())
+        } else {
+            remaining.len()
+        };
+
+        let body = remaining[..body_len].to_vec();
+
+        Ok((headers, body))
+    }
+
     /// Get the method
-    pub fn method(&self) -> Method {
-        self.method
+    pub fn method(&self) -> &Method {
+        &self.method
     }
 
     /// Get the URI

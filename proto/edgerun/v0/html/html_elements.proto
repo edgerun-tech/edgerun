@@ -1,0 +1,265 @@
+syntax = "proto3";
+
+package edgerun.v0.html.elements;
+
+/// HTML Element Definitions — generated from the WHATWG HTML Living Standard.
+/// DO NOT EDIT. Regenerate with: scripts/generate_html_proto.py
+
+/// All HTML elements defined in the WHATWG HTML Living Standard.
+/// Total: 108 elements.
+enum HtmlElement {
+  HTML_ELEMENT_UNSPECIFIED = 0;
+  // <html> — the root of an HTML document
+  HTML = 1;
+  // <head> — a collection of metadata for the [Document](#document)
+  HEAD = 2;
+  // <title> — the document's title or name
+  TITLE = 3;
+  BASE = 4;
+  LINK = 5;
+  META = 6;
+  STYLE = 7;
+  // <body> — the contents of the document
+  BODY = 8;
+  ARTICLE = 9;
+  // <section> — a generic section of a document or application
+  SECTION = 10;
+  // <nav> — a section of a page that links to other pages or to parts within the page: a section with navigation links
+  NAV = 11;
+  ASIDE = 12;
+  H1 = 13;
+  // <hgroup> — a heading and related content
+  HGROUP = 14;
+  // <header> — a group of introductory or navigational aids
+  HEADER = 15;
+  // <footer> — a footer for its nearest ancestor sectioning content element, or for the body element if there is no such ancestor
+  FOOTER = 16;
+  // <address> — the contact information for its nearest [article](#the-article-element) or [body](#the-body-element) element ancestor
+  ADDRESS = 17;
+  // <p> — a paragraph
+  P = 18;
+  // <hr> — a paragraph-level thematic break, e
+  HR = 19;
+  // <pre> — a block of preformatted text, in which structure is represented by typographic conventions rather than by elements
+  PRE = 20;
+  // <blockquote> — a section that is quoted from another source
+  BLOCKQUOTE = 21;
+  OL = 22;
+  UL = 23;
+  MENU = 24;
+  // <li> — a list item
+  LI = 25;
+  // <dl> — an association list consisting of zero or more name-value groups (a description list)
+  DL = 26;
+  // <dt> — the term, or name, part of a term-description group in a description list ([dl](#the-dl-element) element)
+  DT = 27;
+  DD = 28;
+  FIGURE = 29;
+  FIGCAPTION = 30;
+  // <main> — the dominant contents of the document
+  MAIN = 31;
+  SEARCH = 32;
+  // <div> — its children
+  DIV = 33;
+  // <a> — a hyperlink (a hypertext anchor) labeled by its contents
+  A = 34;
+  // <em> — stress emphasis of its contents
+  EM = 35;
+  // <strong> — strong importance, seriousness, or urgency for its contents
+  STRONG = 36;
+  // <small> — side comments such as small print
+  SMALL = 37;
+  // <s> — contents that are no longer accurate or no longer relevant
+  S = 38;
+  // <cite> — the title of a work (e
+  CITE = 39;
+  // <q> — some phrasing content quoted from another source
+  Q = 40;
+  // <dfn> — the defining instance of a term
+  DFN = 41;
+  // <abbr> — an abbreviation or acronym, optionally with its expansion
+  ABBR = 42;
+  RUBY = 43;
+  // <rt> — the same thing as its children
+  RT = 44;
+  // <rp> — nothing
+  RP = 45;
+  // <data> — its contents, along with a machine-readable form of those contents in the [value](#attr-data-value) attribute
+  DATA = 46;
+  // <time> — its contents, along with a machine-readable form of those contents in the [datetime](#attr-time-datetime) attribute
+  TIME = 47;
+  // <code> — a fragment of computer code
+  CODE = 48;
+  // <var> — a variable
+  VAR = 49;
+  // <samp> — sample or quoted output from another program or computing system
+  SAMP = 50;
+  // <kbd> — user input (typically keyboard input, although it may also be used to represent other input, such as voice commands)
+  KBD = 51;
+  // <sub> — a superscript and the [sub](#the-sub-and-sup-elements) element represents a subscript
+  SUB = 52;
+  I = 53;
+  B = 54;
+  U = 55;
+  // <mark> — a run of text in one document marked or highlighted for reference purposes, due to its relevance in another context
+  MARK = 56;
+  // <bdi> — a span of text that is to be isolated from its surroundings for the purposes of bidirectional text formatting
+  BDI = 57;
+  // <bdo> — explicit text directionality formatting control for its children
+  BDO = 58;
+  // <span> — its children
+  SPAN = 59;
+  // <br> — a line break
+  BR = 60;
+  // <wbr> — a line break opportunity
+  WBR = 61;
+  // <ins> — an addition to the document
+  INS = 62;
+  // <del> — a removal from the document
+  DEL = 63;
+  // <picture> — its children
+  PICTURE = 64;
+  SOURCE = 65;
+  // <img> — the element's image data
+  IMG = 66;
+  // <iframe> — its content navigable
+  IFRAME = 67;
+  // <embed> — nothing:
+  EMBED = 68;
+  // <object> — its content navigable
+  OBJECT = 69;
+  // <video> — its poster frame, if any, or else <a href=\"https://drafts
+  VIDEO = 70;
+  // <audio> — a sound or audio stream
+  AUDIO = 71;
+  TRACK = 72;
+  // <map> — its children
+  MAP = 73;
+  // <area> — either a hyperlink with some text and a corresponding area on an image map, or a dead area on an image map
+  AREA = 74;
+  // <table> — data with more than one dimension, in the form of a table
+  TABLE = 75;
+  CAPTION = 76;
+  COLGROUP = 77;
+  // <col> — one or more columns in the column group represented by that [colgroup](#the-colgroup-element)
+  COL = 78;
+  TBODY = 79;
+  THEAD = 80;
+  TFOOT = 81;
+  // <tr> — a row of cells in a table
+  TR = 82;
+  // <td> — a data cell in a table
+  TD = 83;
+  // <th> — a header cell in a table
+  TH = 84;
+  FORM = 85;
+  // <label> — a caption in a user interface
+  LABEL = 86;
+  // <input> — a typed data field, usually with a form control to allow the user to edit the data
+  INPUT = 87;
+  // <button> — a button labeled by its contents
+  BUTTON = 88;
+  // <select> — a control for selecting zero or more options from the list of options
+  SELECT = 89;
+  // <datalist> — nothing and it, along with its children, should be hidden
+  DATALIST = 90;
+  // <optgroup> — a group of option elements with a common label
+  OPTGROUP = 91;
+  OPTION = 92;
+  // <textarea> — a multiline plain text edit control for the element's raw value
+  TEXTAREA = 93;
+  // <output> — the result of a calculation performed by the application, or the result of a user action
+  OUTPUT = 94;
+  // <progress> — the completion progress of a task
+  PROGRESS = 95;
+  METER = 96;
+  // <fieldset> — a set of form controls (or other content) grouped together, optionally with a caption
+  FIELDSET = 97;
+  LEGEND = 98;
+  SELECTEDCONTENT = 99;
+  // <details> — a disclosure widget from which the user can obtain additional information or controls
+  DETAILS = 100;
+  SUMMARY = 101;
+  DIALOG = 102;
+  SCRIPT = 103;
+  // <noscript> — nothing if scripting is enabled, and represents its children if scripting is disabled
+  NOSCRIPT = 104;
+  // <template> — nothing
+  TEMPLATE = 105;
+  // <slot> — its <a href=\"https://dom
+  SLOT = 106;
+  // <canvas> — embedded content consisting of a dynamically created image, the element's bitmap
+  CANVAS = 107;
+  MARQUEE = 108;
+}
+
+/// Content model classification for HTML elements.
+enum ContentModel {
+  CONTENT_MODEL_UNSPECIFIED = 0;
+  CONTENT_MODEL_FLOW = 1;
+  CONTENT_MODEL_PHRASING = 2;
+  CONTENT_MODEL_METADATA = 3;
+  CONTENT_MODEL_HEADING = 4;
+  CONTENT_MODEL_SECTIONING = 5;
+  CONTENT_MODEL_EMBEDDED = 6;
+  CONTENT_MODEL_INTERACTIVE = 7;
+  CONTENT_MODEL_PALATABLE = 8;
+  CONTENT_MODEL_SCRIPT_SUPPORTING = 9;
+  CONTENT_MODEL_NOTHING = 10;
+  CONTENT_MODEL_TRANSPARENT = 11;
+  CONTENT_MODEL_TEXT = 12;
+  CONTENT_MODEL_CUSTOM = 13;
+}
+
+/// Content categories used in element classification.
+enum ContentCategory {
+  CONTENT_CATEGORY_UNSPECIFIED = 0;
+  CONTENT_CATEGORY_METADATA = 1;
+  CONTENT_CATEGORY_FLOW = 2;
+  CONTENT_CATEGORY_SECTIONING = 3;
+  CONTENT_CATEGORY_HEADING = 4;
+  CONTENT_CATEGORY_PHRASING = 5;
+  CONTENT_CATEGORY_EMBEDDED = 6;
+  CONTENT_CATEGORY_INTERACTIVE = 7;
+  CONTENT_CATEGORY_PALATABLE = 8;
+  CONTENT_CATEGORY_SCRIPT_SUPPORTING = 9;
+}
+
+/// Complete definition of an HTML element.
+message ElementDefinition {
+  HtmlElement tag = 1;
+  string tag_name = 2;
+  ContentModel content_model = 3;
+  repeated ContentCategory categories = 4;
+  string content_model_description = 5;
+  string tag_omission = 6;
+  bool has_global_attributes = 7;
+  repeated ElementAttribute element_specific_attributes = 8;
+  string dom_interface = 9;
+  string idl = 10;
+}
+
+/// An HTML element-specific attribute.
+message ElementAttribute {
+  string name = 1;
+  string description = 2;
+  AttributeType attr_type = 3;
+}
+
+/// Inferred Rust type for an attribute.
+enum AttributeType {
+  ATTRIBUTE_TYPE_UNSPECIFIED = 0;
+  ATTRIBUTE_TYPE_BOOL = 1;
+  ATTRIBUTE_TYPE_STRING = 2;
+  ATTRIBUTE_TYPE_STRING_LIST = 3;
+  ATTRIBUTE_TYPE_UINT32 = 4;
+  ATTRIBUTE_TYPE_FLOAT64 = 5;
+  ATTRIBUTE_TYPE_ENUM = 6;
+}
+
+/// Catalog of all HTML element definitions.
+message ElementCatalog {
+  string spec = 1;
+  string spec_date = 2;
+  repeated ElementDefinition elements = 3;
+}

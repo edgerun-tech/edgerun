@@ -32,3 +32,4 @@ pub mod input_method_v2;
 pub mod primary_selection;
 pub mod data_control;
 pub mod dispatch;
+pub mod edgerun_test_overlay;
