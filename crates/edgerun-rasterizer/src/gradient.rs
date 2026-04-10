@@ -1,7 +1,6 @@
 //! CSS Gradient rasterization — linear, radial, conic.
-use libm::{sin, cos, sqrt};
 //! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
-use libm::atan2;
+use libm::{atan2, sin, cos, sqrt};
 use core::f64::consts::PI;
 
 /// Color stop for gradients.
@@ -11,7 +10,6 @@ pub struct GradientStop {
     pub position: f64, // 0.0 to 1.0
 }
 
-/// Interpolate between two color stops at position t.
 #[inline]
 fn lerp_stops(a: &GradientStop, b: &GradientStop, t: f64) -> (u8, u8, u8, u8) {
     let span = b.position - a.position;
@@ -26,37 +24,24 @@ fn lerp_stops(a: &GradientStop, b: &GradientStop, t: f64) -> (u8, u8, u8, u8) {
     )
 }
 
-/// Find the two stops surrounding position t.
 fn find_stops(stops: &[GradientStop], t: f64) -> (usize, usize) {
     let mut i = 0;
-    while i + 1 < stops.len() && stops[i + 1].position < t {
-        i += 1;
-    }
+    while i + 1 < stops.len() && stops[i + 1].position < t { i += 1; }
     (i, (i + 1).min(stops.len() - 1))
 }
 
-/// Linear gradient: color varies along an axis.
-/// angle is in radians, 0 = right, PI/2 = down.
 pub fn linear_gradient(
-    pixels: &mut [u8],
-    stride: u32,
-    fb_width: u32,
-    fb_height: u32,
-    x: u32, y: u32, w: u32, h: u32,
-    angle: f64,
-    stops: &[GradientStop],
+    pixels: &mut [u8], stride: u32, fb_width: u32, fb_height: u32,
+    x: u32, y: u32, w: u32, h: u32, angle: f64, stops: &[GradientStop],
 ) {
     if stops.len() < 2 { return; }
-    let cos_a = cos(angle) as f64;
-    let sin_a = sin(angle) as f64;
-
+    let cos_a = cos(angle);
+    let sin_a = sin(angle);
     for cy in y..(y + h).min(fb_height) {
         for cx in x..(x + w).min(fb_width) {
             let rel_x = (cx - x) as f64;
             let rel_y = (cy - y) as f64;
-            // Project onto gradient axis
-            let t = (rel_x * cos_a + rel_y * sin_a) / (w as f64 + h as f64) * 2.0;
-            let t = t.max(0.0).min(1.0);
+            let t = ((rel_x * cos_a + rel_y * sin_a) / (w as f64 + h as f64) * 2.0).max(0.0).min(1.0);
             let (i0, i1) = find_stops(stops, t);
             let (r, g, b, a) = lerp_stops(&stops[i0], &stops[i1], t);
             let pi = (cy * stride + cx * 4) as usize;
@@ -69,21 +54,14 @@ pub fn linear_gradient(
     }
 }
 
-/// Radial gradient: color varies by distance from center.
 pub fn radial_gradient(
-    pixels: &mut [u8],
-    stride: u32,
-    fb_width: u32,
-    fb_height: u32,
-    x: u32, y: u32, w: u32, h: u32,
-    cx: f64, cy: f64, // center as fraction of rect
-    stops: &[GradientStop],
+    pixels: &mut [u8], stride: u32, fb_width: u32, fb_height: u32,
+    x: u32, y: u32, w: u32, h: u32, cx: f64, cy: f64, stops: &[GradientStop],
 ) {
     if stops.len() < 2 { return; }
     let center_x = x as f64 + w as f64 * cx;
     let center_y = y as f64 + h as f64 * cy;
     let max_dist = sqrt(w as f64 * w as f64 + h as f64 * h as f64) * 0.5;
-
     for py in y..(y + h).min(fb_height) {
         for px in x..(x + w).min(fb_width) {
             let dx = px as f64 - center_x;
@@ -102,21 +80,14 @@ pub fn radial_gradient(
     }
 }
 
-/// Conic gradient: color varies by angle around center.
 pub fn conic_gradient(
-    pixels: &mut [u8],
-    stride: u32,
-    fb_width: u32,
-    fb_height: u32,
-    x: u32, y: u32, w: u32, h: u32,
-    from_angle: f64,
-    cx: f64, cy: f64,
+    pixels: &mut [u8], stride: u32, fb_width: u32, fb_height: u32,
+    x: u32, y: u32, w: u32, h: u32, from_angle: f64, cx: f64, cy: f64,
     stops: &[GradientStop],
 ) {
     if stops.len() < 2 { return; }
     let center_x = x as f64 + w as f64 * cx;
     let center_y = y as f64 + h as f64 * cy;
-
     for py in y..(y + h).min(fb_height) {
         for px in x..(x + w).min(fb_width) {
             let dx = px as f64 - center_x;

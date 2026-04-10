@@ -1,5 +1,6 @@
 //! Blend mode lookup tables — generated from CSS Compositing Level 1 blend modes.
 //! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
+use libm::sqrt;
 
 /// Blend a source channel over destination channel.
 /// Uses integer math only — no floats.
@@ -60,7 +61,7 @@ pub fn blend_softlight(src: u8, dst: u8) -> u8 {
     if s <= 128 {
         (d - (255 - d) * d * (128 - s) / (128 * 255)) as u8
     } else {
-        let v = if d <= 64 { d } else { ((d.max(1) as f64).sqrt() as u32 * 255 / 16).min(255) };
+        let v = if d <= 64 { d } else { (sqrt(d.max(1) as f64) as u32 * 255 / 16).min(255) };
         (d + d * (255 - d) * (s - 128) / (128 * v)) as u8
     }
 }
