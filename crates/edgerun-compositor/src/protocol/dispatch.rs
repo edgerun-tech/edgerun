@@ -6,7 +6,6 @@
 
 use std::collections::HashMap;
 
-use crate::client::Client;
 use crate::compositor::surface::{BufferRegistry, ShmBufferInfo, SurfaceBuffer, SurfaceTree};
 use crate::compositor::shell::Shell;
 use crate::compositor::seat::Seat;
@@ -47,7 +46,6 @@ use crate::wire;
 use crate::wire::decode::ArgCursor;
 use crate::wire::encode::*;
 use crate::compositor::dmabuf::DmabufParams;
-use crate::drm;
 
 /// Clipboard data source.
 pub struct DataSource {
@@ -594,7 +592,7 @@ pub fn process_message(
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     if let Ok(Some(mime_type)) = cursor_obj.string() {
                         // Store mime type in the current data source
-                        if let Some(ref mut source) = current_data_source {
+                        if let Some(source) = current_data_source {
                             source.mime_types.push(mime_type.0);
                         }
                     }
@@ -1185,7 +1183,8 @@ pub fn process_message(
                 }
                 xdg_foreign::imported_request::SET_PARENT_OF => {
                     // Client sets this imported surface as parent of another surface
-                    let _ = (&msg);
+                    // TODO: Validate that the surface handle exists and is visible
+                    let _ = msg;
                 }
                 _ => {}
             }
@@ -1940,7 +1939,8 @@ pub fn process_message(
         "zwlr_primary_selection_source_v1" => {
             match msg.opcode {
                 primary_selection::source_request::OFFER => {
-                    let _ = (&msg);
+                    // MIME type offer — handled by clipboard subsystem
+                    let _ = msg;
                 }
                 primary_selection::source_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
@@ -2040,7 +2040,7 @@ pub fn process_message(
         "zwlr_data_control_source_v1" => {
             match msg.opcode {
                 data_control::data_control_source_request::OFFER => {
-                    if let Some(ref mut source) = current_data_source {
+                    if let Some(source) = current_data_source {
                         let mut cursor_obj = ArgCursor::from_message(&msg);
                         if let Ok(Some(mime_type)) = cursor_obj.string() {
                             source.mime_types.push(mime_type.0);

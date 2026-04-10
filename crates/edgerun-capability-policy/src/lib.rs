@@ -152,7 +152,7 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let mut h = edgerun_core::crypto::Sha256Hasher::new();
+        let mut h = edgerun_crypto::sha2::Sha256::new();
         h.update(&request.request_id);
         h.update(descriptor.provider_name.as_bytes());
         h.update(descriptor.provider_instance_id.as_bytes());
@@ -720,7 +720,7 @@ fn duration_from_prost(value: &ProstDuration) -> Option<Duration> {
 }
 
 fn revocation_id_for(grant_id: &[u8], reason: &RevocationReason) -> Vec<u8> {
-    let mut h = edgerun_core::crypto::Sha256Hasher::new();
+    let mut h = edgerun_crypto::sha2::Sha256::new();
     h.update(grant_id);
     h.update(reason.as_str().as_bytes());
     h.finalize().to_vec()

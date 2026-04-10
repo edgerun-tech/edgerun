@@ -15,8 +15,9 @@ use edgerun_storage::NodeStore;
 use edgerun_proto::edgerun::v0::stream::{CommandDecision, CommandEnvelope, CommandResultPayload as ProtoCommandResultPayload, CommandType, EventType};
 use edgerun_proto::edgerun::v0::trust::{DelegationRecord as ProtoDelegationRecord, RevocationRecord as ProtoRevocationRecord};
 use edgerun_proto::edgerun::v0::common::CommandRef;
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use prost::Message;
-use p256::ecdsa::signature::hazmat::PrehashVerifier;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -101,7 +102,7 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
     let mut vk_sec1 = [0u8; 65];
     vk_sec1[0] = 0x04;
     vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
         Ok(v) => v,
         Err(_) => return Err("bad_public_key"),
     };
@@ -114,9 +115,9 @@ fn verify_command_signature(command: &CommandEnvelope) -> Result<(), &'static st
 
     let mut sig_bytes = [0u8; 64];
     sig_bytes.copy_from_slice(&sig.value);
-    let r = p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(*r, *s) {
+    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[..32]);
+    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[32..]);
+    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
         Ok(sig) => sig,
         Err(_) => return Err("invalid_signature"),
     };
@@ -148,7 +149,7 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
     let mut vk_sec1 = [0u8; 65];
     vk_sec1[0] = 0x04;
     vk_sec1[1..].copy_from_slice(key_hint);
-    let vk = match p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
         Ok(v) => v,
         Err(_) => return Err("bad_public_key"),
     };
@@ -159,9 +160,9 @@ fn verify_delegation_signature(delegation: &edgerun_proto::edgerun::v0::trust::D
     prost::Message::encode(&signable, &mut canonical).map_err(|_| "encode_failed")?;
     let digest = edgerun_core::crypto::sha256(&canonical);
 
-    let r = p256::FieldBytes::from_slice(&sig.value[..32]);
-    let s = p256::FieldBytes::from_slice(&sig.value[32..]);
-    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(*r, *s) {
+    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[..32]);
+    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[32..]);
+    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
         Ok(sig) => sig,
         Err(_) => return Err("invalid_signature"),
     };
@@ -569,15 +570,19 @@ fn dispatch_execute_workload(
             false, "insufficient_capacity", Vec::new(), None);
     }
 
-    // Determine workload class from image
-    let workload_class = if spec_str.contains("inference") {
-        WorkloadClass::Inference
-    } else if spec_str.contains("compilation") {
-        WorkloadClass::Compilation
-    } else if spec_str.contains("container") {
-        WorkloadClass::Container
-    } else {
-        WorkloadClass::General
+    // Determine workload class from image name and resource profile
+    // Uses the parsed image_ref (not raw spec string) to avoid false substring matches.
+    let workload_class = {
+        let img_name = image_ref.repository.to_lowercase();
+        if img_name.contains("inference") || img_name.contains("llm") || img_name.contains("model") {
+            WorkloadClass::Inference
+        } else if img_name.contains("compil") || img_name.contains("build") {
+            WorkloadClass::Compilation
+        } else if image_str.starts_with("container:") || img_name.contains("container") {
+            WorkloadClass::Container
+        } else {
+            WorkloadClass::General
+        }
     };
 
     // === PHASE 1: Pull image ===
@@ -631,6 +636,14 @@ fn dispatch_execute_workload(
             let json = spec.to_json_string_pretty();
             if let Err(e) = std::fs::write(&cfg_path, json) {
                 edgerun_log::warn!("failed to update config.json: {}", e);
+                // ABORT: container must not start without resource limits.
+                // Running unconstrained would violate the capacity guarantee.
+                capacity_tracker.release(allocated_cores, allocated_memory_bytes);
+                let _ = std::fs::remove_dir_all(&paths.tmp_base);
+                let acc = meter.finalize(WorkStatus::Failed, None);
+                let _ = store.record_work_accounting(&acc);
+                return record_and_respond(command, store, stream_id, signer, controllers,
+                    false, "resource_limit_write_failed", Vec::new(), None);
             }
         }
     }
@@ -913,13 +926,13 @@ fn dispatch_terminate_workload(
     // Look up and terminate the workload
     match running_workloads.terminate(&work_id) {
         Some(info) => {
-            // Release reserved resources
-            capacity_tracker.release(info.allocated_cores, info.allocated_memory_bytes);
+            // DO NOT release capacity here — the background thread owns
+            // resource cleanup. Releasing here would cause double-free
+            // when the background thread also releases on exit.
+            // terminate() only signals kill; the background thread handles
+            // capacity release, bundle cleanup, and unregister.
 
-            // Cleanup bundle directory if it still exists
-            let _ = std::fs::remove_dir_all(&info.bundle_path);
-
-            edgerun_log::info!("work {} terminated (pid {}, freed {} cores, {} bytes)",
+            edgerun_log::info!("work {} terminated (pid {}, {} cores, {} bytes — resources released by background thread)",
                 edgerun_core::util::bytes_to_hex(&work_id[..8]),
                 info.pid,
                 info.allocated_cores,
@@ -1700,7 +1713,7 @@ mod tests {
     use edgerun_hardware_signing::{MeshSigner, NodeID};
     use edgerun_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
     use std::sync::Arc;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
     fn test_workload_policy() -> super::super::workload_policy::WorkloadPolicy {
         super::super::workload_policy::WorkloadPolicy::permissive()
@@ -1739,15 +1752,15 @@ mod tests {
         NodeStore::open(&config).unwrap()
     }
 
-    fn random_signing_key() -> p256::ecdsa::SigningKey {
+    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
-        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
     struct TestSigner {
         node_id: NodeID,
-        key: p256::ecdsa::SigningKey,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
     }
 
     impl TestSigner {
@@ -1773,7 +1786,7 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: p256::ecdsa::Signature = self.key.sign_prehash(digest)
+            let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
                 .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());

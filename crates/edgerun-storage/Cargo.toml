@@ -9,7 +9,7 @@ publish.workspace = true
 edgerun-core = { path = "../edgerun-core" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", default-features = false }
-aes-gcm.workspace = true
+edgerun-crypto.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 libc.workspace = true

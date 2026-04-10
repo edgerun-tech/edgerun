@@ -172,10 +172,11 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
         &record_hash,
     );
 
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
-    let Ok(ecdsa_sig) = p256::ecdsa::Signature::from_scalars(
-        *p256::FieldBytes::from_slice(&sig.value[..32]),
-        *p256::FieldBytes::from_slice(&sig.value[32..]),
+    use edgerun_crypto::p256;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+    let Ok(ecdsa_sig) = edgerun_crypto::p256::ecdsa::Signature::from_scalars(
+        *edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[..32]),
+        *edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[32..]),
     ) else {
         return false;
     };
@@ -663,7 +664,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     /// Signs an event with a real ECDSA P-256 key and attaches the signature.
-    fn sign_event_envelope(event: &EventEnvelope, signing_key: &p256::ecdsa::SigningKey) -> EventEnvelope {
+    fn sign_event_envelope(event: &EventEnvelope, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) -> EventEnvelope {
         let record = ProtocolRecord::EventEnvelope(event.clone());
         let canonical = canonical_bytes(&record, true);
         let record_hash = crate::crypto::sha256(&canonical);
@@ -684,7 +685,7 @@ mod tests {
 
     #[test]
     fn event_signature_valid_is_accepted() {
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
@@ -697,7 +698,7 @@ mod tests {
 
     #[test]
     fn event_signature_invalid_is_rejected() {
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
@@ -716,11 +717,11 @@ mod tests {
 
     #[test]
     fn event_signature_wrong_key_is_rejected() {
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 
-        let other_key = p256::ecdsa::SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
+        let other_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
 
         let genesis = make_genesis_event();
         let signed = sign_event_envelope(&genesis, &other_key);
@@ -733,7 +734,7 @@ mod tests {
 
     #[test]
     fn event_signature_bogus_bytes_are_rejected() {
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let verifying_key = signing_key.verifying_key();
         let node_id = crate::crypto::verifying_key_to_node_id(verifying_key);
 

@@ -1,8 +1,6 @@
 //! Server-side rendering functions for the compositor.
 
-use std::io;
-
-use crate::compositor::surface::{SurfaceBuffer, SurfaceTree};
+use crate::compositor::surface::{DamageRect, SurfaceBuffer, SurfaceTree};
 use crate::compositor::shell::Shell;
 use crate::drm;
 use crate::drm::device::DrmDevice;
@@ -11,7 +9,43 @@ use crate::drm::kms;
 use crate::render::cursor::Cursor;
 use crate::render::shm::ShmManager;
 
+/// Accumulated damage regions for incremental rendering.
+pub struct DamageAccumulator {
+    rects: Vec<DamageRect>,
+    /// Whether to render the entire screen next frame.
+    pub damage_all: bool,
+}
+
+impl DamageAccumulator {
+    pub fn new() -> Self {
+        Self { rects: Vec::new(), damage_all: true }
+    }
+
+    /// Add a damage rectangle.
+    pub fn add(&mut self, rect: DamageRect) {
+        self.rects.push(rect);
+    }
+
+    /// Mark the entire output as damaged.
+    pub fn mark_all(&mut self) {
+        self.damage_all = true;
+    }
+
+    /// Take the current damage rectangles and reset for the next frame.
+    pub fn take_rects(&mut self) -> Vec<DamageRect> {
+        std::mem::take(&mut self.rects)
+    }
+
+    /// Check if there is any pending damage.
+    pub fn is_dirty(&self) -> bool {
+        self.damage_all || !self.rects.is_empty()
+    }
+}
+
 /// Render all surfaces to the scanout buffer and issue a page flip.
+///
+/// If `damage` is `None` or `damage_all` is true, the entire framebuffer is cleared.
+/// Otherwise, only the damaged regions are re-rendered.
 pub fn render_and_flip(
     dumb: &mut DumbBuffer,
     fb_id: u32,
@@ -21,7 +55,7 @@ pub fn render_and_flip(
     shell: &Shell,
     cursor: &Cursor,
     shm: &ShmManager,
-    damage_all: bool,
+    damage: &mut DamageAccumulator,
     old_fb_ids: &mut Vec<u32>,
 ) {
     // Map the dumb buffer once — DumbBuffer::map() caches the mapping internally
@@ -35,7 +69,7 @@ pub fn render_and_flip(
     let height = dumb.height;
     let stride = dumb.pitch;
 
-    if damage_all {
+    if damage.damage_all {
         // Clear entire framebuffer to dark blue-gray
         // XRGB8888 little-endian: [B=0x2e, G=0x1a, R=0x1a, X=0xff] => 0xff1a1a2e
         let pixel_count = (width * height) as usize;
@@ -46,6 +80,7 @@ pub fn render_and_flip(
         for p in pixels_u32.iter_mut() {
             *p = bg_pixel;
         }
+        damage.damage_all = false;
     }
 
     // Composite surfaces in z-order (toplevels + subsurfaces)
@@ -109,15 +144,20 @@ fn blit_surface_buffer(
     match buf {
         SurfaceBuffer::Shm { pool_fd, offset, width: buf_w, height: buf_h, stride: buf_stride, format } => {
             // Use cached SHM pool mapping via O(1) fd lookup
-            let data: &[u8] = if let Some(pool) = shm.get_pool_by_fd(*pool_fd) {
+            if let Some(pool) = shm.get_pool_by_fd(*pool_fd) {
                 let len = (*buf_stride as usize) * (*buf_h as usize);
-                match pool.read(*offset as usize, len) {
-                    Some(d) => d,
-                    None => return,
+                if let Some(data) = pool.read(*offset as usize, len) {
+                    blit_pixels(
+                        data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
+                        origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                    );
                 }
             } else {
                 // Fallback: mmap temporarily if pool not in manager
-                let pool_size = drm::fd_size(*pool_fd).ok().unwrap_or(return);
+                let pool_size = match drm::fd_size(*pool_fd) {
+                    Ok(s) => s,
+                    Err(_) => return,
+                };
                 let mapping = unsafe {
                     libc::mmap(std::ptr::null_mut(), pool_size, libc::PROT_READ,
                                libc::MAP_SHARED, *pool_fd, 0)
@@ -126,24 +166,15 @@ fn blit_surface_buffer(
                 let pool_data = unsafe { std::slice::from_raw_parts(mapping as *const u8, pool_size) };
                 let off = *offset as usize;
                 let len = (*buf_stride as usize) * (*buf_h as usize);
-                if off + len > pool_data.len() {
-                    unsafe { libc::munmap(mapping, pool_size) };
-                    return;
+                if off + len <= pool_data.len() {
+                    let data = &pool_data[off..off + len];
+                    blit_pixels(
+                        data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
+                        origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                    );
                 }
-                let data = &pool_data[off..off + len];
-                // Upload texture from fallback mapping
-                blit_pixels(
-                    data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
-                    origin_x, origin_y, output_width, output_height, output_stride, pixels,
-                );
                 unsafe { libc::munmap(mapping, pool_size) };
-                return;
-            };
-
-            blit_pixels(
-                data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
-                origin_x, origin_y, output_width, output_height, output_stride, pixels,
-            );
+            }
         }
         SurfaceBuffer::DmaBuf { width: buf_w, height: buf_h, format, plane_fds, offsets, strides, num_planes: _ } => {
             if plane_fds.is_empty() || plane_fds[0] < 0 { return; }
@@ -151,7 +182,10 @@ fn blit_surface_buffer(
             let buf_stride = strides.first().copied().unwrap_or(*buf_w as u32 * 4);
             let offset = offsets.first().copied().unwrap_or(0);
 
-            let pool_size = drm::fd_size(fd).ok().unwrap_or(return);
+            let pool_size = match drm::fd_size(fd) {
+                Ok(s) => s,
+                Err(_) => return,
+            };
             let mapping = unsafe {
                 libc::mmap(std::ptr::null_mut(), pool_size, libc::PROT_READ,
                            libc::MAP_SHARED, fd, 0)
@@ -201,7 +235,7 @@ fn blit_pixels(
             if dx < 0 || dy < 0 || dx as u32 >= output_width || dy as u32 >= output_height {
                 continue;
             }
-            let src_off = (sy as usize * buf_stride as usize + sx as usize * 4);
+            let src_off = sy as usize * buf_stride as usize + sx as usize * 4;
             if src_off + 4 > src_data.len() { continue; }
             let dst_off = (dy as u32 * output_stride + dx as u32 * 4) as usize;
             if dst_off + 4 > pixels.len() { continue; }

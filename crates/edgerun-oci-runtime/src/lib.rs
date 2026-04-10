@@ -23,6 +23,7 @@ mod cgroups;
 mod rootfs;
 mod bundle;
 mod container;
+mod init;
 
 // Re-export public API
 pub use bundle::{create_bundle, write_bundle};
@@ -170,6 +171,8 @@ mod tests {
                     file_mode: Some(0o666),
                     uid: Some(0),
                     gid: Some(0),
+                    major: Some(1),
+                    minor: Some(3),
                 }]),
                 masked_paths: Some(vec!["/proc/acpi".into()]),
                 readonly_paths: Some(vec!["/proc/sys".into()]),

@@ -18,3 +18,5 @@ pub mod compositor;
 pub mod render;
 pub mod r#loop;
 pub mod gpu;
+pub mod logind;
+pub mod vt;

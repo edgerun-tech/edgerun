@@ -105,7 +105,7 @@ The conformance validator in `validators.rs` does check `trust_roots`, but the *
 
 ### 4. PerformanceCertificate not cryptographically bound
 **Severity:** Medium-High — billing fraud possible  
-**Status:** `WorkMeter` uses cached `perf_cert.bin` but there is **no mechanism** for a peer to verify the certificate's signature or that it corresponds to actual hardware. Any node can claim any performance multiplier.
+**Status:** ✅ **RESOLVED** — `PerformanceCertificate::verify()` validates both digest integrity and ECDSA signature. New certificates are signed during creation via `cache_cert()`. Legacy unsigned certs are signed on first use and re-cached. Node identity mismatch is also detected.
 
 ---
 
@@ -113,7 +113,7 @@ The conformance validator in `validators.rs` does check `trust_roots`, but the *
 
 ### 5. Seccomp-BPF filter not applied
 **Spec:** ~75 essential syscalls whitelist  
-**Status:** OCI runtime design doc describes seccomp filtering but the actual `edgerun-oci-runtime` does **not** implement seccomp-BPF filters.
+**Status:** ✅ **RESOLVED** — Seccomp-BPF is fully implemented in `edgerun-oci-runtime/src/seccomp.rs` with architecture-specific allow-lists (x86_64: ~80 syscalls, aarch64: ~80 syscalls). Applied in `container.rs` `pre_exec` closure before exec — fail-closed, container startup aborts if seccomp can't be applied.
 
 ### 6. Action lifecycle events partially implemented
 **Status:** `record_action_event()` function exists and is called in `command_dispatch.rs`, emitting `ActionCompleted`/`ActionFailed` events. However, `ACTION_STARTED` is NOT emitted before work begins.

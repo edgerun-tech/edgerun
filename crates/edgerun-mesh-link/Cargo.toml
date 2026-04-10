@@ -13,5 +13,5 @@ libc.workspace = true
 
 [dev-dependencies]
 edgerun-core = { path = "../edgerun-core" }
+edgerun-crypto.workspace = true
 edgerun-mesh = { path = "../edgerun-mesh" }
-p256.workspace = true

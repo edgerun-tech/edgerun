@@ -18,6 +18,8 @@
 // ---------------------------------------------------------------------------
 pub use digest;
 pub use sha2;
+pub use sha1;
+pub use pbkdf2;
 
 // ---------------------------------------------------------------------------
 // MAC / KDF
@@ -65,6 +67,7 @@ pub use subtle;
 pub use zeroize;
 pub use generic_array;
 pub use typenum;
+pub use getrandom;
 
 // ---------------------------------------------------------------------------
 // Convenience re-exports for most-used types

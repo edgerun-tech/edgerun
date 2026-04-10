@@ -24,7 +24,8 @@
 //!
 //! Recipient metadata is stored in SQLite via the parent storage layer.
 
-use aes_gcm::{
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
 };
@@ -122,7 +123,7 @@ impl BlobStore {
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
-        edgerun_core::crypto::fill_random(&mut nonce_bytes);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce_bytes);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // Encrypt
@@ -271,7 +272,7 @@ fn load_or_create_sealed_key(
     } else {
         // Generate new key, seal it, store on disk
         let mut key = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut key);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key);
 
         let sealed = seal_fn(&key)?;
         let mut file = File::create(&sealed_path)?;

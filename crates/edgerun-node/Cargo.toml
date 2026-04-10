@@ -68,7 +68,6 @@ all-hardware = [
     # Misc
     "dep:edgerun-json",
     "dep:edgerun-machine-report",
-    "dep:edgerun-rand_core",
 ]
 
 [dependencies]
@@ -86,7 +85,7 @@ edgerun-mesh-capability = { path = "../edgerun-mesh-capability" }
 edgerun-mesh-session = { path = "../edgerun-mesh-session" }
 edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
-p256.workspace = true
+edgerun-crypto.workspace = true
 prost.workspace = true
 prost-types.workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
@@ -146,7 +145,6 @@ edgerun-virtual-disk = { path = "../edgerun-virtual-disk", optional = true }
 # Misc
 edgerun-json = { path = "../edgerun-json", optional = true }
 edgerun-machine-report = { path = "../edgerun-machine-report", optional = true }
-edgerun-rand_core = { path = "../edgerun-rand_core", optional = true, package = "rand_core" }
 
 # OCI container runtime (enable with --features oci)
 edgerun-oci-registry = { path = "../edgerun-oci-registry", optional = true }

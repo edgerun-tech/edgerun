@@ -296,18 +296,19 @@ fn parse_list(val: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use edgerun_hardware_signing::MeshSigner;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use std::sync::Arc;
 
-    fn random_signing_key() -> p256::ecdsa::SigningKey {
+    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
-        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
     struct TestSigner {
         node_id: NodeID,
-        key: p256::ecdsa::SigningKey,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
     }
 
     impl TestSigner {
@@ -333,7 +334,7 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: p256::ecdsa::Signature = self.key.sign_prehash(digest)
+            let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
                 .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());

@@ -1,121 +1,84 @@
 [workspace]
 resolver = "2"
-default-members = ["crates/edgerun-compositor"]
-exclude = [
-  "crates/edgerun-e2e",
-]
-members = [
-  # Vendored external crates
-  "crates/edgerun-proto",
-  "crates/edgerun-cpufeatures",
-  "crates/edgerun-const-oid",
-  "crates/edgerun-base16ct",
-  "crates/edgerun-cfg-if",
-  "crates/edgerun-zeroize",
-  "crates/edgerun-subtle",
-  "crates/edgerun-log",
-  "crates/edgerun-rt",
-  "crates/edgerun-capabilities",
-  "crates/edgerun-capability-policy",
-  "crates/edgerun-remote-capability",
-  "crates/edgerun-stream",
-  "crates/edgerun-oci-runtime",
-  "crates/edgerun-oci-registry",
-  "crates/edgerun-http",
-  "crates/edgerun-http2",
-  "crates/edgerun-http3",
 
-  # Device & media abstraction
-  "crates/edgerun-input",
-  "crates/edgerun-evdev-input",
-  "crates/edgerun-microphone",
+members = [
   "crates/edgerun-alsa-microphone",
-  "crates/edgerun-speaker",
   "crates/edgerun-alsa-speaker",
-  "crates/edgerun-v4l2-camera",
-  "crates/edgerun-camera-biometrics",
-  "crates/edgerun-wifi",
-  "crates/edgerun-display",
-  "crates/edgerun-drm-display",
+  "crates/edgerun-amd-xdna",
+  "crates/edgerun-android-hardware",
+  "crates/edgerun-android-keystore",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
+  "crates/edgerun-bench",
+  "crates/edgerun-biometrics",
+  "crates/edgerun-bluetooth",
+  "crates/edgerun-camera-biometrics",
+  "crates/edgerun-capabilities",
+  "crates/edgerun-capability-policy",
+  "crates/edgerun-cec",
+  "crates/edgerun-cfg-if",
+  "crates/edgerun-compositor",
+  "crates/edgerun-core",
+  "crates/edgerun-crypto",
+  "crates/edgerun-dhcp",
+  "crates/edgerun-display",
+  "crates/edgerun-dns",
+  "crates/edgerun-drm-display",
+  "crates/edgerun-e2e",
+  "crates/edgerun-e2e-capability",
+  "crates/edgerun-evdev-input",
   "crates/edgerun-face-detection",
   "crates/edgerun-fingerprint",
   "crates/edgerun-goodix-fingerprint",
-  "crates/edgerun-json",
-  "crates/edgerun-machine-report",
-  "crates/edgerun-virtual-disk",
-
-  # GPU
   "crates/edgerun-gpu",
-  "crates/edgerun-linux-gpu",
-
-  # Biometric & identity backends
-  "crates/edgerun-biometrics",
-  "crates/edgerun-yubikey",
-  "crates/edgerun-crypto-common",
-  "crates/edgerun-block-buffer",
-  "crates/edgerun-typenum",
-  "crates/edgerun-generic-array",
-  "crates/edgerun-signature",
-  "crates/edgerun-hkdf",
-  "crates/edgerun-rfc6979",
-  "crates/edgerun-hmac",
-  "crates/edgerun-digest",
-  "crates/edgerun-der",
-  "crates/edgerun-sec1",
-  "crates/edgerun-group",
-  "crates/edgerun-ff",
-  "crates/edgerun-crypto-bigint",
-  "crates/edgerun-primeorder",
-  "crates/edgerun-elliptic-curve",
-  "crates/edgerun-ecdsa",
-  "crates/edgerun-p256",
-  "crates/edgerun-crypto",
-  "crates/edgerun-tpm",
-  "crates/edgerun-rand_core",
-  "crates/edgerun-android-keystore",
-  "crates/edgerun-android-hardware",
   "crates/edgerun-hardware-signing",
-
-  # Connectivity and mesh backends
-  "crates/edgerun-bluetooth",
-  "crates/edgerun-mgmt-bluetooth",
-  "crates/edgerun-linux-wifi",
-  "crates/edgerun-linux-netif",
-  "crates/edgerun-network-interface",
-  "crates/edgerun-usb",
-  "crates/edgerun-linux-usb",
-  "crates/edgerun-pci",
-  "crates/edgerun-linux-pci",
-  "crates/edgerun-nfc",
-  "crates/edgerun-linux-nfc",
-  "crates/edgerun-npu",
-  "crates/edgerun-linux-npu",
-  "crates/edgerun-power",
-  "crates/edgerun-linux-power",
-  "crates/edgerun-cec",
+  "crates/edgerun-http",
+  "crates/edgerun-http2",
+  "crates/edgerun-http3",
+  "crates/edgerun-input",
+  "crates/edgerun-json",
   "crates/edgerun-linux-cec",
+  "crates/edgerun-linux-gpu",
+  "crates/edgerun-linux-netif",
+  "crates/edgerun-linux-nfc",
+  "crates/edgerun-linux-npu",
+  "crates/edgerun-linux-pci",
+  "crates/edgerun-linux-power",
   "crates/edgerun-linux-sysfs",
+  "crates/edgerun-linux-usb",
+  "crates/edgerun-linux-wifi",
+  "crates/edgerun-log",
+  "crates/edgerun-machine-report",
   "crates/edgerun-mesh",
-  "crates/edgerun-mesh-link",
-  "crates/edgerun-mesh-session",
   "crates/edgerun-mesh-capability",
   "crates/edgerun-mesh-daemon",
-  "crates/edgerun-amd-xdna",
+  "crates/edgerun-mesh-link",
+  "crates/edgerun-mesh-session",
+  "crates/edgerun-mgmt-bluetooth",
+  "crates/edgerun-microphone",
+  "crates/edgerun-network-interface",
+  "crates/edgerun-nfc",
   "crates/edgerun-node",
-  "crates/edgerun-storage",
+  "crates/edgerun-npu",
+  "crates/edgerun-oci-registry",
+  "crates/edgerun-oci-runtime",
+  "crates/edgerun-pci",
+  "crates/edgerun-power",
+  "crates/edgerun-proto",
+  "crates/edgerun-remote-capability",
+  "crates/edgerun-rt",
   "crates/edgerun-secret-service",
-  "crates/edgerun-compositor",
-
-  # Network infrastructure
-  "crates/edgerun-dhcp",
-  "crates/edgerun-dns",
+  "crates/edgerun-speaker",
+  "crates/edgerun-storage",
+  "crates/edgerun-stream",
   "crates/edgerun-tftp",
-
-  # End-to-end hardware tests
-  "crates/edgerun-e2e",
-  "crates/edgerun-e2e-capability",
+  "crates/edgerun-tls",
+  "crates/edgerun-tpm",
+  "crates/edgerun-usb",
+  "crates/edgerun-v4l2-camera",
+  "crates/edgerun-virtual-disk",
+  "crates/edgerun-wifi",
+  "crates/edgerun-yubikey",
 ]
 
 [workspace.package]
@@ -135,12 +98,9 @@ opt-level = 1
 debug = false
 
 [workspace.dependencies]
-aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
-sha2 = { version = "0.10", default-features = false }
+# Single crypto boundary — all crypto flows through edgerun-crypto
+edgerun-crypto = { path = "crates/edgerun-crypto" }
 libc = "0.2"
 itertools = "0.14"
-p256 = { version = "0.13", default-features = false, features = ["ecdh", "ecdsa", "sha256", "arithmetic"] }
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = "0.14"
-rand_core = { version = "0.6", default-features = false }
-edgerun-crypto = { path = "crates/edgerun-crypto" }

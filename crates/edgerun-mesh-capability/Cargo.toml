@@ -12,4 +12,5 @@ edgerun-remote-capability = { path = "../edgerun-remote-capability" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
+edgerun-crypto.workspace = true
 prost.workspace = true

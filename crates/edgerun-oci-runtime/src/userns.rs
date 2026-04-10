@@ -1,12 +1,15 @@
 //! User namespace mapping and capability management.
 //!
 //! - Writes uid_map/gid_map from the OCI spec (not hardcoded values).
-//! - Drops capabilities from the bounding set that aren't in the spec.
+//! - Sets all capability sets: bounding, effective, inheritable, permitted, ambient.
 
 use std::fs;
 use std::io;
 
-use crate::syscalls::{do_prctl_cap_bset_drop, do_prctl_set_dumpable, do_prctl_set_no_new_privs, setgid, setgroups, setuid};
+use crate::syscalls::{
+    cap_name_to_int, do_capset, do_prctl_cap_ambient, do_prctl_cap_bset_drop,
+    do_prctl_set_dumpable, do_prctl_set_no_new_privs, prctl_const, setgid, setgroups, setuid,
+};
 
 // ===========================================================================
 // User namespace mapping
@@ -45,6 +48,67 @@ pub fn apply_security_hardening(no_new_privs: bool) -> io::Result<()> {
     Ok(())
 }
 
+// ===========================================================================
+// Capability management
+// ===========================================================================
+
+/// Convert a list of capability names to a bitmask.
+/// Unknown capability names are silently skipped.
+fn caps_to_bitmask(cap_names: &[String]) -> u64 {
+    let mut mask: u64 = 0;
+    for name in cap_names {
+        let cap = cap_name_to_int(name);
+        if cap < 64 {
+            mask |= 1u64 << cap;
+        }
+    }
+    mask
+}
+
+/// Set all process capabilities from the OCI spec.
+///
+/// This must be called BEFORE dropping privileges (setuid/setgid).
+///
+/// The OCI spec defines 5 capability sets:
+/// - **bounding**: Upper limit on capabilities the process can ever gain
+/// - **effective**: Capabilities currently in effect
+/// - **inheritable**: Capabilities preserved across execve
+/// - **permitted**: Capabilities the process is allowed to use
+/// - **ambient**: Capabilities inherited by child processes (requires no_new_privs=false)
+pub fn set_capabilities(
+    effective: Option<&[String]>,
+    permitted: Option<&[String]>,
+    inheritable: Option<&[String]>,
+    bounding: Option<&[String]>,
+    ambient: Option<&[String]>,
+) -> io::Result<()> {
+    let eff_mask = caps_to_bitmask(effective.unwrap_or(&[]));
+    let perm_mask = caps_to_bitmask(permitted.unwrap_or(&[]));
+    let inh_mask = caps_to_bitmask(inheritable.unwrap_or(&[]));
+
+    // 1. Set effective, permitted, and inheritable via capset
+    do_capset(eff_mask, perm_mask, inh_mask)?;
+
+    // 2. Drop capabilities not in bounding set
+    drop_capabilities(bounding)?;
+
+    // 3. Set ambient capabilities (requires CAP_SETPCAP in permitted set)
+    // Ambient capabilities are inherited by child processes even after setuid
+    if let Some(ambient_caps) = ambient {
+        // Clear all ambient capabilities first
+        let _ = do_prctl_cap_ambient(prctl_const::PR_CAP_AMBIENT_CLEAR_ALL, 0);
+        for name in ambient_caps {
+            let cap = cap_name_to_int(name);
+            if cap < 64 {
+                // Best-effort: may fail if CAP_SETPCAP not in permitted set
+                let _ = do_prctl_cap_ambient(prctl_const::PR_CAP_AMBIENT_RAISE, cap as i32);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Drop capabilities from the bounding set.
 ///
 /// `bounding_caps` is the list of capabilities to KEEP (e.g., `["CAP_NET_BIND_SERVICE"]`).
@@ -78,6 +142,11 @@ pub fn drop_capabilities(bounding_caps: Option<&[String]>) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Validate a capability name. Returns true if the name is a valid Linux capability.
+pub fn is_valid_capability(name: &str) -> bool {
+    cap_name_to_int(name) != u32::MAX
 }
 
 /// Set supplementary groups.

@@ -74,12 +74,24 @@ pub const SECCOMP_SYSCALL_NR: c_long = 317;
 #[cfg(target_arch = "aarch64")]
 pub const SECCOMP_SYSCALL_NR: c_long = 277; // __NR_seccomp on arm64
 
+/// capset syscall numbers per architecture.
+#[cfg(target_arch = "x86_64")]
+pub const CAPSET_SYSCALL_NR: c_long = 126;
+
+#[cfg(target_arch = "aarch64")]
+pub const CAPSET_SYSCALL_NR: c_long = 94;
+
 /// prctl options.
 pub mod prctl_const {
     use super::c_int;
     pub const SET_NO_NEW_PRIVS: c_int = 38;
     pub const SET_DUMPABLE: c_int     = 4;
     pub const PR_CAPBSET_DROP: c_int  = 24;
+    pub const PR_CAP_AMBIENT: c_int   = 47;
+    pub const PR_CAP_AMBIENT_IS_SET: c_int   = 1;
+    pub const PR_CAP_AMBIENT_RAISE: c_int    = 2;
+    pub const PR_CAP_AMBIENT_LOWER: c_int    = 3;
+    pub const PR_CAP_AMBIENT_CLEAR_ALL: c_int = 4;
 }
 
 /// seccomp operations.
@@ -148,7 +160,7 @@ pub fn do_prctl_cap_bset_drop(cap_name: &str) -> io::Result<()> {
 
 /// Convert a CAP_* string name to its integer value.
 /// Returns the numeric value for known capabilities, or u32::MAX for unknown.
-fn cap_name_to_int(name: &str) -> u32 {
+pub fn cap_name_to_int(name: &str) -> u32 {
     match name.strip_prefix("CAP_").unwrap_or(name) {
         "CHOWN" => 0,
         "DAC_OVERRIDE" => 1,
@@ -188,4 +200,82 @@ fn cap_name_to_int(name: &str) -> u32 {
 
 pub fn makedev(major: u64, minor: u64) -> c_uint {
     ((major & 0xfff) << 8 | (minor & 0xff) | ((minor & 0xfff00) << 12)) as c_uint
+}
+
+/// Set process capabilities via capset syscall.
+///
+/// The `effective`, `permitted`, and `inheritable` arguments are bitmasks
+/// of capability indices (each bit = one cap, max 64 caps).
+///
+/// This must be called BEFORE dropping privileges (setuid/setgid).
+pub fn do_capset(effective: u64, permitted: u64, inheritable: u64) -> io::Result<()> {
+    // cap_data structure for version 3:
+    // [0]: version (u32) = 0x20080522
+    // [1]: pid (i32) = 0 (current process)
+    // [2]: effective (u32)
+    // [3]: permitted (u32)
+    // [4]: inheritable low (u32)
+    // [5]: inheritable high (u32)
+    const CAP_VERSION: u32 = 0x20080522;
+
+    let mut data: [u32; 6] = [0; 6];
+    data[0] = CAP_VERSION;
+    data[1] = 0; // pid = current process
+    data[2] = effective as u32;
+    data[3] = permitted as u32;
+    data[4] = inheritable as u32;
+    data[5] = (inheritable >> 32) as u32;
+
+    let ret = unsafe { syscall(CAPSET_SYSCALL_NR, &data as *const _ as *const c_void) as c_int };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Set/clear an ambient capability via prctl.
+pub fn do_prctl_cap_ambient(action: c_int, cap: c_int) -> io::Result<()> {
+    let ret = unsafe { prctl(prctl_const::PR_CAP_AMBIENT, action as c_ulong, cap as c_ulong, 0, 0) };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Set a resource limit using prlimit64 syscall.
+///
+/// `resource` is the RLIMIT_* constant (e.g., RLIMIT_NOFILE=7).
+/// `soft` and `hard` are the limits.
+pub fn do_setrlimit(resource: u32, soft: u64, hard: u64) -> io::Result<()> {
+    // prlimit64(pid, resource, new_rlimit, old_rlimit)
+    // rlimit64 struct: { rlim_cur: u64, rlim_max: u64 }
+    let new_rlim: [u64; 2] = [soft, hard];
+
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe {
+        syscall(302, 0, resource, &new_rlim as *const _, 0 as *mut u64) as c_int
+    };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe {
+        syscall(267, 0, resource, &new_rlim as *const _, 0 as *mut u64) as c_int
+    };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Parse an RLIMIT_* name to its numeric constant.
+pub fn rlimit_name_to_int(name: &str) -> Option<u32> {
+    // RLIMIT_* constants on Linux (x86_64/aarch64)
+    match name.strip_prefix("RLIMIT_").unwrap_or(name) {
+        "CPU"        => Some(0),
+        "FSIZE"      => Some(1),
+        "DATA"       => Some(2),
+        "STACK"      => Some(3),
+        "CORE"       => Some(4),
+        "RSS"        => Some(5),
+        "NPROC"      => Some(6),
+        "NOFILE"     => Some(7),
+        "MEMLOCK"    => Some(8),
+        "AS"         => Some(9),
+        "LOCKS"      => Some(10),
+        "SIGPENDING" => Some(11),
+        "MSGQUEUE"   => Some(12),
+        "NICE"       => Some(13),
+        "RTPRIO"     => Some(14),
+        "RTTIME"     => Some(15),
+        _ => None,
+    }
 }

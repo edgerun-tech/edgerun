@@ -15,12 +15,15 @@ pub enum CipherSuite {
 }
 
 impl CipherSuite {
-    /// Cipher suites offered by the client, in preference order
+    /// Cipher suites offered by the client, in preference order.
+    /// Only includes cipher suites with working implementations in RecordCipher.
     pub fn client_default() -> Vec<Self> {
         vec![
             CipherSuite::TLS_AES_128_GCM_SHA256,
             CipherSuite::TLS_AES_256_GCM_SHA384,
-            CipherSuite::TLS_CHACHA20_POLY1305_SHA256,
+            // TLS_CHACHA20_POLY1305_SHA256 (0x1303) is NOT offered because
+            // RecordCipher only implements AES-GCM. It remains parseable for
+            // server selection (from_wire) but will not be negotiated.
         ]
     }
 

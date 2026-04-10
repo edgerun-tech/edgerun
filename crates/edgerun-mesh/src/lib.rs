@@ -12,9 +12,10 @@ pub mod router_benchmark;
 use edgerun_hardware_signing::{
     MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
 };
-use p256::ecdsa::Signature;
-use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
-use p256::ecdsa::VerifyingKey;
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::Signature;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+use edgerun_crypto::p256::ecdsa::VerifyingKey;
 
 // ---------------------------------------------------------------------------
 // Frame types
@@ -326,7 +327,8 @@ impl MeshRoutingTable {
 ///
 /// The signature uses domain separation: `SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(header_bytes || payload))`
 /// This should be called before `to_wire()`.
-pub fn sign_frame(frame: &mut MeshFrame, signing_key: &p256::ecdsa::SigningKey) {
+pub fn sign_frame(frame: &mut MeshFrame, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) {
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     let preimage = frame.signed_preimage();
     let record_hash = edgerun_core::crypto::sha256(&preimage);
     let mut sig_input = Vec::with_capacity(22 + 1 + 32);
@@ -411,7 +413,7 @@ impl LocalNode {
 mod tests {
     use super::*;
     use edgerun_hardware_signing::{HardwareSignatureAlgorithm, HardwareSigningError};
-    use p256::ecdsa::SigningKey;
+    use edgerun_crypto::p256::ecdsa::SigningKey;
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -434,7 +436,7 @@ mod tests {
     /// Creates a real P-256 keypair and returns (NodeID, signing_key).
     fn make_real_keypair() -> (NodeID, SigningKey) {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
         let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
         let encoded = signing_key.verifying_key().to_encoded_point(false);
         let bytes = encoded.as_bytes();

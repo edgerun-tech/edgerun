@@ -509,8 +509,9 @@ mod tests {
         CapabilityDescriptor, CommandEnvelope, DelegationRecord, IdentityRef, NodeRef,
     };
     use edgerun_proto::edgerun::v0::common::Signature as ProtoSignature;
-    use p256::ecdsa::SigningKey;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256;
+    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];

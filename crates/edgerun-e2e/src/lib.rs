@@ -37,7 +37,7 @@ use edgerun_proto::edgerun::v0::{
     network::{SessionAccept, SessionHello},
     stream::{CommandEnvelope, CommandType},
 };
-use p256::ecdsa::signature::hazmat::PrehashSigner;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 use prost::Message;
 
 // ===========================================================================
@@ -64,7 +64,7 @@ fn allocate_port() -> u16 {
 
 struct TestSigner {
     node_id: [u8; MESH_PUBLIC_KEY_LENGTH],
-    signing_key: p256::ecdsa::SigningKey,
+    signing_key: edgerun_crypto::p256::ecdsa::SigningKey,
     seed: [u8; 32],
 }
 
@@ -76,8 +76,8 @@ impl TestSigner {
     }
 
     fn from_seed(seed: [u8; 32]) -> Self {
-        let signing_key = p256::ecdsa::SigningKey::from_bytes(&seed.into())
-            .unwrap_or_else(|_| p256::ecdsa::SigningKey::from_bytes(&[1u8; 32].into()).unwrap());
+        let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&seed.into())
+            .unwrap_or_else(|_| edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&[1u8; 32].into()).unwrap());
         let vk = signing_key.verifying_key();
         let encoded = vk.to_encoded_point(false);
         let mut node_id = [0u8; MESH_PUBLIC_KEY_LENGTH];
@@ -90,7 +90,7 @@ impl TestSigner {
     }
 
     fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], String> {
-        let sig: p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
+        let sig: edgerun_crypto::p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
             .map_err(|e| format!("sign failed: {e}"))?;
         let (r, s) = sig.split_bytes();
         let mut out = [0u8; MESH_SIGNATURE_LENGTH];

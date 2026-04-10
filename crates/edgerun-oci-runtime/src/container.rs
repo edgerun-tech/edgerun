@@ -19,11 +19,11 @@ use crate::cgroups::setup_cgroups;
 use crate::rootfs::setup_rootfs;
 use crate::seccomp::apply_seccomp;
 use crate::syscalls::{
-    do_set_hostname, do_unshare, kill,
+    do_set_hostname, do_unshare, do_setrlimit, kill, rlimit_name_to_int,
     SIGKILL, SIGTERM,
 };
 use crate::userns::{
-    apply_security_hardening, drop_capabilities, do_setgid, do_setuid,
+    apply_security_hardening, set_capabilities, do_setgid, do_setuid,
     set_supplementary_gids,
 };
 
@@ -132,9 +132,17 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
         .unwrap_or_default();
     let no_new_privs = process.no_new_privileges.unwrap_or(true);
 
-    // Extract bounding capabilities from spec
-    let bounding_caps: Option<Vec<String>> = process.capabilities.as_ref()
-        .and_then(|c| c.bounding.clone());
+    // Extract all capability sets from spec
+    let caps = process.capabilities.clone().unwrap_or_default();
+    let cap_effective = caps.effective.clone();
+    let cap_permitted = caps.permitted.clone();
+    let cap_inheritable = caps.inheritable.clone();
+    let cap_bounding = caps.bounding.clone();
+    let cap_ambient = caps.ambient.clone();
+
+    // Extract rlimits and OOM score from spec
+    let rlimits = process.rlimits.clone().unwrap_or_default();
+    let oom_score_adj = 0i64; // OCI spec has this in process, but our types don't expose it
 
     let root_path = root.path.clone();
     let root_readonly = root.readonly;
@@ -179,8 +187,14 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
             // 4. Security hardening: no_new_privs + non-dumpable
             apply_security_hardening(no_new_privs)?;
 
-            // 5. Drop capabilities not in spec's bounding set
-            drop_capabilities(bounding_caps.as_deref())?;
+            // 5. Set all process capabilities from OCI spec
+            set_capabilities(
+                cap_effective.as_deref(),
+                cap_permitted.as_deref(),
+                cap_inheritable.as_deref(),
+                cap_bounding.as_deref(),
+                cap_ambient.as_deref(),
+            )?;
 
             // 6. Apply seccomp-BPF filter (deny all but essential syscalls)
             // Fail-closed: if seccomp cannot be applied, the container is not secure.
@@ -191,7 +205,19 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
                 )
             })?;
 
-            // 7. Setup rootfs (pivot_root, mount filesystems, create devices)
+            // 7. Set resource limits (RLIMIT_*)
+            for rl in &rlimits {
+                if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+                    let _ = do_setrlimit(resource, rl.soft, rl.hard);
+                }
+            }
+
+            // 8. Set OOM score adjustment
+            if oom_score_adj != 0 {
+                let _ = std::fs::write("/proc/self/oom_score_adj", format!("{}", oom_score_adj));
+            }
+
+            // 9. Setup rootfs (pivot_root, mount filesystems, create devices)
             let oci_root = OciRoot { path: root_path.clone(), readonly: root_readonly };
             let spec_devices = deserialize_devices(&spec_devices_json);
             setup_rootfs(
@@ -202,12 +228,12 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
                 if spec_devices.is_empty() { None } else { Some(&spec_devices) },
             )?;
 
-            // 8. Set supplementary groups
+            // 10. Set supplementary groups
             if !additional_gids.is_empty() {
                 set_supplementary_gids(&additional_gids);
             }
 
-            // 9. Drop GID then UID
+            // 11. Drop GID then UID
             do_setgid(gid)?;
             do_setuid(uid)?;
 
@@ -220,7 +246,10 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
 
     // Set cgroups from parent (we have the child's PID)
     if let Some(ref res) = resources {
-        let _ = setup_cgroups(child.id(), res, &cgroup_path);
+        if let Err(e) = setup_cgroups(child.id(), res, &cgroup_path) {
+            // Log to kmsg — cgroup limits are security/capacity critical
+            let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup setup failed for PID {}: {}", child.id(), e));
+        }
     }
 
     child.wait()
@@ -320,9 +349,17 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
         .unwrap_or_default();
     let no_new_privs = process.no_new_privileges.unwrap_or(true);
 
-    // Extract bounding capabilities from spec
-    let bounding_caps: Option<Vec<String>> = process.capabilities.as_ref()
-        .and_then(|c| c.bounding.clone());
+    // Extract all capability sets from spec
+    let caps = process.capabilities.clone().unwrap_or_default();
+    let cap_effective = caps.effective.clone();
+    let cap_permitted = caps.permitted.clone();
+    let cap_inheritable = caps.inheritable.clone();
+    let cap_bounding = caps.bounding.clone();
+    let cap_ambient = caps.ambient.clone();
+
+    // Extract rlimits and OOM score from spec
+    let rlimits = process.rlimits.clone().unwrap_or_default();
+    let oom_score_adj = 0i64; // OCI spec has this in process, but our types don't expose it
 
     let root_path = root.path.clone();
     let root_readonly = root.readonly;
@@ -366,8 +403,14 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
             // 4. Security hardening: no_new_privs + non-dumpable
             apply_security_hardening(no_new_privs)?;
 
-            // 5. Drop capabilities not in spec's bounding set
-            drop_capabilities(bounding_caps.as_deref())?;
+            // 5. Set all process capabilities from OCI spec
+            set_capabilities(
+                cap_effective.as_deref(),
+                cap_permitted.as_deref(),
+                cap_inheritable.as_deref(),
+                cap_bounding.as_deref(),
+                cap_ambient.as_deref(),
+            )?;
 
             // 6. Apply seccomp-BPF filter — FAIL-CLOSED
             // If seccomp cannot be applied, the container MUST NOT start.
@@ -378,7 +421,19 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
                 )
             })?;
 
-            // 7. Setup rootfs (pivot_root, mount filesystems, create devices)
+            // 7. Set resource limits (RLIMIT_*)
+            for rl in &rlimits {
+                if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+                    let _ = do_setrlimit(resource, rl.soft, rl.hard);
+                }
+            }
+
+            // 8. Set OOM score adjustment
+            if oom_score_adj != 0 {
+                let _ = std::fs::write("/proc/self/oom_score_adj", format!("{}", oom_score_adj));
+            }
+
+            // 9. Setup rootfs (pivot_root, mount filesystems, create devices)
             let oci_root = OciRoot { path: root_path.clone(), readonly: root_readonly };
             let spec_devices = deserialize_devices(&spec_devices_json);
             setup_rootfs(
@@ -389,12 +444,12 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
                 if spec_devices.is_empty() { None } else { Some(&spec_devices) },
             )?;
 
-            // 8. Set supplementary groups
+            // 10. Set supplementary groups
             if !additional_gids.is_empty() {
                 set_supplementary_gids(&additional_gids);
             }
 
-            // 9. Drop GID then UID
+            // 11. Drop GID then UID
             do_setgid(gid)?;
             do_setuid(uid)?;
 
@@ -407,7 +462,9 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
 
     // Set cgroups from parent
     if let Some(ref res) = resources {
-        let _ = setup_cgroups(child.id(), res, &cgroup_path);
+        if let Err(e) = setup_cgroups(child.id(), res, &cgroup_path) {
+            let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup setup failed for PID {}: {}", child.id(), e));
+        }
     }
 
     Ok(RunningContainer {

@@ -37,13 +37,14 @@
 //! ```
 
 use edgerun_hardware_signing::NodeID;
-use aes_gcm::{
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
 };
-pub use p256::ecdh::EphemeralSecret;
-use p256::PublicKey;
-use p256::elliptic_curve::sec1::ToEncodedPoint;
+pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
+use edgerun_crypto::p256::PublicKey;
+use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -110,7 +111,7 @@ impl MeshSession {
     /// Creates a session from a derived AES-256-GCM key.
     fn new(peer: NodeID, key: [u8; 32]) -> Self {
         let mut nonce_prefix = [0u8; 4];
-        edgerun_core::crypto::fill_random(&mut nonce_prefix);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce_prefix);
 
         Self {
             peer,
@@ -304,7 +305,7 @@ impl SessionManager {
 
     /// Generate a random EphemeralSecret using /dev/urandom.
     pub fn random_ephemeral_secret() -> EphemeralSecret {
-        let mut rng = edgerun_core::crypto::DevUrandomRng;
+        let mut rng = edgerun_crypto::rand_core::OsRng;
         EphemeralSecret::random(&mut rng)
     }
 

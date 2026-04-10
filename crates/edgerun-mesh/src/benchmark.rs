@@ -67,11 +67,12 @@ pub fn benchmark_frame_encode_decode() -> u64 {
 // ===========================================================================
 
 pub fn benchmark_frame_sign_verify() -> u64 {
-    use p256::ecdsa::SigningKey;
+    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_crypto::rand_core::RngCore;
 
     // Generate a real signing key using getrandom
     let mut key_bytes = [0u8; 32];
-    getrandom::fill(&mut key_bytes).expect("getrandom failed");
+    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key_bytes);
     let signing_key = SigningKey::from_bytes((&key_bytes).into())
         .expect("invalid key bytes");
     let src_id = node_id_from_signing_key(&signing_key);
@@ -217,7 +218,7 @@ fn node_id_with_pattern(v: u8) -> NodeID {
     NodeID(bytes)
 }
 
-fn node_id_from_signing_key(key: &p256::ecdsa::SigningKey) -> NodeID {
+fn node_id_from_signing_key(key: &edgerun_crypto::p256::ecdsa::SigningKey) -> NodeID {
     let encoded = key.verifying_key().to_encoded_point(false);
     let bytes = encoded.as_bytes();
     let mut node_bytes = [0u8; 64];

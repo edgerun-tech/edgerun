@@ -195,7 +195,7 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
     let mut sec1 = [0u8; 65];
     sec1[0] = 0x04;
     sec1[1..].copy_from_slice(&writer.0);
-    let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
+    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
         .map_err(|e| StreamError::InvalidPublicKey(e.to_string()))?;
 
     if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value) {
@@ -317,16 +317,16 @@ mod tests {
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner};
     use std::sync::Arc;
 
-    fn random_signing_key() -> p256::ecdsa::SigningKey {
+    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
-        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
     #[derive(Clone)]
     struct TestSigner {
         node_id: NodeID,
-        key: p256::ecdsa::SigningKey,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
     }
 
     impl TestSigner {
@@ -352,8 +352,9 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], HardwareSigningError> {
-            use p256::ecdsa::signature::hazmat::PrehashSigner;
-            let sig: p256::ecdsa::Signature =
+            use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
                 self.key.sign_prehash(digest).unwrap();
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());
@@ -798,7 +799,7 @@ mod tests {
         sign_event(&mut genesis, &signer).unwrap();
         // Replace with random bytes
         let mut rng_bytes = [0u8; 64];
-        edgerun_core::crypto::fill_random(&mut rng_bytes);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut rng_bytes);
         genesis.signature.as_mut().unwrap().value = rng_bytes.to_vec();
         let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
         // Should fail either as InvalidSignatureFormat or SignatureVerification

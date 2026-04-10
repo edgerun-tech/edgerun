@@ -256,8 +256,8 @@ impl PerformanceCertificate {
     }
 
     fn verify_ecdsa_signature(&self) -> Result<(), &'static str> {
-        use p256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
-        use p256::EncodedPoint;
+        use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
+        use edgerun_crypto::p256::EncodedPoint;
 
         // Reconstruct the public key from node_id (64 bytes: x || y, uncompressed without 0x04)
         let mut pk_bytes = [0u8; 65];
@@ -287,9 +287,9 @@ impl PerformanceCertificate {
 
     /// Sign the certificate with the given ECDSA P-256 signing key.
     /// The digest must already be set (via `with_digest()`).
-    pub fn with_signature(mut self, signing_key: &p256::ecdsa::SigningKey) -> Self {
-        use p256::ecdsa::signature::hazmat::PrehashSigner;
-        let sig: p256::ecdsa::Signature = signing_key.sign_prehash(&self.digest)
+    pub fn with_signature(mut self, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) -> Self {
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+        let sig: edgerun_crypto::p256::ecdsa::Signature = signing_key.sign_prehash(&self.digest)
             .expect("ECDSA P-256 signing failed");
         self.signature.copy_from_slice(&sig.to_bytes());
         self
@@ -1037,8 +1037,8 @@ mod tests {
 
     #[test]
     fn certificate_verify_rejects_tampered_digest() {
-        use p256::ecdsa::SigningKey;
-        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        use edgerun_crypto::p256::ecdsa::SigningKey;
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
         let key = SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let vk = key.verifying_key();
@@ -1079,7 +1079,7 @@ mod tests {
 
     #[test]
     fn certificate_verify_rejects_wrong_signature() {
-        use p256::ecdsa::SigningKey;
+        use edgerun_crypto::p256::ecdsa::SigningKey;
 
         let key1 = SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
         let key2 = SigningKey::from_bytes(&[99u8; 32].into()).unwrap();

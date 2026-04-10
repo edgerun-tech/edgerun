@@ -8,7 +8,5 @@ publish.workspace = true
 [dependencies]
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
-aes-gcm.workspace = true
-p256 = { workspace = true }
+edgerun-crypto.workspace = true
 edgerun-core = { path = "../edgerun-core" }
-rand_core.workspace = true

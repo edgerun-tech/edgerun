@@ -1,7 +1,9 @@
 //! ECDH key exchange using P-256 (secp256r1) from the workspace p256 crate.
+//! All randomness flows through edgerun-core::crypto::fill_random.
 
-use p256::ecdh::EphemeralSecret;
-use p256::EncodedPoint;
+use edgerun_crypto::p256::ecdh::EphemeralSecret;
+use edgerun_crypto::rand_core::{CryptoRng, RngCore};
+use edgerun_crypto::p256::EncodedPoint;
 
 /// ECDH key pair using P-256
 pub struct EcdhKeyPair {
@@ -12,7 +14,7 @@ pub struct EcdhKeyPair {
 impl EcdhKeyPair {
     /// Generate a new P-256 ECDH key pair
     pub fn generate() -> Result<Self, String> {
-        let secret = EphemeralSecret::random(&mut OsRng);
+        let secret = EphemeralSecret::random(&mut CoreRng);
         let public = EncodedPoint::from(secret.public_key());
         Ok(EcdhKeyPair { secret, public })
     }
@@ -25,17 +27,18 @@ impl EcdhKeyPair {
     /// Compute the shared secret with the server's public key
     pub fn exchange(&self, server_pk: &[u8]) -> Result<Vec<u8>, String> {
         let server_pk =
-            p256::PublicKey::from_sec1_bytes(server_pk).map_err(|e| format!("Invalid server public key: {:?}", e))?;
+            edgerun_crypto::p256::PublicKey::from_sec1_bytes(server_pk).map_err(|e| format!("Invalid server public key: {:?}", e))?;
 
         let shared = self.secret.diffie_hellman(&server_pk);
         Ok(shared.raw_secret_bytes().to_vec())
     }
 }
 
-/// Unix /dev/urandom RNG
-struct OsRng;
+/// RNG adapter — bridges edgerun_core::crypto::fill_random to p256's rand_core.
+/// All randomness comes from /dev/urandom via edgerun-core's fill_random.
+struct CoreRng;
 
-impl rand_core::RngCore for OsRng {
+impl RngCore for CoreRng {
     fn next_u32(&mut self) -> u32 {
         let mut buf = [0u8; 4];
         self.fill_bytes(&mut buf);
@@ -49,16 +52,13 @@ impl rand_core::RngCore for OsRng {
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.try_fill_bytes(dest).expect("/dev/urandom read failed");
+        self.try_fill_bytes(dest).expect("fill_random failed");
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        use std::fs::File;
-        use std::io::Read;
-        let mut f =
-            File::open("/dev/urandom").map_err(|_| rand_core::Error::from(core::num::NonZeroU32::new(1).unwrap()))?;
-        f.read_exact(dest).map_err(|_| rand_core::Error::from(core::num::NonZeroU32::new(2).unwrap()))
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), edgerun_crypto::p256::elliptic_curve::rand_core::Error> {
+        edgerun_crypto::rand_core::OsRng.fill_bytes(dest);
+        Ok(())
     }
 }
 
-impl rand_core::CryptoRng for OsRng {}
+impl CryptoRng for CoreRng {}

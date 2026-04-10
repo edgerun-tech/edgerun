@@ -17,6 +17,7 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-proto = { path = "../edgerun-proto" }
+edgerun-crypto.workspace = true
 prost.workspace = true
 libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }

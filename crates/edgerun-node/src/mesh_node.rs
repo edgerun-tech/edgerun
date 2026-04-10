@@ -217,18 +217,19 @@ mod tests {
     use edgerun_proto::edgerun::v0::common as proto_common;
     use edgerun_proto::edgerun::v0::stream as proto_stream;
     use edgerun_proto::edgerun::v0::stream::EventType;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     
 
-    fn random_signing_key() -> p256::ecdsa::SigningKey {
+    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
-        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
     struct TestSigner {
         node_id: NodeID,
-        key: p256::ecdsa::SigningKey,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
     }
 
     impl TestSigner {
@@ -254,7 +255,7 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: p256::ecdsa::Signature =
+            let sig: edgerun_crypto::p256::ecdsa::Signature =
                 self.key.sign_prehash(digest).unwrap();
             let mut bytes = [0u8; 64];
             bytes.copy_from_slice(&sig.to_bytes());

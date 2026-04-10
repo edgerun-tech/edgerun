@@ -38,9 +38,10 @@ impl WaylandServer {
             return Err(io::Error::last_os_error());
         }
 
-        // Set permissions — world read/write so any user (e.g. sandboxed Chromium) can connect
+        // Restrict permissions — only owner (and group) can connect.
+        // 0o660 prevents other users from connecting to inject input events.
         let c_path = std::ffi::CString::new(socket_path).unwrap();
-        unsafe { libc::chmod(c_path.as_ptr(), 0o666) };
+        unsafe { libc::chmod(c_path.as_ptr(), 0o660) };
 
         // Listen
         let ret = unsafe { libc::listen(fd, 128) };

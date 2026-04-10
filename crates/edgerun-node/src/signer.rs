@@ -9,8 +9,8 @@ use edgerun_hardware_signing::{
 use edgerun_hardware_signing::AndroidKeystoreHardwareKeyAdapter;
 use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot};
-use p256::ecdsa::SigningKey;
-use p256::ecdsa::signature::hazmat::PrehashSigner;
+use edgerun_crypto::p256::ecdsa::SigningKey;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
 use crate::config::{NodeConfig, SignerConfig};
 use crate::init_cmd::detect_yubikey_device;
@@ -44,7 +44,7 @@ impl MeshSigner for SyncSoftwareSigner {
         digest: &[u8; 32],
     ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
         let key = self.key.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let sig: p256::ecdsa::Signature = key
+        let sig: edgerun_crypto::p256::ecdsa::Signature = key
             .sign_prehash(digest)
             .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
         let mut bytes = [0u8; 64];

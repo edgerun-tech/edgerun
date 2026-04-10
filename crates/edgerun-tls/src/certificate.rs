@@ -1,6 +1,6 @@
 //! X.509 certificate parsing using the workspace `der` crate.
 
-use der::Tag;
+use edgerun_crypto::der::Tag;
 
 /// Parsed X.509 certificate
 #[derive(Debug, Clone)]

@@ -27,7 +27,8 @@ use edgerun_proto::edgerun::v0::capability::{
     CapabilityRevocation,
 };
 use edgerun_proto::edgerun::v0::common::{signature, Signature};
-use p256::ecdsa::VerifyingKey;
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use prost::Message;
 
 /// The ECDSA P-256 algorithm identifier used in protobuf Signature messages.
@@ -103,7 +104,7 @@ pub fn verify_message<M: Message + Clone>(
     let digest = edgerun_core::crypto::sha256(&sig_input);
 
     // Build ECDSA signature
-    let ecdsa_sig = p256::ecdsa::Signature::from_slice(&sig.value)
+    let ecdsa_sig = edgerun_crypto::p256::ecdsa::Signature::from_slice(&sig.value)
         .map_err(|e| format!("invalid ECDSA signature: {e}"))?;
 
     // Build verifying key from sender's NodeID (x||y without 0x04 prefix)
@@ -114,7 +115,7 @@ pub fn verify_message<M: Message + Clone>(
         .map_err(|e| format!("invalid public key in NodeID: {e}"))?;
 
     // Verify using PrehashVerifier (since we already have the SHA-256 digest)
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
     pubkey
         .verify_prehash(&digest, &ecdsa_sig)
         .map_err(|e| format!("signature verification failed: {e}"))
@@ -197,17 +198,17 @@ impl_sign_verify!(
 mod tests {
     use super::*;
     use edgerun_hardware_signing::MeshSigner;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
-    fn random_signing_key() -> p256::ecdsa::SigningKey {
+    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
-        p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
     struct TestSigner {
         node_id: NodeID,
-        key: p256::ecdsa::SigningKey,
+        key: edgerun_crypto::p256::ecdsa::SigningKey,
     }
 
     impl TestSigner {
@@ -234,7 +235,7 @@ mod tests {
             &self,
             digest: &[u8; 32],
         ) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: p256::ecdsa::Signature = self
+            let sig: edgerun_crypto::p256::ecdsa::Signature = self
                 .key
                 .sign_prehash(digest)
                 .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
@@ -246,16 +247,16 @@ mod tests {
 
     #[test]
     fn raw_ecdsa_sign_verify_roundtrip() {
-        use p256::ecdsa::signature::{Signer, Verifier as SigVerifier};
+        use edgerun_crypto::p256::ecdsa::signature::{Signer, Verifier as SigVerifier};
 
         let key = random_signing_key();
         let vk = key.verifying_key();
 
         let msg = b"test message";
-        let sig: p256::ecdsa::Signature = key.sign(msg);
+        let sig: edgerun_crypto::p256::ecdsa::Signature = key.sign(msg);
 
         // Verify using standard trait
-        use p256::ecdsa::signature::Verifier;
+        use edgerun_crypto::p256::ecdsa::signature::Verifier;
         vk.verify(msg, &sig).unwrap();
 
         // Now test via our helper functions
@@ -275,7 +276,7 @@ mod tests {
 
         // And test the to_bytes/from_slice roundtrip
         let sig_bytes = sig.to_bytes();
-        let sig2 = p256::ecdsa::Signature::from_slice(&sig_bytes).unwrap();
+        let sig2 = edgerun_crypto::p256::ecdsa::Signature::from_slice(&sig_bytes).unwrap();
         vk.verify(msg, &sig2).unwrap();
     }
 
@@ -292,12 +293,12 @@ mod tests {
         // Create a signer that uses this key
         struct KeySigner {
             node_id: NodeID,
-            key: p256::ecdsa::SigningKey,
+            key: edgerun_crypto::p256::ecdsa::SigningKey,
         }
         impl MeshSigner for KeySigner {
             fn node_id(&self) -> NodeID { self.node_id }
             fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; 64], edgerun_hardware_signing::HardwareSigningError> {
-                let sig: p256::ecdsa::Signature = self.key.sign_prehash(digest)
+                let sig: edgerun_crypto::p256::ecdsa::Signature = self.key.sign_prehash(digest)
                     .map_err(|e| edgerun_hardware_signing::HardwareSigningError::Provider(e.to_string()))?;
                 let mut bytes = [0u8; 64];
                 bytes.copy_from_slice(&sig.to_bytes());

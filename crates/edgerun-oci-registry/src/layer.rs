@@ -13,6 +13,30 @@ use std::path::{Path, PathBuf};
 use crate::errors::RegistryError;
 
 // ===========================================================================
+// Path validation helpers
+// ===========================================================================
+
+/// Check that a path component list does not escape the root via "..".
+fn path_safe_within_root(path: &std::path::Path) -> bool {
+    use std::path::Component;
+    let mut depth = 0isize;
+    for comp in path.components() {
+        match comp {
+            Component::RootDir => {}
+            Component::Normal(_) => depth += 1,
+            Component::ParentDir => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    true
+}
+
+// ===========================================================================
 // Secure tar extraction
 // ===========================================================================
 
@@ -56,14 +80,26 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
         let entry = entry.map_err(|e| RegistryError::IoError(e))?;
         let path = entry.path().map_err(|e| RegistryError::IoError(e))?;
 
-        // Validate: entry must resolve within dest
+        // Validate: entry must resolve within dest.
+        // First try canonicalize (resolves symlinks). If that fails (path doesn't
+        // exist yet), do a manual component check to reject ".." escape attempts.
         let entry_path = dest.join(&path);
-        let entry_path = entry_path.canonicalize().unwrap_or(entry_path);
-        if !entry_path.starts_with(&dest) {
-            return Err(RegistryError::IoError(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("tar entry {:?} escapes destination {:?}", path, dest),
-            )));
+        let entry_resolved = entry_path.canonicalize().ok();
+        if let Some(ref resolved) = entry_resolved {
+            if !resolved.starts_with(&dest) {
+                return Err(RegistryError::IoError(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("tar entry {:?} escapes destination {:?}", path, dest),
+                )));
+            }
+        } else {
+            // Path doesn't exist yet — check components manually
+            if !path_safe_within_root(&path) {
+                return Err(RegistryError::IoError(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("tar entry {:?} would escape destination", path),
+                )));
+            }
         }
 
         // Validate symlinks: target must resolve within dest
@@ -71,16 +107,26 @@ pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), Registr
             if let Some(link_target) = entry.link_name().map_err(|e| RegistryError::IoError(e))? {
                 // If absolute, check it's within dest; if relative, resolve from entry's parent
                 let resolved = if link_target.is_absolute() {
-                    link_target.to_path_buf()
+                    dest.join(link_target.strip_prefix("/").unwrap_or(&link_target))
                 } else {
                     entry_path.parent().unwrap_or(&dest).join(&link_target)
                 };
-                let resolved = resolved.canonicalize().unwrap_or(resolved);
-                if !resolved.starts_with(&dest) {
+                // Try canonicalize first; if target doesn't exist, check manually
+                if let Some(canonical) = resolved.canonicalize().ok() {
+                    if !canonical.starts_with(&dest) {
+                        return Err(RegistryError::IoError(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            format!(
+                                "symlink {:?} -> {:?} escapes destination",
+                                path, link_target
+                            ),
+                        )));
+                    }
+                } else if !path_safe_within_root(&link_target) {
                     return Err(RegistryError::IoError(io::Error::new(
                         io::ErrorKind::PermissionDenied,
                         format!(
-                            "symlink {:?} -> {:?} escapes destination",
+                            "symlink {:?} -> {:?} would escape destination",
                             path, link_target
                         ),
                     )));
@@ -108,7 +154,7 @@ pub fn verify_blob_digest(
     expected_digest: &str,
 ) -> Result<(), RegistryError> {
     let mut file = File::open(blob_path).map_err(|e| RegistryError::IoError(e))?;
-    let mut hasher = edgerun_core::crypto::Sha256Hasher::new();
+    let mut hasher = edgerun_crypto::sha2::Sha256::new();
     let mut buf = [0u8; 65536]; // 64KB buffer
     loop {
         let n = file.read(&mut buf).map_err(|e| RegistryError::IoError(e))?;
@@ -204,12 +250,17 @@ pub fn build_rootfs(layer_dirs: &[PathBuf], dest: &Path) -> Result<(), RegistryE
 }
 
 /// Copy all contents from src to dest, overwriting existing files.
+/// Preserves file permissions via fs::copy (which copies mode bits).
+/// Uses atomic rename for regular files: write to temp, then rename.
 fn copy_dir_contents(src: &Path, dest: &Path) -> Result<(), RegistryError> {
     use std::os::unix::fs::symlink;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     if !src.is_dir() {
         return Ok(());
     }
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
 
     let entries: Vec<_> = match fs::read_dir(src) {
         Ok(entries) => entries.filter_map(|e| e.ok()).collect(),
@@ -234,11 +285,21 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> Result<(), RegistryError> {
         } else if src_path.is_symlink() {
             let target =
                 fs::read_link(&src_path).map_err(|e| RegistryError::IoError(e))?;
-            let _ = fs::remove_file(&dest_path);
-            let _ = symlink(&target, &dest_path);
+            // Atomic symlink: create temp link, then rename
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
+            let _ = fs::remove_file(&temp_path);
+            symlink(&target, &temp_path)
+                .map_err(|e| RegistryError::IoError(e))?;
+            fs::rename(&temp_path, &dest_path)
+                .map_err(|e| RegistryError::IoError(e))?;
         } else {
-            let _ = fs::remove_file(&dest_path);
-            fs::copy(&src_path, &dest_path)
+            // Atomic file copy: write to temp file, then rename
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let temp_path = dest.join(format!(".tmp.{:x}-{:x}", std::process::id(), n));
+            fs::copy(&src_path, &temp_path)
+                .map_err(|e| RegistryError::IoError(e))?;
+            fs::rename(&temp_path, &dest_path)
                 .map_err(|e| RegistryError::IoError(e))?;
         }
     }

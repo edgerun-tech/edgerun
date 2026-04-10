@@ -12,7 +12,5 @@ edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-wifi = { path = "../edgerun-wifi" }
 libc.workspace = true
-pbkdf2 = { version = "0.12" }
-sha1 = { version = "0.10" }
-hmac = { path = "../edgerun-hmac" }
+edgerun-crypto.workspace = true
 edgerun-log = { path = "../edgerun-log" }

@@ -2102,12 +2102,13 @@ fn parse_mac_string(s: &str) -> Option<[u8; 6]> {
 /// The `ssid` is the network SSID as bytes.
 /// Returns a 32-byte PMK.
 pub fn derive_wpa_pmk(passphrase: &str, ssid: &[u8]) -> [u8; 32] {
-    use pbkdf2::pbkdf2_hmac;
-    use sha1::Sha1;
+    use edgerun_crypto::pbkdf2::pbkdf2;
+    use edgerun_crypto::sha1::Sha1;
+    use edgerun_crypto::hmac::Hmac;
 
     let mut pmk = [0u8; 32];
     // WPA uses 4096 iterations per spec
-    pbkdf2_hmac::<Sha1>(passphrase.as_bytes(), ssid, 4096, &mut pmk);
+    pbkdf2::<Hmac<Sha1>>(passphrase.as_bytes(), ssid, 4096, &mut pmk);
     pmk
 }
 
@@ -2258,9 +2259,8 @@ pub fn derive_ptk(
     snonce: &[u8; 32],
     key_length: usize,
 ) -> Vec<u8> {
-    use hmac::Hmac;
-    use hmac::Mac;
-    use sha1::Sha1;
+    use edgerun_crypto::hmac::{Hmac, Mac};
+    use edgerun_crypto::sha1::Sha1;
 
     // Construct the input for PRF
     let mut input = Vec::with_capacity(102);
@@ -2308,9 +2308,8 @@ pub fn calculate_eapol_mic(
     ptk: &[u8],
     eapol_frame: &[u8],
 ) -> [u8; 16] {
-    use hmac::Hmac;
-    use hmac::Mac;
-    use sha1::Sha1;
+    use edgerun_crypto::hmac::{Hmac, Mac};
+    use edgerun_crypto::sha1::Sha1;
 
     // MIC is computed using the first 16 bytes of PTK (MIC Key)
     let mic_key = &ptk[..16];

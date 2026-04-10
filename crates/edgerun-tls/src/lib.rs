@@ -598,28 +598,17 @@ fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
     #[cfg(unix)]
     {
-        use std::fs::File;
-        use std::io::Read;
-        let mut f = File::open("/dev/urandom").expect("Cannot open /dev/urandom");
-        f.read_exact(&mut buf).expect("Cannot read /dev/urandom");
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut buf);
     }
     #[cfg(not(unix))]
     {
-        // Fallback: use a deterministic PRNG seeded with time
-        // NOT cryptographically secure — only for testing/compilation
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64;
-        // Simple xorshift PRNG
-        let mut state = ts ^ 0x5DEECE66D;
-        for b in buf.iter_mut() {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            *b = state as u8;
-        }
+        // TLS requires cryptographically secure randomness.
+        // This platform is not supported — fail at compile time in release,
+        // panic at runtime in debug builds.
+        compile_error!(
+            "edgerun-tls requires /dev/urandom and only supports Unix-like platforms. \
+             Using a deterministic PRNG for TLS is a critical security vulnerability."
+        );
     }
     buf
 }

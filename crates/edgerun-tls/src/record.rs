@@ -7,7 +7,7 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use aes_gcm::{
+use edgerun_crypto::aes_gcm::{
     aead::{AeadInPlace, KeyInit},
     Aes128Gcm, Aes256Gcm, Nonce,
 };
@@ -83,7 +83,7 @@ impl RecordCipher {
         let nonce = self.make_nonce();
         let mut buffer = ciphertext.to_vec();
         let tag_offset = buffer.len() - 16;
-        let tag: aes_gcm::Tag = aes_gcm::Tag::clone_from_slice(&buffer[tag_offset..]);
+        let tag: edgerun_crypto::aes_gcm::Tag = edgerun_crypto::aes_gcm::Tag::clone_from_slice(&buffer[tag_offset..]);
         buffer.truncate(tag_offset);
 
         match &self.inner {
@@ -107,7 +107,7 @@ impl RecordCipher {
     }
 
     /// Derive the per-record nonce: write_iv XOR sequence_number
-    fn make_nonce(&self) -> Nonce<aes_gcm::aead::consts::U12> {
+    fn make_nonce(&self) -> Nonce<edgerun_crypto::aes_gcm::aead::consts::U12> {
         let mut nonce = [0u8; 12];
         let seq_bytes = self.seq.to_be_bytes();
         for i in 0..8 {

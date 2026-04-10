@@ -14,11 +14,12 @@ use std::time::{Duration, Instant};
 // ===========================================================================
 
 fn benchmark_software_sign(ops_target: u64) -> (u64, Duration) {
-    use p256::ecdsa::{Signature, SigningKey, signature::hazmat::PrehashSigner};
+    use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::hazmat::PrehashSigner};
 
     // Generate a fresh key
+    use edgerun_crypto::rand_core::RngCore;
     let mut key_bytes = [0u8; 32];
-    getrandom::fill(&mut key_bytes).expect("getrandom");
+    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key_bytes);
     let signing_key = SigningKey::from_bytes((&key_bytes).into()).expect("valid key");
 
     let message = [0xDEu8; 32];

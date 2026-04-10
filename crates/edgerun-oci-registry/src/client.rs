@@ -1,9 +1,11 @@
-//! Registry client — HTTP operations using std networking.
+//! Registry client — HTTPS operations using edgerun-tls.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+use edgerun_tls::TlsStream;
 
 use crate::auth::{parse_bearer_auth, RegistryAuth};
 use crate::config::{
@@ -33,15 +35,28 @@ impl std::str::FromStr for ImageRef {
         let mut registry = "docker.io".to_string();
         let mut rest = s;
 
+        // Detect registry: if the first path component contains '.', ':', or is 'localhost'
         if let Some((prefix, remaining)) = s.split_once('/') {
-            if prefix.contains('.') || prefix.contains(':') {
+            if prefix.contains('.') || prefix.contains(':') || prefix == "localhost" {
                 registry = prefix.to_string();
                 rest = remaining;
             }
         }
 
-        let (mut repository, tag) = if let Some((repo, tag)) = rest.rsplit_once(':') {
-            (repo.to_string(), tag.to_string())
+        // Split tag/digest from repository — handle both tag (:) and digest (@) references
+        // Digest references take precedence: repo@sha256:abc...
+        let (mut repository, tag) = if let Some((repo, _digest)) = rest.rsplit_once('@') {
+            // Digest reference — store digest in tag field for downstream use
+            // Repository must not contain ':' which would be confused with tag
+            (repo.to_string(), String::new())
+        } else if let Some((repo, tag)) = rest.rsplit_once(':') {
+            // Check if the ':' is part of a registry port (e.g., "myregistry:5000")
+            // If repo contains ':', it's likely a port number, not a tag
+            if repo.contains(':') {
+                (rest.to_string(), "latest".to_string())
+            } else {
+                (repo.to_string(), tag.to_string())
+            }
         } else {
             (rest.to_string(), "latest".to_string())
         };
@@ -188,7 +203,12 @@ impl RegistryClient {
 
         request.push_str("\r\n");
 
-        let addr = format!("{}:443", host);
+        // Handle host with or without port — don't append :443 if port is already present
+        let addr = if host.contains(':') {
+            host.to_string()
+        } else {
+            format!("{}:443", host)
+        };
         let addrs: Vec<_> = addr
             .to_socket_addrs()
             .map_err(|e| RegistryError::HttpError(e.to_string()))?
@@ -197,12 +217,16 @@ impl RegistryClient {
             return Err(RegistryError::HttpError("No addresses resolved".into()));
         }
 
-        let mut stream =
+        let tcp_stream =
             TcpStream::connect_timeout(&addrs[0], Duration::from_secs(30))
                 .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-        stream
+        tcp_stream
             .set_read_timeout(Some(Duration::from_secs(300)))
             .map_err(|e| RegistryError::HttpError(e.to_string()))?;
+
+        // Wrap in TLS — performs TLS 1.3 handshake with certificate validation
+        let mut stream = TlsStream::client(tcp_stream, host)
+            .map_err(|e| RegistryError::HttpError(format!("TLS handshake failed: {}", e)))?;
 
         stream
             .write_all(request.as_bytes())
@@ -245,6 +269,37 @@ impl RegistryClient {
 
         if status_code == 401 {
             return Ok(GetResult::Unauthorized(headers));
+        }
+
+        // Handle HTTP redirects (301, 302, 307, 308)
+        if status_code == 301 || status_code == 302 || status_code == 307 || status_code == 308 {
+            let location = headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("Location"))
+                .map(|(_, v)| v.as_str())
+                .ok_or_else(|| {
+                    RegistryError::HttpError(format!("Redirect without Location header (status {})", status_code))
+                })?;
+            // Parse redirect URL — extract host and path
+            let (redir_host, redir_path) = if let Some(path) = location.strip_prefix("https://") {
+                if let Some((h, p)) = path.split_once('/') {
+                    (h.to_string(), format!("/{}", p))
+                } else {
+                    (path.to_string(), "/v2/".to_string())
+                }
+            } else if let Some(path) = location.strip_prefix("http://") {
+                if let Some((h, p)) = path.split_once('/') {
+                    (h.to_string(), format!("/{}", p))
+                } else {
+                    (path.to_string(), "/v2/".to_string())
+                }
+            } else if location.starts_with('/') {
+                (host.to_string(), location.to_string())
+            } else {
+                return Err(RegistryError::HttpError(format!("Unsupported redirect URL: {}", location)));
+            };
+            // Recurse with redirect target (single hop only to avoid loops)
+            return self.do_get(&redir_host, &redir_path, extra_headers);
         }
 
         let mut body = Vec::new();
@@ -350,11 +405,21 @@ impl RegistryClient {
                 if idx.manifests.is_empty() {
                     return Err(RegistryError::NoManifests);
                 }
-                let m = &idx.manifests[0];
+                // Select manifest matching current platform (linux/amd64 preferred, fallback to first).
+                let current_arch = std::env::consts::ARCH;
+                let current_os = std::env::consts::OS;
+                let best = idx.manifests.iter()
+                    .find(|m| {
+                        m.platform.as_ref().map(|p| {
+                            p.architecture.as_deref() == Some(current_arch) &&
+                            p.os.as_deref() == Some(current_os)
+                        }).unwrap_or(false)
+                    })
+                    .unwrap_or(&idx.manifests[0]);
                 self.fetch_manifest_by_digest(
                     &image.registry,
                     &image.repository,
-                    &m.digest,
+                    &best.digest,
                 )?
             }
         };
@@ -373,11 +438,6 @@ impl RegistryClient {
         let rootfs = bundle_path.join("rootfs");
         std::fs::create_dir_all(&rootfs)?;
 
-        let overlay_upper = store_path.join("upper");
-        let overlay_work = store_path.join("work");
-        std::fs::create_dir_all(&overlay_upper)?;
-        std::fs::create_dir_all(&overlay_work)?;
-
         // Content-addressable layer cache: extract layers by digest hash.
         // If a layer has already been extracted, reuse it without re-downloading or re-extracting.
         let cache_dir = store_path.join("cache");
@@ -395,8 +455,14 @@ impl RegistryClient {
                 continue;
             }
 
-            // Download blob if not already cached
-            let blob_path = store_path.join(format!("{}.tar.gz", &cache_key));
+            // Download blob if not already cached — use correct extension based on media_type
+            let ext = match layer.media_type.as_deref() {
+                Some(mt) if mt.contains("zstd") => "tar.zst",
+                Some(mt) if mt.contains("gzip") || mt.contains("tar") => "tar.gz",
+                Some(mt) if mt.contains("oci") && !mt.contains("gzip") && !mt.contains("zstd") => "tar",
+                _ => "tar.gz", // default guess
+            };
+            let blob_path = store_path.join(format!("{}.{}", &cache_key, ext));
             if !blob_path.exists() {
                 self.download_blob(
                     &image.registry,
@@ -489,7 +555,12 @@ impl RegistryClient {
 
         request.push_str("\r\n");
 
-        let addr = format!("{}:443", host);
+        // Handle host with or without port — don't append :443 if port is already present
+        let addr = if host.contains(':') {
+            host.to_string()
+        } else {
+            format!("{}:443", host)
+        };
         let addrs: Vec<_> = addr
             .to_socket_addrs()
             .map_err(|e| RegistryError::HttpError(e.to_string()))?
@@ -498,12 +569,15 @@ impl RegistryClient {
             return Err(RegistryError::HttpError("No addresses resolved".into()));
         }
 
-        let mut stream =
+        let tcp_stream =
             TcpStream::connect_timeout(&addrs[0], Duration::from_secs(30))
                 .map_err(|e| RegistryError::HttpError(e.to_string()))?;
-        stream
+        tcp_stream
             .set_read_timeout(Some(Duration::from_secs(30)))
             .map_err(|e| RegistryError::HttpError(e.to_string()))?;
+
+        let mut stream = TlsStream::client(tcp_stream, host)
+            .map_err(|e| RegistryError::HttpError(format!("TLS handshake failed: {}", e)))?;
 
         stream
             .write_all(request.as_bytes())
@@ -562,7 +636,7 @@ impl RegistryClient {
     /// Ensure we're authenticated for the given registry.
     fn ensure_auth(&mut self, registry: &str) -> Result<(), RegistryError> {
         if self.token.is_none() && !matches!(self.auth, RegistryAuth::Anonymous) {
-            let _ = self.ping(registry);
+            self.ping(registry)?;
         }
         Ok(())
     }

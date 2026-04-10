@@ -2,8 +2,8 @@
 //!
 //! Uses the workspace `hkdf` and `hmac` crates backed by SHA-256/384.
 
-use hmac::{Hmac, Mac};
-use sha2::{Digest, Sha256, Sha384};
+use edgerun_crypto::hmac::{Hmac, Mac};
+use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
 /// Hash abstraction for TLS 1.3 key derivation
 #[derive(Clone)]
@@ -185,7 +185,7 @@ pub fn hmac_sha384(key: &[u8], msg: &[u8]) -> Vec<u8> {
 }
 
 // Re-export hkdf::Hkdf for internal use (the crate's extract/expand semantics)
-use hkdf::Hkdf;
+use edgerun_crypto::hkdf::Hkdf;
 
 #[cfg(test)]
 mod tests {

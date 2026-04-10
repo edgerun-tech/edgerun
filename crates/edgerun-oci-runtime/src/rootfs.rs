@@ -144,8 +144,8 @@ fn create_essential_devices() {
     create_device("/dev/null", 1, 3, 0o666);
     create_device("/dev/zero", 1, 5, 0o666);
     create_device("/dev/full", 1, 7, 0o666);
-    create_device("/dev/random", 1, 8, 0o666);
-    create_device("/dev/urandom", 1, 9, 0o666);
+    create_device("/dev/random", 1, 8, 0o444);
+    create_device("/dev/urandom", 1, 9, 0o444);
     create_device("/dev/tty", 5, 0, 0o666);
     let _ = fs::create_dir_all("/dev/pts");
     let _ = fs::create_dir_all("/dev/shm");
@@ -200,13 +200,10 @@ fn remove_whiteout_files(dir: &Path) -> io::Result<()> {
         }
 
         // Overlayfs char device whiteout (0:0 character device)
+        // Must use rdev() (device numbers of the file itself), not dev() (filesystem device ID)
         if let Ok(metadata) = path.metadata() {
-            if metadata.file_type().is_char_device() {
-                let dev = metadata.dev();
-                if dev == 0 {
-                    // This is an overlay whiteout — remove it
-                    let _ = fs::remove_file(&path);
-                }
+            if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
+                let _ = fs::remove_file(&path);
             }
         }
 
@@ -379,22 +376,28 @@ pub fn setup_rootfs(
         }
     }
 
-    // Masked paths
+
+    // Masked paths — security-sensitive, log failures
     if let Some(paths) = masked {
         for p in paths {
-            let _ = do_mount("/dev/null", p, "", ms::BIND, "");
+            if let Err(e) = do_mount("/dev/null", p, "", ms::BIND, "") {
+                let _ = std::fs::write("/dev/kmsg", format!("edgerun: masked path {:?} failed: {}", p, e));
+            }
         }
     }
 
-    // Readonly Paths
+    // Readonly paths — log failures (container may remain writable)
     if let Some(paths) = readonly {
         for p in paths {
-            let _ = do_mount(p, p, "", ms::BIND | ms::REC, "");
-            let _ = do_mount(
+            if let Err(e) = do_mount(p, p, "", ms::BIND | ms::REC, "") {
+                let _ = std::fs::write("/dev/kmsg", format!("edgerun: readonly bind {:?} failed: {}", p, e));
+            } else if let Err(e) = do_mount(
                 p, p, "",
                 ms::BIND | ms::REMOUNT | ms::RDONLY | ms::NOSUID | ms::NODEV | ms::NOEXEC,
                 "",
-            );
+            ) {
+                let _ = std::fs::write("/dev/kmsg", format!("edgerun: readonly remount {:?} failed: {}", p, e));
+            }
         }
     }
 

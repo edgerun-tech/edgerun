@@ -977,7 +977,8 @@ mod tests {
     use super::*;
     use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
     use edgerun_mesh::{sign_frame, DiscoveryPacket, FrameType, MeshFrame, MeshFrameHeader, MeshRoute};
-    use p256::ecdsa::SigningKey;
+    use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::SigningKey;
 
     // -----------------------------------------------------------------------
     // Test helpers
@@ -996,7 +997,7 @@ mod tests {
     /// Creates a real P-256 keypair and returns (NodeID, signing_key).
     fn make_real_keypair() -> (NodeID, SigningKey) {
         let mut bytes = [0u8; 32];
-        edgerun_core::crypto::fill_random(&mut bytes);
+        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
         let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
         let encoded = signing_key.verifying_key().to_encoded_point(false);
         let b = encoded.as_bytes();

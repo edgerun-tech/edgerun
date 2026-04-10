@@ -40,7 +40,7 @@ pub struct SessionState {
 /// Generate a random nonce for session handshake.
 pub fn generate_nonce() -> Vec<u8> {
     let mut nonce = vec![0u8; NONCE_SIZE];
-    edgerun_core::crypto::fill_random(&mut nonce);
+    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce);
     nonce
 }
 
@@ -164,7 +164,7 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
     vk_sec1[0] = 0x04; // Uncompressed point marker
     vk_sec1[1..].copy_from_slice(&initiator.identity_id);
 
-    let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
+    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
         .map_err(|_| "bad_public_key")?;
 
     if !verify_canonical_record(&vk, SIG_DOMAIN_SESSION_HELLO, &canonical, &sig.value) {
@@ -213,7 +213,7 @@ pub fn verify_session_accept(
     vk_sec1[0] = 0x04; // Uncompressed point marker
     vk_sec1[1..].copy_from_slice(&responder.identity_id);
 
-    let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
+    let vk = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
         .map_err(|_| "bad_public_key")?;
 
     if !edgerun_core::crypto::verify_canonical_record(
@@ -283,8 +283,9 @@ pub fn now_timestamp() -> prost_types::Timestamp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use p256::ecdsa::SigningKey;
-    use p256::ecdsa::signature::hazmat::PrehashSigner;
+    use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     use edgerun_hardware_signing::MeshSigner;
 
     struct TestSigner {
@@ -326,7 +327,7 @@ mod tests {
         }
 
         fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH], edgerun_hardware_signing::HardwareSigningError> {
-            let sig: p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
+            let sig: edgerun_crypto::p256::ecdsa::Signature = self.signing_key.sign_prehash(digest)
                 .map_err(|_| edgerun_hardware_signing::HardwareSigningError::Provider("signing failed".into()))?;
             let (r, s) = sig.split_bytes();
             let mut out = [0u8; edgerun_hardware_signing::MESH_SIGNATURE_LENGTH];

@@ -12,7 +12,7 @@ use edgerun_compositor::compositor::dmabuf::DmabufParams;
 use edgerun_compositor::compositor::output::Output;
 use edgerun_compositor::compositor::seat::Seat;
 use edgerun_compositor::compositor::shell::Shell;
-use edgerun_compositor::compositor::surface::{BufferRegistry, ShmBufferInfo, SurfaceBuffer, SurfaceTree};
+use edgerun_compositor::compositor::surface::{BufferRegistry, DamageRect, ShmBufferInfo, SurfaceBuffer, SurfaceTree};
 use edgerun_compositor::drm;
 use edgerun_compositor::drm::device::DrmDevice;
 use edgerun_compositor::drm::dumb::DumbBuffer;
@@ -20,6 +20,7 @@ use edgerun_compositor::drm::kms;
 use edgerun_compositor::input::evdev::EvdevManager;
 use edgerun_compositor::input::keymap::{self, Keymap, Modifiers};
 use edgerun_compositor::r#loop::{EventLoop, EventSource};
+use edgerun_compositor::vt::{VtEvent, VtManager};
 use edgerun_compositor::protocol::linux_dmabuf;
 use edgerun_compositor::protocol::linux_drm_syncobj;
 use edgerun_compositor::protocol::wl_compositor;
@@ -51,7 +52,7 @@ use edgerun_compositor::protocol::data_control;
 use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device};
 use edgerun_compositor::render::cursor::Cursor;
 use edgerun_compositor::render::shm::ShmManager;
-use edgerun_compositor::render::server::render_and_flip;
+use edgerun_compositor::render::server::{render_and_flip, DamageAccumulator};
 use edgerun_compositor::gpu::compositor::GlCompositor;
 use edgerun_compositor::resource::Registry;
 use edgerun_compositor::server::WaylandServer;
@@ -83,6 +84,33 @@ fn main() {
 
     let _ = drm_device.set_client_cap(drm::ioctl::client_cap::ATOMIC, 1);
     let _ = drm_device.set_client_cap(drm::ioctl::client_cap::UNIVERSAL_PLANES, 1);
+
+    // Acquire DRM master — required for KMS (mode setting, page flips).
+    // On card nodes, only one session can be master at a time.
+    // If this fails, another session (e.g., host compositor) holds master.
+    if let Err(e) = drm_device.set_master() {
+        eprintln!("Failed to acquire DRM master: {}", e);
+        eprintln!("Ensure no other compositor/display server is using this DRM device.");
+        eprintln!("Try running from a TTY (Ctrl+Alt+F3) with no graphical session.");
+        std::process::exit(1);
+    }
+    println!("[edgerun-compositor] DRM master acquired");
+
+    // ─── VT management ────────────────────────────────────────
+    // Try to set up VT management. If we're not on a VT (e.g., running
+    // under an existing Wayland/X11 session), this will fail gracefully
+    // and we fall back to direct DRM access.
+    let mut vt_manager = match VtManager::open(0) {
+        Ok(vt) => {
+            println!("[edgerun-compositor] VT{} acquired — running as standalone compositor", vt.vt_num());
+            Some(vt)
+        }
+        Err(e) => {
+            eprintln!("[edgerun-compositor] VT management unavailable: {}", e);
+            eprintln!("[edgerun-compositor] Running in embedded mode — no VT switching");
+            None
+        }
+    };
 
     let resources = match drm_device.get_resources() {
         Ok(r) => r,
@@ -382,6 +410,9 @@ fn main() {
     let mut flip_pending = false;
     let mut pending_render = true; // Render immediately on first frame
 
+    // Damage tracking — accumulate surface damage for incremental rendering
+    let mut damage = DamageAccumulator::new();
+
     loop {
         // Wait for events with a timeout matching the display refresh rate.
         // When flip_pending is true, the timeout is our fallback in case
@@ -437,14 +468,35 @@ fn main() {
                 // GPU-accelerated path
                 gl.composite(&shm, &surfaces, &shell, &cursor, &mut dumb);
             } else {
-                // Software fallback
+                // Software fallback — use damage tracking
                 render_and_flip(
                     &mut dumb, fb_id, crtc_id, &drm_device,
                     &surfaces, &shell, &cursor, &shm,
-                    false, // damage_all - only render damaged regions
+                    &mut damage,
                     &mut old_fb_ids,
                 );
             }
+
+            // Collect damage from surface commits for the next frame
+            for surface in surfaces.surfaces() {
+                if !surface.pending_damage.is_empty() {
+                    for rect in &surface.pending_damage {
+                        damage.add(DamageRect {
+                            x: surface.x + rect.x,
+                            y: surface.y + rect.y,
+                            width: rect.width,
+                            height: rect.height,
+                        });
+                    }
+                }
+                // Also damage the cursor area if cursor moved
+            }
+            damage.add(DamageRect {
+                x: cursor.x.saturating_sub(32),
+                y: cursor.y.saturating_sub(32),
+                width: 64,
+                height: 64,
+            });
 
             // Clean up old FB IDs periodically
             if old_fb_ids.len() > 4 {
@@ -637,6 +689,29 @@ fn main() {
                     }
                 }
             }
+        }
+
+        // ─── VT event handling ──────────────────────────────────
+        if let Some(ref mut vt) = vt_manager {
+            vt.poll_events(&mut |event| {
+                match event {
+                    VtEvent::Release => {
+                        // Pause rendering, release DRM master
+                        eprintln!("[vt] VT release — pausing compositor");
+                        flip_pending = false;
+                        pending_render = false;
+                        // In a full implementation, we'd drop DRM master here
+                        // and release the framebuffer.
+                    }
+                    VtEvent::Acquire => {
+                        // Resume rendering, re-acquire DRM master
+                        eprintln!("[vt] VT re-acquired — resuming compositor");
+                        pending_render = true;
+                        // In a full implementation, we'd re-set DRM master
+                        // and restore the framebuffer.
+                    }
+                }
+            });
         }
     }
 

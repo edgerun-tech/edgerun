@@ -6,9 +6,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-# Registry crypto crates — all types flow through this single dependency boundary
-p256 = { workspace = true }
+# All registry crypto crates — types flow through this single dependency boundary
+p256 = { version = "0.13", default-features = false, features = ["ecdh", "ecdsa", "sha256", "arithmetic"] }
 sha2 = { version = "0.10", default-features = false }
+sha1 = { version = "0.10", default-features = false }
+pbkdf2 = { version = "0.12", default-features = false }
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 hmac = { version = "0.12", default-features = false }
 hkdf = { version = "0.12", default-features = false }
@@ -25,10 +27,11 @@ rfc6979 = { version = "0.4", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false }
 crypto-common = { version = "0.1", default-features = false }
 block-buffer = { version = "0.10", default-features = false }
-rand_core = { version = "0.6", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 subtle = { version = "2", default-features = false }
 zeroize = { version = "1", default-features = false }
 generic-array = { version = "0.14", default-features = false }
 typenum = "1"
 base16ct = { version = "0.2", default-features = false }
 const-oid = { version = "0.9", default-features = false }
+getrandom = { version = "0.2", default-features = false }
