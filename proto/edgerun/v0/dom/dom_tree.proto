@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package edgerun.v0.dom;
+
+/// DOM Tree Types — generated from WHATWG DOM Living Standard.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// Node types.
+enum NodeType {
+  NODE_TYPE_UNSPECIFIED = 0;
+  ELEMENT = 1;
+  ATTRIBUTE = 2;
+  TEXT = 3;
+  CDATA_SECTION = 4;
+  PROCESSING_INSTRUCTION = 7;
+  COMMENT = 8;
+  DOCUMENT = 9;
+  DOCUMENT_TYPE = 10;
+  DOCUMENT_FRAGMENT = 11;
+}
+
+/// Document position flags (from compareDocumentPosition).
+enum DocumentPosition {
+  DOCUMENT_POSITION_UNSPECIFIED = 0;
+  DISCONNECTED = 1;
+  PRECEDING = 2;
+  FOLLOWING = 4;
+  CONTAINS = 8;
+  CONTAINED_BY = 16;
+  IMPLEMENTATION_SPECIFIC = 32;
+}
+
+/// Mutation record type.
+enum MutationType {
+  MUTATION_TYPE_UNSPECIFIED = 0;
+  ATTRIBUTES = 1;
+  CHARACTER_DATA = 2;
+  CHILD_LIST = 3;
+}
+
+/// Mutation observation options.
+message MutationObserverInit {
+  bool child_list = 1;
+  bool attributes = 2;
+  bool character_data = 3;
+  bool subtree = 4;
+  repeated string attribute_filter = 5;
+  bool attribute_old_value = 6;
+  bool character_data_old_value = 7;
+}
+
+/// TreeWalker filter result.
+enum FilterResult {
+  FILTER_RESULT_UNSPECIFIED = 0;
+  FILTER_ACCEPT = 1;
+  FILTER_REJECT = 2;
+  FILTER_SKIP = 3;
+}
+
+/// NodeIterator or TreeWalker filter.
+message NodeFilter {
+  repeated NodeType what_to_show = 1; // bitmask of node types
+  optional FilterResult result = 2;
+}
+
+/// What to show flags.
+enum WhatToShow {
+  WHAT_TO_SHOW_UNSPECIFIED = 0;
+  SHOW_ALL = 1;
+  SHOW_ELEMENT = 2;
+  SHOW_TEXT = 4;
+  SHOW_COMMENT = 128;
+  SHOW_DOCUMENT = 256;
+  SHOW_DOCUMENT_TYPE = 512;
+  SHOW_DOCUMENT_FRAGMENT = 1024;
+  SHOW_PROCESSING_INSTRUCTION = 64;
+}
+
+/// Range boundary point.
+message BoundaryPoint {
+  uint64 node_id = 1;
+  uint32 offset = 2;
+}
+
+/// Selection direction.
+enum SelectionDirection {
+  SELECTION_DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_FORWARD = 1;
+  DIRECTION_BACKWARD = 2;
+  DIRECTION_NONE = 3;
+}

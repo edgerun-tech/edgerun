@@ -584,6 +584,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-animations"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-audio-calibration"
 version = "0.1.0"
 dependencies = [
@@ -685,6 +693,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-contain"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-core"
 version = "0.1.0"
 dependencies = [
@@ -762,6 +778,14 @@ dependencies = [
 [[package]]
 name = "edgerun-dns"
 version = "0.1.0"
+
+[[package]]
+name = "edgerun-dom"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
 
 [[package]]
 name = "edgerun-dom-events"
@@ -1393,10 +1417,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-touch"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-tpm"
 version = "0.1.0"
 dependencies = [
  "edgerun-core",
+]
+
+[[package]]
+name = "edgerun-transforms"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-transitions"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
 ]
 
 [[package]]
@@ -1438,6 +1486,14 @@ name = "edgerun-wifi"
 version = "0.1.0"
 dependencies = [
  "edgerun-capabilities",
+]
+
+[[package]]
+name = "edgerun-writing-modes"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
 ]
 
 [[package]]

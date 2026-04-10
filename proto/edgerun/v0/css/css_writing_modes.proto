@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package edgerun.v0.css.writing_modes;
+
+/// CSS Writing Modes Types — generated from CSS Writing Modes Level 4.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// Writing-mode values.
+enum WritingMode {
+  WRITING_MODE_UNSPECIFIED = 0;
+  HORIZONTAL_TB = 1;
+  VERTICAL_RL = 2;
+  VERTICAL_LR = 3;
+  SIDEWAYS_RL = 4;
+  SIDEWAYS_LR = 5;
+}
+
+/// Text-orientation values.
+enum TextOrientation {
+  TEXT_ORIENTATION_UNSPECIFIED = 0;
+  MIXED = 1;
+  UPRIGHT = 2;
+  SIDEWAYS = 3;
+  SIDEWAYS_RIGHT = 4;
+}
+
+/// Text-combine-upright values.
+enum TextCombineUpright {
+  TEXT_COMBINE_UPRIGHT_UNSPECIFIED = 0;
+  COMBINE_NONE = 1;
+  COMBINE_ALL = 2;
+  COMBINE_ALL_DIGITS = 3;
+}
+
+/// Text-underline-position values.
+enum TextUnderlinePosition {
+  TEXT_UNDERLINE_POSITION_UNSPECIFIED = 0;
+  UNDERLINE_AUTO = 1;
+  UNDERLINE_FROM_FONT = 2;
+  UNDERLINE_UNDER = 3;
+  UNDERLINE_LEFT = 4;
+  UNDERLINE_RIGHT = 5;
+}
+
+/// Caption-side values.
+enum CaptionSide {
+  CAPTION_SIDE_UNSPECIFIED = 0;
+  CAPTION_TOP = 1;
+  CAPTION_BOTTOM = 2;
+  CAPTION_BLOCK_START = 3;
+  CAPTION_BLOCK_END = 4;
+}

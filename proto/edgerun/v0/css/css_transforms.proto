@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package edgerun.v0.css.transforms;
+
+/// CSS Transform Functions and Types — generated from CSS Transforms Level 1.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// A CSS 2D/3D transform function.
+enum TransformFunction {
+  TRANSFORM_FUNCTION_UNSPECIFIED = 0;
+  MATRIX = 1; // matrix(a, b, c, d, tx, ty)
+  TRANSLATE = 2; // translate(tx, ty)
+  TRANSLATE_X = 3;
+  TRANSLATE_Y = 4;
+  TRANSLATE_Z = 5;
+  TRANSLATE_3D = 6;
+  SCALE = 7; // scale(sx, sy)
+  SCALE_X = 8;
+  SCALE_Y = 9;
+  SCALE_Z = 10;
+  SCALE_3D = 11;
+  ROTATE = 12; // rotate(angle)
+  ROTATE_X = 13;
+  ROTATE_Y = 14;
+  ROTATE_Z = 15;
+  ROTATE_3D = 16;
+  SKEW = 17; // skew(ax, ay)
+  SKEW_X = 18;
+  SKEW_Y = 19;
+  PERSPECTIVE = 20; // perspective(d)
+  MATRIX_3D = 21; // matrix3d(16 values)
+  SCALE_3D_ALT = 22;
+}
+
+/// Individual transform component.
+message TransformComponent {
+  TransformFunction function = 1;
+  repeated double values = 2; // matrix: [a,b,c,d,tx,ty], scale: [sx,sy], rotate: [angle], etc.
+  optional string unit = 3; // deg, rad, turn, px, %, etc.
+}
+
+/// Transform-origin position.
+message TransformOrigin {
+  optional string x = 1; // left, center, right, <length>, <percentage>
+  optional string y = 2; // top, center, bottom, <length>, <percentage>
+  optional string z = 3; // <length>
+}
+
+/// The transform property value.
+message TransformValue {
+  repeated TransformComponent transforms = 1;
+}
+
+/// Transform-box values.
+enum TransformBox {
+  TRANSFORM_BOX_UNSPECIFIED = 0;
+  CONTENT_BOX = 1;
+  BORDER_BOX = 2;
+  FILL_BOX = 3;
+  STROKE_BOX = 4;
+  VIEW_BOX = 5;
+}
