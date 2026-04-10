@@ -757,7 +757,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-css-box"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-cascade"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-display"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-page"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-sizing"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-css-syntax"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-ui"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-css-values"
 version = "0.1.0"
 dependencies = [
  "prost",
@@ -1441,6 +1497,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-transitions"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-trusted-types"
 version = "0.1.0"
 dependencies = [
  "prost",

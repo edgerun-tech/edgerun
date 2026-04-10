@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package edgerun.v0.css.box;
+
+/// CSS Box Types — generated from CSS Box Model Level 4.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// Box edge types (for box-shadow, clip-path, etc.).
+enum BoxEdge {
+  BOX_EDGE_UNSPECIFIED = 0;
+  MARGIN = 1;
+  BORDER = 2;
+  PADDING = 3;
+  CONTENT = 4;
+}
+
+/// Box-shadow spread type.
+enum ShadowType {
+  SHADOW_TYPE_UNSPECIFIED = 0;
+  DROP = 1;
+  INSET = 2;
+}
+
+/// Overflow types.
+enum OverflowType {
+  OVERFLOW_TYPE_UNSPECIFIED = 0;
+  VISIBLE = 1;
+  HIDDEN = 2;
+  CLIP = 3;
+  SCROLL = 4;
+  OVERFLOW_AUTO = 5;
+}
+
+/// Text overflow.
+enum TextOverflowType {
+  TEXT_OVERFLOW_TYPE_UNSPECIFIED = 0;
+  CLIP_TEXT = 1;
+  ELLIPSIS = 2;
+  STRING = 3; // custom string
+}
+
+/// Break types (for page/column breaks).
+enum BreakType {
+  BREAK_TYPE_UNSPECIFIED = 0;
+  AUTO = 1;
+  AVOID = 2;
+  ALWAYS = 3;
+  ALL = 4;
+  AVOID_PAGE = 5;
+  PAGE = 6;
+  LEFT = 7;
+  RIGHT = 8;
+  RECTO = 9;
+  VERSO = 10;
+  AVOID_COLUMN = 11;
+  COLUMN = 12;
+  AVOID_REGION = 13;
+  REGION = 14;
+}
+
+/// CSS box model dimensions.
+message BoxModel {
+  double margin_top = 1;
+  double margin_right = 2;
+  double margin_bottom = 3;
+  double margin_left = 4;
+  double border_top = 5;
+  double border_right = 6;
+  double border_bottom = 7;
+  double border_left = 8;
+  double padding_top = 9;
+  double padding_right = 10;
+  double padding_bottom = 11;
+  double padding_left = 12;
+}

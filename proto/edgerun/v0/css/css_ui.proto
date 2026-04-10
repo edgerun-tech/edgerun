@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package edgerun.v0.css.ui;
+
+/// CSS UI Types — generated from CSS UI Level 4.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// Cursor types.
+enum CursorType {
+  CURSOR_TYPE_UNSPECIFIED = 0;
+  CURSOR_AUTO = 1;
+  DEFAULT = 2;
+  NONE = 3;
+  CONTEXT_MENU = 4;
+  HELP = 5;
+  POINTER = 6;
+  PROGRESS = 7;
+  WAIT = 8;
+  CELL = 9;
+  CROSSHAIR = 10;
+  TEXT = 11;
+  VERTICAL_TEXT = 12;
+  ALIAS = 13;
+  COPY = 14;
+  MOVE = 15;
+  NO_DROP = 16;
+  NOT_ALLOWED = 17;
+  GRAB = 18;
+  GRABBING = 19;
+  E_RESIZE = 20;
+  N_RESIZE = 21;
+  NE_RESIZE = 22;
+  NW_RESIZE = 23;
+  S_RESIZE = 24;
+  SE_RESIZE = 25;
+  SW_RESIZE = 26;
+  W_RESIZE = 27;
+  EW_RESIZE = 28;
+  NS_RESIZE = 29;
+  NESW_RESIZE = 30;
+  NWSE_RESIZE = 31;
+  COL_RESIZE = 32;
+  ROW_RESIZE = 33;
+  ALL_SCROLL = 34;
+  ZOOM_IN = 35;
+  ZOOM_OUT = 36;
+}
+
+/// Resize types.
+enum ResizeType {
+  RESIZE_TYPE_UNSPECIFIED = 0;
+  RESIZE_NONE = 1;
+  BOTH = 2;
+  HORIZONTAL = 3;
+  VERTICAL = 4;
+  BLOCK = 5;
+  INLINE = 6;
+}
+
+/// User-select types.
+enum UserSelectType {
+  USER_SELECT_UNSPECIFIED = 0;
+  USER_SELECT_AUTO = 1;
+  USER_SELECT_NONE = 2;
+  USER_SELECT_TEXT = 3;
+  USER_SELECT_ALL = 4;
+  USER_SELECT_CONTAIN = 5;
+}
+
+/// Appearance types.
+enum AppearanceType {
+  APPEARANCE_TYPE_UNSPECIFIED = 0;
+  APPEARANCE_NONE = 1;
+  APPEARANCE_AUTO = 2;
+  MENULIST_BUTTON = 3;
+  MENULIST_TEXTFIELD = 4;
+  SEARCHFIELD = 5;
+}
+
+/// Nav-dir values (spatial navigation).
+enum NavDirType {
+  NAV_DIR_UNSPECIFIED = 0;
+  NAV_AUTO = 1;
+  NAV_UP = 2;
+  NAV_DOWN = 3;
+  NAV_LEFT = 4;
+  NAV_RIGHT = 5;
+}

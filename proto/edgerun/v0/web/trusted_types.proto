@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package edgerun.v0.trusted_types;
+
+/// Trusted Types — generated from Trusted Types spec.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform5.py
+
+/// Injection sink types.
+enum InjectionSink {
+  INJECTION_SINK_UNSPECIFIED = 0;
+  SINK_DOCUMENT_WRITE = 1;
+  SINK_ELEMENT_INSERT_ADJACENT_HTML = 2;
+  SINK_ELEMENT_INNER_HTML = 3;
+  SINK_ELEMENT_OUTER_HTML = 4;
+  SINK_ELEMENT_SET_ATTRIBUTE = 5;
+  SINK_SCRIPT_SRC = 6;
+  SINK_SCRIPT_TEXT = 7;
+  SINK_IFRAME_SRC = 8;
+  SINK_OBJECT_DATA = 9;
+  SINK_EMBED_SRC = 10;
+  SINK_WORKER_CONSTRUCTOR = 13;
+  SINK_WINDOW_OPEN = 15;
+  SINK_LOCATION_ASSIGN = 16;
+  SINK_LOCATION_REPLACE = 17;
+  SINK_LOCATION_HREF = 18;
+  SINK_HTML_SCRIPT_ELEMENT_SRC = 19;
+}
+
+/// Trusted type kinds.
+enum TrustedTypeKind {
+  TRUSTED_TYPE_KIND_UNSPECIFIED = 0;
+  TRUSTED_SCRIPT = 1;
+  TRUSTED_SCRIPT_URL = 2;
+  TRUSTED_HTML = 3;
+}
+
+/// Trusted type policy.
+message TrustedTypePolicy {
+  string name = 1;
+  repeated TrustedTypeKind kinds = 2;
+}
