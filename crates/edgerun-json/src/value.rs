@@ -39,6 +39,24 @@ use crate::util;
 use crate::ValueIndex;
 use core::fmt;
 
+/// Error type for fallible JSON value operations.
+#[derive(Debug, Clone)]
+pub enum JsonValueError {
+    /// Operation was attempted on a JSON value of the wrong type.
+    WrongType(String),
+}
+
+impl fmt::Display for JsonValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JsonValueError::WrongType(msg) => write!(f, "{}", msg),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for JsonValueError {}
+
 /// A JSON value that owns its data.
 ///
 /// This is the main JSON value type in edgerun-json, supporting all standard
@@ -77,6 +95,18 @@ pub type Number = JsonNumber;
 impl Eq for JsonValue {}
 
 impl JsonValue {
+    /// Returns the name of this JSON value's variant (for error messages).
+    pub(crate) fn variant_name(&self) -> &'static str {
+        match self {
+            JsonValue::Null => "null",
+            JsonValue::Bool(_) => "boolean",
+            JsonValue::Number(_) => "number",
+            JsonValue::String(_) => "string",
+            JsonValue::Array(_) => "array",
+            JsonValue::Object(_) => "object",
+        }
+    }
+
     /// Creates a JSON object from key-value pairs.
     ///
     /// # Example
@@ -144,10 +174,40 @@ impl JsonValue {
         }
     }
 
+    /// Non-panicking version of [`push_field`].
+    /// Returns `Err` if called on a non-object value.
+    pub fn try_push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) -> Result<(), JsonValueError> {
+        match self {
+            Self::Object(entries) => {
+                entries.push((key.into(), value.into()));
+                Ok(())
+            }
+            other => Err(JsonValueError::WrongType(format!(
+                "push_field called on {:?} value, expected object",
+                other.variant_name(),
+            ))),
+        }
+    }
+
     pub fn push_item(&mut self, value: impl Into<JsonValue>) {
         match self {
             Self::Array(values) => values.push(value.into()),
             _ => panic!("push_item called on non-array JSON value"),
+        }
+    }
+
+    /// Non-panicking version of [`push_item`].
+    /// Returns `Err` if called on a non-array value.
+    pub fn try_push_item(&mut self, value: impl Into<JsonValue>) -> Result<(), JsonValueError> {
+        match self {
+            Self::Array(values) => {
+                values.push(value.into());
+                Ok(())
+            }
+            other => Err(JsonValueError::WrongType(format!(
+                "push_item called on {:?} value, expected array",
+                other.variant_name(),
+            ))),
         }
     }
 

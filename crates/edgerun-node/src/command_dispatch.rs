@@ -237,7 +237,7 @@ pub fn dispatch_command(
 ) -> CommandDispatchResult {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(std::time::Duration::ZERO)
         .as_millis() as i64;
 
     let local_node_id = signer.node_id().0;
@@ -308,9 +308,15 @@ pub fn dispatch_command(
             record_and_respond(command, store, stream_id, signer, controllers,
                 true, "", Vec::new(), None)
         }
+        #[cfg(feature = "oci")]
         x if x == CommandType::ExecuteWorkload as i32 => {
             // Execute workload with full accounting + capacity check
             dispatch_execute_workload(command, store, stream_id, signer, controllers, capacity_tracker, workload_policy, rate_limiter, running_workloads)
+        }
+        #[cfg(not(feature = "oci"))]
+        x if x == CommandType::ExecuteWorkload as i32 => {
+            record_and_respond(command, store, stream_id, signer, controllers,
+                false, "oci_feature_not_enabled", Vec::new(), None)
         }
         x if x == CommandType::TerminateWorkload as i32 => {
             // Preempt/terminate a running workload
@@ -406,6 +412,7 @@ fn dispatch_transfer_control(
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // ExecuteWorkload — compute marketplace with full accounting
 // ---------------------------------------------------------------------------
 
@@ -413,12 +420,10 @@ fn dispatch_transfer_control(
 /// registry, run the container via the OCI runtime, and record full
 /// resource accounting — all billed in reference-core-microseconds.
 ///
-/// `workload_policy` and `rate_limiter` are projected from the immutable
-/// event log by the caller — they are NOT loaded from mutable files here.
-///
 /// The container is started non-blocking and registered in `running_workloads`
 /// so it can be preempted. A background thread awaits its completion and
 /// records accounting.
+#[cfg(feature = "oci")]
 fn dispatch_execute_workload(
     command: &CommandEnvelope,
     store: &mut NodeStore,
@@ -432,6 +437,7 @@ fn dispatch_execute_workload(
 ) -> CommandDispatchResult {
     use super::metering::{WorkMeter, compute_work_id};
     use edgerun_core::accounting::{WorkloadClass, WorkPriority, WorkStatus};
+    use std::sync::Arc;
 
     // Extract workload spec from command payload
     let workload_spec = match &command.payload {
@@ -518,12 +524,22 @@ fn dispatch_execute_workload(
 
     // === CERTIFICATE FRESHNESS CHECK: reject stale certs ===
     if let Err(reason) = check_cert_freshness_impl(&cert) {
-        edgerun_log::warn!("stale performance cert: {}", reason);
-        // Re-benchmark on the fly
-        let c = edgerun_core::benchmark::run_full_benchmark(provider_id);
-        cache_cert(store, &c);
+        edgerun_log::warn!("certificate freshness check failed: {}", reason);
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, &format!("stale_certificate: {}", reason), Vec::new(), None);
     }
 
+    // === CAPACITY CHECK: do we have enough resources? ===
+    if !capacity_tracker.try_allocate(allocated_cores, allocated_memory_bytes) {
+        edgerun_log::warn!("insufficient capacity: need {} cores, {} bytes (have {} cores, {} bytes)",
+            allocated_cores, allocated_memory_bytes,
+            capacity_tracker.available_cores(),
+            capacity_tracker.available_memory());
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "insufficient_capacity", Vec::new(), None);
+    }
+
+    // Determine workload class from image
     let workload_class = if spec_str.contains("inference") {
         WorkloadClass::Inference
     } else if spec_str.contains("compilation") {
@@ -534,16 +550,10 @@ fn dispatch_execute_workload(
         WorkloadClass::General
     };
 
-    // === CAPACITY CHECK: reject if insufficient resources ===
-    if !capacity_tracker.try_allocate(allocated_cores, allocated_memory_bytes) {
-        edgerun_log::warn!("insufficient capacity for work: {} cores, {} memory (available: {} cores, {} memory)",
-            allocated_cores, allocated_memory_bytes,
-            capacity_tracker.available_cores(),
-            capacity_tracker.available_memory());
-        return record_and_respond(command, store, stream_id, signer, controllers,
-            false, "insufficient_capacity", Vec::new(), None);
-    }
-    // Resources are now reserved. They will be released below after workload completes/fails.
+    // === PHASE 1: Pull image ===
+    let paths = WorkloadPaths::new(&work_id);
+    let bundle_dir = &paths.bundle_dir;
+    let store_dir = &paths.store_dir;
 
     // Start metering BEFORE pull so download time is billed
     let meter = WorkMeter::new(
@@ -551,11 +561,6 @@ fn dispatch_execute_workload(
         allocated_cores, allocated_memory_bytes,
         workload_class, WorkPriority::Standard, &cert,
     );
-
-    // === PHASE 1: Pull image ===
-    let paths = WorkloadPaths::new(&work_id);
-    let bundle_dir = &paths.bundle_dir;
-    let store_dir = &paths.store_dir;
 
     edgerun_log::info!("pulling: {}", image_str);
     if let Err(e) = pull_with_metering(&image_ref, bundle_dir, store_dir, &meter) {
@@ -594,7 +599,10 @@ fn dispatch_execute_workload(
                 });
             }
             let json = spec.to_json_string_pretty();
+            if let Err(e) = std::fs::write(&cfg_path, json) {
+                edgerun_log::warn!("failed to update config.json: {}", e);
             }
+        }
     }
 
     // === PHASE 3: Run container (non-blocking) ===
@@ -719,6 +727,7 @@ fn dispatch_execute_workload(
 /// The body of the background workload thread. Runs after the container is started.
 /// Waits for container exit, records accounting, and performs cleanup.
 /// This is extracted into a function so it can be wrapped in `catch_unwind`.
+#[cfg(feature = "oci")]
 fn workload_thread_body(
     work_id: [u8; 32],
     container: edgerun_oci_runtime::RunningContainer,
@@ -743,7 +752,7 @@ fn workload_thread_body(
     let start_monotonic = std::time::Instant::now();
     let start_time_us = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(std::time::Duration::ZERO)
         .as_micros() as u64;
 
     // Await container exit (blocking). The container will be killed
@@ -906,6 +915,7 @@ fn dispatch_terminate_workload(
 // Helpers
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "oci")]
 fn parse_workload_spec(spec: &[u8]) -> (String, u32, u64) {
     let s = String::from_utf8_lossy(spec);
     let mut image = s.to_string();
@@ -950,6 +960,7 @@ fn parse_workload_spec(spec: &[u8]) -> (String, u32, u64) {
     (image, cores, memory_gb * 1024 * 1024 * 1024)
 }
 
+#[cfg(feature = "oci")]
 fn pull_with_metering(
     image: &edgerun_oci_registry::ImageRef,
     bundle_dir: &std::path::Path,
@@ -994,6 +1005,7 @@ fn pull_with_metering(
     Ok(())
 }
 
+#[cfg(feature = "oci")]
 fn dir_size(path: &std::path::Path) -> std::io::Result<u64> {
     let mut total = 0u64;
     if path.is_dir() {
@@ -1007,6 +1019,7 @@ fn dir_size(path: &std::path::Path) -> std::io::Result<u64> {
     Ok(total)
 }
 
+#[cfg(feature = "oci")]
 fn load_cached_cert(store: &NodeStore) -> Option<edgerun_core::accounting::PerformanceCertificate> {
     let p = store.data_root().join("perf_cert.bin");
     if let Ok(data) = std::fs::read(&p) {
@@ -1016,6 +1029,7 @@ fn load_cached_cert(store: &NodeStore) -> Option<edgerun_core::accounting::Perfo
     }
 }
 
+#[cfg(feature = "oci")]
 fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::PerformanceCertificate) {
     // Persist to disk for fast loading
     let p = store.data_root().join("perf_cert.bin");
@@ -1043,6 +1057,7 @@ fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::Performanc
 ///       `container:alpine:memory=8G:cores=4` → same normalized form
 ///
 /// Strategy: extract image, cores, memory → sort key-value pairs → reassemble.
+#[cfg(feature = "oci")]
 fn normalize_workload_spec(spec: &[u8]) -> Vec<u8> {
     let (image, cores, memory_bytes) = parse_workload_spec(spec);
 
@@ -1068,13 +1083,15 @@ fn normalize_workload_spec(spec: &[u8]) -> Vec<u8> {
 // ===========================================================================
 
 /// Maximum age for a performance certificate before re-benchmarking is required.
+#[cfg(feature = "oci")]
 const MAX_CERT_AGE_US: u64 = 24 * 60 * 60 * 1_000_000; // 24 hours
 
 /// Check if a performance certificate is still fresh.
+#[cfg(feature = "oci")]
 fn check_cert_freshness_impl(cert: &edgerun_core::accounting::PerformanceCertificate) -> Result<(), String> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(std::time::Duration::ZERO)
         .as_micros() as u64;
     let age = now.saturating_sub(cert.benchmark_completed_us);
     if age > MAX_CERT_AGE_US {
@@ -1569,6 +1586,7 @@ fn delegation_hash(delegation: &edgerun_proto::edgerun::v0::trust::DelegationRec
 }
 
 /// Construct workload temporary directory paths from a work_id.
+#[cfg(feature = "oci")]
 #[derive(Clone)]
 struct WorkloadPaths {
     tmp_base: std::path::PathBuf,
@@ -1578,6 +1596,7 @@ struct WorkloadPaths {
     thread_name: String,
 }
 
+#[cfg(feature = "oci")]
 impl WorkloadPaths {
     fn new(work_id: &[u8]) -> Self {
         let hex8 = edgerun_core::util::bytes_to_hex(&work_id[..8.min(work_id.len())]);

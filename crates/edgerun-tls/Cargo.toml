@@ -4,13 +4,20 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Dependency-free TLS 1.2/1.3 client implementation using workspace crypto"
+description = "TLS 1.2/1.3 client implementation using workspace crypto primitives"
 readme = "README.md"
 documentation = "https://docs.rs/edgerun-tls"
 keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http" }
-p256 = { path = "../edgerun-p256", default-features = false }
+aes-gcm = { path = "../aes-gcm", default-features = false, features = ["aes", "alloc"] }
+hmac = { path = "../edgerun-hmac" }
+hkdf = { path = "../edgerun-hkdf" }
 sha2 = { path = "../sha2", default-features = false }
+p256 = { path = "../edgerun-p256", default-features = false, features = ["ecdh", "arithmetic"] }
+der = { path = "../edgerun-der", default-features = false, features = ["alloc", "derive", "oid"] }
+rand_core = { path = "../edgerun-rand_core" }
+
+[dev-dependencies]
+hex-literal = "0.4"

@@ -10,5 +10,5 @@ edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 
-[build]
-rustflags = ["-C", "target-cpu=native"]
+[lints.rust]
+unused = "warn"

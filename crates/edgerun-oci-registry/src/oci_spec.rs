@@ -1,109 +1,10 @@
-//! OCI spec generation from image config — produces JSON directly.
+//! OCI spec generation from image config — produces JSON via edgerun-json.
 
-use std::collections::HashMap;
 use std::path::Path;
 
+use edgerun_json::{json, to_string_pretty};
+
 use crate::config::ImageConfig;
-
-/// A minimal JSON value for OCI spec output.
-#[derive(Clone, Debug)]
-enum Json {
-    Null,
-    Bool(bool),
-    Num(u64),
-    Str(String),
-    Arr(Vec<Json>),
-    Obj(Vec<(String, Json)>),
-}
-
-impl Json {
-    fn obj(pairs: Vec<(&str, Json)>) -> Json {
-        Json::Obj(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
-    }
-
-    fn arr(items: Vec<Json>) -> Json {
-        Json::Arr(items)
-    }
-
-    fn str(s: &str) -> Json {
-        Json::Str(s.to_string())
-    }
-
-    fn to_string_pretty(&self) -> String {
-        format_json(self, 0)
-    }
-}
-
-fn format_json(v: &Json, indent: usize) -> String {
-    let pad = "  ".repeat(indent);
-    let inner_pad = "  ".repeat(indent + 1);
-    match v {
-        Json::Null => "null".into(),
-        Json::Bool(b) => b.to_string(),
-        Json::Num(n) => n.to_string(),
-        Json::Str(s) => format!("\"{}\"", escape_str(s)),
-        Json::Arr(arr) => {
-            if arr.is_empty() {
-                return "[]".into();
-            }
-            let items = arr
-                .iter()
-                .map(|v| format!("{}{}", inner_pad, format_json(v, indent + 1)))
-                .collect::<Vec<_>>()
-                .join(",\n");
-            format!("[\n{}\n{}]", items, pad)
-        }
-        Json::Obj(fields) => {
-            if fields.is_empty() {
-                return "{}".into();
-            }
-            let items = fields
-                .iter()
-                .map(|(k, v)| {
-                    format!(
-                        "{}\"{}\": {}",
-                        inner_pad,
-                        escape_str(k),
-                        format_json(v, indent + 1)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",\n");
-            format!("{{\n{}\n{}}}", items, pad)
-        }
-    }
-}
-
-fn escape_str(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if c.is_control() => {
-                out.push_str(&format!("\\u{:04x}", c as u32));
-            }
-            c => out.push(c),
-        }
-    }
-    out
-}
-
-fn default_namespaces() -> Json {
-    Json::arr(vec![
-        Json::obj(vec![("type", Json::str("pid")), ("path", Json::str(""))]),
-        Json::obj(vec![("type", Json::str("network")), ("path", Json::str(""))]),
-        Json::obj(vec![("type", Json::str("ipc")), ("path", Json::str(""))]),
-        Json::obj(vec![("type", Json::str("uts")), ("path", Json::str(""))]),
-        Json::obj(vec![
-            ("type", Json::str("mount")),
-            ("path", Json::str("")),
-        ]),
-    ])
-}
 
 pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
     let process_config = image_config.config.as_ref();
@@ -125,8 +26,7 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
         .and_then(|c| c.env.as_ref())
         .cloned()
         .unwrap_or_else(|| {
-            vec!["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-                .into()]
+            vec!["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into()]
         });
 
     let cwd = process_config
@@ -136,7 +36,7 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
 
     let (uid, gid) = parse_user(process_config.and_then(|c| c.user.as_ref()));
 
-    let volume_mounts: Vec<Json> = image_config
+    let volume_mounts: Vec<edgerun_json::JsonValue> = image_config
         .config
         .as_ref()
         .and_then(|c| c.volumes.as_ref())
@@ -144,112 +44,71 @@ pub fn generate_oci_spec(image_config: &ImageConfig, rootfs: &Path) -> String {
             volumes
                 .keys()
                 .map(|dest| {
-                    Json::obj(vec![
-                        ("destination", Json::str(dest)),
-                        ("type", Json::str("tmpfs")),
-                        ("source", Json::str("tmpfs")),
-                        (
-                            "options",
-                            Json::arr(vec![
-                                Json::str("nosuid"),
-                                Json::str("nodev"),
-                                Json::str("noexec"),
-                            ]),
-                        ),
-                    ])
+                    let dest_str = dest.as_str();
+                    json!({
+                        "destination": dest_str,
+                        "type": "tmpfs",
+                        "source": "tmpfs",
+                        "options": ["nosuid", "nodev", "noexec"]
+                    })
                 })
                 .collect()
         })
         .unwrap_or_default();
 
-    let process_args = if args.is_empty() {
-        vec![Json::str("/bin/sh")]
+    let process_args: Vec<edgerun_json::JsonValue> = if args.is_empty() {
+        vec![json!("/bin/sh")]
     } else {
-        args.into_iter().map(|a| Json::str(&a)).collect()
+        args.iter().map(|a| json!(a.as_str())).collect()
     };
 
-    let spec = Json::obj(vec![
-        ("ociVersion", Json::str("1.0.2")),
-        (
-            "process",
-            Json::obj(vec![
-                ("args", Json::arr(process_args)),
-                (
-                    "env",
-                    Json::arr(env.into_iter().map(|e| Json::str(&e)).collect()),
-                ),
-                ("cwd", Json::str(&cwd)),
-                ("noNewPrivileges", Json::Bool(true)),
-                (
-                    "user",
-                    Json::obj(vec![
-                        ("uid", Json::Num(uid as u64)),
-                        ("gid", Json::Num(gid as u64)),
-                    ]),
-                ),
-            ]),
-        ),
-        (
-            "root",
-            Json::obj(vec![(
-                "path",
-                Json::str(rootfs.to_str().unwrap_or("/")),
-            )]),
-        ),
-        ("hostname", Json::str("edgerun")),
-        (
-            "linux",
-            Json::obj(vec![
-                ("namespaces", default_namespaces()),
-                (
-                    "maskedPaths",
-                    Json::arr(vec![
-                        Json::str("/proc/acpi"),
-                        Json::str("/proc/kcore"),
-                        Json::str("/proc/keys"),
-                        Json::str("/proc/latency_stats"),
-                        Json::str("/proc/timer_list"),
-                        Json::str("/proc/timer_stats"),
-                        Json::str("/proc/sched_debug"),
-                        Json::str("/proc/scsi"),
-                        Json::str("/sys/firmware"),
-                    ]),
-                ),
-                (
-                    "readonlyPaths",
-                    Json::arr(vec![
-                        Json::str("/proc/asound"),
-                        Json::str("/proc/bus"),
-                        Json::str("/proc/fs"),
-                        Json::str("/proc/irq"),
-                        Json::str("/proc/sys"),
-                        Json::str("/proc/sysrq-trigger"),
-                    ]),
-                ),
-            ]),
-        ),
-    ]);
+    let env_json: Vec<edgerun_json::JsonValue> = env.iter().map(|e| json!(e.as_str())).collect();
 
-    // Add mounts if there are volume mounts
+    let mut spec = json!({
+        "ociVersion": "1.0.2",
+        "process": {
+            "args": process_args,
+            "env": env_json,
+            "cwd": cwd,
+            "noNewPrivileges": true,
+            "user": {
+                "uid": uid,
+                "gid": gid
+            }
+        },
+        "root": {
+            "path": rootfs.to_str().unwrap_or("/")
+        },
+        "hostname": "edgerun",
+        "linux": {
+            "namespaces": [
+                { "type": "pid", "path": "" },
+                { "type": "network", "path": "" },
+                { "type": "ipc", "path": "" },
+                { "type": "uts", "path": "" },
+                { "type": "mount", "path": "" }
+            ],
+            "maskedPaths": [
+                "/proc/acpi", "/proc/kcore", "/proc/keys",
+                "/proc/latency_stats", "/proc/timer_list",
+                "/proc/timer_stats", "/proc/sched_debug",
+                "/proc/scsi", "/sys/firmware"
+            ],
+            "readonlyPaths": [
+                "/proc/asound", "/proc/bus", "/proc/fs",
+                "/proc/irq", "/proc/sys", "/proc/sysrq-trigger"
+            ]
+        }
+    });
+
+    // Insert mounts if there are volume mounts
     if !volume_mounts.is_empty() {
-        // We need to rebuild with mounts — simpler to just add it
-        let spec_str = spec.to_string_pretty();
-        // Just insert mounts before the final }
-        let mounts_json = format!(
-            ",\n  \"mounts\": [\n{}\n  ]",
-            volume_mounts
-                .iter()
-                .map(|m| format!("    {}", m.to_string_pretty()))
-                .collect::<Vec<_>>()
-                .join(",\n")
-        );
-        // Insert before the last }
-        if let Some(pos) = spec_str.rfind('}') {
-            return format!("{}{}\n}}", &spec_str[..pos], mounts_json);
+        if let edgerun_json::JsonValue::Object(ref mut fields) = spec {
+            fields.push(("mounts".to_string(), edgerun_json::JsonValue::Array(volume_mounts)));
         }
     }
 
-    spec.to_string_pretty()
+    to_string_pretty(&spec).unwrap_or_default()
 }
 
 fn parse_user(user_str: Option<&String>) -> (u32, u32) {

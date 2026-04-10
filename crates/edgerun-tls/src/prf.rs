@@ -1,84 +1,67 @@
-//! Pseudorandom function (PRF) for TLS key derivation
+//! TLS 1.3 key derivation using HKDF (RFC 8446 §7)
+//!
+//! Uses the workspace `hkdf` and `hmac` crates backed by SHA-256/384.
 
-/// TLS PRF implementation
-pub struct TlsPrf;
+use hmac::{Hmac, Mac};
+use sha2::{Digest, Sha256, Sha384};
 
-impl TlsPrf {
-    /// TLS 1.2 PRF
-    /// PRF(secret, label, seed) = P_hash(secret, label + seed)
-    ///
-    /// P_hash(secret, seed) = HMAC_hash(secret, A(1) + seed) +
-    ///                        HMAC_hash(secret, A(2) + seed) +
-    ///                        HMAC_hash(secret, A(3) + seed) + ...
-    ///
-    /// A() is defined as:
-    /// A(0) = seed
-    /// A(i) = HMAC_hash(secret, A(i-1))
-    pub fn prf(secret: &[u8], label: &[u8], seed: &[u8], length: usize) -> Vec<u8> {
-        // P_hash implementation using HMAC-SHA256
-        let mut result = Vec::with_capacity(length);
-        let mut a = Self::hmac_sha256(secret, &[label, seed].concat());
+/// Hash abstraction for TLS 1.3 key derivation
+#[derive(Clone)]
+pub enum Hasher {
+    Sha256,
+    Sha384,
+}
 
-        while result.len() < length {
-            let output = Self::hmac_sha256(secret, &[&a, label, seed].concat());
-            result.extend_from_slice(&output);
-            a = Self::hmac_sha256(secret, &a);
+impl Hasher {
+    /// Output length in bytes
+    pub fn len(&self) -> usize {
+        match self {
+            Hasher::Sha256 => 32,
+            Hasher::Sha384 => 48,
         }
-
-        result.truncate(length);
-        result
     }
 
-    /// TLS 1.3 HKDF-Extract
-    /// HKDF-Extract(salt, IKM) -> PRK
-    pub fn hkdf_extract(salt: &[u8], ikm: &[u8]) -> Vec<u8> {
-        // HKDF-Extract is just HMAC-SHA256(salt, ikm)
-        Self::hmac_sha256(salt, ikm)
+    /// HKDF-Extract(salt, ikm)
+    pub fn extract(&self, salt: &[u8], ikm: &[u8]) -> Vec<u8> {
+        match self {
+            Self::Sha256 => {
+                let (prk, _hk) = Hkdf::<Sha256>::extract(Some(salt), ikm);
+                prk.to_vec()
+            }
+            Self::Sha384 => {
+                let (prk, _hk) = Hkdf::<Sha384>::extract(Some(salt), ikm);
+                prk.to_vec()
+            }
+        }
     }
 
-    /// TLS 1.3 HKDF-Expand-Label
-    /// HKDF-Expand-Label(Secret, Label, Context, Length)
-    pub fn hkdf_expand_label(
-        secret: &[u8],
-        label: &str,
-        context: &[u8],
-        length: usize,
-    ) -> Vec<u8> {
-        // Construct HKDF-Expand-Label info
-        let mut hkdf_label = Vec::new();
-
-        // Length (2 bytes)
-        hkdf_label.extend_from_slice(&(length as u16).to_be_bytes());
-
-        // Label length + "tls13 " + label
-        let full_label = format!("tls13 {}", label);
-        hkdf_label.push(full_label.len() as u8);
-        hkdf_label.extend_from_slice(full_label.as_bytes());
-
-        // Context length + context
-        hkdf_label.extend_from_slice(&(context.len() as u8).to_be_bytes());
-        hkdf_label.extend_from_slice(context);
-
-        // HKDF-Expand
-        Self::hkdf_expand(secret, &hkdf_label, length)
+    /// HKDF-Expand-Label(secret, label, context, length) per RFC 8446 §7.1
+    pub fn expand_label(&self, secret: &[u8], label: &str, context: &[u8], length: usize) -> Vec<u8> {
+        let hkdf_label = build_hkdf_label(label, context, length);
+        self.expand(secret, &hkdf_label, length)
     }
 
-    /// TLS 1.3 HKDF-Expand
-    /// HKDF-Expand(PRK, info, Length) -> OKM
-    pub fn hkdf_expand(prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
-        let hash_len = 32; // SHA-256 output
+    /// HKDF-Expand(prk, info, length)
+    fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
+        let hash_len = self.len();
         let n = (length + hash_len - 1) / hash_len;
-
         let mut okm = Vec::with_capacity(length);
-        let mut t = Vec::new(); // T(0) is empty
+        let mut t = Vec::new();
 
         for i in 1..=n {
-            // T(i) = HMAC-Hash(PRK, T(i-1) | info | i)
             let mut input = t.clone();
             input.extend_from_slice(info);
             input.push(i as u8);
-
-            t = Self::hmac_sha256(prk, &input);
+            t = match self {
+                Hasher::Sha256 => {
+                    type HmacSha256 = Hmac<Sha256>;
+                    hmac_sha256(prk, &input)
+                }
+                Hasher::Sha384 => {
+                    type HmacSha384 = Hmac<Sha384>;
+                    hmac_sha384(prk, &input)
+                }
+            };
             okm.extend_from_slice(&t);
         }
 
@@ -86,261 +69,155 @@ impl TlsPrf {
         okm
     }
 
-    /// Derive TLS 1.2 keys
-    pub fn derive_keys_tls12(
-        pre_master_secret: &[u8],
-        client_random: &[u8],
-        server_random: &[u8],
-        key_length: usize,
-        iv_length: usize,
-    ) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
-        // master_secret = PRF(pre_master_secret, "master secret",
-        //                     client_random + server_random)[0..48]
-        let master_secret = Self::prf(
-            pre_master_secret,
-            b"master secret",
-            &[client_random, server_random].concat(),
-            48,
-        );
-
-        // key_block = PRF(master_secret, "key expansion",
-        //                 server_random + client_random)
-        let key_block = Self::prf(
-            &master_secret,
-            b"key expansion",
-            &[server_random, client_random].concat(),
-            2 * (key_length + iv_length),
-        );
-
-        // Split key_block
-        let client_write_key = key_block[0..key_length].to_vec();
-        let server_write_key = key_block[key_length..2 * key_length].to_vec();
-        let client_write_iv = key_block[2 * key_length..2 * key_length + iv_length].to_vec();
-        let server_write_iv =
-            key_block[2 * key_length + iv_length..2 * (key_length + iv_length)].to_vec();
-
-        (
-            client_write_key,
-            server_write_key,
-            client_write_iv,
-            server_write_iv,
-        )
-    }
-
-    /// Derive TLS 1.3 keys
-    pub fn derive_keys_tls13(
-        shared_secret: &[u8],
-        client_hello_hash: &[u8],
-        _server_hello_hash: &[u8],
-    ) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
-        // Early secret
-        let salt_early = vec![0u8; 32]; // Empty salt
-        let early_secret = Self::hkdf_extract(&salt_early, &[0u8; 32]); // Zero IKM
-
-        // Handshake secret
-        let salt_handshake = shared_secret;
-        let handshake_secret = Self::hkdf_extract(salt_handshake, &early_secret);
-
-        // Client handshake traffic secret
-        let _client_handshake_secret = Self::hkdf_expand_label(
-            &handshake_secret,
-            "c hs traffic",
-            client_hello_hash,
-            32,
-        );
-
-        // Server handshake traffic secret
-        let _server_handshake_secret = Self::hkdf_expand_label(
-            &handshake_secret,
-            "s hs traffic",
-            client_hello_hash,
-            32,
-        );
-
-        // Application secret (master secret)
-        let master_secret = Self::hkdf_expand_label(&handshake_secret, "master", &[], 32);
-
-        // Client application traffic secret
-        let client_traffic_secret = Self::hkdf_expand_label(
-            &master_secret,
-            "c ap traffic",
-            &[],
-            32,
-        );
-
-        // Server application traffic secret
-        let server_traffic_secret = Self::hkdf_expand_label(
-            &master_secret,
-            "s ap traffic",
-            &[],
-            32,
-        );
-
-        // Derive actual keys from secrets
-        let client_write_key = Self::hkdf_expand_label(
-            &client_traffic_secret,
-            "key",
-            &[],
-            16, // AES-128
-        );
-
-        let server_write_key = Self::hkdf_expand_label(
-            &server_traffic_secret,
-            "key",
-            &[],
-            16,
-        );
-
-        let client_write_iv = Self::hkdf_expand_label(
-            &client_traffic_secret,
-            "iv",
-            &[],
-            12, // 96-bit IV
-        );
-
-        let server_write_iv = Self::hkdf_expand_label(&server_traffic_secret, "iv", &[], 12);
-
-        (
-            client_write_key,
-            server_write_key,
-            client_write_iv,
-            server_write_iv,
-        )
-    }
-
-    /// HMAC-SHA256 implementation (simplified)
-    /// In production, use the edgerun-hmac crate from workspace
-    fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
-        // HMAC(K, m) = H((K' ⊕ opad) || H((K' ⊕ ipad) || m))
-        // where K' is the key padded to block size
-
-        let block_size = 64; // SHA-256 block size
-        let hash_size = 32; // SHA-256 output size
-
-        // If key is longer than block size, hash it
-        let mut key_padded = if key.len() > block_size {
-            // In full implementation: SHA256(key)
-            vec![0u8; hash_size]
-        } else {
-            key.to_vec()
-        };
-
-        // Pad key to block size
-        key_padded.resize(block_size, 0);
-
-        // Create inner and outer padded keys
-        let mut key_inner = key_padded.clone();
-        let mut key_outer = key_padded.clone();
-
-        for byte in &mut key_inner {
-            *byte ^= 0x36; // ipad
+    /// SHA-256 hash
+    pub fn hash(&self, data: &[u8]) -> Vec<u8> {
+        match self {
+            Hasher::Sha256 => Sha256::digest(data).to_vec(),
+            Hasher::Sha384 => Sha384::digest(data).to_vec(),
         }
-
-        for byte in &mut key_outer {
-            *byte ^= 0x5c; // opad
-        }
-
-        // Inner hash: H((K' ⊕ ipad) || m)
-        let mut inner_msg = key_inner;
-        inner_msg.extend_from_slice(message);
-        let inner_hash = Self::sha256(&inner_msg);
-
-        // Outer hash: H((K' ⊕ opad) || inner_hash)
-        let mut outer_msg = key_outer;
-        outer_msg.extend_from_slice(&inner_hash);
-        Self::sha256(&outer_msg)
-    }
-
-    /// SHA-256 hash using the workspace sha2 crate.
-    fn sha256(data: &[u8]) -> Vec<u8> {
-        use sha2::{Digest, Sha256};
-        Sha256::digest(data).to_vec()
     }
 }
+
+/// TLS 1.3 key schedule (RFC 8446 §7.1)
+pub struct Tls13KeySchedule {
+    hash: Hasher,
+    /// Current secret (progresses through the schedule)
+    secret: Vec<u8>,
+}
+
+impl Tls13KeySchedule {
+    /// Start from a zero salt (early secret derivation)
+    pub fn new(hash: Hasher) -> Self {
+        let zero = vec![0u8; hash.len()];
+        let secret = hash.extract(&zero, &zero); // early_secret
+        Tls13KeySchedule { hash, secret }
+    }
+
+    /// Advance to handshake secret using the ECDH shared secret
+    pub fn advance_to_handshake(&mut self, shared_secret: &[u8], _ch_hash: &[u8], _sh_hash: &[u8]) {
+        // derive_secret("derived")
+        let derived = self.hash.expand_label(&self.secret, "derived", &[], self.hash.len());
+
+        // handshake_secret = HKDF-Extract(shared_secret, derived)
+        let handshake_secret = self.hash.extract(shared_secret, &derived);
+        self.secret = handshake_secret;
+    }
+
+    /// Derive client handshake traffic secret
+    pub fn client_handshake_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "c hs traffic", ch_hash, self.hash.len())
+    }
+
+    /// Derive server handshake traffic secret
+    pub fn server_handshake_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "s hs traffic", ch_hash, self.hash.len())
+    }
+
+    /// Advance to master secret
+    pub fn advance_to_master(&mut self) {
+        let derived = self.hash.expand_label(&self.secret, "derived", &[], self.hash.len());
+        let zero = vec![0u8; self.hash.len()];
+        self.secret = self.hash.extract(&derived, &zero); // master_secret
+    }
+
+    /// Derive client application traffic secret
+    pub fn client_app_traffic_secret(&self) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "c ap traffic", &[], self.hash.len())
+    }
+
+    /// Derive server application traffic secret
+    pub fn server_app_traffic_secret(&self) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "s ap traffic", &[], self.hash.len())
+    }
+
+    /// Derive resumption master secret
+    pub fn resumption_master_secret(&self) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "res master", &[], self.hash.len())
+    }
+}
+
+/// Derive record-layer keys from traffic secret
+pub struct TrafficKeys {
+    pub write_key: Vec<u8>,
+    pub write_iv: Vec<u8>,
+}
+
+/// Derive AEAD keys for client → server
+pub fn client_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+    TrafficKeys {
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
+    }
+}
+
+/// Derive AEAD keys for server → client
+pub fn server_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+    TrafficKeys {
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
+    }
+}
+
+/// HKDF-Label encoding (RFC 8446 §7.1)
+fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
+    let full_label = format!("tls13 {}", label);
+    let mut out = Vec::with_capacity(2 + 1 + full_label.len() + 1 + context.len());
+    out.extend_from_slice(&(length as u16).to_be_bytes());
+    out.push(full_label.len() as u8);
+    out.extend_from_slice(full_label.as_bytes());
+    out.push(context.len() as u8);
+    out.extend_from_slice(context);
+    out
+}
+
+pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    type HmacSha256Inner = Hmac<Sha256>;
+    let mut mac = HmacSha256Inner::new_from_slice(key).expect("HMAC key length ok");
+    mac.update(msg);
+    mac.finalize().into_bytes().to_vec()
+}
+
+pub fn hmac_sha384(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    type HmacSha384Inner = Hmac<Sha384>;
+    let mut mac = HmacSha384Inner::new_from_slice(key).expect("HMAC key length ok");
+    mac.update(msg);
+    mac.finalize().into_bytes().to_vec()
+}
+
+// Re-export hkdf::Hkdf for internal use (the crate's extract/expand semantics)
+use hkdf::Hkdf;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_prf_output_length() {
-        let secret = b"test_secret";
-        let label = b"test_label";
-        let seed = b"test_seed";
+    fn test_expand_label_output_length() {
+        let hash = Hasher::Sha256;
+        let secret = vec![0xAB; 32];
+        let out = hash.expand_label(&secret, "key", &[], 16);
+        assert_eq!(out.len(), 16);
 
-        let output_16 = TlsPrf::prf(secret, label, seed, 16);
-        assert_eq!(output_16.len(), 16);
-
-        let output_32 = TlsPrf::prf(secret, label, seed, 32);
-        assert_eq!(output_32.len(), 32);
-
-        let output_48 = TlsPrf::prf(secret, label, seed, 48);
-        assert_eq!(output_48.len(), 48);
+        let out = hash.expand_label(&secret, "iv", &[], 12);
+        assert_eq!(out.len(), 12);
     }
 
     #[test]
-    fn test_prf_deterministic() {
-        let secret = b"secret";
-        let label = b"label";
-        let seed = b"seed";
+    fn test_key_schedule_derives_keys() {
+        let hash = Hasher::Sha256;
+        let mut ks = Tls13KeySchedule::new(hash.clone());
 
-        let output1 = TlsPrf::prf(secret, label, seed, 32);
-        let output2 = TlsPrf::prf(secret, label, seed, 32);
+        // After new(), we have early_secret
+        let _early = ks.secret.clone();
 
-        assert_eq!(output1, output2);
-    }
+        // Advance with fake shared secret
+        ks.advance_to_handshake(b"shared_secret_here", &[1u8; 32], &[2u8; 32]);
 
-    #[test]
-    fn test_hkdf_extract() {
-        let salt = b"salt";
-        let ikm = b"input_keying_material";
+        let _client_hs = ks.client_handshake_traffic_secret(&[1u8; 32]);
+        let _server_hs = ks.server_handshake_traffic_secret(&[1u8; 32]);
 
-        let prk = TlsPrf::hkdf_extract(salt, ikm);
-        assert_eq!(prk.len(), 32); // SHA-256 output
-    }
-
-    #[test]
-    fn test_hkdf_expand_label() {
-        let secret = b"secret";
-        let label = "key";
-        let context = b"";
-
-        let output = TlsPrf::hkdf_expand_label(secret, label, context, 16);
-        assert_eq!(output.len(), 16);
-    }
-
-    #[test]
-    fn test_derive_keys_tls12() {
-        let pre_master = vec![0u8; 48];
-        let client_random = [1u8; 32];
-        let server_random = [2u8; 32];
-
-        let (ck, sk, civ, siv) = TlsPrf::derive_keys_tls12(
-            &pre_master,
-            &client_random,
-            &server_random,
-            16, // 128-bit key
-            12, // 96-bit IV
-        );
-
-        assert_eq!(ck.len(), 16);
-        assert_eq!(sk.len(), 16);
-        assert_eq!(civ.len(), 12);
-        assert_eq!(siv.len(), 12);
-    }
-
-    #[test]
-    fn test_derive_keys_tls13() {
-        let shared_secret = vec![0u8; 32];
-        let ch_hash = [1u8; 32];
-        let sh_hash = [2u8; 32];
-
-        let (ck, sk, civ, siv) =
-            TlsPrf::derive_keys_tls13(&shared_secret, &ch_hash, &sh_hash);
-
-        assert_eq!(ck.len(), 16);
-        assert_eq!(sk.len(), 16);
-        assert_eq!(civ.len(), 12);
-        assert_eq!(siv.len(), 12);
+        ks.advance_to_master();
+        let _client_app = ks.client_app_traffic_secret();
+        let _server_app = ks.server_app_traffic_secret();
     }
 }

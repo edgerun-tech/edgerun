@@ -20,7 +20,7 @@ impl Date {
     /// };
     /// ```
     pub fn read() -> Option<Date> {
-        ::get_version_and_date()
+        crate::get_version_and_date()
             .and_then(|(_, date)| date)
             .and_then(|date| Date::parse(&date))
     }

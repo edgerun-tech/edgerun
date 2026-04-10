@@ -1,8 +1,8 @@
 //! Layer extraction, whiteout handling, and rootfs building.
 
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, Read};
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::io::{BufReader, Read};
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 
 use crate::errors::RegistryError;

@@ -11,6 +11,8 @@
 //! If this is better than the current known cost, the route is updated and
 //! advertised in the next hello.
 
+pub mod benchmark;
+
 use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 use edgerun_mesh::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,

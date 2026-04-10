@@ -1,5 +1,16 @@
 [workspace]
 resolver = "2"
+default-members = ["crates/edgerun-compositor"]
+exclude = [
+  "crates/edgerun-mesh",
+  "crates/edgerun-mesh-router",
+  "crates/edgerun-mesh-session",
+  "crates/edgerun-mesh-link",
+  "crates/edgerun-mesh-capability",
+  "crates/edgerun-mesh-daemon",
+  "crates/edgerun-e2e",
+  "crates/edgerun-node",
+]
 members = [
   # Vendored external crates
   "crates/aead",
@@ -39,6 +50,7 @@ members = [
 
   # Protocol / core
   "crates/edgerun-core",
+  "crates/edgerun-bench",
   "crates/edgerun-proto",
   "crates/edgerun-cpufeatures",
   "crates/edgerun-const-oid",
@@ -139,6 +151,12 @@ members = [
   "crates/edgerun-node",
   "crates/edgerun-storage",
   "crates/edgerun-secret-service",
+  "crates/edgerun-compositor",
+
+  # Network infrastructure
+  "crates/edgerun-dhcp",
+  "crates/edgerun-dns",
+  "crates/edgerun-tftp",
 
   # End-to-end hardware tests
   "crates/edgerun-e2e",
@@ -153,6 +171,13 @@ version = "0.1.0"
 
 [profile.release]
 panic = "abort"
+opt-level = 3
+codegen-units = 1
+lto = "fat"
+
+[profile.dev]
+opt-level = 1
+debug = false
 
 [workspace.dependencies]
 aes-gcm = { path = "crates/aes-gcm", default-features = false, features = ["aes", "alloc"] }

@@ -37,7 +37,6 @@ categories = [
 ]
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/RustCrypto/crypto-bigint"
-resolver = "2"
 
 [package.metadata.docs.rs]
 all-features = true

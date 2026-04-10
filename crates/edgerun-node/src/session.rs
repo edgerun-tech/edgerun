@@ -285,7 +285,9 @@ pub fn decode_accept(bytes: &[u8]) -> Result<SessionAccept, prost::DecodeError> 
 
 /// Get current timestamp as protobuf Timestamp.
 pub fn now_timestamp() -> prost_types::Timestamp {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(std::time::Duration::ZERO);
     prost_types::Timestamp {
         seconds: now.as_secs() as i64,
         nanos: now.subsec_nanos() as i32,
@@ -317,8 +319,9 @@ mod tests {
 
             let signing_key = SigningKey::from_bytes(&seed.into())
                 .unwrap_or_else(|_| {
-                    // If seed is invalid, use a fallback
-                    SigningKey::from_bytes(&[1u8; 32].into()).unwrap()
+                    // If seed is invalid, use a fallback (deterministic for tests)
+                    SigningKey::from_bytes(&[1u8; 32].into())
+                        .expect("fallback signing key should always be valid")
                 });
             let verifying_key = signing_key.verifying_key();
             let encoded = verifying_key.to_encoded_point(false);

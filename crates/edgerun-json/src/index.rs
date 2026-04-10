@@ -84,10 +84,11 @@ pub fn object_index_or_insert<'a>(value: &'a mut JsonValue, key: &str) -> &'a mu
     match value {
         JsonValue::Object(entries) => entries.get_or_insert_null(key),
         JsonValue::Null => unreachable!(),
-        JsonValue::Bool(_) => panic!("cannot access key {key:?} in JSON boolean"),
-        JsonValue::Number(_) => panic!("cannot access key {key:?} in JSON number"),
-        JsonValue::String(_) => panic!("cannot access key {key:?} in JSON string"),
-        JsonValue::Array(_) => panic!("cannot access key {key:?} in JSON array"),
+        other => panic!(
+            "cannot access key {:?} in JSON {}",
+            key,
+            other.variant_name(),
+        ),
     }
 }
 
@@ -96,14 +97,14 @@ fn array_index_or_panic(value: &mut JsonValue, index: usize) -> &mut JsonValue {
         JsonValue::Array(values) => {
             let len = values.len();
             values.get_mut(index).unwrap_or_else(|| {
-                panic!("cannot access index {index} of JSON array of length {len}")
+                panic!("cannot access index {} of JSON array of length {}", index, len)
             })
         }
-        JsonValue::Null => panic!("cannot access index {index} of JSON null"),
-        JsonValue::Bool(_) => panic!("cannot access index {index} of JSON boolean"),
-        JsonValue::Number(_) => panic!("cannot access index {index} of JSON number"),
-        JsonValue::String(_) => panic!("cannot access index {index} of JSON string"),
-        JsonValue::Object(_) => panic!("cannot access index {index} of JSON object"),
+        other => panic!(
+            "cannot access index {} of JSON {}",
+            index,
+            other.variant_name(),
+        ),
     }
 }
 

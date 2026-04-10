@@ -8,7 +8,7 @@
 
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::future::Future;
-use std::io::{self, Read, Write};
+use std::io::{self};
 use std::net::{SocketAddr, TcpListener as StdTcpL, TcpStream as StdTcp, ToSocketAddrs};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
@@ -222,6 +222,7 @@ impl Reactor {
     fn new() -> io::Result<Self> {
         Ok(Self { epoll: EpollFd::new()?, fds: Mutex::new(HashMap::new()), timers: Mutex::new(BinaryHeap::new()), shutdown: AtomicBool::new(false) })
     }
+    #[allow(dead_code)]
     fn register_fd(&self, fd: RawFd) -> io::Result<Arc<FdInterest>> {
         let mut map = self.fds.lock().unwrap();
         if let Some(s) = map.get(&fd) { return Ok(s.clone()); }
@@ -317,7 +318,7 @@ impl Reactor {
                     }
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                Err(e) => { edgerun_log::warn!("epoll error: {e}"); std::thread::sleep(Duration::from_millis(10)); }
+                Err(e) => { edgerun_log::warn!("epoll error: {}", e); std::thread::sleep(Duration::from_millis(10)); }
             }
         }
     }
@@ -360,7 +361,7 @@ impl BlockingPool {
                                 } else {
                                     "unknown panic".to_string()
                                 };
-                                edgerun_log::warn!("blocking task panicked: {msg}");
+                                edgerun_log::warn!("blocking task panicked: {}", msg);
                             }
                         }
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
@@ -378,7 +379,7 @@ impl BlockingPool {
                         } else {
                             "unknown panic".to_string()
                         };
-                        edgerun_log::warn!("blocking task panicked: {msg}");
+                        edgerun_log::warn!("blocking task panicked: {}", msg);
                     }
                 }
             })
@@ -445,7 +446,7 @@ impl std::error::Error for JoinError {}
 // Runtime
 // ===========================================================================
 
-struct RuntimeInner {
+pub struct RuntimeInner {
     reactor: Arc<Reactor>,
     tasks: Arc<TaskMap>,
     queue: Arc<ReadyQueue>,
@@ -548,7 +549,7 @@ impl Builder {
                             } else {
                                 "unknown panic".to_string()
                             };
-                            edgerun_log::warn!("task panicked: {msg}");
+                            edgerun_log::warn!("task panicked: {}", msg);
                             // Task is dropped — not re-inserted
                         }
                     }
@@ -565,6 +566,7 @@ impl Builder {
 
 pub struct Runtime { inner: Arc<RuntimeInner> }
 impl Runtime {
+    #[allow(dead_code)]
     pub fn new_multi_thread() -> Builder { Builder::new_multi_thread() }
 
     pub fn spawn<F>(&self, f: F) -> JoinHandle<F::Output>
@@ -829,7 +831,7 @@ impl AsyncRead for TcpStream {
         let mut inner = self.inner.lock().unwrap();
         let fd = inner.as_raw_fd();
         let mut tmp_buf = vec![0u8; buf.len()];
-        match inner.read(&mut tmp_buf) {
+        match std::io::Read::read(&mut *inner, &mut tmp_buf) {
             Ok(0) => Poll::Ready(Ok(0)),
             Ok(n) => { buf[..n].copy_from_slice(&tmp_buf[..n]); drop(inner); rt.reactor.clear_read(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -847,7 +849,7 @@ impl AsyncWrite for TcpStream {
         let rt = current_rt();
         let mut inner = self.inner.lock().unwrap();
         let fd = inner.as_raw_fd();
-        match inner.write(buf) {
+        match std::io::Write::write(&mut *inner, buf) {
             Ok(n) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 drop(inner);
@@ -859,7 +861,7 @@ impl AsyncWrite for TcpStream {
     }
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> { Poll::Ready(Ok(())) }
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let mut inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap();
         match inner.shutdown(std::net::Shutdown::Write) {
             Ok(()) => Poll::Ready(Ok(())),
             Err(e) => Poll::Ready(Err(e)),
@@ -886,7 +888,7 @@ impl AsyncRead for ReadHalf {
         let mut inner = self.inner.lock().unwrap();
         let fd = inner.as_raw_fd();
         let mut tmp_buf = vec![0u8; buf.len()];
-        match inner.read(&mut tmp_buf) {
+        match std::io::Read::read(&mut *inner, &mut tmp_buf) {
             Ok(0) => Poll::Ready(Ok(0)),
             Ok(n) => { buf[..n].copy_from_slice(&tmp_buf[..n]); drop(inner); rt.reactor.clear_read(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -903,7 +905,7 @@ impl AsyncWrite for WriteHalf {
         let rt = current_rt();
         let mut inner = self.inner.lock().unwrap();
         let fd = inner.as_raw_fd();
-        match inner.write(buf) {
+        match std::io::Write::write(&mut *inner, buf) {
             Ok(n) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(n)) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 drop(inner);
@@ -917,7 +919,7 @@ impl AsyncWrite for WriteHalf {
         let rt = current_rt();
         let mut inner = self.inner.lock().unwrap();
         let fd = inner.as_raw_fd();
-        match inner.flush() {
+        match std::io::Write::flush(&mut *inner) {
             Ok(()) => { drop(inner); rt.reactor.clear_write(fd); Poll::Ready(Ok(())) }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 drop(inner);
@@ -928,7 +930,7 @@ impl AsyncWrite for WriteHalf {
         }
     }
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        let mut inner = self.inner.lock().unwrap();
+        let inner = self.inner.lock().unwrap();
         match inner.shutdown(std::net::Shutdown::Write) {
             Ok(()) => Poll::Ready(Ok(())),
             Err(e) => Poll::Ready(Err(e)),
@@ -1030,6 +1032,7 @@ impl Future for CtrlC {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     static NOOP_WAKER: std::sync::LazyLock<Waker> = std::sync::LazyLock::new(|| {
         static VTABLE_NOOP: RawWakerVTable = RawWakerVTable::new(clone_noop, wake_noop, wake_noop, drop_noop);
         const fn clone_noop(_: *const ()) -> RawWaker { RawWaker::new(std::ptr::null(), &VTABLE_NOOP) }
@@ -1038,6 +1041,7 @@ mod tests {
         unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE_NOOP)) }
     });
 
+    #[allow(dead_code)]
     fn ctx() -> Context<'static> {
         Context::from_waker(&*NOOP_WAKER)
     }

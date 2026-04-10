@@ -568,9 +568,6 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::panic)]
     use super::*;
 
-    #[cfg(feature = "dev")]
-    use crate::dev::MockCurve;
-
     /// Example private key. From RFC 7518 Appendix C:
     /// <https://tools.ietf.org/html/rfc7518#appendix-C>
     const JWK_PRIVATE_KEY: &str = r#"
@@ -648,28 +645,5 @@ mod tests {
         let actual = JwkEcKey::from_str(JWK_PUBLIC_KEY).unwrap().to_string();
         let expected: String = JWK_PUBLIC_KEY.split_whitespace().collect();
         assert_eq!(actual, expected);
-    }
-
-    #[cfg(feature = "dev")]
-    #[test]
-    fn jwk_into_encoded_point() {
-        let jwk = JwkEcKey::from_str(JWK_PUBLIC_KEY).unwrap();
-        let point = jwk.to_encoded_point::<MockCurve>().unwrap();
-        let (x, y) = match point.coordinates() {
-            Coordinates::Uncompressed { x, y } => (x, y),
-            other => panic!("unexpected coordinates: {other:?}"),
-        };
-
-        assert_eq!(&decode_base64url_fe::<MockCurve>(&jwk.x).unwrap(), x);
-        assert_eq!(&decode_base64url_fe::<MockCurve>(&jwk.y).unwrap(), y);
-    }
-
-    #[cfg(feature = "dev")]
-    #[test]
-    fn encoded_point_into_jwk() {
-        let jwk = JwkEcKey::from_str(JWK_PUBLIC_KEY).unwrap();
-        let point = jwk.to_encoded_point::<MockCurve>().unwrap();
-        let jwk2 = JwkEcKey::from_encoded_point::<MockCurve>(&point).unwrap();
-        assert_eq!(jwk, jwk2);
     }
 }

@@ -1,0 +1,16 @@
+[package]
+name = "edgerun-compositor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Wayland compositor — zero external C dependencies, direct Linux kernel only"
+
+[[bin]]
+name = "edgerun-compositor"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-evdev-input = { path = "../edgerun-evdev-input" }
+edgerun-input = { path = "../edgerun-input" }
+libc = { path = "../libc" }

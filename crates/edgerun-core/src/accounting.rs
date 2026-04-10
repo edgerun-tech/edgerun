@@ -171,6 +171,20 @@ pub struct PerformanceCertificate {
     pub storage_random_iops: u64,
     /// Storage sequential throughput MB/s
     pub storage_seq_mbps: u64,
+    /// Storage event append IOPS (protobuf encode + file append + fsync)
+    pub storage_event_iops: u64,
+    /// Storage blob put/get ops/s (encrypt + write / read + decrypt)
+    pub storage_blob_ops: u64,
+    /// Storage object put/get ops/s (encode + encrypt + blob + index)
+    pub storage_object_ops: u64,
+    /// Mesh frame encode/decode ops/s
+    pub net_frame_encode_decode_ops: u64,
+    /// Mesh frame sign/verify ops/s
+    pub net_frame_sign_verify_ops: u64,
+    /// UDP raw throughput ops/s (send + recv loopback)
+    pub net_udp_throughput_ops: u64,
+    /// Mesh router next-hop lookup ops/s
+    pub net_router_lookup_ops: u64,
     /// Optional GPU compute score
     pub gpu_score: Option<u64>,
     /// Optional NPU compute score
@@ -193,11 +207,18 @@ pub const REFERENCE_MEM_BW_MBPS: u64 = 5_000;
 pub const REFERENCE_MEM_LATENCY_NS: u64 = 100;
 pub const REFERENCE_STORAGE_IOPS: u64 = 3_000;
 pub const REFERENCE_STORAGE_SEQ_MBPS: u64 = 50;
+pub const REFERENCE_STORAGE_EVENT_IOPS: u64 = 500;
+pub const REFERENCE_STORAGE_BLOB_OPS: u64 = 1_000;
+pub const REFERENCE_STORAGE_OBJECT_OPS: u64 = 500;
+pub const REFERENCE_NET_FRAME_ENCODE_DECODE_OPS: u64 = 10_000;
+pub const REFERENCE_NET_FRAME_SIGN_VERIFY_OPS: u64 = 1_000;
+pub const REFERENCE_NET_UDP_THROUGHPUT_OPS: u64 = 50_000;
+pub const REFERENCE_NET_ROUTER_LOOKUP_OPS: u64 = 100_000;
 
 impl PerformanceCertificate {
     /// Compute the SHA-256 digest of all performance fields (excludes digest and signature).
     pub fn compute_digest(&self) -> [u8; 32] {
-        let mut buf = [0u8; 64 + 8 * 8 + 8 + 8];
+        let mut buf = [0u8; 64 + 8 * 15 + 8 + 8]; // 200 bytes
         buf[0..64].copy_from_slice(&self.node_id);
         buf[64..72].copy_from_slice(&self.cpu_int_score.to_le_bytes());
         buf[72..80].copy_from_slice(&self.cpu_crypto_score.to_le_bytes());
@@ -205,24 +226,63 @@ impl PerformanceCertificate {
         buf[88..96].copy_from_slice(&self.mem_latency_ns.to_le_bytes());
         buf[96..104].copy_from_slice(&self.storage_random_iops.to_le_bytes());
         buf[104..112].copy_from_slice(&self.storage_seq_mbps.to_le_bytes());
-        buf[112..120].copy_from_slice(&(self.gpu_score.unwrap_or(0)).to_le_bytes());
-        buf[120..128].copy_from_slice(&(self.npu_score.unwrap_or(0)).to_le_bytes());
-        buf[128..136].copy_from_slice(&self.benchmark_started_us.to_le_bytes());
-        buf[136..144].copy_from_slice(&self.benchmark_completed_us.to_le_bytes());
+        buf[112..120].copy_from_slice(&self.storage_event_iops.to_le_bytes());
+        buf[120..128].copy_from_slice(&self.storage_blob_ops.to_le_bytes());
+        buf[128..136].copy_from_slice(&self.storage_object_ops.to_le_bytes());
+        buf[136..144].copy_from_slice(&self.net_frame_encode_decode_ops.to_le_bytes());
+        buf[144..152].copy_from_slice(&self.net_frame_sign_verify_ops.to_le_bytes());
+        buf[152..160].copy_from_slice(&self.net_udp_throughput_ops.to_le_bytes());
+        buf[160..168].copy_from_slice(&self.net_router_lookup_ops.to_le_bytes());
+        buf[168..176].copy_from_slice(&(self.gpu_score.unwrap_or(0)).to_le_bytes());
+        buf[176..184].copy_from_slice(&(self.npu_score.unwrap_or(0)).to_le_bytes());
+        buf[184..192].copy_from_slice(&self.benchmark_started_us.to_le_bytes());
+        buf[192..200].copy_from_slice(&self.benchmark_completed_us.to_le_bytes());
         let hash = sha256(&buf);
         let mut out = [0u8; 32];
         out.copy_from_slice(&hash);
         out
     }
 
-    /// Verify the certificate's integrity (digest matches) and signature.
+    /// Verify the certificate's integrity (digest matches) and ECDSA signature.
+    /// Returns `true` if both the digest and signature are valid.
     pub fn verify(&self) -> bool {
+        // 1. Check digest matches
         if self.digest != self.compute_digest() {
             return false;
         }
-        // Signature verification would use p256::ecdsa::VerifyingKey
-        // For now, we verify the digest — full sig verification needs the verifying key
-        true
+
+        // 2. Verify ECDSA P-256 signature over the digest
+        self.verify_ecdsa_signature().is_ok()
+    }
+
+    fn verify_ecdsa_signature(&self) -> Result<(), &'static str> {
+        use p256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
+        use p256::EncodedPoint;
+
+        // Reconstruct the public key from node_id (64 bytes: x || y, uncompressed without 0x04)
+        let mut pk_bytes = [0u8; 65];
+        pk_bytes[0] = 0x04;
+        pk_bytes[1..33].copy_from_slice(&self.node_id[..32]);
+        pk_bytes[33..].copy_from_slice(&self.node_id[32..]);
+
+        let encoded_point = EncodedPoint::from_bytes(pk_bytes).map_err(|_| "Invalid public key")?;
+        let verifying_key = VerifyingKey::from_encoded_point(&encoded_point).map_err(|_| "Invalid verifying key")?;
+
+        // Parse signature (r || s format, 64 bytes total)
+        let r_bytes: [u8; 32] = self.signature[..32].try_into().map_err(|_| "Invalid r")?;
+        let s_bytes: [u8; 32] = self.signature[32..].try_into().map_err(|_| "Invalid s")?;
+
+        let sig = Signature::from_scalars(r_bytes, s_bytes).map_err(|_| "Invalid signature")?;
+
+        // Verify signature over the digest
+        verifying_key.verify_prehash(&self.digest, &sig).map_err(|_| "Signature verification failed")
+    }
+
+    /// Compute and return a new certificate with the digest field populated.
+    /// Convenience method for benchmark construction.
+    pub fn with_digest(mut self) -> Self {
+        self.digest = self.compute_digest();
+        self
     }
 
     /// CPU core multiplier relative to reference.
@@ -248,9 +308,9 @@ impl PerformanceCertificate {
     }
 
     /// Serialize the certificate to bytes for wire transport.
-    /// Format: node_id(64) + scores(8*8) + times(2*8) + digest(32) + signature(64) = 224 bytes
+    /// Format: node_id(64) + scores(15*8) + times(2*8) + digest(32) + signature(64) = 296 bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(224);
+        let mut buf = Vec::with_capacity(296);
         buf.extend_from_slice(&self.node_id);
         buf.extend_from_slice(&self.cpu_int_score.to_le_bytes());
         buf.extend_from_slice(&self.cpu_crypto_score.to_le_bytes());
@@ -258,6 +318,13 @@ impl PerformanceCertificate {
         buf.extend_from_slice(&self.mem_latency_ns.to_le_bytes());
         buf.extend_from_slice(&self.storage_random_iops.to_le_bytes());
         buf.extend_from_slice(&self.storage_seq_mbps.to_le_bytes());
+        buf.extend_from_slice(&self.storage_event_iops.to_le_bytes());
+        buf.extend_from_slice(&self.storage_blob_ops.to_le_bytes());
+        buf.extend_from_slice(&self.storage_object_ops.to_le_bytes());
+        buf.extend_from_slice(&self.net_frame_encode_decode_ops.to_le_bytes());
+        buf.extend_from_slice(&self.net_frame_sign_verify_ops.to_le_bytes());
+        buf.extend_from_slice(&self.net_udp_throughput_ops.to_le_bytes());
+        buf.extend_from_slice(&self.net_router_lookup_ops.to_le_bytes());
         buf.extend_from_slice(&(self.gpu_score.unwrap_or(0)).to_le_bytes());
         buf.extend_from_slice(&(self.npu_score.unwrap_or(0)).to_le_bytes());
         buf.extend_from_slice(&self.benchmark_started_us.to_le_bytes());
@@ -269,7 +336,7 @@ impl PerformanceCertificate {
 
     /// Deserialize from bytes.
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
-        if data.len() < 224 {
+        if data.len() < 296 {
             return None;
         }
         let mut node_id = [0u8; 64];
@@ -280,14 +347,21 @@ impl PerformanceCertificate {
         let mem_latency_ns = u64::from_le_bytes(data[88..96].try_into().ok()?);
         let storage_random_iops = u64::from_le_bytes(data[96..104].try_into().ok()?);
         let storage_seq_mbps = u64::from_le_bytes(data[104..112].try_into().ok()?);
-        let gpu_raw = u64::from_le_bytes(data[112..120].try_into().ok()?);
-        let npu_raw = u64::from_le_bytes(data[120..128].try_into().ok()?);
-        let benchmark_started_us = u64::from_le_bytes(data[128..136].try_into().ok()?);
-        let benchmark_completed_us = u64::from_le_bytes(data[136..144].try_into().ok()?);
+        let storage_event_iops = u64::from_le_bytes(data[112..120].try_into().ok()?);
+        let storage_blob_ops = u64::from_le_bytes(data[120..128].try_into().ok()?);
+        let storage_object_ops = u64::from_le_bytes(data[128..136].try_into().ok()?);
+        let net_frame_encode_decode_ops = u64::from_le_bytes(data[136..144].try_into().ok()?);
+        let net_frame_sign_verify_ops = u64::from_le_bytes(data[144..152].try_into().ok()?);
+        let net_udp_throughput_ops = u64::from_le_bytes(data[152..160].try_into().ok()?);
+        let net_router_lookup_ops = u64::from_le_bytes(data[160..168].try_into().ok()?);
+        let gpu_raw = u64::from_le_bytes(data[168..176].try_into().ok()?);
+        let npu_raw = u64::from_le_bytes(data[176..184].try_into().ok()?);
+        let benchmark_started_us = u64::from_le_bytes(data[184..192].try_into().ok()?);
+        let benchmark_completed_us = u64::from_le_bytes(data[192..200].try_into().ok()?);
         let mut digest = [0u8; 32];
-        digest.copy_from_slice(&data[144..176]);
+        digest.copy_from_slice(&data[200..232]);
         let mut signature = [0u8; 64];
-        signature.copy_from_slice(&data[176..240]);
+        signature.copy_from_slice(&data[232..296]);
 
         let gpu_score = if gpu_raw > 0 { Some(gpu_raw) } else { None };
         let npu_score = if npu_raw > 0 { Some(npu_raw) } else { None };
@@ -295,6 +369,9 @@ impl PerformanceCertificate {
         Some(Self {
             node_id, cpu_int_score, cpu_crypto_score, mem_bandwidth_mbps,
             mem_latency_ns, storage_random_iops, storage_seq_mbps,
+            storage_event_iops, storage_blob_ops, storage_object_ops,
+            net_frame_encode_decode_ops, net_frame_sign_verify_ops,
+            net_udp_throughput_ops, net_router_lookup_ops,
             gpu_score, npu_score, benchmark_started_us, benchmark_completed_us,
             digest, signature,
         })
@@ -733,6 +810,13 @@ mod tests {
             mem_latency_ns: 50,
             storage_random_iops: 6_000,
             storage_seq_mbps: 100,
+            storage_event_iops: 1_000,
+            storage_blob_ops: 2_000,
+            storage_object_ops: 1_000,
+            net_frame_encode_decode_ops: 20_000,
+            net_frame_sign_verify_ops: 2_000,
+            net_udp_throughput_ops: 100_000,
+            net_router_lookup_ops: 200_000,
             gpu_score: None,
             npu_score: None,
             benchmark_started_us: 1_000_000_000_000_000,
@@ -757,6 +841,13 @@ mod tests {
             mem_latency_ns: 0,
             storage_random_iops: 0,
             storage_seq_mbps: 0,
+            storage_event_iops: 0,
+            storage_blob_ops: 0,
+            storage_object_ops: 0,
+            net_frame_encode_decode_ops: 0,
+            net_frame_sign_verify_ops: 0,
+            net_udp_throughput_ops: 0,
+            net_router_lookup_ops: 0,
             gpu_score: None,
             npu_score: None,
             benchmark_started_us: 0,
@@ -781,6 +872,13 @@ mod tests {
             mem_latency_ns: 0,
             storage_random_iops: 0,
             storage_seq_mbps: 0,
+            storage_event_iops: 0,
+            storage_blob_ops: 0,
+            storage_object_ops: 0,
+            net_frame_encode_decode_ops: 0,
+            net_frame_sign_verify_ops: 0,
+            net_udp_throughput_ops: 0,
+            net_router_lookup_ops: 0,
             gpu_score: None,
             npu_score: None,
             benchmark_started_us: 0,
@@ -901,6 +999,13 @@ mod tests {
             mem_latency_ns: 50,           // 2x reference (half the latency)
             storage_random_iops: 0,
             storage_seq_mbps: 0,
+            storage_event_iops: 0,
+            storage_blob_ops: 0,
+            storage_object_ops: 0,
+            net_frame_encode_decode_ops: 0,
+            net_frame_sign_verify_ops: 0,
+            net_udp_throughput_ops: 0,
+            net_router_lookup_ops: 0,
             gpu_score: None,
             npu_score: None,
             benchmark_started_us: 0,

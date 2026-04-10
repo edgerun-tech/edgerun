@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
@@ -19,7 +19,7 @@ pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
         q: Mutex::new(VecDeque::with_capacity(cap)),
         cap,
         recv_waker: Mutex::new(None),
-        /// Queue of pending senders waiting for space in the channel.
+        // Queue of pending senders waiting for space in the channel.
         pending_senders: Mutex::new(VecDeque::new()),
         send_cvar: Condvar::new(),
         closed: AtomicBool::new(false),

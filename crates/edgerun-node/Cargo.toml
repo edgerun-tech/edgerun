@@ -10,7 +10,11 @@ name = "edgerund"
 path = "src/main.rs"
 
 [features]
-default = ["all-hardware"]
+default = ["all-hardware", "oci"]
+oci = [
+    "dep:edgerun-oci-runtime",
+    "dep:edgerun-oci-registry",
+]
 hardware = [
     "dep:edgerun-evdev-input",
     "dep:edgerun-alsa-speaker",
@@ -143,9 +147,9 @@ edgerun-json = { path = "../edgerun-json", optional = true }
 edgerun-machine-report = { path = "../edgerun-machine-report", optional = true }
 edgerun-rand_core = { path = "../edgerun-rand_core", optional = true, package = "rand_core" }
 
-# OCI container runtime (required for ExecuteWorkload)
-edgerun-oci-registry = { path = "../edgerun-oci-registry" }
-edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
+# OCI container runtime (enable with --features oci)
+edgerun-oci-registry = { path = "../edgerun-oci-registry", optional = true }
+edgerun-oci-runtime = { path = "../edgerun-oci-runtime", optional = true }
 
 [dev-dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }

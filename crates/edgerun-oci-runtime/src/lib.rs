@@ -8,7 +8,7 @@ use std::fs;
 use std::io;
 use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 // ===========================================================================
@@ -91,6 +91,7 @@ const SECCOMP_FILTER_FLAG_TSYNC: c_uint = 1;
 
 /// Minimal seccomp-BPF allow-list for containers.
 /// Allows essential syscalls, denies everything else with EPERM.
+/// Supports both x86_64 and aarch64 architectures.
 fn seccomp_bpf_prog() -> Vec<u8> {
     // BPF instruction: code(u16) jt(u8) jf(u8) k(u32) = 8 bytes
     //
@@ -101,12 +102,13 @@ fn seccomp_bpf_prog() -> Vec<u8> {
     //
     // seccomp_data layout:
     //   offset 0: syscall_nr (u32)
-    //   offset 4: audit_arch (u32)  — x86_64 = 0xc000003e
+    //   offset 4: audit_arch (u32)  — x86_64 = 0xc000003e, aarch64 = 0xc00000b7
     //
     // SECCOMP_RET_ALLOW = 0x7fff0000
     // SECCOMP_RET_ERRNO(EPERM) = 0x00050001
 
-    // Essential syscalls for container workloads
+    // Architecture-specific syscall numbers
+    #[cfg(target_arch = "x86_64")]
     const ALLOWED: &[u32] = &[
         0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12,       // read/write/stat/mmap/munmap/brk
         13, 14, 15, 16, 17, 18, 19, 20,               // signals/ioctl/pread/pwrite/readv/writev
@@ -120,14 +122,42 @@ fn seccomp_bpf_prog() -> Vec<u8> {
         257, 262, 273, 281, 291, 302, 318, 332, 334, // statx/getdents/epoll/eventfd/timerfd/pidfd/clone3/rseq
         424, 435,                                     // pidfd_getfd/epoll_pwait2
     ];
+    #[cfg(target_arch = "x86_64")]
+    const AUDIT_ARCH: u32 = 0xc000003e;
+
+    // TODO: Add proper aarch64 syscall list. The numbers below are placeholders.
+    // See https://github.com/ureddit/aarch64-linux-gnu-syscall-list
+    #[cfg(target_arch = "aarch64")]
+    const ALLOWED: &[u32] = &[
+        // Basic I/O and memory management
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,        // io_setup..close
+        13, 14, 15, 16, 17, 18, 19, 20, 21,           // readv..getpid
+        22, 23, 24, 25, 27, 28, 29, 30, 31,           // sendfile..madvise
+        32, 34, 35, 36, 37, 38, 39, 40, 41,           // pause..lseek
+        43, 44, 45, 46, 47, 48, 49, 50, 51,           // mmap..shutdown
+        52, 53, 54, 55, 56, 57, 58, 59, 60,           // setsockopt..wait4
+        61, 62, 63, 73, 74, 79, 80, 81, 82,           // kill..truncate
+        83, 84, 85, 86, 87, 88, 89, 90, 91,           // fcntl..symlinkat
+        92, 93, 94, 98, 99, 100, 101, 102, 103,       // linkat..clock_settime
+        104, 107, 108, 113, 114, 115, 116, 117, 127, // timer_create..sigaltstack
+        131, 132, 133, 134, 135, 157, 158, 159, 168, // futex..epoll_ctl
+        176, 191, 199, 200, 202, 217, 221, 228, 234, // prctl..clone3
+        244, 248, 255, 257, 262, 273, 281, 291, 302, // open_tree..process_madvise
+        332, 334, 424, 435,
+    ];
+    #[cfg(target_arch = "aarch64")]
+    const AUDIT_ARCH: u32 = 0xc00000b7;
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    compile_error!("seccomp-BPF only supported on x86_64 and aarch64");
 
     let mut insns: Vec<[u8; 8]> = Vec::new();
 
     // 0: LOAD audit_arch
     insns.push(bpf_insn(0x20, 0, 0, 4));
-    // 1: JEQ x86_64 (0xc000003e) ? continue : kill (skip to RET ERRNO)
+    // 1: JEQ expected_arch ? continue : kill (skip to RET ERRNO)
     let skip_to_deny = ALLOWED.len() + 2; // skip all checks + RET DENY
-    insns.push(bpf_insn_j(0x15, skip_to_deny.min(255) as u8, 0, 0xc000003e));
+    insns.push(bpf_insn_j(0x15, skip_to_deny.min(255) as u8, 0, AUDIT_ARCH));
     // 2: LOAD syscall_nr
     insns.push(bpf_insn(0x20, 0, 0, 0));
 
@@ -145,11 +175,26 @@ fn seccomp_bpf_prog() -> Vec<u8> {
     insns.push(bpf_insn(0x06, 0, 0, 0x7fff0000));
 
     // Build sock_fprog: { len: u16, filter: *sock_filter }
-    let leaked = Box::leak(Box::new(insns));
+    // Use a thread-local cell array to avoid static mut UB
+    const MAX_INSNS: usize = 256;
+    
+    if insns.len() > MAX_INSNS {
+        // Fallback: use a minimal allowlist that fits in storage
+        panic!("seccomp BPF program too large: {} instructions (max {})", insns.len(), MAX_INSNS);
+    }
+
+    // Copy instructions into a stack buffer
+    let mut insn_bytes = [0u8; MAX_INSNS * 8];
+    let src = unsafe { std::slice::from_raw_parts(insns.as_ptr() as *const u8, insns.len() * 8) };
+    insn_bytes[..src.len()].copy_from_slice(src);
+
+    let prog_len = insns.len() as u16;
+    let prog_ptr = insn_bytes.as_ptr();
+
     let mut prog = Vec::with_capacity(16);
-    prog.extend_from_slice(&(leaked.len() as u16).to_le_bytes());
+    prog.extend_from_slice(&prog_len.to_le_bytes());
     prog.resize(8, 0);
-    prog.extend_from_slice(&(leaked.as_ptr() as u64).to_le_bytes());
+    prog.extend_from_slice(&(prog_ptr as u64).to_le_bytes());
     prog
 }
 
@@ -237,7 +282,13 @@ fn makedev(major: u64, minor: u64) -> c_uint {
 
 fn create_device(path: &str, major: u64, minor: u64, mode: u32) {
     let dev = makedev(major, minor);
-    let path_c = CString::new(path).unwrap();
+    let path_c = match CString::new(path) {
+        Ok(c) => c,
+        Err(_) => {
+            // Path contains null byte — skip device creation
+            return;
+        }
+    };
     let _ = unsafe { mknod(path_c.as_ptr(), S_IFCHR | mode, dev) };
 }
 
@@ -543,7 +594,6 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
     let no_new_privs = process.no_new_privileges.unwrap_or(true);
 
     let root_path = root.path.clone();
-    let root_path_pre = root_path.clone();
     let mounts = spec.mounts.clone();
     let masked = linux.masked_paths.clone();
     let readonly = linux.readonly_paths.clone();
@@ -584,12 +634,13 @@ pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
             }
 
             // 5. Apply seccomp-BPF filter (deny all but essential syscalls)
-            // Fail open: if seccomp is not supported, log and continue.
-            if let Err(e) = apply_seccomp() {
-                // Seccomp may be unavailable in some environments (containers, WSL).
-                // Log the error but don't block the workload.
-                let _ = std::fs::write("/tmp/.edgerun_seccomp_err", format!("{}", e));
-            }
+            // Fail-closed: if seccomp cannot be applied, the container is not secure.
+            apply_seccomp().map_err(|e| {
+                io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
+                )
+            })?;
 
             // 6. Setup rootfs (pivot_root, mount filesystems)
             let oci_root = OciRoot { path: root_path.clone(), readonly: None };
@@ -692,7 +743,7 @@ pub fn create_bundle(
 /// Serialize an OCI spec to config.json in a bundle directory.
 pub fn write_bundle(bundle_path: &Path, spec: &OciSpec) -> io::Result<()> {
     fs::create_dir_all(bundle_path)?;
-    let json = spec.to_json_string_pretty();
+    let json = spec.to_json_string();
     fs::write(bundle_path.join("config.json"), json)?;
     Ok(())
 }
@@ -1356,7 +1407,7 @@ mod tests {
             source: Some("proc".into()),
             options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
         };
-        let json = mount.to_json_pretty(0);
+        let json = edgerun_json::to_string_pretty(&mount).unwrap();
         let parsed: OciMount = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.destination, "/proc");
         assert_eq!(parsed.mount_type, Some("proc".into()));
@@ -1370,20 +1421,25 @@ mod tests {
     #[test]
     fn oci_linux_resources_roundtrip() {
         let res = OciLinuxResources {
-            pids: None,
+            pids: Some(OciLinuxPids { limit: 256 }),
             memory: Some(OciLinuxMemory {
                 limit: Some(1073741824),
                 reservation: Some(536870912),
                 swap: Some(0),
+                kernel: None,
+                kernel_tcp: None,
             }),
             cpu: Some(OciLinuxCpu {
                 shares: Some(2048),
                 quota: Some(100000),
                 period: Some(100000),
+                realtime_runtime: None,
+                realtime_period: None,
+                cpus: None,
+                mems: None,
             }),
-            pids: Some(OciLinuxPids { limit: 256 }),
         };
-        let json = res.to_json_pretty(0);
+        let json = edgerun_json::to_string_pretty(&res).unwrap();
         let parsed: OciLinuxResources = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.memory.as_ref().unwrap().limit, Some(1073741824));
         assert_eq!(parsed.cpu.as_ref().unwrap().shares, Some(2048));
@@ -1403,7 +1459,7 @@ mod tests {
             permitted: Some(vec!["CAP_NET_BIND_SERVICE".into()]),
             ambient: Some(vec![]),
         };
-        let json = caps.to_json_pretty(0);
+        let json = edgerun_json::to_string_pretty(&caps).unwrap();
         let parsed: OciCapabilities = json::parse_oci_spec(json.as_bytes()).unwrap();
         assert_eq!(parsed.bounding.as_ref().unwrap().len(), 1);
         assert_eq!(parsed.effective.as_ref().unwrap()[0], "CAP_NET_BIND_SERVICE");

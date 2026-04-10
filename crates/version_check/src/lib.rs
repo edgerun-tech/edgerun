@@ -130,7 +130,7 @@ fn version_and_date_from_rustc_version(s: &str) -> (Option<String>, Option<Strin
     let mut components = last_line.trim().split(" ");
     let version = components.nth(1);
     let date = components.filter(|c| c.ends_with(')')).next()
-        .map(|s| s.trim_right().trim_right_matches(")").trim_left().trim_left_matches('('));
+        .map(|s| s.trim_end().trim_end_matches(")").trim_start().trim_start_matches('('));
     (version.map(|s| s.to_string()), date.map(|s| s.to_string()))
 }
 
@@ -156,7 +156,7 @@ fn version_and_date_from_rustc_verbose_version(s: &str) -> (Option<String>, Opti
 }
 
 /// Returns (version, date) as available from `rustc --version`.
-fn get_version_and_date() -> Option<(Option<String>, Option<String>)> {
+pub(crate) fn get_version_and_date() -> Option<(Option<String>, Option<String>)> {
     let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
     Command::new(rustc).arg("--verbose").arg("--version").output().ok()
         .and_then(|output| String::from_utf8(output.stdout).ok())
@@ -337,7 +337,7 @@ pub fn supports_feature(feature: &str) -> Option<bool> {
 
         let rustflags = flags.to_string_lossy();
         let allow_features = rustflags.split(delim)
-            .map(|flag| flag.trim_left_matches("-Z").trim())
+            .map(|flag| flag.trim_start_matches("-Z").trim())
             .filter(|flag| flag.starts_with(ALLOW_FEATURES))
             .map(|flag| &flag[ALLOW_FEATURES.len()..]);
 

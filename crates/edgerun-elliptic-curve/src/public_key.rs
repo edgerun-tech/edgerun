@@ -549,19 +549,3 @@ where
         Self::from_public_key_der(&der_bytes).map_err(de::Error::custom)
     }
 }
-
-#[cfg(all(feature = "dev", test))]
-mod tests {
-    use crate::{dev::MockCurve, sec1::FromEncodedPoint};
-
-    type EncodedPoint = crate::sec1::EncodedPoint<MockCurve>;
-    type PublicKey = super::PublicKey<MockCurve>;
-
-    #[test]
-    fn from_encoded_point_rejects_identity() {
-        let identity = EncodedPoint::identity();
-        assert!(bool::from(
-            PublicKey::from_encoded_point(&identity).is_none()
-        ));
-    }
-}

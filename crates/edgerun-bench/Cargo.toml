@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-core = { path = "../edgerun-core" }
+edgerun-mesh = { path = "../edgerun-mesh" }
+edgerun-mesh-router = { path = "../edgerun-mesh-router" }
+edgerun-tpm = { path = "../edgerun-tpm" }
+edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm"] }
+edgerun-yubikey = { path = "../edgerun-yubikey" }
+getrandom = "0.3"
+p256 = { path = "../edgerun-p256", features = ["ecdsa", "sha256"] }
+
+[[bin]]
+name = "edgerun-bench"
+path = "src/main.rs"

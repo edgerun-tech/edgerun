@@ -116,7 +116,7 @@ impl Drop for Notified<'_> {
         // If we registered a waker but the future was dropped before completing,
         // remove ourselves from the waiters list.
         if self.registered {
-            if let Ok(mut inner) = self.notify.inner.lock() {
+            if let Ok(_inner) = self.notify.inner.lock() {
                 // We can't efficiently remove by pointer, but we don't need to:
                 // the waker will just be woken spuriously and re-register.
                 // For correctness, the waker wakes a task that may have already

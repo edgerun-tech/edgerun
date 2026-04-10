@@ -509,7 +509,7 @@ pub fn serve_capabilities_unix(
         match listener.accept() {
             Ok((stream, _addr)) => {
                 let mut transport = FramedRemoteTransport::new(stream);
-                let mut locked = multi.lock().unwrap();
+                let mut locked = multi.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
                 match serve_one(&mut *locked, &mut transport) {
                     Ok(true) => {} // connection served
                     Ok(false) => {} // connection closed gracefully

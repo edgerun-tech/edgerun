@@ -5,14 +5,14 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::auth::{decode_basic_auth, parse_bearer_auth, RegistryAuth};
+use crate::auth::{parse_bearer_auth, RegistryAuth};
 use crate::config::{
     parse_image_config, parse_json_bytes, parse_manifest,
-    parse_single_manifest_from_value,
+    parse_single_manifest,
 };
 use crate::errors::RegistryError;
 use crate::layer::{
-    apply_whiteouts, build_rootfs, extract_layer, extract_tar, verify_blob_digest,
+    apply_whiteouts, build_rootfs, extract_layer, verify_blob_digest,
 };
 use crate::manifest::{ImageManifest, SingleManifest};
 use crate::oci_spec::generate_oci_spec;
@@ -309,9 +309,7 @@ impl RegistryClient {
 
         let body = self.authenticated_get(&image.registry, &url, &headers)?;
 
-        let value = parse_json_bytes(&body)
-            .map_err(|e| RegistryError::ParseError(e))?;
-        parse_manifest(&value).map_err(|e| RegistryError::ParseError(e))
+        parse_manifest(&body).map_err(|e| RegistryError::ParseError(e))
     }
 
     /// Fetch a manifest by digest.
@@ -322,9 +320,7 @@ impl RegistryClient {
         digest: &str,
     ) -> Result<SingleManifest, RegistryError> {
         let body = self.fetch_blob(registry, repository, digest)?;
-        let value = parse_json_bytes(&body)
-            .map_err(|e| RegistryError::ParseError(e))?;
-        parse_single_manifest_from_value(&value)
+        parse_single_manifest(&body)
             .map_err(|e| RegistryError::ParseError(e))
     }
 
@@ -432,7 +428,7 @@ impl RegistryClient {
     /// Handle OCI Registry V2 authentication (Bearer token exchange).
     fn handle_auth_challenge(
         &mut self,
-        registry: &str,
+        _registry: &str,
         www_auth: &str,
     ) -> Result<(), RegistryError> {
         let (realm, service, scope) = parse_bearer_auth(www_auth)

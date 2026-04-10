@@ -19,7 +19,7 @@ impl Version {
     /// };
     /// ```
     pub fn read() -> Option<Version> {
-        ::get_version_and_date()
+        crate::get_version_and_date()
             .and_then(|(version, _)| version)
             .and_then(|version| Version::parse(&version))
     }

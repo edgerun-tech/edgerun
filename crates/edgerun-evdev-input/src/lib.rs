@@ -292,6 +292,11 @@ impl EvdevInputBackend {
         Ok(Self { info, file })
     }
 
+    /// Get the file descriptor for epoll.
+    pub fn fd(&self) -> RawFd {
+        self.file.as_raw_fd()
+    }
+
     /// Read events with a timeout. Returns empty Vec if timeout expires.
     /// This is the primary event loop method — it uses poll() to wait
     /// for events with a deadline, then reads all available events.
@@ -409,7 +414,7 @@ impl EvdevInputBackend {
     pub fn grab(&self, grab: bool) -> Result<(), CapabilityError> {
         let grab_val: c_int = if grab { 1 } else { 0 };
         let ret = unsafe {
-            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as c_int, grab_val)
+            libc::ioctl(self.file.as_raw_fd(), EVIOCGRAB as _, grab_val)
         };
         if ret < 0 {
             Err(CapabilityError::Provider(
@@ -424,7 +429,7 @@ impl EvdevInputBackend {
     pub fn ioctl_device_name(&self) -> Result<String, CapabilityError> {
         let mut buf = [0u8; 256];
         let ret = unsafe {
-            libc::ioctl(self.file.as_raw_fd(), EVIOCGNAME, buf.as_mut_ptr())
+            libc::ioctl(self.file.as_raw_fd(), EVIOCGNAME as _, buf.as_mut_ptr())
         };
         if ret < 0 {
             return Err(CapabilityError::Provider(

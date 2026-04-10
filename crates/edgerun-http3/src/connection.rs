@@ -5,15 +5,16 @@ use std::net::UdpSocket;
 
 use super::http3::frame::Http3Frame;
 use super::http3::settings::Http3Settings;
-use super::http3::stream::{Http3Stream, Http3StreamState, Http3StreamType};
+use super::http3::stream::{Http3Stream, Http3StreamType};
 use super::http3::stream_types;
 use super::qpack::{QpackDecoder, QpackEncoder};
-use super::quic::{frame::QuicFrame, packet::QuicPacket, QuicConnection as QuicConn};
-use super::{Http3Error, Result};
+use super::quic::QuicConnection as QuicConn;
+use super::Result;
 
 /// HTTP/3 connection
 pub struct Http3Connection {
     /// Underlying QUIC connection
+    #[allow(dead_code)]
     quic: QuicConn,
     /// QPACK encoder
     qpack_encoder: QpackEncoder,
@@ -22,6 +23,7 @@ pub struct Http3Connection {
     /// Local HTTP/3 settings
     local_settings: Http3Settings,
     /// Remote HTTP/3 settings
+    #[allow(dead_code)]
     remote_settings: Http3Settings,
     /// Streams
     streams: HashMap<u64, Http3Stream>,
@@ -30,8 +32,10 @@ pub struct Http3Connection {
     /// Next unidirectional stream ID
     next_uni_stream_id: u64,
     /// Max push ID
+    #[allow(dead_code)]
     max_push_id: u64,
     /// Server name (for SNI)
+    #[allow(dead_code)]
     server_name: String,
     /// Control stream ID
     control_stream_id: Option<u64>,

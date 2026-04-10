@@ -112,9 +112,33 @@ fn mount_if_needed(source: &str, target: &str, fstype: &str) {
         let _ = std::fs::create_dir_all(target);
     }
 
-    let source_c = std::ffi::CString::new(source).unwrap();
-    let target_c = std::ffi::CString::new(target).unwrap();
-    let fstype_c = std::ffi::CString::new(fstype).unwrap();
+    let source_c = match std::ffi::CString::new(source) {
+        Ok(c) => c,
+        Err(_) => {
+            let msg = "mount: source path contains NUL bytes\n";
+            let bytes = msg.as_bytes();
+            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            return;
+        }
+    };
+    let target_c = match std::ffi::CString::new(target) {
+        Ok(c) => c,
+        Err(_) => {
+            let msg = "mount: target path contains NUL bytes\n";
+            let bytes = msg.as_bytes();
+            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            return;
+        }
+    };
+    let fstype_c = match std::ffi::CString::new(fstype) {
+        Ok(c) => c,
+        Err(_) => {
+            let msg = "mount: fstype contains NUL bytes\n";
+            let bytes = msg.as_bytes();
+            unsafe { libc::write(libc::STDERR_FILENO, bytes.as_ptr() as *const _, bytes.len()); }
+            return;
+        }
+    };
 
     let result = unsafe {
         libc::mount(

@@ -6,4 +6,5 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
-edgerun-json = { path = "../edgerun-json" }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }

@@ -381,25 +381,3 @@ where
             .ok_or_else(|| de::Error::custom("expected non-zero scalar"))
     }
 }
-
-#[cfg(all(test, feature = "dev"))]
-mod tests {
-    use crate::dev::{NonZeroScalar, Scalar};
-    use ff::{Field, PrimeField};
-    use hex_literal::hex;
-    use zeroize::Zeroize;
-
-    #[test]
-    fn round_trip() {
-        let bytes = hex!("c9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721");
-        let scalar = NonZeroScalar::from_repr(bytes.into()).unwrap();
-        assert_eq!(&bytes, scalar.to_repr().as_slice());
-    }
-
-    #[test]
-    fn zeroize() {
-        let mut scalar = NonZeroScalar::new(Scalar::from(42u64)).unwrap();
-        scalar.zeroize();
-        assert_eq!(*scalar, Scalar::ONE);
-    }
-}

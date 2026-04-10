@@ -1,9 +1,9 @@
 //! Non-blocking TCP connect + async I/O with separate read/write wakers.
 
-use crate::{AsyncRead, AsyncWrite, register_fd_read, register_connecting_fd};
+use crate::{AsyncRead, AsyncWrite};
 
 use std::future::Future;
-use std::io::{self, Read, Write};
+use std::io::{self};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
@@ -45,7 +45,6 @@ impl AsyncTcpStream {
     /// The stream is consumed and its fd is taken over.
     pub fn from_std(stream: std::net::TcpStream) -> io::Result<Self> {
         stream.set_nonblocking(true)?;
-        let fd = stream.as_raw_fd();
         // Convert to RawFd and prevent the stream from closing it on drop.
         let raw = stream.as_raw_fd(); std::mem::forget(stream);
         Ok(Self {
@@ -491,6 +490,7 @@ impl Unpin for AsyncReadHalf {}
 impl Unpin for AsyncWriteHalf {}
 
 /// Legacy split function for backwards compatibility with old TcpStream.
+#[allow(dead_code)]
 pub fn split_legacy(stream: &mut crate::TcpStream) -> (crate::ReadHalf, crate::WriteHalf) {
     crate::split(stream)
 }

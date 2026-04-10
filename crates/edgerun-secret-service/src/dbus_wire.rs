@@ -324,7 +324,6 @@ mod tests {
         ]);
         w.wval("a{ss}", &d);
         let bytes = w.finish();
-        eprintln!("dict_ss bytes ({}): {:02x?}", bytes.len(), bytes);
         let mut r = Rdr::new(bytes);
         let v = r.val("a{ss}").unwrap();
         let pairs = v.dict_ss().unwrap();
@@ -355,7 +354,6 @@ mod tests {
         let mut w = Wtr::new();
         w.wval(sig, &secret);
         let bytes = w.finish();
-        eprintln!("struct bytes: {:02x?}", bytes);
         let mut r = Rdr::new(bytes);
         let v = r.val(sig).unwrap();
         let fields = v.into_struct().unwrap();
@@ -376,7 +374,6 @@ mod tests {
         let mut w = Wtr::new();
         w.wval(sig, &secret);
         let bytes = w.finish();
-        eprintln!("wrote {} bytes: {:02x?}", bytes.len(), bytes);
         let mut r = Rdr::new(bytes);
         let v = r.val(sig).unwrap();
         let fields = v.into_struct().unwrap();

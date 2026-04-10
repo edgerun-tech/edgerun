@@ -8,8 +8,9 @@ publish.workspace = true
 [dependencies]
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
 edgerun-core = { path = "../edgerun-core" }
-edgerun-json = { path = "../edgerun-json" }
+edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 flate2 = "1"
 tar = "0.4"
 zstd = "0.13"
+serde = { version = "1", features = ["derive"] }

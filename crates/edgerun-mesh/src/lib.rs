@@ -5,6 +5,8 @@
 //! sender's secure hardware and verified against the sender's NodeID
 //! embedded in the frame header.
 
+pub mod benchmark;
+
 use edgerun_hardware_signing::{
     MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
 };

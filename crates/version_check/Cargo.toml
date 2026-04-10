@@ -10,6 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
+edition = "2021"
 name = "version_check"
 version = "0.9.5"
 authors = ["Sergio Benitez <sb@sergio.bz>"]

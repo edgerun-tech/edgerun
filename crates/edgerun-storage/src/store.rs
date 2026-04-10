@@ -1035,7 +1035,7 @@ impl NodeStore {
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "path contains null bytes"))?;
 
         unsafe {
-            let mut stat: libc::statvfs = std::mem::zeroed();
+            let mut stat = std::mem::MaybeUninit::zeroed().assume_init();
             if libc::statvfs(path_c.as_ptr(), &mut stat) == 0 {
                 let avail = stat.f_bavail * stat.f_frsize;
                 Ok(Some(avail as u64))

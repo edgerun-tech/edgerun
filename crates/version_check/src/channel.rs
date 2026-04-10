@@ -27,7 +27,7 @@ impl Channel {
     /// };
     /// ```
     pub fn read() -> Option<Channel> {
-        ::get_version_and_date()
+        crate::get_version_and_date()
             .and_then(|(version, _)| version)
             .and_then(|version| Channel::parse(&version))
     }
