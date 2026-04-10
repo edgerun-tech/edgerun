@@ -1,6 +1,9 @@
 //! Kill command implementation.
 //!
-/// Sends a signal to a container process.
+//! Sends a signal to a container process.
+//! For TERM/INT/QUIT on running containers, signal goes to PID 1 init
+//! which forwards to the child workload. Other signals go directly to PID.
+//! No-op for stopped containers (OCI kill_no_effect behavior).
 
 use std::io;
 use std::os::raw::c_int;
@@ -22,10 +25,20 @@ pub fn cmd_kill(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<(
         io::Error::new(io::ErrorKind::InvalidInput, "container has no PID")
     })?;
 
+    // No-op for stopped/created containers — OCI spec: kill should be safe on non-running
+    if !is_process_alive(pid) {
+        return Ok(());
+    }
+
     let sig = parse_signal(sig_str)?;
     let ret = unsafe { libc::kill(pid as c_int, sig) };
     if ret != 0 {
-        return Err(io::Error::last_os_error());
+        // ESRCH = process doesn't exist — not an error for kill
+        let err = io::Error::last_os_error();
+        if err.kind() == io::ErrorKind::NotFound {
+            return Ok(());
+        }
+        return Err(err);
     }
     Ok(())
 }

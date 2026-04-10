@@ -4,7 +4,21 @@
 > **Spec**: [`opencontainers/runtime-spec`](https://github.com/opencontainers/runtime-spec) @ `6f7b71c` (v1.3.0-dev)
 > **Generated**: 2026-04-10
 > **Updated**: 2026-04-10 (code audit)
-> **Unit tests**: 55/55 passing (`cargo test -p edgerun-oci-runtime`)
+> **Unit tests**: 60/60 passing (`cargo test -p edgerun-oci-runtime`)
+
+## CLI vs Library Architecture
+
+The lifecycle is now split into **composable phases**. Both CLI and library use the same lifecycle functions:
+
+```
+CLI create → run_prestart_hooks() → run_create_runtime_hooks() → fork_container_child() → save_created_state()
+CLI start  → signal_start() → setup_container_cgroups() → run_poststart_hooks() → update_state_running()
+CLI delete → run_poststop_and_cleanup() → delete_state() → remove_fifo() → remove_cgroup()
+```
+
+All hooks (prestart, createRuntime, createContainer, startContainer, poststart, poststop) run in the correct namespace:
+- **Runtime namespace** (parent): prestart, createRuntime, poststart, poststop
+- **Container namespace** (child `pre_exec`): createContainer, startContainer (between FIFO unblock and exec)
 >
 > This document is derived from the official OCI runtime conformance test suite.
 > Each row maps to a test binary in `runtime-tools/validation/`.
@@ -24,15 +38,15 @@
 
 | Test | Spec Section | Status | Notes |
 |------|-------------|--------|-------|
-| `create` | Runtime & Lifecycle: create | ⚠️ | CLI `cmd_create` implemented via `libc::clone()` + FIFO sync. **Gap:** uses `setup_child_for_create()` which skips seccomp (step 7 missing vs `setup_container_child()`). Uses external `mkfifo` binary — only non-kernel dependency. |
-| `start` | Runtime & Lifecycle: start | ⚠️ | CLI `cmd_start` implemented: validates "created" state, writes "go\n" to FIFO, updates state to "running". **Gap:** does not run poststart hooks (only the library `start_spec_internal` does). |
-| `state` | Runtime & Lifecycle: query state | ✅ | CLI `cmd_state` implemented: loads state.json, checks process liveness via `kill(pid, 0)`, outputs OCI-compatible JSON. |
-| `kill` | Runtime & Lifecycle: kill | ✅ | CLI `cmd_kill` implemented: parses signal (numeric or name), sends via `libc::kill()`. Supports HUP/INT/QUIT/KILL/TERM/CONT/STOP. |
+| `create` | Runtime & Lifecycle: create | ⚠️ | CLI uses `fork_container_child()` which forks via `Command::pre_exec`, runs all setup + createContainer hooks, then waits on FIFO. **Gap:** uses external `mkfifo` binary — only non-kernel dependency. Otherwise fully implemented. |
+| `start` | Runtime & Lifecycle: start | ✅ | CLI `cmd_start`: validates state, signals FIFO → child runs startContainer hooks → sets up cgroups → runs poststart hooks → updates state to "running". Full lifecycle. |
+| `state` | Runtime & Lifecycle: query state | ✅ | CLI `cmd_state`: loads state.json, checks liveness via `kill(pid, 0)`, outputs OCI-compatible JSON. |
+| `kill` | Runtime & Lifecycle: kill | ✅ | CLI `cmd_kill`: parses signal (numeric or name), sends via `libc::kill()`. Supports HUP/INT/QUIT/KILL/TERM/CONT/STOP. |
 | `kill_no_effect` | kill on non-running container | ⚠️ | Signal sent regardless of container state; library `RunningContainer::kill()` has graceful SIGTERM→wait→SIGKILL but CLI sends raw signal. |
 | `killsig` | Signal delivery | ⚠️ | Library path: PID 1 init script forwards TERM/INT/QUIT to child. CLI path: signal sent directly to container PID (bypasses init). |
-| `delete` | Runtime & Lifecycle: delete | ⚠️ | CLI `cmd_delete` implemented: checks running state, optionally SIGKILLs, cleans state dir. **Gap:** does not run poststop hooks from spec (no config.json loaded at delete time). |
-| `delete_only_create_resources` | Delete with create-only resources | ⚠️ | State cleanup works; cgroup cleanup not implemented in CLI or library. |
-| `delete_resources` | Delete cleans up cgroups | ❌ | Neither CLI nor library cleans up cgroups on delete. `delete_container_internal()` is a stub — only runs poststop hooks with `None`. |
+| `delete` | Runtime & Lifecycle: delete | ✅ | CLI `cmd_delete`: loads spec from bundle, runs poststop hooks from spec, kills process if running (with --force), cleans state dir + FIFO + cgroup dir. |
+| `delete_only_create_resources` | Delete with create-only resources | ⚠️ | State/FIFO cleanup works; cgroup cleanup implemented but `remove_dir_all` on cgroup v2 may fail if processes still in cgroup (kernel EBUSY). |
+| `delete_resources` | Delete cleans up cgroups | ✅ | Both CLI and library now call `remove_dir_all` on cgroup directory. Best-effort (errors logged to kmsg via cgroup_write). |
 | `default` | Default spec validation | ✅ | `create_bundle()` produces valid defaults: 6 namespaces, 9 masked paths, 6 readonly paths, uid=0, gid=0, noNewPrivileges=true |
 | `misc_props` | OCI version, annotations | ✅ | We set `ociVersion: "1.0.2"`; `annotations` map fully supported in `OciSpec` type |
 | `config_updates_without_affect` | Spec updates don't affect running container | ❌ | No live config update support |

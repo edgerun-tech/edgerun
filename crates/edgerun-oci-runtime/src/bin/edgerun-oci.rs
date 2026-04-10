@@ -27,6 +27,8 @@ fn main() {
         "state" => cli::cmd_state(&opts, &cmd_args),
         "kill" => cli::cmd_kill(&opts, &cmd_args),
         "delete" => cli::cmd_delete(&opts, &cmd_args),
+        "exec" => cli::cmd_exec(&opts, &cmd_args),
+        "update" => cli::cmd_update(&opts, &cmd_args),
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();

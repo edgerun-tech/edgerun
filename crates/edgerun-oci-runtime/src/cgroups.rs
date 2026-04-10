@@ -12,12 +12,17 @@ use std::path::Path;
 use crate::json::OciLinuxResources;
 
 /// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
-fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
+pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
     if let Err(e) = fs::write(cgroup_root.join(file), content) {
         if let Ok(mut kmsg) = fs::OpenOptions::new().write(true).open("/dev/kmsg") {
             let _ = writeln!(kmsg, "edgerun: cgroup write error {}/{}: {}", cgroup_root.display(), file, e);
         }
     }
+}
+
+/// Write to a specific cgroup file (public for update command).
+pub fn setup_container_cgroups_from_file(cgroup_root: &Path, file: &str, content: &str) {
+    cgroup_write(cgroup_root, file, content);
 }
 
 /// Apply cgroup v2 resource limits by writing to /sys/fs/cgroup.

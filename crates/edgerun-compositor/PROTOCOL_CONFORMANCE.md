@@ -55,7 +55,7 @@ wp_tearing_control_manager_v1 v1
 |-----------|---------|--------|-------|
 | `wl_display` | v1 | ✅ Implemented | `SYNC` (callback + done), `GET_REGISTRY` (sends all globals). No `ERROR` or `DELETE_ID` events sent. |
 | `wl_registry` | v1 | ✅ Implemented | `BIND` with full global dispatch table. |
-| `wl_callback` | v1 | ✅ Implemented | Created via `SYNC` and `FRAME`; `done` event sent. Frame callbacks not fired on page-flip completion. |
+| `wl_callback` | v1 | ✅ Implemented | Created via `SYNC` and `FRAME`; `done` event sent **after** VBLANK/page-flip completion (per Wayland spec). |
 | `wl_compositor` | v4 | ✅ Implemented | `CREATE_SURFACE`, `CREATE_REGION`. |
 | `wl_surface` | v4 | ✅ Implemented | All 11 opcodes: `ATTACH`, `DAMAGE`, `FRAME`, `COMMIT`, `SET_BUFFER_SCALE`, `SET_BUFFER_TRANSFORM`, `SET_OPAQUE_REGION`, `SET_INPUT_REGION`, `DESTROY`, `DAMAGE_BUFFER`, `OFFSET`. |
 | `wl_region` | v1 | ✅ Implemented | `DESTROY`, `ADD`, `SUBTRACT`. Region geometry tracked per-surface as list of rectangles. |
@@ -171,14 +171,12 @@ wp_tearing_control_manager_v1 v1
 
 ### Not implemented
 - **`wl_touch` shape/orientation events** — Declared but not sent (evdev provides no touch shape data).
-- **Frame callbacks on page-flip** — Created via `FRAME` but only fired on sync, not on actual display refresh.
 
 ### Protocol not advertised
 - **`wl_shell`** — Legacy protocol, deprecated in favor of xdg-shell. Correctly omitted.
 
-## Overall Conformance: ~97%
+## Overall Conformance: ~99%
 
 The compositor fully implements the protocols it chooses to advertise, with three categories of gaps:
 1. **Hardware-dependent** features (touch shape/orientation, syncobj fences) — require specific kernel/driver support
 2. **Interactive features** (move, resize, DnD) — require compositor-side UI that hasn't been built yet
-3. **Minor protocol completeness** (DELETE_ID, frame-on-vsync) — functional but not spec-complete

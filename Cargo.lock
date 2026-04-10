@@ -1402,6 +1402,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-rasterizer"
+version = "0.1.0"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "edgerun-remote-capability"
 version = "0.1.0"
 dependencies = [

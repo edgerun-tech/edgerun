@@ -222,6 +222,7 @@ impl ClientHello {
                     }
                     51 => {
                         // key_share
+                        // Parse all key shares, prefer SECP256R1 (our only supported group)
                         if ext_data_len >= 2 {
                             let ks_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut kpos = 2;
@@ -230,8 +231,12 @@ impl ClientHello {
                                 let ke_len = u16::from_be_bytes([ext_data[kpos + 2], ext_data[kpos + 3]]) as usize;
                                 kpos += 4;
                                 if kpos + ke_len <= ext_data.len() {
-                                    if client_key_share.is_none() {
-                                        if let Ok(g) = NamedGroup::from_wire(group) {
+                                    if let Ok(g) = NamedGroup::from_wire(group) {
+                                        // Prefer SECP256R1; fall back to first valid group
+                                        if g == NamedGroup::SECP256R1 {
+                                            client_key_share_group = Some(g);
+                                            client_key_share = Some(ext_data[kpos..kpos + ke_len].to_vec());
+                                        } else if client_key_share.is_none() {
                                             client_key_share_group = Some(g);
                                             client_key_share = Some(ext_data[kpos..kpos + ke_len].to_vec());
                                         }
@@ -300,6 +305,22 @@ impl TlsServerStream {
         stream: TcpStream,
         cert_and_key: &CertificateAndKey,
     ) -> Result<Self> {
+        // Ensure the socket is blocking for read_exact to work correctly.
+        // Some test frameworks and async runtimes create non-blocking sockets.
+        #[cfg(unix)]
+        {
+            use std::os::fd::AsRawFd;
+            let fd = stream.as_raw_fd();
+            unsafe {
+                let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+                if flags >= 0 {
+                    libc::fcntl(fd, libc::F_SETFL, flags & !libc::O_NONBLOCK);
+                }
+            }
+        }
+        stream.set_read_timeout(None).ok();
+        stream.set_write_timeout(None).ok();
+
         let mut hs = ServerHandshake::new(stream, cert_and_key);
         hs.do_handshake()?;
         Ok(hs.finish())
@@ -430,6 +451,7 @@ struct ServerHandshake {
     server_random: [u8; 32],
     key_pair: EcdhKeyPair,
     client_key_share: Vec<u8>,
+    client_session_id: Vec<u8>,
     /// ClientHello message bytes (for transcript)
     ch_msg: Vec<u8>,
     /// ServerHello message bytes (for transcript)
@@ -457,6 +479,7 @@ impl ServerHandshake {
             server_random: generate_random(),
             key_pair,
             client_key_share: Vec::new(),
+            client_session_id: Vec::new(),
             ch_msg: Vec::new(),
             sh_msg: Vec::new(),
             transcript: Vec::new(),
@@ -548,6 +571,9 @@ impl ServerHandshake {
             return Err(TlsError::HandshakeFailure("No key_share in ClientHello".into()));
         }
 
+        // Save session ID for ServerHello
+        self.client_session_id = ch.session_id;
+
         // Save ClientHello for transcript
         self.ch_msg = fragment.clone();
         self.transcript = fragment;
@@ -559,6 +585,8 @@ impl ServerHandshake {
         let public_key = self.key_pair.public_key_bytes();
         let sh_msg = build_server_hello(
             self.server_random,
+            &[],
+            &self.client_session_id,
             self.cipher_suite,
             &public_key,
             NamedGroup::SECP256R1,
@@ -713,8 +741,10 @@ impl ServerHandshake {
 }
 
 /// Build a ServerHello handshake message
-fn build_server_hello(
+pub fn build_server_hello(
     random: [u8; 32],
+    &[],
+    session_id: &[u8],
     cipher_suite: CipherSuite,
     server_key_share: &[u8],
     group: NamedGroup,
@@ -732,8 +762,9 @@ fn build_server_hello(
     // Random
     msg.extend_from_slice(&random);
 
-    // Session ID (empty for TLS 1.3)
-    msg.push(0);
+    // Session ID (echo client's session ID per RFC 8446 §4.1.3)
+    msg.push(session_id.len() as u8);
+    msg.extend_from_slice(session_id);
 
     // Cipher suite
     msg.extend_from_slice(&cipher_suite.to_wire().to_be_bytes());
@@ -776,7 +807,7 @@ fn build_server_hello(
 }
 
 /// Build EncryptedExtensions (empty for now)
-fn build_encrypted_extensions() -> Vec<u8> {
+pub fn build_encrypted_extensions() -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(8); // EncryptedExtensions type
     msg.extend_from_slice(&[0u8; 3]); // length = 0
@@ -786,7 +817,7 @@ fn build_encrypted_extensions() -> Vec<u8> {
 }
 
 /// Build Certificate message (TLS 1.3 format)
-fn build_certificate_message(cert_der: &[u8]) -> Vec<u8> {
+pub fn build_certificate_message(cert_der: &[u8]) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(11); // Certificate type
 
@@ -814,7 +845,7 @@ fn build_certificate_message(cert_der: &[u8]) -> Vec<u8> {
 }
 
 /// Build CertificateVerify message
-fn build_certificate_verify(
+pub fn build_certificate_verify(
     transcript: &[u8],
     signing_key: &SigningKey,
     hasher: &Hasher,
@@ -857,7 +888,7 @@ fn build_certificate_verify(
 }
 
 /// Build Finished message
-fn build_finished_message(verify_data: &[u8]) -> Vec<u8> {
+pub fn build_finished_message(verify_data: &[u8]) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(20); // Finished type
     msg.extend_from_slice(&((verify_data.len()) as u32).to_be_bytes()[1..]); // 3-byte length
@@ -952,6 +983,7 @@ mod tests {
 
         let sh_bytes = build_server_hello(
             random,
+            &[],
             CipherSuite::TLS_AES_128_GCM_SHA256,
             &public_key,
             NamedGroup::SECP256R1,
@@ -1167,6 +1199,7 @@ mod tests {
         // Test with AES-256
         let sh_bytes = build_server_hello(
             random,
+            &[],
             CipherSuite::TLS_AES_256_GCM_SHA384,
             &public_key,
             NamedGroup::SECP256R1,
@@ -1230,6 +1263,7 @@ mod tests {
         let server_pub = server_keys.public_key_bytes();
         let sh_bytes = build_server_hello(
             server_random,
+            &[],
             cipher_suite,
             &server_pub,
             NamedGroup::SECP256R1,
@@ -1302,6 +1336,7 @@ mod tests {
         let server_pub = server_keys.public_key_bytes();
         let sh_msg = build_server_hello(
             server_random,
+            &[],
             cipher_suite,
             &server_pub,
             NamedGroup::SECP256R1,

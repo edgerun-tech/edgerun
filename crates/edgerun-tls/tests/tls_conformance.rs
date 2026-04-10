@@ -1,20 +1,12 @@
 //! TLS 1.3 conformance tests — isolated, testable units.
-//!
-//! Tests are organized by RFC 8446 section:
-//! - §4. Handshake Protocol
-//! - §5. Record Protocol
-//! - §7. Key Schedule
 
 use edgerun_tls::cipher::{CipherSuite, NamedGroup};
 use edgerun_tls::certificate_gen::generate_self_signed;
-use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello, read_record_header, read_record_fragment};
+use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::EcdhKeyPair;
-use edgerun_tls::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys, hmac_sha256};
+use edgerun_tls::prf::{Hasher, Tls13KeySchedule, server_write_keys, hmac_sha256};
 use edgerun_tls::record::{RecordCipher, TlsRecord};
 use edgerun_tls::server::{build_server_hello, build_encrypted_extensions, build_certificate_message, build_certificate_verify, build_finished_message, ClientHello};
-use edgerun_tls::server::TlsServerStream;
-use edgerun_tls::TlsStream;
-use std::io::{Read, Write, Cursor};
 
 // ========================================================================
 // §4.2.1 — ClientHello format conformance
@@ -102,6 +94,7 @@ fn test_server_hello_rfc8446_format() {
 
     let sh_bytes = build_server_hello(
         random,
+        &[],
         CipherSuite::TLS_AES_128_GCM_SHA256,
         &public_key,
         NamedGroup::SECP256R1,
@@ -337,7 +330,7 @@ fn test_finished_verify_data() {
 
     let finished_msg = build_finished_message(&expected);
     assert_eq!(finished_msg[0], 20); // Finished type
-    assert!(finished_msg.len() > 36); // type(1) + length(3) + verify_data(32)
+    assert_eq!(finished_msg.len(), 4 + expected.len()); // type(1) + length(3) + verify_data(32)
 }
 
 // ========================================================================
@@ -364,6 +357,7 @@ fn test_handshake_message_sequence() {
     let server_pub = server_keys.public_key_bytes();
     let sh_msg = build_server_hello(
         [0x22u8; 32],
+        &[],
         CipherSuite::TLS_AES_128_GCM_SHA256,
         &server_pub,
         NamedGroup::SECP256R1,

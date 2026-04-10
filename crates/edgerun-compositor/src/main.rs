@@ -198,7 +198,7 @@ fn main() {
         }
     };
 
-    let fb_id = match dumb.add_fb() {
+    let mut fb_id = match dumb.add_fb() {
         Ok(id) => id,
         Err(e) => {
             eprintln!("Failed to create framebuffer: {}", e);
@@ -451,41 +451,42 @@ fn main() {
             }
         };
 
-        // On timeout with pending render — fire frame callbacks and render.
-        // This is our VBLANK ticker, driven by the display's refresh rate.
+        // On timeout with pending render — render and page flip.
+        // Frame callbacks are fired AFTER the VBLANK event completes (see DrmDevice handler).
         if events.is_empty() && pending_render && !flip_pending {
             frame_count += 1;
             pending_render = false;
             flip_pending = true;
 
-            // Fire frame callbacks
-            frame_callbacks.clear();
-            for (&cid, _reg) in &client_registry_ids {
-                if let Some(&compositor_id) = client_compositor_ids.get(&cid) {
-                    for surface in surfaces.surfaces_mut() {
-                        for &cb_id in &surface.frame_callbacks {
-                            frame_callbacks.push((compositor_id, cb_id));
-                        }
-                        surface.frame_callbacks.clear();
-                    }
-                }
-            }
-
-            let serial = frame_count as u32;
-            for &(_compositor_id, cb_id) in &frame_callbacks {
-                for &cid in client_registry_ids.keys() {
-                    if let Some(client) = server.client_mut(cid) {
-                        client.send_message(
-                            wl_core::callback_done_event(cb_id, serial)
-                        );
-                    }
-                }
-            }
-
             // Render all surfaces and page flip
             if let Some(gl) = gl_compositor.as_mut() {
                 // GPU-accelerated path
                 gl.composite(&shm, &surfaces, &shell, &cursor, &mut dumb);
+                // Read back to dumb, then page flip
+                if let Ok(mapped) = dumb.map() {
+                    let pixels = unsafe { std::slice::from_raw_parts(mapped.as_ptr(), mapped.len()) };
+                    screencopy_state.update(dumb.width, dumb.height, dumb.pitch, pixels);
+                }
+                let new_fb_id = match dumb.add_fb() {
+                    Ok(id) => id,
+                    Err(_) => { flip_pending = false; pending_render = true; continue; }
+                };
+                if fb_id != 0 {
+                    old_fb_ids.push(fb_id);
+                }
+                let mut flip_flags = crate::drm::ioctl::page_flip::PAGE_FLIP_EVENT;
+                if let Some(front) = shell.stack.last() {
+                    if let Some(tl) = shell.toplevels.get(front) {
+                        if let Some(surface) = surfaces.get(tl.surface_id) {
+                            if surface.buffer.is_some() && surface.tearing_hint == 2 {
+                                flip_flags |= crate::drm::ioctl::page_flip::PAGE_FLIP_ASYNC;
+                            }
+                        }
+                    }
+                }
+                let user_data = kms::next_flip_serial();
+                let _ = kms::page_flip(drm_device.as_raw_fd(), crtc_id, new_fb_id, flip_flags, user_data);
+                fb_id = new_fb_id;
             } else {
                 // Software fallback — use damage tracking
                 render_and_flip(
@@ -494,12 +495,6 @@ fn main() {
                     &mut damage,
                     &mut old_fb_ids,
                 );
-            }
-
-            // Update screencopy framebuffer snapshot
-            if let Ok(mapped) = dumb.map() {
-                let pixels = unsafe { std::slice::from_raw_parts(mapped.as_ptr(), mapped.len()) };
-                screencopy_state.update(dumb.width, dumb.height, dumb.pitch, pixels);
             }
 
             // Collect damage from surface commits for the next frame
@@ -514,7 +509,6 @@ fn main() {
                         });
                     }
                 }
-                // Also damage the cursor area if cursor moved
             }
             damage.add(DamageRect {
                 x: cursor.x.saturating_sub(32),
@@ -697,7 +691,29 @@ fn main() {
                 EventSource::DrmDevice => {
                     // DRM page flip completion — the previous frame was displayed.
                     // Send `presented` events to all pending feedback objects with real VBLANK timing.
+                    // Also fire frame callbacks NOW (after presentation, per Wayland spec).
                     let _ = drm::kms::read_events(drm_device.as_raw_fd());
+
+                    // Fire frame callbacks AFTER the frame has been presented
+                    frame_callbacks.clear();
+                    for (&cid, _reg) in &client_registry_ids {
+                        if let Some(&compositor_id) = client_compositor_ids.get(&cid) {
+                            for surface in surfaces.surfaces_mut() {
+                                for &cb_id in &surface.frame_callbacks {
+                                    frame_callbacks.push((compositor_id, cb_id));
+                                }
+                                surface.frame_callbacks.clear();
+                            }
+                        }
+                    }
+                    let serial = frame_count as u32;
+                    for &(_compositor_id, cb_id) in &frame_callbacks {
+                        for &cid in client_registry_ids.keys() {
+                            if let Some(client) = server.client_mut(cid) {
+                                client.send_message(wl_core::callback_done_event(cb_id, serial));
+                            }
+                        }
+                    }
 
                     // Send `presented` events with real timestamp
                     let (sec_hi, sec_lo, nsec) = presentation_tracker.clock_timestamp();

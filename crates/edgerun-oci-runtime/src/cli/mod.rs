@@ -5,12 +5,16 @@ mod start;
 mod state;
 mod kill;
 mod delete;
+mod exec;
+mod update;
 
 pub use create::cmd_create;
 pub use start::cmd_start;
 pub use state::cmd_state;
 pub use kill::cmd_kill;
 pub use delete::cmd_delete;
+pub use exec::cmd_exec;
+pub use update::cmd_update;
 
 /// Global options parsed from the CLI.
 #[derive(Debug, Default)]
@@ -118,6 +122,8 @@ pub fn print_usage() {
     eprintln!("  state <container-id>   Output state of a container");
     eprintln!("  kill <container-id>    Send signal to container");
     eprintln!("  delete <container-id>  Delete container resources");
+    eprintln!("  exec <container-id>    Run additional process in container");
+    eprintln!("  update <container-id>  Update container resource limits");
     eprintln!();
     eprintln!("Global options:");
     eprintln!("  --bundle <path>    Path to bundle directory");

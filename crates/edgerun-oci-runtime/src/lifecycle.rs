@@ -107,11 +107,10 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
     fs::create_dir_all(&state_dir)?;
     let fifo = fifo_path(container_id);
     let _ = fs::remove_file(&fifo);
-    let mkfifo_out = std::process::Command::new("mkfifo").arg(&fifo).output()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("mkfifo failed: {}", e)))?;
-    if !mkfifo_out.status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other,
-            format!("mkfifo failed: {}", String::from_utf8_lossy(&mkfifo_out.stderr))));
+    let fifo_cstr = std::ffi::CString::new(fifo.to_string_lossy().as_bytes()).unwrap();
+    let mkfifo_ret = unsafe { libc::mkfifo(fifo_cstr.as_ptr(), 0o600) };
+    if mkfifo_ret != 0 {
+        return Err(io::Error::last_os_error());
     }
 
     // Extract hooks for the child
@@ -376,6 +375,11 @@ pub fn run_poststop_and_cleanup(_container_id: &str, pid: u32, bundle_path: &str
     if !cgroup_path.is_empty() {
         let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
         if cgroup_dir.exists() {
+            // First try to kill all processes in the cgroup (cgroup v2)
+            let _ = fs::write(cgroup_dir.join("cgroup.kill"), "1");
+            // Give processes a moment to exit
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            // Now remove the directory
             let _ = std::fs::remove_dir_all(&cgroup_dir);
         }
     }
@@ -424,7 +428,7 @@ fn start_created_container_internal(child: ForkedChild, spec: &OciSpec, containe
     let resources = child.resources.clone();
     let cgroup_path = child.cgroup_path().to_string();
     let poststop_hooks = child.poststop_hooks.clone();
-    let poststart_hooks = child.poststart_hooks.clone();
+    let _poststart_hooks = child.poststart_hooks.clone();
     let bundle_path = child.bundle_path().to_string();
 
     // Signal FIFO

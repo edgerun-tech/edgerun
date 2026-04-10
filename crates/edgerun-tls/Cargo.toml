@@ -11,6 +11,7 @@ keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
 [dependencies]
+libc = "0.2"
 edgerun-crypto.workspace = true
 edgerun-core = { path = "../edgerun-core" }
 
