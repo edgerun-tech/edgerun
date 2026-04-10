@@ -805,6 +805,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-css-text"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-css-ui"
 version = "0.1.0"
 dependencies = [
@@ -1013,6 +1021,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-images"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-indexeddb"
 version = "0.1.0"
 dependencies = [
  "prost",
@@ -1427,6 +1443,14 @@ name = "edgerun-selectors"
 version = "0.1.0"
 
 [[package]]
+name = "edgerun-service-workers"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
 name = "edgerun-speaker"
 version = "0.1.0"
 dependencies = [
@@ -1554,6 +1578,14 @@ dependencies = [
 
 [[package]]
 name = "edgerun-writing-modes"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
+
+[[package]]
+name = "edgerun-xml"
 version = "0.1.0"
 dependencies = [
  "prost",

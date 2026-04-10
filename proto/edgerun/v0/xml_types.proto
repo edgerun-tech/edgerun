@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package edgerun.v0.xml;
+
+/// XML Types — generated from XML 1.0 / Namespaces in XML.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform6.py
+
+/// XML version.
+enum XmlVersion {
+  XML_VERSION_UNSPECIFIED = 0;
+  XML_1_0 = 1;
+  XML_1_1 = 2;
+}
+
+/// XML node type.
+enum XmlNodeType {
+  XML_NODE_TYPE_UNSPECIFIED = 0;
+  ELEMENT = 1;
+  ATTRIBUTE = 2;
+  TEXT = 3;
+  CDATA_SECTION = 4;
+  ENTITY_REFERENCE = 5;
+  ENTITY = 6;
+  PROCESSING_INSTRUCTION = 7;
+  COMMENT = 8;
+  DOCUMENT = 9;
+  DOCUMENT_TYPE = 10;
+  DOCUMENT_FRAGMENT = 11;
+  NOTATION = 12;
+}
+
+/// XML namespace declaration.
+message NamespaceDecl {
+  string prefix = 1;
+  string uri = 2;
+}
+
+/// XML entity type.
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  INTERNAL_GENERAL = 1;
+  EXTERNAL_GENERAL = 2;
+  INTERNAL_PARAMETER = 3;
+  EXTERNAL_PARAMETER = 4;
+  UNPARSED = 5;
+}
+
+/// XML processing instruction.
+message ProcessingInstruction {
+  string target = 1;
+  string data = 2;
+}
+
+/// XML declaration.
+message XmlDeclaration {
+  XmlVersion version = 1;
+  optional string encoding = 2;
+  optional bool standalone = 3;
+}

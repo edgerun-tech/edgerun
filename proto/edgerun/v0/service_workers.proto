@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+package edgerun.v0.service_workers;
+
+/// Service Worker Types — generated from Service Workers Level 1.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform6.py
+
+/// ServiceWorker state.
+enum ServiceWorkerState {
+  SERVICE_WORKER_STATE_UNSPECIFIED = 0;
+  INSTALLING = 1;
+  INSTALLED = 2;
+  ACTIVATING = 3;
+  ACTIVATED = 4;
+  REDUNDANT = 5;
+}
+
+/// ExtendableEvent type.
+enum ExtendableEventType {
+  EXTENDABLE_EVENT_TYPE_UNSPECIFIED = 0;
+  INSTALL = 1;
+  ACTIVATE = 2;
+  FETCH = 3;
+  PUSH = 4;
+  NOTIFICATION_CLICK = 5;
+  NOTIFICATION_CLOSE = 6;
+  SYNC = 7;
+  PERIODIC_SYNC = 8;
+}
+
+/// FetchEvent request type.
+enum FetchRequestType {
+  FETCH_REQUEST_TYPE_UNSPECIFIED = 0;
+  NAVIGATE = 1;
+  SAME_ORIGIN = 2;
+  CROSS_ORIGIN = 3;
+  STYLE = 4;
+  SCRIPT = 5;
+  IMAGE = 6;
+  FONT = 7;
+  PREFETCH = 8;
+  PREFLIGHT = 9;
+}
+
+/// Cache query options.
+message CacheQueryOptions {
+  bool ignore_search = 1;
+  bool ignore_method = 2;
+  bool ignore_vary = 3;
+  string cache_name = 4;
+}
+
+/// FetchEvent data.
+message FetchEvent {
+  string request_url = 1;
+  string request_method = 2;
+  FetchRequestType request_type = 3;
+  string client_id = 4;
+  bool is_reload = 5;
+}
+
+/// Registration options.
+message RegistrationOptions {
+  string scope = 1;
+  string type = 2; // "classic" or "module"
+}
+
+/// Sync event.
+message SyncEvent {
+  string tag = 1;
+  bool last_chance = 2;
+}
+
+/// Notification event.
+message NotificationEvent {
+  string action = 1;
+  string notification_tag = 2;
+  string notification_body = 3;
+  string notification_title = 4;
+}
