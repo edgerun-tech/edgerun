@@ -9,4 +9,4 @@ publish.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-input = { path = "../edgerun-input" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
-libc = { path = "../libc" }
+libc.workspace = true

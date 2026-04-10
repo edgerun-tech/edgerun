@@ -77,12 +77,10 @@ fn sign_session_hello(
     mut hello: SessionHello,
     signer: &dyn edgerun_hardware_signing::MeshSigner,
 ) -> Result<SessionHello, String> {
+    use edgerun_core::crypto::SIG_DOMAIN_SESSION_HELLO;
     let record = ProtocolRecord::SessionHello(hello.clone());
     let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-    let digest = sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    match signer.sign_digest(&digest_bytes) {
+    match signer.sign_record(SIG_DOMAIN_SESSION_HELLO, &canonical) {
         Ok(sig) => {
             hello.signature = Some(edgerun_core::protocol::Signature {
                 algorithm: 1,
@@ -125,12 +123,10 @@ fn sign_session_accept(
     mut accept: SessionAccept,
     signer: &dyn edgerun_hardware_signing::MeshSigner,
 ) -> Result<SessionAccept, String> {
+    use edgerun_core::crypto::SIG_DOMAIN_SESSION_ACCEPT;
     let record = ProtocolRecord::SessionAccept(accept.clone());
     let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-    let digest = sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    match signer.sign_digest(&digest_bytes) {
+    match signer.sign_record(SIG_DOMAIN_SESSION_ACCEPT, &canonical) {
         Ok(sig) => {
             accept.signature = Some(edgerun_core::protocol::Signature {
                 algorithm: 1,
@@ -144,6 +140,7 @@ fn sign_session_accept(
 
 /// Verify a SessionHello's signature and extract the peer's node ID.
 pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str> {
+    use edgerun_core::crypto::{SIG_DOMAIN_SESSION_HELLO, verify_canonical_record};
     let Some(ref sig) = hello.signature else {
         return Err("missing_signature");
     };
@@ -157,11 +154,10 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
         return Err("bad_identity_id_length");
     }
 
-    // Verify the signature using canonical bytes
+    // Verify the signature with domain separation
     let mut hello_for_verify = hello.clone();
     let record = ProtocolRecord::SessionHello(hello_for_verify.clone());
     let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-    let digest = sha256(&canonical);
 
     // Build verifying key from identity_id
     let mut vk_sec1 = [0u8; 65];
@@ -171,16 +167,9 @@ pub fn verify_session_hello(hello: &SessionHello) -> Result<NodeID, &'static str
     let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
         .map_err(|_| "bad_public_key")?;
 
-    // Construct signature from raw bytes (r || s)
-    let sig_bytes = &sig.value;
-    let r = p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = p256::ecdsa::Signature::from_scalars(*r, *s)
-        .map_err(|_| "invalid_signature")?;
-
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
-    vk.verify_prehash(digest.as_slice(), &ecdsa_sig)
-        .map_err(|_| "invalid_signature")?;
+    if !verify_canonical_record(&vk, SIG_DOMAIN_SESSION_HELLO, &canonical, &sig.value) {
+        return Err("invalid_signature");
+    }
 
     let mut node_id_bytes = [0u8; 64];
     node_id_bytes.copy_from_slice(&initiator.identity_id);
@@ -215,10 +204,9 @@ pub fn verify_session_accept(
         return Err("unsupported_protocol_version");
     }
 
-    // Verify the signature using canonical bytes
+    // Verify the signature with domain separation
     let record = ProtocolRecord::SessionAccept(accept.clone());
     let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-    let digest = sha256(&canonical);
 
     // Build verifying key from identity_id
     let mut vk_sec1 = [0u8; 65];
@@ -228,16 +216,14 @@ pub fn verify_session_accept(
     let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1)
         .map_err(|_| "bad_public_key")?;
 
-    // Construct signature from raw bytes (r || s)
-    let sig_bytes = &sig.value;
-    let r = p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = p256::ecdsa::Signature::from_scalars(*r, *s)
-        .map_err(|_| "invalid_signature")?;
-
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
-    vk.verify_prehash(digest.as_slice(), &ecdsa_sig)
-        .map_err(|_| "invalid_signature")?;
+    if !edgerun_core::crypto::verify_canonical_record(
+        &vk,
+        edgerun_core::crypto::SIG_DOMAIN_SESSION_ACCEPT,
+        &canonical,
+        &sig.value,
+    ) {
+        return Err("invalid_signature");
+    }
 
     let mut node_id_bytes = [0u8; 64];
     node_id_bytes.copy_from_slice(&responder.identity_id);

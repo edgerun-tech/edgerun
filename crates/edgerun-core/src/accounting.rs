@@ -285,6 +285,16 @@ impl PerformanceCertificate {
         self
     }
 
+    /// Sign the certificate with the given ECDSA P-256 signing key.
+    /// The digest must already be set (via `with_digest()`).
+    pub fn with_signature(mut self, signing_key: &p256::ecdsa::SigningKey) -> Self {
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+        let sig: p256::ecdsa::Signature = signing_key.sign_prehash(&self.digest)
+            .expect("ECDSA P-256 signing failed");
+        self.signature.copy_from_slice(&sig.to_bytes());
+        self
+    }
+
     /// CPU core multiplier relative to reference.
     /// E.g., 2.5x means 1 physical core-µs = 2.5 billable RC-µs.
     pub fn cpu_core_multiplier(&self) -> FixedPoint16 {
@@ -828,7 +838,7 @@ mod tests {
         let d2 = cert.compute_digest();
         assert_eq!(d1, d2);
         cert.digest = d1;
-        assert!(cert.verify());
+        assert_eq!(cert.digest, cert.compute_digest());
     }
 
     #[test]
@@ -1023,5 +1033,96 @@ mod tests {
         assert_eq!(SettlementStatus::Pending.as_str(), "pending");
         assert_eq!(SettlementStatus::Settled.as_str(), "settled");
         assert_eq!(SettlementStatus::Disputed.as_str(), "disputed");
+    }
+
+    #[test]
+    fn certificate_verify_rejects_tampered_digest() {
+        use p256::ecdsa::SigningKey;
+        use p256::ecdsa::signature::hazmat::PrehashSigner;
+
+        let key = SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let vk = key.verifying_key();
+        let encoded = vk.to_encoded_point(false);
+        let mut node_id = [0u8; 64];
+        node_id.copy_from_slice(&encoded.as_bytes()[1..65]);
+
+        let mut cert = PerformanceCertificate {
+            node_id,
+            cpu_int_score: 1_000_000,
+            cpu_crypto_score: 500_000,
+            mem_bandwidth_mbps: 5000,
+            mem_latency_ns: 100,
+            storage_random_iops: 3000,
+            storage_seq_mbps: 50,
+            storage_event_iops: 500,
+            storage_blob_ops: 1000,
+            storage_object_ops: 500,
+            net_frame_encode_decode_ops: 10000,
+            net_frame_sign_verify_ops: 1000,
+            net_udp_throughput_ops: 50000,
+            net_router_lookup_ops: 100000,
+            gpu_score: None,
+            npu_score: None,
+            benchmark_started_us: 1_700_000_000_000_000,
+            benchmark_completed_us: 1_700_000_002_000_000,
+            digest: [0u8; 32],
+            signature: [0u8; 64],
+        };
+        cert = cert.with_digest();
+        cert = cert.with_signature(&key);
+        assert!(cert.verify(), "valid cert should verify");
+
+        // Tamper with the digest
+        cert.digest[0] ^= 0xFF;
+        assert!(!cert.verify(), "tampered digest should fail verification");
+    }
+
+    #[test]
+    fn certificate_verify_rejects_wrong_signature() {
+        use p256::ecdsa::SigningKey;
+
+        let key1 = SigningKey::from_bytes(&[42u8; 32].into()).unwrap();
+        let key2 = SigningKey::from_bytes(&[99u8; 32].into()).unwrap();
+
+        let vk = key1.verifying_key();
+        let encoded = vk.to_encoded_point(false);
+        let mut node_id = [0u8; 64];
+        node_id.copy_from_slice(&encoded.as_bytes()[1..65]);
+
+        let mut cert = PerformanceCertificate {
+            node_id,
+            cpu_int_score: 1_000_000,
+            cpu_crypto_score: 500_000,
+            mem_bandwidth_mbps: 5000,
+            mem_latency_ns: 100,
+            storage_random_iops: 3000,
+            storage_seq_mbps: 50,
+            storage_event_iops: 500,
+            storage_blob_ops: 1000,
+            storage_object_ops: 500,
+            net_frame_encode_decode_ops: 10000,
+            net_frame_sign_verify_ops: 1000,
+            net_udp_throughput_ops: 50000,
+            net_router_lookup_ops: 100000,
+            gpu_score: None,
+            npu_score: None,
+            benchmark_started_us: 1_700_000_000_000_000,
+            benchmark_completed_us: 1_700_000_002_000_000,
+            digest: [0u8; 32],
+            signature: [0u8; 64],
+        };
+        cert = cert.with_digest();
+        cert = cert.with_signature(&key1);
+        assert!(cert.verify(), "cert signed by key1 should verify");
+
+        // Re-sign with different key — but node_id stays the same (simulating fabrication)
+        cert.signature = [0u8; 64];
+        cert = cert.with_signature(&key2);
+        // This should still verify because the signature matches the digest,
+        // even though the signing key doesn't match the node_id's key pair.
+        // The verify() method only checks that the signature is valid for the
+        // digest using the node_id as the public key. Since we re-signed with
+        // a different key, the signature won't match the node_id's public key.
+        assert!(!cert.verify(), "cert signed by wrong key should fail");
     }
 }

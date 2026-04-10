@@ -41,18 +41,18 @@ version = "0.3"
 optional = true
 
 [dependencies.block-buffer]
-path = "../edgerun-block-buffer"
+version = "0.10"
 optional = true
 
 [dependencies.const-oid]
-path = "../edgerun-const-oid"
+version = "0.9"
 optional = true
 
 [dependencies.crypto-common]
-path = "../edgerun-crypto-common"
+version = "0.1"
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 optional = true
 default-features = false
 

@@ -7,3 +7,15 @@ publish.workspace = true
 
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
+
+# Real Android Keystore implementation via JNI (optional)
+# Enabled when building for actual Android devices.
+# On non-Android targets these deps are not needed.
+jni = { version = "0.21", optional = true }
+ndk-context = { version = "0.1", optional = true }
+once_cell = { version = "1", optional = true }
+
+[features]
+default = []
+# Real JNI-backed implementation — requires Android NDK toolchain.
+android-real = ["dep:jni", "dep:ndk-context", "dep:once_cell"]

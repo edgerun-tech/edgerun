@@ -1,6 +1,5 @@
-//! Software renderer — composite surfaces to a scanout buffer.
+//! Software renderer — cursor and shared rendering utilities.
 
-pub mod fb;
-pub mod shm;
-pub mod composite;
 pub mod cursor;
+pub mod server;
+pub mod shm;

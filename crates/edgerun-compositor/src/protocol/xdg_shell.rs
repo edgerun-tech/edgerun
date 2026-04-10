@@ -4,10 +4,6 @@
 
 use crate::wire::{ArgType, Message};
 use crate::wire::encode::*;
-use xdg_wm_base_event::*;
-use xdg_surface_event::*;
-use xdg_toplevel_event::*;
-use xdg_popup_event::*;
 
 pub const XDG_WM_BASE: &str = "xdg_wm_base";
 pub const XDG_WM_BASE_VERSION: u32 = 6;
@@ -220,6 +216,22 @@ pub fn xdg_toplevel_close_event(toplevel_id: u32) -> Message {
     message_empty(toplevel_id, xdg_toplevel_event::CLOSE)
 }
 
+/// Build a wm_capabilities event (v5+).
+/// capabilities is an array of u32 capability flags.
+pub fn xdg_toplevel_wm_capabilities_event(toplevel_id: u32, capabilities: &[u32]) -> Message {
+    let mut args = Vec::new();
+    // Serialize as array of u32
+    let bytes: Vec<u8> = capabilities.iter().flat_map(|c| c.to_le_bytes()).collect();
+    crate::wire::encode::encode_array(&mut args, &bytes);
+    Message {
+        sender_id: toplevel_id,
+        opcode: xdg_toplevel_event::WM_CAPABILITIES,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
 // ─── xdg_positioner ──────────────────────────────────────────
 
 pub const XDG_POSITIONER: &str = "xdg_positioner";
@@ -302,7 +314,7 @@ pub fn xdg_popup_configure_event(
     args.extend_from_slice(&height.to_le_bytes());
     Message {
         sender_id: popup_id,
-        opcode: xdg_toplevel_event::CONFIGURE,
+        opcode: xdg_popup_event::CONFIGURE,
         size: (8 + args.len()) as u16,
         args,
         fds: Vec::new(),

@@ -10,3 +10,6 @@ edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-camera-biometrics = { path = "../edgerun-camera-biometrics" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
+
+[dev-dependencies]
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }

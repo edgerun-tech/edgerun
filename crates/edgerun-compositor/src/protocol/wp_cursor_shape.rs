@@ -2,8 +2,7 @@
 //!
 //! Allows clients to request named cursor shapes.
 
-use crate::wire::{ArgType, Message};
-use crate::wire::encode::*;
+use crate::wire::ArgType;
 
 pub const WP_CURSOR_SHAPE_MANAGER_V1: &str = "wp_cursor_shape_manager_v1";
 pub const WP_CURSOR_SHAPE_MANAGER_V1_VERSION: u32 = 1;

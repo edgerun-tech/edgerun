@@ -285,6 +285,120 @@ pub fn discover_cec_adapters() -> Vec<String> {
 }
 
 // ===========================================================================
+// Input (evdev)
+// ===========================================================================
+
+#[cfg(feature = "all-hardware")]
+pub fn discover_input_devices() -> Vec<String> {
+    match edgerun_evdev_input::discover_evdev_devices() {
+        Ok(devices) => devices
+            .into_iter()
+            .map(|d| {
+                let kind = format!("{:?}", d.kind);
+                format!("{}: {} ({})", d.event_node, d.device_name, kind)
+            })
+            .collect(),
+        Err(e) => {
+            eprintln!("edgerund: warning: evdev input discovery failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(not(feature = "all-hardware"))]
+pub fn discover_input_devices() -> Vec<String> {
+    Vec::new()
+}
+
+// ===========================================================================
+// Audio Input (ALSA microphone)
+// ===========================================================================
+
+#[cfg(feature = "all-hardware")]
+pub fn discover_audio_input() -> Vec<String> {
+    match edgerun_alsa_microphone::discover_alsa_pcms() {
+        Ok(pcms) => pcms
+            .into_iter()
+            .filter(|p| p.capture)
+            .map(|p| format!(
+                "ALSA PCM {}:{} ({})",
+                p.card_index, p.device_index, p.name
+            ))
+            .collect(),
+        Err(e) => {
+            eprintln!("edgerund: warning: ALSA microphone discovery failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(not(feature = "all-hardware"))]
+pub fn discover_audio_input() -> Vec<String> {
+    Vec::new()
+}
+
+// ===========================================================================
+// Audio Output (ALSA speaker)
+// ===========================================================================
+
+#[cfg(feature = "all-hardware")]
+pub fn discover_audio_output() -> Vec<String> {
+    match edgerun_alsa_speaker::discover_speakers() {
+        Ok(speakers) => speakers
+            .into_iter()
+            .map(|s| format!(
+                "ALSA {} card={} device={} ({}ch, {}Hz)",
+                s.card_id, s.card_index, s.device_index, s.channels, s.default_sample_rate_hz
+            ))
+            .collect(),
+        Err(e) => {
+            eprintln!("edgerund: warning: ALSA speaker discovery failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(not(feature = "all-hardware"))]
+pub fn discover_audio_output() -> Vec<String> {
+    Vec::new()
+}
+
+// ===========================================================================
+// Camera (V4L2)
+// ===========================================================================
+
+#[cfg(feature = "all-hardware")]
+pub fn discover_cameras() -> Vec<String> {
+    match edgerun_v4l2_camera::discover_camera_devices() {
+        Ok(cameras) => cameras
+            .into_iter()
+            .map(|c| {
+                let caps = match c.query_info() {
+                    Ok(info) => {
+                        let mut parts = Vec::new();
+                        if info.supports_video_capture() { parts.push("capture"); }
+                        if info.supports_streaming() { parts.push("streaming"); }
+                        if parts.is_empty() { parts.push("unknown"); }
+                        parts.join(", ")
+                    }
+                    Err(_) => "unknown".into(),
+                };
+                format!("{} ({})", c.devnode.display(), caps)
+            })
+            .collect(),
+        Err(e) => {
+            eprintln!("edgerund: warning: V4L2 camera discovery failed: {}", e);
+            Vec::new()
+        }
+    }
+}
+
+#[cfg(not(feature = "all-hardware"))]
+pub fn discover_cameras() -> Vec<String> {
+    Vec::new()
+}
+
+// ===========================================================================
 // Audio Calibration
 // ===========================================================================
 
@@ -357,13 +471,105 @@ pub fn check_android_keystore_available() -> bool {
 }
 
 // ===========================================================================
+// Android Hardware (NDK-backed providers)
+// ===========================================================================
+
+#[cfg(target_os = "android")]
+mod android_hw {
+    use edgerun_android_hardware::{
+        AndroidInputProvider, AndroidAudioInputProvider, AndroidAudioOutputProvider,
+        AndroidSensorProvider, AndroidDisplayProvider, AndroidCameraProvider,
+        AndroidBiometricProvider, AndroidLocationProvider, AndroidPowerProvider,
+    };
+
+    pub fn discover_input() -> Vec<String> {
+        vec!["AInput (NDK libinput.so)".into()]
+    }
+
+    pub fn discover_audio_input() -> Vec<String> {
+        vec!["AAudio capture (NDK libaaudio.so)".into()]
+    }
+
+    pub fn discover_audio_output() -> Vec<String> {
+        vec!["AAudio playback (NDK libaaudio.so)".into()]
+    }
+
+    pub fn discover_sensors() -> Vec<String> {
+        vec!["ASensorManager (NDK libsensor.so)".into()]
+    }
+
+    pub fn discover_display() -> Vec<String> {
+        vec!["ANativeWindow (NDK libnative_window.so)".into()]
+    }
+
+    pub fn discover_camera() -> Vec<String> {
+        vec!["Camera2 NDK (libcamera2_ndk.so)".into()]
+    }
+
+    pub fn discover_biometric() -> Vec<String> {
+        vec!["BiometricPrompt (JNI)".into()]
+    }
+
+    pub fn discover_location() -> Vec<String> {
+        vec!["LocationManager (JNI)".into()]
+    }
+
+    pub fn discover_power() -> Vec<String> {
+        let mut items = Vec::new();
+        // Read Android power info from sysfs (available on all Android)
+        if let Ok(content) = std::fs::read_to_string("/sys/class/power_supply/battery/capacity") {
+            items.push(format!("Battery: {}%", content.trim()));
+        }
+        if let Ok(status) = std::fs::read_to_string("/sys/class/power_supply/battery/status") {
+            items.push(format!("Charging: {}", status.trim()));
+        }
+        items.push("BatteryManager (JNI)".into());
+        items
+    }
+
+    pub fn discover_keystore() -> Vec<String> {
+        vec!["android.security.keystore (JNI)".into()]
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn discover_android_hardware() -> Vec<String> {
+    use android_hw::*;
+    let mut items = Vec::new();
+    items.extend(discover_input());
+    items.extend(discover_audio_input());
+    items.extend(discover_audio_output());
+    items.extend(discover_sensors());
+    items.extend(discover_display());
+    items.extend(discover_camera());
+    items.extend(discover_biometric());
+    items.extend(discover_location());
+    items.extend(discover_power());
+    items.extend(discover_keystore());
+    items
+}
+
+// On Linux, use the existing discovery
+#[cfg(not(target_os = "android"))]
+pub fn discover_android_hardware() -> Vec<String> {
+    Vec::new()
+}
+
+// ===========================================================================
 // Aggregated hardware inventory
 // ===========================================================================
 
 /// Full hardware inventory for this machine.
+/// Platform-specific: Linux drivers on Linux, NDK/JNI on Android.
 pub struct HardwareInventory {
-    pub gpus: Vec<edgerun_linux_gpu::LinuxGpuDevice>,
+    pub platform: &'static str,
+    pub gpus: Vec<String>,
     pub displays: Vec<String>,
+    pub input_devices: Vec<String>,
+    pub audio_input: Vec<String>,
+    pub audio_output: Vec<String>,
+    pub sensors: Vec<String>,
+    pub camera: Vec<String>,
     pub fingerprint_readers: Vec<String>,
     pub bluetooth_controllers: Vec<String>,
     pub wifi_interfaces: Vec<String>,
@@ -373,13 +579,44 @@ pub struct HardwareInventory {
     pub npu_devices: Vec<String>,
     pub power_supplies: Vec<String>,
     pub cec_adapters: Vec<String>,
-    pub biometric_state: edgerun_biometrics::BiometricState,
-    pub android_keystore_available: bool,
+    pub biometric: Vec<String>,
+    pub location: Vec<String>,
+    pub keystore: Vec<String>,
 }
 
 impl HardwareInventory {
-    /// Discover all hardware on this machine.
+    /// Discover all hardware on this machine — platform-aware.
+    #[cfg(target_os = "android")]
     pub fn discover() -> Self {
+        // On Android: use NDK/JNI providers
+        let android = discover_android_hardware();
+        Self {
+            platform: "android",
+            gpus: vec![],                    // TODO: Android GPU via EGL
+            displays: vec![],                // TODO: ANativeWindow
+            input_devices: vec!["AInput (NDK)".into()],
+            audio_input: vec!["AAudio capture".into()],
+            audio_output: vec!["AAudio playback".into()],
+            sensors: vec!["ASensorManager".into()],
+            camera: vec!["Camera2 NDK".into()],
+            fingerprint_readers: vec![],
+            bluetooth_controllers: vec![],
+            wifi_interfaces: vec![],
+            usb_devices: vec![],
+            pci_devices: vec![],
+            nfc_adapters: vec![],
+            npu_devices: vec![],
+            power_supplies: android.iter().filter(|s| s.contains("Battery") || s.contains("Charging")).cloned().collect(),
+            cec_adapters: vec![],
+            biometric: vec!["BiometricPrompt (JNI)".into()],
+            location: vec!["LocationManager (JNI)".into()],
+            keystore: vec!["android.security.keystore (JNI)".into()],
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    pub fn discover() -> Self {
+        // On Linux: use existing Linux drivers
         let gpus = discover_gpus();
         let displays: Vec<String> = discover_displays()
             .into_iter()
@@ -412,12 +649,24 @@ impl HardwareInventory {
         let npu_devices = discover_npu_devices();
         let power_supplies = discover_power_supplies();
         let cec_adapters = discover_cec_adapters();
-        let biometric_state = get_biometric_state();
-        let android_keystore_available = check_android_keystore_available();
+        let input_devices = discover_input_devices();
+        let audio_input = discover_audio_input();
+        let audio_output = discover_audio_output();
+        let camera = discover_cameras();
 
         Self {
-            gpus,
+            platform: "linux",
+            gpus: gpus.iter().map(|g| format!("GPU: {} ({}:{})",
+                g.pci_address,
+                g.vendor_id.map(|v| format!("{:04x}", v)).unwrap_or_else(|| "????".into()),
+                g.device_id.map(|d| format!("{:04x}", d)).unwrap_or_else(|| "????".into())
+            )).collect(),
             displays,
+            input_devices,
+            audio_input,
+            audio_output,
+            sensors: vec![],
+            camera,
             fingerprint_readers,
             bluetooth_controllers,
             wifi_interfaces,
@@ -427,16 +676,26 @@ impl HardwareInventory {
             npu_devices,
             power_supplies,
             cec_adapters,
-            biometric_state,
-            android_keystore_available,
+            biometric: vec![],
+            location: vec![],
+            keystore: if check_android_keystore_available() {
+                vec!["available".into()]
+            } else {
+                vec![]
+            },
         }
     }
 
     /// Print a summary of discovered hardware.
     pub fn summary(&self) -> String {
         let mut lines = Vec::new();
+        lines.push(format!("  Platform:        {}", self.platform));
         lines.push(format!("  GPUs:            {}", self.gpus.len()));
         lines.push(format!("  Displays:        {}", self.displays.len()));
+        lines.push(format!("  Input:           {}", self.input_devices.len()));
+        lines.push(format!("  Audio in/out:    {}/{}", self.audio_input.len(), self.audio_output.len()));
+        lines.push(format!("  Sensors:         {}", self.sensors.len()));
+        lines.push(format!("  Camera:          {}", self.camera.len()));
         lines.push(format!("  Fingerprint:     {}", self.fingerprint_readers.len()));
         lines.push(format!("  Bluetooth:       {}", self.bluetooth_controllers.len()));
         lines.push(format!("  WiFi interfaces: {}", self.wifi_interfaces.len()));
@@ -446,7 +705,9 @@ impl HardwareInventory {
         lines.push(format!("  NPU devices:     {}", self.npu_devices.len()));
         lines.push(format!("  Power supplies:  {}", self.power_supplies.len()));
         lines.push(format!("  CEC adapters:    {}", self.cec_adapters.len()));
-        lines.push(format!("  Android KS:      {}", self.android_keystore_available));
+        lines.push(format!("  Biometric:       {}", self.biometric.len()));
+        lines.push(format!("  Location:        {}", self.location.len()));
+        lines.push(format!("  Keystore:        {}", self.keystore.len()));
         lines.join("\n")
     }
 }
@@ -458,14 +719,10 @@ mod tests {
     #[test]
     fn hardware_inventory_discover_does_not_panic() {
         let inventory = HardwareInventory::discover();
-        // Should always succeed even without real hardware
         assert!(!inventory.summary().is_empty());
-    }
-
-    #[test]
-    fn biometric_state_default() {
-        let state = get_biometric_state();
-        // Default should be a valid state
-        let _ = state.assurance_strength();
+        #[cfg(not(target_os = "android"))]
+        assert_eq!(inventory.platform, "linux");
+        #[cfg(target_os = "android")]
+        assert_eq!(inventory.platform, "android");
     }
 }

@@ -4,7 +4,6 @@
 //! browsers use for smooth scrolling and pointer-based interactions.
 
 use crate::wire::{ArgType, Message};
-use crate::wire::encode::*;
 
 pub const ZWP_RELATIVE_POINTER_MANAGER_V1: &str = "zwp_relative_pointer_manager_v1";
 pub const ZWP_RELATIVE_POINTER_MANAGER_V1_VERSION: u32 = 1;

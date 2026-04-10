@@ -36,7 +36,7 @@ use edgerun_core::protocol::{CommandEnvelope, EventEnvelope};
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::{LocalNode, MeshFrame};
 use edgerun_mesh_link::MeshLink;
-use edgerun_mesh_router::MeshRouter;
+use edgerun_mesh::MeshRouter;
 use edgerun_proto::edgerun::v0::stream as proto_stream;
 use prost::Message;
 use std::sync::Arc;
@@ -136,12 +136,10 @@ impl MeshNode {
 
     /// Signs a mesh frame using the node's hardware signer.
     fn sign_frame(&mut self, frame: &mut MeshFrame) {
+        use edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME;
         frame.header.src = self.node.identity();
         let preimage = frame.signed_preimage();
-        let digest = edgerun_core::crypto::sha256(&preimage);
-        let mut digest_bytes = [0u8; 32];
-        digest_bytes.copy_from_slice(&digest);
-        match self.signer.sign_digest(&digest_bytes) {
+        match self.signer.sign_record(SIG_DOMAIN_MESH_FRAME, &preimage) {
             Ok(sig) => {
                 frame.signature = sig;
             }

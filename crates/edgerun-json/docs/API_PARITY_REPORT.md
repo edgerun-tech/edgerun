@@ -7,7 +7,7 @@
 ## Summary
 
 - **serde_json top-level items found**: 144
-- **edgerun-json top-level items found**: 184
+- **edgerun-json top-level items found**: 187
 - **Core API items tracked**: 22
 
 - **Present in edgerun-json**: 3 / 4 (75.0%)
@@ -336,6 +336,8 @@
 - `to_writer<W: Write>`
 - `to_writer_pretty<T, W>`
 - `to_writer_pretty<W: Write>`
+- `try_push_field`
+- `try_push_item`
 - `values`
 - `values_mut`
 - `with_index<'b>`
@@ -358,6 +360,7 @@
 - `JsonNumber` (enum)
 - `JsonParseError` (enum)
 - `JsonValue` (enum)
+- `JsonValueError` (enum)
 - `TapeTokenKind` (enum)
 - `BorrowedRawDeserializer` (struct)
 - `BoxedFromString;` (struct)

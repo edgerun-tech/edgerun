@@ -2,8 +2,7 @@
 //!
 //! Used by Chromium for HiDPI and fractional scaling.
 
-use crate::wire::{ArgType, Message};
-use crate::wire::encode::*;
+use crate::wire::ArgType;
 
 pub const WP_VIEWPORTER: &str = "wp_viewporter";
 pub const WP_VIEWPORTER_VERSION: u32 = 1;

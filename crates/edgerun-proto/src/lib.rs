@@ -1456,7 +1456,7 @@ mod tests {
         assert_eq!(CommandType::FetchObject as i32, 6);
         assert_eq!(CommandType::Query as i32, 7);
         assert_eq!(CommandType::ExecuteWorkload as i32, 8);
-        assert_eq!(CommandType::Custom as i32, 1000);
+        assert_eq!(CommandType::Custom as i32, 2000);
     }
 
     #[test]

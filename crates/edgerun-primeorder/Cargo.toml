@@ -41,7 +41,7 @@ rustdoc-args = [
 ]
 
 [dependencies.elliptic-curve]
-path = "../edgerun-elliptic-curve"
+version = "0.13"
 features = [
     "arithmetic",
     "sec1",

@@ -735,13 +735,10 @@ impl NodeStore {
             signature: None,
         };
 
-        // Sign the descriptor
+        // Sign the descriptor with domain separation
         let record = edgerun_core::protocol::ProtocolRecord::SnapshotDescriptor(descriptor.clone());
         let canonical = edgerun_core::protocol::canonical_bytes(&record, true);
-        let digest = edgerun_core::crypto::sha256(&canonical);
-        let mut digest_bytes = [0u8; 32];
-        digest_bytes.copy_from_slice(&digest);
-        let sig = signer.sign_digest(&digest_bytes)
+        let sig = signer.sign_record(edgerun_core::crypto::SIG_DOMAIN_SNAPSHOT_DESCRIPTOR, &canonical)
             .map_err(|e| StorageError::Encode(format!("snapshot signing failed: {}", e)))?;
         descriptor.signature = Some(edgerun_core::protocol::Signature {
             algorithm: 1,

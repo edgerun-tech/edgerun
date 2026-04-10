@@ -17,9 +17,9 @@ echo "The compositor will take over the display."
 echo "To launch clients, use: WAYLAND_DISPLAY=$WAYLAND_SOCKET <command>"
 echo ""
 echo "Examples:"
+echo "  WAYLAND_DISPLAY=$WAYLAND_SOCKET chromium --ozone-platform=wayland --no-sandbox"
 echo "  WAYLAND_DISPLAY=$WAYLAND_SOCKET firefox"
 echo "  WAYLAND_DISPLAY=$WAYLAND_SOCKET weston-flower"
-echo "  WAYLAND_DISPLAY=$WAYLAND_SOCKET epiphany"
 echo ""
 
 # Run the compositor

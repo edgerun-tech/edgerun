@@ -21,7 +21,7 @@ readme = "README.md"
 license = "MIT/Apache-2.0"
 repository = "https://github.com/zkcrypto/group"
 [dependencies.ff]
-path = "../edgerun-ff"
+version = "0.13"
 default-features = false
 
 [dependencies.memuse]
@@ -34,7 +34,7 @@ optional = true
 default-features = false
 
 [dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 default-features = false
 
 [dependencies.rand_xorshift]
@@ -42,7 +42,7 @@ version = "0.3"
 optional = true
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 default-features = false
 
 [badges.maintenance]

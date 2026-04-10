@@ -8,5 +8,5 @@ publish.workspace = true
 [dependencies]
 edgerun-linux-npu = { path = "../edgerun-linux-npu" }
 edgerun-npu = { path = "../edgerun-npu" }
-libc = { path = "../libc" }
+libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }

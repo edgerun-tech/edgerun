@@ -8,7 +8,7 @@ use crate::command_dispatch;
 use crate::daemon::send_command_to_peer;
 use crate::ingress;
 use crate::query_engine::execute_query;
-use crate::types::{StoreRequest, StoreResponse, MeshCommandRequest, MeshReply};
+use crate::types::{StoreRequest, StoreResponse, MeshReply};
 use crate::workload_policy;
 
 pub fn run_store_task(
@@ -16,13 +16,13 @@ pub fn run_store_task(
     stream_id: &[u8],
     signer: &dyn MeshSigner,
     mut rx: edgerun_rt::mpsc::Receiver<StoreRequest>,
-    mesh_command_rx: edgerun_rt::mpsc::Receiver<MeshCommandRequest>,
     mut global_rate_limiter: ingress::TokenBucket,
     mut message_hash_cache: ingress::RecentHashCache,
     allowed_peers: Vec<Vec<u8>>,
     responder_node_id: NodeID,
     capacity_tracker: std::sync::Arc<capacity::ResourceTracker>,
     workload_policy: workload_policy::WorkloadPolicy,
+    local_assurance_class: i32,
 ) {
     let rate_limiter = workload_policy::RateLimiter::new(
         100,    // max 100 workloads per requester
@@ -62,20 +62,14 @@ pub fn run_store_task(
     let mut request_counter: u64 = 0;
 
     loop {
-        // Try to receive from either mesh (sync, non-blocking poll) or TCP (blocking recv)
-        let req = if let Ok(mesh_req) = mesh_command_rx.try_recv() {
-            // Process mesh command and route reply back through mesh
-            process_mesh_command_sync(mesh_req, &mut store, stream_id, signer,
-                &mut controllers, &mut replay_cache, &revoked_delegations, &trusted_root_ids,
-                &capacity_tracker, &workload_policy, &rate_limiter,
-                &running_workloads);
-            request_counter += 1;
-            continue;
-        } else if let Some(store_req) = rx.blocking_recv() {
-            store_req
-        } else {
-            // TCP channel closed, shut down
-            break;
+        // Receive commands from TCP or mesh (both use the same StoreRequest channel).
+        // Nothing happens before the event is stored.
+        let req = match rx.blocking_recv() {
+            Some(store_req) => store_req,
+            None => {
+                // Channel closed, shut down
+                break;
+            }
         };
 
         request_counter += 1;
@@ -154,6 +148,7 @@ pub fn run_store_task(
                     &command, &mut store, stream_id, signer,
                     &mut controllers, &mut replay_cache,
                     &revoked_delegations, &trusted_root_ids,
+                    local_assurance_class,
                     &capacity_tracker, &workload_policy, &rate_limiter,
                     &running_workloads,
                 );
@@ -249,45 +244,6 @@ pub fn run_store_task(
             }
         }
     }
-}
-
-/// Processes a mesh command synchronously and routes the reply back through the mesh.
-pub fn process_mesh_command_sync(
-    req: MeshCommandRequest,
-    store: &mut NodeStore,
-    stream_id: &[u8],
-    signer: &dyn MeshSigner,
-    controllers: &mut command_dispatch::ControllerSet,
-    replay_cache: &mut std::collections::HashMap<Vec<u8>, (Vec<u8>, i64)>,
-    revoked_delegations: &std::collections::HashSet<Vec<u8>>,
-    trusted_root_ids: &[Vec<u8>],
-    capacity_tracker: &std::sync::Arc<capacity::ResourceTracker>,
-    workload_policy: &workload_policy::WorkloadPolicy,
-    rate_limiter: &workload_policy::RateLimiter,
-    running_workloads: &std::sync::Arc<crate::running_workloads::RunningWorkloads>,
-) {
-    let source = req.source;
-    let raw_bytes = req.raw_bytes.clone();
-
-    // Ingress screening for mesh commands
-    let _msg_hash = ingress::quick_message_hash(&raw_bytes);
-    // (mesh commands bypass rate limiting and allowlist for now -- they're from the local mesh)
-
-    // Full command dispatch
-    let result = command_dispatch::dispatch_command(
-        &req.command, store, stream_id, signer,
-        controllers, replay_cache,
-        revoked_delegations, trusted_root_ids,
-        capacity_tracker, workload_policy, rate_limiter,
-        running_workloads,
-    );
-
-    // Route reply back through mesh to the original sender
-    let reply = MeshReply {
-        source,
-        response_bytes: result.response_bytes,
-    };
-    let _ = req.reply_tx.send(reply);
 }
 
 /// Extracts the initial controller identities.

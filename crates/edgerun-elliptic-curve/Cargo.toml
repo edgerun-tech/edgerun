@@ -50,16 +50,16 @@ rustdoc-args = [
 ]
 
 [dependencies.base16ct]
-path = "../edgerun-base16ct"
+version = "0.2"
 
 [dependencies.base64ct]
-path = "../base64ct"
+version = "1"
 features = ["alloc"]
 optional = true
 default-features = false
 
 [dependencies.crypto-bigint]
-path = "../edgerun-crypto-bigint"
+version = "0.5"
 features = [
     "rand_core",
     "generic-array",
@@ -68,21 +68,21 @@ features = [
 default-features = false
 
 [dependencies.digest]
-path = "../edgerun-digest"
+version = "0.10"
 optional = true
 
 [dependencies.ff]
-path = "../edgerun-ff"
+version = "0.13"
 optional = true
 default-features = false
 
 [dependencies.generic-array]
-path = "../edgerun-generic-array"
+version = "0.14"
 features = ["zeroize"]
 default-features = false
 
 [dependencies.group]
-path = "../edgerun-group"
+version = "0.13"
 optional = true
 default-features = false
 
@@ -91,7 +91,7 @@ version = "0.4"
 optional = true
 
 [dependencies.hkdf]
-path = "../edgerun-hkdf"
+version = "0.12"
 optional = true
 default-features = false
 
@@ -101,16 +101,16 @@ features = ["alloc"]
 optional = true
 
 [dependencies.pkcs8]
-path = "../pkcs8"
+version = "0.10"
 optional = true
 default-features = false
 
 [dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 default-features = false
 
 [dependencies.sec1]
-path = "../edgerun-sec1"
+version = "0.7"
 features = [
     "subtle",
     "zeroize",
@@ -130,7 +130,7 @@ optional = true
 default-features = false
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 default-features = false
 
 [dependencies.tap]
@@ -139,14 +139,14 @@ optional = true
 default-features = false
 
 [dependencies.zeroize]
-path = "../edgerun-zeroize"
+version = "1"
 default-features = false
 
 [dev-dependencies.hex-literal]
 version = "0.4"
 
 [dev-dependencies.sha2]
-path = "../sha2"
+version = "0.10"
 
 [dev-dependencies.sha3]
 version = "0.10"

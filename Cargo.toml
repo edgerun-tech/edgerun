@@ -2,55 +2,10 @@
 resolver = "2"
 default-members = ["crates/edgerun-compositor"]
 exclude = [
-  "crates/edgerun-mesh",
-  "crates/edgerun-mesh-router",
-  "crates/edgerun-mesh-session",
-  "crates/edgerun-mesh-link",
-  "crates/edgerun-mesh-capability",
-  "crates/edgerun-mesh-daemon",
   "crates/edgerun-e2e",
-  "crates/edgerun-node",
 ]
 members = [
   # Vendored external crates
-  "crates/aead",
-  "crates/aes",
-  "crates/aes-gcm",
-  "crates/anyhow",
-  "crates/base64ct",
-  "crates/block-padding",
-  "crates/bytes",
-  "crates/cbc",
-  "crates/cipher",
-  "crates/ctr",
-  "crates/either",
-  "crates/ghash",
-  "crates/inout",
-  "crates/itertools",
-  "crates/libc",
-  "crates/opaque-debug",
-  "crates/pbkdf2",
-  "crates/pkcs5",
-  "crates/pkcs8",
-  "crates/polyval",
-  "crates/proc-macro2",
-  "crates/prost",
-  "crates/prost-derive",
-  "crates/prost-types",
-  "crates/quote",
-  "crates/salsa20",
-  "crates/scrypt",
-  "crates/sha1",
-  "crates/sha2",
-  "crates/spki",
-  "crates/syn",
-  "crates/unicode-ident",
-  "crates/universal-hash",
-  "crates/version_check",
-
-  # Protocol / core
-  "crates/edgerun-core",
-  "crates/edgerun-bench",
   "crates/edgerun-proto",
   "crates/edgerun-cpufeatures",
   "crates/edgerun-const-oid",
@@ -67,7 +22,6 @@ members = [
   "crates/edgerun-oci-runtime",
   "crates/edgerun-oci-registry",
   "crates/edgerun-http",
-  "crates/edgerun-tls",
   "crates/edgerun-http2",
   "crates/edgerun-http3",
 
@@ -117,9 +71,11 @@ members = [
   "crates/edgerun-elliptic-curve",
   "crates/edgerun-ecdsa",
   "crates/edgerun-p256",
+  "crates/edgerun-crypto",
   "crates/edgerun-tpm",
   "crates/edgerun-rand_core",
   "crates/edgerun-android-keystore",
+  "crates/edgerun-android-hardware",
   "crates/edgerun-hardware-signing",
 
   # Connectivity and mesh backends
@@ -143,7 +99,6 @@ members = [
   "crates/edgerun-linux-sysfs",
   "crates/edgerun-mesh",
   "crates/edgerun-mesh-link",
-  "crates/edgerun-mesh-router",
   "crates/edgerun-mesh-session",
   "crates/edgerun-mesh-capability",
   "crates/edgerun-mesh-daemon",
@@ -180,10 +135,12 @@ opt-level = 1
 debug = false
 
 [workspace.dependencies]
-aes-gcm = { path = "crates/aes-gcm", default-features = false, features = ["aes", "alloc"] }
-sha2 = { path = "crates/sha2", default-features = false }
-libc = { path = "crates/libc" }
-p256 = { path = "crates/edgerun-p256", default-features = false, features = ["ecdh", "ecdsa"] }
-prost = { path = "crates/prost" }
-prost-types = { path = "crates/prost-types" }
-rand_core = { path = "crates/edgerun-rand_core" }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+sha2 = { version = "0.10", default-features = false }
+libc = "0.2"
+itertools = "0.14"
+p256 = { version = "0.13", default-features = false, features = ["ecdh", "ecdsa", "sha256", "arithmetic"] }
+prost = { version = "0.14", default-features = false, features = ["derive"] }
+prost-types = "0.14"
+rand_core = { version = "0.6", default-features = false }
+edgerun-crypto = { path = "crates/edgerun-crypto" }

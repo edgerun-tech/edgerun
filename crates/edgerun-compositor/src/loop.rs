@@ -22,6 +22,8 @@ pub struct EventLoop {
     epoll_fd: RawFd,
     /// Map from fd to event source.
     fd_to_source: HashMap<RawFd, EventSource>,
+    /// Reusable buffer for epoll events — avoids per-wait() allocation.
+    events_buf: Vec<libc::epoll_event>,
 }
 
 impl EventLoop {
@@ -35,6 +37,7 @@ impl EventLoop {
         Ok(Self {
             epoll_fd,
             fd_to_source: HashMap::new(),
+            events_buf: vec![libc::epoll_event { events: 0, u64: 0 }; 64],
         })
     }
 
@@ -108,11 +111,9 @@ impl EventLoop {
 
     /// Wait for events. Returns a list of (source, events) that are ready.
     /// Blocks for up to `timeout_ms` milliseconds.
-    pub fn wait(&self, timeout_ms: i32) -> io::Result<Vec<(EventSource, u32)>> {
-        let mut events = vec![libc::epoll_event { events: 0, u64: 0 }; 64];
-
+    pub fn wait(&mut self, timeout_ms: i32) -> io::Result<Vec<(EventSource, u32)>> {
         let nfds = unsafe {
-            libc::epoll_wait(self.epoll_fd, events.as_mut_ptr(), events.len() as i32, timeout_ms)
+            libc::epoll_wait(self.epoll_fd, self.events_buf.as_mut_ptr(), self.events_buf.len() as i32, timeout_ms)
         };
 
         if nfds < 0 {
@@ -123,11 +124,11 @@ impl EventLoop {
             return Err(err);
         }
 
-        let mut ready = Vec::new();
+        let mut ready = Vec::with_capacity(nfds as usize);
         for i in 0..nfds as usize {
-            let fd = events[i].u64 as RawFd;
+            let fd = self.events_buf[i].u64 as RawFd;
             if let Some(&source) = self.fd_to_source.get(&fd) {
-                ready.push((source, events[i].events));
+                ready.push((source, self.events_buf[i].events));
             }
         }
 

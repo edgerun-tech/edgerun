@@ -4,12 +4,8 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::io;
 use std::os::fd::RawFd;
-use std::path::Path;
 
 use crate::client::Client;
-use crate::wire;
-use crate::wire::decode::ArgCursor;
-use crate::protocol::*;
 
 /// The Wayland server.
 pub struct WaylandServer {
@@ -89,66 +85,20 @@ impl WaylandServer {
         self.listen_fd
     }
 
-    /// Get a client.
-    pub fn client(&self, id: u32) -> Option<&Client> {
-        self.clients.get(&id)
-    }
-
     /// Get a mutable client.
     pub fn client_mut(&mut self, id: u32) -> Option<&mut Client> {
         self.clients.get_mut(&id)
-    }
-
-    /// Get all client ids.
-    pub fn client_ids(&self) -> Vec<u32> {
-        self.clients.keys().copied().collect()
     }
 
     /// Remove a disconnected client.
     pub fn remove_client(&mut self, id: u32) {
         self.clients.remove(&id);
     }
-
-    /// Send initial globals to a new client.
-    /// Globals are sent via `broadcast_global` instead.
-    pub fn send_initial(
-        &mut self,
-        _client_id: u32,
-        _globals: &[(u32, &str, u32)],
-    ) {
-        // Handled by broadcast_global in main.rs
-    }
-
-    /// Broadcast a global event to all clients.
-    pub fn broadcast_global(
-        &mut self,
-        name: u32,
-        interface: &str,
-        version: u32,
-        registry_ids: &HashMap<u32, u32>, // client_id -> registry_id
-    ) {
-        let mut args = Vec::new();
-        args.extend_from_slice(&name.to_le_bytes());
-        crate::wire::encode::encode_string(&mut args, interface);
-        args.extend_from_slice(&version.to_le_bytes());
-
-        for (&client_id, &registry_id) in registry_ids {
-            if let Some(client) = self.clients.get_mut(&client_id) {
-                client.send_message(wire::Message {
-                    sender_id: registry_id,
-                    opcode: wl_core::registry_event::GLOBAL,
-                    size: (8 + args.len()) as u16,
-                    args: args.clone(),
-                    fds: Vec::new(),
-                });
-            }
-        }
-    }
 }
 
 /// Create a Unix socket address for the given path.
 fn unix_socket_addr(path: &str) -> Vec<u8> {
-    use std::os::raw::c_char;
+    
 
     // Build sockaddr_un manually
     let c_path = CString::new(path).unwrap();

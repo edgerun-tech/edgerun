@@ -15,7 +15,6 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-remote-capability = { path = "../edgerun-remote-capability" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-mesh-link = { path = "../edgerun-mesh-link" }
-edgerun-mesh-router = { path = "../edgerun-mesh-router" }
 edgerun-mesh-session = { path = "../edgerun-mesh-session" }
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime" }
 edgerun-oci-registry = { path = "../edgerun-oci-registry" }

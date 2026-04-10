@@ -7,3 +7,6 @@ publish.workspace = true
 
 [dependencies]
 edgerun-fingerprint = { path = "../edgerun-fingerprint" }
+
+[dev-dependencies]
+edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }

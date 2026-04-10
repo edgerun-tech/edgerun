@@ -1,7 +1,12 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use edgerun_hardware_signing::{HardwareMeshSigner, MeshSigner, NodeID, TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter};
+use edgerun_hardware_signing::{
+    HardwareMeshSigner, MeshSigner, NodeID,
+    TpmHardwareKeyAdapter, YubiKeyHardwareKeyAdapter,
+};
+#[cfg(feature = "android-hardware")]
+use edgerun_hardware_signing::AndroidKeystoreHardwareKeyAdapter;
 use edgerun_tpm::{LinuxTpmSigningKey, TpmHandle};
 use edgerun_yubikey::{LinuxPcscYubiKey, YubiKeyPivSlot};
 use p256::ecdsa::SigningKey;
@@ -118,6 +123,43 @@ pub fn load_signer_from_config(config: &NodeConfig) -> Arc<dyn MeshSigner + Send
                 });
 
             Arc::new(mesh_signer)
+        }
+        "android-keystore" => {
+            let alias = signer_config.handle.as_ref().expect("Android Keystore signer requires handle (key alias)");
+
+            edgerun_log::info!("using Android Keystore signer: alias={}", alias);
+
+            #[cfg(feature = "android-hardware")]
+            {
+                // Initialize JVM context if not already done
+                edgerun_android_keystore::init_keystore_jvm().unwrap_or_else(|e| {
+                    eprintln!("error: failed to initialize Android Keystore JVM: {}", e);
+                    std::process::exit(1);
+                });
+
+                // Use ECDSA P-256 (most common on Android)
+                let algo = edgerun_android_keystore::AndroidKeystoreSignatureAlgorithm::EcdsaP256Sha256;
+                let keystore_key = edgerun_android_keystore::JniKeystoreKey::generate_or_retrieve(alias, algo)
+                    .unwrap_or_else(|e| {
+                        eprintln!("error: failed to retrieve Android Keystore key '{}': {}", alias, e);
+                        std::process::exit(1);
+                    });
+
+                let adapter = AndroidKeystoreHardwareKeyAdapter::new(keystore_key);
+                let mesh_signer = HardwareMeshSigner::new(adapter)
+                    .unwrap_or_else(|e| {
+                        eprintln!("error: failed to initialize Android Keystore signer: {}", e);
+                        std::process::exit(1);
+                    });
+
+                return Arc::new(mesh_signer);
+            }
+
+            #[cfg(not(feature = "android-hardware"))]
+            {
+                eprintln!("error: Android Keystore signer requested but android-hardware feature is not enabled");
+                std::process::exit(1);
+            }
         }
         other => {
             eprintln!("error: unknown signer type: {}", other);

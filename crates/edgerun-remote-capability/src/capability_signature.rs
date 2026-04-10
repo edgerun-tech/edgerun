@@ -52,11 +52,11 @@ pub fn sign_message<M: Message>(
     let mut buf = Vec::new();
     msg.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
 
-    // Hash and sign
-    let digest = edgerun_core::crypto::sha256(&buf);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    let sig_bytes = signer.sign_digest(&digest_bytes).map_err(|e| format!("sign: {e}"))?;
+    // Sign with domain separation for capability protocol messages
+    let sig_bytes = signer.sign_record(
+        "edgerun:v0:sig:capability-message",
+        &buf,
+    ).map_err(|e| format!("sign: {e}"))?;
 
     // Set signature
     set_sig(
@@ -92,8 +92,15 @@ pub fn verify_message<M: Message + Clone>(
     let mut buf = Vec::new();
     msg_clone.encode(&mut buf).map_err(|e| format!("proto encode: {e}"))?;
 
-    // Hash
-    let digest = edgerun_core::crypto::sha256(&buf);
+    // Build the same domain-separated prehash that MeshSigner::sign_record uses:
+    //   digest = SHA-256(domain_tag || 0x00 || SHA-256(message_bytes))
+    let record_hash = edgerun_core::crypto::sha256(&buf);
+    let domain_tag = "edgerun:v0:sig:capability-message";
+    let mut sig_input = Vec::with_capacity(domain_tag.len() + 1 + 32);
+    sig_input.extend_from_slice(domain_tag.as_bytes());
+    sig_input.push(0);
+    sig_input.extend_from_slice(&record_hash);
+    let digest = edgerun_core::crypto::sha256(&sig_input);
 
     // Build ECDSA signature
     let ecdsa_sig = p256::ecdsa::Signature::from_slice(&sig.value)

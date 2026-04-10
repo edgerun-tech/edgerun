@@ -3,7 +3,7 @@
 //! This protocol allows clients to inhibit the compositor's idle behavior
 //! (e.g., screen blanking, DPMS) while a surface is visible.
 
-use crate::wire::{ArgType, Message};
+use crate::wire::ArgType;
 
 pub const ZWP_IDLE_INHIBIT_MANAGER_V1: &str = "zwp_idle_inhibit_manager_v1";
 pub const ZWP_IDLE_INHIBIT_MANAGER_V1_VERSION: u32 = 1;

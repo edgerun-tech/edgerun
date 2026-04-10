@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
+use edgerun_mesh_daemon::MeshDaemon;
 use edgerun_storage::{NodeStore, NodeStoreConfig, BlobKeySource};
 use edgerun_core::util::system_time_to_prost;
 use prost::Message;
@@ -13,14 +14,16 @@ use crate::capabilities;
 use crate::capacity;
 use crate::command_dispatch;
 use crate::config::{self, NodeConfig, BootstrapPeer};
-use crate::config::{parse_config, parse_bootstrap_peers, load_signer_from_config, extract_private_key_bytes};
+use crate::config::{parse_config, parse_bootstrap_peers, extract_private_key_bytes};
+use crate::signer::load_signer_from_config;
 use crate::health::{HealthState, run_health_server};
 use crate::ingress;
+use crate::mesh_store_provider::{make_mesh_command_handler, MeshCommandBridge};
 use crate::peer_reconnect::run_peer_reconnection;
 use crate::session;
-use crate::store_task::{run_store_task, MeshCommandRequest};
+use crate::store_task::{run_store_task};
 use crate::tcp_server::{SessionContext, run_tcp_listener, handle_tcp_connection, encode_tcp_frame, perform_session_handshake_as_initiator};
-use crate::types::{StoreRequest, StoreResponse, MeshReply};
+use crate::types::{StoreRequest, StoreResponse};
 use crate::workload_policy;
 
 async fn run_fetch_queue_consumer(
@@ -170,7 +173,7 @@ async fn run_fetch_queue_consumer(
 }
 
 /// Sends a CommandEnvelope to a peer over TCP, records CommandSent event, and returns the response.
-/// (Blocking version -- for use from the store task's blocking thread)
+/// Called from the store task's blocking thread — does direct blocking TCP I/O.
 pub fn send_command_to_peer(
     peer_addr: &str,
     command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
@@ -181,15 +184,38 @@ pub fn send_command_to_peer(
     // Record CommandSent event on our own stream (double-entry bookkeeping)
     command_dispatch::record_command_sent_event(store, stream_id, signer, command);
 
-    // Spawn the async operation and wait for it
-    let peer_addr = peer_addr.to_string();
-    let command = command.clone();
-    match edgerun_rt::spawn(async move {
-        send_command_to_peer_async(&peer_addr, &command).await
-    }).blocking_recv() {
-        Ok(result) => result,
-        Err(_) => Err("command response channel closed unexpectedly".into()),
-    }
+    // Do blocking TCP I/O directly since we're already on a blocking thread
+    send_command_to_peer_blocking(peer_addr, command)
+}
+
+/// Direct blocking TCP connection to send a command to a peer.
+fn send_command_to_peer_blocking(
+    peer_addr: &str,
+    command: &edgerun_proto::edgerun::v0::stream::CommandEnvelope,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let mut stream = TcpStream::connect_timeout(
+        &peer_addr.parse()?,
+        Duration::from_secs(10),
+    )?;
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(10)))?;
+
+    let cmd_bytes = prost::Message::encode_to_vec(command);
+    let frame = encode_tcp_frame(&cmd_bytes);
+    stream.write_all(&frame)?;
+
+    let mut header = [0u8; 8];
+    stream.read_exact(&mut header)?;
+
+    let payload_len = u64::from_be_bytes(header) as usize;
+    let mut payload = vec![0u8; payload_len];
+    stream.read_exact(&mut payload)?;
+
+    Ok(payload)
 }
 
 /// Async version of send_command_to_peer -- no store mutation, just network I/O.
@@ -288,6 +314,13 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
 
     let _node_name = config.name.as_deref().unwrap_or("(unnamed)").to_string();
     let _signer_type = config.signer.as_ref().map(|s| s.signer_type.clone()).unwrap_or_else(|| "unconfigured".to_string());
+
+    // Determine local assurance class from signer type
+    let local_assurance_class: i32 = match config.signer.as_ref().map(|s| s.signer_type.as_str()) {
+        Some("tpm") | Some("yubikey") | Some("android-keystore") => 2, // HARDWARE_BACKED
+        Some("software") => 1, // SOFTWARE
+        _ => 0, // Unknown/unconfigured
+    };
 
     edgerun_log::info!("edgerund starting");
 
@@ -428,7 +461,7 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         if cap_count > 0 {
             let multi_arc = Arc::new(std::sync::Mutex::new(multi));
             let socket_path_clone = socket_path.clone();
-            std::thread::spawn(move || {
+            edgerun_rt::spawn_blocking(move || {
                 if let Err(e) = capabilities::serve_capabilities_unix(multi_arc, &socket_path_clone) {
                     edgerun_log::error!("capability server error: {}", e);
                 }
@@ -462,21 +495,98 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
         }
     }
 
-    // --- Mesh poll loop (blocking thread) ---
-    // Creates direct channels between mesh loop and store task
-    let mesh_node_id = node_id;
-    let (mesh_command_tx, mesh_command_rx) = edgerun_rt::mpsc::channel::<MeshCommandRequest>(256);
-    let (mesh_reply_tx, mesh_reply_rx) = edgerun_rt::mpsc::channel::<MeshReply>(256);
+    // --- Mesh daemon (blocking thread) — handles session encryption, frame signing,
+    //     and capability dispatch. Decrypted frames that aren't capability envelopes
+    //     are forwarded to the store task via the command handler callback.
+    let mesh_command_bridge = Arc::new(std::sync::Mutex::new(None::<MeshCommandBridge>));
+    let bridge_for_daemon = mesh_command_bridge.clone();
+    let mesh_handler = make_mesh_command_handler(store_tx.clone());
 
     let store_handle = edgerun_rt::spawn_blocking(move || {
         run_store_task(store, &stream_id_vec, &*store_signer, store_rx,
-                       mesh_command_rx,
                        global_rate_limiter, message_hash_cache, allowed_peers, node_id,
-                       tracker, workload_policy);
+                       tracker, workload_policy, local_assurance_class);
     });
 
+    // Create the MeshDaemon on a separate blocking thread
+    let mesh_daemon_node_id = node_id;
     let mesh_handle = edgerun_rt::spawn_blocking(move || {
-        crate::mesh_loop::run_mesh_loop(mesh_node_id, mesh_command_tx, mesh_reply_rx);
+        use edgerun_capabilities::capability_descriptor;
+        use edgerun_capabilities::{CapabilityModality, CapabilityOperation, CapabilityRole};
+        use edgerun_remote_capability::RemoteCapabilityProvider;
+
+        // Minimal capability provider — mesh peers can discover this node
+        // but actual command dispatch goes through the command_handler callback
+        struct MeshNodeProvider;
+        impl RemoteCapabilityProvider for MeshNodeProvider {
+            fn descriptor(&self) -> edgerun_capabilities::CapabilityDescriptor {
+                capability_descriptor(
+                    "edgerun-mesh-node",
+                    "edgerund",
+                    CapabilityRole::Communication,
+                    &[CapabilityModality::Text],
+                    &[edgerun_capabilities::CapabilityEventKind::Text],
+                    &[CapabilityOperation::Query],
+                    Vec::new(),
+                )
+            }
+            fn open_session(
+                &mut self,
+                open: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionOpen,
+            ) -> Result<edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept, edgerun_capabilities::CapabilityError> {
+                Ok(edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionAccept {
+                    version: open.version,
+                    session_id: open.session_id.clone(),
+                    accepted: true,
+                    granted_operations: vec![CapabilityOperation::Query as i32],
+                    granted_access_class: open.requested_access_class,
+                    error_reason: String::new(),
+                    grant_id: open.session_id.clone(),
+                })
+            }
+            fn invoke(
+                &mut self,
+                _session_id: &[u8],
+                _invocation: &edgerun_proto::edgerun::v0::capability::CapabilityInvocation,
+                _inline_parameters: Option<&[u8]>,
+            ) -> Result<edgerun_remote_capability::RemoteInvocationResult, edgerun_capabilities::CapabilityError> {
+                Err(edgerun_capabilities::CapabilityError::Unsupported("use command_handler for mesh commands".into()))
+            }
+            fn close_session(&mut self, _close: &edgerun_proto::edgerun::v0::capability_runtime::CapabilitySessionClose) -> Result<(), edgerun_capabilities::CapabilityError> {
+                Ok(())
+            }
+        }
+
+        let mut daemon = MeshDaemon::new(
+            mesh_daemon_node_id,
+            edgerun_mesh_daemon::MeshDaemonConfig::default(),
+            MeshNodeProvider,
+        );
+
+        // Register all UP network interfaces
+        match daemon.discover_and_open_interfaces() {
+            Ok(ifaces) => edgerun_log::info!("mesh daemon opened {} interfaces", ifaces.len()),
+            Err(e) => edgerun_log::warn!("mesh daemon failed to open interfaces: {}", e),
+        }
+
+        // Enable UDP broadcast for local network peer discovery
+        if let Err(e) = daemon.enable_udp_broadcast() {
+            edgerun_log::warn!("mesh daemon UDP broadcast failed: {}", e);
+        }
+
+        // Wire up the command handler: decrypted non-capability frames → store task
+        daemon = daemon.with_command_handler(mesh_handler);
+
+        // Expose the outbound queue for the store task to send commands over mesh
+        let outbound = daemon.outbound_queue();
+        *bridge_for_daemon.lock().unwrap() = Some(MeshCommandBridge::new(outbound));
+
+        edgerun_log::info!("mesh daemon running with encrypted sessions and command dispatch");
+
+        // Run the daemon's event loop (blocks until shutdown)
+        if let Err(e) = daemon.run() {
+            edgerun_log::error!("mesh daemon error: {}", e);
+        }
     });
 
     // --- TCP listener (if configured) ---

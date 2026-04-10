@@ -45,22 +45,22 @@ rustdoc-args = [
 ]
 
 [dependencies.base16ct]
-path = "../edgerun-base16ct"
+version = "0.2"
 optional = true
 default-features = false
 
 [dependencies.der]
-path = "../edgerun-der"
+version = "0.7"
 features = ["oid"]
 optional = true
 
 [dependencies.generic-array]
-path = "../edgerun-generic-array"
+version = "0.14"
 optional = true
 default-features = false
 
 [dependencies.pkcs8]
-path = "../pkcs8"
+version = "0.10"
 optional = true
 default-features = false
 
@@ -71,12 +71,12 @@ optional = true
 default-features = false
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 optional = true
 default-features = false
 
 [dependencies.zeroize]
-path = "../edgerun-zeroize"
+version = "1"
 optional = true
 default-features = false
 

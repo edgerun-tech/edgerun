@@ -2,6 +2,9 @@
 
 This directory contains a multi-crate Rust workspace for the edgerun protocol surface and capability backends.
 
+**Status:** Active development — core protocol functional, security hardening in progress.  
+See [docs/capability-gap-analysis.md](docs/capability-gap-analysis.md) for detailed implementation status and known gaps.
+
 The workspace is organized into crate groups by ownership/risk boundary:
 
 - **Protocol core**

@@ -11,8 +11,8 @@ edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-wifi = { path = "../edgerun-wifi" }
-libc = { path = "../libc" }
-pbkdf2 = { path = "../pbkdf2" }
-sha1 = { path = "../sha1" }
+libc.workspace = true
+pbkdf2 = { version = "0.12" }
+sha1 = { version = "0.10" }
 hmac = { path = "../edgerun-hmac" }
 edgerun-log = { path = "../edgerun-log" }

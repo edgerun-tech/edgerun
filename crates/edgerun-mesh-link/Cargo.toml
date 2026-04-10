@@ -7,7 +7,6 @@ publish.workspace = true
 
 [dependencies]
 edgerun-mesh = { path = "../edgerun-mesh" }
-edgerun-mesh-router = { path = "../edgerun-mesh-router" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 libc.workspace = true

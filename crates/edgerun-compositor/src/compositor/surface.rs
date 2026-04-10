@@ -28,6 +28,11 @@ pub struct Surface {
     pub width: u32,
     /// Height of current buffer.
     pub height: u32,
+    /// Viewport source rectangle (x, y, w, h) in buffer coordinates.
+    /// None = use entire buffer.
+    pub viewport_src: Option<(f64, f64, f64, f64)>,
+    /// Viewport destination size (w, h). (-1, -1) = use buffer size.
+    pub viewport_dst: Option<(i32, i32)>,
 }
 
 /// A buffer attached to a surface.
@@ -168,22 +173,13 @@ pub struct DamageRect {
 /// Surface state manager.
 pub struct SurfaceTree {
     surfaces: HashMap<u32, Surface>,
-    next_id: u32,
 }
 
 impl SurfaceTree {
     pub fn new() -> Self {
         Self {
             surfaces: HashMap::new(),
-            next_id: 2, // 1 is wl_display
         }
-    }
-
-    /// Allocate a new surface id.
-    pub fn alloc_id(&mut self) -> u32 {
-        let id = self.next_id;
-        self.next_id += 1;
-        id
     }
 
     /// Create a new surface.
@@ -201,6 +197,8 @@ impl SurfaceTree {
             frame_callbacks: Vec::new(),
             width: 0,
             height: 0,
+            viewport_src: None,
+            viewport_dst: None,
         });
     }
 
@@ -244,6 +242,20 @@ impl SurfaceTree {
         }
     }
 
+    /// Set viewport source rectangle.
+    pub fn set_viewport_source(&mut self, id: u32, x: f64, y: f64, w: f64, h: f64) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.viewport_src = Some((x, y, w, h));
+        }
+    }
+
+    /// Set viewport destination size.
+    pub fn set_viewport_destination(&mut self, id: u32, w: i32, h: i32) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.viewport_dst = Some((w, h));
+        }
+    }
+
     /// Commit pending state for a surface.
     pub fn commit(&mut self, id: u32) {
         if let Some(s) = self.surfaces.get_mut(&id) {
@@ -271,5 +283,91 @@ impl SurfaceTree {
     /// Iterate mutably.
     pub fn surfaces_mut(&mut self) -> impl Iterator<Item = &mut Surface> {
         self.surfaces.values_mut()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_and_get_surface() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        let surface = tree.get(5).unwrap();
+        assert_eq!(surface.id, 5);
+        assert!(surface.buffer.is_none());
+        assert_eq!(surface.x, 0);
+        assert_eq!(surface.y, 0);
+    }
+
+    #[test]
+    fn test_surface_attach_commit() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        tree.attach(5, SurfaceBuffer::Null, 10, 20);
+        assert!(tree.get(5).unwrap().pending_buffer.is_some());
+        tree.commit(5);
+        assert!(tree.get(5).unwrap().buffer.is_some());
+        assert_eq!(tree.get(5).unwrap().x, 10);
+        assert_eq!(tree.get(5).unwrap().y, 20);
+    }
+
+    #[test]
+    fn test_surface_damage_tracking() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        tree.damage(5, 0, 0, 100, 100);
+        assert_eq!(tree.get(5).unwrap().pending_damage.len(), 1);
+        tree.commit(5); // clears damage on commit
+        assert_eq!(tree.get(5).unwrap().pending_damage.len(), 0);
+    }
+
+    #[test]
+    fn test_surface_scale() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        assert_eq!(tree.get(5).unwrap().buffer_scale, 1);
+        tree.set_buffer_scale(5, 2);
+        assert_eq!(tree.get(5).unwrap().buffer_scale, 2);
+        tree.set_buffer_scale(5, 0); // should clamp to 1
+        assert_eq!(tree.get(5).unwrap().buffer_scale, 1);
+    }
+
+    #[test]
+    fn test_surface_destroy() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        assert!(tree.get(5).is_some());
+        let surface = tree.destroy(5);
+        assert!(surface.is_some());
+        assert!(tree.get(5).is_none());
+    }
+
+    #[test]
+    fn test_frame_callbacks() {
+        let mut tree = SurfaceTree::new();
+        tree.create(5);
+        tree.add_frame_callback(5, 100);
+        tree.add_frame_callback(5, 101);
+        assert_eq!(tree.get(5).unwrap().frame_callbacks.len(), 2);
+        tree.commit(5); // commit doesn't clear callbacks
+        assert_eq!(tree.get(5).unwrap().frame_callbacks.len(), 2);
+    }
+
+    #[test]
+    fn test_surface_buffer_dimensions() {
+        let buf = SurfaceBuffer::Shm {
+            pool_fd: 0,
+            offset: 0,
+            width: 800,
+            height: 600,
+            stride: 3200,
+            format: 0x34325258,
+        };
+        assert_eq!(buf.width(), 800);
+        assert_eq!(buf.height(), 600);
+        assert_eq!(buf.stride(), 3200);
+        assert_eq!(buf.format(), 0x34325258);
     }
 }

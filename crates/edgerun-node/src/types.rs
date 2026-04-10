@@ -60,8 +60,8 @@ pub struct OutboundCommand {
 }
 
 /// A request sent to the store task from the mesh loop (blocking thread).
-/// Uses std::sync::mpsc since both sender (mesh loop) and receiver (store task)
-/// are on blocking threads.
+/// Uses `edgerun_rt::mpsc` (async-compatible channel) since the sender
+/// is on the mesh blocking thread and the receiver is on the store blocking thread.
 pub struct MeshCommandRequest {
     pub command: edgerun_proto::edgerun::v0::stream::CommandEnvelope,
     pub raw_bytes: Vec<u8>,

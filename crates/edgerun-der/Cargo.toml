@@ -60,12 +60,12 @@ features = ["derive"]
 optional = true
 
 [dependencies.bytes]
-path = "../bytes"
+version = "1"
 optional = true
 default-features = false
 
 [dependencies.const-oid]
-path = "../edgerun-const-oid"
+version = "0.9"
 optional = true
 
 [dependencies.der_derive]
@@ -87,7 +87,7 @@ optional = true
 default-features = false
 
 [dependencies.zeroize]
-path = "../edgerun-zeroize"
+version = "1"
 optional = true
 default-features = false
 

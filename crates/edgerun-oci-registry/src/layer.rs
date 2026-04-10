@@ -1,11 +1,20 @@
 //! Layer extraction, whiteout handling, and rootfs building.
+//!
+//! Fixes applied:
+//! - **Tar symlink/ path traversal validation** — all entry paths validated against dest root
+//! - **Streaming digest verification** — no longer loads entire blob into memory
+//! - **Overlay whiteout char device handling** (0:0 device check)
 
 use std::fs::{self, File};
-use std::io::{BufReader, Read};
-use std::os::unix::fs::FileTypeExt;
+use std::io::{self, BufReader, Read};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
 
 use crate::errors::RegistryError;
+
+// ===========================================================================
+// Secure tar extraction
+// ===========================================================================
 
 /// Extract a compressed layer tarball to a directory.
 pub fn extract_layer(
@@ -26,35 +35,88 @@ pub fn extract_layer(
     if is_zstd {
         let mut decoder =
             zstd::Decoder::new(file).map_err(|e| RegistryError::IoError(e))?;
-        extract_tar(&mut decoder, dest)?;
+        extract_tar_secure(&mut decoder, dest)?;
     } else if is_gzip {
         let mut decoder = flate2::read::GzDecoder::new(file);
-        extract_tar(&mut decoder, dest)?;
+        extract_tar_secure(&mut decoder, dest)?;
     } else {
-        extract_tar(&mut BufReader::new(file), dest)?;
+        extract_tar_secure(&mut BufReader::new(file), dest)?;
     }
 
     Ok(())
 }
 
-/// Extract a tar stream to a directory.
-pub fn extract_tar<R: Read>(reader: R, dest: &Path) -> Result<(), RegistryError> {
+/// Securely extract a tar stream to a directory.
+/// Validates all entry paths to prevent directory traversal and symlink escape.
+pub fn extract_tar_secure<R: Read>(reader: R, dest: &Path) -> Result<(), RegistryError> {
     let mut archive = tar::Archive::new(reader);
-    archive
-        .unpack(dest)
-        .map_err(|e| RegistryError::IoError(e))?;
+    let dest = dest.canonicalize().unwrap_or(dest.to_path_buf());
+
+    for entry in archive.entries().map_err(|e| RegistryError::IoError(e))? {
+        let entry = entry.map_err(|e| RegistryError::IoError(e))?;
+        let path = entry.path().map_err(|e| RegistryError::IoError(e))?;
+
+        // Validate: entry must resolve within dest
+        let entry_path = dest.join(&path);
+        let entry_path = entry_path.canonicalize().unwrap_or(entry_path);
+        if !entry_path.starts_with(&dest) {
+            return Err(RegistryError::IoError(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("tar entry {:?} escapes destination {:?}", path, dest),
+            )));
+        }
+
+        // Validate symlinks: target must resolve within dest
+        if entry.header().entry_type() == tar::EntryType::Symlink {
+            if let Some(link_target) = entry.link_name().map_err(|e| RegistryError::IoError(e))? {
+                // If absolute, check it's within dest; if relative, resolve from entry's parent
+                let resolved = if link_target.is_absolute() {
+                    link_target.to_path_buf()
+                } else {
+                    entry_path.parent().unwrap_or(&dest).join(&link_target)
+                };
+                let resolved = resolved.canonicalize().unwrap_or(resolved);
+                if !resolved.starts_with(&dest) {
+                    return Err(RegistryError::IoError(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        format!(
+                            "symlink {:?} -> {:?} escapes destination",
+                            path, link_target
+                        ),
+                    )));
+                }
+            }
+        }
+
+        // Extract the entry
+        // Use unpack_in which validates paths, but we already validated above
+        let mut entry = entry;
+        entry.unpack_in(&dest).map_err(|e| RegistryError::IoError(e))?;
+    }
+
     Ok(())
 }
 
+// ===========================================================================
+// Streaming digest verification
+// ===========================================================================
+
 /// Verify that a blob matches the expected digest.
+/// Streams the file through a SHA-256 hasher — never loads the entire file into memory.
 pub fn verify_blob_digest(
     blob_path: &Path,
     expected_digest: &str,
 ) -> Result<(), RegistryError> {
-    let data = fs::read(blob_path).map_err(|e| RegistryError::IoError(e))?;
-    let computed_hash = edgerun_core::crypto::sha256(&data);
-    let computed =
-        format!("sha256:{}", edgerun_core::util::bytes_to_hex(&computed_hash));
+    let mut file = File::open(blob_path).map_err(|e| RegistryError::IoError(e))?;
+    let mut hasher = edgerun_core::crypto::Sha256Hasher::new();
+    let mut buf = [0u8; 65536]; // 64KB buffer
+    loop {
+        let n = file.read(&mut buf).map_err(|e| RegistryError::IoError(e))?;
+        if n == 0 { break; }
+        hasher.update(&buf[..n]);
+    }
+    let computed_hash = hasher.finalize();
+    let computed = format!("sha256:{}", edgerun_core::util::bytes_to_hex(&computed_hash));
 
     if computed != expected_digest {
         return Err(RegistryError::DigestMismatch {
@@ -66,6 +128,10 @@ pub fn verify_blob_digest(
     Ok(())
 }
 
+// ===========================================================================
+// Whiteout handling
+// ===========================================================================
+
 /// Apply whiteout files across layers (reverse order, top layer first).
 pub fn apply_whiteouts(layer_dirs: &[PathBuf]) -> Result<(), RegistryError> {
     for layer_dir in layer_dirs.iter().rev() {
@@ -75,6 +141,7 @@ pub fn apply_whiteouts(layer_dirs: &[PathBuf]) -> Result<(), RegistryError> {
 }
 
 /// Remove whiteout files from a directory tree.
+/// Handles both OCI-style `.wh.` prefix and overlayfs char device whiteouts (0:0).
 fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
     if !dir.is_dir() {
         return Ok(());
@@ -90,9 +157,11 @@ fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
         let file_name = entry.file_name();
 
         if let Some(name) = file_name.to_str() {
+            // Skip the opaque whiteout marker itself
             if name == ".wh..wh..opq" {
                 continue;
             }
+            // OCI-style whiteout: .wh.<name> → delete <name>
             if let Some(rest) = name.strip_prefix(".wh.") {
                 let target = path.parent().unwrap().join(rest);
                 if target.exists() {
@@ -107,9 +176,10 @@ fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
             }
         }
 
+        // Overlayfs char device whiteout (0:0 character device)
         if let Ok(metadata) = path.metadata() {
-            if metadata.file_type().is_char_device() {
-                // Overlay whiteout (0:0 device) — would need dev_t check
+            if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
+                let _ = fs::remove_file(&path);
             }
         }
 
@@ -120,6 +190,10 @@ fn remove_whiteout_files(dir: &Path) -> Result<(), RegistryError> {
 
     Ok(())
 }
+
+// ===========================================================================
+// Rootfs building
+// ===========================================================================
 
 /// Build rootfs by merging layers in order.
 pub fn build_rootfs(layer_dirs: &[PathBuf], dest: &Path) -> Result<(), RegistryError> {
@@ -147,6 +221,7 @@ fn copy_dir_contents(src: &Path, dest: &Path) -> Result<(), RegistryError> {
         let dest_path = dest.join(entry.file_name());
         let file_name = entry.file_name();
 
+        // Skip whiteout files
         if let Some(name) = file_name.to_str() {
             if name.starts_with(".wh.") {
                 continue;

@@ -44,14 +44,14 @@ rustdoc-args = [
 ]
 
 [dependencies.ecdsa-core]
-path = "../edgerun-ecdsa"
+version = "0.16"
 package = "ecdsa"
 features = ["der"]
 optional = true
 default-features = false
 
 [dependencies.elliptic-curve]
-path = "../edgerun-elliptic-curve"
+version = "0.13"
 features = [
     "hazmat",
     "sec1",
@@ -63,12 +63,12 @@ version = "0.4"
 optional = true
 
 [dependencies.sha2]
-path = "../sha2"
+version = "0.10"
 optional = true
 default-features = false
 
 [dependencies.primeorder]
-path = "../edgerun-primeorder"
+version = "0.13"
 optional = true
 
 [dependencies.serdect]
@@ -83,7 +83,7 @@ version = "0.3"
 version = "0.4"
 
 [dev-dependencies.ecdsa-core]
-path = "../edgerun-ecdsa"
+version = "0.16"
 package = "ecdsa"
 features = ["dev"]
 default-features = false
@@ -92,14 +92,14 @@ default-features = false
 version = "0.4"
 
 [dev-dependencies.primeorder]
-path = "../edgerun-primeorder"
+version = "0.13"
 features = ["dev"]
 
 [dev-dependencies.proptest]
 version = "1"
 
 [dev-dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 features = ["getrandom"]
 
 [features]

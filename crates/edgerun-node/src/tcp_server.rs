@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
+use prost::Message;
 
 use crate::ingress;
 use crate::session;

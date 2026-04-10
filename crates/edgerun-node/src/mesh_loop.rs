@@ -3,8 +3,9 @@ use edgerun_linux_netif::discover_network_interfaces;
 use edgerun_network_interface::NetworkLinkState;
 use edgerun_mesh::{FrameType, LocalNode};
 use edgerun_mesh_link::MeshLink;
-use edgerun_mesh_router::MeshRouter;
+use edgerun_mesh::MeshRouter;
 use edgerun_rt::mpsc::{Sender, Receiver};
+use prost::Message;
 
 use crate::types::{MeshCommandRequest, MeshReply};
 

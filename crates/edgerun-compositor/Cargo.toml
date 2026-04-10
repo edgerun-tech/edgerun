@@ -13,4 +13,4 @@ path = "src/main.rs"
 [dependencies]
 edgerun-evdev-input = { path = "../edgerun-evdev-input" }
 edgerun-input = { path = "../edgerun-input" }
-libc = { path = "../libc" }
+libc.workspace = true

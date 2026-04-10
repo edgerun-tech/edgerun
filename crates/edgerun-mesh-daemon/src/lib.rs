@@ -10,10 +10,9 @@
 //! 6. Shuts down cleanly on SIGINT/SIGTERM
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
-use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader};
+use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRouter};
 use edgerun_mesh_link::MeshLink;
-use edgerun_mesh_router::MeshRouter;
-use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher, OutboundQueue};
+use edgerun_mesh_capability::{MeshCapabilityServer, MeshEnvelopeDispatcher};
 use edgerun_mesh_session::{HandshakeAccept, HandshakeInit, SessionError, SessionManager};
 use edgerun_remote_capability::RemoteCapabilityProvider;
 use edgerun_hardware_signing::HardwareSigningError;
@@ -24,6 +23,13 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+// Re-export types needed by integrators
+pub use edgerun_mesh_capability::OutboundQueue;
+
+/// Callback type for handling decrypted frames that are not capability envelopes.
+/// Receives (sender NodeID, decrypted payload bytes).
+pub type CommandHandler = Box<dyn FnMut(NodeID, Vec<u8>) + Send>;
 
 // ---------------------------------------------------------------------------
 // Daemon configuration
@@ -71,6 +77,9 @@ pub struct MeshDaemon<P: RemoteCapabilityProvider> {
     outbound: OutboundQueue,
     /// Pending handshakes: peer → ECDH ephemeral secret.
     pending_handshakes: HashMap<NodeID, edgerun_mesh_session::EphemeralSecret>,
+    /// Optional callback for decrypted frames that are not capability envelopes.
+    /// Used by the node to receive CommandEnvelope payloads over mesh.
+    command_handler: Option<CommandHandler>,
 }
 
 impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
@@ -92,12 +101,32 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             signer: None,
             outbound: Arc::new(Mutex::new(VecDeque::new())),
             pending_handshakes: HashMap::new(),
+            command_handler: None,
         }
+    }
+
+    /// Sets a callback for decrypted frames that are not capability envelopes.
+    ///
+    /// This is used by the node to receive `CommandEnvelope` and `QueryRequest`
+    /// payloads over mesh. The callback receives the sender's NodeID and the
+    /// raw decrypted bytes.
+    pub fn with_command_handler<F>(mut self, handler: F) -> Self
+    where
+        F: FnMut(NodeID, Vec<u8>) + Send + 'static,
+    {
+        self.command_handler = Some(Box::new(handler));
+        self
     }
 
     /// Returns the shared outbound queue for creating `MeshCapabilityTransport` instances.
     pub fn outbound_queue(&self) -> OutboundQueue {
         Arc::clone(&self.outbound)
+    }
+
+    /// Enables UDP multicast discovery so this node can find and be found by
+    /// peers on the local network.
+    pub fn enable_udp_broadcast(&mut self) -> Result<(), io::Error> {
+        self.link.enable_udp_broadcast()
     }
 
     /// Attaches a hardware-backed signer.
@@ -236,14 +265,12 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
             // Step 1: fill in src NodeID (public key only, no secret material)
             frame.header.src = signer.node_id();
 
-            // Step 2: hash the preimage (header + payload)
+            // Step 2: sign the preimage with domain separation
             let preimage = frame.signed_preimage();
-            let digest = edgerun_core::crypto::sha256(&preimage);
-            let mut digest_bytes = [0u8; 32];
-            digest_bytes.copy_from_slice(&digest);
-
-            // Step 3: send digest to hardware → get 64-byte signature
-            frame.signature = signer.sign_digest(&digest_bytes)?;
+            frame.signature = signer.sign_record(
+                edgerun_core::crypto::SIG_DOMAIN_MESH_FRAME,
+                &preimage,
+            )?;
 
             signed.push(frame);
         }
@@ -366,7 +393,7 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                     let sender = frame.header.src;
                     match self.sessions.decrypt_from(sender, &frame.payload) {
                         Ok(decrypted) => {
-                            // Decode protobuf and deliver to the server
+                            // Try decoding as capability envelope first
                             if let Ok(envelope) = CapabilityRemoteEnvelope::decode(decrypted.as_slice()) {
                                 if let Some(inboxes) = self.server.dispatcher().inboxes_mut().get_mut(&sender) {
                                     if let Some(inbox) = inboxes.first_mut() {
@@ -374,6 +401,11 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
                                         processed_any = true;
                                     }
                                 }
+                            } else if let Some(ref mut handler) = self.command_handler {
+                                // Not a capability envelope — dispatch to command handler
+                                // (used by the node to receive CommandEnvelope/QueryRequest over mesh)
+                                handler(sender, decrypted);
+                                processed_any = true;
                             }
                         }
                         Err(SessionError::NoActiveSession) => {

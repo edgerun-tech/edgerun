@@ -167,6 +167,7 @@ impl Node {
             revoked_delegation_ids: &self.revoked_delegation_ids,
             now_ms: now_ms(),
             trusted_root_ids: &self.config.controllers.iter().map(|s| s.as_bytes().to_vec()).collect::<Vec<_>>(),
+            local_assurance_class: 0, // Unknown — simple config path doesn't track signer type
         };
 
         let result = validate_command(command, &ctx);

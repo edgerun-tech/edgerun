@@ -154,12 +154,10 @@ fn ms_to_timestamp(ms: i64) -> Timestamp {
 /// Signs an event envelope using the canonical representation with signature
 /// field omitted. Returns the 64-byte ECDSA P-256 signature.
 pub fn sign_event(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), StreamError> {
+    use edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE;
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = edgerun_core::crypto::sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    let sig = signer.sign_digest(&digest_bytes)?;
+    let sig = signer.sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)?;
     event.signature = Some(Signature {
         algorithm: 1, // ECDSA_P256_SHA256
         value: sig.to_vec(),
@@ -181,6 +179,7 @@ pub fn compute_event_hash(event: &EventEnvelope) -> Digest {
 
 /// Verifies the event signature against the given writer identity.
 pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), StreamError> {
+    use edgerun_core::crypto::{SIG_DOMAIN_EVENT_ENVELOPE, verify_canonical_record};
     let sig = event.signature.as_ref().ok_or(StreamError::MissingSignature)?;
     if sig.value.len() != 64 {
         return Err(StreamError::InvalidSignature {
@@ -191,9 +190,6 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
 
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = edgerun_core::crypto::sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
 
     // Build verifying key from NodeID
     let mut sec1 = [0u8; 65];
@@ -202,16 +198,10 @@ pub fn verify_event(event: &EventEnvelope, writer: &NodeID) -> Result<(), Stream
     let vk = p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1)
         .map_err(|e| StreamError::InvalidPublicKey(e.to_string()))?;
 
-    let mut sig_bytes = [0u8; 64];
-    sig_bytes.copy_from_slice(&sig.value);
-    let r = p256::FieldBytes::from_slice(&sig_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&sig_bytes[32..]);
-    let ecdsa_sig = p256::ecdsa::Signature::from_scalars(*r, *s)
-        .map_err(|e| StreamError::InvalidSignatureFormat(e.to_string()))?;
-
-    use p256::ecdsa::signature::hazmat::PrehashVerifier;
-    vk.verify_prehash(&digest_bytes, &ecdsa_sig)
-        .map_err(|e| StreamError::SignatureVerification(e.to_string()))
+    if !verify_canonical_record(&vk, SIG_DOMAIN_EVENT_ENVELOPE, &canonical, &sig.value) {
+        return Err(StreamError::SignatureVerification("invalid signature".into()));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

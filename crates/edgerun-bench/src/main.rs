@@ -35,7 +35,7 @@ fn main() {
     println!("Running network benchmarks...");
     println!();
     let (enc_dec, sign_vrfy, udp) = edgerun_mesh::benchmark::run_mesh_benchmarks();
-    let router = edgerun_mesh_router::benchmark::benchmark_router_lookup();
+    let router = edgerun_mesh::router_benchmark::benchmark_router_lookup();
 
     // Build full certificate
     let full_cert = edgerun_core::benchmark::run_full_benchmark_with_network(

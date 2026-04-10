@@ -1,13 +1,12 @@
 //! Minimal GL bindings via dynamic loading.
 //! Only the subset needed for compositing (textured quads).
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::os::raw::{c_char, c_float, c_int, c_void};
-use std::ptr;
 
 pub type GLenum = c_int;
 pub type GLint = c_int;
-pub type GLuint = c_int;
+pub type GLuint = u32;
 pub type GLsizei = c_int;
 pub type GLboolean = u8;
 pub type GLbitfield = c_int;
@@ -53,6 +52,9 @@ pub const GL_FRAMEBUFFER: GLenum = 0x8D40;
 pub const GL_RENDERBUFFER: GLenum = 0x8D41;
 pub const GL_COLOR_ATTACHMENT0: GLenum = 0x8CE0;
 pub const GL_FRAMEBUFFER_COMPLETE: GLenum = 0x8CD5;
+pub const GL_DEPTH_ATTACHMENT: GLenum = 0x8D00;
+pub const GL_TRIANGLES: GLenum = 0x0004;
+pub const GL_UNSIGNED_SHORT: GLenum = 0x1403;
 pub const GL_TEXTURE_MAG_FILTER_OES: GLenum = 0x2600;
 
 // GL_OES_EGL_image
@@ -142,7 +144,7 @@ pub type PFNGLDELETEBUFFERSPROC = unsafe extern "system" fn(n: GLsizei, buffers:
 pub type PFNGLDELETEVERTEXARRAYSPROC = unsafe extern "system" fn(n: GLsizei, arrays: *const GLuint);
 
 pub struct Gl {
-    lib: *mut c_void,
+    pub lib: *mut c_void,
     pub glGenTextures: PFNGLGENTEXTURESPROC,
     pub glBindTexture: PFNGLBINDTEXTUREPROC,
     pub glTexParameteri: PFNGLTEXPARAMETERIPROC,

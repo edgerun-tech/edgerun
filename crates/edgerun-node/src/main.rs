@@ -34,7 +34,7 @@ mod config;
 mod daemon;
 mod health;
 mod init_cmd;
-mod mesh_loop;
+mod mesh_store_provider;
 mod peer_reconnect;
 mod query_engine;
 mod signer;

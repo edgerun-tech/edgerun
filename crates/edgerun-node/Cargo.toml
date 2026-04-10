@@ -25,6 +25,14 @@ hardware = [
     "dep:edgerun-speaker",
     "dep:edgerun-audio-liveliness",
 ]
+# Android hardware backends (NDK + JNI)
+# On Android: replaces Linux drivers with NDK FFI and JNI calls.
+# On non-Android: stub implementations that compile cleanly.
+android-hardware = [
+    "dep:edgerun-android-hardware",
+    "dep:edgerun-android-keystore",
+    "edgerun-hardware-signing/android-keystore",
+]
 all-hardware = [
     "hardware",
     # GPU / display
@@ -55,10 +63,6 @@ all-hardware = [
     "dep:edgerun-cec",
     "dep:edgerun-linux-cec",
     "dep:edgerun-amd-xdna",
-    # Mesh extras
-    "dep:edgerun-mesh-session",
-    "dep:edgerun-mesh-daemon",
-    "dep:edgerun-mesh-capability",
     # Storage
     "dep:edgerun-virtual-disk",
     # Misc
@@ -77,7 +81,9 @@ edgerun-storage = { path = "../edgerun-storage" }
 edgerun-remote-capability = { path = "../edgerun-remote-capability" }
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-mesh-link = { path = "../edgerun-mesh-link" }
-edgerun-mesh-router = { path = "../edgerun-mesh-router" }
+edgerun-mesh-daemon = { path = "../edgerun-mesh-daemon" }
+edgerun-mesh-capability = { path = "../edgerun-mesh-capability" }
+edgerun-mesh-session = { path = "../edgerun-mesh-session" }
 edgerun-linux-netif = { path = "../edgerun-linux-netif" }
 edgerun-network-interface = { path = "../edgerun-network-interface" }
 p256.workspace = true
@@ -86,7 +92,7 @@ prost-types.workspace = true
 edgerun-rt = { path = "../edgerun-rt" }
 
 edgerun-log = { path = "../edgerun-log" }
-libc = { path = "../libc" }
+libc.workspace = true
 
 # Hardware signing is required for node identity and stream writing
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
@@ -134,11 +140,6 @@ edgerun-cec = { path = "../edgerun-cec", optional = true }
 edgerun-linux-cec = { path = "../edgerun-linux-cec", optional = true }
 edgerun-amd-xdna = { path = "../edgerun-amd-xdna", optional = true }
 
-# Mesh extras
-edgerun-mesh-session = { path = "../edgerun-mesh-session", optional = true }
-edgerun-mesh-daemon = { path = "../edgerun-mesh-daemon", optional = true }
-edgerun-mesh-capability = { path = "../edgerun-mesh-capability", optional = true }
-
 # Storage
 edgerun-virtual-disk = { path = "../edgerun-virtual-disk", optional = true }
 
@@ -150,6 +151,10 @@ edgerun-rand_core = { path = "../edgerun-rand_core", optional = true, package = 
 # OCI container runtime (enable with --features oci)
 edgerun-oci-registry = { path = "../edgerun-oci-registry", optional = true }
 edgerun-oci-runtime = { path = "../edgerun-oci-runtime", optional = true }
+
+# Android hardware (NDK + JNI)
+edgerun-android-hardware = { path = "../edgerun-android-hardware", optional = true }
+edgerun-android-keystore = { path = "../edgerun-android-keystore", optional = true }
 
 [dev-dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }

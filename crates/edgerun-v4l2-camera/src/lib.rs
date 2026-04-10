@@ -1541,17 +1541,7 @@ impl CapabilityProvider for V4l2PairedCameraBiometricReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use edgerun_linux_sysfs::temp_root;
 
     #[test]
     fn parse_c_string_stops_at_nul() {

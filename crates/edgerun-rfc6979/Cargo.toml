@@ -33,16 +33,16 @@ license = "Apache-2.0 OR MIT"
 repository = "https://github.com/RustCrypto/signatures/tree/master/rfc6979"
 
 [dependencies.hmac]
-path = "../edgerun-hmac"
+version = "0.12"
 features = ["reset"]
 default-features = false
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 default-features = false
 
 [dev-dependencies.hex-literal]
 version = "0.3"
 
 [dev-dependencies.sha2]
-path = "../sha2"
+version = "0.10"

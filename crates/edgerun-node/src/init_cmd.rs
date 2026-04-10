@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use edgerun_hardware_signing::NodeID;
+use edgerun_yubikey::YubiKeySigningKey;
 
 pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     let has_tpm = PathBuf::from("/dev/tpmrm0").exists();

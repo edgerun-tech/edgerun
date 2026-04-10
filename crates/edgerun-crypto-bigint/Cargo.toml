@@ -46,16 +46,16 @@ rustdoc-args = [
 ]
 
 [dependencies.der]
-path = "../edgerun-der"
+version = "0.7"
 optional = true
 default-features = false
 
 [dependencies.generic-array]
-path = "../edgerun-generic-array"
+version = "0.14"
 optional = true
 
 [dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 optional = true
 
 [dependencies.rlp]
@@ -69,11 +69,11 @@ optional = true
 default-features = false
 
 [dependencies.subtle]
-path = "../edgerun-subtle"
+version = "2"
 default-features = false
 
 [dependencies.zeroize]
-path = "../edgerun-zeroize"
+version = "1"
 optional = true
 default-features = false
 
@@ -106,7 +106,7 @@ version = "1"
 version = "0.3"
 
 [dev-dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 features = ["std"]
 
 [features]

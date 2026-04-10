@@ -13,8 +13,7 @@
 //! router can learn peer identities from Ethernet source addresses.
 
 use edgerun_hardware_signing::NodeID;
-use edgerun_mesh::{FrameType, MeshFrame};
-use edgerun_mesh_router::{DiscoveryPacket, MeshRouter};
+use edgerun_mesh::{DiscoveryPacket, FrameType, MeshFrame, MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};
@@ -977,8 +976,7 @@ fn current_unix_secs() -> i64 {
 mod tests {
     use super::*;
     use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
-    use edgerun_mesh::{sign_frame, FrameType, MeshFrame, MeshFrameHeader, MeshRoute};
-    use edgerun_mesh_router::DiscoveryPacket;
+    use edgerun_mesh::{sign_frame, DiscoveryPacket, FrameType, MeshFrame, MeshFrameHeader, MeshRoute};
     use p256::ecdsa::SigningKey;
 
     // -----------------------------------------------------------------------
@@ -1485,7 +1483,7 @@ mod tests {
         link.queue_frame(frame);
 
         // Create a router so drain_pending_frames can operate
-        let mut router = edgerun_mesh_router::MeshRouter::new(
+        let mut router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(src_id),
         );
         // No transports available, so drain should attempt but not crash
@@ -1501,7 +1499,7 @@ mod tests {
     #[test]
     fn mesh_link_pump_with_no_transports_returns_zero() {
         let mut link = MeshLink::new();
-        let mut router = edgerun_mesh_router::MeshRouter::new(
+        let mut router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(node_id(0xAA)),
         );
         let count = link.pump(&mut router).unwrap();
@@ -1511,7 +1509,7 @@ mod tests {
     #[test]
     fn mesh_link_broadcast_discovery_no_transports_ok() {
         let mut link = MeshLink::new();
-        let mut router = edgerun_mesh_router::MeshRouter::new(
+        let mut router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(node_id(0xAA)),
         );
         // Should not panic even with no transports
@@ -1808,11 +1806,11 @@ mod tests {
         let (peer_id, peer_key) = make_real_keypair();
 
         let mut router =
-            edgerun_mesh_router::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
+            edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
 
         // Build a discovery frame from the peer
         let mut peer_router =
-            edgerun_mesh_router::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
+            edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
         let mut disc_frame = peer_router.build_discovery_frame();
         sign_frame(&mut disc_frame, &peer_key);
 
@@ -1925,12 +1923,12 @@ mod tests {
         let mut link = MeshLink::new();
         link.set_local_node_id(src_id);
 
-        let mut router = edgerun_mesh_router::MeshRouter::new(
+        let mut router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(src_id),
         );
         // Learn a route to other_id (simulated by discovery)
         let mut other_router =
-            edgerun_mesh_router::MeshRouter::new(edgerun_mesh::LocalNode::new(other_id));
+            edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(other_id));
         let disc = other_router.build_discovery_frame();
         let pkt = DiscoveryPacket::decode(&disc.payload).unwrap();
         router.process_discovery(other_id, &pkt, 1000);
@@ -1967,7 +1965,7 @@ mod tests {
         // Instead, let's use process_discovery on the router directly.
 
         // Reset and do it properly:
-        let mut router2 = edgerun_mesh_router::MeshRouter::new(
+        let mut router2 = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(src_id),
         );
         // other_id advertises a route to third_id
@@ -2168,7 +2166,7 @@ mod tests {
     #[test]
     fn mesh_link_send_frame_no_route_returns_false() {
         let mut link = MeshLink::new();
-        let router = edgerun_mesh_router::MeshRouter::new(
+        let router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(node_id(0xAA)),
         );
         let frame = MeshFrame::from_payload(node_id(0xBB), vec![]);
@@ -2208,9 +2206,9 @@ mod tests {
         let (peer_id, peer_key) = make_real_keypair();
 
         let mut router =
-            edgerun_mesh_router::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
+            edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(my_id));
         let mut peer_router =
-            edgerun_mesh_router::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
+            edgerun_mesh::MeshRouter::new(edgerun_mesh::LocalNode::new(peer_id));
 
         // Build a discovery frame from the peer
         let mut disc_frame = peer_router.build_discovery_frame();
@@ -2352,7 +2350,7 @@ mod tests {
         let frame = make_signed_frame(&local_key, local_id, dest, 16, FrameType::Data, b"x".to_vec());
         link.queue_frame(frame);
 
-        let mut router = edgerun_mesh_router::MeshRouter::new(
+        let mut router = edgerun_mesh::MeshRouter::new(
             edgerun_mesh::LocalNode::new(local_id),
         );
         // drain_pending_frames calls send_mesh_frame which clones and sets src
@@ -2374,7 +2372,7 @@ mod tests {
     #[test]
     fn integration_discovery_frame_roundtrip() {
         use edgerun_mesh::{LocalNode, FrameType, MeshFrame};
-        use edgerun_mesh_router::{MeshRouter, DiscoveryPacket};
+        use edgerun_mesh::{MeshRouter, DiscoveryPacket};
 
         let (my_node_id, signing_key) = make_real_keypair();
 
@@ -2421,7 +2419,7 @@ mod tests {
     #[test]
     fn integration_discovery_to_routing() {
         use edgerun_mesh::{LocalNode, FrameType, MeshFrame};
-        use edgerun_mesh_router::{MeshRouter, DiscoveryPacket};
+        use edgerun_mesh::{MeshRouter, DiscoveryPacket};
 
         let (node_a_id, signing_key_a) = make_real_keypair();
         let (node_b_id, _) = make_real_keypair();

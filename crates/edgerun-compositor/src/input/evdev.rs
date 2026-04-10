@@ -2,9 +2,8 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::os::fd::RawFd;
 
-use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend, EvdevDeviceInfo};
+use edgerun_evdev_input::{discover_evdev_devices, EvdevInputBackend};
 use edgerun_input::{InputDevice, InputDeviceKind};
 
 /// Manager for evdev input devices.
@@ -13,18 +12,6 @@ pub struct EvdevManager {
     next_id: u32,
     /// Map from device id to our internal id.
     device_map: HashMap<String, u32>,
-}
-
-impl EvdevManager {
-    /// Get all device IDs.
-    pub fn device_ids(&self) -> impl Iterator<Item = u32> + '_ {
-        self.devices.keys().copied()
-    }
-
-    /// Get the file descriptor for a specific device.
-    pub fn device_fd(&self, id: u32) -> Option<i32> {
-        self.devices.get(&id).map(|d| d.fd())
-    }
 }
 
 /// A discovered input device.
@@ -120,27 +107,14 @@ impl EvdevManager {
         }
     }
 
-    /// Read events from all devices, returning (device_id, events).
-    pub fn read_all_events(&mut self, max_per_device: usize) -> Vec<(u32, Vec<edgerun_input::InputEventRecord>)> {
-        let ids: Vec<u32> = self.devices.keys().copied().collect();
-        let mut all = Vec::new();
-        for id in ids {
-            let events = self.read_events(id, max_per_device);
-            if !events.is_empty() {
-                all.push((id, events));
-            }
-        }
-        all
+    /// Get all device IDs.
+    pub fn device_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.devices.keys().copied()
     }
 
-    /// Get the file descriptor for epoll monitoring.
-    pub fn event_fd(&self) -> Option<RawFd> {
-        self.devices.values().next().map(|d| d.fd())
-    }
-
-    /// Get all device fds for epoll.
-    pub fn all_fds(&self) -> Vec<RawFd> {
-        self.devices.values().map(|d| d.fd()).collect()
+    /// Get the file descriptor for a specific device.
+    pub fn device_fd(&self, id: u32) -> Option<i32> {
+        self.devices.get(&id).map(|d| d.fd())
     }
 
     /// Get info about a device.

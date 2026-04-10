@@ -39,6 +39,9 @@ pub struct CommandValidationContext<'a> {
     pub now_ms: i64,
     /// Trusted root identity IDs. If empty, direct authority is accepted.
     pub trusted_root_ids: &'a [Vec<u8>],
+    /// Local node's assurance capability (ASSURANCE_CLASS_SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3).
+    /// If 0, no assurance capability is reported (software-only, no attestation).
+    pub local_assurance_class: i32,
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +199,23 @@ pub fn validate_command(
         }
     }
 
-    // --- Step 5: Delegation chain validation (if present) ---
+    // --- Step 5: Assurance requirement check (if requested) ---
+    if let Some(ref req) = command.requested_assurance {
+        let required_class = req.required_class; // ASSURANCE_CLASS_UNSPECIFIED=0, SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3
+        if required_class > 0 && ctx.local_assurance_class < required_class {
+            let mut derived_map = std::collections::BTreeMap::new();
+            derived_map.insert("required_class".into(), Value::Int(required_class as i64));
+            derived_map.insert("local_class".into(), Value::Int(ctx.local_assurance_class as i64));
+            let derived = Value::Map(derived_map);
+            return reject(
+                ReasonCode::AuthorityDenied,
+                derived,
+                Value::String("node cannot satisfy requested assurance requirement".into()),
+            );
+        }
+    }
+
+    // --- Step 6: Delegation chain validation (if present) ---
     if !command.delegation_chain.is_empty() {
         match validate_delegation_chain(
             &command.delegation_chain,
@@ -271,6 +290,19 @@ fn validate_delegation_chain(
             Value::String("delegation chain recipient does not match command issuer".into()),
             empty_map(),
         ));
+    }
+
+    // Verify root trust: the first delegation's issuer must be in the trusted root set
+    let first = chain.first().unwrap();
+    if !ctx.trusted_root_ids.is_empty() {
+        let root_issuer = first.issuer.as_ref().map(|i| i.identity_id.clone());
+        if root_issuer.map_or(true, |id| !ctx.trusted_root_ids.contains(&id)) {
+            return Err(reject(
+                ReasonCode::AuthorityDenied,
+                Value::String("delegation chain root issuer is not in trusted roots".into()),
+                empty_map(),
+            ));
+        }
     }
 
     for delegation in chain {
@@ -564,6 +596,7 @@ mod tests {
             revoked_delegation_ids: &*EMPTY_REVOKED,
             now_ms: 1_700_000_000_000,
             trusted_root_ids: &EMPTY_ROOTS,
+            local_assurance_class: 2, // HARDWARE_BACKED for tests
         }
     }
 
@@ -929,5 +962,325 @@ mod tests {
         let result = validate_command(&cmd, &ctx);
         assert_eq!(result.verdict, Verdict::Reject);
         assert_eq!(result.reason_code, Some(ReasonCode::RevocationActive));
+    }
+
+    #[test]
+    fn command_with_unspecified_assurance_is_accepted() {
+        // When requested_assurance is None or has unspecified class, no check is needed
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = 0; // No assurance capability
+
+        let cmd = make_signed_command(&key, Some(hint));
+        // requested_assurance is None by default
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Accept);
+    }
+
+    #[test]
+    fn command_requesting_hardware_backed_is_rejected_when_node_is_software_only() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = 1; // SOFTWARE only
+
+        // Build unsigned command with assurance requirement, then sign
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::HardwareBacked as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        // Sign it
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = crate::crypto::sha256(&canonical);
+        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn command_requesting_attested_runtime_is_rejected_when_node_is_hardware_only() {
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = 2; // HARDWARE_BACKED
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::AttestedRuntime as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = crate::crypto::sha256(&canonical);
+        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn command_requesting_software_is_accepted_when_node_is_hardware_backed() {
+        // Hardware-backed node can satisfy software requirement (higher >= lower)
+        use edgerun_proto::edgerun::v0::common::AssuranceClass;
+        use edgerun_proto::edgerun::v0::trust::AssuranceRequirement;
+
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.local_assurance_class = 2; // HARDWARE_BACKED
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: vec![7, 8, 9],
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.requested_assurance = Some(AssuranceRequirement {
+            assurance_version: 1,
+            required_class: AssuranceClass::Software as i32,
+            acceptable_attesters: vec![],
+            max_evidence_age: None,
+            assurance_metadata: None,
+        });
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = crate::crypto::sha256(&canonical);
+        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Accept);
+    }
+
+    #[test]
+    fn delegation_chain_root_not_in_trusted_roots_is_rejected() {
+        // Delegation chain where root issuer is NOT in trusted_root_ids
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let trusted = vec![vec![99, 99, 99]]; // Different identity, not the root
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.trusted_root_ids = &trusted;
+
+        // Build a delegation with root issuer NOT in trusted roots
+        let root_issuer_id = vec![1, 2, 3];
+        let delegate_id = vec![7, 8, 9]; // command issuer
+        let delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: vec![10, 20, 30],
+            issuer: Some(IdentityRef {
+                identity_id: root_issuer_id.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: delegate_id.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            issued_at: None,
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: 0,
+                actions: vec!["query".into()],
+                scope: None,
+                constraints: None,
+                delegation_policy: 0,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: Some(ProtoSignature {
+                algorithm: 1,
+                value: vec![0xAA; 64], // Dummy signature (won't be verified structurally)
+            }),
+        };
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: delegate_id,
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.delegation_chain = vec![delegation];
+        cmd.command_type = 7; // QUERY
+
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = crate::crypto::sha256(&canonical);
+        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+
+        let result = validate_command(&cmd, &ctx);
+        assert_eq!(result.verdict, Verdict::Reject);
+        assert_eq!(result.reason_code, Some(ReasonCode::AuthorityDenied));
+    }
+
+    #[test]
+    fn delegation_chain_root_in_trusted_roots_passes() {
+        let key = test_signing_key();
+        let vk = key.verifying_key();
+        let node_id: [u8; 64] = {
+            let encoded = vk.to_encoded_point(false);
+            let mut bytes = [0u8; 64];
+            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
+            bytes
+        };
+        let hint: Vec<u8> = node_id.to_vec();
+
+        let root_issuer_id = vec![1, 2, 3];
+        let delegate_id = vec![7, 8, 9];
+        let trusted = vec![root_issuer_id.clone()]; // Root IS trusted
+        let mut ctx = default_ctx();
+        ctx.local_node_id = &TEST_NODE_ID;
+        ctx.trusted_root_ids = &trusted;
+
+        let delegation = DelegationRecord {
+            record_version: 1,
+            delegation_id: vec![10, 20, 30],
+            issuer: Some(IdentityRef {
+                identity_id: root_issuer_id.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            recipient: Some(IdentityRef {
+                identity_id: delegate_id.clone(),
+                identity_kind: Some(2),
+                key_hint: None,
+            }),
+            issued_at: None,
+            not_before: None,
+            expires_at: None,
+            capability: Some(CapabilityDescriptor {
+                capability_version: 1,
+                capability_kind: 0,
+                actions: vec!["query".into()],
+                scope: None,
+                constraints: None,
+                delegation_policy: 0,
+                minimum_assurance: None,
+                capability_metadata: None,
+            }),
+            parent_delegation: None,
+            revocation_authorities: vec![],
+            delegation_metadata: None,
+            signature: Some(ProtoSignature {
+                algorithm: 1,
+                value: vec![0xAA; 64],
+            }),
+        };
+
+        let mut cmd = make_unsigned_command();
+        cmd.issuer = Some(IdentityRef {
+            identity_id: delegate_id,
+            identity_kind: Some(1),
+            key_hint: Some(hint),
+        });
+        cmd.delegation_chain = vec![delegation];
+        cmd.command_type = 7; // QUERY
+
+        let record = ProtocolRecord::CommandEnvelope(cmd.clone());
+        let canonical = canonical_bytes(&record, true);
+        let digest = crate::crypto::sha256(&canonical);
+        let sig: p256::ecdsa::Signature = key.sign_prehash(digest.as_slice()).unwrap();
+        cmd.signature = Some(ProtoSignature {
+            algorithm: 1,
+            value: sig.to_bytes().to_vec(),
+        });
+
+        let result = validate_command(&cmd, &ctx);
+        // Root is trusted, so this should pass the root check (may fail signature verification on delegation)
+        // But since delegation signature is structurally valid (64 bytes, algorithm 1), it passes
+        assert_eq!(result.verdict, Verdict::Accept);
     }
 }

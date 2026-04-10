@@ -4,7 +4,6 @@
 //! browsers use for navigation (back/forward/zoom gestures).
 
 use crate::wire::{ArgType, Message};
-use crate::wire::encode::*;
 
 pub const ZWP_POINTER_GESTURES_V1: &str = "zwp_pointer_gestures_v1";
 pub const ZWP_POINTER_GESTURES_V1_VERSION: u32 = 1;

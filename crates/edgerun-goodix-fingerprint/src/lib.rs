@@ -2022,17 +2022,7 @@ impl FingerprintReader for GoodixFingerprintReader {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_root(name: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("{name}-{unique}"));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
+    use edgerun_linux_sysfs::temp_root;
 
     #[test]
     fn supported_device_detection_matches_framework_13_reader() {

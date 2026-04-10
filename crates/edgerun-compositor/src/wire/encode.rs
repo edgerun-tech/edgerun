@@ -152,3 +152,78 @@ pub fn encode_array(buf: &mut Vec<u8>, data: &[u8]) {
         buf.push(0);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wire::decode::ArgCursor;
+
+    #[test]
+    fn test_align4() {
+        assert_eq!(align4(0), 0);
+        assert_eq!(align4(1), 4);
+        assert_eq!(align4(2), 4);
+        assert_eq!(align4(3), 4);
+        assert_eq!(align4(4), 4);
+        assert_eq!(align4(5), 8);
+        assert_eq!(align4(7), 8);
+        assert_eq!(align4(8), 8);
+    }
+
+    #[test]
+    fn test_encode_uint() {
+        let msg = message_uint(42, 1, 0x12345678);
+        assert_eq!(msg.sender_id, 42);
+        assert_eq!(msg.opcode, 1);
+        assert_eq!(msg.size, 12);
+        assert_eq!(msg.args, 0x12345678u32.to_le_bytes());
+    }
+
+    #[test]
+    fn test_encode_uint2() {
+        let msg = message_uint2(42, 1, 0xAABBCCDD, 0x11223344);
+        assert_eq!(msg.size, 16);
+        assert_eq!(&msg.args[..4], &0xAABBCCDDu32.to_le_bytes());
+        assert_eq!(&msg.args[4..], &0x11223344u32.to_le_bytes());
+    }
+
+    #[test]
+    fn test_encode_empty() {
+        let msg = message_empty(42, 1);
+        assert_eq!(msg.sender_id, 42);
+        assert_eq!(msg.size, 8);
+        assert!(msg.args.is_empty());
+    }
+
+    #[test]
+    fn test_encode_string() {
+        let mut buf = Vec::new();
+        encode_string(&mut buf, "hello");
+        // "hello" = 5 bytes + null = 6, length prefix = 4, padded to 12
+        assert_eq!(buf.len(), 12);
+        assert_eq!(&buf[4..9], b"hello");
+        assert_eq!(buf[9], 0);
+    }
+
+    #[test]
+    fn test_encode_array() {
+        let mut buf = Vec::new();
+        let data = [1u8, 2, 3, 4, 5];
+        encode_array(&mut buf, &data);
+        assert_eq!(buf.len(), 12);
+        let len = u32::from_le_bytes(buf[..4].try_into().unwrap());
+        assert_eq!(len, 5);
+        assert_eq!(&buf[4..9], &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_roundtrip_encode_decode() {
+        let original = message_uint(42, 1, 0xDEADBEEF);
+        let encoded = encode(&original);
+        let mut decoded = ArgCursor::new(&encoded[..], &[]);
+        assert_eq!(decoded.sender_id().unwrap(), 42);
+        assert_eq!(decoded.opcode().unwrap(), 1);
+        assert_eq!(decoded.size().unwrap(), 12);
+        assert_eq!(decoded.uint().unwrap(), 0xDEADBEEF);
+    }
+}

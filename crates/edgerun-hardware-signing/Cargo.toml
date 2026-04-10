@@ -9,6 +9,8 @@ publish.workspace = true
 default = []
 tpm = ["dep:edgerun-tpm"]
 android-keystore = ["dep:edgerun-android-keystore"]
+# Real JNI-backed Android implementation (requires NDK toolchain)
+android-real = ["android-keystore", "edgerun-android-keystore/android-real"]
 yubikey = ["dep:edgerun-yubikey"]
 # All backends
 all-hardware = ["tpm", "android-keystore", "yubikey"]

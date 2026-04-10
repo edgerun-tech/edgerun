@@ -1,8 +1,7 @@
 //! Core Wayland protocol interfaces: wl_display, wl_registry, wl_callback.
 
-use crate::wire::{ArgType, ArgSpec, Message};
+use crate::wire::{ArgType, Message};
 use crate::wire::encode::*;
-use crate::wire::encode_string;
 
 // ─── wl_display ──────────────────────────────────────────────
 
@@ -25,7 +24,7 @@ pub mod display_request {
 
 /// wl_display events (server → client).
 pub mod display_event {
-    use super::*;
+    
 
     /// error — fatal error from the server.
     pub const ERROR: u16 = 0;

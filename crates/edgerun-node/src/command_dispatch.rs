@@ -220,6 +220,9 @@ pub fn project_controller_set(
 /// `running_workloads` is a shared registry for tracking active containers
 /// so they can be preempted.
 ///
+/// `local_assurance_class` is the node's assurance capability
+/// (ASSURANCE_CLASS_SOFTWARE=1, HARDWARE_BACKED=2, ATTESTED_RUNTIME=3).
+///
 /// Returns the response bytes to send back to the caller.
 pub fn dispatch_command(
     command: &CommandEnvelope,
@@ -230,6 +233,7 @@ pub fn dispatch_command(
     replay_cache: &mut HashMap<Vec<u8>, (Vec<u8>, i64)>,
     revoked_delegations: &HashSet<Vec<u8>>,
     trusted_root_ids: &[Vec<u8>],
+    local_assurance_class: i32,
     capacity_tracker: &std::sync::Arc<crate::capacity::ResourceTracker>,
     workload_policy: &super::workload_policy::WorkloadPolicy,
     rate_limiter: &super::workload_policy::RateLimiter,
@@ -249,6 +253,7 @@ pub fn dispatch_command(
         revoked_delegation_ids: revoked_delegations,
         now_ms,
         trusted_root_ids,
+        local_assurance_class,
     };
 
     // Run full validation (replay, timing, delegation chain, cryptographic signatures)
@@ -513,14 +518,39 @@ fn dispatch_execute_workload(
     };
 
     let provider_id = signer.node_id().0;
-    let cert = match load_cached_cert(store) {
+    let mut cert = match load_cached_cert(store) {
         Some(c) => c,
         None => {
             let c = edgerun_core::benchmark::run_full_benchmark(provider_id);
-            cache_cert(store, &c);
+            cache_cert(store, &c, signer);
             c
         }
     };
+
+    // Sign the certificate if it's not already signed (legacy certs)
+    if cert.signature == [0u8; 64] {
+        let mut digest_32 = [0u8; 32];
+        digest_32.copy_from_slice(&cert.digest);
+        if let Ok(sig) = signer.sign_digest(&digest_32) {
+            cert.signature = sig;
+            cache_cert(store, &cert, signer); // Re-cache with signature
+        }
+    }
+
+    // === CERTIFICATE SIGNATURE VERIFICATION ===
+    // The certificate must be self-signed by the node's key to prevent fabrication.
+    if !cert.verify() {
+        edgerun_log::error!("performance certificate signature verification failed — possible fabrication");
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "invalid_certificate_signature", Vec::new(), None);
+    }
+
+    // Also verify the certificate's node_id matches our node identity
+    if cert.node_id != provider_id {
+        edgerun_log::error!("performance certificate node_id does not match local node identity");
+        return record_and_respond(command, store, stream_id, signer, controllers,
+            false, "certificate_identity_mismatch", Vec::new(), None);
+    }
 
     // === CERTIFICATE FRESHNESS CHECK: reject stale certs ===
     if let Err(reason) = check_cert_freshness_impl(&cert) {
@@ -1030,7 +1060,19 @@ fn load_cached_cert(store: &NodeStore) -> Option<edgerun_core::accounting::Perfo
 }
 
 #[cfg(feature = "oci")]
-fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::PerformanceCertificate) {
+fn cache_cert(store: &mut NodeStore, cert: &edgerun_core::accounting::PerformanceCertificate, signer: &dyn MeshSigner) {
+    // Sign the certificate if it's not already signed
+    let mut cert = cert.clone();
+    if cert.signature == [0u8; 64] {
+        let mut digest_32 = [0u8; 32];
+        digest_32.copy_from_slice(&cert.digest);
+        if let Ok(sig) = signer.sign_digest(&digest_32) {
+            cert.signature = sig;
+        } else {
+            edgerun_log::warn!("failed to sign performance certificate");
+        }
+    }
+
     // Persist to disk for fast loading
     let p = store.data_root().join("perf_cert.bin");
     if std::fs::write(&p, cert.to_bytes()).is_ok() {
@@ -1559,12 +1601,10 @@ fn record_and_respond(
 /// Sign an event envelope with the local node's key.
 /// Shared utility used by both command_dispatch and main node logic.
 pub(crate) fn sign_event_envelope(event: &mut EventEnvelope, signer: &dyn MeshSigner) -> Result<(), String> {
+    use edgerun_core::crypto::SIG_DOMAIN_EVENT_ENVELOPE;
     let record = ProtocolRecord::EventEnvelope(event.clone());
     let canonical = canonical_bytes(&record, true);
-    let digest = edgerun_core::crypto::sha256(&canonical);
-    let mut digest_bytes = [0u8; 32];
-    digest_bytes.copy_from_slice(&digest);
-    let sig = signer.sign_digest(&digest_bytes)
+    let sig = signer.sign_record(SIG_DOMAIN_EVENT_ENVELOPE, &canonical)
         .map_err(|e| format!("signing failed: {}", e))?;
     event.signature = Some(edgerun_core::protocol::Signature {
         algorithm: 1,
@@ -1902,6 +1942,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -1949,6 +1990,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -1996,6 +2038,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2043,6 +2086,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2094,6 +2138,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2145,6 +2190,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2194,6 +2240,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2243,6 +2290,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2291,6 +2339,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2339,6 +2388,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2387,6 +2437,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2435,6 +2486,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2511,6 +2563,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2588,6 +2641,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2637,6 +2691,7 @@ mod tests {
         let result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &test_running_workloads(),
         );
@@ -2690,6 +2745,7 @@ mod tests {
         let _result = dispatch_command(
             &command, &mut store, &node_id.0, &signer,
             &mut controllers, &mut replay_cache, &revoked, &trusted,
+            2, // HARDWARE_BACKED
             &test_capacity_tracker(), &test_workload_policy(), &test_rate_limiter(),
             &std::sync::Arc::new(crate::running_workloads::RunningWorkloads::new()),
         );

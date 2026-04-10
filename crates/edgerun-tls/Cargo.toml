@@ -11,11 +11,11 @@ keywords = ["tls", "ssl", "https", "security", "crypto"]
 categories = ["cryptography", "network-programming"]
 
 [dependencies]
-aes-gcm = { path = "../aes-gcm", default-features = false, features = ["aes", "alloc"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 hmac = { path = "../edgerun-hmac" }
 hkdf = { path = "../edgerun-hkdf" }
-sha2 = { path = "../sha2", default-features = false }
-p256 = { path = "../edgerun-p256", default-features = false, features = ["ecdh", "arithmetic"] }
+sha2 = { version = "0.10", default-features = false }
+p256.workspace = true
 der = { path = "../edgerun-der", default-features = false, features = ["alloc", "derive", "oid"] }
 rand_core = { path = "../edgerun-rand_core" }
 

@@ -6,6 +6,8 @@
 //! embedded in the frame header.
 
 pub mod benchmark;
+pub mod router;
+pub mod router_benchmark;
 
 use edgerun_hardware_signing::{
     MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
@@ -193,8 +195,8 @@ impl MeshFrame {
 
     /// Verifies the ECDSA P-256 signature against the sender's NodeID.
     ///
-    /// The signature is computed over `header_bytes || payload` using
-    /// SHA-256 as the digest.  The public key is reconstructed from
+    /// The signature is computed over `SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(header_bytes || payload))`
+    /// using SHA-256 as the digest.  The public key is reconstructed from
     /// the `src` field of the header (64 bytes, uncompressed x||y).
     ///
     /// Returns `true` if the signature is valid, `false` otherwise.
@@ -217,10 +219,16 @@ impl MeshFrame {
             Err(_) => return false,
         };
 
-        // Hash the preimage and verify
+        // Verify with domain separation: SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(preimage))
         let preimage = self.signed_preimage();
-        let digest = edgerun_core::crypto::sha256(&preimage);
-        vk.verify_prehash(&digest, &sig).is_ok()
+        let record_hash = edgerun_core::crypto::sha256(&preimage);
+        let mut sig_input = Vec::with_capacity(22 + 1 + 32); // domain tag + null + hash
+        sig_input.extend_from_slice(b"edgerun:v0:sig:mesh-frame");
+        sig_input.push(0);
+        sig_input.extend_from_slice(&record_hash);
+        let full_digest = edgerun_core::crypto::sha256(&sig_input);
+
+        vk.verify_prehash(&full_digest, &sig).is_ok()
     }
 }
 
@@ -316,12 +324,17 @@ impl MeshRoutingTable {
 
 /// Signs a mesh frame with the given ECDSA P-256 signing key.
 ///
-/// The signature covers the header bytes and payload (not the signature itself).
+/// The signature uses domain separation: `SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(header_bytes || payload))`
 /// This should be called before `to_wire()`.
 pub fn sign_frame(frame: &mut MeshFrame, signing_key: &p256::ecdsa::SigningKey) {
     let preimage = frame.signed_preimage();
-    let digest = edgerun_core::crypto::sha256(&preimage);
-    let sig: Signature = signing_key.sign_prehash(&digest).expect("P-256 signing failed");
+    let record_hash = edgerun_core::crypto::sha256(&preimage);
+    let mut sig_input = Vec::with_capacity(22 + 1 + 32);
+    sig_input.extend_from_slice(b"edgerun:v0:sig:mesh-frame");
+    sig_input.push(0);
+    sig_input.extend_from_slice(&record_hash);
+    let full_digest = edgerun_core::crypto::sha256(&sig_input);
+    let sig: Signature = signing_key.sign_prehash(&full_digest).expect("P-256 signing failed");
     frame.signature.copy_from_slice(&sig.to_bytes());
 }
 
@@ -1939,3 +1952,10 @@ mod tests {
         assert_eq!(preimage.len(), MeshFrameHeader::SIZE + 4);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Re-exports from the router module for backward compatibility with
+// code that previously depended on the `edgerun-mesh-router` crate.
+// ---------------------------------------------------------------------------
+
+pub use router::{DiscoveryPacket, MeshRouter};

@@ -1305,12 +1305,19 @@ mod tests {
 
     #[test]
     fn linux_pcsc_yubikey_builder_methods_set_fields() {
-        let key = LinuxPcscYubiKey::new("YubiKey 5 NFC", YubiKeyPivSlot::Signature)
+        let device_info = LinuxUsbYubiKeyInfo {
+            bus: 1,
+            device: 5,
+            product_id: 0x0407,
+            interface: 0,
+        };
+        let key = LinuxPcscYubiKey::new(device_info, YubiKeyPivSlot::Signature)
             .with_serial_number("123456")
             .with_pin("123456");
-        assert_eq!(key.reader_name, "YubiKey 5 NFC");
         assert_eq!(key.serial_number, Some("123456".into()));
         assert_eq!(key.pin, Some(b"123456".to_vec()));
+        assert_eq!(key.device_info.bus, 1);
+        assert_eq!(key.slot, YubiKeyPivSlot::Signature);
     }
 
     #[test]

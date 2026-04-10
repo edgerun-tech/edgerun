@@ -19,5 +19,5 @@ edgerun-storage = { path = "../edgerun-storage" }
 edgerun-core = { path = "../edgerun-core" }
 edgerun-json = { path = "../edgerun-json" }
 edgerun-proto = { path = "../edgerun-proto" }
-prost = { path = "../prost" }
-prost-types = { path = "../prost-types" }
+prost.workspace = true
+prost-types.workspace = true

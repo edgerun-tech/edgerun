@@ -7,12 +7,12 @@ publish.workspace = true
 
 [dependencies]
 edgerun-proto = { path = "../edgerun-proto" }
-p256 = { path = "../edgerun-p256", default-features = false, features = ["ecdh", "ecdsa", "sha256"] }
-sha2 = { path = "../sha2", default-features = false }
+p256.workspace = true
+sha2 = { version = "0.10", default-features = false }
 prost.workspace = true
 prost-types.workspace = true
 rand_core.workspace = true
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
-aes-gcm = { path = "../aes-gcm", default-features = false, features = ["aes", "alloc"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }

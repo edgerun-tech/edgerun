@@ -1,0 +1,33 @@
+# Android cross-compilation configuration
+#
+# To build for Android, install the NDK and set $ANDROID_NDK_ROOT:
+#   export ANDROID_NDK_ROOT=$HOME/Android/Sdk/ndk/27.0.12077973
+#
+# Then build:
+#   cargo build --target aarch64-linux-android --features android-real
+#
+# Or with cargo-ndk:
+#   cargo ndk --target aarch64-linux-android --platform 34 -- build --features android-real
+
+[target.aarch64-linux-android]
+linker = "ld.lld"
+rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
+
+[target.armv7-linux-androideabi]
+linker = "ld.lld"
+rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
+
+[target.x86_64-linux-android]
+linker = "ld.lld"
+rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
+
+[target.i686-linux-android]
+linker = "ld.lld"
+rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
+
+[build]
+# Default to host target — override with --target for Android builds
+
+# Android NDK toolchain configuration
+# Set ANDROID_NDK_ROOT to your NDK installation path
+# Example: export ANDROID_NDK_ROOT=$HOME/Android/Sdk/ndk/27.0.12077973

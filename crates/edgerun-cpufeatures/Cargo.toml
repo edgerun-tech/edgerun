@@ -42,17 +42,17 @@ name = "cpufeatures"
 path = "src/lib.rs"
 
 [target.aarch64-linux-android.dependencies.libc]
-path = "../libc"
+version = "0.2"
 default-features = false
 
 [target.'cfg(all(target_arch = "aarch64", target_os = "linux"))'.dependencies.libc]
-path = "../libc"
+version = "0.2"
 default-features = false
 
 [target.'cfg(all(target_arch = "aarch64", target_vendor = "apple"))'.dependencies.libc]
-path = "../libc"
+version = "0.2"
 default-features = false
 
 [target.'cfg(all(target_arch = "loongarch64", target_os = "linux"))'.dependencies.libc]
-path = "../libc"
+version = "0.2"
 default-features = false

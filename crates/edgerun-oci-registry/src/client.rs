@@ -378,13 +378,25 @@ impl RegistryClient {
         std::fs::create_dir_all(&overlay_upper)?;
         std::fs::create_dir_all(&overlay_work)?;
 
-        let mut layer_dirs = Vec::new();
-        for (i, layer) in manifest_data.layers.iter().enumerate() {
-            let layer_dir = store_path.join(format!("layer_{}", i));
-            std::fs::create_dir_all(&layer_dir)?;
+        // Content-addressable layer cache: extract layers by digest hash.
+        // If a layer has already been extracted, reuse it without re-downloading or re-extracting.
+        let cache_dir = store_path.join("cache");
+        std::fs::create_dir_all(&cache_dir)?;
 
-            let blob_path =
-                store_path.join(format!("{}.tar.gz", layer.digest.replace(':', "_")));
+        let mut layer_dirs = Vec::new();
+        for layer in manifest_data.layers.iter() {
+            // Use the digest as the cache key (e.g., "sha256:abc123..." → "sha256_abc123...")
+            let cache_key = layer.digest.replace(':', "_");
+            let cached_layer = cache_dir.join(&cache_key);
+
+            if cached_layer.is_dir() {
+                // Layer already extracted — reuse from cache
+                layer_dirs.push(cached_layer);
+                continue;
+            }
+
+            // Download blob if not already cached
+            let blob_path = store_path.join(format!("{}.tar.gz", &cache_key));
             if !blob_path.exists() {
                 self.download_blob(
                     &image.registry,
@@ -395,8 +407,11 @@ impl RegistryClient {
             }
 
             verify_blob_digest(&blob_path, &layer.digest)?;
-            extract_layer(&blob_path, &layer_dir, layer.media_type.as_deref())?;
-            layer_dirs.push(layer_dir);
+
+            // Extract layer to cache
+            std::fs::create_dir_all(&cached_layer)?;
+            extract_layer(&blob_path, &cached_layer, layer.media_type.as_deref())?;
+            layer_dirs.push(cached_layer);
         }
 
         apply_whiteouts(&layer_dirs)?;

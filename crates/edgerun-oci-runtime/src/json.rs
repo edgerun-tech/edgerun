@@ -160,6 +160,10 @@ pub struct OciLinuxDevice {
     pub uid: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gid: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub major: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minor: Option<i64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -70,6 +70,8 @@ pub const SIG_DOMAIN_RELAY_ENVELOPE: &str = "edgerun:v0:sig:relay-envelope";
 pub const SIG_DOMAIN_IDENTITY_RECORD: &str = "edgerun:v0:sig:identity-record";
 /// Domain tag for signing an assurance claim.
 pub const SIG_DOMAIN_ASSURANCE_CLAIM: &str = "edgerun:v0:sig:assurance-claim";
+/// Domain tag for signing a mesh frame.
+pub const SIG_DOMAIN_MESH_FRAME: &str = "edgerun:v0:sig:mesh-frame";
 
 // ---------------------------------------------------------------------------
 // Object identity derivation tags (spec §17.14–17.16)
@@ -353,6 +355,38 @@ pub fn verify_record(
     public_key
         .verify_prehash(&signature_input(sig_domain_tag, record_hash), &sig)
         .is_ok()
+}
+
+/// Signs canonical bytes with domain separation.
+///
+/// Computes `SHA-256(sig_domain_tag || 0x00 || SHA-256(canonical_bytes))` and signs it.
+/// This is the recommended way to sign protocol records.
+pub fn sign_canonical_record(
+    private_key: &SigningKey,
+    sig_domain_tag: &str,
+    canonical_bytes: &[u8],
+) -> Result<Vec<u8>, p256::ecdsa::Error> {
+    let record_hash = sha256(canonical_bytes);
+    sign_record(private_key, sig_domain_tag, &record_hash)
+}
+
+/// Verifies a signature over canonical bytes with domain separation.
+///
+/// Matches the signing done by `sign_canonical_record` (which signs
+/// `SHA-256(sig_domain_tag || 0x00 || SHA-256(canonical_bytes))`).
+pub fn verify_canonical_record(
+    public_key: &VerifyingKey,
+    sig_domain_tag: &str,
+    canonical_bytes: &[u8],
+    signature: &[u8],
+) -> bool {
+    let record_hash = sha256(canonical_bytes);
+    let sig_input = signature_input(sig_domain_tag, &record_hash);
+    let sig_input_digest = sha256(&sig_input);
+    let Ok(sig) = Signature::from_slice(signature) else {
+        return false;
+    };
+    public_key.verify_prehash(&sig_input_digest, &sig).is_ok()
 }
 
 /// Converts a verifying key to the 64-byte NodeID format (x || y without 0x04).

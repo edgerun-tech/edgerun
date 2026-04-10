@@ -5,7 +5,6 @@ use std::os::fd::RawFd;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::ioctl::*;
-use super::device::DrmConnector;
 
 /// KMS output state.
 #[derive(Debug, Clone)]

@@ -64,7 +64,7 @@ pub fn recv_with_fds(
 ///
 /// Returns bytes written.
 pub fn send_with_fds(fd: RawFd, data: &[u8], fds: &[RawFd]) -> io::Result<usize> {
-    use libc::{iovec, msghdr, sendmsg, CMSG_DATA, CMSG_FIRSTHDR, CMSG_LEN};
+    use libc::{iovec, msghdr, sendmsg, CMSG_DATA, CMSG_LEN};
 
     let mut iov = iovec {
         iov_base: data.as_ptr() as *const libc::c_void as *mut libc::c_void,

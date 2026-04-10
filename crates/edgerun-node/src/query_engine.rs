@@ -317,15 +317,13 @@ pub fn execute_query(
         signature: None,
     };
 
-    // Sign the query response
+    // Sign the query response with domain separation
     {
         use edgerun_core::protocol::{ProtocolRecord, canonical_bytes};
+        use edgerun_core::crypto::SIG_DOMAIN_QUERY_RESULT_FRAGMENT;
         let record = ProtocolRecord::QueryResultFragment(fragment.clone());
         let canonical = canonical_bytes(&record, true);
-        let digest = edgerun_core::crypto::sha256(&canonical);
-        let mut digest_bytes = [0u8; 32];
-        digest_bytes.copy_from_slice(&digest);
-        if let Ok(sig) = signer.sign_digest(&digest_bytes) {
+        if let Ok(sig) = signer.sign_record(SIG_DOMAIN_QUERY_RESULT_FRAGMENT, &canonical) {
             fragment.signature = Some(edgerun_core::protocol::Signature {
                 algorithm: 1,
                 value: sig.to_vec(),

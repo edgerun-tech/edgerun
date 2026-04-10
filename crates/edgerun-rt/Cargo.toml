@@ -7,5 +7,5 @@ publish.workspace = true
 description = "Minimal epoll-based async runtime for edgerun"
 
 [dependencies]
-libc = { path = "../libc" }
+libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }

@@ -53,10 +53,10 @@ optional = true
 default-features = false
 
 [dependencies.typenum]
-path = "../edgerun-typenum"
+version = "1"
 
 [dependencies.zeroize]
-path = "../edgerun-zeroize"
+version = "1"
 optional = true
 default-features = false
 
@@ -67,7 +67,7 @@ version = "1.0"
 version = "1.0"
 
 [build-dependencies.version_check]
-path = "../version_check"
+version = "0.9"
 
 [badges.travis-ci]
 repository = "fizyk20/generic-array"

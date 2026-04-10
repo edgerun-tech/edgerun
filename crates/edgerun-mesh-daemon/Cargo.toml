@@ -8,7 +8,6 @@ publish.workspace = true
 [dependencies]
 edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-mesh-link = { path = "../edgerun-mesh-link" }
-edgerun-mesh-router = { path = "../edgerun-mesh-router" }
 edgerun-mesh-capability = { path = "../edgerun-mesh-capability" }
 edgerun-mesh-session = { path = "../edgerun-mesh-session" }
 edgerun-remote-capability = { path = "../edgerun-remote-capability" }

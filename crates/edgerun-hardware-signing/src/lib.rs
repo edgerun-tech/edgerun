@@ -282,7 +282,41 @@ pub trait MeshSigner {
 
     /// Signs a pre-hashed 32-byte SHA-256 digest.
     /// Returns exactly 64 bytes: r (32 bytes) || s (32 bytes).
+    ///
+    /// **Deprecated:** Use `sign_record` instead to get domain-separated signatures.
+    /// This method signs the raw digest without any domain prefix, which means
+    /// signatures could potentially be replayed across different record types.
     fn sign_digest(&self, digest: &[u8; 32]) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError>;
+
+    /// Signs a record with domain separation (spec §17.9, §17.11).
+    ///
+    /// Computes `SHA-256(canonical_bytes)` to get the record hash, then
+    /// signs `sig_domain_tag || 0x00 || record_hash`.
+    /// This prevents signature replay across different record types.
+    ///
+    /// # Arguments
+    /// * `sig_domain_tag` - Domain tag for signing (e.g., `SIG_DOMAIN_COMMAND_ENVELOPE`)
+    /// * `canonical_bytes` - The canonical encoding of the record to sign
+    fn sign_record(
+        &self,
+        sig_domain_tag: &str,
+        canonical_bytes: &[u8],
+    ) -> Result<[u8; MESH_SIGNATURE_LENGTH], HardwareSigningError> {
+        // Build domain-separated signature input: sig_domain_tag || 0x00 || SHA-256(canonical_bytes)
+        let record_hash = edgerun_core::crypto::sha256(canonical_bytes);
+        let mut sig_input = Vec::with_capacity(sig_domain_tag.len() + 1 + 32);
+        sig_input.extend_from_slice(sig_domain_tag.as_bytes());
+        sig_input.push(0);
+        sig_input.extend_from_slice(&record_hash);
+        // Sign the domain-prepared input directly (not double-hashed)
+        self.sign_digest(&{
+            let mut d = [0u8; 32];
+            // sig_input is the actual message to sign, hash it to 32 bytes for sign_digest
+            let h = edgerun_core::crypto::sha256(&sig_input);
+            d.copy_from_slice(&h);
+            d
+        })
+    }
 
     /// Returns self as `Any` for downcasting (used by TCP task cloning).
     fn as_any(&self) -> &dyn std::any::Any {

@@ -2,7 +2,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::path::Path;
 
 use super::ioctl::*;
@@ -128,10 +128,6 @@ impl DrmDevice {
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
-
-        // Get min/max dimensions
-        res.min_width = res.min_width;
-        res.max_width = res.max_width;
 
         Ok(DrmResources {
             crtcs,
@@ -353,7 +349,9 @@ impl DrmConnector {
 /// Connector type constants (from drm_mode.h).
 mod connector_status {
     pub const CONNECTED: i32 = 1;
+    #[allow(dead_code)]
     pub const DISCONNECTED: i32 = 2;
+    #[allow(dead_code)]
     pub const UNKNOWN_CONNECTION: i32 = 3;
 }
 

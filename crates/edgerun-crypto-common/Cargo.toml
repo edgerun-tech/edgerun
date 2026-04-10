@@ -46,15 +46,15 @@ name = "crypto_common"
 path = "src/lib.rs"
 
 [dependencies.generic-array]
-path = "../edgerun-generic-array"
+version = "0.14"
 features = ["more_lengths"]
 
 [dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 optional = true
 
 [dependencies.typenum]
-path = "../edgerun-typenum"
+version = "1"
 
 [features]
 getrandom = ["rand_core/getrandom"]

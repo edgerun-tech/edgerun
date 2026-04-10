@@ -53,6 +53,21 @@ pub struct Popup {
     pub y: i32,
     pub width: i32,
     pub height: i32,
+    /// Positioner state (from xdg_positioner).
+    pub anchor_rect_x: i32,
+    pub anchor_rect_y: i32,
+    pub anchor_rect_width: i32,
+    pub anchor_rect_height: i32,
+    pub anchor: u32,
+    pub gravity: u32,
+    pub offset_x: i32,
+    pub offset_y: i32,
+    /// Whether this popup has an active grab.
+    pub grabbed: bool,
+    /// The seat that owns the grab (if grabbed).
+    pub grab_seat_id: Option<u32>,
+    /// Serial at grab time.
+    pub grab_serial: Option<u32>,
 }
 
 /// A subsurface.
@@ -125,6 +140,28 @@ pub struct Shell {
     /// Output dimensions (for configure).
     pub output_width: i32,
     pub output_height: i32,
+    /// Output refresh rate in mHz.
+    pub output_refresh_mhz: i32,
+    /// Physical dimensions in mm.
+    pub output_mm_width: i32,
+    pub output_mm_height: i32,
+    /// Positioner state (accumulated before GET_POPUP is called).
+    pub positioners: std::collections::HashMap<u32, PositionerState>,
+}
+
+/// Positioner state from xdg_positioner protocol.
+#[derive(Debug, Default)]
+pub struct PositionerState {
+    pub width: i32,
+    pub height: i32,
+    pub anchor_rect_x: i32,
+    pub anchor_rect_y: i32,
+    pub anchor_rect_width: i32,
+    pub anchor_rect_height: i32,
+    pub anchor: u32,
+    pub gravity: u32,
+    pub offset_x: i32,
+    pub offset_y: i32,
 }
 
 impl Shell {
@@ -139,13 +176,30 @@ impl Shell {
             subsurfaces: SubsurfaceManager::default(),
             output_width: 0,
             output_height: 0,
+            output_refresh_mhz: 60000,
+            output_mm_width: 0,
+            output_mm_height: 0,
+            positioners: std::collections::HashMap::new(),
         }
     }
 
-    /// Set output dimensions.
-    pub fn set_output_size(&mut self, width: i32, height: i32) {
+    /// Set output dimensions and physical properties.
+    pub fn set_output_size(&mut self, width: i32, height: i32, refresh_mhz: i32, mm_width: i32, mm_height: i32) {
         self.output_width = width;
         self.output_height = height;
+        self.output_refresh_mhz = refresh_mhz;
+        self.output_mm_width = mm_width;
+        self.output_mm_height = mm_height;
+    }
+
+    /// Create or update positioner state.
+    pub fn set_positioner(&mut self, positioner_id: u32, state: PositionerState) {
+        self.positioners.insert(positioner_id, state);
+    }
+
+    /// Destroy positioner state.
+    pub fn remove_positioner(&mut self, positioner_id: u32) {
+        self.positioners.remove(&positioner_id);
     }
 
     /// Create a toplevel for a surface.
@@ -194,15 +248,83 @@ impl Shell {
             y: 0,
             width: 0,
             height: 0,
+            anchor_rect_x: 0,
+            anchor_rect_y: 0,
+            anchor_rect_width: 0,
+            anchor_rect_height: 0,
+            anchor: 0,
+            gravity: 0,
+            offset_x: 0,
+            offset_y: 0,
+            grabbed: false,
+            grab_seat_id: None,
+            grab_serial: None,
         });
+    }
+
+    /// Update popup positioner state.
+    pub fn set_popup_positioner(
+        &mut self,
+        popup_id: u32,
+        anchor_rect_x: i32,
+        anchor_rect_y: i32,
+        anchor_rect_width: i32,
+        anchor_rect_height: i32,
+        anchor: u32,
+        gravity: u32,
+        offset_x: i32,
+        offset_y: i32,
+    ) {
+        if let Some(popup) = self.popups.get_mut(&popup_id) {
+            popup.anchor_rect_x = anchor_rect_x;
+            popup.anchor_rect_y = anchor_rect_y;
+            popup.anchor_rect_width = anchor_rect_width;
+            popup.anchor_rect_height = anchor_rect_height;
+            popup.anchor = anchor;
+            popup.gravity = gravity;
+            popup.offset_x = offset_x;
+            popup.offset_y = offset_y;
+
+            // Calculate popup position from positioner state
+            // Simple implementation: position relative to parent's anchor rect + offset
+            popup.x = anchor_rect_x + offset_x;
+            popup.y = anchor_rect_y + offset_y;
+        }
+    }
+
+    /// Start a grab on a popup.
+    pub fn grab_popup(&mut self, popup_id: u32, seat_id: u32, serial: u32) {
+        if let Some(popup) = self.popups.get_mut(&popup_id) {
+            popup.grabbed = true;
+            popup.grab_seat_id = Some(seat_id);
+            popup.grab_serial = Some(serial);
+        }
+    }
+
+    /// End a grab on a popup.
+    pub fn ungrab_popup(&mut self, popup_id: u32) {
+        if let Some(popup) = self.popups.get_mut(&popup_id) {
+            popup.grabbed = false;
+            popup.grab_seat_id = None;
+            popup.grab_serial = None;
+        }
+    }
+
+    /// Dismiss all grabs (e.g., on pointer button release).
+    pub fn dismiss_all_grabs(&mut self) {
+        for (_, popup) in self.popups.iter_mut() {
+            popup.grabbed = false;
+            popup.grab_seat_id = None;
+            popup.grab_serial = None;
+        }
     }
 
     /// Send configure to a toplevel. Returns the configure serial.
     pub fn configure_toplevel(
         &mut self,
         toplevel_id: u32,
-        width: i32,
-        height: i32,
+        _width: i32,
+        _height: i32,
     ) -> u32 {
         let serial = self.configure_serial;
         self.configure_serial += 1;
@@ -268,8 +390,8 @@ impl Shell {
     pub fn configure_toplevel_with_state(
         &mut self,
         toplevel_id: u32,
-        width: i32,
-        height: i32,
+        _width: i32,
+        _height: i32,
     ) -> u32 {
         let serial = self.configure_serial;
         self.configure_serial += 1;
@@ -318,13 +440,120 @@ impl Shell {
     }
 
     /// Get the current state bytes for a toplevel.
-    pub fn toplevel_state_bytes(&self, toplevel_id: u32) -> Vec<u8> {
-        if let Some(tl) = self.toplevels.get(&toplevel_id) {
-            tl.states.clone()
-        } else {
-            protocol::xdg_shell::toplevel_state::ACTIVATED.to_le_bytes().to_vec()
-        }
+    pub fn toplevel_state_bytes(&self, toplevel_id: u32) -> &[u8] {
+        static DEFAULT_STATE: [u8; 4] = protocol::xdg_shell::toplevel_state::ACTIVATED.to_le_bytes();
+        self.toplevels.get(&toplevel_id)
+            .map(|tl| tl.states.as_slice())
+            .unwrap_or(&DEFAULT_STATE)
     }
 }
 
 use crate::protocol;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_toplevel() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        let tl = shell.get_toplevel(1).unwrap();
+        assert_eq!(tl.id, 1);
+        assert_eq!(tl.surface_id, 5);
+        assert!(shell.stack.contains(&1));
+    }
+
+    #[test]
+    fn test_destroy_toplevel() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        shell.destroy_toplevel(1);
+        assert!(shell.get_toplevel(1).is_none());
+        assert!(!shell.stack.contains(&1));
+    }
+
+    #[test]
+    fn test_toplevel_z_order() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        shell.create_toplevel(2, 6);
+        shell.create_toplevel(3, 7);
+
+        // Front to back: last created is frontmost
+        let z_order: Vec<u32> = shell.toplevels_z_order().map(|tl| tl.id).collect();
+        assert_eq!(z_order, vec![3, 2, 1]);
+    }
+
+    #[test]
+    fn test_activate_moves_to_front() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        shell.create_toplevel(2, 6);
+        shell.create_toplevel(3, 7);
+
+        shell.activate(1); // move 1 to front
+        let z_order: Vec<u32> = shell.toplevels_z_order().map(|tl| tl.id).collect();
+        assert_eq!(z_order, vec![1, 3, 2]);
+    }
+
+    #[test]
+    fn test_configure_toplevel() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        let serial = shell.configure_toplevel(1, 800, 600);
+        assert!(serial > 0);
+        // After configure, it's not configured until ack
+        assert!(!shell.get_toplevel(1).unwrap().configured);
+    }
+
+    #[test]
+    fn test_ack_configure() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        let serial = shell.configure_toplevel(1, 800, 600);
+        shell.ack_configure(1, serial);
+        assert!(shell.get_toplevel(1).unwrap().configured);
+    }
+
+    #[test]
+    fn test_toplevel_state_bytes() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 5);
+        let state = shell.toplevel_state_bytes(1);
+        // Should be ACTIVATED state (4 bytes)
+        assert_eq!(state.len(), 4);
+        let state_val = u32::from_le_bytes(state.try_into().unwrap());
+        assert_eq!(state_val, protocol::xdg_shell::toplevel_state::ACTIVATED);
+    }
+
+    #[test]
+    fn test_subsurface_manager() {
+        let mut shell = Shell::new(100);
+        shell.subsurfaces.create(10, 5);
+        shell.subsurfaces.create(11, 5);
+        shell.subsurfaces.create(12, 6);
+
+        let mut parent_5: Vec<_> = shell.subsurfaces.for_parent(5).iter().map(|s| s.surface_id).collect();
+        parent_5.sort();
+        assert_eq!(parent_5, vec![10, 11]);
+
+        let mut parent_6: Vec<_> = shell.subsurfaces.for_parent(6).iter().map(|s| s.surface_id).collect();
+        parent_6.sort();
+        assert_eq!(parent_6, vec![12]);
+    }
+
+    #[test]
+    fn test_popup_grab() {
+        let mut shell = Shell::new(100);
+        shell.create_popup(1, 5, Some(100));
+        assert!(!shell.popups.get(&1).unwrap().grabbed);
+
+        shell.grab_popup(1, 1, 42);
+        assert!(shell.popups.get(&1).unwrap().grabbed);
+        assert_eq!(shell.popups.get(&1).unwrap().grab_serial, Some(42));
+
+        shell.ungrab_popup(1);
+        assert!(!shell.popups.get(&1).unwrap().grabbed);
+    }
+}

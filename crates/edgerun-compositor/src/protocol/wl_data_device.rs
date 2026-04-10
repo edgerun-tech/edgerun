@@ -23,7 +23,7 @@ pub mod dnd_manager_request {
 }
 
 /// Create a data source object.
-pub fn create_data_source_event(manager_id: u32, new_id: u32) -> Message {
+pub fn create_data_source_event(manager_id: u32, _new_id: u32) -> Message {
     // This is implicit — client creates via new_id, no server event needed
     message_empty(manager_id, 0)
 }
@@ -113,6 +113,9 @@ pub mod data_offer_request {
 
     pub const SET_ACTIONS: u16 = 3; // version 3+
     pub const SET_ACTIONS_SIG: &[ArgType] = &[ArgType::Uint, ArgType::Uint]; // dnd_actions, preferred_action
+
+    pub const DESTROY: u16 = 4;
+    pub const DESTROY_SIG: &[ArgType] = &[];
 }
 
 pub mod data_offer_event {

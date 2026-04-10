@@ -128,7 +128,7 @@ pub type PFNEGLWAITSYNCPROC =
     unsafe extern "system" fn(dpy: EGLDisplay, sync: *mut c_void, flags: EGLint) -> EGLint;
 
 pub struct Egl {
-    lib: *mut c_void,
+    pub lib: *mut c_void,
     pub eglGetPlatformDisplay: PFNEGLGETPLATFORMDISPLAYEXTPROC,
     pub eglGetDisplay: PFNEGLGETDISPLAYPROC,
     pub eglQueryString: PFNEGLQUERYSTRINGPROC,
@@ -168,14 +168,16 @@ fn dlsym<T>(lib: *mut c_void, name: &str) -> Option<T> {
 impl Egl {
     pub fn open() -> Option<Self> {
         // Try libEGL.so.1 (Mesa), then libEGL.so
-        let lib = dlopen("libEGL.so.1")
-            .then_some(())
-            .map(|_| unsafe { &mut *(dlopen("libEGL.so.1") as *mut c_void) })
-            .unwrap_or_else(|| {
-                let l = dlopen("libEGL.so");
-                if l.is_null() { return ptr::null_mut(); }
+        let lib = {
+            let l = dlopen("libEGL.so.1");
+            if !l.is_null() {
                 l
-            });
+            } else {
+                let l = dlopen("libEGL.so");
+                if l.is_null() { return None; }
+                l
+            }
+        };
 
         if lib.is_null() {
             eprintln!("[egl] Failed to load libEGL.so.1 or libEGL.so");

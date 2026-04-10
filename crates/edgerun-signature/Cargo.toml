@@ -45,12 +45,12 @@ optional = true
 package = "signature_derive"
 
 [dependencies.digest]
-path = "../edgerun-digest"
+version = "0.10"
 optional = true
 default-features = false
 
 [dependencies.rand_core]
-path = "../edgerun-rand_core"
+version = "0.6"
 optional = true
 default-features = false
 
@@ -58,7 +58,7 @@ default-features = false
 version = "0.4"
 
 [dev-dependencies.sha2]
-path = "../sha2"
+version = "0.10"
 default-features = false
 
 [features]
