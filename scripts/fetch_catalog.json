@@ -1,0 +1,316 @@
+{
+  "spec": "Fetch Living Standard",
+  "spec_date": "2026-04-10",
+  "request_init": [
+    {
+      "name": "method",
+      "type": "String",
+      "description": "GET, POST, PUT, DELETE, etc."
+    },
+    {
+      "name": "url",
+      "type": "String",
+      "description": "The URL of the request"
+    },
+    {
+      "name": "headers",
+      "type": "HeadersInit",
+      "description": "Headers object or dict"
+    },
+    {
+      "name": "body",
+      "type": "Option<BodyInit>",
+      "description": "Request body"
+    },
+    {
+      "name": "referrer",
+      "type": "String",
+      "description": "Referrer URL"
+    },
+    {
+      "name": "referrer_policy",
+      "type": "String",
+      "description": "no-referrer, origin, etc."
+    },
+    {
+      "name": "mode",
+      "type": "RequestMode",
+      "description": "cors, no-cors, same-origin, navigate"
+    },
+    {
+      "name": "credentials",
+      "type": "RequestCredentials",
+      "description": "omit, same-origin, include"
+    },
+    {
+      "name": "cache",
+      "type": "RequestCache",
+      "description": "default, no-store, reload, etc."
+    },
+    {
+      "name": "redirect",
+      "type": "RequestRedirect",
+      "description": "follow, error, manual"
+    },
+    {
+      "name": "integrity",
+      "type": "String",
+      "description": "Subresource integrity hash"
+    },
+    {
+      "name": "keep_alive",
+      "type": "bool",
+      "description": "Keepalive flag"
+    },
+    {
+      "name": "signal",
+      "type": "Option<AbortSignal>",
+      "description": "AbortSignal"
+    },
+    {
+      "name": "priority",
+      "type": "RequestPriority",
+      "description": "high, low, auto"
+    },
+    {
+      "name": "duplex",
+      "type": "String",
+      "description": "half for streaming"
+    }
+  ],
+  "response_properties": [
+    {
+      "name": "ok",
+      "type": "bool",
+      "description": "Success status (200-299)"
+    },
+    {
+      "name": "status",
+      "type": "u16",
+      "description": "HTTP status code"
+    },
+    {
+      "name": "status_text",
+      "type": "String",
+      "description": "Status message"
+    },
+    {
+      "name": "headers",
+      "type": "Headers",
+      "description": "Response headers"
+    },
+    {
+      "name": "url",
+      "type": "String",
+      "description": "Response URL"
+    },
+    {
+      "name": "type",
+      "type": "ResponseType",
+      "description": "basic, cors, opaque, etc."
+    },
+    {
+      "name": "redirected",
+      "type": "bool",
+      "description": "Whether redirected"
+    },
+    {
+      "name": "body",
+      "type": "Option<Body>",
+      "description": "Response body stream"
+    }
+  ],
+  "headers_methods": [
+    {
+      "name": "append",
+      "return_type": "void",
+      "parameters": "name: &str, value: &str"
+    },
+    {
+      "name": "delete",
+      "return_type": "void",
+      "parameters": "name: &str"
+    },
+    {
+      "name": "get",
+      "return_type": "Option<String>",
+      "parameters": "name: &str"
+    },
+    {
+      "name": "get_set_cookie",
+      "return_type": "Vec<String>",
+      "parameters": ""
+    },
+    {
+      "name": "has",
+      "return_type": "bool",
+      "parameters": "name: &str"
+    },
+    {
+      "name": "set",
+      "return_type": "void",
+      "parameters": "name: &str, value: &str"
+    },
+    {
+      "name": "entries",
+      "return_type": "Iterator",
+      "parameters": ""
+    },
+    {
+      "name": "keys",
+      "return_type": "Iterator",
+      "parameters": ""
+    },
+    {
+      "name": "values",
+      "return_type": "Iterator",
+      "parameters": ""
+    },
+    {
+      "name": "for_each",
+      "return_type": "void",
+      "parameters": "callback: Fn(&str, &str)"
+    }
+  ],
+  "body_methods": [
+    {
+      "name": "array_buffer",
+      "return_type": "Vec<u8>",
+      "parameters": ""
+    },
+    {
+      "name": "blob",
+      "return_type": "Blob",
+      "parameters": ""
+    },
+    {
+      "name": "bytes",
+      "return_type": "Vec<u8>",
+      "parameters": ""
+    },
+    {
+      "name": "form_data",
+      "return_type": "FormData",
+      "parameters": ""
+    },
+    {
+      "name": "json",
+      "return_type": "JsValue",
+      "parameters": ""
+    },
+    {
+      "name": "text",
+      "return_type": "String",
+      "parameters": ""
+    }
+  ],
+  "enums": [
+    {
+      "name": "RequestMode",
+      "variants": [
+        "SameOrigin",
+        "Cors",
+        "NoCors",
+        "Navigate",
+        "WebSocket"
+      ]
+    },
+    {
+      "name": "RequestCredentials",
+      "variants": [
+        "Omit",
+        "SameOrigin",
+        "Include"
+      ]
+    },
+    {
+      "name": "RequestCache",
+      "variants": [
+        "Default",
+        "NoStore",
+        "Reload",
+        "NoCache",
+        "ForceCache",
+        "OnlyIfCached"
+      ]
+    },
+    {
+      "name": "RequestRedirect",
+      "variants": [
+        "Follow",
+        "Error",
+        "Manual"
+      ]
+    },
+    {
+      "name": "RequestPriority",
+      "variants": [
+        "High",
+        "Low",
+        "Auto"
+      ]
+    },
+    {
+      "name": "ResponseType",
+      "variants": [
+        "Basic",
+        "Cors",
+        "Default",
+        "Error",
+        "Opaque",
+        "OpaqueRedirect"
+      ]
+    },
+    {
+      "name": "ReferrerPolicy",
+      "variants": [
+        "NoReferrer",
+        "NoReferrerWhenDowngrade",
+        "SameOrigin",
+        "Origin",
+        "StrictOrigin",
+        "OriginWhenCrossOrigin",
+        "StrictOriginWhenCrossOrigin",
+        "UnsafeUrl"
+      ]
+    },
+    {
+      "name": "RequestDestination",
+      "variants": [
+        "Audio",
+        "AudioWorklet",
+        "Document",
+        "Embed",
+        "Font",
+        "Frame",
+        "Iframe",
+        "Image",
+        "Manifest",
+        "Object",
+        "PainterWorklet",
+        "Report",
+        "Script",
+        "SharedWorker",
+        "Style",
+        "Track",
+        "Video",
+        "Worker",
+        "Xslt"
+      ]
+    }
+  ],
+  "fetch_states": [
+    {
+      "name": "NetworkError",
+      "description": "The fetch encountered a network error"
+    },
+    {
+      "name": "Aborted",
+      "description": "The fetch was aborted"
+    },
+    {
+      "name": "Done",
+      "description": "The fetch completed successfully"
+    }
+  ]
+}

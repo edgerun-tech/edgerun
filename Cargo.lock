@@ -752,6 +752,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-encoding"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-evdev-input"
 version = "0.1.0"
 dependencies = [
@@ -769,6 +773,10 @@ dependencies = [
  "edgerun-camera-biometrics",
  "edgerun-capabilities",
 ]
+
+[[package]]
+name = "edgerun-fetch"
+version = "0.1.0"
 
 [[package]]
 name = "edgerun-fingerprint"
@@ -1273,6 +1281,14 @@ version = "0.1.0"
 dependencies = [
  "edgerun-core",
 ]
+
+[[package]]
+name = "edgerun-uievents"
+version = "0.1.0"
+
+[[package]]
+name = "edgerun-url"
+version = "0.1.0"
 
 [[package]]
 name = "edgerun-usb"
