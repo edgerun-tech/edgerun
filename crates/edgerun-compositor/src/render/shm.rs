@@ -4,6 +4,83 @@ use std::collections::HashMap;
 use std::io;
 use std::os::fd::RawFd;
 
+/// Read data from an SHM pool fd, using the ShmManager's cached mapping
+/// or falling back to a temporary mmap if the pool isn't tracked.
+///
+/// Returns a borrowed slice from the cached mapping, or an owned Vec
+/// if fallback mmap was needed. The caller is responsible for munmap
+/// in the fallback case.
+pub enum ShmReadResult<'a> {
+    /// Data from the ShmManager's cached pool mapping (no cleanup needed).
+    Cached(&'a [u8]),
+    /// Data from a temporary fallback mmap (caller must call unmap).
+    FallBack { data: Vec<u8>, mapping: *mut libc::c_void, size: usize },
+}
+
+impl ShmReadResult<'_> {
+    /// Get the data bytes. For fallback results, the mapping stays valid
+    /// until the ShmReadResult is dropped (Drop handles munmap).
+    pub fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Cached(slice) => slice,
+            Self::FallBack { data, .. } => data,
+        }
+    }
+}
+
+impl Drop for ShmReadResult<'_> {
+    fn drop(&mut self) {
+        if let Self::FallBack { mapping, size, .. } = self {
+            if !mapping.is_null() {
+                unsafe { libc::munmap(*mapping, *size) };
+            }
+        }
+    }
+}
+
+/// Try to read SHM buffer data. First checks the ShmManager's cached
+/// mapping, then falls back to a direct mmap of the fd.
+pub fn read_shm_buffer_with_fallback(
+    shm: &ShmManager,
+    pool_fd: RawFd,
+    offset: usize,
+    len: usize,
+) -> Option<ShmReadResult<'_>> {
+    // Fast path: use ShmManager's cached mapping
+    if let Some(pool) = shm.get_pool_by_fd(pool_fd) {
+        return pool.read(offset, len).map(ShmReadResult::Cached);
+    }
+
+    // Fallback: mmap the fd directly
+    let pool_size = crate::drm::fd_size(pool_fd).ok()?;
+    let mapping = unsafe {
+        libc::mmap(
+            std::ptr::null_mut(),
+            pool_size,
+            libc::PROT_READ,
+            libc::MAP_SHARED,
+            pool_fd,
+            0,
+        )
+    };
+    if mapping == libc::MAP_FAILED {
+        return None;
+    }
+
+    let pool_data = unsafe { std::slice::from_raw_parts(mapping as *const u8, pool_size) };
+    if offset + len > pool_data.len() {
+        unsafe { libc::munmap(mapping, pool_size) };
+        return None;
+    }
+
+    let data = pool_data[offset..offset + len].to_vec();
+    Some(ShmReadResult::FallBack {
+        data,
+        mapping,
+        size: pool_size,
+    })
+}
+
 /// A SHM pool backed by a memory-mapped file descriptor.
 pub struct ShmPool {
     pub id: u32,

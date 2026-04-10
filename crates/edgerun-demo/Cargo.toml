@@ -7,5 +7,5 @@ publish = false
 
 [dependencies]
 edgerun-html-render = { path = "../edgerun-html-render" }
-edgerun-layout = { path = "../edgerun-layout" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+edgerun-css-cascade = { path = "../edgerun-css-cascade" }

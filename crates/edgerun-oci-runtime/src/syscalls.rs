@@ -13,7 +13,6 @@ use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};
 // ===========================================================================
 
 extern "C" {
-    pub fn unshare(flags: c_int) -> c_int;
     pub fn syscall(number: c_long, ...) -> c_long;
     pub fn kill(pid: c_int, sig: c_int) -> c_int;
     pub fn mount(
@@ -116,12 +115,20 @@ pub const SECCOMP_FILTER_FLAG_TSYNC: c_uint = 1;
 // ===========================================================================
 
 /// Call the seccomp syscall (architecture-aware).
-pub fn do_seccomp(operation: c_uint, flags: c_uint, args: *const c_void) -> c_int {
-    unsafe { syscall(SECCOMP_SYSCALL_NR, operation, flags, args) as c_int }
+///
+/// # Safety
+///
+/// `args` must be a valid pointer (or null) for the seccomp operation.
+pub unsafe fn do_seccomp(operation: c_uint, flags: c_uint, args: *const c_void) -> c_int {
+    syscall(SECCOMP_SYSCALL_NR, operation, flags, args) as c_int
 }
 
 pub fn do_unshare(flags: c_int) -> io::Result<()> {
-    let ret = unsafe { unshare(flags) };
+    // Use raw syscall to avoid potential libc wrapper issues after fork
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { syscall(272, flags) as c_int }; // __NR_unshare
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { syscall(97, flags) as c_int };  // __NR_unshare
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
@@ -269,11 +276,11 @@ pub fn do_setrlimit(resource: u32, soft: u64, hard: u64) -> io::Result<()> {
 
     #[cfg(target_arch = "x86_64")]
     let ret = unsafe {
-        syscall(302, 0, resource, &new_rlim as *const _, 0 as *mut u64) as c_int
+        syscall(302, 0, resource, &new_rlim as *const _, std::ptr::null_mut::<u64>()) as c_int
     };
     #[cfg(target_arch = "aarch64")]
     let ret = unsafe {
-        syscall(267, 0, resource, &new_rlim as *const _, 0 as *mut u64) as c_int
+        syscall(267, 0, resource, &new_rlim as *const _, std::ptr::null_mut::<u64>()) as c_int
     };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }

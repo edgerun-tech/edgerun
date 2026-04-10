@@ -41,6 +41,15 @@ impl Hasher {
         self.expand(secret, &hkdf_label, length)
     }
 
+    /// Derive-Secret(secret, label, messages) per RFC 8446 §7.1
+    ///
+    /// This is HKDF-Expand-Label(secret, label, Hash(messages), Hash.length)
+    /// where Hash(messages) is the transcript hash of the given messages.
+    pub fn derive_secret(&self, secret: &[u8], label: &str, messages: &[u8]) -> Vec<u8> {
+        let hash = self.hash(messages);
+        self.expand_label(secret, label, &hash, self.len())
+    }
+
     /// HKDF-Expand(prk, info, length)
     fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
         let hash_len = self.len();
@@ -95,8 +104,8 @@ impl Tls13KeySchedule {
 
     /// Advance to handshake secret using the ECDH shared secret
     pub fn advance_to_handshake(&mut self, shared_secret: &[u8], _ch_hash: &[u8], _sh_hash: &[u8]) {
-        // derive_secret("derived")
-        let derived = self.hash.expand_label(&self.secret, "derived", &[], self.hash.len());
+        // derive_secret("derived") with empty messages = Hash("")
+        let derived = self.hash.derive_secret(&self.secret, "derived", &[]);
 
         // handshake_secret = HKDF-Extract(derived_secret, shared_secret)
         // Per RFC 8446 §7.1: salt=derived, ikm=shared_secret
@@ -116,7 +125,7 @@ impl Tls13KeySchedule {
 
     /// Advance to master secret
     pub fn advance_to_master(&mut self) {
-        let derived = self.hash.expand_label(&self.secret, "derived", &[], self.hash.len());
+        let derived = self.hash.derive_secret(&self.secret, "derived", &[]);
         let zero = vec![0u8; self.hash.len()];
         self.secret = self.hash.extract(&derived, &zero); // master_secret
     }
@@ -144,38 +153,38 @@ pub struct TrafficKeys {
 }
 
 /// Derive AEAD keys for client → server (handshake)
-/// Labels per RFC 8446 §7.3: "c hs key", "c hs iv"
+/// Labels per RFC 8446 §7.3: "key", "iv"
 pub fn client_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "c hs key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "c hs iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
     }
 }
 
 /// Derive AEAD keys for server → client (handshake)
-/// Labels per RFC 8446 §7.3: "s hs key", "s hs iv"
+/// Labels per RFC 8446 §7.3: "key", "iv"
 pub fn server_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "s hs key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "s hs iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
     }
 }
 
 /// Derive AEAD keys for client → server (application data)
-/// Labels per RFC 8446 §7.3: "c ap key", "c ap iv"
+/// Labels per RFC 8446 §7.3: "key", "iv"
 pub fn client_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "c ap key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "c ap iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
     }
 }
 
 /// Derive AEAD keys for server → client (application data)
-/// Labels per RFC 8446 §7.3: "s ap key", "s ap iv"
+/// Labels per RFC 8446 §7.3: "key", "iv"
 pub fn server_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "s ap key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "s ap iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
     }
 }
 
@@ -240,5 +249,20 @@ mod tests {
         ks.advance_to_master();
         let _client_app = ks.client_app_traffic_secret();
         let _server_app = ks.server_app_traffic_secret();
+    }
+
+    /// Verify key derivation against RFC 8446 test vectors
+    #[test]
+    fn test_server_handshake_keys_against_vectors() {
+        let hash = Hasher::Sha256;
+        let secret: [u8; 32] = [
+            0x30, 0x31, 0xe9, 0xc2, 0xc2, 0x6e, 0xcc, 0x15, 0x4b, 0xc3, 0x68, 0x26, 0xe8, 0x7f, 0xee, 0xff,
+            0x8f, 0x45, 0x47, 0xdf, 0x52, 0x59, 0x67, 0x47, 0xb2, 0xdc, 0xab, 0xf9, 0x2b, 0x18, 0xfb, 0x59
+        ];
+        let keys = server_write_keys(&secret, 16, 12, &hash);
+        let expected_key: [u8; 16] = [0x4d, 0x15, 0xc0, 0x0e, 0x47, 0x31, 0x7f, 0xe9, 0x9c, 0x71, 0x4f, 0x8e, 0xbd, 0x92, 0xc4, 0xd1];
+        let expected_iv: [u8; 12] = [0x18, 0x22, 0x30, 0x84, 0x73, 0x5f, 0x2f, 0x2d, 0x85, 0x88, 0xca, 0xaa];
+        assert_eq!(keys.write_key, expected_key, "Key mismatch");
+        assert_eq!(keys.write_iv, expected_iv, "IV mismatch");
     }
 }

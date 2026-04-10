@@ -36,4 +36,5 @@ mod dispatch_legacy;
 pub mod single_pixel_buffer;
 pub mod fractional_scale;
 pub mod tearing_control;
+pub mod layer_shell;
 pub mod edgerun_test_overlay;

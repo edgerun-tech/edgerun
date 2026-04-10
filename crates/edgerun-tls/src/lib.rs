@@ -272,6 +272,8 @@ struct Handshake {
     /// Running transcript: concatenation of all handshake message bytes
     /// Used for computing the transcript hash for Finished verification
     transcript: Vec<u8>,
+    /// Hash of CH || SH transcript (for handshake traffic key derivation)
+    handshake_transcript_hash: Vec<u8>,
     write_cipher: RecordCipher,
     read_cipher: RecordCipher,
 }
@@ -297,6 +299,7 @@ impl Handshake {
             ch_hash: Vec::new(),
             sh_hash: Vec::new(),
             transcript: Vec::new(),
+            handshake_transcript_hash: Vec::new(),
             write_cipher,
             read_cipher,
         }
@@ -317,11 +320,20 @@ impl Handshake {
         // self.transcript already contains both messages at this point
         let transcript_hash = hash.hash(&self.transcript);
 
+        eprintln!("[CLIENT] transcript_hash: {:02x?}", &transcript_hash[..8]);
+        eprintln!("[CLIENT] ch transcript len: {}", self.transcript.len());
+
         let mut ks = Tls13KeySchedule::new(hash.clone());
         ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
 
         let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
         let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
+
+        eprintln!("[CLIENT] client_hs_secret: {:02x?}", &client_hs_secret[..8]);
+        eprintln!("[CLIENT] server_hs_secret: {:02x?}", &server_hs_secret[..8]);
+
+        // Store the handshake transcript hash for Finished verification
+        self.handshake_transcript_hash = transcript_hash.clone();
 
         let client_hs_keys = client_write_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &hash);
         let server_hs_keys = server_write_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &hash);
@@ -504,18 +516,11 @@ impl Handshake {
                 }
                 20 => {
                     // Finished — verify verify_data
-                    // hs_msg is the full handshake message: type(1) + length(3) + verify_data
                     // Per RFC 8446 §4.4.4: verify_data is computed from transcript NOT including Finished
-                    
-                    // The verify_data is computed as:
-                    //   finished_key = HKDF-Expand-Label(handshake_traffic_secret, "finished", "", Hash.length)
-                    //   verify_data = HMAC(finished_key, Hash(handshake_transcript))
-                    //
-                    // Compute the transcript hash of all handshake messages BEFORE Finished:
-                    // ClientHello || ServerHello || EncryptedExtensions || Certificate || CertificateVerify
                     let full_transcript_hash = self.hasher().hash(&self.transcript);
 
-                    let server_hs_secret = ks.server_handshake_traffic_secret(&full_transcript_hash);
+                    // The server_hs_secret is derived from hash(CH || SH), stored during key derivation
+                    let server_hs_secret = ks.server_handshake_traffic_secret(&self.handshake_transcript_hash);
                     let finished_key = self.hasher().expand_label(&server_hs_secret, "finished", &[], self.hasher().len());
 
                     // hs_msg: type(1) + length(3) + verify_data
@@ -563,7 +568,8 @@ impl Handshake {
         // where finished_key = HKDF-Expand-Label(client_handshake_traffic_secret, "finished", "", Hash.length)
         // and transcript includes all handshake messages up to (but not including) client Finished
         let full_transcript_hash = self.hasher().hash(&self.transcript);
-        let client_hs_secret = ks.client_handshake_traffic_secret(&full_transcript_hash);
+        // Use the handshake transcript hash (CH || SH) for key derivation
+        let client_hs_secret = ks.client_handshake_traffic_secret(&self.handshake_transcript_hash);
         let finished_key = self.hasher().expand_label(&client_hs_secret, "finished", &[], self.hasher().len());
         let verify_data = match self.hasher() {
             Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),

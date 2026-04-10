@@ -42,7 +42,7 @@ pub fn fifo_path(id: &str) -> PathBuf {
 pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
     let dir = container_state_dir(id);
     fs::create_dir_all(&dir)?;
-    let json = serde_json::to_string_pretty(state)?;
+    let json = edgerun_json::to_string_pretty(state).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     fs::write(state_file_path(id), json)?;
     Ok(())
 }
@@ -50,7 +50,7 @@ pub fn save_state(state: &ContainerState, id: &str) -> io::Result<()> {
 /// Load container state from disk.
 pub fn load_state(id: &str) -> io::Result<ContainerState> {
     let data = fs::read_to_string(state_file_path(id))?;
-    serde_json::from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    edgerun_json::from_str(&data).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
 /// Delete container state directory and all contents.

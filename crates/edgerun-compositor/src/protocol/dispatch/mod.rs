@@ -11,6 +11,8 @@ use crate::compositor::seat::Seat;
 
 // Re-export constraint types from seat module for use in main.rs
 pub use crate::compositor::seat::{PointerConstraint, ConstraintType};
+// Re-export region registry for use in main.rs
+pub use crate::protocol::dispatch::compositor::RegionRegistry;
 use crate::input::keymap::{Keymap, Modifiers};
 use crate::protocol::wp_presentation_time::PresentationFeedbackTracker;
 use crate::render::cursor::Cursor;
@@ -34,6 +36,7 @@ pub mod linux_ext;
 mod zwp_ext;
 mod wlroots_ext;
 mod ime;
+mod layer_shell;
 
 /// Touch input state — tracks active touch slots and their positions.
 pub struct TouchState {
@@ -123,6 +126,9 @@ pub struct PrimarySelectionSource {
 }
 
 /// Global objects advertised to clients via wl_registry.global.
+/// Each entry: (interface_name, version, global_constructor_id_offset).
+/// The constructor ID offset is how many `global_name += 1` steps from the
+/// base in main.rs — this keeps the list in sync with send_globals_to_client.
 const GLOBALS: &[(&str, u32)] = &[
     ("wl_compositor", 4),
     ("wl_shm", 1),
@@ -156,7 +162,27 @@ const GLOBALS: &[(&str, u32)] = &[
     ("wp_single_pixel_buffer_manager_v1", 1),
     ("wp_fractional_scale_manager_v1", 1),
     ("wp_tearing_control_manager_v1", 1),
+    ("zwlr_layer_shell_v1", 4),
 ];
+
+/// Full global descriptor — pairs interface metadata with the
+/// runtime-assigned global name (object ID).
+pub struct GlobalDescriptor {
+    pub global_name: u32,
+    pub interface: &'static str,
+    pub version: u32,
+}
+
+/// Assign global names from a `global_name` counter and return
+/// descriptors ready for both registry binding and client announcement.
+pub fn assign_globals(mut global_name: u32) -> (u32, Vec<GlobalDescriptor>) {
+    let mut descriptors = Vec::with_capacity(GLOBALS.len());
+    for &(interface, version) in GLOBALS {
+        global_name += 1;
+        descriptors.push(GlobalDescriptor { global_name, interface, version });
+    }
+    (global_name, descriptors)
+}
 
 /// Screencopy state — holds the last rendered framebuffer snapshot.
 pub struct ScreencopyState {
@@ -209,6 +235,7 @@ pub struct DispatchContext<'a> {
     pub modifiers: &'a mut Modifiers,
     pub cursor: &'a mut Cursor,
     pub presentation_tracker: &'a mut PresentationFeedbackTracker,
+    pub region_registry: &'a mut RegionRegistry,
     pub client_registries: &'a mut HashMap<u32, Registry>,
     pub client_registry_ids: &'a mut HashMap<u32, u32>,
     pub client_compositor_ids: &'a mut HashMap<u32, u32>,
@@ -302,6 +329,7 @@ pub fn process_message(
     modifiers: &mut Modifiers,
     cursor: &mut Cursor,
     presentation_tracker: &mut PresentationFeedbackTracker,
+    region_registry: &mut RegionRegistry,
     client_registries: &mut HashMap<u32, Registry>,
     client_registry_ids: &mut HashMap<u32, u32>,
     client_compositor_ids: &mut HashMap<u32, u32>,
@@ -361,6 +389,7 @@ pub fn process_message(
         modifiers,
         cursor,
         presentation_tracker,
+        region_registry,
         client_registries,
         client_registry_ids,
         client_compositor_ids,
@@ -476,6 +505,8 @@ pub fn process_message(
         "zwp_input_method_manager_v2" => ime::handle_input_method_manager(&mut ctx),
         "zwp_input_method_v2" => ime::handle_input_method(&mut ctx),
         "zwp_input_method_keyboard_grab_v2" => ime::handle_keyboard_grab(&mut ctx),
+        "zwlr_layer_shell_v1" => layer_shell::handle_layer_shell(&mut ctx),
+        "zwlr_layer_surface_v1" => layer_shell::handle_layer_surface(&mut ctx),
         "edgerun_test_overlay" => {}
         _ => {}
     }

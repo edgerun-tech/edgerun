@@ -203,7 +203,7 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     join_explicit_namespaces(&cfg.ns_paths)?;
 
     // 3. UID/GID mapping
-    write_uid_map(&cfg.uid_map)?;
+    write_uid_map(&cfg.uid_map).map_err(|e| { eprintln!("[DEBUG] write_uid_map failed: {:?}", e); e })?;
     write_gid_map(&cfg.gid_map)?;
 
     // 4. Hostname

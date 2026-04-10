@@ -16,3 +16,4 @@ pub mod color_lut;
 pub mod text_bitmap;
 pub mod rect;
 pub mod gradient;
+pub mod simd_blend;

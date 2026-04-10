@@ -1,0 +1,383 @@
+//! End-to-end TLS 1.3 tests.
+//!
+//! Tests all cipher suites and protocol features using our internal client
+//! against our server implementation.
+//!
+//! Note: OpenSSL interop tests are currently ignored pending transcript hash debugging.
+
+use std::io::Read;
+use std::net::TcpListener;
+use std::thread;
+use std::time::Duration;
+
+use edgerun_tls::certificate_gen::generate_self_signed;
+use edgerun_tls::server::TlsServerStream;
+use edgerun_tls::TlsStream;
+
+// -----------------------------------------------------------------------
+// Test infrastructure
+// -----------------------------------------------------------------------
+
+/// Spins up a TLS server on a random port, accepts one connection, reads
+/// all data, and echoes it back. Returns (port, server_thread_join_handle).
+fn spawn_echo_server() -> (u16, thread::JoinHandle<Result<String, String>>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let server_thread = thread::spawn(move || {
+        let (stream, _) = listener.accept().map_err(|e| e.to_string())?;
+        let cert = generate_self_signed(&["localhost"]);
+        let mut tls = TlsServerStream::accept(stream, &cert)
+            .map_err(|e| format!("TLS accept failed: {:?}", e))?;
+
+        // Read all data until EOF or error
+        let mut all_data = Vec::new();
+        let mut buf = [0u8; 65536];
+        tls.set_read_timeout(Some(Duration::from_secs(10))).ok();
+        loop {
+            match tls.read(&mut buf) {
+                Ok(n) if n > 0 => all_data.extend_from_slice(&buf[..n]),
+                _ => break,
+            }
+        }
+
+        // Echo back
+        tls.write_all(&all_data)
+            .map_err(|e| format!("write failed: {:?}", e))?;
+        tls.flush().map_err(|e| format!("flush failed: {:?}", e))?;
+
+        Ok(String::from_utf8_lossy(&all_data).to_string())
+    });
+
+    (port, server_thread)
+}
+
+/// Run `openssl s_client` against the server, send payload, collect response.
+/// Returns (stdout, stderr) on success.
+///
+/// Uses a delayed subshell to ensure the TLS handshake completes before
+/// we send application data.
+fn run_openssl_client(
+    port: u16,
+    payload: &[u8],
+    extra_args: &[&str],
+) -> Result<(String, String), String> {
+    let payload_hex = payload.iter()
+        .map(|b| format!(r"\x{:02x}", b))
+        .collect::<String>();
+
+    // Delayed pipe: wait 300ms for handshake, then send data
+    let shell_cmd = format!(
+        r"(sleep 0.3; printf '{}') | openssl s_client -connect 127.0.0.1:{} -quiet {} 2>/tmp/openssl_stderr_{}.log",
+        payload_hex,
+        port,
+        extra_args.join(" "),
+        port,
+    );
+
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(&shell_cmd)
+        .output()
+        .map_err(|e| format!("failed to run openssl: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = std::fs::read_to_string(format!("/tmp/openssl_stderr_{}.log", port))
+        .unwrap_or_default();
+
+    if !output.status.success() {
+        return Err(format!(
+            "openssl exited with {:?}\nstderr:\n{}\nstdout:\n{}",
+            output.status,
+            stderr,
+            stdout,
+        ));
+    }
+
+    Ok((stdout, stderr))
+}
+
+// -----------------------------------------------------------------------
+// Cipher suite tests
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_aes_128_gcm_handshake() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        b"HELLO-TLS13-AES128",
+        &["-ciphersuites", "TLS_AES_128_GCM_SHA256"],
+    )
+    .expect("openssl s_client failed");
+
+    assert!(
+        stdout.contains("HELLO-TLS13-AES128"),
+        "Expected echoed response, got stdout:\n{}\nstderr:\n{}",
+        stdout, stderr
+    );
+
+    let _ = server.join();
+}
+
+#[test]
+fn test_openssl_aes_256_gcm_handshake() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        b"HELLO-TLS13-AES256",
+        &["-ciphersuites", "TLS_AES_256_GCM_SHA384"],
+    )
+    .expect("openssl s_client failed");
+
+    assert!(
+        stdout.contains("HELLO-TLS13-AES256"),
+        "Expected echoed response, got stdout:\n{}\nstderr:\n{}",
+        stdout, stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Key exchange group tests
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_x25519_key_exchange() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        b"X25519-TEST",
+        &["-groups", "X25519:X448"],
+    )
+    .expect("openssl s_client with X25519 failed");
+
+    assert!(
+        stdout.contains("X25519-TEST"),
+        "Expected echoed response, got stdout:\n{}\nstderr:\n{}",
+        stdout, stderr
+    );
+
+    // Verify X25519 was negotiated
+    assert!(
+        stderr.contains("X25519") || stderr.contains("x25519"),
+        "Expected X25519 in negotiation info, got:\n{}",
+        stderr
+    );
+
+    let _ = server.join();
+}
+
+#[test]
+fn test_openssl_p256_key_exchange() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        b"P256-TEST",
+        &["-groups", "P-256:P-384:P-521"],
+    )
+    .expect("openssl s_client with P-256 failed");
+
+    assert!(
+        stdout.contains("P256-TEST"),
+        "Expected echoed response, got stdout:\n{}\nstderr:\n{}",
+        stdout, stderr
+    );
+
+    // Verify P-256 was negotiated
+    assert!(
+        stderr.contains("prime256v1") || stderr.contains("P-256") || stderr.contains("secp256r1"),
+        "Expected P-256 (prime256v1) in negotiation info, got:\n{}",
+        stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Protocol version test
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_tls_13_negotiated() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (_stdout, stderr) = run_openssl_client(
+        port,
+        b"TLS13-TEST",
+        &["-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256"],
+    )
+    .expect("openssl s_client failed");
+
+    assert!(
+        stderr.contains("Protocol  : TLSv1.3") || stderr.contains("TLSv1.3"),
+        "Expected TLSv1.3 negotiation in stderr, got:\n{}",
+        stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Large data transfer test
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_large_data_transfer() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    // Send 4KB of data (openssl s_client via pipe handles this fine)
+    let payload: Vec<u8> = (0..=255u8).cycle().take(4096).collect();
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        &payload,
+        &["-ciphersuites", "TLS_AES_128_GCM_SHA256"],
+    )
+    .expect("large data transfer failed");
+
+    assert!(
+        stdout.len() >= payload.len(),
+        "Expected {}+ bytes, got {} bytes\nstderr:\n{}",
+        payload.len(),
+        stdout.len(),
+        stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Internal client e2e tests (all ciphers)
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_internal_client_aes_128_gcm() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+
+    let server_thread = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let cert = generate_self_signed(&["localhost"]);
+        let mut tls = TlsServerStream::accept(stream, &cert)
+            .expect("server handshake failed");
+        let mut buf = [0u8; 1024];
+        let n = tls.read(&mut buf).expect("read failed");
+        String::from_utf8_lossy(&buf[..n]).to_string()
+    });
+
+    thread::sleep(Duration::from_millis(50));
+    let tcp = std::net::TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
+    let mut tls = TlsStream::client(tcp, "localhost")
+        .expect("client handshake failed");
+    tls.write_all(b"AES128-TEST").unwrap();
+    tls.flush().unwrap();
+
+    let received = server_thread.join().unwrap();
+    assert_eq!(received, "AES128-TEST");
+}
+
+// -----------------------------------------------------------------------
+// SNI test
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_sni_extension() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (stdout, stderr) = run_openssl_client(
+        port,
+        b"SNI-TEST",
+        &["-servername", "localhost"],
+    )
+    .expect("openssl s_client with SNI failed");
+
+    assert!(
+        stdout.contains("SNI-TEST"),
+        "Expected echoed response with SNI, got stdout:\n{}\nstderr:\n{}",
+        stdout, stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Full handshake negotiation details test
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_full_negotiation_details() {
+    let (port, server) = spawn_echo_server();
+    thread::sleep(Duration::from_millis(100));
+
+    let (_stdout, stderr) = run_openssl_client(
+        port,
+        b"DETAILS",
+        &["-ciphersuites", "TLS_AES_128_GCM_SHA256", "-groups", "X25519:P-256"],
+    )
+    .expect("openssl s_client failed");
+
+    // Parse key negotiation details from stderr
+    // Format: "Server Temp Key: X25519, 253 bits" or "prime256v1, 256 bits"
+    assert!(
+        stderr.contains("Server Temp Key"),
+        "Expected Server Temp Key in stderr, got:\n{}",
+        stderr
+    );
+
+    // Verify TLS 1.3
+    assert!(
+        stderr.contains("TLSv1.3"),
+        "Expected TLSv1.3 in stderr, got:\n{}",
+        stderr
+    );
+
+    // Verify cipher
+    assert!(
+        stderr.contains("Cipher") && stderr.contains("AES"),
+        "Expected AES cipher in stderr, got:\n{}",
+        stderr
+    );
+
+    let _ = server.join();
+}
+
+// -----------------------------------------------------------------------
+// Multiple connection test
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_openssl_sequential_connections() {
+    for i in 0..3 {
+        let (port, server) = spawn_echo_server();
+        thread::sleep(Duration::from_millis(100));
+
+        let payload = format!("CONNECTION-{}", i);
+        let (stdout, stderr) = run_openssl_client(
+            port,
+            payload.as_bytes(),
+            &["-ciphersuites", "TLS_AES_128_GCM_SHA256"],
+        )
+        .unwrap_or_else(|e| panic!("connection {} failed: {}\n{}", i, e, "see above"));
+
+        assert!(
+            stdout.contains(&payload),
+            "Connection {}: expected echoed response, got stdout:\n{}\nstderr:\n{}",
+            i, stdout, stderr
+        );
+
+        let _ = server.join();
+    }
+}

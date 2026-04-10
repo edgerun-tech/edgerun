@@ -41,6 +41,7 @@ members = [
   "crates/edgerun-css-box",
   "crates/edgerun-css-sizing",
   "crates/edgerun-css-display",
+  "crates/edgerun-edit",
   "crates/edgerun-css-cascade",
   "crates/edgerun-css-values",
   "crates/edgerun-dom",
@@ -139,6 +140,8 @@ debug = false
 [workspace.dependencies]
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }
+# edgerun-json as drop-in replacement for serde_json
+edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
 libc = "0.2"
 itertools = "0.14"
 prost = { version = "0.14", default-features = false, features = ["derive"] }

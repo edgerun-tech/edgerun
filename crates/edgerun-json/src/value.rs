@@ -581,6 +581,36 @@ where
     }
 }
 
+impl<K, V> From<std::collections::HashMap<K, V>> for JsonValue
+where
+    K: Into<String> + Eq + std::hash::Hash,
+    V: Into<JsonValue>,
+{
+    fn from(map: std::collections::HashMap<K, V>) -> Self {
+        Self::Object(
+            map.into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    }
+}
+
+impl<K, V> From<std::collections::BTreeMap<K, V>> for JsonValue
+where
+    K: Into<String> + Ord,
+    V: Into<JsonValue>,
+{
+    fn from(map: std::collections::BTreeMap<K, V>) -> Self {
+        Self::Object(
+            map.into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    }
+}
+
 impl<K, V> core::iter::FromIterator<(K, V)> for JsonValue
 where
     K: Into<String>,

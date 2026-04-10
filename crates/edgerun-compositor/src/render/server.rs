@@ -7,7 +7,7 @@ use crate::drm::device::DrmDevice;
 use crate::drm::dumb::DumbBuffer;
 use crate::drm::kms;
 use crate::render::cursor::Cursor;
-use crate::render::shm::ShmManager;
+use crate::render::shm::{ShmManager, read_shm_buffer_with_fallback};
 
 /// Accumulated damage regions for incremental rendering.
 pub struct DamageAccumulator {
@@ -83,6 +83,19 @@ pub fn render_and_flip(
         damage.damage_all = false;
     }
 
+    // Composite layer surfaces: background + bottom layers (below toplevels)
+    for ls in shell.layer_surfaces_render_order() {
+        if ls.layer > 1 { break; } // only background(0) and bottom(1)
+        if let Some(surface) = surfaces.get(ls.surface_id) {
+            if surface.buffer.is_some() {
+                if let Some(ref buf) = surface.buffer {
+                    let transform = surface.buffer_transform;
+                    blit_surface_buffer(buf, pixels, ls.x, ls.y, width, height, stride, shm, transform);
+                }
+            }
+        }
+    }
+
     // Composite surfaces in z-order (toplevels + subsurfaces)
     // Always render surfaces with buffers — surfaces are composited
     // back-to-front onto the cleared framebuffer each frame.
@@ -106,6 +119,19 @@ pub fn render_and_flip(
                         let transform = sub_surface.buffer_transform;
                         blit_surface_buffer(buf, pixels, sub.x, sub.y, width, height, stride, shm, transform);
                     }
+                }
+            }
+        }
+    }
+
+    // Composite layer surfaces: top + overlay layers (above toplevels)
+    for ls in shell.layer_surfaces_render_order() {
+        if ls.layer < 2 { continue; } // only top(2) and overlay(3)
+        if let Some(surface) = surfaces.get(ls.surface_id) {
+            if surface.buffer.is_some() {
+                if let Some(ref buf) = surface.buffer {
+                    let transform = surface.buffer_transform;
+                    blit_surface_buffer(buf, pixels, ls.x, ls.y, width, height, stride, shm, transform);
                 }
             }
         }
@@ -163,39 +189,13 @@ fn blit_surface_buffer(
 ) {
     match buf {
         SurfaceBuffer::Shm { pool_fd, offset, width: buf_w, height: buf_h, stride: buf_stride, format } => {
-            // Use cached SHM pool mapping via O(1) fd lookup
-            if let Some(pool) = shm.get_pool_by_fd(*pool_fd) {
-                let len = (*buf_stride as usize) * (*buf_h as usize);
-                if let Some(data) = pool.read(*offset as usize, len) {
-                    blit_pixels(
-                        data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
-                        origin_x, origin_y, output_width, output_height, output_stride, pixels,
-                        transform,
-                    );
-                }
-            } else {
-                // Fallback: mmap temporarily if pool not in manager
-                let pool_size = match drm::fd_size(*pool_fd) {
-                    Ok(s) => s,
-                    Err(_) => return,
-                };
-                let mapping = unsafe {
-                    libc::mmap(std::ptr::null_mut(), pool_size, libc::PROT_READ,
-                               libc::MAP_SHARED, *pool_fd, 0)
-                };
-                if mapping == libc::MAP_FAILED { return; }
-                let pool_data = unsafe { std::slice::from_raw_parts(mapping as *const u8, pool_size) };
-                let off = *offset as usize;
-                let len = (*buf_stride as usize) * (*buf_h as usize);
-                if off + len <= pool_data.len() {
-                    let data = &pool_data[off..off + len];
-                    blit_pixels(
-                        data, *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
-                        origin_x, origin_y, output_width, output_height, output_stride, pixels,
-                        transform,
-                    );
-                }
-                unsafe { libc::munmap(mapping, pool_size) };
+            let len = (*buf_stride as usize) * (*buf_h as usize);
+            if let Some(result) = read_shm_buffer_with_fallback(shm, *pool_fd, *offset as usize, len) {
+                blit_pixels(
+                    result.as_bytes(), *format, *buf_w as u32, *buf_h as u32, *buf_stride as u32,
+                    origin_x, origin_y, output_width, output_height, output_stride, pixels,
+                    transform,
+                );
             }
         }
         SurfaceBuffer::DmaBuf { width: buf_w, height: buf_h, format, plane_fds, offsets, strides, num_planes: _ } => {
@@ -239,6 +239,9 @@ fn blit_surface_buffer(
 /// Shared pixel blitting logic — handles format conversion and clipping.
 /// Uses integer alpha blending for performance (no f32).
 /// Applies buffer transform (rotation/flip) before compositing.
+///
+/// The format match is hoisted outside the pixel loop for performance —
+/// we dispatch to a format-specific inner loop once per surface.
 fn blit_pixels(
     src_data: &[u8],
     format: u32,
@@ -260,19 +263,51 @@ fn blit_pixels(
     let draw_w = if rotated { buf_h } else { buf_w };
     let draw_h = if rotated { buf_w } else { buf_h };
 
+    // Hoist format match outside the per-pixel loop
+    match format {
+        0x34325258 /* XRGB8888 */ => {
+            blit_xrgb8888(src_data, buf_w, buf_h, buf_stride, origin_x, origin_y,
+                output_width, output_height, output_stride, pixels, transform, draw_w, draw_h);
+        }
+        0x34325241 /* ARGB8888 */ => {
+            blit_argb8888(src_data, buf_w, buf_h, buf_stride, origin_x, origin_y,
+                output_width, output_height, output_stride, pixels, transform, draw_w, draw_h);
+        }
+        0x34324241 /* ABGR8888 */ => {
+            blit_abgr8888(src_data, buf_w, buf_h, buf_stride, origin_x, origin_y,
+                output_width, output_height, output_stride, pixels, transform, draw_w, draw_h);
+        }
+        _ => {
+            // Default: treat as XRGB8888, direct copy
+            blit_xrgb8888(src_data, buf_w, buf_h, buf_stride, origin_x, origin_y,
+                output_width, output_height, output_stride, pixels, transform, draw_w, draw_h);
+        }
+    }
+}
+
+/// Inner loop for XRGB8888 — same format as framebuffer, direct copy.
+#[inline]
+fn blit_xrgb8888(
+    src_data: &[u8],
+    buf_w: u32, buf_h: u32, buf_stride: u32,
+    origin_x: i32, origin_y: i32,
+    output_width: u32, output_height: u32, output_stride: u32,
+    pixels: &mut [u8],
+    transform: i32,
+    draw_w: u32, draw_h: u32,
+) {
     for dy in 0..draw_h {
         for dx_local in 0..draw_w {
-            // Map output pixel back to source coordinates, applying inverse transform
             let (sx, sy) = match transform {
-                0 => (dx_local, dy),                         // normal
-                1 => (buf_w - 1 - dy, dx_local),             // 90 CW
-                2 => (buf_w - 1 - dx_local, buf_h - 1 - dy), // 180
-                3 => (dy, buf_h - 1 - dx_local),             // 270 CW (=90 CCW)
-                4 => (buf_w - 1 - dx_local, dy),             // flipped horizontal
-                5 => (buf_w - 1 - dy, buf_h - 1 - dx_local), // flipped+90
-                6 => (dx_local, buf_h - 1 - dy),             // flipped+180 (=vertical flip)
-                7 => (dy, dx_local),                         // flipped+270
-                _ => (dx_local, dy),                         // default: normal
+                0 => (dx_local, dy),
+                1 => (buf_w - 1 - dy, dx_local),
+                2 => (buf_w - 1 - dx_local, buf_h - 1 - dy),
+                3 => (dy, buf_h - 1 - dx_local),
+                4 => (buf_w - 1 - dx_local, dy),
+                5 => (buf_w - 1 - dy, buf_h - 1 - dx_local),
+                6 => (dx_local, buf_h - 1 - dy),
+                7 => (dy, dx_local),
+                _ => (dx_local, dy),
             };
 
             let out_x = origin_x + dx_local as i32;
@@ -285,63 +320,186 @@ fn blit_pixels(
             let dst_off = (out_y as u32 * output_stride + out_x as u32 * 4) as usize;
             if dst_off + 4 > pixels.len() { continue; }
 
-            // Target framebuffer is XRGB8888 (little-endian memory: [B, G, R, X])
-            match format {
-                0x34325258 /* XRGB8888 */ => {
-                    // Same format as framebuffer — direct copy
-                    // Source LE memory: [B, G, R, X], Dest LE memory: [B, G, R, X]
-                    pixels[dst_off] = src_data[src_off];
-                    pixels[dst_off + 1] = src_data[src_off + 1];
-                    pixels[dst_off + 2] = src_data[src_off + 2];
-                    pixels[dst_off + 3] = 0xff;
-                }
-                0x34325241 /* ARGB8888 */ => {
-                    // ARGB8888 little-endian: [B, G, R, A]
-                    // Same RGB order as framebuffer, needs alpha blending
-                    let alpha = src_data[src_off + 3];
-                    if alpha == 0 { continue; }
-                    if alpha == 255 {
-                        pixels[dst_off] = src_data[src_off];
-                        pixels[dst_off + 1] = src_data[src_off + 1];
-                        pixels[dst_off + 2] = src_data[src_off + 2];
-                    } else {
-                        // Integer alpha blending: dst = (src * alpha + dst * (255 - alpha)) / 255
-                        let a_inv = 255u32 - alpha as u32;
-                        pixels[dst_off] =     ((src_data[src_off] as u32 * alpha as u32 + pixels[dst_off] as u32 * a_inv) / 255) as u8;
-                        pixels[dst_off + 1] = ((src_data[src_off + 1] as u32 * alpha as u32 + pixels[dst_off + 1] as u32 * a_inv) / 255) as u8;
-                        pixels[dst_off + 2] = ((src_data[src_off + 2] as u32 * alpha as u32 + pixels[dst_off + 2] as u32 * a_inv) / 255) as u8;
-                    }
-                    pixels[dst_off + 3] = 0xff;
-                }
-                0x34324241 /* ABGR8888 */ => {
-                    // ABGR8888 little-endian: [R, G, B, A]
-                    // Need to swap R↔B to match XRGB8888 framebuffer [B, G, R, X]
-                    let alpha = src_data[src_off + 3];
-                    if alpha == 0 { continue; }
-                    if alpha == 255 {
-                        pixels[dst_off] =     src_data[src_off + 2]; // B <- source B (byte 2)
-                        pixels[dst_off + 1] = src_data[src_off + 1]; // G <- source G (byte 1)
-                        pixels[dst_off + 2] = src_data[src_off];     // R <- source R (byte 0)
-                    } else {
-                        let a_inv = 255u32 - alpha as u32;
-                        // Source: [R, G, B, A] → we need [B, G, R] for dest
-                        let src_b = src_data[src_off + 2] as u32;
-                        let src_g = src_data[src_off + 1] as u32;
-                        let src_r = src_data[src_off] as u32;
-                        pixels[dst_off] =     ((src_b * alpha as u32 + pixels[dst_off] as u32 * a_inv) / 255) as u8;
-                        pixels[dst_off + 1] = ((src_g * alpha as u32 + pixels[dst_off + 1] as u32 * a_inv) / 255) as u8;
-                        pixels[dst_off + 2] = ((src_r * alpha as u32 + pixels[dst_off + 2] as u32 * a_inv) / 255) as u8;
-                    }
-                    pixels[dst_off + 3] = 0xff;
-                }
-                _ => {
-                    // Default: treat as XRGB8888, direct copy
-                    pixels[dst_off] = src_data[src_off];
-                    pixels[dst_off + 1] = src_data[src_off + 1];
-                    pixels[dst_off + 2] = src_data[src_off + 2];
-                    pixels[dst_off + 3] = 0xff;
-                }
-            }
+            pixels[dst_off] = src_data[src_off];
+            pixels[dst_off + 1] = src_data[src_off + 1];
+            pixels[dst_off + 2] = src_data[src_off + 2];
+            pixels[dst_off + 3] = 0xff;
         }
+    }
+}
+
+/// Inner loop for ARGB8888 — needs alpha blending.
+#[inline]
+fn blit_argb8888(
+    src_data: &[u8],
+    buf_w: u32, buf_h: u32, buf_stride: u32,
+    origin_x: i32, origin_y: i32,
+    output_width: u32, output_height: u32, output_stride: u32,
+    pixels: &mut [u8],
+    transform: i32,
+    draw_w: u32, draw_h: u32,
+) {
+    for dy in 0..draw_h {
+        for dx_local in 0..draw_w {
+            let (sx, sy) = match transform {
+                0 => (dx_local, dy),
+                1 => (buf_w - 1 - dy, dx_local),
+                2 => (buf_w - 1 - dx_local, buf_h - 1 - dy),
+                3 => (dy, buf_h - 1 - dx_local),
+                4 => (buf_w - 1 - dx_local, dy),
+                5 => (buf_w - 1 - dy, buf_h - 1 - dx_local),
+                6 => (dx_local, buf_h - 1 - dy),
+                7 => (dy, dx_local),
+                _ => (dx_local, dy),
+            };
+
+            let out_x = origin_x + dx_local as i32;
+            let out_y = origin_y + dy as i32;
+            if out_x < 0 || out_y < 0 || out_x as u32 >= output_width || out_y as u32 >= output_height {
+                continue;
+            }
+            let src_off = sy as usize * buf_stride as usize + sx as usize * 4;
+            if src_off + 4 > src_data.len() { continue; }
+            let dst_off = (out_y as u32 * output_stride + out_x as u32 * 4) as usize;
+            if dst_off + 4 > pixels.len() { continue; }
+
+            let alpha = src_data[src_off + 3];
+            if alpha == 0 { continue; }
+            if alpha == 255 {
+                pixels[dst_off] = src_data[src_off];
+                pixels[dst_off + 1] = src_data[src_off + 1];
+                pixels[dst_off + 2] = src_data[src_off + 2];
+            } else {
+                let a_inv = 255u32 - alpha as u32;
+                pixels[dst_off] =
+                    ((src_data[src_off] as u32 * alpha as u32 + pixels[dst_off] as u32 * a_inv) / 255) as u8;
+                pixels[dst_off + 1] =
+                    ((src_data[src_off + 1] as u32 * alpha as u32 + pixels[dst_off + 1] as u32 * a_inv) / 255) as u8;
+                pixels[dst_off + 2] =
+                    ((src_data[src_off + 2] as u32 * alpha as u32 + pixels[dst_off + 2] as u32 * a_inv) / 255) as u8;
+            }
+            pixels[dst_off + 3] = 0xff;
+        }
+    }
+}
+
+/// Inner loop for ABGR8888 — needs R↔B swap + alpha blending.
+#[inline]
+fn blit_abgr8888(
+    src_data: &[u8],
+    buf_w: u32, buf_h: u32, buf_stride: u32,
+    origin_x: i32, origin_y: i32,
+    output_width: u32, output_height: u32, output_stride: u32,
+    pixels: &mut [u8],
+    transform: i32,
+    draw_w: u32, draw_h: u32,
+) {
+    for dy in 0..draw_h {
+        for dx_local in 0..draw_w {
+            let (sx, sy) = match transform {
+                0 => (dx_local, dy),
+                1 => (buf_w - 1 - dy, dx_local),
+                2 => (buf_w - 1 - dx_local, buf_h - 1 - dy),
+                3 => (dy, buf_h - 1 - dx_local),
+                4 => (buf_w - 1 - dx_local, dy),
+                5 => (buf_w - 1 - dy, buf_h - 1 - dx_local),
+                6 => (dx_local, buf_h - 1 - dy),
+                7 => (dy, dx_local),
+                _ => (dx_local, dy),
+            };
+
+            let out_x = origin_x + dx_local as i32;
+            let out_y = origin_y + dy as i32;
+            if out_x < 0 || out_y < 0 || out_x as u32 >= output_width || out_y as u32 >= output_height {
+                continue;
+            }
+            let src_off = sy as usize * buf_stride as usize + sx as usize * 4;
+            if src_off + 4 > src_data.len() { continue; }
+            let dst_off = (out_y as u32 * output_stride + out_x as u32 * 4) as usize;
+            if dst_off + 4 > pixels.len() { continue; }
+
+            let alpha = src_data[src_off + 3];
+            if alpha == 0 { continue; }
+            if alpha == 255 {
+                pixels[dst_off] = src_data[src_off + 2]; // B <- source B (byte 2)
+                pixels[dst_off + 1] = src_data[src_off + 1]; // G <- source G (byte 1)
+                pixels[dst_off + 2] = src_data[src_off];     // R <- source R (byte 0)
+            } else {
+                let a_inv = 255u32 - alpha as u32;
+                let src_b = src_data[src_off + 2] as u32;
+                let src_g = src_data[src_off + 1] as u32;
+                let src_r = src_data[src_off] as u32;
+                pixels[dst_off] =
+                    ((src_b * alpha as u32 + pixels[dst_off] as u32 * a_inv) / 255) as u8;
+                pixels[dst_off + 1] =
+                    ((src_g * alpha as u32 + pixels[dst_off + 1] as u32 * a_inv) / 255) as u8;
+                pixels[dst_off + 2] =
+                    ((src_r * alpha as u32 + pixels[dst_off + 2] as u32 * a_inv) / 255) as u8;
+            }
+            pixels[dst_off + 3] = 0xff;
+        }
+    }
+}
+
+// ─── Tests ─────────────────────────────────────────────────
+
+#[cfg(test)]
+mod blit_tests {
+    use super::*;
+
+    #[test]
+    fn test_blit_xrgb_direct_copy() {
+        let src = vec![
+            0x00, 0x00, 0xff, 0xff,
+            0x00, 0xff, 0x00, 0xff,
+            0xff, 0x00, 0x00, 0xff,
+            0xff, 0xff, 0x00, 0xff,
+        ];
+        let mut dst = vec![0u8; 16];
+        blit_xrgb8888(&src, 2, 2, 8, 0, 0, 2, 2, 8, &mut dst, 0, 2, 2);
+        assert_eq!(&dst[0..4], &[0x00, 0x00, 0xff, 0xff]);
+        assert_eq!(&dst[8..12], &[0xff, 0x00, 0x00, 0xff]);
+    }
+
+    #[test]
+    fn test_blit_argb_alpha_blend() {
+        let src = vec![0x00, 0x00, 0xff, 0x80];
+        let mut dst = vec![0x00, 0x00, 0x00, 0xff];
+        blit_argb8888(&src, 1, 1, 4, 0, 0, 1, 1, 4, &mut dst, 0, 1, 1);
+        assert_eq!(dst[2], 128);
+        assert_eq!(dst[3], 0xff);
+    }
+
+    #[test]
+    fn test_blit_argb_opaque_skip() {
+        let src = vec![0x00, 0x00, 0xff, 0x00];
+        let mut dst = vec![0x00, 0x00, 0x00, 0xff];
+        blit_argb8888(&src, 1, 1, 4, 0, 0, 1, 1, 4, &mut dst, 0, 1, 1);
+        assert_eq!(&dst[..], &[0x00, 0x00, 0x00, 0xff]);
+    }
+
+    #[test]
+    fn test_blit_abgr_r_b_swap() {
+        let src = vec![0xff, 0x80, 0x40, 0xff];
+        let mut dst = vec![0u8; 4];
+        blit_abgr8888(&src, 1, 1, 4, 0, 0, 1, 1, 4, &mut dst, 0, 1, 1);
+        assert_eq!(dst[0], 0x40);
+        assert_eq!(dst[1], 0x80);
+        assert_eq!(dst[2], 0xff);
+        assert_eq!(dst[3], 0xff);
+    }
+
+    #[test]
+    fn test_blit_transform_180() {
+        let src = vec![
+            0x01, 0x00, 0x00, 0xff,
+            0x02, 0x00, 0x00, 0xff,
+            0x03, 0x00, 0x00, 0xff,
+            0x04, 0x00, 0x00, 0xff,
+        ];
+        let mut dst = vec![0u8; 16];
+        blit_xrgb8888(&src, 2, 2, 8, 0, 0, 2, 2, 8, &mut dst, 2, 2, 2);
+        assert_eq!(dst[0], 0x04);
+        assert_eq!(dst[4], 0x03);
     }
 }

@@ -1,6 +1,6 @@
 //! State command implementation.
 //!
-/// Outputs container state JSON to stdout.
+//! Outputs container state JSON to stdout.
 
 use std::io;
 
@@ -22,7 +22,7 @@ pub fn cmd_state(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Output matching rspecs.State JSON format
     let pid_val = updated_state.pid.unwrap_or(0);
-    let output = serde_json::json!({
+    let output = edgerun_json::json!({
         "ociVersion": updated_state.oci_version,
         "id": updated_state.id,
         "status": updated_state.status,
@@ -30,6 +30,6 @@ pub fn cmd_state(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
         "bundle": updated_state.bundle,
         "annotations": updated_state.annotations.unwrap_or_default(),
     });
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    println!("{}", edgerun_json::to_string_pretty(&output).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?);
     Ok(())
 }

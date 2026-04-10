@@ -12,11 +12,10 @@ use std::os::raw::{c_int, c_void};
 
 use crate::compositor::surface::{SurfaceBuffer, SurfaceTree};
 use crate::compositor::shell::Shell;
-use crate::drm;
 use crate::drm::dumb::DumbBuffer;
 use crate::gpu::egl::{self, Egl, Gbm, EGLImage, GBM_BO_USE_RENDERING, GBM_BO_USE_SCANOUT};
 use crate::gpu::gl;
-use crate::render::shm::ShmManager;
+use crate::render::shm::{ShmManager, read_shm_buffer_with_fallback};
 use crate::render::cursor::{self, Cursor};
 
 /// A GL texture handle for a surface buffer.
@@ -424,48 +423,9 @@ impl GlCompositor {
 
         match buf {
             SurfaceBuffer::Shm { pool_fd, offset, stride, format: _, width: w, height: h } => {
-                // Use cached SHM pool mapping via O(1) fd lookup
-                let data: &[u8] = if let Some(pool) = shm.get_pool_by_fd(*pool_fd) {
-                    let len = (*stride as usize) * (*h as usize);
-                    match pool.read(*offset as usize, len) {
-                        Some(d) => d,
-                        None => return None,
-                    }
-                } else {
-                    // Fallback: mmap temporarily if pool not in manager
-                    let pool_size = drm::fd_size(*pool_fd).ok()?;
-                    let mapping = unsafe {
-                        libc::mmap(std::ptr::null_mut(), pool_size, libc::PROT_READ,
-                                   libc::MAP_SHARED, *pool_fd, 0)
-                    };
-                    if mapping == libc::MAP_FAILED { return None; }
-                    let pool_data = unsafe { std::slice::from_raw_parts(mapping as *const u8, pool_size) };
-                    let off = *offset as usize;
-                    let len = (*stride as usize) * (*h as usize);
-                    if off + len > pool_data.len() {
-                        unsafe { libc::munmap(mapping, pool_size) };
-                        return None;
-                    }
-                    let data = &pool_data[off..off + len];
-                    // Upload texture from fallback mapping
-                    unsafe {
-                        (self.gl_ctx.glBindTexture)(gl::GL_TEXTURE_2D, tex_id);
-                        (self.gl_ctx.glTexParameteri)(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MIN_FILTER, gl::GL_LINEAR as i32);
-                        (self.gl_ctx.glTexParameteri)(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_MAG_FILTER, gl::GL_LINEAR as i32);
-                        (self.gl_ctx.glTexParameteri)(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_WRAP_S, gl::GL_CLAMP_TO_EDGE as i32);
-                        (self.gl_ctx.glTexParameteri)(gl::GL_TEXTURE_2D, gl::GL_TEXTURE_WRAP_T, gl::GL_CLAMP_TO_EDGE as i32);
-                        (self.gl_ctx.glTexImage2D)(
-                            gl::GL_TEXTURE_2D, 0, gl::GL_RGBA as i32,
-                            *w as i32, *h as i32, 0,
-                            gl::GL_BGRA, gl::GL_UNSIGNED_BYTE,
-                            data.as_ptr() as *const _,
-                        );
-                    }
-                    unsafe { libc::munmap(mapping, pool_size) };
-                    let tex = GlTexture { id: tex_id, width: *w as u32, height: *h as u32, egl_image: egl::EGL_NO_IMAGE };
-                    self.texture_cache.insert(cache_key, tex);
-                    return Some((tex_id, *w as u32, *h as u32));
-                };
+                let len = (*stride as usize) * (*h as usize);
+                let Some(result) = read_shm_buffer_with_fallback(shm, *pool_fd, *offset as usize, len)
+                else { return None; };
 
                 unsafe {
                     (self.gl_ctx.glBindTexture)(gl::GL_TEXTURE_2D, tex_id);
@@ -478,7 +438,7 @@ impl GlCompositor {
                         gl::GL_TEXTURE_2D, 0, gl::GL_RGBA as i32,
                         *w as i32, *h as i32, 0,
                         gl::GL_BGRA, gl::GL_UNSIGNED_BYTE,
-                        data.as_ptr() as *const _,
+                        result.as_bytes().as_ptr() as *const _,
                     );
                 }
 

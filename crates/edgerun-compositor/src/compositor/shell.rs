@@ -130,6 +130,43 @@ impl SubsurfaceManager {
     }
 }
 
+/// A layer surface (zwlr_layer_surface_v1).
+#[derive(Debug)]
+pub struct LayerSurface {
+    /// zwlr_layer_surface_v1 object id.
+    pub id: u32,
+    /// Associated wl_surface id.
+    pub surface_id: u32,
+    /// Client that created this surface.
+    pub client_id: u32,
+    /// Layer: 0=background, 1=bottom, 2=top, 3=overlay.
+    pub layer: u32,
+    /// Anchor bitmask: top=1, bottom=2, left=4, right=8.
+    pub anchor: u32,
+    /// Exclusive zone. -1 = auto (use size), >= 0 = explicit zone.
+    pub exclusive_zone: i32,
+    /// Margins: top, right, bottom, left.
+    pub margin_top: i32,
+    pub margin_right: i32,
+    pub margin_bottom: i32,
+    pub margin_left: i32,
+    /// Keyboard interactivity: 0=none, 1=exclusive, 2=on_demand.
+    pub keyboard_interactivity: u32,
+    /// Desired size from client (0, 0) means stretch to fill available space.
+    pub desired_width: u32,
+    pub desired_height: u32,
+    /// Computed position and size after layout.
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    /// Configure state.
+    pub configured: bool,
+    pub configure_serial: Option<u32>,
+    /// Whether the surface has been closed.
+    pub closed: bool,
+}
+
 /// Shell state — manages xdg_wm_base and all toplevels/popups.
 pub struct Shell {
     /// xdg_wm_base object id.
@@ -177,6 +214,13 @@ pub struct Shell {
     pub syncobj_state: SyncobjState,
     /// Map from syncobj_surface object ID to wl_surface ID.
     pub syncobj_surface_map: HashMap<u32, u32>,
+
+    // Layer shell state
+    /// All layer surfaces keyed by layer_surface object id.
+    pub layer_surfaces: HashMap<u32, LayerSurface>,
+    /// Map from zwlr_layer_surface_v1 object id to associated xdg_popup object id
+    /// (for popups anchored to layer surfaces).
+    pub layer_popup_map: HashMap<u32, u32>,
 }
 
 /// Positioner state from xdg_positioner protocol.
@@ -225,6 +269,8 @@ impl Shell {
             pending_token_surface: HashMap::new(),
             syncobj_state: SyncobjState::new(),
             syncobj_surface_map: HashMap::new(),
+            layer_surfaces: HashMap::new(),
+            layer_popup_map: HashMap::new(),
         }
     }
 
@@ -549,6 +595,209 @@ impl Shell {
             .map(|tl| tl.states.as_slice())
             .unwrap_or(&DEFAULT_STATE)
     }
+
+    // ─── Layer shell methods ───────────────────────────────
+
+    /// Create a new layer surface.
+    pub fn create_layer_surface(
+        &mut self,
+        layer_surface_id: u32,
+        surface_id: u32,
+        layer: u32,
+        anchor: u32,
+        exclusive_zone: i32,
+        margin_top: i32,
+        margin_right: i32,
+        margin_bottom: i32,
+        margin_left: i32,
+        keyboard_interactivity: u32,
+        desired_width: u32,
+        desired_height: u32,
+    ) {
+        self.layer_surfaces.insert(layer_surface_id, LayerSurface {
+            id: layer_surface_id,
+            surface_id,
+            client_id: 0, // set by caller if needed
+            layer,
+            anchor,
+            exclusive_zone,
+            margin_top,
+            margin_right,
+            margin_bottom,
+            margin_left,
+            keyboard_interactivity,
+            desired_width,
+            desired_height,
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            configured: false,
+            configure_serial: None,
+            closed: false,
+        });
+    }
+
+    /// Send configure to a layer surface and compute its position.
+    pub fn configure_layer_surface(&mut self, layer_surface_id: u32, _width: u32, _height: u32) -> u32 {
+        let serial = self.configure_serial;
+        self.configure_serial += 1;
+        let output_w = self.output_width as u32;
+        let output_h = self.output_height as u32;
+
+        // Gather data needed for layout, then release borrow
+        let (anchor, margin_top, margin_right, margin_bottom, margin_left, desired_width, desired_height) =
+            if let Some(ls) = self.layer_surfaces.get(&layer_surface_id) {
+                (ls.anchor, ls.margin_top, ls.margin_right, ls.margin_bottom, ls.margin_left,
+                 ls.desired_width, ls.desired_height)
+            } else {
+                return serial;
+            };
+
+        // Compute layout
+        let margin_t = margin_top as i32;
+        let margin_r = margin_right as i32;
+        let margin_b = margin_bottom as i32;
+        let margin_l = margin_left as i32;
+        let mut w = if desired_width > 0 { desired_width }
+            else if anchor & crate::protocol::layer_shell::anchor::LEFT != 0
+                && anchor & crate::protocol::layer_shell::anchor::RIGHT != 0
+            { (output_w as i32 - margin_l - margin_r).max(0) as u32 }
+            else { output_w };
+        let mut h = if desired_height > 0 { desired_height }
+            else if anchor & crate::protocol::layer_shell::anchor::TOP != 0
+                && anchor & crate::protocol::layer_shell::anchor::BOTTOM != 0
+            { (output_h as i32 - margin_t - margin_b).max(0) as u32 }
+            else { output_h };
+        let h_center = (output_w as i32 - w as i32) / 2;
+        let v_center = (output_h as i32 - h as i32) / 2;
+        let x = if anchor & crate::protocol::layer_shell::anchor::LEFT != 0 { margin_l }
+            else if anchor & crate::protocol::layer_shell::anchor::RIGHT != 0
+            { output_w as i32 - w as i32 - margin_r }
+            else { h_center };
+        let y = if anchor & crate::protocol::layer_shell::anchor::TOP != 0 { margin_t }
+            else if anchor & crate::protocol::layer_shell::anchor::BOTTOM != 0
+            { output_h as i32 - h as i32 - margin_b }
+            else { v_center };
+
+        // Apply to the layer surface
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.configure_serial = Some(serial);
+            ls.configured = false;
+            ls.x = x;
+            ls.y = y;
+            ls.width = w;
+            ls.height = h;
+        }
+
+        serial
+    }
+
+    /// Acknowledge a configure from a client.
+    pub fn ack_layer_configure(&mut self, layer_surface_id: u32, serial: u32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            if ls.configure_serial == Some(serial) {
+                ls.configured = true;
+            }
+        }
+    }
+
+    /// Set layer surface size.
+    pub fn set_layer_surface_size(&mut self, layer_surface_id: u32, width: u32, height: u32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.desired_width = width;
+            ls.desired_height = height;
+        }
+    }
+
+    /// Set layer surface anchor.
+    pub fn set_layer_surface_anchor(&mut self, layer_surface_id: u32, anchor: u32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.anchor = anchor;
+        }
+    }
+
+    /// Set layer surface exclusive zone.
+    pub fn set_layer_surface_exclusive_zone(&mut self, layer_surface_id: u32, zone: i32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.exclusive_zone = zone;
+        }
+    }
+
+    /// Set layer surface margins.
+    pub fn set_layer_surface_margin(
+        &mut self, layer_surface_id: u32,
+        top: i32, right: i32, bottom: i32, left: i32,
+    ) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.margin_top = top;
+            ls.margin_right = right;
+            ls.margin_bottom = bottom;
+            ls.margin_left = left;
+        }
+    }
+
+    /// Set layer surface keyboard interactivity.
+    pub fn set_layer_surface_keyboard_interactivity(&mut self, layer_surface_id: u32, value: u32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.keyboard_interactivity = value;
+        }
+    }
+
+    /// Set layer surface layer.
+    pub fn set_layer_surface_layer(&mut self, layer_surface_id: u32, layer: u32) {
+        if let Some(ls) = self.layer_surfaces.get_mut(&layer_surface_id) {
+            ls.layer = layer;
+        }
+    }
+
+    /// Set a popup's parent to be this layer surface.
+    pub fn set_layer_popup_parent(&mut self, layer_surface_id: u32, popup_id: u32) {
+        self.layer_popup_map.insert(popup_id, layer_surface_id);
+    }
+
+    /// Destroy a layer surface.
+    pub fn destroy_layer_surface(&mut self, layer_surface_id: u32) {
+        if let Some(ls) = self.layer_surfaces.remove(&layer_surface_id) {
+            // Send keyboard focus away if this surface had it
+        }
+    }
+
+    /// Get layer surface IDs for a client.
+    pub fn layer_surfaces_for_client(&self, client_id: u32) -> Vec<u32> {
+        self.layer_surfaces.iter()
+            .filter(|(_, ls)| ls.client_id == client_id)
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
+    /// Get all layer surfaces sorted by layer (background → overlay).
+    pub fn layer_surfaces_z_order(&self) -> Vec<(u32, i32, i32, u32, u32)> {
+        let mut result: Vec<_> = self.layer_surfaces.values()
+            .filter(|ls| !ls.closed && ls.configured)
+            .map(|ls| (ls.surface_id, ls.x, ls.y, ls.width, ls.height, ls.layer))
+            .collect();
+        result.sort_by_key(|&(_, _, _, _, _, layer)| layer);
+        result.into_iter().map(|(sid, x, y, w, h, _)| (sid, x, y, w, h)).collect()
+    }
+
+    /// Get all layer surfaces in layer order (for rendering).
+    pub fn layer_surfaces_render_order(&self) -> Vec<&LayerSurface> {
+        let mut surfaces: Vec<_> = self.layer_surfaces.values()
+            .filter(|ls| !ls.closed && ls.configured)
+            .collect();
+        surfaces.sort_by_key(|ls| ls.layer);
+        surfaces
+    }
+
+    /// Check if any layer surface wants keyboard focus.
+    pub fn layer_keyboard_focus(&self) -> Option<u32> {
+        // Return the highest-layer surface with exclusive keyboard interactivity
+        self.layer_surfaces.values()
+            .filter(|ls| !ls.closed && ls.configured && ls.keyboard_interactivity == 1)
+            .max_by_key(|ls| ls.layer)
+            .map(|ls| ls.surface_id)
+    }
 }
 
 use crate::protocol;
@@ -658,5 +907,95 @@ mod tests {
 
         shell.ungrab_popup(1);
         assert!(!shell.popups.get(&1).unwrap().grabbed);
+    }
+
+    #[test]
+    fn test_layer_surface_create() {
+        let mut shell = Shell::new(100);
+        shell.create_layer_surface(
+            1, 5, 2,  // layer_surface_id, surface_id, layer (top)
+            0, 0, 0, 0, 0, 0,  // anchor, exclusive_zone, margins(4)
+            0, 0, 0,  // keyboard_interactivity, desired_width, desired_height
+        );
+        assert!(shell.layer_surfaces.contains_key(&1));
+        let ls = shell.layer_surfaces.get(&1).unwrap();
+        assert_eq!(ls.layer, 2);
+        assert_eq!(ls.surface_id, 5);
+    }
+
+    #[test]
+    fn test_layer_surface_configure_and_layout() {
+        let mut shell = Shell::new(100);
+        shell.set_output_size(1920, 1080, 60000, 520, 290, 1);
+        shell.create_layer_surface(1, 5, 2, 1, 0, 10, 20, 30, 40, 0, 0, 0);
+        let serial = shell.configure_layer_surface(1, 1920, 1080);
+        assert!(serial > 0);
+        let ls = shell.layer_surfaces.get(&1).unwrap();
+        // Top anchor = 1, so y should be margin_top = 10
+        assert_eq!(ls.y, 10);
+        // Not stretched horizontally, so x should be centered
+        assert_eq!(ls.x, 0); // centered: (1920 - 1920) / 2 = 0
+    }
+
+    #[test]
+    fn test_layer_surface_anchor_stretch() {
+        let mut shell = Shell::new(100);
+        shell.set_output_size(1920, 1080, 60000, 520, 290, 1);
+        // Anchor top + bottom, left + right = stretch both ways
+        let anchor = 1 | 2 | 4 | 8; // top | bottom | left | right
+        shell.create_layer_surface(1, 5, 1, anchor, 0, 50, 60, 70, 80, 0, 0, 0);
+        shell.configure_layer_surface(1, 1920, 1080);
+        let ls = shell.layer_surfaces.get(&1).unwrap();
+        assert_eq!(ls.width, 1920 - 80 - 60); // output - left_margin - right_margin
+        assert_eq!(ls.height, 1080 - 50 - 70); // output - top_margin - bottom_margin
+        assert_eq!(ls.x, 80);
+        assert_eq!(ls.y, 50);
+    }
+
+    #[test]
+    fn test_layer_surface_render_order() {
+        let mut shell = Shell::new(100);
+        shell.set_output_size(1920, 1080, 60000, 520, 290, 1);
+        shell.create_layer_surface(1, 5, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0); // overlay
+        shell.create_layer_surface(2, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); // background
+        shell.create_layer_surface(3, 7, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0); // top
+        // Configure and ack all to make them renderable
+        let s1 = shell.configure_layer_surface(1, 1920, 1080);
+        let s2 = shell.configure_layer_surface(2, 1920, 1080);
+        let s3 = shell.configure_layer_surface(3, 1920, 1080);
+        shell.ack_layer_configure(1, s1);
+        shell.ack_layer_configure(2, s2);
+        shell.ack_layer_configure(3, s3);
+        let order = shell.layer_surfaces_render_order();
+        // background(0) -> top(2) -> overlay(3)
+        assert_eq!(order[0].layer, 0);
+        assert_eq!(order[1].layer, 2);
+        assert_eq!(order[2].layer, 3);
+    }
+
+    #[test]
+    fn test_layer_surface_destroy() {
+        let mut shell = Shell::new(100);
+        shell.create_layer_surface(1, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        assert!(shell.layer_surfaces.contains_key(&1));
+        shell.destroy_layer_surface(1);
+        assert!(!shell.layer_surfaces.contains_key(&1));
+    }
+
+    #[test]
+    fn test_layer_keyboard_focus() {
+        let mut shell = Shell::new(100);
+        shell.set_output_size(1920, 1080, 60000, 520, 290, 1);
+        // Layer surface with exclusive keyboard interactivity
+        shell.create_layer_surface(1, 5, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0);
+        let s1 = shell.configure_layer_surface(1, 1920, 1080);
+        shell.ack_layer_configure(1, s1);
+        assert_eq!(shell.layer_keyboard_focus(), Some(5));
+        // Without keyboard interactivity
+        shell.create_layer_surface(2, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        let s2 = shell.configure_layer_surface(2, 1920, 1080);
+        shell.ack_layer_configure(2, s2);
+        // Only layer 1 has keyboard interactivity
+        assert_eq!(shell.layer_keyboard_focus(), Some(5));
     }
 }

@@ -647,11 +647,11 @@ fn arch_to_bpf(arch: &str) -> u32 {
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
 pub fn apply_seccomp() -> io::Result<()> {
     let prog = seccomp_bpf_prog();
-    let ret = do_seccomp(
+    let ret = unsafe { do_seccomp(
         SECCOMP_SET_MODE_FILTER,
         SECCOMP_FILTER_FLAG_TSYNC,
         prog.as_ptr() as *const c_void,
-    );
+    ) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 

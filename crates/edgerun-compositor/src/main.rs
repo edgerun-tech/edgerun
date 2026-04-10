@@ -12,47 +12,21 @@ use edgerun_compositor::compositor::dmabuf::DmabufParams;
 use edgerun_compositor::compositor::output::Output;
 use edgerun_compositor::compositor::seat::Seat;
 use edgerun_compositor::compositor::shell::Shell;
-use edgerun_compositor::compositor::surface::{BufferRegistry, DamageRect, ShmBufferInfo, SurfaceBuffer, SurfaceTree};
+use edgerun_compositor::compositor::surface::{BufferRegistry, DamageRect, SurfaceTree};
 use edgerun_compositor::drm;
 use edgerun_compositor::drm::device::DrmDevice;
 use edgerun_compositor::drm::dumb::DumbBuffer;
 use edgerun_compositor::drm::kms;
 use edgerun_compositor::input::evdev::EvdevManager;
-use edgerun_compositor::input::keymap::{self, Keymap, Modifiers};
+use edgerun_compositor::input::keymap::{Keymap, Modifiers};
 use edgerun_compositor::r#loop::{EventLoop, EventSource};
 use edgerun_compositor::vt::{VtEvent, VtManager};
-use edgerun_compositor::protocol::linux_dmabuf;
-use edgerun_compositor::protocol::linux_drm_syncobj;
-use edgerun_compositor::protocol::wl_compositor;
 use edgerun_compositor::protocol::wl_core;
-use edgerun_compositor::protocol::wl_data_device;
-use edgerun_compositor::protocol::wl_output;
-use edgerun_compositor::protocol::wl_seat;
-use edgerun_compositor::protocol::wl_shm;
-use edgerun_compositor::protocol::wl_subcompositor;
-use edgerun_compositor::protocol::wp_cursor_shape;
-use edgerun_compositor::protocol::wp_presentation_time;
-use edgerun_compositor::protocol::wp_presentation_time::PresentationFeedbackTracker;
-use edgerun_compositor::protocol::wp_viewporter;
-use edgerun_compositor::protocol::xdg_activation;
-use edgerun_compositor::protocol::xdg_decoration;
-use edgerun_compositor::protocol::xdg_shell;
-use edgerun_compositor::protocol::xdg_output;
-use edgerun_compositor::protocol::xdg_foreign;
-use edgerun_compositor::protocol::zwp_pointer_gestures;
-use edgerun_compositor::protocol::zwp_pointer_constraints;
-use edgerun_compositor::protocol::zwp_relative_pointer;
-use edgerun_compositor::protocol::zwp_text_input;
-use edgerun_compositor::protocol::zxdg_idle_inhibit;
-use edgerun_compositor::protocol::screencopy;
 use edgerun_compositor::protocol::text_input_v3;
 use edgerun_compositor::protocol::input_method_v2;
-use edgerun_compositor::protocol::primary_selection;
-use edgerun_compositor::protocol::data_control;
-use edgerun_compositor::protocol::single_pixel_buffer;
-use edgerun_compositor::protocol::fractional_scale;
-use edgerun_compositor::protocol::tearing_control;
-use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device, PointerConstraint, ConstraintType};
+use edgerun_compositor::protocol::wp_presentation_time;
+use edgerun_compositor::protocol::wp_presentation_time::PresentationFeedbackTracker;
+use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device, PointerConstraint, ConstraintType, RegionRegistry};
 use edgerun_compositor::render::cursor::Cursor;
 use edgerun_compositor::render::shm::ShmManager;
 use edgerun_compositor::render::server::{render_and_flip, DamageAccumulator};
@@ -257,6 +231,7 @@ fn main() {
     let mut surfaces = SurfaceTree::new();
     let mut buffers = BufferRegistry::new();
     let mut shm = ShmManager::new();
+    let mut region_registry = RegionRegistry::new();
 
     // Create output to compute scale factor
     let output = Output::from_drm(
@@ -290,41 +265,11 @@ fn main() {
     let mut current_primary_selection: Option<dispatch::PrimarySelectionSource> = None;
     let mut primary_selection_offer_counter: u32 = 0;
 
-    // Registry (globals advertised to clients)
+    // Registry (globals advertised to clients) — single source of truth
+    // via dispatch::assign_globals (matches dispatch::GLOBALS).
     let mut global_name: u32 = 1;
-
-    let compositor_global = { global_name += 1; global_name };
-    let shm_global = { global_name += 1; global_name };
-    let seat_global = { global_name += 1; global_name };
-    let xdg_wm_base_global = { global_name += 1; global_name };
-    let output_global = { global_name += 1; global_name };
-    let dmabuf_global = { global_name += 1; global_name };
-    let data_device_manager_global = { global_name += 1; global_name };
-    let subcompositor_global = { global_name += 1; global_name };
-    let decoration_manager_global = { global_name += 1; global_name };
-    let viewporter_global = { global_name += 1; global_name };
-    let cursor_shape_manager_global = { global_name += 1; global_name };
-    let activation_global = { global_name += 1; global_name };
-    let presentation_global = { global_name += 1; global_name };
-    let relative_pointer_manager_global = { global_name += 1; global_name };
-    let pointer_gestures_global = { global_name += 1; global_name };
-    let text_input_manager_global = { global_name += 1; global_name };
-    let idle_inhibit_manager_global = { global_name += 1; global_name };
-    let pointer_constraints_global = { global_name += 1; global_name };
-    let xdg_output_manager_global = { global_name += 1; global_name };
-    let xdg_exporter_global = { global_name += 1; global_name };
-    let xdg_importer_global = { global_name += 1; global_name };
-    let syncobj_global = { global_name += 1; global_name };
-    let syncobj_surface_global = { global_name += 1; global_name };
-    let syncobj_timeline_global = { global_name += 1; global_name };
-    let screencopy_manager_global = { global_name += 1; global_name };
-    let text_input_v3_manager_global = { global_name += 1; global_name };
-    let input_method_v2_manager_global = { global_name += 1; global_name };
-    let primary_selection_manager_global = { global_name += 1; global_name };
-    let data_control_manager_global = { global_name += 1; global_name };
-    let single_pixel_buffer_global = { global_name += 1; global_name };
-    let fractional_scale_global = { global_name += 1; global_name };
-    let tearing_control_global = { global_name += 1; global_name };
+    let (global_name_after, globals) = dispatch::assign_globals(global_name);
+    global_name = global_name_after;
 
     // Input
     let mut input_mgr = EvdevManager::new();
@@ -553,29 +498,7 @@ fn main() {
                             client_pool_map.insert(client_id, HashMap::new());
                             dmabuf_pending.insert(client_id, DmabufParams::new());
 
-                            send_globals_to_client(
-                                &mut server, client_id, registry_id,
-                                compositor_global, shm_global, seat_global,
-                                xdg_wm_base_global, output_global, dmabuf_global,
-                                data_device_manager_global, subcompositor_global,
-                                decoration_manager_global, viewporter_global,
-                                cursor_shape_manager_global, activation_global,
-                                presentation_global, relative_pointer_manager_global,
-                                pointer_gestures_global, text_input_manager_global,
-                                idle_inhibit_manager_global,
-                                pointer_constraints_global,
-                                xdg_output_manager_global,
-                                xdg_exporter_global, xdg_importer_global,
-                                syncobj_global, syncobj_surface_global, syncobj_timeline_global,
-                                screencopy_manager_global,
-                                text_input_v3_manager_global,
-                                input_method_v2_manager_global,
-                                primary_selection_manager_global,
-                                data_control_manager_global,
-                                single_pixel_buffer_global,
-                                fractional_scale_global,
-                                tearing_control_global,
-                            );
+                            send_globals_to_client(&mut server, client_id, registry_id, &globals);
 
                             // Flush immediately — the client socket is read-only in epoll,
                             // so EPOLLOUT never fires to drain the send queue.
@@ -616,6 +539,7 @@ fn main() {
                                 &mut seat_obj, &mut keymap_obj, &mut modifiers,
                                 &mut cursor,
                                 &mut presentation_tracker,
+                                &mut region_registry,
                                 &mut client_registries, &mut client_registry_ids,
                                 &mut client_compositor_ids, &mut client_shm_ids,
                                 &mut client_seat_ids, &mut client_xdg_base_ids,
@@ -802,79 +726,13 @@ fn send_globals_to_client(
     server: &mut WaylandServer,
     client_id: u32,
     registry_id: u32,
-    compositor_global: u32,
-    shm_global: u32,
-    seat_global: u32,
-    xdg_wm_base_global: u32,
-    output_global: u32,
-    dmabuf_global: u32,
-    data_device_manager_global: u32,
-    subcompositor_global: u32,
-    decoration_manager_global: u32,
-    viewporter_global: u32,
-    cursor_shape_manager_global: u32,
-    activation_global: u32,
-    presentation_global: u32,
-    relative_pointer_manager_global: u32,
-    pointer_gestures_global: u32,
-    text_input_manager_global: u32,
-    idle_inhibit_manager_global: u32,
-    pointer_constraints_global: u32,
-    xdg_output_manager_global: u32,
-    xdg_exporter_global: u32,
-    xdg_importer_global: u32,
-    syncobj_global: u32,
-    syncobj_surface_global: u32,
-    syncobj_timeline_global: u32,
-    screencopy_manager_global: u32,
-    text_input_v3_manager_global: u32,
-    input_method_v2_manager_global: u32,
-    primary_selection_manager_global: u32,
-    data_control_manager_global: u32,
-    single_pixel_buffer_global: u32,
-    fractional_scale_global: u32,
-    tearing_control_global: u32,
+    globals: &[dispatch::GlobalDescriptor],
 ) {
-    let globals = [
-        (compositor_global, wl_compositor::WL_COMPOSITOR, wl_compositor::WL_COMPOSITOR_VERSION),
-        (shm_global, wl_shm::WL_SHM, wl_shm::WL_SHM_VERSION),
-        (seat_global, wl_seat::WL_SEAT, wl_seat::WL_SEAT_VERSION),
-        (xdg_wm_base_global, xdg_shell::XDG_WM_BASE, xdg_shell::XDG_WM_BASE_VERSION),
-        (output_global, wl_output::WL_OUTPUT, wl_output::WL_OUTPUT_VERSION),
-        (dmabuf_global, linux_dmabuf::ZWP_LINUX_DMABUF_V1, linux_dmabuf::ZWP_LINUX_DMABUF_V1_VERSION),
-        (data_device_manager_global, wl_data_device::WL_DATA_DEVICE_MANAGER, wl_data_device::WL_DATA_DEVICE_MANAGER_VERSION),
-        (subcompositor_global, wl_subcompositor::WL_SUBCOMPOSITOR, wl_subcompositor::WL_SUBCOMPOSITOR_VERSION),
-        (decoration_manager_global, xdg_decoration::ZXDG_DECORATION_MANAGER_V1, xdg_decoration::ZXDG_DECORATION_MANAGER_V1_VERSION),
-        (viewporter_global, wp_viewporter::WP_VIEWPORTER, wp_viewporter::WP_VIEWPORTER_VERSION),
-        (cursor_shape_manager_global, wp_cursor_shape::WP_CURSOR_SHAPE_MANAGER_V1, wp_cursor_shape::WP_CURSOR_SHAPE_MANAGER_V1_VERSION),
-        (activation_global, xdg_activation::ZXDG_ACTIVATION_V1, xdg_activation::ZXDG_ACTIVATION_V1_VERSION),
-        (presentation_global, wp_presentation_time::WP_PRESENTATION, wp_presentation_time::WP_PRESENTATION_VERSION),
-        (relative_pointer_manager_global, zwp_relative_pointer::ZWP_RELATIVE_POINTER_MANAGER_V1, zwp_relative_pointer::ZWP_RELATIVE_POINTER_MANAGER_V1_VERSION),
-        (pointer_gestures_global, zwp_pointer_gestures::ZWP_POINTER_GESTURES_V1, zwp_pointer_gestures::ZWP_POINTER_GESTURES_V1_VERSION),
-        (text_input_manager_global, zwp_text_input::ZWP_TEXT_INPUT_MANAGER_V1, zwp_text_input::ZWP_TEXT_INPUT_MANAGER_V1_VERSION),
-        (idle_inhibit_manager_global, zxdg_idle_inhibit::ZWP_IDLE_INHIBIT_MANAGER_V1, zxdg_idle_inhibit::ZWP_IDLE_INHIBIT_MANAGER_V1_VERSION),
-        (pointer_constraints_global, zwp_pointer_constraints::ZWP_POINTER_CONSTRAINTS_V1, zwp_pointer_constraints::ZWP_POINTER_CONSTRAINTS_V1_VERSION),
-        (xdg_output_manager_global, xdg_output::ZXDG_OUTPUT_MANAGER_V1, xdg_output::ZXDG_OUTPUT_MANAGER_V1_VERSION),
-        (xdg_exporter_global, xdg_foreign::ZXDG_EXPORTER_V2, xdg_foreign::ZXDG_EXPORTER_V2_VERSION),
-        (xdg_importer_global, xdg_foreign::ZXDG_IMPORTER_V2, xdg_foreign::ZXDG_IMPORTER_V2_VERSION),
-        (syncobj_global, linux_drm_syncobj::LINUX_DRM_SYNCOBJ_V1, linux_drm_syncobj::LINUX_DRM_SYNCOBJ_V1_VERSION),
-        (syncobj_surface_global, linux_drm_syncobj::SURFACE_V1, linux_drm_syncobj::SURFACE_V1_VERSION),
-        (syncobj_timeline_global, linux_drm_syncobj::TIMELINE_V1, linux_drm_syncobj::TIMELINE_V1_VERSION),
-        (screencopy_manager_global, screencopy::ZWLR_SCREENCOPY_MANAGER_V1, screencopy::ZWLR_SCREENCOPY_MANAGER_V1_VERSION),
-        (text_input_v3_manager_global, text_input_v3::ZWP_TEXT_INPUT_MANAGER_V3, text_input_v3::ZWP_TEXT_INPUT_MANAGER_V3_VERSION),
-        (input_method_v2_manager_global, input_method_v2::ZWP_INPUT_METHOD_MANAGER_V2, input_method_v2::ZWP_INPUT_METHOD_MANAGER_V2_VERSION),
-        (primary_selection_manager_global, primary_selection::ZWLR_PRIMARY_SELECTION_MANAGER_V1, primary_selection::ZWLR_PRIMARY_SELECTION_MANAGER_V1_VERSION),
-        (data_control_manager_global, data_control::ZWLR_DATA_CONTROL_MANAGER_V1, data_control::ZWLR_DATA_CONTROL_MANAGER_V1_VERSION),
-        (single_pixel_buffer_global, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_MANAGER_V1, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_MANAGER_V1_VERSION),
-        (fractional_scale_global, fractional_scale::WP_FRACTIONAL_SCALE_MANAGER_V1, fractional_scale::WP_FRACTIONAL_SCALE_MANAGER_V1_VERSION),
-        (tearing_control_global, tearing_control::WP_TEARING_CONTROL_MANAGER_V1, tearing_control::WP_TEARING_CONTROL_MANAGER_V1_VERSION),
-    ];
-
-    for &(name, interface, version) in &globals {
+    for g in globals {
         let mut args = Vec::new();
-        args.extend_from_slice(&name.to_le_bytes());
-        crate::wire::encode::encode_string(&mut args, interface);
-        args.extend_from_slice(&version.to_le_bytes());
+        args.extend_from_slice(&g.global_name.to_le_bytes());
+        crate::wire::encode::encode_string(&mut args, g.interface);
+        args.extend_from_slice(&g.version.to_le_bytes());
 
         if let Some(client) = server.client_mut(client_id) {
             client.send_message(wire::Message {
