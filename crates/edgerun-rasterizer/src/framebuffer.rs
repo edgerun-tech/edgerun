@@ -2,15 +2,15 @@
 //! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 
 /// XRGB8888 framebuffer. In little-endian memory: [B, G, R, X].
-pub struct Framebuffer {
-    pub pixels: &'static mut [u8],
+pub struct Framebuffer<'a> {
+    pub pixels: &'a mut [u8],
     pub width: u32,
     pub height: u32,
-    pub stride: u32, // bytes per row
+    pub stride: u32,
 }
 
-impl Framebuffer {
-    pub fn new(pixels: &'static mut [u8], width: u32, height: u32) -> Self {
+impl<'a> Framebuffer<'a> {
+    pub fn new(pixels: &'a mut [u8], width: u32, height: u32) -> Self {
         let stride = width * 4;
         Self { pixels, width, height, stride }
     }
@@ -25,10 +25,10 @@ impl Framebuffer {
             let row = (cy * self.stride) as usize;
             for cx in x0..x1 {
                 let i = row + (cx as usize) * 4;
-                self.pixels[i]     = b; // B
-                self.pixels[i + 1] = g; // G
-                self.pixels[i + 2] = r; // R
-                self.pixels[i + 3] = 0xFF; // X (unused)
+                self.pixels[i]     = b;
+                self.pixels[i + 1] = g;
+                self.pixels[i + 2] = r;
+                self.pixels[i + 3] = 0xFF;
             }
         }
     }
@@ -36,10 +36,7 @@ impl Framebuffer {
     #[inline]
     pub fn fill_alpha(&mut self, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, alpha: u8) {
         if alpha == 0 { return; }
-        if alpha == 255 {
-            self.fill_solid(x, y, w, h, r, g, b);
-            return;
-        }
+        if alpha == 255 { self.fill_solid(x, y, w, h, r, g, b); return; }
         let a = alpha as u32;
         let inv_a = 255 - a;
         let x0 = x.min(self.width - 1);
@@ -76,12 +73,10 @@ impl Framebuffer {
     }
 
     pub fn clear(&mut self) {
-        let bg = [0x1a, 0x1a, 0x2e, 0xFF]; // dark blue-gray
+        let bg = [0x1a, 0x1a, 0x2e, 0xFF];
         for i in (0..self.pixels.len()).step_by(4) {
-            self.pixels[i]     = bg[0];
-            self.pixels[i + 1] = bg[1];
-            self.pixels[i + 2] = bg[2];
-            self.pixels[i + 3] = bg[3];
+            self.pixels[i] = bg[0]; self.pixels[i+1] = bg[1];
+            self.pixels[i+2] = bg[2]; self.pixels[i+3] = bg[3];
         }
     }
 }

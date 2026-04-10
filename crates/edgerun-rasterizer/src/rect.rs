@@ -5,7 +5,7 @@ use crate::border_lut;
 use crate::blend_lut;
 
 /// Draw a filled rectangle with optional alpha.
-pub fn fill_rect(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, alpha: u8) {
+pub fn fill_rect(fb: &mut Framebuffer<'_>, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, alpha: u8) {
     if alpha == 0 { return; }
     if alpha == 255 {
         fb.fill_solid(x, y, w, h, r, g, b);
@@ -15,7 +15,7 @@ pub fn fill_rect(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, r: u8, g:
 }
 
 /// Draw a rectangle border with a specific style.
-pub fn stroke_rect(fb: &mut Framebuffer, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, style: u8, thickness: u32) {
+pub fn stroke_rect(fb: &mut Framebuffer<'_>, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, style: u8, thickness: u32) {
     if thickness == 0 { return; }
     let pattern = border_lut::border_pattern(style);
 

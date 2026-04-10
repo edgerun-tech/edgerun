@@ -27,7 +27,7 @@ pub enum RasterCommand {
 }
 
 /// Rasterize a list of commands into a framebuffer.
-pub fn rasterize(fb: &mut Framebuffer, commands: &[RasterCommand]) {
+pub fn rasterize(fb: &mut Framebuffer<'_>, commands: &[RasterCommand]) {
     for cmd in commands {
         match cmd {
             RasterCommand::FillRect { x, y, w, h, r, g, b, a } => {
