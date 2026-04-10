@@ -114,8 +114,54 @@ pub fn handle_device(ctx: &mut DispatchContext) {
                 }
             }
         }
-        wl_data_device::data_device_request::START_DRAG => {}
-        wl_data_device::data_device_request::RELEASE => {}
+        wl_data_device::data_device_request::START_DRAG => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let source_id = cursor_obj.object().unwrap_or(0);
+            let origin_surface_id = cursor_obj.object().unwrap_or(0);
+            let icon_id = cursor_obj.object().unwrap_or(0);
+            let _serial = cursor_obj.uint().unwrap_or(0);
+            let _ = (origin_surface_id, icon_id);
+
+            if source_id != 0 {
+                // Create a drag data offer
+                *ctx.selection_offer_counter += 1;
+                let offer_id = *ctx.selection_offer_counter;
+
+                *ctx.current_data_source = Some(DataSource {
+                    id: source_id,
+                    owner_client_id: ctx.client_id,
+                    mime_types: Vec::new(),
+                });
+
+                // Broadcast drag enter to the target surface
+                if let Some(surface) = ctx.surfaces.get(origin_surface_id) {
+                    for (&cid, &device_id) in ctx.client_data_device_ids.iter() {
+                        if let Some(client) = ctx.server.client_mut(cid) {
+                            client.send_message(wl_data_device::data_device_data_offer_event(device_id, offer_id));
+                            client.send_message(wl_data_device::data_device_enter_event(
+                                device_id,
+                                ctx.seat.next_serial(),
+                                origin_surface_id,
+                                surface.x as f64,
+                                surface.y as f64,
+                                offer_id,
+                            ));
+                            if let Some(ref source) = *ctx.current_data_source {
+                                for mime in &source.mime_types {
+                                    client.send_message(wl_data_device::data_offer_offer_event(offer_id, mime));
+                                }
+                            }
+                        }
+                    }
+                    eprintln!("[edgerun-compositor] Drag started from surface {}", origin_surface_id);
+                }
+            }
+        }
+        wl_data_device::data_device_request::RELEASE => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

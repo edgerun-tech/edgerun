@@ -1,5 +1,5 @@
 [package]
-name = "edgerun-animations"
+name = "edgerun-css-animations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

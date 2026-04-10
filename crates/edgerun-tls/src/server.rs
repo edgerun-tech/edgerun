@@ -657,9 +657,12 @@ impl ServerHandshake {
         let fragment = read_record_fragment(&mut self.stream, len)?;
 
         let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
-        if inner_type != 20 {
+
+        // plaintext IS the handshake message: type(1) + length(3) + verify_data
+        let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
+        if hs_type != 20 {
             return Err(TlsError::HandshakeFailure(format!(
-                "Expected Finished (type 20), got {}", inner_type,
+                "Expected Finished (type 20), got {}", hs_type,
             )));
         }
 
@@ -672,18 +675,19 @@ impl ServerHandshake {
             Hasher::Sha384 => hmac_sha384(&finished_key, &transcript_hash),
         };
 
-        if plaintext.len() < expected_verify.len()
-            || !constant_time_eq(&plaintext[..expected_verify.len()], &expected_verify)
-        {
+        // plaintext = type(1) + length(3) + verify_data
+        // verify_data starts at offset 4
+        if plaintext.len() < 4 + expected_verify.len() {
+            return Err(TlsError::Protocol("Client Finished verification data too short".into()));
+        }
+        let client_verify_data = &plaintext[4..4 + expected_verify.len()];
+
+        if !constant_time_eq(client_verify_data, &expected_verify) {
             return Err(TlsError::Protocol("Client Finished verification failed".into()));
         }
 
         // Append client Finished to transcript
-        let mut finished_msg = Vec::with_capacity(4 + plaintext.len());
-        finished_msg.push(20);
-        finished_msg.extend_from_slice(&(plaintext.len() as u32).to_be_bytes()[1..]);
-        finished_msg.extend_from_slice(&plaintext);
-        self.transcript.extend_from_slice(&finished_msg);
+        self.transcript.extend_from_slice(&plaintext);
 
         Ok(())
     }
@@ -887,10 +891,6 @@ mod tests {
     use crate::key_exchange::EcdhKeyPair;
     use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys};
     use crate::record::RecordCipher;
-
-    // -----------------------------------------------------------------------
-    // 1. ClientHello build → parse round-trip
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_client_hello_roundtrip() {
@@ -1269,9 +1269,6 @@ mod tests {
     // 15. Full client↔server handshake using pipes (no real TCP)
     // -----------------------------------------------------------------------
 
-    use std::io::Cursor;
-    use std::sync::mpsc;
-
     #[test]
     fn test_handshake_transcript_transcript_match() {
         // This test verifies that the server and client build the same
@@ -1297,7 +1294,7 @@ mod tests {
         let client_ch_hash = hash.hash(&ch_msg);
 
         // ========== SERVER SIDE: parse ClientHello ==========
-        let ch_parsed = ClientHello::parse(&ch_msg).unwrap();
+        let _ch_parsed = ClientHello::parse(&ch_msg).unwrap();
         let server_ch_hash = hash.hash(&ch_msg);
         assert_eq!(client_ch_hash, server_ch_hash, "ClientHello hashes must match");
 

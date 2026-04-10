@@ -252,6 +252,13 @@ use crate::protocol::text_input_v3::TextInputState;
 use crate::protocol::input_method_v2;
 use crate::protocol::input_method_v2::IMEState;
 
+/// Helper: send delete_id to a client when destroying an object.
+fn send_delete_id(server: &mut WaylandServer, client_id: u32, obj_id: u32) {
+    if let Some(client) = server.client_mut(client_id) {
+        client.send_message(crate::protocol::wl_core::display_delete_id_event(obj_id));
+    }
+}
+
 /// Dispatch a single Wayland message to the appropriate protocol handler.
 #[allow(clippy::too_many_arguments)]
 pub fn process_message(

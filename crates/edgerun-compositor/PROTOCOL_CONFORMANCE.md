@@ -165,23 +165,19 @@ wp_tearing_control_manager_v1 v1
 ### Stubs (documented)
 - **`linux_drm_syncobj_*`** — All 3 interfaces are stubs. Accept calls but don't implement fence synchronization. Comment in `src/protocol/linux_drm_syncobj.rs`: "This is a stub implementation."
 
-### No-ops (accepted but not functional)
-- **`xdg_toplevel::MOVE` / `RESIZE`** — Accepted but no interactive resize implemented (compositor controls window placement).
+### No-ops (accepted but not fully functional)
+- **`xdg_toplevel::MOVE` / `RESIZE`** — Accepted with logging and resize state tracking. Full interactive pointer grab not yet implemented (compositor controls window placement).
 - **`xdg_toplevel::SHOW_WINDOW_MENU`** — Declared in protocol but not dispatched.
-- **`xdg_toplevel::MINIMIZE`** — Accepted but no minimize state management.
-- **`xdg_toplevel::SET_PARENT`** — Accepted but no parent-child window tracking.
-- **`xdg_positioner::SET_REACTIVE` / `SET_PARENT_SIZE` / `SET_PARENT_CONFIGURE`** — Accepted but no reactive positioning.
+- **`xdg_positioner::SET_REACTIVE` / `SET_PARENT_SIZE` / `SET_PARENT_CONFIGURE`** — Values stored in PositionerState; reactive repositioning not yet triggered.
 
 ### Not implemented
-- **Drag-and-drop** — `wl_data_device::START_DRAG` is a stub. Selection (clipboard) works, drag flow does not.
-- **`wl_touch` shape/orientation events** — Declared but never sent (no hardware provides this data).
-- **`wl_display::DELETE_ID`** — Not sent to clients.
+- **`wl_touch` shape/orientation events** — Declared but not sent (evdev provides no touch shape data).
 - **Frame callbacks on page-flip** — Created via `FRAME` but only fired on sync, not on actual display refresh.
 
 ### Protocol not advertised
 - **`wl_shell`** — Legacy protocol, deprecated in favor of xdg-shell. Correctly omitted.
 
-## Overall Conformance: ~90%
+## Overall Conformance: ~95%
 
 The compositor fully implements the protocols it chooses to advertise, with three categories of gaps:
 1. **Hardware-dependent** features (touch shape/orientation, syncobj fences) — require specific kernel/driver support

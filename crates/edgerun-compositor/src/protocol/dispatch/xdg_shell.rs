@@ -146,38 +146,17 @@ pub fn handle_toplevel(ctx: &mut DispatchContext) {
         }
         xdg_shell::xdg_toplevel_request::SET_MIN_SIZE => { let _ = &ctx.msg; }
         xdg_shell::xdg_toplevel_request::SET_MAX_SIZE => { let _ = &ctx.msg; }
-        xdg_shell::xdg_toplevel_request::MAXIMIZE | xdg_shell::xdg_toplevel_request::SET_MAXIMIZED => {
+        xdg_shell::xdg_toplevel_request::MINIMIZE | xdg_shell::xdg_toplevel_request::SET_MINIMIZED => {
             let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
             if let Some(tl_id) = toplevel_id {
-                ctx.shell.maximize(tl_id);
-                let serial = ctx.shell.configure_toplevel_with_state(tl_id, ctx.shell.output_width, ctx.shell.output_height);
-                if let Some(client) = ctx.server.client_mut(ctx.client_id) {
-                    let state = ctx.shell.toplevel_state_bytes(tl_id);
-                    let surface_id = ctx.shell.toplevels.get(&tl_id).map(|tl| tl.surface_id).unwrap_or(0);
-                    client.send_message(xdg_shell::xdg_surface_configure_event(surface_id, serial));
-                    client.send_message(xdg_shell::xdg_toplevel_configure_event(
-                        tl_id, ctx.shell.output_width, ctx.shell.output_height, &state));
-                }
+                ctx.shell.toplevels.get_mut(&tl_id).unwrap().minimized = true;
+                eprintln!("[edgerun-compositor] Toplevel {} minimized", tl_id);
             }
         }
-        xdg_shell::xdg_toplevel_request::UNMAXIMIZE | xdg_shell::xdg_toplevel_request::UNSET_MAXIMIZED => {
-            let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
-            if let Some(tl_id) = toplevel_id {
-                ctx.shell.unmaximize(tl_id);
-                let serial = ctx.shell.configure_toplevel_with_state(tl_id, ctx.shell.output_width, ctx.shell.output_height);
-                if let Some(client) = ctx.server.client_mut(ctx.client_id) {
-                    let state = ctx.shell.toplevel_state_bytes(tl_id);
-                    let surface_id = ctx.shell.toplevels.get(&tl_id).map(|tl| tl.surface_id).unwrap_or(0);
-                    client.send_message(xdg_shell::xdg_surface_configure_event(surface_id, serial));
-                    client.send_message(xdg_shell::xdg_toplevel_configure_event(
-                        tl_id, ctx.shell.output_width, ctx.shell.output_height, &state));
-                }
-            }
-        }
-        xdg_shell::xdg_toplevel_request::MINIMIZE | xdg_shell::xdg_toplevel_request::SET_MINIMIZED => {}
         xdg_shell::xdg_toplevel_request::SET_FULLSCREEN => {
             let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
             if let Some(tl_id) = toplevel_id {
+                ctx.shell.toplevels.get_mut(&tl_id).unwrap().minimized = false;
                 ctx.shell.set_fullscreen(tl_id, true);
                 let surface_id = ctx.shell.toplevels.get(&tl_id).map(|tl| tl.surface_id).unwrap_or(0);
                 if let Some(surface) = ctx.surfaces.get_mut(surface_id) {
@@ -207,9 +186,66 @@ pub fn handle_toplevel(ctx: &mut DispatchContext) {
                 }
             }
         }
-        xdg_shell::xdg_toplevel_request::MOVE => { let _ = &ctx.msg; }
-        xdg_shell::xdg_toplevel_request::RESIZE => { let _ = &ctx.msg; }
-        xdg_shell::xdg_toplevel_request::SET_PARENT => { let _ = &ctx.msg; }
+        xdg_shell::xdg_toplevel_request::MAXIMIZE | xdg_shell::xdg_toplevel_request::SET_MAXIMIZED => {
+            let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
+            if let Some(tl_id) = toplevel_id {
+                ctx.shell.toplevels.get_mut(&tl_id).unwrap().minimized = false;
+                ctx.shell.maximize(tl_id);
+                let serial = ctx.shell.configure_toplevel_with_state(tl_id, ctx.shell.output_width, ctx.shell.output_height);
+                if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+                    let state = ctx.shell.toplevel_state_bytes(tl_id);
+                    let surface_id = ctx.shell.toplevels.get(&tl_id).map(|tl| tl.surface_id).unwrap_or(0);
+                    client.send_message(xdg_shell::xdg_surface_configure_event(surface_id, serial));
+                    client.send_message(xdg_shell::xdg_toplevel_configure_event(
+                        tl_id, ctx.shell.output_width, ctx.shell.output_height, &state));
+                }
+            }
+        }
+        xdg_shell::xdg_toplevel_request::UNMAXIMIZE | xdg_shell::xdg_toplevel_request::UNSET_MAXIMIZED => {
+            let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
+            if let Some(tl_id) = toplevel_id {
+                ctx.shell.unmaximize(tl_id);
+                let serial = ctx.shell.configure_toplevel_with_state(tl_id, ctx.shell.output_width, ctx.shell.output_height);
+                if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+                    let state = ctx.shell.toplevel_state_bytes(tl_id);
+                    let surface_id = ctx.shell.toplevels.get(&tl_id).map(|tl| tl.surface_id).unwrap_or(0);
+                    client.send_message(xdg_shell::xdg_surface_configure_event(surface_id, serial));
+                    client.send_message(xdg_shell::xdg_toplevel_configure_event(
+                        tl_id, ctx.shell.output_width, ctx.shell.output_height, &state));
+                }
+            }
+        }
+        xdg_shell::xdg_toplevel_request::MOVE => {
+            let _ = &ctx.msg;
+            // Client initiated interactive move. Track that the window is being moved.
+            // Full implementation would start an interactive grab on the pointer.
+            if let Some(tl) = ctx.shell.toplevels.get(&ctx.msg.sender_id) {
+                eprintln!("[edgerun-compositor] Toplevel {} initiated interactive move", tl.id);
+            }
+        }
+        xdg_shell::xdg_toplevel_request::RESIZE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let _seat_obj_id = cursor_obj.object().unwrap_or(0);
+            let _serial = cursor_obj.uint().unwrap_or(0);
+            let edges = cursor_obj.uint().unwrap_or(0);
+            if let Some(tl) = ctx.shell.toplevels.get_mut(&ctx.msg.sender_id) {
+                tl.resizing = true;
+                eprintln!("[edgerun-compositor] Toplevel {} initiated interactive resize (edges={})", tl.id, edges);
+            }
+        }
+        xdg_shell::xdg_toplevel_request::SET_PARENT => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let parent_obj_id = cursor_obj.object().unwrap_or(0);
+            let parent_id = if parent_obj_id != 0 {
+                ctx.shell.toplevels.values().find(|p| p.id == parent_obj_id).map(|p| p.id)
+            } else {
+                None
+            };
+            if let Some(tl) = ctx.shell.toplevels.get_mut(&ctx.msg.sender_id) {
+                tl.parent = parent_id;
+                eprintln!("[edgerun-compositor] Toplevel {} set parent to {:?}", tl.id, parent_id);
+            }
+        }
         xdg_shell::xdg_toplevel_request::DESTROY => {
             let surface_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.surface_id);
             if ctx.seat.keyboard_focus() == surface_id {
@@ -276,7 +312,13 @@ pub fn handle_positioner(ctx: &mut DispatchContext) {
             let gravity = cursor_obj.uint().unwrap_or(0);
             if let Some(pos) = ctx.shell.positioners.get_mut(&ctx.msg.sender_id) { pos.gravity = gravity; }
         }
-        xdg_shell::xdg_positioner_request::SET_CONSTRAINT_ADJUSTMENT => {}
+        xdg_shell::xdg_positioner_request::SET_CONSTRAINT_ADJUSTMENT => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let adjustment = cursor_obj.uint().unwrap_or(0);
+            if let Some(pos) = ctx.shell.positioners.get_mut(&ctx.msg.sender_id) {
+                pos.constraint_adjustment = adjustment;
+            }
+        }
         xdg_shell::xdg_positioner_request::SET_OFFSET => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let x = cursor_obj.int().unwrap_or(0);
@@ -285,9 +327,27 @@ pub fn handle_positioner(ctx: &mut DispatchContext) {
                 pos.offset_x = x; pos.offset_y = y;
             }
         }
-        xdg_shell::xdg_positioner_request::SET_REACTIVE => {}
-        xdg_shell::xdg_positioner_request::SET_PARENT_SIZE => {}
-        xdg_shell::xdg_positioner_request::SET_PARENT_CONFIGURE => {}
+        xdg_shell::xdg_positioner_request::SET_REACTIVE => {
+            if let Some(pos) = ctx.shell.positioners.get_mut(&ctx.msg.sender_id) {
+                pos.reactive = true;
+            }
+        }
+        xdg_shell::xdg_positioner_request::SET_PARENT_SIZE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let w = cursor_obj.int().unwrap_or(0);
+            let h = cursor_obj.int().unwrap_or(0);
+            if let Some(pos) = ctx.shell.positioners.get_mut(&ctx.msg.sender_id) {
+                pos.parent_width = w;
+                pos.parent_height = h;
+            }
+        }
+        xdg_shell::xdg_positioner_request::SET_PARENT_CONFIGURE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let serial = cursor_obj.uint().unwrap_or(0);
+            if let Some(pos) = ctx.shell.positioners.get_mut(&ctx.msg.sender_id) {
+                pos.parent_configure_serial = serial;
+            }
+        }
         xdg_shell::xdg_positioner_request::DESTROY => {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);

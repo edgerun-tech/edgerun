@@ -90,6 +90,7 @@ pub fn handle_keyboard(ctx: &mut DispatchContext) {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
+            super::send_delete_id(ctx.server, ctx.client_id, ctx.msg.sender_id);
             ctx.client_keyboard_ids.remove(&ctx.client_id);
         }
         _ => {}
@@ -106,6 +107,7 @@ pub fn handle_pointer(ctx: &mut DispatchContext) {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
+            super::send_delete_id(ctx.server, ctx.client_id, ctx.msg.sender_id);
             ctx.client_pointer_ids.remove(&ctx.client_id);
         }
         _ => {}
@@ -118,6 +120,7 @@ pub fn handle_touch(ctx: &mut DispatchContext) {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
+            super::send_delete_id(ctx.server, ctx.client_id, ctx.msg.sender_id);
             ctx.client_touch_ids.remove(&ctx.client_id);
         }
         _ => {}

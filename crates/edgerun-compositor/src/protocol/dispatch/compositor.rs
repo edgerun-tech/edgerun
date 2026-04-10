@@ -153,6 +153,7 @@ pub fn handle_surface(ctx: &mut DispatchContext) {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
+            super::send_delete_id(ctx.server, ctx.client_id, ctx.msg.sender_id);
         }
         _ => {}
     }

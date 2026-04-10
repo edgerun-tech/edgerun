@@ -136,6 +136,14 @@ pub fn handle_registry(ctx: &mut DispatchContext) {
                                 size: (8 + name_args.len()) as u16,
                                 args: name_args, fds: Vec::new(),
                             });
+                            // description (v4+)
+                            let mut desc_args = Vec::new();
+                            encode_string(&mut desc_args, "edgerun compositor output");
+                            client.send_message(wire::Message {
+                                sender_id: id, opcode: 6,
+                                size: (8 + desc_args.len()) as u16,
+                                args: desc_args, fds: Vec::new(),
+                            });
                         }
                         if version >= 4 {
                             client.send_message(wire::Message {

@@ -1,5 +1,5 @@
 [package]
-name = "edgerun-fonts"
+name = "edgerun-css-fonts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

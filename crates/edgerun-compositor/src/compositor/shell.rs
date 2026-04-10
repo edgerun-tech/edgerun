@@ -33,6 +33,8 @@ pub struct Toplevel {
     pub maximized: bool,
     /// Whether the window is fullscreen.
     pub fullscreen: bool,
+    /// Whether the window is minimized.
+    pub minimized: bool,
     /// Whether the window is being resized by the compositor.
     pub resizing: bool,
     /// xdg_decoration object id (if any).
@@ -170,6 +172,12 @@ pub struct PositionerState {
     pub gravity: u32,
     pub offset_x: i32,
     pub offset_y: i32,
+    // v6+ fields
+    pub constraint_adjustment: u32,
+    pub reactive: bool,
+    pub parent_width: i32,
+    pub parent_height: i32,
+    pub parent_configure_serial: u32,
 }
 
 impl Shell {
@@ -255,6 +263,7 @@ impl Shell {
             wants_close: false,
             maximized: false,
             fullscreen: false,
+            minimized: false,
             resizing: false,
             decoration_id: None,
             decoration_mode: None,

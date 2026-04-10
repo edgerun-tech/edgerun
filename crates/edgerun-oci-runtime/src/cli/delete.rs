@@ -1,6 +1,7 @@
 //! Delete command implementation.
 //!
 /// Cleans up container state and optionally kills running process.
+/// Runs poststop hooks and cleans up cgroups.
 
 use std::fs;
 use std::io;
@@ -17,10 +18,10 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
         io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
     })?;
 
-    // Load hooks from bundle's config.json if available
-    let (poststop_hooks, cgroup_path) = {
-        let state = load_state(&id).ok();
-        let (hooks, cgroup) = state.as_ref().and_then(|s| {
+    // Load spec from bundle for hooks and cgroup path
+    let (poststop_hooks, cgroup_path) = load_state(&id)
+        .ok()
+        .and_then(|s| {
             if s.bundle.is_empty() {
                 return None;
             }
@@ -35,9 +36,8 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
                 .and_then(|l| l.cgroups_path.clone())
                 .unwrap_or_else(|| "/edgerun".into());
             Some((hooks, cgroup))
-        }).unwrap_or_default();
-        (hooks, cgroup)
-    };
+        })
+        .unwrap_or_default();
 
     if let Ok(state) = load_state(&id) {
         if let Some(pid) = state.pid {
@@ -48,35 +48,32 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
             }
             if alive {
                 unsafe { libc::kill(pid as c_int, libc::SIGKILL) };
-                // Wait briefly for exit
                 unsafe { libc::usleep(50000) };
             }
-        }
 
-        // Run poststop hooks with container state
-        let hook_state = ContainerState {
-            version: state.oci_version,
-            id: state.id,
-            status: "stopped".to_string(),
-            pid: state.pid.unwrap_or(0),
-            bundle: state.bundle,
-            annotations: state.annotations.unwrap_or_default(),
-        };
-        execute_poststop_hooks(Some(&poststop_hooks), &hook_state);
+            // Run poststop hooks
+            let hook_state = ContainerState {
+                version: state.oci_version.clone(),
+                id: state.id.clone(),
+                status: "stopped".to_string(),
+                pid,
+                bundle: state.bundle.clone(),
+                annotations: state.annotations.clone().unwrap_or_default(),
+            };
+            execute_poststop_hooks(Some(&poststop_hooks), &hook_state);
+        }
     }
 
-    // Clean up state dir and FIFO
+    // Clean up state dir
     delete_state(&id);
 
     // Clean up FIFO
-    let fifo = fifo_path(&id);
-    let _ = fs::remove_file(&fifo);
+    let _ = fs::remove_file(fifo_path(&id));
 
     // Clean up cgroup directory
     if !cgroup_path.is_empty() {
-        let cgroup_dir = std::path::Path::new("/sys/fs/cgroup").join(
-            cgroup_path.trim_start_matches('/'),
-        );
+        let cgroup_dir = std::path::Path::new("/sys/fs/cgroup")
+            .join(cgroup_path.trim_start_matches('/'));
         if cgroup_dir.exists() {
             let _ = fs::remove_dir_all(&cgroup_dir);
         }

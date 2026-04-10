@@ -500,39 +500,47 @@ impl Handshake {
                 }
                 20 => {
                     // Finished — verify verify_data
+                    // hs_msg is the full handshake message: type(1) + length(3) + verify_data
+                    // Per RFC 8446 §4.4.4: verify_data is computed from transcript NOT including Finished
+                    
                     // The verify_data is computed as:
                     //   finished_key = HKDF-Expand-Label(handshake_traffic_secret, "finished", "", Hash.length)
                     //   verify_data = HMAC(finished_key, Hash(handshake_transcript))
-                    // 
-                    // Compute the transcript hash of all handshake messages:
+                    //
+                    // Compute the transcript hash of all handshake messages BEFORE Finished:
                     // ClientHello || ServerHello || EncryptedExtensions || Certificate || CertificateVerify
                     let full_transcript_hash = self.hasher().hash(&self.transcript);
-                    
+
                     let server_hs_secret = ks.server_handshake_traffic_secret(&full_transcript_hash);
                     let finished_key = self.hasher().expand_label(&server_hs_secret, "finished", &[], self.hasher().len());
-                    
-                    // The plaintext of the Finished message is just the verify_data (no header)
-                    if plaintext.len() < self.hasher().len() {
+
+                    // hs_msg: type(1) + length(3) + verify_data
+                    // verify_data starts at offset 4
+                    if hs_msg.len() < 4 + self.hasher().len() {
                         return Err(TlsError::Protocol(
                             "Finished message too short".into(),
                         ));
                     }
+                    let verify_data = &hs_msg[4..];
                     
                     // Compute expected verify_data using HMAC
                     let expected_verify_data = match self.hasher() {
                         Hasher::Sha256 => hmac_sha256(&finished_key, &full_transcript_hash),
                         Hasher::Sha384 => hmac_sha384(&finished_key, &full_transcript_hash),
                     };
-                    
+
                     // Constant-time comparison
-                    if plaintext.len() < expected_verify_data.len()
-                        || !constant_time_eq(&plaintext[..expected_verify_data.len()], &expected_verify_data)
+                    if verify_data.len() < expected_verify_data.len()
+                        || !constant_time_eq(&verify_data[..expected_verify_data.len()], &expected_verify_data)
                     {
                         return Err(TlsError::Protocol(
                             "Finished message verification failed".into(),
                         ));
                     }
-                    
+
+                    // Append server's Finished to transcript (needed for client's own Finished)
+                    self.transcript.extend_from_slice(&hs_msg);
+
                     return Ok(());
                 }
                 _ => {
@@ -701,10 +709,7 @@ mod tests {
     }
 
     /// Full TLS 1.3 client-server loopback test
-    /// Note: Currently disabled — the server handshake state machine needs debugging.
-    /// The certificate generation and ClientHello/ServerHello parsing work correctly.
     #[test]
-    #[ignore = "server handshake state machine needs debugging for full loopback"]
     fn test_tls_server_client_loopback() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind listener");
         let port = listener.local_addr().expect("get addr").port();

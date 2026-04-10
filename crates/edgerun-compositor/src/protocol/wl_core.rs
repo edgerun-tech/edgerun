@@ -106,3 +106,18 @@ pub fn callback_done_event(callback_id: u32, serial: u32) -> Message {
     use callback_event::DONE;
     message_uint(callback_id, DONE, serial)
 }
+
+/// Create a `delete_id` event for wl_display.
+/// Sent to clients to confirm object deletion.
+pub fn display_delete_id_event(obj_id: u32) -> Message {
+    use display_event::DELETE_ID;
+    let mut args = Vec::new();
+    args.extend_from_slice(&obj_id.to_le_bytes());
+    Message {
+        sender_id: 1, // wl_display is always object id 1
+        opcode: DELETE_ID,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
