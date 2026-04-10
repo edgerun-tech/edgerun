@@ -72,6 +72,7 @@ members = [
   "crates/edgerun-http",
   "crates/edgerun-input",
   "crates/edgerun-json",
+  "crates/edgerun-layout",
   "crates/edgerun-linux-cec",
   "crates/edgerun-linux-gpu",
   "crates/edgerun-linux-netif",
