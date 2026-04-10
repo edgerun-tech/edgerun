@@ -554,6 +554,31 @@ fn response_no_body_304() {
     assert!(resp.body().is_empty());
 }
 
+#[test]
+fn response_parse_trailer_headers() {
+    // RFC 9112 §6.3: trailers follow the 0-length chunk, terminated by blank line
+    let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nTrailer: X-Checksum\r\n\r\n5\r\nHello\r\n0\r\nX-Checksum: abc123\r\n\r\n";
+    let resp = Response::from_http(raw).unwrap();
+    assert_eq!(resp.body_as_string().unwrap(), "Hello");
+    assert!(resp.trailers().contains_key("x-checksum"));
+    assert_eq!(resp.trailers().get("x-checksum").unwrap().as_str(), "abc123");
+}
+
+#[test]
+fn response_no_trailers_without_chunked() {
+    let raw = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n12345";
+    let resp = Response::from_http(raw).unwrap();
+    assert!(resp.trailers().is_empty());
+}
+
+#[test]
+fn response_chunked_no_trailers() {
+    let raw = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHello\r\n0\r\n\r\n";
+    let resp = Response::from_http(raw).unwrap();
+    assert_eq!(resp.body_as_string().unwrap(), "Hello");
+    assert!(resp.trailers().is_empty());
+}
+
 // ---------------------------------------------------------------------------
 // HTTP/1.1 Request parsing conformance (RFC 9112)
 // ---------------------------------------------------------------------------
@@ -661,4 +686,26 @@ fn request_rejects_invalid() {
             "Request should reject invalid input: {raw:?}"
         );
     }
+}
+
+#[test]
+fn request_parse_chunked_body() {
+    let raw = "POST /api HTTP/1.1\r\nHost: example.com\r\nTransfer-Encoding: chunked\r\n\r\n7\r\nMozilla\r\n9\r\nDeveloper\r\n0\r\n\r\n";
+    let req = Request::from_http(raw).unwrap();
+    assert!(matches!(req.method(), &Method::POST));
+    assert_eq!(req.body_as_str().unwrap(), "MozillaDeveloper");
+}
+
+#[test]
+fn request_parse_chunked_body_single() {
+    let raw = "PUT /data HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\nd\r\nHello, world!\r\n0\r\n\r\n";
+    let req = Request::from_http(raw).unwrap();
+    assert_eq!(req.body_as_str().unwrap(), "Hello, world!");
+}
+
+#[test]
+fn request_rejects_invalid_chunked_body() {
+    // Incomplete chunked body (missing final 0\r\n\r\n)
+    let raw = "POST /api HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n7\r\nMozilla";
+    assert!(Request::from_http(raw).is_err());
 }

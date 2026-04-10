@@ -11,6 +11,8 @@ pub struct Response {
     status: StatusCode,
     headers: HeaderMap,
     body: Vec<u8>,
+    /// Trailer headers (RFC 9112 §6.3) — only present after chunked transfer encoding.
+    trailers: HeaderMap,
 }
 
 impl Response {
@@ -20,6 +22,7 @@ impl Response {
             status,
             headers: HeaderMap::new(),
             body: Vec::new(),
+            trailers: HeaderMap::new(),
         }
     }
 
@@ -93,7 +96,7 @@ impl Response {
 
         // Responses to HEAD requests and 1xx/204/304 responses MUST NOT have a body
         if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
-            return Ok(Response { status, headers, body: Vec::new() });
+            return Ok(Response { status, headers, body: Vec::new(), trailers: HeaderMap::new() });
         }
 
         let remaining = &raw[pos..];
@@ -104,7 +107,7 @@ impl Response {
             .map(|v| v.as_str().to_lowercase());
         let is_chunked = transfer_encoding.as_deref().map_or(false, |v| v.contains("chunked"));
 
-        let body = if is_chunked {
+        let (body, trailers) = if is_chunked {
             Self::parse_chunked_body(remaining)?
         } else if let Some(content_length) = headers.get("content-length") {
             let len = content_length
@@ -112,13 +115,13 @@ impl Response {
                 .parse::<usize>()
                 .unwrap_or(remaining.len())
                 .min(remaining.len());
-            remaining[..len].to_vec()
+            (remaining[..len].to_vec(), HeaderMap::new())
         } else {
             // No Content-Length, no Transfer-Encoding — body extends to end of data
-            remaining.to_vec()
+            (remaining.to_vec(), HeaderMap::new())
         };
 
-        Ok(Response { status, headers, body })
+        Ok(Response { status, headers, body, trailers })
     }
 
     /// Create a response from HTTP response string (convenience wrapper).
@@ -135,20 +138,18 @@ impl Response {
     }
 
     /// Parse a chunked transfer-encoded body (RFC 9112 §7.1).
-    fn parse_chunked_body(mut data: &[u8]) -> Result<Vec<u8>> {
+    /// Returns (body, trailer_headers).
+    fn parse_chunked_body(mut data: &[u8]) -> Result<(Vec<u8>, HeaderMap)> {
         let mut body = Vec::new();
 
         loop {
-            // Find end of chunk size line
             let crlf = Self::find_crlf(data, 0).ok_or_else(|| {
                 crate::Error::InvalidResponse("Incomplete chunked body".to_string())
             })?;
 
-            // Parse chunk size (hex), ignoring chunk extensions
             let size_hex = std::str::from_utf8(&data[..crlf])
                 .map_err(|_| crate::Error::InvalidResponse("Invalid chunk size".to_string()))?;
 
-            // Chunk extensions are after the hex size, before any semicolon
             let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
             let chunk_size = usize::from_str_radix(size_str, 16)
                 .map_err(|_| crate::Error::InvalidResponse("Invalid chunk size".to_string()))?;
@@ -156,13 +157,11 @@ impl Response {
             data = &data[crlf + 2..];
 
             if chunk_size == 0 {
-                // Last chunk — optional trailers follow
-                // Find the final CRLF (trailers end with blank line)
-                // For simplicity, we stop here — trailers are discarded
-                break;
+                // Last chunk — parse trailer headers (RFC 9112 §6.3)
+                let trailers = Self::parse_trailers(data)?;
+                return Ok((body, trailers));
             }
 
-            // Read chunk data
             if data.len() < chunk_size {
                 return Err(crate::Error::InvalidResponse(
                     "Incomplete chunked body".to_string(),
@@ -172,7 +171,6 @@ impl Response {
             body.extend_from_slice(&data[..chunk_size]);
             data = &data[chunk_size..];
 
-            // Consume CRLF after chunk data
             if data.len() < 2 || data[0] != b'\r' || data[1] != b'\n' {
                 return Err(crate::Error::InvalidResponse(
                     "Missing CRLF after chunk".to_string(),
@@ -180,8 +178,52 @@ impl Response {
             }
             data = &data[2..];
         }
+    }
 
-        Ok(body)
+    /// Parse trailer headers after the last chunk (RFC 9112 §6.3).
+    /// Trailers are headers after the 0-length chunk, terminated by a blank line.
+    fn parse_trailers(data: &[u8]) -> Result<HeaderMap> {
+        let mut trailers = HeaderMap::new();
+        let mut pos = 0;
+
+        while pos < data.len() {
+            // Find end of line
+            let line_end = data[pos..]
+                .windows(2)
+                .position(|w| w == b"\r\n")
+                .map(|i| pos + i);
+
+            match line_end {
+                Some(end) if end == pos => {
+                    // Blank line — end of trailers
+                    break;
+                }
+                Some(end) => {
+                    let line = std::str::from_utf8(&data[pos..end])
+                        .map_err(|_| crate::Error::InvalidResponse("Invalid UTF-8 in trailer".to_string()))?;
+
+                    if let Some(colon) = line.find(':') {
+                        let name = line[..colon].trim();
+                        let value = line[colon + 1..].trim();
+                        if !name.is_empty() {
+                            trailers.insert(name, value);
+                        }
+                    }
+                    pos = end + 2;
+                }
+                None => {
+                    // No more CRLF — treat remaining as end
+                    break;
+                }
+            }
+        }
+
+        Ok(trailers)
+    }
+
+    /// Get the trailer headers (only present for chunked responses).
+    pub fn trailers(&self) -> &HeaderMap {
+        &self.trailers
     }
 
     /// Get the status code

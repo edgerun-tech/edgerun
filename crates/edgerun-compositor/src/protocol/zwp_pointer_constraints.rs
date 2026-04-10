@@ -59,6 +59,9 @@ pub mod locked_pointer_event {
 
     pub const UNLOCKED: u16 = 1;
     // sig: none
+
+    pub const MOTION: u16 = 2;
+    // sig: uint(time_hi), uint(time_lo), fixed(dx), fixed(dy)
 }
 
 /// Build locked event.
@@ -69,6 +72,22 @@ pub fn locked_pointer_locked_event(locked_id: u32) -> Message {
 /// Build unlocked event.
 pub fn locked_pointer_unlocked_event(locked_id: u32) -> Message {
     crate::wire::encode::message_empty(locked_id, locked_pointer_event::UNLOCKED)
+}
+
+/// Build locked pointer motion event.
+pub fn locked_pointer_motion_event(locked_id: u32, time: u32, dx: u32, dy: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&0u32.to_le_bytes()); // time_hi (we use 32-bit time)
+    args.extend_from_slice(&time.to_le_bytes()); // time_lo
+    args.extend_from_slice(&dx.to_le_bytes());   // dx (fixed point)
+    args.extend_from_slice(&dy.to_le_bytes());   // dy (fixed point)
+    Message {
+        sender_id: locked_id,
+        opcode: locked_pointer_event::MOTION,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
 }
 
 // ─── zwp_confined_pointer_v1 ───────────────────────────────

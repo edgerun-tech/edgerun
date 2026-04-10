@@ -1,6 +1,6 @@
 //! xdg-shell window management.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A toplevel window.
 #[derive(Debug)]
@@ -147,6 +147,12 @@ pub struct Shell {
     pub output_mm_height: i32,
     /// Positioner state (accumulated before GET_POPUP is called).
     pub positioners: std::collections::HashMap<u32, PositionerState>,
+
+    // Idle inhibit state
+    /// Surface IDs that are currently inhibiting idle/sleep.
+    pub idle_inhibitors: HashSet<u32>,
+    /// Map from inhibitor object ID to surface ID.
+    pub inhibitor_to_surface: HashMap<u32, u32>,
 }
 
 /// Positioner state from xdg_positioner protocol.
@@ -180,6 +186,31 @@ impl Shell {
             output_mm_width: 0,
             output_mm_height: 0,
             positioners: std::collections::HashMap::new(),
+            idle_inhibitors: HashSet::new(),
+            inhibitor_to_surface: HashMap::new(),
+        }
+    }
+
+    /// Check if any surface is inhibiting idle.
+    pub fn idle_inhibited(&self) -> bool {
+        !self.idle_inhibitors.is_empty()
+    }
+
+    /// Check if a specific surface is inhibiting idle.
+    pub fn surface_inhibits_idle(&self, surface_id: u32) -> bool {
+        self.idle_inhibitors.contains(&surface_id)
+    }
+
+    /// Add an idle inhibitor for a surface.
+    pub fn add_idle_inhibitor(&mut self, inhibitor_id: u32, surface_id: u32) {
+        self.idle_inhibitors.insert(surface_id);
+        self.inhibitor_to_surface.insert(inhibitor_id, surface_id);
+    }
+
+    /// Remove an idle inhibitor for a surface.
+    pub fn remove_idle_inhibitor(&mut self, inhibitor_id: u32) {
+        if let Some(surface_id) = self.inhibitor_to_surface.remove(&inhibitor_id) {
+            self.idle_inhibitors.remove(&surface_id);
         }
     }
 

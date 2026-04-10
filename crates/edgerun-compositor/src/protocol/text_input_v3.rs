@@ -139,3 +139,77 @@ pub fn text_input_commit_string_event(text_input_id: u32, text: &str) -> Message
 pub fn text_input_done_event(text_input_id: u32, serial: u32) -> Message {
     message_uint(text_input_id, text_input_event::DONE, serial)
 }
+
+/// Build delete_surrounding_text event.
+pub fn text_input_delete_surrounding_text_event(text_input_id: u32, before_length: i32, after_length: i32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&(before_length as u32).to_le_bytes());
+    args.extend_from_slice(&(after_length as u32).to_le_bytes());
+    Message {
+        sender_id: text_input_id,
+        opcode: text_input_event::DELETE_SURROUNDING_TEXT,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
+/// Text input state — tracks the current IME state per client.
+#[derive(Debug, Clone)]
+pub struct TextInputState {
+    /// Text input object ID.
+    pub text_input_id: u32,
+    /// Client ID that owns this text input.
+    pub client_id: u32,
+    /// Currently focused surface.
+    pub focused_surface: Option<u32>,
+    /// Surrounding text.
+    pub surrounding_text: String,
+    /// Cursor position in surrounding text.
+    pub cursor: u32,
+    /// Anchor position in surrounding text.
+    pub anchor: u32,
+    /// Text change cause (0=input_method, 1=other).
+    pub text_change_cause: u32,
+    /// Content type hint.
+    pub content_hint: u32,
+    /// Content purpose.
+    pub content_purpose: u32,
+    /// Whether text input is enabled.
+    pub enabled: bool,
+    /// Pending preedit state (set by IME, sent on commit).
+    pub pending_preedit: Option<String>,
+    pub pending_preedit_cursor_begin: i32,
+    pub pending_preedit_cursor_end: i32,
+    /// Pending commit state.
+    pub pending_commit: Option<String>,
+    /// Pending delete surrounding text.
+    pub pending_delete_before: i32,
+    pub pending_delete_after: i32,
+    /// Whether pending state needs to be sent.
+    pub pending_commit_needed: bool,
+}
+
+impl TextInputState {
+    pub fn new(text_input_id: u32, client_id: u32) -> Self {
+        Self {
+            text_input_id,
+            client_id,
+            focused_surface: None,
+            surrounding_text: String::new(),
+            cursor: 0,
+            anchor: 0,
+            text_change_cause: 0,
+            content_hint: 0,
+            content_purpose: 0,
+            enabled: false,
+            pending_preedit: None,
+            pending_preedit_cursor_begin: 0,
+            pending_preedit_cursor_end: 0,
+            pending_commit: None,
+            pending_delete_before: 0,
+            pending_delete_after: 0,
+            pending_commit_needed: false,
+        }
+    }
+}

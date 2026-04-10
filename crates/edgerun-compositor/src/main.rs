@@ -49,7 +49,10 @@ use edgerun_compositor::protocol::text_input_v3;
 use edgerun_compositor::protocol::input_method_v2;
 use edgerun_compositor::protocol::primary_selection;
 use edgerun_compositor::protocol::data_control;
-use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device};
+use edgerun_compositor::protocol::single_pixel_buffer;
+use edgerun_compositor::protocol::fractional_scale;
+use edgerun_compositor::protocol::tearing_control;
+use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device, PointerConstraint, ConstraintType};
 use edgerun_compositor::render::cursor::Cursor;
 use edgerun_compositor::render::shm::ShmManager;
 use edgerun_compositor::render::server::{render_and_flip, DamageAccumulator};
@@ -57,8 +60,8 @@ use edgerun_compositor::gpu::compositor::GlCompositor;
 use edgerun_compositor::resource::Registry;
 use edgerun_compositor::server::WaylandServer;
 use edgerun_compositor::wire;
-use edgerun_compositor::wire::decode::ArgCursor;
-use edgerun_compositor::wire::encode::*;
+// wire imports used in dispatch
+// (wire types accessed through dispatch module)
 
 fn main() {
     let socket_path = std::env::args().nth(1).unwrap_or_else(|| "/tmp/edgerun-wayland-0".to_string());
@@ -270,6 +273,8 @@ fn main() {
     // Clipboard: currently active data source
     let mut current_data_source: Option<DataSource> = None;
     let mut selection_offer_counter: u32 = 0;
+    let mut current_primary_selection: Option<dispatch::PrimarySelectionSource> = None;
+    let mut primary_selection_offer_counter: u32 = 0;
 
     // Registry (globals advertised to clients)
     let mut global_name: u32 = 1;
@@ -303,6 +308,9 @@ fn main() {
     let input_method_v2_manager_global = { global_name += 1; global_name };
     let primary_selection_manager_global = { global_name += 1; global_name };
     let data_control_manager_global = { global_name += 1; global_name };
+    let single_pixel_buffer_global = { global_name += 1; global_name };
+    let fractional_scale_global = { global_name += 1; global_name };
+    let tearing_control_global = { global_name += 1; global_name };
 
     let _output = Output::from_drm(
         0,
@@ -377,6 +385,8 @@ fn main() {
     let mut client_cursor_shape_manager_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_cursor_shape_device_ids: HashMap<u32, u32> = HashMap::new();
     let mut client_relative_pointer_ids: HashMap<u32, u32> = HashMap::new();
+    let mut client_gesture_swipe_ids: HashMap<u32, u32> = HashMap::new();
+    let mut client_gesture_pinch_ids: HashMap<u32, u32> = HashMap::new();
 
     // Track which client-side pool id maps to which internal pool
     let mut client_pool_map: HashMap<u32, HashMap<u32, u32>> = HashMap::new();
@@ -389,6 +399,12 @@ fn main() {
 
     let mut config_serial: u32 = 1;
     let mut touch_state = dispatch::TouchState::new();
+    let mut screencopy_state = dispatch::ScreencopyState::new();
+    let mut pointer_constraints: HashMap<u32, dispatch::PointerConstraint> = HashMap::new();
+    let mut constraint_type_map: HashMap<u32, dispatch::ConstraintType> = HashMap::new();
+    let mut text_input_state: Option<text_input_v3::TextInputState> = None;
+    let mut ime_state: Option<input_method_v2::IMEState> = None;
+    let mut text_input_serial: u32 = 1;
     let mut frame_count: u64 = 0;
     let _start_time = Instant::now();
     let mut old_fb_ids: Vec<u32> = Vec::new(); // Track old FB IDs for cleanup
@@ -476,6 +492,12 @@ fn main() {
                 );
             }
 
+            // Update screencopy framebuffer snapshot
+            if let Ok(mapped) = dumb.map() {
+                let pixels = unsafe { std::slice::from_raw_parts(mapped.as_ptr(), mapped.len()) };
+                screencopy_state.update(dumb.width, dumb.height, dumb.pitch, pixels);
+            }
+
             // Collect damage from surface commits for the next frame
             for surface in surfaces.surfaces() {
                 if !surface.pending_damage.is_empty() {
@@ -547,6 +569,9 @@ fn main() {
                                 input_method_v2_manager_global,
                                 primary_selection_manager_global,
                                 data_control_manager_global,
+                                single_pixel_buffer_global,
+                                fractional_scale_global,
+                                tearing_control_global,
                             );
 
                             // Flush immediately — the client socket is read-only in epoll,
@@ -605,6 +630,14 @@ fn main() {
                                 &mut dmabuf_pending,
                                 &mut current_data_source, &mut selection_offer_counter,
                                 &mut config_serial,
+                                &mut pointer_constraints,
+                                &mut constraint_type_map,
+                                &mut current_primary_selection,
+                                &mut primary_selection_offer_counter,
+                                &mut screencopy_state,
+                                &mut text_input_state,
+                                &mut ime_state,
+                                &mut text_input_serial,
                             );
                         }
 
@@ -641,6 +674,8 @@ fn main() {
                             client_pool_map.remove(&client_id);
                             client_cursor_surfaces.remove(&client_id);
                             client_relative_pointer_ids.remove(&client_id);
+                            client_gesture_swipe_ids.remove(&client_id);
+                            client_gesture_pinch_ids.remove(&client_id);
                             dmabuf_pending.remove(&client_id);
                             server.remove_client(client_id);
                         }
@@ -686,8 +721,12 @@ fn main() {
                             &client_keyboard_ids, &client_pointer_ids,
                             &client_touch_ids,
                             &client_relative_pointer_ids,
+                            &client_gesture_swipe_ids,
+                            &client_gesture_pinch_ids,
                             &client_compositor_ids, &mut cursor,
                             &mut touch_state,
+                            &mut pointer_constraints,
+                            &mut constraint_type_map,
                         );
                     }
                 }
@@ -759,6 +798,9 @@ fn send_globals_to_client(
     input_method_v2_manager_global: u32,
     primary_selection_manager_global: u32,
     data_control_manager_global: u32,
+    single_pixel_buffer_global: u32,
+    fractional_scale_global: u32,
+    tearing_control_global: u32,
 ) {
     let globals = [
         (compositor_global, wl_compositor::WL_COMPOSITOR, wl_compositor::WL_COMPOSITOR_VERSION),
@@ -790,6 +832,9 @@ fn send_globals_to_client(
         (input_method_v2_manager_global, input_method_v2::ZWP_INPUT_METHOD_MANAGER_V2, input_method_v2::ZWP_INPUT_METHOD_MANAGER_V2_VERSION),
         (primary_selection_manager_global, primary_selection::ZWLR_PRIMARY_SELECTION_MANAGER_V1, primary_selection::ZWLR_PRIMARY_SELECTION_MANAGER_V1_VERSION),
         (data_control_manager_global, data_control::ZWLR_DATA_CONTROL_MANAGER_V1, data_control::ZWLR_DATA_CONTROL_MANAGER_V1_VERSION),
+        (single_pixel_buffer_global, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_MANAGER_V1, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_MANAGER_V1_VERSION),
+        (fractional_scale_global, fractional_scale::WP_FRACTIONAL_SCALE_MANAGER_V1, fractional_scale::WP_FRACTIONAL_SCALE_MANAGER_V1_VERSION),
+        (tearing_control_global, tearing_control::WP_TEARING_CONTROL_MANAGER_V1, tearing_control::WP_TEARING_CONTROL_MANAGER_V1_VERSION),
     ];
 
     for &(name, interface, version) in &globals {

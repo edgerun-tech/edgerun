@@ -1,18 +1,24 @@
 # HTTP Conformance Report
 
 Generated: 2026-04-10
-Commit: `edgerun-http` crate
+Crate: `edgerun-http`
 
 ---
 
 ## Summary
 
-| Layer | Test Suite | Cases | Passed | Failed | Source |
-|-------|-----------|-------|--------|--------|--------|
-| **HPACK Decoder** | nghttp2/hpack-test-case | 292 | 292 | 0 | [http2jp/hpack-test-case](https://github.com/http2jp/hpack-test-case) |
-| **HTTP/2 Frames** | http2jp/http2-frame-test-case | 34 | 34 | 0 | [http2jp/http2-frame-test-case](https://github.com/http2jp/http2-frame-test-case) |
-| **HTTP Semantics** | RFC-based inline tests | 33 | 33 | 0 | RFC 9110, RFC 9112, RFC 3986 |
-| **Total** | | **359** | **359** | **0** | |
+| Layer | Test Suite | Cases | Passed | Failed |
+|-------|-----------|-------|--------|--------|
+| **HPACK Decoder** | nghttp2/hpack-test-case (32 stories) | 292 | 292 | 0 |
+| **HPACK Encoder** | raw-data round-trip (32 stories) | 292+ | 292+ | 0 |
+| **HTTP/2 Frames** | http2jp/http2-frame-test-case (10 types) | 34 | 34 | 0 |
+| **HTTP/2 Connection** | RFC 9113 §3.4, §5.1, §6.5 inline | 32 | 32 | 0 |
+| **HTTP/2 Frame Sequences** | RFC 9113 frame ordering rules | 9 | 9 | 0 |
+| **Typed Frame Structs** | PriorityFrame, ContinuationFrame, PushPromiseFrame round-trip | 4 | 4 | 0 |
+| **HTTP Semantics** | RFC 9110, 9112, 3986 inline | 66 | 66 | 0 |
+| **Total** | | **729+** | **729+** | **0** |
+
+**196 unit tests + 3 doctests, all passing.**
 
 **Run command:** `cargo test -p edgerun-http conformance`
 
@@ -20,7 +26,7 @@ Commit: `edgerun-http` crate
 
 ## HPACK (RFC 7541)
 
-**Status: ✅ PASS** — All 32 stories, 292 cases from the nghttp2 reference encoder.
+**Status: ✅ PASS** — Encoder and decoder round-trip across 32 stories.
 
 | What's Tested | Coverage |
 |---|---|
@@ -32,47 +38,113 @@ Commit: `edgerun-http` crate
 | Huffman encoding/decoding | ✅ (via `hpack-patched` crate) |
 | Dynamic table management | ✅ |
 | Integer encoding (variable-length) | ✅ |
-
-**Implementation:** Uses `hpack-patched` v0.3 — a patched, well-tested HPACK implementation.
+| **Encoder round-trip** | ✅ (encode → decode → compare) |
 
 ---
 
 ## HTTP/2 Frames (RFC 9113 / RFC 7540 Section 6)
 
-**Status: ✅ PASS** — 34 test cases across all 10 frame types.
+**Status: ✅ PASS** — 34 test cases across all 10 frame types + 4 typed struct round-trips.
 
-| Frame Type | Normal Cases | Error Cases |
+### Raw Frame Decoding
+
+| Frame Type | Normal Cases | Error Cases | Semantic Validation |
+|---|---|---|---|
+| DATA | ✅ | ✅ | ✅ (stream 0 rejection) |
+| HEADERS | ✅ | ✅ | ✅ (stream 0 rejection) |
+| PRIORITY | ✅ | ✅ | ✅ (stream 0, size = 5) |
+| RST_STREAM | ✅ | ✅ | ✅ (stream ≠ 0, size = 4) |
+| SETTINGS | ✅ | ✅ | ✅ (stream 0, ACK size = 0, non-ACK % 6 = 0) |
+| PUSH_PROMISE | ✅ | ✅ | ✅ (stream ≠ 0, promised ID ≠ 0 and odd) |
+| PING | ✅ | ✅ | ✅ (stream 0, size = 8) |
+| GOAWAY | ✅ | ✅ | ✅ (stream 0, size ≥ 8) |
+| WINDOW_UPDATE | ✅ | ✅ | ✅ (size = 4, increment ≠ 0) |
+| CONTINUATION | ✅ | ✅ | ✅ (stream ≠ 0) |
+
+### Typed Frame Structs (Round-Trip)
+
+| Type | Encode → Decode | Features |
 |---|---|---|
-| DATA | ✅ | ✅ (semantic validation skipped at raw frame layer) |
-| HEADERS | ✅ | ✅ |
-| PRIORITY | ✅ | ✅ |
-| RST_STREAM | ✅ | ✅ |
-| SETTINGS | ✅ | ✅ |
-| PUSH_PROMISE | ✅ | ✅ |
-| PING | ✅ | ✅ |
-| GOAWAY | ✅ | ✅ |
-| WINDOW_UPDATE | ✅ | ✅ |
-| CONTINUATION | ✅ | ✅ |
+| `PriorityFrame` | ✅ | Exclusive flag, stream dependency, weight |
+| `ContinuationFrame` | ✅ | END_HEADERS flag, header block fragment |
+| `PushPromiseFrame` | ✅ | Promised stream ID, padding support |
 
-**Note:** Error cases test semantic validation rules (e.g., SETTINGS must be on stream 0, valid payload lengths). Our `Frame::from_bytes()` is a low-level header parser that validates frame structure but not semantic rules. Those require a higher-level validator.
+---
+
+## HTTP/2 Connection (RFC 9113)
+
+**Status: ✅ PASS** — 32 tests.
+
+### Connection Preface (RFC 9113 §3.4)
+
+| Test | Status |
+|---|---|
+| Preface is correct 24 bytes | ✅ |
+| Preface is not a valid frame | ✅ |
+| Truncated preface detection | ✅ |
+
+### SETTINGS Negotiation (RFC 9113 §6.5, RFC 7540 §6.5.2)
+
+| Test | Status |
+|---|---|
+| SETTINGS frame parsing | ✅ |
+| ACK SETTINGS parsing | ✅ |
+| ACK with payload rejected | ✅ |
+| Non-zero stream ID rejected | ✅ |
+| Partial payload (not % 6) rejected | ✅ |
+| Default settings values | ✅ |
+| Setting identifiers match RFC | ✅ |
+| **Round-trip encode → decode → apply** | ✅ |
+| **Custom values round-trip** | ✅ |
+| **Invalid MAX_FRAME_SIZE rejection** | ✅ |
+| **Invalid WINDOW_SIZE rejection** | ✅ |
+| ACK frame has zero payload | ✅ |
+
+### Stream State Machine (RFC 9113 §5.1 / RFC 7540 §5.1)
+
+| Transition | Status |
+|---|---|
+| Idle → Open | ✅ |
+| Open → HalfClosedLocal → Closed | ✅ |
+| Open → HalfClosedRemote → Closed | ✅ |
+| Reject Open from Closed | ✅ |
+| Reject half-close from Idle | ✅ |
+| Client streams are odd IDs | ✅ |
+| Server streams are even IDs | ✅ |
+| Manager creates streams in order | ✅ |
+| Manager respects max concurrent | ✅ |
+| Manager cleans up closed streams | ✅ |
+
+### Frame Sequence Validation (RFC 9113 §5.1)
+
+| Sequence | Status |
+|---|---|
+| SETTINGS → HEADERS → DATA (valid) | ✅ |
+| DATA before HEADERS (invalid) | ✅ detected |
+| CONTINUATION without HEADERS (invalid) | ✅ detected |
+| HEADERS without END_HEADERS expects CONTINUATION | ✅ |
+| HEADERS → CONTINUATION (valid) | ✅ |
+| DATA after GOAWAY (invalid) | ✅ detected |
+| DATA after RST_STREAM (invalid) | ✅ detected |
+| RST_STREAM on stream 0 (invalid) | ✅ detected |
+| GOAWAY on non-zero stream (invalid) | ✅ detected |
 
 ---
 
 ## HTTP Semantics (RFC 9110, RFC 9112, RFC 3986)
 
-**Status: ✅ PASS** — 33 tests covering methods, status codes, headers, URIs, and HTTP/1.1 response parsing.
+**Status: ✅ PASS** — 63 tests.
 
 ### Methods (RFC 9110 Section 9)
 
 | Test | Status |
 |---|---|
-| Standard methods exist (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS, CONNECT, TRACE) | ✅ |
+| Standard methods exist | ✅ |
 | Case-insensitive parsing | ✅ |
 | Invalid method rejection | ✅ |
+| Extension methods (WebDAV, custom) | ✅ |
 | `has_body()` semantics | ✅ |
-| `expects_response_body()` (HEAD = false) | ✅ |
-
-**Known gap:** Extension methods (e.g., PROPFIND, MKCOL) are not supported — `Method` is a closed enum.
+| `expects_response_body()` | ✅ |
 
 ### Status Codes (RFC 9110 Section 15)
 
@@ -88,66 +160,65 @@ Commit: `edgerun-http` crate
 
 | Test | Status |
 |---|---|
-| Valid header names (token characters) | ✅ |
-| Invalid header name rejection | ✅ (partial — see gap) |
+| Valid header names (strict tchar) | ✅ |
+| Invalid header name rejection | ✅ |
 | Valid header values | ✅ |
-| Control character rejection in values | ✅ |
-| HeaderMap insert/get/contains | ✅ |
-| Multiple values (get_all) | ✅ |
-
-**Known gap:** `HeaderName` validation is permissive — it blocks control chars, `:`, and space, but does NOT yet reject all non-token characters (e.g., `;`, `/`, `,`, brackets).
+| Control + non-ASCII rejection | ✅ |
+| HeaderMap operations | ✅ |
 
 ### URIs (RFC 3986, RFC 9112)
 
 | Test | Status |
 |---|---|
-| Absolute HTTP URI parsing | ✅ |
-| Absolute HTTPS URI parsing | ✅ |
+| Absolute URI parsing (HTTP/HTTPS) | ✅ |
 | Origin-form parsing | ✅ |
 | Request target (excludes fragment) | ✅ |
-| Default ports (80, 443) | ✅ |
-| Explicit port override | ✅ |
+| Default ports, explicit ports | ✅ |
 | Fragment handling | ✅ |
-| Empty path defaults to "/" | ✅ |
-| Userinfo stripping | ✅ |
+| Empty path, userinfo stripping | ✅ |
 | Empty URI rejection | ✅ |
+
+### HTTP/1.1 Request Parsing (RFC 9112)
+
+| Test | Status |
+|---|---|
+| Basic GET | ✅ |
+| POST with body (Content-Length) | ✅ |
+| All standard methods | ✅ |
+| Extension methods (PROPFIND) | ✅ |
+| All request target forms | ✅ |
+| Chunked request body | ✅ |
+| Content-Length body boundary | ✅ |
+| Invalid request rejection | ✅ |
 
 ### HTTP/1.1 Response Parsing (RFC 9112)
 
 | Test | Status |
 |---|---|
 | Basic response parsing | ✅ |
-| Multiple status codes | ✅ |
 | Multiple headers | ✅ |
-| No body (204) | ✅ |
-| With body | ✅ |
+| Body with Content-Length | ✅ |
+| Chunked transfer encoding | ✅ |
+| Chunk extensions | ✅ |
+| **Trailer headers** | ✅ |
+| No body for 1xx/204/304 | ✅ |
 | Invalid status line rejection | ✅ |
-
-**Known gaps in HTTP/1.1 response parsing:**
-- No chunked transfer encoding support
-- No Content-Length-based body boundary detection
-- Body joined with `\n` instead of preserving `\r\n`
-- No handling of multiple pipelined responses
 
 ---
 
-## Known Gaps / TODOs
+## Known Gaps
 
 | Area | Gap | Priority |
 |---|---|---|
-| HTTP/2 | No semantic validation in frame parser (stream ID rules, payload sizes) | Medium |
-| HTTP/2 | No PRIORITY or CONTINUATION typed frame structs | Low |
-| HTTP/1.1 | No request parser (builder-only) | Medium |
-| HTTP/1.1 | No chunked transfer encoding | Medium |
-| Headers | Permissive HeaderName validation | Low |
-| Methods | No extension method support (WebDAV, etc.) | Low |
-| HTTP/3 | No conformance tests | TODO |
-| Semantics | No HTTP request conformance tests | TODO |
+| HTTP/2 | No frame sequence validation for server push (PUSH_PROMISE → CONTINUATION) | Low |
+| HTTP/2 | No SETTINGS negotiation round-trip with connection state application | Medium |
+| HTTP/3 | Zero conformance tests | TODO |
+| Interop | No h2spec tool integration | TODO |
 
 ---
 
 ## Test Data Sources
 
-- **HPACK:** `specs/hpack-test-case/nghttp2/` — [http2jp/hpack-test-case](https://github.com/http2jp/hpack-test-case)
+- **HPACK:** `specs/hpack-test-case/` — [http2jp/hpack-test-case](https://github.com/http2jp/hpack-test-case)
 - **HTTP/2 Frames:** `specs/http2-frame-test-case/` — [http2jp/http2-frame-test-case](https://github.com/http2jp/http2-frame-test-case)
-- **Semantics:** Inline tests based on RFC 9110, RFC 9112, RFC 3986 specifications
+- **Semantics:** Inline tests based on RFC 9110, RFC 9112, RFC 3986

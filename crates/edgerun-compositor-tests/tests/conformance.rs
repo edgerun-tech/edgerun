@@ -119,3 +119,59 @@ fn toplevel_minimize() {
     let result = edgerun_compositor_tests::protocols::xdg_shell::test_toplevel_minimize();
     assert!(result.is_ok(), "toplevel_minimize: {:?}", result.err());
 }
+
+// ─── Extended Protocol Tests ─────────────────────────────────
+
+#[test]
+fn seat_touch() {
+    let result = edgerun_compositor_tests::protocols::extended::test_seat_touch();
+    assert!(result.is_ok(), "seat_touch: {:?}", result.err());
+}
+
+#[test]
+fn pointer_lock() {
+    let result = edgerun_compositor_tests::protocols::extended::test_pointer_lock();
+    assert!(result.is_ok(), "pointer_lock: {:?}", result.err());
+}
+
+#[test]
+fn pointer_confine() {
+    let result = edgerun_compositor_tests::protocols::extended::test_pointer_confine();
+    assert!(result.is_ok(), "pointer_confine: {:?}", result.err());
+}
+
+#[test]
+fn idle_inhibit() {
+    let result = edgerun_compositor_tests::protocols::extended::test_idle_inhibit();
+    assert!(result.is_ok(), "idle_inhibit: {:?}", result.err());
+}
+
+#[test]
+fn primary_selection() {
+    let result = edgerun_compositor_tests::protocols::extended::test_primary_selection();
+    assert!(result.is_ok(), "primary_selection: {:?}", result.err());
+}
+
+#[test]
+fn screencopy_capture() {
+    let result = edgerun_compositor_tests::protocols::extended::test_screencopy_capture();
+    assert!(result.is_ok(), "screencopy_capture: {:?}", result.err());
+}
+
+#[test]
+fn fractional_scale() {
+    let result = edgerun_compositor_tests::protocols::extended::test_fractional_scale();
+    assert!(result.is_ok(), "fractional_scale: {:?}", result.err());
+}
+
+#[test]
+fn tearing_control() {
+    let result = edgerun_compositor_tests::protocols::extended::test_tearing_control();
+    assert!(result.is_ok(), "tearing_control: {:?}", result.err());
+}
+
+#[test]
+fn single_pixel_buffer() {
+    let result = edgerun_compositor_tests::protocols::extended::test_single_pixel_buffer();
+    assert!(result.is_ok(), "single_pixel_buffer: {:?}", result.err());
+}

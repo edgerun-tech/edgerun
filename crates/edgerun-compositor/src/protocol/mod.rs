@@ -32,4 +32,7 @@ pub mod input_method_v2;
 pub mod primary_selection;
 pub mod data_control;
 pub mod dispatch;
+pub mod single_pixel_buffer;
+pub mod fractional_scale;
+pub mod tearing_control;
 pub mod edgerun_test_overlay;

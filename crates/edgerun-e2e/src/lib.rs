@@ -30,6 +30,7 @@ use std::process::{Child, Command};
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::time::Duration;
 
+use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::sha2::Digest;
 use edgerun_hardware_signing::{MeshSigner, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
 use edgerun_proto::edgerun::v0::{

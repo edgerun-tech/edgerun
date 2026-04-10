@@ -119,6 +119,40 @@ pub fn input_method_done_event(input_method_id: u32) -> Message {
     message_empty(input_method_id, input_method_event::DONE)
 }
 
+/// Build surround_text event.
+pub fn input_method_surround_text_event(input_method_id: u32, text: &str, cursor: u32, anchor: u32) -> Message {
+    let mut args = Vec::new();
+    encode_string(&mut args, text);
+    args.extend_from_slice(&cursor.to_le_bytes());
+    args.extend_from_slice(&anchor.to_le_bytes());
+    Message {
+        sender_id: input_method_id,
+        opcode: input_method_event::SURROUND_TEXT,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
+/// Build text_change_cause event.
+pub fn input_method_text_change_cause_event(input_method_id: u32, cause: u32) -> Message {
+    message_uint(input_method_id, input_method_event::TEXT_CHANGE_CAUSE, cause)
+}
+
+/// Build content_type event.
+pub fn input_method_content_type_event(input_method_id: u32, hint: u32, purpose: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&hint.to_le_bytes());
+    args.extend_from_slice(&purpose.to_le_bytes());
+    Message {
+        sender_id: input_method_id,
+        opcode: input_method_event::CONTENT_TYPE,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
 // ─── zwp_input_method_keyboard_grab_v2 ────────────────────
 
 pub const ZWP_INPUT_METHOD_KEYBOARD_GRAB_V2: &str = "zwp_input_method_keyboard_grab_v2";
@@ -146,4 +180,92 @@ pub mod keyboard_grab_event {
 
     pub const REPEAT_INFO: u16 = 3;
     // sig: int(rate), int(delay)
+}
+
+/// Build keyboard grab key event.
+pub fn keyboard_grab_key_event(grab_id: u32, serial: u32, time: u32, key: u32, state: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&serial.to_le_bytes());
+    args.extend_from_slice(&time.to_le_bytes());
+    args.extend_from_slice(&key.to_le_bytes());
+    args.extend_from_slice(&state.to_le_bytes());
+    Message {
+        sender_id: grab_id,
+        opcode: keyboard_grab_event::KEY,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
+/// Build keyboard grab modifiers event.
+pub fn keyboard_grab_modifiers_event(grab_id: u32, serial: u32, depressed: u32, latched: u32, locked: u32, group: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&serial.to_le_bytes());
+    args.extend_from_slice(&depressed.to_le_bytes());
+    args.extend_from_slice(&latched.to_le_bytes());
+    args.extend_from_slice(&locked.to_le_bytes());
+    args.extend_from_slice(&group.to_le_bytes());
+    Message {
+        sender_id: grab_id,
+        opcode: keyboard_grab_event::MODIFIERS,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
+/// Build keyboard grab keymap event.
+pub fn keyboard_grab_keymap_event(grab_id: u32, format: u32, fd: i32, size: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&format.to_le_bytes());
+    args.extend_from_slice(&size.to_le_bytes());
+    Message {
+        sender_id: grab_id,
+        opcode: keyboard_grab_event::KEYMAP,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: vec![fd],
+    }
+}
+
+/// Build keyboard grab repeat_info event.
+pub fn keyboard_grab_repeat_info_event(grab_id: u32, rate: i32, delay: i32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&rate.to_le_bytes());
+    args.extend_from_slice(&delay.to_le_bytes());
+    Message {
+        sender_id: grab_id,
+        opcode: keyboard_grab_event::REPEAT_INFO,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
+/// IME state — tracks the current input method server state.
+#[derive(Debug)]
+pub struct IMEState {
+    /// Input method object ID.
+    pub input_method_id: u32,
+    /// Client ID of the IME server.
+    pub client_id: u32,
+    /// Currently active text input object.
+    pub active_text_input_id: Option<u32>,
+    /// Keyboard grab object.
+    pub keyboard_grab_id: Option<u32>,
+    /// Whether keyboard grab is active.
+    pub keyboard_grab_active: bool,
+}
+
+impl IMEState {
+    pub fn new(input_method_id: u32, client_id: u32) -> Self {
+        Self {
+            input_method_id,
+            client_id,
+            active_text_input_id: None,
+            keyboard_grab_id: None,
+            keyboard_grab_active: false,
+        }
+    }
 }

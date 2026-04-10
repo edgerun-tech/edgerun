@@ -22,6 +22,39 @@ pub mod manager_request {
     // id: new_id, seat: object
 }
 
+// ─── zwlr_primary_selection_v1 (device) ─────────────────────
+
+pub const ZWLR_PRIMARY_SELECTION_DEVICE_V1: &str = "zwlr_primary_selection_device_v1";
+pub const ZWLR_PRIMARY_SELECTION_DEVICE_V1_VERSION: u32 = 1;
+
+pub mod device_request {
+    use super::*;
+
+    pub const DESTROY: u16 = 0;
+    pub const DESTROY_SIG: &[ArgType] = &[];
+
+    pub const SET_SELECTION: u16 = 1;
+    pub const SET_SELECTION_SIG: &[ArgType] = &[ArgType::Object]; // source or null
+}
+
+pub mod device_event {
+    pub const SELECTION: u16 = 0;
+    // sig: object(id)
+}
+
+/// Build selection event.
+pub fn device_selection_event(device_id: u32, offer_id: u32) -> Message {
+    let mut args = Vec::new();
+    args.extend_from_slice(&offer_id.to_le_bytes());
+    Message {
+        sender_id: device_id,
+        opcode: device_event::SELECTION,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
+}
+
 // ─── zwlr_primary_selection_v1 ─────────────────────────────
 
 pub const ZWLR_PRIMARY_SELECTION_V1: &str = "zwlr_primary_selection_v1";
@@ -66,7 +99,7 @@ pub mod offer_event {
 }
 
 /// Build offer event.
-pub fn primary_selection_offer_event(offer_id: u32, mime_type: &str) -> Message {
+pub fn offer_offer_event(offer_id: u32, mime_type: &str) -> Message {
     let mut args = Vec::new();
     encode_string(&mut args, mime_type);
     Message {
@@ -101,7 +134,7 @@ pub mod source_event {
 }
 
 /// Build send event.
-pub fn primary_selection_source_send_event(source_id: u32, mime_type: &str, fd: i32) -> Message {
+pub fn source_send_event(source_id: u32, mime_type: &str, fd: i32) -> Message {
     let mut args = Vec::new();
     encode_string(&mut args, mime_type);
     Message {

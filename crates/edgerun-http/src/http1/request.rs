@@ -60,7 +60,7 @@ impl Request {
         })
     }
 
-    /// Parse headers (until blank line) and body (based on Content-Length).
+    /// Parse headers (until blank line) and body (based on Content-Length or Transfer-Encoding).
     fn parse_headers_and_body(raw: &str) -> Result<(HeaderMap, Vec<u8>)> {
         let mut headers = HeaderMap::new();
         let mut pos = 0;
@@ -68,7 +68,6 @@ impl Request {
 
         // Parse headers until blank line
         while pos < bytes.len() {
-            // Find end of line
             let line_end = bytes[pos..]
                 .windows(2)
                 .position(|w| w == b"\r\n")
@@ -76,7 +75,6 @@ impl Request {
 
             match line_end {
                 Some(end) if end == pos => {
-                    // Blank line — end of headers
                     pos = end + 2;
                     break;
                 }
@@ -94,29 +92,83 @@ impl Request {
                     pos = end + 2;
                 }
                 None => {
-                    // No more \r\n — treat rest as body
                     break;
                 }
             }
         }
 
-        // Body is everything after the blank line
         let remaining = &bytes[pos..];
 
-        // Determine body length from Content-Length if present
-        let body_len = if let Some(cl) = headers.get("content-length") {
-            cl.as_str()
+        // Determine body handling
+        let transfer_encoding = headers
+            .get("transfer-encoding")
+            .map(|v| v.as_str().to_lowercase());
+        let is_chunked = transfer_encoding.as_deref().map_or(false, |v| v.contains("chunked"));
+
+        let body = if is_chunked {
+            Self::parse_chunked_body(remaining)?
+        } else if let Some(cl) = headers.get("content-length") {
+            let len = cl.as_str()
                 .parse::<usize>()
                 .ok()
                 .unwrap_or(remaining.len())
-                .min(remaining.len())
+                .min(remaining.len());
+            remaining[..len].to_vec()
         } else {
-            remaining.len()
+            remaining.to_vec()
         };
 
-        let body = remaining[..body_len].to_vec();
-
         Ok((headers, body))
+    }
+
+    /// Parse a chunked transfer-encoded body (RFC 9112 §7.1).
+    fn parse_chunked_body(mut data: &[u8]) -> Result<Vec<u8>> {
+        let mut body = Vec::new();
+
+        loop {
+            let crlf = Self::find_crlf(data, 0).ok_or_else(|| {
+                crate::Error::InvalidRequest("Incomplete chunked body".to_string())
+            })?;
+
+            let size_hex = std::str::from_utf8(&data[..crlf])
+                .map_err(|_| crate::Error::InvalidRequest("Invalid chunk size".to_string()))?;
+
+            let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
+            let chunk_size = usize::from_str_radix(size_str, 16)
+                .map_err(|_| crate::Error::InvalidRequest("Invalid chunk size".to_string()))?;
+
+            data = &data[crlf + 2..];
+
+            if chunk_size == 0 {
+                break;
+            }
+
+            if data.len() < chunk_size {
+                return Err(crate::Error::InvalidRequest(
+                    "Incomplete chunked body".to_string(),
+                ));
+            }
+
+            body.extend_from_slice(&data[..chunk_size]);
+            data = &data[chunk_size..];
+
+            if data.len() < 2 || data[0] != b'\r' || data[1] != b'\n' {
+                return Err(crate::Error::InvalidRequest(
+                    "Missing CRLF after chunk".to_string(),
+                ));
+            }
+            data = &data[2..];
+        }
+
+        Ok(body)
+    }
+
+    /// Find CRLF starting at position `pos`.
+    fn find_crlf(data: &[u8], pos: usize) -> Option<usize> {
+        data[pos..]
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .map(|i| pos + i)
     }
 
     /// Get the method

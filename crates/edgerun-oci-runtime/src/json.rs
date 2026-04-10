@@ -9,9 +9,6 @@ use serde::{Deserialize, Serialize};
 
 /// Parse an OCI spec from JSON bytes.
 pub fn parse_oci_spec(data: &[u8]) -> Result<OciSpec, String> {
-    let text = std::str::from_utf8(data).map_err(|e| format!("invalid UTF-8: {}", e))?;
-    eprintln!("DEBUG: text len={}, first_bytes={:?}", text.len(), &text[..text.len().min(5)]);
-    eprintln!("DEBUG: last_bytes={:?}", &text[text.len().saturating_sub(5)..]);
     from_slice(data).map_err(|e| e.to_string())
 }
 

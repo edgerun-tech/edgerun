@@ -89,6 +89,30 @@ impl Seat {
     }
 }
 
+/// Pointer constraint state — tracks locked/confined pointers.
+#[derive(Debug, Clone)]
+pub struct PointerConstraint {
+    /// The constraint object ID (locked_pointer_v1 or confined_pointer_v1).
+    pub constraint_id: u32,
+    /// The surface being locked/confined to.
+    pub surface_id: u32,
+    /// The pointer object ID.
+    pub pointer_id: u32,
+    /// Lifetime: 0 = oneshot (auto-release), 1 = persistent.
+    pub lifetime: u32,
+    /// Optional confine region (x, y, width, height in surface-local coords).
+    pub region: Option<(i32, i32, i32, i32)>,
+    /// Whether this constraint has been activated (sent locked/confined event).
+    pub activated: bool,
+}
+
+/// Type of pointer constraint.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConstraintType {
+    Lock,
+    Confine,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

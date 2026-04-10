@@ -57,6 +57,11 @@ pub use base16ct;
 pub use const_oid;
 
 // ---------------------------------------------------------------------------
+// X.509 certificate generation / parsing
+// ---------------------------------------------------------------------------
+pub use x509_cert;
+
+// ---------------------------------------------------------------------------
 // Core crypto primitives
 // ---------------------------------------------------------------------------
 pub use crypto_bigint;
@@ -98,3 +103,15 @@ pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 // DER
 pub use der::Tag;
+
+// ---------------------------------------------------------------------------
+// Convenience hash functions
+// ---------------------------------------------------------------------------
+
+/// SHA-256 hash of `data`, returning 32 bytes.
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    use sha2::Digest;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(data);
+    hasher.finalize().into()
+}

@@ -35,6 +35,7 @@
 
 pub mod alert;
 pub mod certificate;
+pub mod certificate_gen;
 pub mod cipher;
 pub mod handshake;
 pub mod key_exchange;
@@ -53,6 +54,7 @@ use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys}
 use crate::record::{RecordCipher, TlsRecord};
 
 pub use alert::{Alert, AlertLevel};
+pub use certificate_gen::{CertificateAndKey, generate_self_signed};
 
 /// TLS error types
 #[derive(Debug)]

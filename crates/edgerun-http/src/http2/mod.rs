@@ -13,6 +13,10 @@ pub mod stream;
 mod hpack_conformance;
 #[cfg(test)]
 mod http2_frame_conformance;
+#[cfg(test)]
+mod connection_conformance;
+#[cfg(test)]
+mod frame_sequence_conformance;
 
 pub use connection::Connection;
 pub use flow_control::FlowController;

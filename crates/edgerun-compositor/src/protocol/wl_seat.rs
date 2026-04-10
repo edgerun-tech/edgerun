@@ -432,7 +432,13 @@ pub fn touch_down_event(
     args.extend_from_slice(&touch_slot.to_le_bytes());
     args.extend_from_slice(&(x.to_bits() as i64).to_le_bytes());
     args.extend_from_slice(&(y.to_bits() as i64).to_le_bytes());
-    message(touch_id, touch_event::DOWN, args)
+    Message {
+        sender_id: touch_id,
+        opcode: touch_event::DOWN,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
 }
 
 /// Build touch up event.
@@ -441,7 +447,13 @@ pub fn touch_up_event(touch_id: u32, serial: u32, time: u32, touch_slot: i32) ->
     args.extend_from_slice(&serial.to_le_bytes());
     args.extend_from_slice(&time.to_le_bytes());
     args.extend_from_slice(&touch_slot.to_le_bytes());
-    message(touch_id, touch_event::UP, args)
+    Message {
+        sender_id: touch_id,
+        opcode: touch_event::UP,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
 }
 
 /// Build touch motion event.
@@ -451,7 +463,13 @@ pub fn touch_motion_event(touch_id: u32, time: u32, touch_slot: i32, x: f64, y: 
     args.extend_from_slice(&touch_slot.to_le_bytes());
     args.extend_from_slice(&(x.to_bits() as i64).to_le_bytes());
     args.extend_from_slice(&(y.to_bits() as i64).to_le_bytes());
-    message(touch_id, touch_event::MOTION, args)
+    Message {
+        sender_id: touch_id,
+        opcode: touch_event::MOTION,
+        size: (8 + args.len()) as u16,
+        args,
+        fds: Vec::new(),
+    }
 }
 
 /// Build touch frame event.

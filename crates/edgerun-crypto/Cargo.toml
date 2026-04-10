@@ -35,3 +35,6 @@ typenum = "1"
 base16ct = { version = "0.2", default-features = false }
 const-oid = { version = "0.9", default-features = false }
 getrandom = { version = "0.2", default-features = false }
+
+# X.509 certificate generation (uses same der/const-oid/p256/ecdsa stack above)
+x509-cert = { version = "0.2", default-features = false, features = ["builder", "pem"] }

@@ -27,6 +27,8 @@ mod handle;
 mod lifecycle;
 mod hooks;
 mod init;
+pub mod state;
+pub mod cli;
 
 // Re-export public API
 pub use bundle::{create_bundle, write_bundle};
@@ -641,11 +643,7 @@ mod tests {
         let data = data.unwrap();
 
         // First parse as JsonValue
-        let v_result: Result<edgerun_json::Value, _> = edgerun_json::serde_api::from_slice(&data);
-        eprintln!("DEBUG: JsonValue parse: {}", if v_result.is_ok() { "OK" } else { "FAIL" });
-        if let Err(e) = &v_result {
-            eprintln!("DEBUG: JsonValue error: {}", e);
-        }
+        let v_result: Result<edgerun_json::Value, _> = edgerun_json::from_slice(&data);
 
         // Then parse as OciSpec
         match json::parse_oci_spec(&data) {

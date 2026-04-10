@@ -7,7 +7,7 @@ use edgerun_linux_sysfs::read_trimmed;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read};
 use std::os::fd::{AsRawFd, RawFd};
-use std::os::raw::{c_int, c_ulong};
+use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -17,16 +17,11 @@ const EV_REL: u16 = 0x02;
 const EV_ABS: u16 = 0x03;
 const EV_MSC: u16 = 0x04;
 const EV_SW: u16 = 0x05;
-const EV_LED: u16 = 0x11;
-const EV_FF: u16 = 0x15;
 
 // evdev ioctls
 const EVIOCGNAME: c_int = 0x81004506u32 as c_int; // _IOC(_IOC_READ, 'E', 0x06, 256)
-const EVIOCGPHYS: c_int = 0x81004507u32 as c_int;
-const EVIOCGUNIQ: c_int = 0x81004508u32 as c_int;
 const EVIOCGBIT: c_int = 0x80004520u32 as c_int; // _IOC(_IOC_READ, 'E', 0x20, len)
 const EVIOCGRAB: c_int = 0x40044590u32 as c_int; // _IOC(_IOC_WRITE, 'E', 0x90, 4)
-const EVIOCREVOKE: c_int = 0x40044591u32 as c_int;
 
 // poll constants
 const POLLIN: i16 = 0x001;

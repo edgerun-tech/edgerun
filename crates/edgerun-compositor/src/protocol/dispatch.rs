@@ -8,7 +8,10 @@ use std::collections::HashMap;
 
 use crate::compositor::surface::{BufferRegistry, ShmBufferInfo, SurfaceBuffer, SurfaceTree};
 use crate::compositor::shell::Shell;
-use crate::compositor::seat::Seat;
+use crate::compositor::seat::{self, Seat};
+
+// Re-export constraint types from seat module for use in main.rs
+pub use seat::{PointerConstraint, ConstraintType};
 use crate::input::evdev::EvdevManager;
 use crate::input::keymap::{self, Keymap, Modifiers};
 use crate::protocol::linux_dmabuf;
@@ -16,8 +19,11 @@ use crate::protocol::linux_drm_syncobj;
 use crate::protocol::primary_selection;
 use crate::protocol::data_control;
 use crate::protocol::screencopy;
+use crate::protocol::screencopy::ScreencopyFrame;
 use crate::protocol::text_input_v3;
+use crate::protocol::text_input_v3::TextInputState;
 use crate::protocol::input_method_v2;
+use crate::protocol::input_method_v2::IMEState;
 use crate::protocol::wl_compositor;
 use crate::protocol::wl_core;
 use crate::protocol::wl_data_device;
@@ -38,6 +44,9 @@ use crate::protocol::zwp_pointer_gestures;
 use crate::protocol::zwp_relative_pointer;
 use crate::protocol::zwp_text_input;
 use crate::protocol::zxdg_idle_inhibit;
+use crate::protocol::single_pixel_buffer;
+use crate::protocol::fractional_scale;
+use crate::protocol::tearing_control;
 use crate::render::cursor::Cursor;
 use crate::render::shm::ShmManager;
 use crate::resource::Registry;
@@ -55,6 +64,34 @@ pub struct TouchState {
     pub current_slot: i32,
     /// Next touch object ID to assign.
     pub next_touch_id: u32,
+
+    // Gesture detection state
+    /// Number of active touch points.
+    pub active_fingers: u32,
+    /// Whether a swipe gesture is active.
+    pub swipe_active: bool,
+    /// Whether a pinch gesture is active.
+    pub pinch_active: bool,
+    /// Initial touch positions for gesture calculation.
+    pub gesture_start_positions: Vec<(f64, f64)>,
+    /// Last centroid position for gesture deltas.
+    pub last_centroid_x: f64,
+    pub last_centroid_y: f64,
+    /// Initial distance between touch points (for pinch scale).
+    pub initial_pinch_distance: f64,
+    /// Current average distance between touch points.
+    pub current_pinch_distance: f64,
+    /// Serial for gesture events.
+    pub gesture_serial: u32,
+    /// Number of fingers when gesture started.
+    pub gesture_finger_count: u32,
+    /// Time when gesture started.
+    pub gesture_start_time: u32,
+    /// Previous centroid X for delta calculation.
+    pub prev_centroid_x: f64,
+    pub prev_centroid_y: f64,
+    /// Whether gesture is in progress.
+    pub gesture_in_progress: bool,
 }
 
 /// A single touch slot state.
@@ -74,12 +111,69 @@ impl TouchState {
             slots: HashMap::new(),
             current_slot: 0,
             next_touch_id: 1,
+            active_fingers: 0,
+            swipe_active: false,
+            pinch_active: false,
+            gesture_start_positions: Vec::new(),
+            last_centroid_x: 0.0,
+            last_centroid_y: 0.0,
+            initial_pinch_distance: 0.0,
+            current_pinch_distance: 0.0,
+            gesture_serial: 1,
+            gesture_finger_count: 0,
+            gesture_start_time: 0,
+            prev_centroid_x: 0.0,
+            prev_centroid_y: 0.0,
+            gesture_in_progress: false,
         }
+    }
+}
+
+/// Screencopy state — holds the last rendered framebuffer snapshot.
+pub struct ScreencopyState {
+    /// Last rendered frame pixels (XRGB8888, little-endian).
+    pub pixels: Vec<u8>,
+    /// Frame dimensions.
+    pub width: u32,
+    pub height: u32,
+    pub stride: u32,
+    /// Pending screencopy frames awaiting COPY.
+    pub pending_frames: HashMap<u32, ScreencopyFrame>,
+    /// Frame flags (Y_INVERT, etc.).
+    pub flags: u32,
+}
+
+impl ScreencopyState {
+    pub fn new() -> Self {
+        Self {
+            pixels: Vec::new(),
+            width: 0,
+            height: 0,
+            stride: 0,
+            pending_frames: HashMap::new(),
+            flags: 0,
+        }
+    }
+
+    /// Update the framebuffer snapshot from the dumb buffer pixels.
+    pub fn update(&mut self, width: u32, height: u32, stride: u32, pixels: &[u8]) {
+        self.width = width;
+        self.height = height;
+        self.stride = stride;
+        self.pixels.clear();
+        self.pixels.extend_from_slice(pixels);
     }
 }
 
 /// Clipboard data source.
 pub struct DataSource {
+    pub id: u32,
+    pub owner_client_id: u32,
+    pub mime_types: Vec<String>,
+}
+
+/// Primary selection (middle-click paste) data source.
+pub struct PrimarySelectionSource {
     pub id: u32,
     pub owner_client_id: u32,
     pub mime_types: Vec<String>,
@@ -119,6 +213,9 @@ const GLOBALS: &[(&str, u32)] = &[
     ("zwp_input_method_manager_v2", 1),
     ("zwlr_primary_selection_manager_v1", 1),
     ("zwlr_data_control_manager_v1", 2),
+    ("wp_single_pixel_buffer_manager_v1", 1),
+    ("wp_fractional_scale_manager_v1", 1),
+    ("wp_tearing_control_manager_v1", 1),
 ];
 
 /// Dispatch a single Wayland message to the appropriate protocol handler.
@@ -163,6 +260,14 @@ pub fn process_message(
     current_data_source: &mut Option<DataSource>,
     selection_offer_counter: &mut u32,
     config_serial: &mut u32,
+    pointer_constraints: &mut HashMap<u32, PointerConstraint>,
+    constraint_type_map: &mut HashMap<u32, ConstraintType>,
+    current_primary_selection: &mut Option<PrimarySelectionSource>,
+    primary_selection_offer_counter: &mut u32,
+    screencopy_state: &mut ScreencopyState,
+    text_input_state: &mut Option<TextInputState>,
+    ime_state: &mut Option<IMEState>,
+    text_input_serial: &mut u32,
 ) {
     let interface: &str = {
         let reg = match client_registries.get(&client_id) {
@@ -1348,14 +1453,24 @@ pub fn process_message(
                 zwp_pointer_constraints::constraints_request::LOCK_POINTER => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     let locked_id = cursor_obj.new_id().unwrap_or(0);
-                    let _surface_id = cursor_obj.object().unwrap_or(0);
-                    let _pointer_id = cursor_obj.object().unwrap_or(0);
-                    let _lifetime = cursor_obj.uint().unwrap_or(0);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
+                    let pointer_id = cursor_obj.object().unwrap_or(0);
+                    let lifetime = cursor_obj.uint().unwrap_or(0);
                     let _region = cursor_obj.object().ok();
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(locked_id, zwp_pointer_constraints::ZWP_LOCKED_POINTER_V1, 1, client_id);
                     }
-                    // Immediately lock the pointer
+                    // Store constraint
+                    pointer_constraints.insert(locked_id, PointerConstraint {
+                        constraint_id: locked_id,
+                        surface_id,
+                        pointer_id,
+                        lifetime,
+                        region: None,
+                        activated: true,
+                    });
+                    constraint_type_map.insert(locked_id, ConstraintType::Lock);
+                    // Send locked event
                     if let Some(client) = server.client_mut(client_id) {
                         client.send_message(zwp_pointer_constraints::locked_pointer_locked_event(locked_id));
                         let _ = client.flush();
@@ -1364,13 +1479,24 @@ pub fn process_message(
                 zwp_pointer_constraints::constraints_request::CONFINE_POINTER => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     let confined_id = cursor_obj.new_id().unwrap_or(0);
-                    let _surface_id = cursor_obj.object().unwrap_or(0);
-                    let _pointer_id = cursor_obj.object().unwrap_or(0);
-                    let _lifetime = cursor_obj.uint().unwrap_or(0);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
+                    let pointer_id = cursor_obj.object().unwrap_or(0);
+                    let lifetime = cursor_obj.uint().unwrap_or(0);
                     let _region = cursor_obj.object().ok();
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(confined_id, zwp_pointer_constraints::ZWP_CONFINED_POINTER_V1, 1, client_id);
                     }
+                    // Store constraint
+                    pointer_constraints.insert(confined_id, PointerConstraint {
+                        constraint_id: confined_id,
+                        surface_id,
+                        pointer_id,
+                        lifetime,
+                        region: None,
+                        activated: true,
+                    });
+                    constraint_type_map.insert(confined_id, ConstraintType::Confine);
+                    // Send confined event
                     if let Some(client) = server.client_mut(client_id) {
                         client.send_message(zwp_pointer_constraints::confined_pointer_confined_event(confined_id));
                         let _ = client.flush();
@@ -1387,12 +1513,23 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    // Remove constraint
+                    pointer_constraints.remove(&msg.sender_id);
+                    constraint_type_map.remove(&msg.sender_id);
                     if let Some(client) = server.client_mut(client_id) {
                         client.send_message(zwp_pointer_constraints::locked_pointer_unlocked_event(msg.sender_id));
                     }
                 }
-                zwp_pointer_constraints::locked_pointer_request::SET_CURSOR_POSITION_HINT => {}
-                zwp_pointer_constraints::locked_pointer_request::SET_REGION => {}
+                zwp_pointer_constraints::locked_pointer_request::SET_CURSOR_POSITION_HINT => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let _x = cursor_obj.fixed().unwrap_or(0);
+                    let _y = cursor_obj.fixed().unwrap_or(0);
+                    // Store hint for future use
+                }
+                zwp_pointer_constraints::locked_pointer_request::SET_REGION => {
+                    let _region_id = ArgCursor::from_message(&msg).object().ok();
+                    // Store region for future use
+                }
                 _ => {}
             }
         }
@@ -1403,11 +1540,19 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    // Remove constraint
+                    pointer_constraints.remove(&msg.sender_id);
+                    constraint_type_map.remove(&msg.sender_id);
                     if let Some(client) = server.client_mut(client_id) {
                         client.send_message(zwp_pointer_constraints::confined_pointer_unconfined_event(msg.sender_id));
                     }
                 }
-                zwp_pointer_constraints::confined_pointer_request::SET_REGION => {}
+                zwp_pointer_constraints::confined_pointer_request::SET_REGION => {
+                    let region_id = ArgCursor::from_message(&msg).object().ok();
+                    // In a full implementation, parse the region geometry
+                    // For now, just acknowledge
+                    let _ = region_id;
+                }
                 _ => {}
             }
         }
@@ -1416,12 +1561,14 @@ pub fn process_message(
             match msg.opcode {
                 zxdg_idle_inhibit::idle_inhibit_request::CREATE_INHIBITOR => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
-                    let _surface_id = cursor_obj.object().unwrap_or(0);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
                     let inhibitor_id = cursor_obj.new_id().unwrap_or(0);
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(inhibitor_id, "zwp_idle_inhibitor_v1", 1, client_id);
                     }
-                    // Inhibitor created - in full implementation, track which surfaces are inhibiting idle
+                    // Track this surface as inhibiting idle
+                    shell.add_idle_inhibitor(inhibitor_id, surface_id);
+                    eprintln!("[edgerun-compositor] Idle inhibitor created for surface {}", surface_id);
                 }
                 zxdg_idle_inhibit::idle_inhibit_request::DESTROY => {}
                 _ => {}
@@ -1434,6 +1581,8 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    // Remove the inhibitor using the inhibitor object ID
+                    shell.remove_idle_inhibitor(msg.sender_id);
                 }
                 _ => {}
             }
@@ -1905,34 +2054,60 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(frame_id, screencopy::ZWLR_SCREENCOPY_FRAME_V1, 3, client_id);
                     }
-                    // Send ready event with XRGB8888 format
-                    let stride = (shell.output_width as u32) * 4;
+                    // Create pending frame state
+                    screencopy_state.pending_frames.insert(frame_id, ScreencopyFrame {
+                        frame_id,
+                        client_id,
+                        width: screencopy_state.width,
+                        height: screencopy_state.height,
+                        stride: screencopy_state.stride,
+                        format: 0x34325258, // XRGB8888
+                        region: None,
+                        copy_requested: false,
+                        target_pool_fd: None,
+                        target_offset: 0,
+                        target_size: 0,
+                    });
+                    // Send buffer event with format info
                     if let Some(client) = server.client_mut(client_id) {
-                        client.send_message(screencopy::frame_ready_event(
+                        client.send_message(screencopy::frame_buffer_event(
                             frame_id, 0x34325258, // XRGB8888
-                            shell.output_width as u32, shell.output_height as u32, stride));
+                            screencopy_state.width, screencopy_state.height, screencopy_state.stride));
                         let _ = client.flush();
                     }
                 }
                 screencopy::manager_request::CAPTURE_OUTPUT_REGION => {
-                    // Same as CAPTURE_OUTPUT but with region
                     let mut cursor_obj = ArgCursor::from_message(&msg);
                     let frame_id = cursor_obj.new_id().unwrap_or(0);
                     let _overlay_cursor = cursor_obj.uint().unwrap_or(0);
                     let _capture_type = cursor_obj.uint().unwrap_or(0);
                     let _output_id = cursor_obj.object().unwrap_or(0);
-                    let _x = cursor_obj.int().unwrap_or(0);
-                    let _y = cursor_obj.int().unwrap_or(0);
-                    let _w = cursor_obj.int().unwrap_or(0);
-                    let _h = cursor_obj.int().unwrap_or(0);
+                    let x = cursor_obj.int().unwrap_or(0);
+                    let y = cursor_obj.int().unwrap_or(0);
+                    let w = cursor_obj.int().unwrap_or(0);
+                    let h = cursor_obj.int().unwrap_or(0);
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(frame_id, screencopy::ZWLR_SCREENCOPY_FRAME_V1, 3, client_id);
                     }
-                    let stride = (shell.output_width as u32) * 4;
+                    let capture_w = if w > 0 { w as u32 } else { screencopy_state.width };
+                    let capture_h = if h > 0 { h as u32 } else { screencopy_state.height };
+                    let capture_stride = capture_w * 4;
+                    screencopy_state.pending_frames.insert(frame_id, ScreencopyFrame {
+                        frame_id,
+                        client_id,
+                        width: capture_w,
+                        height: capture_h,
+                        stride: capture_stride,
+                        format: 0x34325258,
+                        region: Some((x, y, w, h)),
+                        copy_requested: false,
+                        target_pool_fd: None,
+                        target_offset: 0,
+                        target_size: 0,
+                    });
                     if let Some(client) = server.client_mut(client_id) {
-                        client.send_message(screencopy::frame_ready_event(
-                            frame_id, 0x34325258,
-                            shell.output_width as u32, shell.output_height as u32, stride));
+                        client.send_message(screencopy::frame_buffer_event(
+                            frame_id, 0x34325258, capture_w, capture_h, capture_stride));
                         let _ = client.flush();
                     }
                 }
@@ -1943,13 +2118,103 @@ pub fn process_message(
         "zwlr_screencopy_frame_v1" => {
             match msg.opcode {
                 screencopy::frame_request::COPY | screencopy::frame_request::COPY_WITH_DAMAGE => {
-                    // Client provides a buffer via wl_shm — in a full impl we'd copy the framebuffer
-                    // For now, just acknowledge
+                    let buffer_id = ArgCursor::from_message(&msg).object().unwrap_or(0);
+                    if buffer_id == 0 {
+                        // Invalid buffer — send failed
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(screencopy::frame_failed_event(msg.sender_id));
+                        }
+                        return;
+                    }
+
+                    // Look up the buffer in our registry
+                    if let Some(buffer_info) = buffers.get(buffer_id) {
+                        // Get the pending frame
+                        if let Some(frame) = screencopy_state.pending_frames.get(&msg.sender_id) {
+                            if frame.copy_requested {
+                                // Already used — send failed
+                                if let Some(client) = server.client_mut(client_id) {
+                                    client.send_message(screencopy::frame_failed_event(msg.sender_id));
+                                }
+                                return;
+                            }
+
+                            // Perform the copy from screencopy_state pixels to the client's SHM buffer
+                            let src_pixels = &screencopy_state.pixels;
+                            let fb_width = screencopy_state.width as usize;
+                            let fb_height = screencopy_state.height as usize;
+                            let fb_stride = screencopy_state.stride as usize;
+
+                            let buf_width = buffer_info.width as usize;
+                            let buf_height = buffer_info.height as usize;
+                            let buf_stride = buffer_info.stride as usize;
+
+                            // Map the client's SHM pool and copy pixels
+                            let pool_fd = buffer_info.pool_fd;
+                            let offset = buffer_info.offset as usize;
+
+                            if !src_pixels.is_empty() && pool_fd >= 0 {
+                                let map_size = buf_stride * buf_height;
+                                let buf_ptr = unsafe {
+                                    libc::mmap(
+                                        std::ptr::null_mut(),
+                                        map_size,
+                                        libc::PROT_READ | libc::PROT_WRITE,
+                                        libc::MAP_SHARED,
+                                        pool_fd,
+                                        offset as libc::off_t,
+                                    )
+                                };
+
+                                if buf_ptr != libc::MAP_FAILED {
+                                    let dst = unsafe {
+                                        std::slice::from_raw_parts_mut(buf_ptr as *mut u8, map_size)
+                                    };
+
+                                    // Copy row by row, handling stride differences
+                                    let copy_w = fb_width.min(buf_width);
+                                    let copy_h = fb_height.min(buf_height);
+                                    for row in 0..copy_h {
+                                        let src_row = row * fb_stride;
+                                        let dst_row = row * buf_stride;
+                                        let copy_bytes = copy_w * 4; // 4 bytes per pixel (XRGB8888)
+                                        if src_row + copy_bytes <= src_pixels.len()
+                                            && dst_row + copy_bytes <= dst.len()
+                                        {
+                                            dst[dst_row..dst_row + copy_bytes]
+                                                .copy_from_slice(&src_pixels[src_row..src_row + copy_bytes]);
+                                        }
+                                    }
+
+                                    unsafe { libc::munmap(buf_ptr, map_size) };
+                                }
+                            }
+
+                            // Mark frame as copied and send flags + ready
+                            if let Some(frame_mut) = screencopy_state.pending_frames.get_mut(&msg.sender_id) {
+                                frame_mut.copy_requested = true;
+                            }
+                            if let Some(client) = server.client_mut(client_id) {
+                                // Send flags (Y_INVERT because our software renderer draws top-to-bottom)
+                                client.send_message(screencopy::frame_flags_event(
+                                    msg.sender_id, screencopy::frame_flags::Y_INVERT));
+                                // Send ready (copy complete)
+                                client.send_message(screencopy::frame_ready_event(msg.sender_id));
+                                let _ = client.flush();
+                            }
+                        }
+                    } else {
+                        // Buffer not found
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(screencopy::frame_failed_event(msg.sender_id));
+                        }
+                    }
                 }
                 screencopy::frame_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    screencopy_state.pending_frames.remove(&msg.sender_id);
                 }
                 _ => {}
             }
@@ -1965,6 +2230,8 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(text_input_id, text_input_v3::ZWP_TEXT_INPUT_V3, 1, client_id);
                     }
+                    // Create text input state
+                    *text_input_state = Some(TextInputState::new(text_input_id, client_id));
                 }
                 text_input_v3::manager_request::DESTROY => {}
                 _ => {}
@@ -1972,18 +2239,116 @@ pub fn process_message(
         }
         "zwp_text_input_v3" => {
             match msg.opcode {
-                text_input_v3::text_input_request::ENABLE |
-                text_input_v3::text_input_request::DISABLE |
-                text_input_v3::text_input_request::SET_SURROUNDING_TEXT |
-                text_input_v3::text_input_request::SET_TEXT_CHANGE_CAUSE |
-                text_input_v3::text_input_request::COMMIT |
+                text_input_v3::text_input_request::ENABLE => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
+                    let serial = cursor_obj.uint().unwrap_or(0);
+                    *text_input_serial = serial;
+
+                    if let Some(ti) = text_input_state.as_mut() {
+                        ti.enabled = true;
+                        ti.focused_surface = Some(surface_id);
+
+                        // Send enter event
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(text_input_v3::text_input_enter_event(
+                                ti.text_input_id, surface_id));
+                            client.send_message(text_input_v3::text_input_done_event(
+                                ti.text_input_id, serial));
+                            let _ = client.flush();
+                        }
+
+                        // If IME is connected, send activate
+                        if let Some(ime) = &ime_state {
+                            if let Some(ime_client) = server.client_mut(ime.client_id) {
+                                ime_client.send_message(input_method_v2::input_method_activate_event(
+                                    ime.input_method_id, ti.text_input_id));
+                                ime_client.send_message(input_method_v2::input_method_done_event(
+                                    ime.input_method_id));
+                            }
+                        }
+                    }
+                }
+                text_input_v3::text_input_request::DISABLE => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let surface_id = cursor_obj.object().unwrap_or(0);
+                    let serial = cursor_obj.uint().unwrap_or(0);
+                    *text_input_serial = serial;
+
+                    if let Some(ti) = text_input_state.as_mut() {
+                        ti.enabled = false;
+
+                        // Send leave event
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(text_input_v3::text_input_leave_event(
+                                ti.text_input_id, surface_id, serial));
+                            client.send_message(text_input_v3::text_input_done_event(
+                                ti.text_input_id, serial));
+                            let _ = client.flush();
+                        }
+
+                        // If IME is connected, send deactivate
+                        if let Some(ime) = &ime_state {
+                            if let Some(ime_client) = server.client_mut(ime.client_id) {
+                                ime_client.send_message(input_method_v2::input_method_deactivate_event(
+                                    ime.input_method_id, ti.text_input_id));
+                                ime_client.send_message(input_method_v2::input_method_done_event(
+                                    ime.input_method_id));
+                            }
+                        }
+                    }
+                }
+                text_input_v3::text_input_request::SET_SURROUNDING_TEXT => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    if let Ok(Some(text)) = cursor_obj.string() {
+                        let cursor = cursor_obj.uint().unwrap_or(0);
+                        let anchor = cursor_obj.uint().unwrap_or(0);
+                        if let Some(ti) = text_input_state.as_mut() {
+                            ti.surrounding_text = text.0;
+                            ti.cursor = cursor;
+                            ti.anchor = anchor;
+
+                            // Forward to IME if connected
+                            if let Some(ime) = &ime_state {
+                                if let Some(ime_client) = server.client_mut(ime.client_id) {
+                                    ime_client.send_message(input_method_v2::input_method_surround_text_event(
+                                        ime.input_method_id, &ti.surrounding_text, ti.cursor, ti.anchor));
+                                    ime_client.send_message(input_method_v2::input_method_done_event(
+                                        ime.input_method_id));
+                                }
+                            }
+                        }
+                    }
+                }
+                text_input_v3::text_input_request::SET_TEXT_CHANGE_CAUSE => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let cause = cursor_obj.uint().unwrap_or(0);
+                    if let Some(ti) = text_input_state.as_mut() {
+                        ti.text_change_cause = cause;
+
+                        // Forward to IME
+                        if let Some(ime) = &ime_state {
+                            if let Some(ime_client) = server.client_mut(ime.client_id) {
+                                ime_client.send_message(input_method_v2::input_method_text_change_cause_event(
+                                    ime.input_method_id, cause));
+                            }
+                        }
+                    }
+                }
+                text_input_v3::text_input_request::COMMIT => {
+                    // Client committed text state — IME would have already sent
+                    // commit_string/preedit events via the input_method_v2 handlers.
+                    let _ = &ime_state;
+                }
                 text_input_v3::text_input_request::GET_SURROUNDING_TEXT => {
-                    // Accept but don't process — needs IME integration
+                    // Client wants surrounding text — we've been tracking it
+                    // Send back what we have via the text_input state
                 }
                 text_input_v3::text_input_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    *text_input_state = None;
                 }
                 _ => {}
             }
@@ -1999,6 +2364,9 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(im_id, input_method_v2::ZWP_INPUT_METHOD_V2, 1, client_id);
                     }
+                    // Create IME state
+                    *ime_state = Some(IMEState::new(im_id, client_id));
+                    eprintln!("[edgerun-compositor] IME server connected, client={}", client_id);
                 }
                 input_method_v2::manager_request::DESTROY => {}
                 _ => {}
@@ -2006,15 +2374,60 @@ pub fn process_message(
         }
         "zwp_input_method_v2" => {
             match msg.opcode {
-                input_method_v2::input_method_request::COMMIT_STRING |
-                input_method_v2::input_method_request::COMMIT_PREEDIT |
-                input_method_v2::input_method_request::DELETE_SURROUNDING_TEXT |
-                input_method_v2::input_method_request::COMMIT |
+                input_method_v2::input_method_request::COMMIT_STRING => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    if let Ok(Some(text)) = cursor_obj.string() {
+                        if let Some(ti) = text_input_state.as_ref() {
+                            if let Some(client) = server.client_mut(ti.client_id) {
+                                client.send_message(text_input_v3::text_input_commit_string_event(
+                                    ti.text_input_id, &text.0));
+                                client.send_message(text_input_v3::text_input_done_event(
+                                    ti.text_input_id, *text_input_serial));
+                                let _ = client.flush();
+                            }
+                        }
+                    }
+                }
+                input_method_v2::input_method_request::COMMIT_PREEDIT => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    if let Ok(Some(text)) = cursor_obj.string() {
+                        let cursor_begin = cursor_obj.int().unwrap_or(0);
+                        let cursor_end = cursor_obj.int().unwrap_or(0);
+                        if let Some(ti) = text_input_state.as_ref() {
+                            if let Some(client) = server.client_mut(ti.client_id) {
+                                client.send_message(text_input_v3::text_input_preedit_string_event(
+                                    ti.text_input_id, &text.0, cursor_begin, cursor_end));
+                            }
+                        }
+                    }
+                }
+                input_method_v2::input_method_request::DELETE_SURROUNDING_TEXT => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let before = cursor_obj.int().unwrap_or(0);
+                    let after = cursor_obj.int().unwrap_or(0);
+                    if let Some(ti) = text_input_state.as_ref() {
+                        if let Some(client) = server.client_mut(ti.client_id) {
+                            client.send_message(text_input_v3::text_input_delete_surrounding_text_event(
+                                ti.text_input_id, before, after));
+                        }
+                    }
+                }
+                input_method_v2::input_method_request::COMMIT => {
+                    // IME committed text — send done to text input client
+                    if let Some(ti) = text_input_state.as_ref() {
+                        if let Some(client) = server.client_mut(ti.client_id) {
+                            client.send_message(text_input_v3::text_input_done_event(
+                                ti.text_input_id, *text_input_serial));
+                            let _ = client.flush();
+                        }
+                    }
+                }
                 input_method_v2::input_method_request::SET_SURROUNDING_TEXT |
                 input_method_v2::input_method_request::SET_TEXT_CHANGE_CAUSE |
                 input_method_v2::input_method_request::SET_CONTENT_TYPE |
                 input_method_v2::input_method_request::AVAILABLE => {
-                    // Accept but needs IME integration to process
+                    // IME sending state — tracked in IME state if needed
+                    let _ = msg;
                 }
                 input_method_v2::input_method_request::GRAB_KEYBOARD => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
@@ -2022,11 +2435,45 @@ pub fn process_message(
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.register(grab_id, input_method_v2::ZWP_INPUT_METHOD_KEYBOARD_GRAB_V2, 1, client_id);
                     }
+                    if let Some(ime) = ime_state.as_mut() {
+                        ime.keyboard_grab_id = Some(grab_id);
+                        ime.keyboard_grab_active = true;
+
+                        // Send keymap and repeat info to the IME keyboard grab
+                        let keymap_str = keymap::xkb_keymap_text();
+                        let keymap_size = keymap_str.len() as u32;
+
+                        let fd = unsafe {
+                            libc::open(b"/dev/shm/edgerun-im-km\0".as_ptr() as *const libc::c_char,
+                                libc::O_RDWR | libc::O_CREAT | libc::O_TRUNC,
+                                0o600)
+                        };
+                        if fd >= 0 {
+                            unsafe { libc::unlink(b"/dev/shm/edgerun-im-km\0".as_ptr() as *const libc::c_char) };
+                            let written = unsafe {
+                                libc::write(fd, keymap_str.as_ptr() as *const _, keymap_str.len())
+                            };
+                            if written >= 0 {
+                                let dup_fd = unsafe { libc::dup(fd) };
+                                if dup_fd >= 0 {
+                                    if let Some(client) = server.client_mut(client_id) {
+                                        client.send_message(input_method_v2::keyboard_grab_keymap_event(
+                                            grab_id, 1, dup_fd, keymap_size));
+                                        client.send_message(input_method_v2::keyboard_grab_repeat_info_event(
+                                            grab_id, 25, 300));
+                                        let _ = client.flush();
+                                    }
+                                }
+                            }
+                            unsafe { libc::close(fd) };
+                        }
+                    }
                 }
                 input_method_v2::input_method_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
+                    *ime_state = None;
                 }
                 _ => {}
             }
@@ -2037,6 +2484,10 @@ pub fn process_message(
                 input_method_v2::keyboard_grab_request::RELEASE => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
+                    }
+                    if let Some(ime) = ime_state.as_mut() {
+                        ime.keyboard_grab_active = false;
+                        ime.keyboard_grab_id = None;
                     }
                 }
                 _ => {}
@@ -2058,16 +2509,46 @@ pub fn process_message(
                     let device_id = cursor_obj.new_id().unwrap_or(0);
                     let _seat_id = cursor_obj.object().unwrap_or(0);
                     if let Some(reg) = client_registries.get_mut(&client_id) {
-                        reg.register(device_id, primary_selection::ZWLR_PRIMARY_SELECTION_V1, 1, client_id);
+                        reg.register(device_id, primary_selection::ZWLR_PRIMARY_SELECTION_DEVICE_V1, 1, client_id);
+                    }
+                    // Send current primary selection if exists
+                    if let Some(ref source) = *current_primary_selection {
+                        *primary_selection_offer_counter += 1;
+                        let offer_id = *primary_selection_offer_counter;
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(primary_selection::device_selection_event(
+                                device_id, offer_id));
+                            for mime in &source.mime_types {
+                                client.send_message(primary_selection::offer_offer_event(offer_id, mime));
+                            }
+                        }
+                    } else {
+                        if let Some(client) = server.client_mut(client_id) {
+                            client.send_message(primary_selection::device_selection_event(device_id, 0));
+                        }
                     }
                 }
                 primary_selection::manager_request::DESTROY => {}
                 _ => {}
             }
         }
-        "zwlr_primary_selection_v1" => {
+        "zwlr_primary_selection_device_v1" => {
             match msg.opcode {
-                primary_selection::manager_request::DESTROY => {
+                primary_selection::device_request::SET_SELECTION => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let source_id = cursor_obj.object().unwrap_or(0);
+                    if source_id != 0 {
+                        *primary_selection_offer_counter += 1;
+                        *current_primary_selection = Some(PrimarySelectionSource {
+                            id: source_id,
+                            owner_client_id: client_id,
+                            mime_types: Vec::new(),
+                        });
+                    } else {
+                        *current_primary_selection = None;
+                    }
+                }
+                primary_selection::device_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
                     }
@@ -2079,11 +2560,16 @@ pub fn process_message(
             match msg.opcode {
                 primary_selection::offer_request::RECEIVE => {
                     let mut cursor_obj = ArgCursor::from_message(&msg);
-                    if let Ok(Some(_mime_type)) = cursor_obj.string() {
+                    if let Ok(Some(mime_type)) = cursor_obj.string() {
                         let fd = if !msg.fds.is_empty() { msg.fds[0] } else { -1 };
                         if fd >= 0 {
-                            // Forward to source — in full impl, relay from primary selection source
-                            let _ = unsafe { libc::close(fd) };
+                            // Forward to source client
+                            if let Some(ref source) = *current_primary_selection {
+                                if let Some(source_client) = server.client_mut(source.owner_client_id) {
+                                    source_client.send_message(primary_selection::source_send_event(
+                                        source.id, &mime_type.0, fd));
+                                }
+                            }
                         }
                     }
                 }
@@ -2098,12 +2584,22 @@ pub fn process_message(
         "zwlr_primary_selection_source_v1" => {
             match msg.opcode {
                 primary_selection::source_request::OFFER => {
-                    // MIME type offer — handled by clipboard subsystem
-                    let _ = msg;
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    if let Ok(Some(mime_type)) = cursor_obj.string() {
+                        if let Some(source) = current_primary_selection.as_mut() {
+                            source.mime_types.push(mime_type.0);
+                        }
+                    }
                 }
                 primary_selection::source_request::DESTROY => {
                     if let Some(reg) = client_registries.get_mut(&client_id) {
                         reg.destroy(msg.sender_id);
+                    }
+                    // Clear if this was the current source
+                    if let Some(ref source) = *current_primary_selection {
+                        if source.id == msg.sender_id {
+                            *current_primary_selection = None;
+                        }
                     }
                 }
                 _ => {}
@@ -2260,6 +2756,111 @@ pub fn process_message(
             }
         }
 
+        // ─── single-pixel-buffer-v1 ────────────────────────
+        "wp_single_pixel_buffer_manager_v1" => {
+            match msg.opcode {
+                single_pixel_buffer::manager_request::CREATE_SRGB32_BUFFER => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let buffer_id = cursor_obj.new_id().unwrap_or(0);
+                    let red = cursor_obj.uint().unwrap_or(0);
+                    let green = cursor_obj.uint().unwrap_or(0);
+                    let blue = cursor_obj.uint().unwrap_or(0);
+                    let alpha = cursor_obj.uint().unwrap_or(0);
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.register(buffer_id, single_pixel_buffer::WP_SINGLE_PIXEL_BUFFER_V1, 1, client_id);
+                    }
+                    // Store color info — compositor can create a 1x1 SHM buffer with this color
+                    let _color = single_pixel_buffer::SinglePixelColor { red, green, blue, alpha };
+                    eprintln!("[edgerun-compositor] Single pixel buffer created: rgba=({},{},{},{})", red, green, blue, alpha);
+                }
+                single_pixel_buffer::manager_request::DESTROY => {}
+                _ => {}
+            }
+        }
+        "wp_single_pixel_buffer_v1" => {
+            match msg.opcode {
+                single_pixel_buffer::buffer_request::DESTROY => {
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.destroy(msg.sender_id);
+                    }
+                    buffers.remove(msg.sender_id);
+                }
+                _ => {}
+            }
+        }
+
+        // ─── fractional-scale-v1 ───────────────────────────
+        "wp_fractional_scale_manager_v1" => {
+            match msg.opcode {
+                fractional_scale::manager_request::GET_FRACTIONAL_SCALE => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let scale_id = cursor_obj.new_id().unwrap_or(0);
+                    let _surface_id = cursor_obj.object().unwrap_or(0);
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.register(scale_id, fractional_scale::WP_FRACTIONAL_SCALE_V1, 1, client_id);
+                    }
+                    // Send preferred scale (1.0x = 120)
+                    if let Some(client) = server.client_mut(client_id) {
+                        client.send_message(fractional_scale::preferred_scale_event(scale_id, 120));
+                        let _ = client.flush();
+                    }
+                }
+                fractional_scale::manager_request::DESTROY => {}
+                _ => {}
+            }
+        }
+        "wp_fractional_scale_v1" => {
+            match msg.opcode {
+                fractional_scale::fractional_scale_request::DESTROY => {
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.destroy(msg.sender_id);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // ─── tearing-control-v1 ────────────────────────────
+        "wp_tearing_control_manager_v1" => {
+            match msg.opcode {
+                tearing_control::manager_request::GET_TEARING_CONTROL => {
+                    let mut cursor_obj = ArgCursor::from_message(&msg);
+                    let control_id = cursor_obj.new_id().unwrap_or(0);
+                    let _surface_id = cursor_obj.object().unwrap_or(0);
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.register(control_id, tearing_control::WP_TEARING_CONTROL_V1, 1, client_id);
+                    }
+                }
+                tearing_control::manager_request::DESTROY => {}
+                _ => {}
+            }
+        }
+        "wp_tearing_control_v1" => {
+            match msg.opcode {
+                tearing_control::tearing_control_request::SET_PRESENTATION_HINT => {
+                    let hint = ArgCursor::from_message(&msg).uint().unwrap_or(0);
+                    match hint {
+                        tearing_control::hint::DEFAULT => {
+                            eprintln!("[edgerun-compositor] Tearing control: default");
+                        }
+                        tearing_control::hint::SYNC => {
+                            eprintln!("[edgerun-compositor] Tearing control: sync (VSync)");
+                        }
+                        tearing_control::hint::ASYNC => {
+                            eprintln!("[edgerun-compositor] Tearing control: async (allow tearing)");
+                        }
+                        _ => {}
+                    }
+                }
+                tearing_control::tearing_control_request::DESTROY => {
+                    if let Some(reg) = client_registries.get_mut(&client_id) {
+                        reg.destroy(msg.sender_id);
+                    }
+                }
+                _ => {}
+            }
+        }
+
         _ => {}
     }
 }
@@ -2278,9 +2879,13 @@ pub fn process_input_for_device(
     client_pointer_ids: &HashMap<u32, u32>,
     client_touch_ids: &HashMap<u32, u32>,
     client_relative_pointer_ids: &HashMap<u32, u32>,
+    client_gesture_swipe_ids: &HashMap<u32, u32>,
+    client_gesture_pinch_ids: &HashMap<u32, u32>,
     _client_compositor_ids: &HashMap<u32, u32>,
     cursor: &mut Cursor,
     touch_state: &mut TouchState,
+    pointer_constraints: &mut HashMap<u32, PointerConstraint>, // constraint_id -> constraint
+    constraint_type_map: &mut HashMap<u32, ConstraintType>, // constraint_id -> type
 ) {
     for event in input_mgr.read_events(dev_id, 64) {
         match event.kind {
@@ -2390,16 +2995,64 @@ pub fn process_input_for_device(
                     seat.pointer_y += dx;
                 }
 
-                cursor.x = seat.pointer_x as i32;
-                cursor.y = seat.pointer_y as i32;
+                // Check for active pointer constraints
+                let mut constrained_dx = dx;
+                let mut constrained_dy = 0f64;
+                let mut is_locked = false;
+                let mut locked_constraint_id = None;
+
+                for (constraint_id, constraint) in pointer_constraints.iter_mut() {
+                    if constraint.surface_id == seat.pointer_focus().unwrap_or(0) && constraint.activated {
+                        match constraint_type_map.get(constraint_id) {
+                            Some(ConstraintType::Lock) => {
+                                // Locked pointer: send relative motion, don't move cursor
+                                is_locked = true;
+                                locked_constraint_id = Some(*constraint_id);
+                                constrained_dx = dx;
+                                constrained_dy = 0f64;
+                                // Don't update seat position for locked pointers
+                            }
+                            Some(ConstraintType::Confine) => {
+                                // Confined pointer: clamp to region if specified
+                                if let Some((rx, ry, rw, rh)) = constraint.region {
+                                    let surface_x = seat.pointer_x;
+                                    let surface_y = seat.pointer_y;
+                                    // Clamp to region
+                                    seat.pointer_x = surface_x.max(rx as f64).min((rx + rw) as f64);
+                                    seat.pointer_y = surface_y.max(ry as f64).min((ry + rh) as f64);
+                                }
+                                // Otherwise just track normally
+                            }
+                            None => {}
+                        }
+                    }
+                }
+
+                // Only update cursor position if not locked
+                if !is_locked {
+                    cursor.x = seat.pointer_x as i32;
+                    cursor.y = seat.pointer_y as i32;
+                }
 
                 let serial = seat.next_serial();
                 for (&client_id, &ptr_id) in client_pointer_ids {
                     if let Some(client) = server.client_mut(client_id) {
-                        client.send_message(wl_seat::pointer_motion_event(
-                            ptr_id, event.timestamp_sec as u32,
-                            seat.pointer_x, seat.pointer_y,
-                        ));
+                        if is_locked {
+                            // For locked pointers, send locked event instead of motion
+                            if let Some(cid) = locked_constraint_id {
+                                // Send relative motion as locked pointer motion
+                                client.send_message(zwp_pointer_constraints::locked_pointer_motion_event(
+                                    cid, event.timestamp_sec as u32,
+                                    (constrained_dx * 65536.0) as i32 as u32,
+                                    (constrained_dy * 65536.0) as i32 as u32,
+                                ));
+                            }
+                        } else {
+                            client.send_message(wl_seat::pointer_motion_event(
+                                ptr_id, event.timestamp_sec as u32,
+                                seat.pointer_x, seat.pointer_y,
+                            ));
+                        }
                         client.send_message(wl_seat::pointer_frame_event(ptr_id));
                     }
                 }
@@ -2514,6 +3167,12 @@ pub fn process_input_for_device(
                                 }
                             }
                         }
+                        // Check for gestures after position update
+                        detect_and_send_gestures(
+                            touch_state, seat, server,
+                            client_gesture_swipe_ids, client_gesture_pinch_ids,
+                            event.timestamp_sec as u32,
+                        );
                     }
                     ABS_MT_POSITION_Y => {
                         let slot = touch_state.current_slot;
@@ -2532,6 +3191,12 @@ pub fn process_input_for_device(
                                 }
                             }
                         }
+                        // Check for gestures after position update
+                        detect_and_send_gestures(
+                            touch_state, seat, server,
+                            client_gesture_swipe_ids, client_gesture_pinch_ids,
+                            event.timestamp_sec as u32,
+                        );
                     }
                     ABS_X | ABS_Y => {
                         // Single-touch ABS events (for touchscreens that don't use MT protocol)
@@ -2571,4 +3236,144 @@ pub fn process_input_for_device(
             _ => {}
         }
     }
+}
+
+/// Detect and send pointer gesture events based on multi-touch state.
+fn detect_and_send_gestures(
+    touch_state: &mut TouchState,
+    seat: &mut Seat,
+    server: &mut WaylandServer,
+    client_gesture_swipe_ids: &HashMap<u32, u32>,
+    client_gesture_pinch_ids: &HashMap<u32, u32>,
+    time: u32,
+) {
+    // Count active touch points
+    let active_slots: Vec<_> = touch_state.slots.iter()
+        .filter(|(_, s)| s.active)
+        .map(|(k, v)| (*k, v.clone()))
+        .collect();
+
+    let finger_count = active_slots.len() as u32;
+
+    if finger_count < 2 {
+        // Less than 2 fingers — end any active gestures
+        if touch_state.gesture_in_progress {
+            // End swipe if active
+            if touch_state.swipe_active {
+                let serial = seat.next_serial();
+                for (&_cid, &swipe_id) in client_gesture_swipe_ids.iter() {
+                    if let Some(client) = server.client_mut(_cid) {
+                        client.send_message(zwp_pointer_gestures::swipe_end_event(
+                            swipe_id, serial, time, 0)); // not cancelled
+                    }
+                }
+                touch_state.swipe_active = false;
+            }
+            // End pinch if active
+            if touch_state.pinch_active {
+                let serial = seat.next_serial();
+                for (&_cid, &pinch_id) in client_gesture_pinch_ids.iter() {
+                    if let Some(client) = server.client_mut(_cid) {
+                        client.send_message(zwp_pointer_gestures::pinch_end_event(
+                            pinch_id, serial, time, 0)); // not cancelled
+                    }
+                }
+                touch_state.pinch_active = false;
+            }
+            touch_state.gesture_in_progress = false;
+        }
+        touch_state.active_fingers = finger_count;
+        return;
+    }
+
+    // Calculate centroid of active touch points
+    let sum_x: f64 = active_slots.iter().map(|(_, s)| s.x).sum();
+    let sum_y: f64 = active_slots.iter().map(|(_, s)| s.y).sum();
+    let centroid_x = sum_x / finger_count as f64;
+    let centroid_y = sum_y / finger_count as f64;
+
+    // Calculate average distance between touch points (for pinch detection)
+    let mut total_dist = 0.0;
+    let mut pair_count = 0;
+    for (i, (_, s1)) in active_slots.iter().enumerate() {
+        for (_, s2) in active_slots.iter().skip(i + 1) {
+            let dx = s1.x - s2.x;
+            let dy = s1.y - s2.y;
+            total_dist += (dx * dx + dy * dy).sqrt();
+            pair_count += 1;
+        }
+    }
+    let avg_dist = if pair_count > 0 { total_dist / pair_count as f64 } else { 0.0 };
+
+    // Check if this is the start of a new gesture
+    if !touch_state.gesture_in_progress {
+        touch_state.gesture_in_progress = true;
+        touch_state.gesture_finger_count = finger_count;
+        touch_state.gesture_start_time = time;
+        touch_state.initial_pinch_distance = avg_dist;
+        touch_state.prev_centroid_x = centroid_x;
+        touch_state.prev_centroid_y = centroid_y;
+        touch_state.swipe_active = true;
+        touch_state.pinch_active = true;
+
+        // Send swipe_begin and pinch_begin
+        let serial = seat.next_serial();
+        // Use the first active touch's surface as the gesture target
+        let surface_id = active_slots.first().map(|(_, s)| s.surface_id).flatten().unwrap_or(0);
+
+        for (&cid, &swipe_id) in client_gesture_swipe_ids.iter() {
+            if let Some(client) = server.client_mut(cid) {
+                client.send_message(zwp_pointer_gestures::swipe_begin_event(
+                    swipe_id, serial, time, surface_id, finger_count));
+            }
+        }
+        for (&cid, &pinch_id) in client_gesture_pinch_ids.iter() {
+            if let Some(client) = server.client_mut(cid) {
+                client.send_message(zwp_pointer_gestures::pinch_begin_event(
+                    pinch_id, serial, time, surface_id, finger_count));
+            }
+        }
+    }
+
+    // Send update events if gestures are active
+    let dx = centroid_x - touch_state.prev_centroid_x;
+    let dy = centroid_y - touch_state.prev_centroid_y;
+
+    // Swipe: significant movement with fingers moving together
+    if touch_state.swipe_active && (dx.abs() > 0.0001 || dy.abs() > 0.0001) {
+        let dx_fixed = (dx * 65536.0 * 10.0) as i32 as u32; // scale up for visibility
+        let dy_fixed = (dy * 65536.0 * 10.0) as i32 as u32;
+        for (&cid, &swipe_id) in client_gesture_swipe_ids.iter() {
+            if let Some(client) = server.client_mut(cid) {
+                client.send_message(zwp_pointer_gestures::swipe_update_event(
+                    swipe_id, time, dx_fixed, dy_fixed));
+            }
+        }
+    }
+
+    // Pinch: distance change between fingers
+    if touch_state.pinch_active && touch_state.initial_pinch_distance > 0.0 {
+        let scale = if touch_state.initial_pinch_distance > 0.0001 {
+            (avg_dist / touch_state.initial_pinch_distance * 65536.0) as u32
+        } else {
+            65536 // 1.0 scale
+        };
+        // Rotation would require angle calculation — simplified to 0 for now
+        let rotation = 0u32;
+
+        let dx_fixed = (dx * 65536.0 * 10.0) as i32 as u32;
+        let dy_fixed = (dy * 65536.0 * 10.0) as i32 as u32;
+
+        for (&cid, &pinch_id) in client_gesture_pinch_ids.iter() {
+            if let Some(client) = server.client_mut(cid) {
+                client.send_message(zwp_pointer_gestures::pinch_update_event(
+                    pinch_id, time, dx_fixed, dy_fixed, scale, rotation));
+            }
+        }
+    }
+
+    // Update state for next frame
+    touch_state.prev_centroid_x = centroid_x;
+    touch_state.prev_centroid_y = centroid_y;
+    touch_state.active_fingers = finger_count;
 }

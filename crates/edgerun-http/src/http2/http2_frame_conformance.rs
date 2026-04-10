@@ -9,6 +9,7 @@
 use std::fs;
 
 use crate::http2::{Frame, FrameType};
+use crate::http2::frame::{ContinuationFrame, PriorityFrame, PushPromiseFrame};
 
 // Path relative to this crate's manifest directory.
 const SPEC_DIR: &str = env!("CARGO_MANIFEST_DIR");
@@ -510,4 +511,82 @@ fn check_continuation_frame(frame: &Frame, obj: &serde_json::Map<String, serde_j
 #[test]
 fn http2_frame_decode_conformance() {
     run_frame_decode_conformance();
+}
+
+// ---------------------------------------------------------------------------
+// Typed frame struct conformance (round-trip encode/decode)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn priority_frame_roundtrip() {
+    let original = PriorityFrame::new(0, true, 11, 8);
+    let frame = original.to_frame();
+
+    assert_eq!(frame.frame_type, FrameType::Priority);
+    assert_eq!(frame.stream_id, 0);
+    assert_eq!(frame.payload.len(), 5);
+
+    let decoded = PriorityFrame::from_frame(&frame).unwrap();
+    assert_eq!(decoded.stream_id, original.stream_id);
+    assert_eq!(decoded.exclusive, original.exclusive);
+    assert_eq!(decoded.stream_dependency, original.stream_dependency);
+    assert_eq!(decoded.weight, original.weight);
+}
+
+#[test]
+fn continuation_frame_roundtrip() {
+    let hbf = vec![0x82, 0x86, 0x84, 0x41, 0x8a];
+
+    // Without END_HEADERS
+    let original = ContinuationFrame::new(1, hbf.clone(), false);
+    let frame = original.to_frame();
+    assert_eq!(frame.frame_type, FrameType::Continuation);
+    assert_eq!(frame.flags, 0x00);
+    assert_eq!(frame.stream_id, 1);
+
+    let decoded = ContinuationFrame::from_frame(&frame).unwrap();
+    assert_eq!(decoded.stream_id, original.stream_id);
+    assert_eq!(decoded.header_block_fragment, original.header_block_fragment);
+    assert!(!decoded.end_headers);
+
+    // With END_HEADERS
+    let original2 = ContinuationFrame::new(1, hbf, true);
+    let frame2 = original2.to_frame();
+    let decoded2 = ContinuationFrame::from_frame(&frame2).unwrap();
+    assert!(decoded2.end_headers);
+}
+
+#[test]
+fn push_promise_frame_roundtrip() {
+    let hbf = vec![0x82, 0x86, 0x84];
+    let original = PushPromiseFrame::new(1, 2, hbf.clone());
+    let frame = original.to_frame();
+
+    assert_eq!(frame.frame_type, FrameType::PushPromise);
+    assert_eq!(frame.stream_id, 1);
+    assert_eq!(frame.flags, 0x00); // no padding
+
+    let decoded = PushPromiseFrame::from_frame(&frame).unwrap();
+    assert_eq!(decoded.stream_id, original.stream_id);
+    assert_eq!(decoded.promised_stream_id, original.promised_stream_id);
+    assert_eq!(decoded.header_block_fragment, original.header_block_fragment);
+    assert!(decoded.padding.is_none());
+}
+
+#[test]
+fn push_promise_frame_with_padding_roundtrip() {
+    let hbf = vec![0x82, 0x86, 0x84];
+    let padding = vec![0x00, 0x00, 0x00];
+    let original = PushPromiseFrame::with_padding(1, 2, hbf.clone(), padding.clone());
+    let frame = original.to_frame();
+
+    assert_eq!(frame.frame_type, FrameType::PushPromise);
+    assert_eq!(frame.stream_id, 1);
+    assert_ne!(frame.flags & 0x08, 0); // PADDED flag set
+
+    let decoded = PushPromiseFrame::from_frame(&frame).unwrap();
+    assert_eq!(decoded.stream_id, original.stream_id);
+    assert_eq!(decoded.promised_stream_id, original.promised_stream_id);
+    assert_eq!(decoded.header_block_fragment, original.header_block_fragment);
+    assert_eq!(decoded.padding, original.padding);
 }

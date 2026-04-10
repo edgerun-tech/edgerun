@@ -392,7 +392,7 @@ fn build_method_call_with_fds(
 fn build_message_raw(
     msg_type: u8,
     flags: u8,
-    unix_fds: u32,
+    _unix_fds: u32,
     serial: u32,
     header_fields: &[u8],
     body: &[u8],

@@ -72,6 +72,11 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
         }
     }
 
+    // Check if already mounted at this destination — skip if so
+    if is_already_mounted(&mount.destination, mount.mount_type.as_deref()) {
+        return Ok(());
+    }
+
     let source = mount.source.as_deref().unwrap_or("");
     let fstype = mount.mount_type.as_deref().unwrap_or("");
     let flags = mount_flags_from_opts(mount.options.as_deref());
@@ -101,6 +106,37 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
         do_mount(source, &mount.destination, fstype, flags, &data)?;
     }
     Ok(())
+}
+
+/// Check if a filesystem of the given type is already mounted at the destination.
+fn is_already_mounted(destination: &str, fstype: Option<&str>) -> bool {
+    use std::fs;
+    let mountinfo = match fs::read_to_string("/proc/self/mountinfo") {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    for line in mountinfo.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 5 {
+            continue;
+        }
+        // parts[4] is the mount point
+        if parts[4] == destination {
+            // parts[8] is the filesystem type (optional, after separator)
+            if let Some(expected_type) = fstype {
+                // Find the separator (fields after it start at index 7+)
+                if let Some(sep_idx) = parts.iter().position(|&p| p == "-") {
+                    if sep_idx + 1 < parts.len() && parts[sep_idx + 1] == expected_type {
+                        return true;
+                    }
+                }
+            } else {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ===========================================================================
@@ -316,22 +352,23 @@ pub fn setup_rootfs(
         "",
     )?;
 
+    // Make / private BEFORE pivot_root so mounts don't propagate to host
+    do_mount("", "/", "", ms::PRIVATE | ms::REC, "")?;
+
     // Create old_root inside rootfs for pivot_root
     let old_root = rootfs.join(".oci-old-root");
     fs::create_dir_all(&old_root)?;
 
-    // pivot_root
-    let old_root_cstr = old_root.to_str().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "old_root path is not valid UTF-8")
-    })?;
-    do_pivot_root(rootfs_cstr, old_root_cstr)?;
+    // pivot_root requires CWD to be under new_root, so chdir to rootfs first
+    std::env::set_current_dir(rootfs)?;
+
+    // pivot_root (now with CWD inside rootfs, use relative paths)
+    let old_root_cstr = ".oci-old-root";
+    do_pivot_root(".", old_root_cstr)?;
 
     // Detach and remove old root
     do_umount2("/.oci-old-root", MNT_DETACH)?;
     let _ = fs::remove_dir("/.oci-old-root");
-
-    // Make / private so mounts don't propagate to host
-    do_mount("", "/", "", ms::PRIVATE | ms::REC, "")?;
 
     // If root is readonly, remount the entire rootfs as read-only NOW,
     // before mounting writable filesystems on top.
@@ -382,7 +419,13 @@ pub fn setup_rootfs(
     // Additional mounts from spec
     if let Some(spec_mounts) = mounts {
         for m in spec_mounts {
-            setup_mount(m, mount_label)?;
+            // Make certain filesystem types best-effort (mqueue, hugetlbfs, etc.)
+            let is_optional = matches!(m.mount_type.as_deref(), Some("mqueue") | Some("hugetlbfs"));
+            if is_optional {
+                let _ = setup_mount(m, mount_label);
+            } else {
+                setup_mount(m, mount_label)?;
+            }
         }
     }
 

@@ -416,6 +416,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_object(visitor)
     }
 
@@ -423,6 +424,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_array(visitor)
     }
 
@@ -430,6 +432,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_array(visitor)
     }
 
@@ -437,6 +440,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_object(visitor)
     }
 
@@ -445,6 +449,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_integer(visitor, |token, visitor| {
             if let Some(i) = parse_i64_fast(token) {
                 visitor.visit_i64(i)
@@ -459,6 +464,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_integer(visitor, |token, visitor| {
             if let Some(u) = parse_u64_fast(token) {
                 visitor.visit_u64(u)
@@ -472,6 +478,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_integer(visitor, |token, visitor| {
             visitor.visit_f64(token.parse::<f64>().unwrap_or(0.0))
         })
@@ -538,6 +545,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_string(visitor)
     }
 
@@ -545,6 +553,7 @@ impl<'de> SerdeDeserializer<'de> for &mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
+        self.skip_whitespace();
         self.consume_string(visitor)
     }
 

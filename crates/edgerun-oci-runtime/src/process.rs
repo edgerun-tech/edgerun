@@ -1,9 +1,10 @@
-//! Child process setup — runs in `pre_exec` before `execve`.
+//! Child process setup — runs in `pre_exec` before `execve`, or as a `clone()` entry point.
 //!
 //! This module contains all the namespace, rootfs, security, and privilege
 //! setup that must happen in the forked child before the container process
 //! is exec'd.
 
+use std::ffi::CString;
 use std::fs;
 use std::io;
 use std::os::unix::io::AsRawFd;
@@ -62,25 +63,8 @@ impl ContainerConfig {
         let process = spec.process.clone().unwrap_or_default();
         let user = process.user.clone().unwrap_or_default();
 
-        let ns_list = linux.namespaces.clone().unwrap_or_else(default_namespaces);
-        let ns_flags = {
-            use crate::syscalls::ns;
-            let mut f: i32 = 0;
-            for ns in &ns_list {
-                if ns.path.is_some() { continue; }
-                f |= match ns.ns_type.as_str() {
-                    "mount"   => ns::NEWNS,
-                    "cgroup"  => ns::NEWCGROUP,
-                    "uts"     => ns::NEWUTS,
-                    "ipc"     => ns::NEWIPC,
-                    "user"    => ns::NEWUSER,
-                    "pid"     => ns::NEWPID,
-                    "network" => ns::NEWNET,
-                    _ => 0, // Unknown ns type — validation below
-                };
-            }
-            f
-        };
+        let ns_list = linux.namespaces.clone().unwrap_or_else(crate::default_namespaces);
+        let ns_flags = crate::namespace_flags(&ns_list);
 
         // Validate namespace types — reject unknown types
         for ns in &ns_list {
@@ -136,7 +120,7 @@ impl ContainerConfig {
 
     /// Returns true if PID namespace is unshared (not joined via path).
     pub fn has_pid_ns(&self) -> bool {
-        (self.ns_flags & 0x20000000) != 0 // CLONE_NEWPID
+        (self.ns_flags & crate::syscalls::ns::NEWPID) != 0
     }
 }
 
@@ -181,14 +165,15 @@ fn deserialize_devices(json: &str) -> Vec<OciLinuxDevice> {
 }
 
 fn ns_type_to_flag(ns_type: &str) -> Option<i32> {
+    use crate::syscalls::ns;
     match ns_type {
-        "mount"   => Some(0x00020000),
-        "cgroup"  => Some(0x02000000),
-        "uts"     => Some(0x04000000),
-        "ipc"     => Some(0x08000000),
-        "user"    => Some(0x10000000),
-        "pid"     => Some(0x20000000),
-        "network" => Some(0x40000000),
+        "mount"   => Some(ns::NEWNS),
+        "cgroup"  => Some(ns::NEWCGROUP),
+        "uts"     => Some(ns::NEWUTS),
+        "ipc"     => Some(ns::NEWIPC),
+        "user"    => Some(ns::NEWUSER),
+        "pid"     => Some(ns::NEWPID),
+        "network" => Some(ns::NEWNET),
         _ => None,
     }
 }
@@ -320,12 +305,249 @@ fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
 }
 
 fn write_uid_map(content: &str) -> io::Result<()> {
-    fs::write("/proc/self/uid_map", content)?;
-    let _ = fs::write("/proc/self/setgroups", "deny");
+    // Only write uid_map if we're in a user namespace.
+    // Writing to /proc/self/uid_map outside a user namespace fails with EPERM.
+    if let Ok(ns) = fs::read_link("/proc/self/ns/user") {
+        if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
+            if ns != init_ns {
+                fs::write("/proc/self/uid_map", content)?;
+                let _ = fs::write("/proc/self/setgroups", "deny");
+                return Ok(());
+            }
+        }
+    }
+    // Not in a user namespace — skip uid_map writing (we keep current uid)
     Ok(())
 }
 
 fn write_gid_map(content: &str) -> io::Result<()> {
-    fs::write("/proc/self/gid_map", content)?;
+    // Same as uid_map — only write if in a user namespace
+    if let Ok(ns) = fs::read_link("/proc/self/ns/user") {
+        if let Ok(init_ns) = fs::read_link("/proc/1/ns/user") {
+            if ns != init_ns {
+                fs::write("/proc/self/gid_map", content)?;
+                return Ok(());
+            }
+        }
+    }
     Ok(())
+}
+
+// ===========================================================================
+// clone() entry point and setup
+// ===========================================================================
+
+/// Data passed to the clone() child entry point.
+pub struct CloneChildData {
+    pub bundle: CString,
+    pub fifo: CString,
+    pub id: CString,
+}
+
+/// Entry point for the cloned child process.
+/// 
+/// This runs in the new namespaces from the start (no unshare needed).
+/// Reads config from bundle, runs setup, waits on FIFO for start signal, then execs.
+/// 
+/// Returns 0 on success, 1 on failure.
+pub fn cloned_child_main(data: CloneChildData) -> i32 {
+    // Open FIFO for reading+writing (O_RDWR prevents EOF when no writers)
+    let fifo_fd = unsafe {
+        libc::open(data.fifo.as_ptr(), libc::O_RDWR)
+    };
+    if fifo_fd < 0 {
+        return 1;
+    }
+
+    // Read the config.json from the bundle
+    let config_path = format!("{}/config.json", data.bundle.to_string_lossy());
+    let config_cstr = match CString::new(config_path.clone()) {
+        Ok(c) => c,
+        Err(_) => return 1,
+    };
+    let fd = unsafe { libc::open(config_cstr.as_ptr(), libc::O_RDONLY) };
+    if fd < 0 {
+        return 1;
+    }
+
+    // Read config data
+    let mut buf = Vec::new();
+    loop {
+        let mut tmp = [0u8; 4096];
+        let n = unsafe { libc::read(fd, tmp.as_mut_ptr() as *mut libc::c_void, tmp.len()) };
+        if n <= 0 { break; }
+        buf.extend_from_slice(&tmp[..n as usize]);
+    }
+    unsafe { libc::close(fd) };
+
+    // Parse spec
+    let spec = match crate::json::parse_oci_spec(&buf) {
+        Ok(s) => s,
+        Err(_) => return 1,
+    };
+
+    // Run the setup
+    let bundle_lossy = data.bundle.to_string_lossy();
+    let bundle_path = std::path::Path::new(bundle_lossy.as_ref());
+    if setup_child_for_create(&spec, bundle_path).is_err() {
+        return 1;
+    }
+
+    // Wait for start signal
+    let mut start_buf = [0u8; 4];
+    let n = unsafe { libc::read(fifo_fd, start_buf.as_mut_ptr() as *mut libc::c_void, start_buf.len()) };
+    if n <= 0 {
+        return 1;
+    }
+
+    // Exec the container
+    exec_container_process(&spec);
+    1 // Should not reach here if exec succeeds
+}
+
+/// Setup the container for the create command (clone path).
+/// This runs setup without waiting for FIFO — the caller handles FIFO.
+pub fn setup_child_for_create(spec: &OciSpec, bundle: &std::path::Path) -> io::Result<()> {
+    // Change to bundle directory so relative rootfs paths work
+    std::env::set_current_dir(bundle)?;
+
+    let cfg = ContainerConfig::from_spec(spec)?;
+
+    join_explicit_namespaces(&cfg.ns_paths)?;
+    write_uid_map(&cfg.uid_map)?;
+    write_gid_map(&cfg.gid_map)?;
+
+    let _ = do_set_hostname(&cfg.hostname);
+
+    apply_security_hardening(cfg.no_new_privs)?;
+
+    // Capabilities — non-fatal, may fail in certain namespace configurations
+    let _ = set_capabilities(
+        cfg.cap_effective.as_deref(),
+        cfg.cap_permitted.as_deref(),
+        cfg.cap_inheritable.as_deref(),
+        cfg.cap_bounding.as_deref(),
+        cfg.cap_ambient.as_deref(),
+    );
+
+    // Resource limits
+    for rl in &cfg.rlimits {
+        if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {
+            let _ = do_setrlimit(resource, rl.soft, rl.hard);
+        }
+    }
+
+    // OOM score
+    if cfg.oom_score_adj != 0 {
+        let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
+    }
+
+    // Rootfs
+    let devices = deserialize_devices(&cfg.devices_json);
+    let mount_label = cfg.mount_label.as_deref();
+    setup_rootfs(
+        &cfg.root,
+        cfg.mounts.as_deref(),
+        cfg.masked_paths.as_deref(),
+        cfg.readonly_paths.as_deref(),
+        if devices.is_empty() { None } else { Some(&devices) },
+        mount_label,
+        true,
+        true,
+    )?;
+
+    set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
+    apply_sysctl(cfg.sysctl.as_ref())?;
+
+    if !cfg.additional_gids.is_empty() {
+        set_supplementary_gids(&cfg.additional_gids);
+    }
+
+    do_setgid(cfg.gid)?;
+    do_setuid(cfg.uid)?;
+
+    Ok(())
+}
+
+/// Exec the container process.
+fn exec_container_process(spec: &OciSpec) {
+    let process = spec.process.clone().unwrap_or_default();
+    let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
+    let env = process.env.clone().unwrap_or_else(|| vec![
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin".into(),
+        "TERM=xterm".into(),
+    ]);
+    let cwd = process.cwd.clone().unwrap_or("/".into());
+
+    let use_pid1 = has_pid_ns(spec);
+    let init_script = if use_pid1 {
+        pid1_init_script(&args)
+    } else {
+        String::new()
+    };
+
+    use std::process::{Command, Stdio};
+    let mut cmd = if use_pid1 {
+        let mut c = Command::new("/bin/sh");
+        c.arg("-c");
+        c.arg(&init_script);
+        c
+    } else {
+        let mut c = Command::new(&args[0]);
+        c.args(&args[1..]);
+        c
+    };
+    cmd.current_dir(&cwd);
+    cmd.env_clear();
+    for e in &env {
+        if let Some((k, v)) = e.split_once('=') {
+            cmd.env(k, v);
+        }
+    }
+    cmd.stdin(Stdio::inherit());
+    cmd.stdout(Stdio::inherit());
+    cmd.stderr(Stdio::inherit());
+
+    use std::os::unix::process::CommandExt;
+    let _ = cmd.exec();
+    std::process::exit(1);
+}
+
+fn has_pid_ns(spec: &OciSpec) -> bool {
+    let linux = spec.linux.as_ref();
+    let ns_list = linux.and_then(|l| l.namespaces.as_ref()).map(|x| x.as_slice()).unwrap_or(&[]);
+    if ns_list.is_empty() { return true; }
+    for ns in ns_list {
+        if ns.ns_type == "pid" && ns.path.is_none() { return true; }
+    }
+    false
+}
+
+fn pid1_init_script(args: &[String]) -> String {
+    let workload = args.iter()
+        .map(|a| a.replace('\'', "'\\''"))
+        .map(|a| format!("'{}'", a))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    format!(
+        r#"#!/bin/sh
+cleanup() {{
+    kill -$1 $PID 2>/dev/null
+}}
+trap 'cleanup 15' TERM
+trap 'cleanup 2' INT
+trap 'cleanup 3' QUIT
+{workload} &
+PID=$!
+while true; do
+    wait $PID 2>/dev/null
+    EXIT_CODE=$?
+    while kill -0 $PID 2>/dev/null; do
+        sleep 0.1
+    done
+    exit $EXIT_CODE
+done
+"#
+    )
 }
