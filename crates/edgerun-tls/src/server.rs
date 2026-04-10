@@ -1309,7 +1309,7 @@ mod tests {
         let server_sh_hash = hash.hash(&sh_msg);
 
         // ========== CLIENT SIDE: parse ServerHello ==========
-        let sh_parsed = ServerHello::parse(&sh_msg).unwrap();
+        let _sh_parsed = ServerHello::parse(&sh_msg).unwrap();
         let client_sh_hash = hash.hash(&sh_msg);
         assert_eq!(server_sh_hash, client_sh_hash, "ServerHello hashes must match");
 

@@ -1,21 +1,19 @@
-//! OCI container lifecycle — create, start, delete with hook integration.
+//! OCI container lifecycle — composable phases with full hook support.
 //!
 //! Follows the OCI runtime spec lifecycle:
 //!
 //! ```text
-//! create  →  (prestart → createRuntime)  →  fork child →  (createContainer → FIFO-wait)  →  created
-//! start   →  (signal FIFO)               →  child: (startContainer → exec)  →  poststart  →  running
+//! create  →  (prestart → createRuntime)  →  fork child →  (createContainer → FIFO-wait → startContainer → exec)  →  created
+//! start   →  signal FIFO                →  poststart   →  running
 //! (process exits)                                                              →  stopped
-//! delete  →  (undo create → poststop)                                        →  deleted
+//! delete  →  (poststop + cgroup cleanup)                                      →  deleted
 //! ```
 //!
 //! Hook execution:
-//! - **Runtime namespace** (parent process): prestart, createRuntime, poststart, poststop
-//! - **Container namespace** (child process): createContainer, startContainer
+//! - **Runtime namespace** (parent): prestart, createRuntime, poststart, poststop
+//! - **Container namespace** (child): createContainer, startContainer
 //!
-//! Hook failure semantics per OCI spec:
-//! - **prestart/createRuntime/createContainer/startContainer/poststart**: error → stop container
-//! - **poststop**: warning only, remaining hooks continue
+//! Hook failure semantics: error → stop container (except poststop: warn + continue)
 
 use std::fs;
 use std::io;
@@ -29,88 +27,80 @@ use crate::cgroups::setup_cgroups;
 use crate::hooks::{
     ContainerState,
     execute_prestart_hooks, execute_create_runtime_hooks,
+    execute_create_container_hooks, execute_start_container_hooks,
     execute_poststart_hooks, execute_poststop_hooks,
 };
 use crate::process::{ContainerConfig, setup_container_child};
 use crate::init::pid1_init_script;
 use crate::handle::RunningContainer;
-use crate::state::{container_state_dir, fifo_path};
+use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState};
 
 // ===========================================================================
-// CreatedContainer — intermediate state between create and start
+// Step 1: prestart hooks
 // ===========================================================================
 
-/// A container that has been created but not yet started.
-///
-/// The child process is blocked inside `pre_exec`, waiting on the FIFO.
-/// Call [`start_created_container`] to signal the FIFO and complete startup.
-pub struct CreatedContainer {
-    child: std::process::Child,
-    cgroup_path: String,
-    bundle_path: String,
-    pid: u32,
-    resources: Option<OciLinuxResources>,
-    poststop_hooks: Vec<OciHook>,
-    poststart_hooks: Vec<OciHook>,
-}
+/// Run prestart hooks (runtime namespace). Returns hook state for subsequent steps.
+pub fn run_prestart_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> {
+    let hooks = spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default();
 
-impl CreatedContainer {
-    /// The host PID of the container's init process.
-    pub fn pid(&self) -> u32 {
-        self.pid
+    let state = make_state(spec, container_id, "creating", 0);
+
+    if let Some(ref prestart) = hooks.prestart {
+        if !prestart.is_empty() {
+            if let Err(e) = execute_prestart_hooks(Some(prestart), &state) {
+                return Err(io::Error::new(io::ErrorKind::Other, format!("prestart hook failed: {}", e)));
+            }
+        }
     }
+    Ok(())
 }
 
 // ===========================================================================
-// Phase 1: create
+// Step 2: createRuntime hooks
 // ===========================================================================
 
-/// Create a container — runs prestart + createRuntime hooks (runtime namespace),
-/// then spawns the child which runs createContainer hooks (container namespace)
-/// and waits on the FIFO for the start signal.
-pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Result<CreatedContainer> {
+/// Run createRuntime hooks (runtime namespace).
+pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> {
+    let hooks = spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default();
+
+    let state = make_state(spec, container_id, "creating", 0);
+
+    if let Some(ref create_runtime) = hooks.create_runtime {
+        if !create_runtime.is_empty() {
+            if let Err(e) = execute_create_runtime_hooks(Some(create_runtime), &state) {
+                return Err(io::Error::new(io::ErrorKind::Other, format!("createRuntime hook failed: {}", e)));
+            }
+        }
+    }
+    Ok(())
+}
+
+// ===========================================================================
+// Step 3: fork child — runs setup + createContainer + FIFO-wait + startContainer
+// ===========================================================================
+
+/// Fork the container child. The child runs:
+/// 1. setup_container_child (namespaces, rootfs, security, etc.)
+/// 2. createContainer hooks (container namespace)
+/// 3. Waits on FIFO for start signal
+/// 4. startContainer hooks (container namespace)
+/// 5. execs the workload
+///
+/// Returns the child PID and a reference to the spec-derived config.
+pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
     let cfg = ContainerConfig::from_spec(spec)?;
     let bundle_path = cfg.root.path.clone();
     let cgroup_path = spec.linux.as_ref()
         .and_then(|l| l.cgroups_path.as_ref())
         .cloned()
         .unwrap_or_else(|| "/edgerun".into());
-
-    let state = ContainerState {
-        version: spec.version.clone(),
-        id: container_id.to_string(),
-        status: "creating".into(),
-        pid: 0,
-        bundle: bundle_path.clone(),
-        annotations: spec.linux.as_ref()
-            .and_then(|l| l.sysctl.as_ref())
-            .map(|sysctl| {
-                sysctl.iter()
-                    .map(|(k, v)| (format!("sysctl:{}", k), v.clone()))
-                    .collect()
-            })
-            .unwrap_or_default(),
-    };
-
-    let hooks = spec.linux.as_ref()
-        .and_then(|l| l.hooks.clone())
-        .unwrap_or_default();
-
-    // === Step 3: prestart hooks (runtime namespace) ===
-    if let Err(e) = execute_prestart_hooks(hooks.prestart.as_deref(), &state) {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("prestart hook failed: {}", e),
-        ));
-    }
-
-    // === Step 4: createRuntime hooks (runtime namespace) ===
-    if let Err(e) = execute_create_runtime_hooks(hooks.create_runtime.as_deref(), &state) {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("createRuntime hook failed: {}", e),
-        ));
-    }
+    let resources = spec.linux.as_ref().and_then(|l| l.resources.clone());
 
     // Create state directory and FIFO
     let state_dir = container_state_dir(container_id);
@@ -124,7 +114,13 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
             format!("mkfifo failed: {}", String::from_utf8_lossy(&mkfifo_out.stderr))));
     }
 
-    // Build the command
+    // Extract hooks for the child
+    let hooks = spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default();
+
+    // Build the workload command
     let process = spec.process.clone().unwrap_or_default();
     let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
     let env = process.env.clone().unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
@@ -151,7 +147,7 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
         }
     }
 
-    // Clone data for pre_exec (runs in container namespace)
+    // Clone data for pre_exec
     let create_container_hooks = hooks.create_container.clone();
     let start_container_hooks = hooks.start_container.clone();
     let version = spec.version.clone();
@@ -161,7 +157,7 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
 
     unsafe {
         cmd.pre_exec(move || {
-            // 1. Standard container setup (namespaces, rootfs, security, etc.)
+            // 1. Standard container setup
             setup_container_child(&cfg)?;
 
             // 2. createContainer hooks (container namespace)
@@ -174,10 +170,12 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
                 annotations: std::collections::HashMap::new(),
             };
             if let Some(ref hk) = create_container_hooks {
-                crate::hooks::execute_create_container_hooks(Some(hk), &cc_state)?;
+                if !hk.is_empty() {
+                    execute_create_container_hooks(Some(hk), &cc_state)?;
+                }
             }
 
-            // 3. Wait on FIFO for start signal (blocks here until parent calls start)
+            // 3. Wait on FIFO for start signal
             let fifo_fd = libc::open(fifo_cstr.as_ptr(), libc::O_RDONLY);
             if fifo_fd < 0 {
                 return Err(io::Error::last_os_error());
@@ -199,7 +197,9 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
                 annotations: std::collections::HashMap::new(),
             };
             if let Some(ref hk) = start_container_hooks {
-                crate::hooks::execute_start_container_hooks(Some(hk), &sc_state)?;
+                if !hk.is_empty() {
+                    execute_start_container_hooks(Some(hk), &sc_state)?;
+                }
             }
 
             Ok(())
@@ -209,116 +209,246 @@ pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Res
     let child = cmd.spawn()?;
     let child_pid = child.id();
 
-    Ok(CreatedContainer {
+    Ok(ForkedChild {
         child,
-        cgroup_path,
-        bundle_path,
         pid: child_pid,
-        resources: spec.linux.as_ref().and_then(|l| l.resources.clone()),
+        bundle_path,
+        cgroup_path,
+        resources,
         poststop_hooks: hooks.poststop.unwrap_or_default(),
         poststart_hooks: hooks.poststart.unwrap_or_default(),
     })
 }
 
+/// Result of forking a container child.
+pub struct ForkedChild {
+    child: std::process::Child,
+    pid: u32,
+    bundle_path: String,
+    cgroup_path: String,
+    resources: Option<OciLinuxResources>,
+    poststop_hooks: Vec<OciHook>,
+    poststart_hooks: Vec<OciHook>,
+}
+
+impl ForkedChild {
+    pub fn pid(&self) -> u32 { self.pid }
+    pub fn bundle_path(&self) -> &str { &self.bundle_path }
+    pub fn cgroup_path(&self) -> &str { &self.cgroup_path }
+}
+
 // ===========================================================================
-// Phase 2: start
+// Step 4: save state as "created"
 // ===========================================================================
 
-/// Start a created container — signals the FIFO to unblock the child,
-/// sets up cgroups, and runs poststart hooks.
-pub fn start_created_container(created: CreatedContainer) -> io::Result<RunningContainer> {
-    let CreatedContainer {
-        child,
-        cgroup_path,
-        bundle_path,
-        pid: child_pid,
-        resources,
-        poststop_hooks,
-        poststart_hooks,
-    } = created;
+/// Save the container state as "created".
+pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
+    let state = StateContainerState {
+        oci_version: spec.version.clone(),
+        id: container_id.to_string(),
+        status: "created".to_string(),
+        pid: Some(pid),
+        bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
+        annotations: spec.annotations.clone(),
+    };
+    save_state(&state, container_id)
+}
 
-    // Signal the FIFO to unblock the child's pre_exec
-    let fifo = fifo_path(&child_pid.to_string());
-    // We need the container ID to find the FIFO. Store it in CreatedContainer.
-    // For now, derive from bundle path (it's in /run/edgerun-oci/<id>/)
-    // Actually, let's store the container ID in CreatedContainer.
+// ===========================================================================
+// Step 5: signal start
+// ===========================================================================
 
-    // Cgroups
-    if let Some(ref res) = resources {
-        if let Err(e) = setup_cgroups(child_pid, res, &cgroup_path) {
-            let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup setup failed for PID {}: {}", child_pid, e));
+/// Signal the container child to start by writing to the FIFO.
+pub fn signal_start(container_id: &str) -> io::Result<()> {
+    let fifo = fifo_path(container_id);
+    let mut fifo_file = fs::File::create(&fifo)
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("failed to open start FIFO: {}", e)))?;
+    let _ = fifo_file.write_all(b"go\n");
+    let _ = fifo_file.flush();
+    // Keep the FIFO open briefly to ensure the reader gets the data
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    Ok(())
+}
+
+// ===========================================================================
+// Step 6: cgroups
+// ===========================================================================
+
+/// Set up cgroups for the container.
+pub fn setup_container_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) {
+    if let Err(e) = setup_cgroups(pid, resources, cgroup_path) {
+        let _ = std::fs::write("/dev/kmsg", format!("edgerun: cgroup setup failed for PID {}: {}", pid, e));
+    }
+}
+
+// ===========================================================================
+// Step 7: poststart hooks
+// ===========================================================================
+
+/// Run poststart hooks (runtime namespace).
+pub fn run_poststart_hooks(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
+    let hooks = spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default();
+
+    let state = make_state(spec, container_id, "running", pid);
+
+    if let Some(ref poststart) = hooks.poststart {
+        if !poststart.is_empty() {
+            if let Err(e) = execute_poststart_hooks(Some(poststart), &state) {
+                let _ = unsafe { crate::syscalls::kill(pid as std::os::raw::c_int, crate::syscalls::SIGKILL) };
+                return Err(io::Error::new(io::ErrorKind::Other, format!("poststart hook failed: {}", e)));
+            }
         }
     }
+    Ok(())
+}
 
-    // Poststart hooks (runtime namespace)
+// ===========================================================================
+// Step 8: update state to "running"
+// ===========================================================================
+
+/// Update the container state to "running".
+pub fn update_state_running(container_id: &str, pid: u32) -> io::Result<()> {
+    let state = StateContainerState {
+        oci_version: String::new(),
+        id: container_id.to_string(),
+        status: "running".to_string(),
+        pid: Some(pid),
+        bundle: String::new(),
+        annotations: None,
+    };
+    // Only update the status field — the state file already exists
+    // We need to load and update, not overwrite
+    if let Ok(mut existing) = crate::state::load_state(container_id) {
+        existing.status = "running".to_string();
+        existing.pid = Some(pid);
+        crate::state::save_state(&existing, container_id)
+    } else {
+        save_state(&state, container_id)
+    }
+}
+
+// ===========================================================================
+// Step 9: RunningContainer wrapper
+// ===========================================================================
+
+/// Wrap a ForkedChild into a RunningContainer for the library API.
+pub fn into_running_container(child: ForkedChild) -> RunningContainer {
+    RunningContainer {
+        child: child.child,
+        cgroup_path: child.cgroup_path,
+        bundle_path: child.bundle_path,
+        pid: child.pid,
+        poststop_hooks: child.poststop_hooks,
+    }
+}
+
+// ===========================================================================
+// Delete
+// ===========================================================================
+
+/// Run poststop hooks and clean up cgroups.
+pub fn run_poststop_and_cleanup(_container_id: &str, pid: u32, bundle_path: &str, cgroup_path: &str, spec: &OciSpec) {
+    // Poststop hooks
+    let hooks = spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default();
+
     let state = ContainerState {
         version: String::new(),
         id: String::new(),
-        status: "running".into(),
-        pid: child_pid,
-        bundle: bundle_path.clone(),
+        status: "stopped".into(),
+        pid,
+        bundle: bundle_path.to_string(),
         annotations: std::collections::HashMap::new(),
     };
 
-    if let Err(e) = execute_poststart_hooks(Some(&poststart_hooks), &state) {
-        let _ = unsafe { crate::syscalls::kill(child_pid as std::os::raw::c_int, crate::syscalls::SIGKILL) };
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("poststart hook failed: {}", e),
-        ));
+    if let Some(ref poststop) = hooks.poststop {
+        if !poststop.is_empty() {
+            execute_poststop_hooks(Some(poststop), &state);
+        }
     }
 
-    Ok(RunningContainer {
-        child,
-        cgroup_path,
-        bundle_path,
-        pid: child_pid,
-        poststop_hooks,
-    })
+    // Clean up cgroup directory
+    if !cgroup_path.is_empty() {
+        let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+        if cgroup_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cgroup_dir);
+        }
+    }
 }
 
 // ===========================================================================
-// Convenience: full create+start in one call
+// Convenience: full create+start in one call (library API)
 // ===========================================================================
 
 /// Run a container from a parsed OCI spec (blocking).
-///
-/// Full lifecycle: create → start → wait → delete (with poststop hooks).
 pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
-    let created = create_container_from_spec(spec, "")?;
-    let mut running = start_created_container(created)?;
-    let result = running.child.wait()?;
-    let _ = delete_container_internal(running.pid, &running.bundle_path, &running.cgroup_path, &running.poststop_hooks);
-    Ok(result)
+    run_spec_with_id(spec, "")
 }
 
 /// Run a container from a parsed OCI spec with a container ID (blocking).
-///
-/// Same as [`run_spec`] but populates `ContainerState.id` for hooks.
 pub fn run_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<std::process::ExitStatus> {
-    let created = create_container_from_spec(spec, container_id)?;
-    let mut running = start_created_container(created)?;
+    run_prestart_hooks(spec, container_id)?;
+    run_create_runtime_hooks(spec, container_id)?;
+    let child = fork_container_child(spec, container_id)?;
+    let pid = child.pid();
+    let bundle = child.bundle_path().to_string();
+    let cgroup = child.cgroup_path().to_string();
+    let running = start_created_container_internal(child, spec, container_id)?;
+    let mut running = running;
     let result = running.child.wait()?;
-    let _ = delete_container_internal(running.pid, &running.bundle_path, &running.cgroup_path, &running.poststop_hooks);
+    run_poststop_and_cleanup(container_id, pid, &bundle, &cgroup, spec);
     Ok(result)
 }
 
 /// Start a container without blocking.
-///
-/// Full create + start lifecycle. Returns a handle for awaiting/killing.
 pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
     start_spec_with_id(spec, "")
 }
 
 /// Start a container without blocking, with a container ID.
 pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<RunningContainer> {
-    let created = create_container_from_spec(spec, container_id)?;
-    start_created_container(created)
+    run_prestart_hooks(spec, container_id)?;
+    run_create_runtime_hooks(spec, container_id)?;
+    let child = fork_container_child(spec, container_id)?;
+    start_created_container_internal(child, spec, container_id)
 }
 
-// ===========================================================================
-// Delete / cleanup
-// ===========================================================================
+/// Start a forked child — signals FIFO, sets up cgroups, runs poststart hooks.
+fn start_created_container_internal(child: ForkedChild, spec: &OciSpec, container_id: &str) -> io::Result<RunningContainer> {
+    let pid = child.pid();
+    let resources = child.resources.clone();
+    let cgroup_path = child.cgroup_path().to_string();
+    let poststop_hooks = child.poststop_hooks.clone();
+    let poststart_hooks = child.poststart_hooks.clone();
+    let bundle_path = child.bundle_path().to_string();
+
+    // Signal FIFO
+    signal_start(container_id)?;
+
+    // Cgroups
+    if let Some(ref res) = resources {
+        setup_container_cgroups(pid, res, &cgroup_path);
+    }
+
+    // Poststart hooks
+    run_poststart_hooks(spec, container_id, pid)?;
+
+    // Update state
+    update_state_running(container_id, pid)?;
+
+    Ok(RunningContainer {
+        child: child.child,
+        cgroup_path,
+        bundle_path,
+        pid,
+        poststop_hooks,
+    })
+}
 
 /// Delete a container and run poststop hooks.
 pub fn delete_container(container: RunningContainer) {
@@ -347,7 +477,6 @@ fn delete_container_internal(
 
     execute_poststop_hooks(Some(poststop_hooks), &state);
 
-    // Clean up cgroup directory
     if !cgroup_path.is_empty() {
         let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
         if cgroup_dir.exists() {
@@ -356,4 +485,26 @@ fn delete_container_internal(
     }
 
     Ok(())
+}
+
+// ===========================================================================
+// Helpers
+// ===========================================================================
+
+fn make_state(spec: &OciSpec, container_id: &str, status: &str, pid: u32) -> ContainerState {
+    ContainerState {
+        version: spec.version.clone(),
+        id: container_id.to_string(),
+        status: status.into(),
+        pid,
+        bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
+        annotations: spec.linux.as_ref()
+            .and_then(|l| l.sysctl.as_ref())
+            .map(|sysctl| {
+                sysctl.iter()
+                    .map(|(k, v)| (format!("sysctl:{}", k), v.clone()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
 }

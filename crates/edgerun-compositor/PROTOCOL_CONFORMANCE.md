@@ -167,8 +167,7 @@ wp_tearing_control_manager_v1 v1
 
 ### No-ops (accepted but not fully functional)
 - **`xdg_toplevel::MOVE` / `RESIZE`** — Accepted with logging and resize state tracking. Full interactive pointer grab not yet implemented (compositor controls window placement).
-- **`xdg_toplevel::SHOW_WINDOW_MENU`** — Declared in protocol but not dispatched.
-- **`xdg_positioner::SET_REACTIVE` / `SET_PARENT_SIZE` / `SET_PARENT_CONFIGURE`** — Values stored in PositionerState; reactive repositioning not yet triggered.
+- **`xdg_toplevel::SHOW_WINDOW_MENU`** — Declared in protocol but not dispatched (requires compositor-side UI).
 
 ### Not implemented
 - **`wl_touch` shape/orientation events** — Declared but not sent (evdev provides no touch shape data).
@@ -177,7 +176,7 @@ wp_tearing_control_manager_v1 v1
 ### Protocol not advertised
 - **`wl_shell`** — Legacy protocol, deprecated in favor of xdg-shell. Correctly omitted.
 
-## Overall Conformance: ~95%
+## Overall Conformance: ~97%
 
 The compositor fully implements the protocols it chooses to advertise, with three categories of gaps:
 1. **Hardware-dependent** features (touch shape/orientation, syncobj fences) — require specific kernel/driver support

@@ -339,3 +339,8 @@ pub fn xdg_popup_configure_event(
 pub fn xdg_popup_done_event(popup_id: u32) -> Message {
     message_empty(popup_id, xdg_popup_event::POPUP_DONE)
 }
+
+/// Build popup repositioned event.
+pub fn xdg_popup_repositioned_event(popup_id: u32, token: u32) -> Message {
+    message_uint(popup_id, xdg_popup_event::REPOSITIONED, token)
+}

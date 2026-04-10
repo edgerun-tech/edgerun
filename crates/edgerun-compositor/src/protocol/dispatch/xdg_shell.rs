@@ -26,7 +26,12 @@ pub fn handle_wm_base(ctx: &mut DispatchContext) {
             }
             ctx.shell.set_positioner(pos_id, crate::compositor::shell::PositionerState::default());
         }
-        xdg_shell::xdg_wm_base_request::PONG => {}
+        xdg_shell::xdg_wm_base_request::PONG => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let pong_serial = cursor_obj.uint().unwrap_or(0);
+            // Client responded to ping — clear the pending ping
+            ctx.shell.ack_ping(pong_serial);
+        }
         _ => {}
     }
 }
@@ -113,7 +118,25 @@ pub fn handle_surface(ctx: &mut DispatchContext) {
             }
         }
         xdg_shell::xdg_surface_request::SET_WINDOW_GEOMETRY => {
-            let _ = &ctx.msg;
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let x = cursor_obj.int().unwrap_or(0);
+            let y = cursor_obj.int().unwrap_or(0);
+            let w = cursor_obj.int().unwrap_or(0);
+            let h = cursor_obj.int().unwrap_or(0);
+            // Track window geometry on the toplevel and surface
+            if let Some(tl) = ctx.shell.toplevels.values_mut().find(|tl| tl.surface_id == ctx.msg.sender_id) {
+                tl.window_x = x;
+                tl.window_y = y;
+                tl.window_width = w;
+                tl.window_height = h;
+                eprintln!("[edgerun-compositor] Window geometry for toplevel {}: x={} y={} w={} h={}", tl.id, x, y, w, h);
+            }
+            if let Some(surface) = ctx.surfaces.get_mut(ctx.msg.sender_id) {
+                surface.x = x;
+                surface.y = y;
+                if w > 0 { surface.width = w as u32; }
+                if h > 0 { surface.height = h as u32; }
+            }
         }
         xdg_shell::xdg_surface_request::DESTROY => {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
@@ -144,8 +167,24 @@ pub fn handle_toplevel(ctx: &mut DispatchContext) {
                 }
             }
         }
-        xdg_shell::xdg_toplevel_request::SET_MIN_SIZE => { let _ = &ctx.msg; }
-        xdg_shell::xdg_toplevel_request::SET_MAX_SIZE => { let _ = &ctx.msg; }
+        xdg_shell::xdg_toplevel_request::SET_MIN_SIZE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let w = cursor_obj.int().unwrap_or(0);
+            let h = cursor_obj.int().unwrap_or(0);
+            if let Some(tl) = ctx.shell.toplevels.get_mut(&ctx.msg.sender_id) {
+                tl.min_width = w;
+                tl.min_height = h;
+            }
+        }
+        xdg_shell::xdg_toplevel_request::SET_MAX_SIZE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let w = cursor_obj.int().unwrap_or(0);
+            let h = cursor_obj.int().unwrap_or(0);
+            if let Some(tl) = ctx.shell.toplevels.get_mut(&ctx.msg.sender_id) {
+                tl.max_width = w;
+                tl.max_height = h;
+            }
+        }
         xdg_shell::xdg_toplevel_request::MINIMIZE | xdg_shell::xdg_toplevel_request::SET_MINIMIZED => {
             let toplevel_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.id);
             if let Some(tl_id) = toplevel_id {
@@ -247,6 +286,12 @@ pub fn handle_toplevel(ctx: &mut DispatchContext) {
             }
         }
         xdg_shell::xdg_toplevel_request::DESTROY => {
+            // Send close event before destroying
+            if let Some(tl) = ctx.shell.toplevels.get(&ctx.msg.sender_id) {
+                if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+                    client.send_message(xdg_shell::xdg_toplevel_close_event(tl.id));
+                }
+            }
             let surface_id = ctx.shell.toplevels.get(&ctx.msg.sender_id).map(|tl| tl.surface_id);
             if ctx.seat.keyboard_focus() == surface_id {
                 let serial = ctx.seat.next_serial();
@@ -370,8 +415,8 @@ pub fn handle_popup(ctx: &mut DispatchContext) {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let seat_obj_id = cursor_obj.object().unwrap_or(0);
             let serial = cursor_obj.uint().unwrap_or(0);
-            let _ = &seat_obj_id;
             ctx.shell.grab_popup(ctx.msg.sender_id, seat_obj_id, serial);
+            // Send configure + done events
             if let Some(popup) = ctx.shell.popups.get(&ctx.msg.sender_id) {
                 if let Some(client) = ctx.server.client_mut(ctx.client_id) {
                     client.send_message(xdg_shell::xdg_popup_configure_event(
@@ -379,14 +424,34 @@ pub fn handle_popup(ctx: &mut DispatchContext) {
                         popup.x, popup.y,
                         popup.width.max(100), popup.height.max(50),
                     ));
+                    client.send_message(xdg_shell::xdg_surface_configure_event(popup.surface_id, serial));
                     let _ = client.flush();
                 }
             }
         }
         xdg_shell::xdg_popup_request::REPOSITION => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
-            let _positioner_id = cursor_obj.object().unwrap_or(0);
-            let _token = cursor_obj.uint().unwrap_or(0);
+            let positioner_id = cursor_obj.object().unwrap_or(0);
+            let token = cursor_obj.uint().unwrap_or(0);
+            // Apply positioner state and send repositioned event
+            if let Some(pos) = ctx.shell.positioners.get(&positioner_id) {
+                if let Some(popup) = ctx.shell.popups.get_mut(&ctx.msg.sender_id) {
+                    popup.x = pos.anchor_rect_x + pos.offset_x;
+                    popup.y = pos.anchor_rect_y + pos.offset_y;
+                    popup.width = pos.width;
+                    popup.height = pos.height;
+                    // Send configure + repositioned
+                    if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+                        client.send_message(xdg_shell::xdg_popup_configure_event(
+                            ctx.msg.sender_id,
+                            popup.x, popup.y,
+                            popup.width.max(100), popup.height.max(50),
+                        ));
+                        client.send_message(xdg_shell::xdg_popup_repositioned_event(
+                            ctx.msg.sender_id, token));
+                    }
+                }
+            }
         }
         _ => {}
     }

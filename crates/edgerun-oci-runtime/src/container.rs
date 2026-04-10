@@ -1,7 +1,7 @@
 //! Container lifecycle management — blocking and non-blocking execution.
 //!
 //! This module delegates to:
-//! - `lifecycle` — Hook-aware create/start/delete
+//! - `lifecycle` — Hook-aware create/start/delete with composable steps
 //! - `process`   — Child process pre_exec setup
 //! - `handle`    — RunningContainer handle
 
@@ -10,7 +10,13 @@ use std::io;
 use std::path::Path;
 
 use crate::json::OciSpec;
-pub use crate::lifecycle::{run_spec, run_spec_with_id, start_spec, start_spec_with_id, create_container_from_spec, start_created_container, CreatedContainer};
+pub use crate::lifecycle::{
+    run_spec, run_spec_with_id, start_spec, start_spec_with_id,
+    run_prestart_hooks, run_create_runtime_hooks, fork_container_child,
+    ForkedChild, save_created_state, signal_start, setup_container_cgroups,
+    run_poststart_hooks, update_state_running, into_running_container,
+    run_poststop_and_cleanup,
+};
 pub use crate::handle::RunningContainer;
 
 /// Delete a container and run poststop hooks.

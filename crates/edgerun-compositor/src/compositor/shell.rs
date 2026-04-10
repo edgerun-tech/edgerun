@@ -21,6 +21,11 @@ pub struct Toplevel {
     /// Max size.
     pub max_width: i32,
     pub max_height: i32,
+    /// Window geometry (from SET_WINDOW_GEOMETRY).
+    pub window_x: i32,
+    pub window_y: i32,
+    pub window_width: i32,
+    pub window_height: i32,
     /// Current state (byte array of u32 state flags, little-endian).
     pub states: Vec<u8>,
     /// Whether the surface has ack'd the latest configure.
@@ -257,6 +262,10 @@ impl Shell {
             min_height: 0,
             max_width: 0,
             max_height: 0,
+            window_x: 0,
+            window_y: 0,
+            window_width: 0,
+            window_height: 0,
             states: protocol::xdg_shell::toplevel_state::ACTIVATED.to_le_bytes().to_vec(),
             configured: false,
             configure_serial: None,
@@ -428,6 +437,18 @@ impl Shell {
         self.configure_serial += 1;
         self.ping_serial = Some(serial);
         serial
+    }
+
+    /// Acknowledge a ping response from a client.
+    pub fn ack_ping(&mut self, serial: u32) {
+        if self.ping_serial == Some(serial) {
+            self.ping_serial = None;
+        }
+    }
+
+    /// Check if a ping is currently pending.
+    pub fn ping_pending(&self) -> bool {
+        self.ping_serial.is_some()
     }
 
     /// Send configure with current state to a toplevel.

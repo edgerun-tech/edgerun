@@ -18,7 +18,13 @@ pub fn handle_subcompositor(ctx: &mut DispatchContext) {
 
             ctx.shell.subsurfaces.create(surface_id, parent_id);
         }
-        wl_subcompositor::subcompositor_request::DESTROY => {}
+        wl_subcompositor::subcompositor_request::DESTROY => {
+            // Destroying wl_subcompositor is fine — just clean up the registry
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+            ctx.client_subcompositor_ids.remove(&ctx.client_id);
+        }
         _ => {}
     }
 }

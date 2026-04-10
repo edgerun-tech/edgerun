@@ -1,7 +1,6 @@
 //! Delete command implementation.
 //!
-/// Cleans up container state and optionally kills running process.
-/// Runs poststop hooks and cleans up cgroups.
+//! Kills the container process if running, runs poststop hooks, and cleans up.
 
 use std::fs;
 use std::io;
@@ -9,8 +8,8 @@ use std::os::raw::c_int;
 
 use crate::state::{load_state, delete_state, fifo_path};
 use crate::cli::{parse_delete_args, is_process_alive};
-use crate::hooks::{ContainerState, execute_poststop_hooks};
-use crate::json::{OciSpec, parse_oci_spec};
+use crate::json::parse_oci_spec;
+use crate::lifecycle::run_poststop_and_cleanup;
 
 pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (force, id) = parse_delete_args(args);
@@ -18,50 +17,41 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
         io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
     })?;
 
-    // Load spec from bundle for hooks and cgroup path
-    let (poststop_hooks, cgroup_path) = load_state(&id)
-        .ok()
-        .and_then(|s| {
-            if s.bundle.is_empty() {
-                return None;
-            }
-            let config_path = std::path::Path::new(&s.bundle).join("config.json");
-            let data = fs::read(&config_path).ok()?;
-            let spec: OciSpec = parse_oci_spec(&data).ok()?;
-            let hooks = spec.linux.as_ref()
-                .and_then(|l| l.hooks.as_ref())
-                .and_then(|h| h.poststop.clone())
-                .unwrap_or_default();
-            let cgroup = spec.linux.as_ref()
-                .and_then(|l| l.cgroups_path.clone())
-                .unwrap_or_else(|| "/edgerun".into());
-            Some((hooks, cgroup))
-        })
-        .unwrap_or_default();
+    let state = load_state(&id).ok();
+    let (pid, bundle, _cgroup_path) = if let Some(ref s) = state {
+        let p = s.pid.unwrap_or(0);
+        let b = s.bundle.clone();
 
-    if let Ok(state) = load_state(&id) {
-        if let Some(pid) = state.pid {
-            let alive = is_process_alive(pid);
-            if alive && state.status == "running" && !force {
+        // Kill if running
+        if p > 0 && is_process_alive(p) {
+            if s.status == "running" && !force {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput,
                     format!("container {} is still running, use --force", id)));
             }
-            if alive {
-                unsafe { libc::kill(pid as c_int, libc::SIGKILL) };
+            if force || s.status != "running" {
+                unsafe { libc::kill(p as c_int, libc::SIGKILL) };
                 unsafe { libc::usleep(50000) };
             }
-
-            // Run poststop hooks
-            let hook_state = ContainerState {
-                version: state.oci_version.clone(),
-                id: state.id.clone(),
-                status: "stopped".to_string(),
-                pid,
-                bundle: state.bundle.clone(),
-                annotations: state.annotations.clone().unwrap_or_default(),
-            };
-            execute_poststop_hooks(Some(&poststop_hooks), &hook_state);
         }
+
+        (p, b, s.bundle.clone())
+    } else {
+        (0, String::new(), String::new())
+    };
+
+    // Load spec for poststop hooks and cgroup path
+    let spec = if !bundle.is_empty() {
+        let config_path = std::path::Path::new(&bundle).join("config.json");
+        fs::read(&config_path).ok().and_then(|data| parse_oci_spec(&data).ok())
+    } else {
+        None
+    };
+
+    // Poststop hooks + cgroup cleanup
+    if let Some(ref spec) = spec {
+        let linux = spec.linux.clone().unwrap_or_default();
+        let cgroup = linux.cgroups_path.clone().unwrap_or_else(|| "/edgerun".into());
+        run_poststop_and_cleanup(&id, pid, &bundle, &cgroup, spec);
     }
 
     // Clean up state dir
@@ -69,15 +59,6 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
 
     // Clean up FIFO
     let _ = fs::remove_file(fifo_path(&id));
-
-    // Clean up cgroup directory
-    if !cgroup_path.is_empty() {
-        let cgroup_dir = std::path::Path::new("/sys/fs/cgroup")
-            .join(cgroup_path.trim_start_matches('/'));
-        if cgroup_dir.exists() {
-            let _ = fs::remove_dir_all(&cgroup_dir);
-        }
-    }
 
     Ok(())
 }
