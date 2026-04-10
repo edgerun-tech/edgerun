@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package edgerun.v0.ecmascript.globals;
+
+/// ECMAScript Global Symbols and Intrinsics — generated from ECMA-262.
+/// DO NOT EDIT. Regenerate with: scripts/generate_ecmascript_proto.py
+
+/// ECMAScript well-known symbols (@@iterator, @@toStringTag, etc.).
+/// Total: 17 symbols.
+enum JsWellKnownSymbol {
+  JS_WELL_KNOWN_SYMBOL_UNSPECIFIED = 0;
+  SYMBOL_ASYNC_ITERATOR = 1; // @@asyncIterator
+  SYMBOL_HAS_INSTANCE = 2; // @@hasInstance
+  SYMBOL_HASINSTANCE = 3; // @@hasinstance
+  SYMBOL_IS_CONCAT_SPREADABLE = 4; // @@isConcatSpreadable
+  SYMBOL_ITERATOR = 5; // @@iterator
+  SYMBOL_MATCH = 6; // @@match
+  SYMBOL_MATCH_ALL = 7; // @@matchAll
+  SYMBOL_NAME = 8; // @@name
+  SYMBOL_REPLACE = 9; // @@replace
+  SYMBOL_SEARCH = 10; // @@search
+  SYMBOL_SPECIES = 11; // @@species
+  SYMBOL_SPLIT = 12; // @@split
+  SYMBOL_TO_PRIMITIVE = 13; // @@toPrimitive
+  SYMBOL_TO_STRING_TAG = 14; // @@toStringTag
+  SYMBOL_TOPRIMITIVE = 15; // @@toprimitive
+  SYMBOL_TOSTRINGTAG = 16; // @@tostringtag
+  SYMBOL_UNSCOPABLES = 17; // @@unscopables
+}
+
+/// ECMAScript well-known intrinsic objects (%Array%, %Object%, etc.).
+/// Total: 127 intrinsics.
+enum JsIntrinsic {
+  JS_INTRINSIC_UNSPECIFIED = 0;
+  INTRINSIC_20AT = 1; // %20at%
+  INTRINSIC_20DOT = 2; // %20dot%
+  INTRINSIC_AGGREGATE_ERROR = 3; // %AggregateError%
+  INTRINSIC_AGGREGATE_ERROR_PROTOTYPE = 4; // %AggregateError.prototype%
+  INTRINSIC_ARRAY = 5; // %Array%
+  INTRINSIC_ARRAY_PROTOTYPE = 6; // %Array.prototype%
+  INTRINSIC_ARRAY_PROTOTYPE_TO_STRING = 7; // %Array.prototype.toString%
+  INTRINSIC_ARRAY_PROTOTYPE_VALUES = 8; // %Array.prototype.values%
+  INTRINSIC_ARRAY_BUFFER = 9; // %ArrayBuffer%
+  INTRINSIC_ARRAY_BUFFER_PROTOTYPE = 10; // %ArrayBuffer.prototype%
+  INTRINSIC_ARRAY_ITERATOR_PROTOTYPE = 11; // %ArrayIteratorPrototype%
+  INTRINSIC_ASYNC_FROM_SYNC_ITERATOR_PROTOTYPE = 12; // %AsyncFromSyncIteratorPrototype%
+  INTRINSIC_ASYNC_FUNCTION = 13; // %AsyncFunction%
+  INTRINSIC_ASYNC_FUNCTION_PROTOTYPE = 14; // %AsyncFunction.prototype%
+  INTRINSIC_ASYNC_GENERATOR_FUNCTION = 15; // %AsyncGeneratorFunction%
+  INTRINSIC_ASYNC_GENERATOR_FUNCTION_PROTOTYPE = 16; // %AsyncGeneratorFunction.prototype%
+  INTRINSIC_ASYNC_GENERATOR_FUNCTION_PROTOTYPE_PROTOTYPE = 17; // %AsyncGeneratorFunction.prototype.prototype%
+  INTRINSIC_ASYNC_GENERATOR_PROTOTYPE = 18; // %AsyncGeneratorPrototype%
+  INTRINSIC_ASYNC_ITERATOR_PROTOTYPE = 19; // %AsyncIteratorPrototype%
+  INTRINSIC_ATOMICS = 20; // %Atomics%
+  INTRINSIC_BIG_INT = 21; // %BigInt%
+  INTRINSIC_BIG_INT_PROTOTYPE = 22; // %BigInt.prototype%
+  INTRINSIC_BIG_INT64_ARRAY = 23; // %BigInt64Array%
+  INTRINSIC_BIG_UINT64_ARRAY = 24; // %BigUint64Array%
+  INTRINSIC_BOOLEAN = 25; // %Boolean%
+  INTRINSIC_BOOLEAN_PROTOTYPE = 26; // %Boolean.prototype%
+  INTRINSIC_DATA_VIEW = 27; // %DataView%
+  INTRINSIC_DATA_VIEW_PROTOTYPE = 28; // %DataView.prototype%
+  INTRINSIC_DATE = 29; // %Date%
+  INTRINSIC_DATE_PROTOTYPE = 30; // %Date.prototype%
+  INTRINSIC_DATE_PROTOTYPE_TO_U_T_C_STRING = 31; // %Date.prototype.toUTCString%
+  INTRINSIC_ERROR = 32; // %Error%
+  INTRINSIC_ERROR_PROTOTYPE = 33; // %Error.prototype%
+  INTRINSIC_EVAL_ERROR = 34; // %EvalError%
+  INTRINSIC_EVAL_ERROR_PROTOTYPE = 35; // %EvalError.prototype%
+  INTRINSIC_FINALIZATION_REGISTRY = 36; // %FinalizationRegistry%
+  INTRINSIC_FINALIZATION_REGISTRY_PROTOTYPE = 37; // %FinalizationRegistry.prototype%
+  INTRINSIC_FLOAT16_ARRAY = 38; // %Float16Array%
+  INTRINSIC_FLOAT32_ARRAY = 39; // %Float32Array%
+  INTRINSIC_FLOAT64_ARRAY = 40; // %Float64Array%
+  INTRINSIC_FOR_IN_ITERATOR_PROTOTYPE = 41; // %ForInIteratorPrototype%
+  INTRINSIC_FUNCTION = 42; // %Function%
+  INTRINSIC_FUNCTION_PROTOTYPE = 43; // %Function.prototype%
+  INTRINSIC_GENERATOR_FUNCTION = 44; // %GeneratorFunction%
+  INTRINSIC_GENERATOR_FUNCTION_PROTOTYPE = 45; // %GeneratorFunction.prototype%
+  INTRINSIC_GENERATOR_FUNCTION_PROTOTYPE_PROTOTYPE = 46; // %GeneratorFunction.prototype.prototype%
+  INTRINSIC_GENERATOR_PROTOTYPE = 47; // %GeneratorPrototype%
+  INTRINSIC_GENERATOR_PROTOTYPE_NEXT = 48; // %GeneratorPrototype.next%
+  INTRINSIC_INT16_ARRAY = 49; // %Int16Array%
+  INTRINSIC_INT32_ARRAY = 50; // %Int32Array%
+  INTRINSIC_INT8_ARRAY = 51; // %Int8Array%
+  INTRINSIC_ITERATOR = 52; // %Iterator%
+  INTRINSIC_ITERATOR_PROTOTYPE = 53; // %Iterator.prototype%
+  INTRINSIC_ITERATOR_HELPER_PROTOTYPE = 54; // %IteratorHelperPrototype%
+  INTRINSIC_J_S_O_N = 55; // %JSON%
+  INTRINSIC_MAP = 56; // %Map%
+  INTRINSIC_MAP_PROTOTYPE = 57; // %Map.prototype%
+  INTRINSIC_MAP_PROTOTYPE_ENTRIES = 58; // %Map.prototype.entries%
+  INTRINSIC_MAP_ITERATOR_PROTOTYPE = 59; // %MapIteratorPrototype%
+  INTRINSIC_MATH = 60; // %Math%
+  INTRINSIC_NUMBER = 61; // %Number%
+  INTRINSIC_NUMBER_PROTOTYPE = 62; // %Number.prototype%
+  INTRINSIC_OBJECT = 63; // %Object%
+  INTRINSIC_OBJECT_PROTOTYPE = 64; // %Object.prototype%
+  INTRINSIC_OBJECT_PROTOTYPE_TO_STRING = 65; // %Object.prototype.toString%
+  INTRINSIC_PROMISE = 66; // %Promise%
+  INTRINSIC_PROMISE_PROTOTYPE = 67; // %Promise.prototype%
+  INTRINSIC_PROXY = 68; // %Proxy%
+  INTRINSIC_RANGE_ERROR = 69; // %RangeError%
+  INTRINSIC_RANGE_ERROR_PROTOTYPE = 70; // %RangeError.prototype%
+  INTRINSIC_REFERENCE_ERROR = 71; // %ReferenceError%
+  INTRINSIC_REFERENCE_ERROR_PROTOTYPE = 72; // %ReferenceError.prototype%
+  INTRINSIC_REFLECT = 73; // %Reflect%
+  INTRINSIC_REG_EXP = 74; // %RegExp%
+  INTRINSIC_REG_EXP_PROTOTYPE = 75; // %RegExp.prototype%
+  INTRINSIC_REG_EXP_PROTOTYPE_EXEC = 76; // %RegExp.prototype.exec%
+  INTRINSIC_REG_EXP_STRING_ITERATOR_PROTOTYPE = 77; // %RegExpStringIteratorPrototype%
+  INTRINSIC_SET = 78; // %Set%
+  INTRINSIC_SET_PROTOTYPE = 79; // %Set.prototype%
+  INTRINSIC_SET_PROTOTYPE_VALUES = 80; // %Set.prototype.values%
+  INTRINSIC_SET_ITERATOR_PROTOTYPE = 81; // %SetIteratorPrototype%
+  INTRINSIC_SHARED_ARRAY_BUFFER = 82; // %SharedArrayBuffer%
+  INTRINSIC_SHARED_ARRAY_BUFFER_PROTOTYPE = 83; // %SharedArrayBuffer.prototype%
+  INTRINSIC_STRING = 84; // %String%
+  INTRINSIC_STRING_PROTOTYPE = 85; // %String.prototype%
+  INTRINSIC_STRING_PROTOTYPE_TRIM_END = 86; // %String.prototype.trimEnd%
+  INTRINSIC_STRING_PROTOTYPE_TRIM_START = 87; // %String.prototype.trimStart%
+  INTRINSIC_STRING_ITERATOR_PROTOTYPE = 88; // %StringIteratorPrototype%
+  INTRINSIC_SYMBOL = 89; // %Symbol%
+  INTRINSIC_SYMBOL_PROTOTYPE = 90; // %Symbol.prototype%
+  INTRINSIC_SYNTAX_ERROR = 91; // %SyntaxError%
+  INTRINSIC_SYNTAX_ERROR_PROTOTYPE = 92; // %SyntaxError.prototype%
+  INTRINSIC_THROW_TYPE_ERROR = 93; // %ThrowTypeError%
+  INTRINSIC_TYPE_ERROR = 94; // %TypeError%
+  INTRINSIC_TYPE_ERROR_PROTOTYPE = 95; // %TypeError.prototype%
+  INTRINSIC_TYPED_ARRAY = 96; // %TypedArray%
+  INTRINSIC_TYPED_ARRAY_PROTOTYPE = 97; // %TypedArray.prototype%
+  INTRINSIC_TYPED_ARRAY_PROTOTYPE_VALUES = 98; // %TypedArray.prototype.values%
+  INTRINSIC_U_R_I_ERROR = 99; // %URIError%
+  INTRINSIC_U_R_I_ERROR_PROTOTYPE = 100; // %URIError.prototype%
+  INTRINSIC_UINT16_ARRAY = 101; // %Uint16Array%
+  INTRINSIC_UINT32_ARRAY = 102; // %Uint32Array%
+  INTRINSIC_UINT8_ARRAY = 103; // %Uint8Array%
+  INTRINSIC_UINT8_ARRAY_PROTOTYPE = 104; // %Uint8Array.prototype%
+  INTRINSIC_UINT8_CLAMPED_ARRAY = 105; // %Uint8ClampedArray%
+  INTRINSIC_WEAK_MAP = 106; // %WeakMap%
+  INTRINSIC_WEAK_MAP_PROTOTYPE = 107; // %WeakMap.prototype%
+  INTRINSIC_WEAK_REF = 108; // %WeakRef%
+  INTRINSIC_WEAK_REF_PROTOTYPE = 109; // %WeakRef.prototype%
+  INTRINSIC_WEAK_SET = 110; // %WeakSet%
+  INTRINSIC_WEAK_SET_PROTOTYPE = 111; // %WeakSet.prototype%
+  INTRINSIC_WRAP_FOR_VALID_ITERATOR_PROTOTYPE = 112; // %WrapForValidIteratorPrototype%
+  INTRINSIC_DECODE_U_R_I = 113; // %decodeURI%
+  INTRINSIC_DECODE_U_R_I_COMPONENT = 114; // %decodeURIComponent%
+  INTRINSIC_ENCODE_U_R_I = 115; // %encodeURI%
+  INTRINSIC_ENCODE_U_R_I_COMPONENT = 116; // %encodeURIComponent%
+  INTRINSIC_ESCAPE = 117; // %escape%
+  INTRINSIC_EVAL = 118; // %eval%
+  INTRINSIC_IS_FINITE = 119; // %isFinite%
+  INTRINSIC_IS_NA_N = 120; // %isNaN%
+  INTRINSIC_ITERATORPROTOTYPE = 121; // %iteratorprototype%
+  INTRINSIC_NAME = 122; // %name%
+  INTRINSIC_NAME_A_B = 123; // %name.a.b%
+  INTRINSIC_PARSE_FLOAT = 124; // %parseFloat%
+  INTRINSIC_PARSE_INT = 125; // %parseInt%
+  INTRINSIC_TYPEDARRAYPROTOTYPE = 126; // %typedarrayprototype%
+  INTRINSIC_UNESCAPE = 127; // %unescape%
+}

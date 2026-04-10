@@ -1,0 +1,6436 @@
+{
+  "spec": "ECMA-262 (ECMAScript)",
+  "spec_date": "2026-04-10",
+  "total_built_in_objects": 414,
+  "total_abstract_operations": 121,
+  "total_well_known_symbols": 17,
+  "total_well_known_intrinsics": 166,
+  "built_in_objects": [
+    {
+      "name": "Object",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "hasOwnProperty",
+          "parameters": [
+            "V"
+          ],
+          "section": "20.1.3.2"
+        },
+        {
+          "name": "isPrototypeOf",
+          "parameters": [
+            "V"
+          ],
+          "section": "20.1.3.3"
+        },
+        {
+          "name": "propertyIsEnumerable",
+          "parameters": [
+            "V"
+          ],
+          "section": "20.1.3.4"
+        },
+        {
+          "name": "toLocaleString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "20.1.3.5"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "20.1.3.6"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "20.1.3.7"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "20.1.2.21"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.1.3.1"
+        }
+      ],
+      "constructor_signature": "Object(['value'])"
+    },
+    {
+      "name": "Function",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "apply",
+          "parameters": [
+            "thisArg",
+            "argArray"
+          ],
+          "section": "20.2.3.1"
+        },
+        {
+          "name": "bind",
+          "parameters": [
+            "thisArg",
+            "...args"
+          ],
+          "section": "20.2.3.2"
+        },
+        {
+          "name": "call",
+          "parameters": [
+            "thisArg",
+            "...args"
+          ],
+          "section": "20.2.3.3"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "20.2.3.5"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "20.2.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.2.3.4"
+        }
+      ],
+      "constructor_signature": "Function(['...parameterArgs', 'bodyArg'])"
+    },
+    {
+      "name": "Boolean",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "20.3.3.2"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "20.3.3.3"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "20.3.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.3.3.1"
+        }
+      ],
+      "constructor_signature": "Boolean(['. . .'])"
+    },
+    {
+      "name": "Symbol",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "20.4.3.3"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "20.4.3.4"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "asyncIterator",
+          "section": "20.4.2.1"
+        },
+        {
+          "name": "hasInstance",
+          "section": "20.4.2.3"
+        },
+        {
+          "name": "isConcatSpreadable",
+          "section": "20.4.2.4"
+        },
+        {
+          "name": "iterator",
+          "section": "20.4.2.5"
+        },
+        {
+          "name": "match",
+          "section": "20.4.2.7"
+        },
+        {
+          "name": "matchAll",
+          "section": "20.4.2.8"
+        },
+        {
+          "name": "prototype",
+          "section": "20.4.2.9"
+        },
+        {
+          "name": "replace",
+          "section": "20.4.2.10"
+        },
+        {
+          "name": "search",
+          "section": "20.4.2.11"
+        },
+        {
+          "name": "species",
+          "section": "20.4.2.12"
+        },
+        {
+          "name": "split",
+          "section": "20.4.2.13"
+        },
+        {
+          "name": "toPrimitive",
+          "section": "20.4.2.14"
+        },
+        {
+          "name": "toStringTag",
+          "section": "20.4.2.15"
+        },
+        {
+          "name": "unscopables",
+          "section": "20.4.2.16"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.4.3.1"
+        }
+      ],
+      "constructor_signature": "Symbol(['\\\\[description \\\\]'])"
+    },
+    {
+      "name": "Error",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "20.5.3.4"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "20.5.2.2"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.5.3.1"
+        },
+        {
+          "name": "message",
+          "section": "20.5.3.2"
+        },
+        {
+          "name": "name",
+          "section": "20.5.3.3"
+        }
+      ],
+      "constructor_signature": "Error(['. . .'])"
+    },
+    {
+      "name": "Number",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "toExponential",
+          "parameters": [
+            "fractionDigits"
+          ],
+          "section": "21.1.3.2"
+        },
+        {
+          "name": "toFixed",
+          "parameters": [
+            "fractionDigits"
+          ],
+          "section": "21.1.3.3"
+        },
+        {
+          "name": "toLocaleString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "21.1.3.4"
+        },
+        {
+          "name": "toPrecision",
+          "parameters": [
+            "precision"
+          ],
+          "section": "21.1.3.5"
+        },
+        {
+          "name": "toString",
+          "parameters": [
+            "\\[radix \\]"
+          ],
+          "section": "21.1.3.6"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "21.1.3.7"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "EPSILON",
+          "section": "21.1.2.1"
+        },
+        {
+          "name": "MAX_SAFE_INTEGER",
+          "section": "21.1.2.6"
+        },
+        {
+          "name": "MAX_VALUE",
+          "section": "21.1.2.7"
+        },
+        {
+          "name": "MIN_SAFE_INTEGER",
+          "section": "21.1.2.8"
+        },
+        {
+          "name": "MIN_VALUE",
+          "section": "21.1.2.9"
+        },
+        {
+          "name": "NaN",
+          "section": "21.1.2.10"
+        },
+        {
+          "name": "NEGATIVE_INFINITY",
+          "section": "21.1.2.11"
+        },
+        {
+          "name": "POSITIVE_INFINITY",
+          "section": "21.1.2.14"
+        },
+        {
+          "name": "prototype",
+          "section": "21.1.2.15"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "21.1.3.1"
+        }
+      ],
+      "constructor_signature": "Number(['value'])"
+    },
+    {
+      "name": "BigInt",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "toLocaleString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "21.2.3.2"
+        },
+        {
+          "name": "toString",
+          "parameters": [
+            "\\[radix \\]"
+          ],
+          "section": "21.2.3.3"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "21.2.3.4"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "21.2.2.3"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "21.2.3.1"
+        }
+      ],
+      "constructor_signature": "BigInt(['. . .'])"
+    },
+    {
+      "name": "Date",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "getDate",
+          "parameters": [],
+          "section": "21.4.4.2"
+        },
+        {
+          "name": "getDay",
+          "parameters": [],
+          "section": "21.4.4.3"
+        },
+        {
+          "name": "getFullYear",
+          "parameters": [],
+          "section": "21.4.4.4"
+        },
+        {
+          "name": "getHours",
+          "parameters": [],
+          "section": "21.4.4.5"
+        },
+        {
+          "name": "getMilliseconds",
+          "parameters": [],
+          "section": "21.4.4.6"
+        },
+        {
+          "name": "getMinutes",
+          "parameters": [],
+          "section": "21.4.4.7"
+        },
+        {
+          "name": "getMonth",
+          "parameters": [],
+          "section": "21.4.4.8"
+        },
+        {
+          "name": "getSeconds",
+          "parameters": [],
+          "section": "21.4.4.9"
+        },
+        {
+          "name": "getTime",
+          "parameters": [],
+          "section": "21.4.4.10"
+        },
+        {
+          "name": "getTimezoneOffset",
+          "parameters": [],
+          "section": "21.4.4.11"
+        },
+        {
+          "name": "getUTCDate",
+          "parameters": [],
+          "section": "21.4.4.12"
+        },
+        {
+          "name": "getUTCDay",
+          "parameters": [],
+          "section": "21.4.4.13"
+        },
+        {
+          "name": "getUTCFullYear",
+          "parameters": [],
+          "section": "21.4.4.14"
+        },
+        {
+          "name": "getUTCHours",
+          "parameters": [],
+          "section": "21.4.4.15"
+        },
+        {
+          "name": "getUTCMilliseconds",
+          "parameters": [],
+          "section": "21.4.4.16"
+        },
+        {
+          "name": "getUTCMinutes",
+          "parameters": [],
+          "section": "21.4.4.17"
+        },
+        {
+          "name": "getUTCMonth",
+          "parameters": [],
+          "section": "21.4.4.18"
+        },
+        {
+          "name": "getUTCSeconds",
+          "parameters": [],
+          "section": "21.4.4.19"
+        },
+        {
+          "name": "setDate",
+          "parameters": [
+            "date"
+          ],
+          "section": "21.4.4.20"
+        },
+        {
+          "name": "setFullYear",
+          "parameters": [
+            "year \\[month \\[date \\] \\]"
+          ],
+          "section": "21.4.4.21"
+        },
+        {
+          "name": "setHours",
+          "parameters": [
+            "hour \\[min \\[sec \\[ms \\] \\] \\]"
+          ],
+          "section": "21.4.4.22"
+        },
+        {
+          "name": "setMilliseconds",
+          "parameters": [
+            "ms"
+          ],
+          "section": "21.4.4.23"
+        },
+        {
+          "name": "setMinutes",
+          "parameters": [
+            "min \\[sec \\[ms \\] \\]"
+          ],
+          "section": "21.4.4.24"
+        },
+        {
+          "name": "setMonth",
+          "parameters": [
+            "month \\[date \\]"
+          ],
+          "section": "21.4.4.25"
+        },
+        {
+          "name": "setSeconds",
+          "parameters": [
+            "sec \\[ms \\]"
+          ],
+          "section": "21.4.4.26"
+        },
+        {
+          "name": "setTime",
+          "parameters": [
+            "time"
+          ],
+          "section": "21.4.4.27"
+        },
+        {
+          "name": "setUTCDate",
+          "parameters": [
+            "date"
+          ],
+          "section": "21.4.4.28"
+        },
+        {
+          "name": "setUTCFullYear",
+          "parameters": [
+            "year \\[month \\[date \\] \\]"
+          ],
+          "section": "21.4.4.29"
+        },
+        {
+          "name": "setUTCHours",
+          "parameters": [
+            "hour \\[min \\[sec \\[ms \\] \\] \\]"
+          ],
+          "section": "21.4.4.30"
+        },
+        {
+          "name": "setUTCMilliseconds",
+          "parameters": [
+            "ms"
+          ],
+          "section": "21.4.4.31"
+        },
+        {
+          "name": "setUTCMinutes",
+          "parameters": [
+            "min \\[sec \\[ms \\] \\]"
+          ],
+          "section": "21.4.4.32"
+        },
+        {
+          "name": "setUTCMonth",
+          "parameters": [
+            "month \\[date \\]"
+          ],
+          "section": "21.4.4.33"
+        },
+        {
+          "name": "setUTCSeconds",
+          "parameters": [
+            "sec \\[ms \\]"
+          ],
+          "section": "21.4.4.34"
+        },
+        {
+          "name": "toDateString",
+          "parameters": [],
+          "section": "21.4.4.35"
+        },
+        {
+          "name": "toISOString",
+          "parameters": [],
+          "section": "21.4.4.36"
+        },
+        {
+          "name": "toJSON",
+          "parameters": [
+            "key"
+          ],
+          "section": "21.4.4.37"
+        },
+        {
+          "name": "toLocaleDateString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "21.4.4.38"
+        },
+        {
+          "name": "toLocaleString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "21.4.4.39"
+        },
+        {
+          "name": "toLocaleTimeString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "21.4.4.40"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "21.4.4.41"
+        },
+        {
+          "name": "toTimeString",
+          "parameters": [],
+          "section": "21.4.4.42"
+        },
+        {
+          "name": "toUTCString",
+          "parameters": [],
+          "section": "21.4.4.43"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "21.4.4.44"
+        },
+        {
+          "name": "getYear",
+          "parameters": [],
+          "section": "B.2.3.1"
+        },
+        {
+          "name": "setYear",
+          "parameters": [
+            "year"
+          ],
+          "section": "B.2.3.2"
+        },
+        {
+          "name": "toGMTString",
+          "parameters": [],
+          "section": "B.2.3.3"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "21.4.3.3"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "21.4.4.1"
+        }
+      ],
+      "constructor_signature": "Date(['. . .'])"
+    },
+    {
+      "name": "String",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "at",
+          "parameters": [
+            "index"
+          ],
+          "section": "22.1.3.1"
+        },
+        {
+          "name": "charAt",
+          "parameters": [
+            "pos"
+          ],
+          "section": "22.1.3.2"
+        },
+        {
+          "name": "charCodeAt",
+          "parameters": [
+            "pos"
+          ],
+          "section": "22.1.3.3"
+        },
+        {
+          "name": "codePointAt",
+          "parameters": [
+            "pos"
+          ],
+          "section": "22.1.3.4"
+        },
+        {
+          "name": "concat",
+          "parameters": [
+            "...args"
+          ],
+          "section": "22.1.3.5"
+        },
+        {
+          "name": "endsWith",
+          "parameters": [
+            "searchString \\[endPosition \\]"
+          ],
+          "section": "22.1.3.7"
+        },
+        {
+          "name": "includes",
+          "parameters": [
+            "searchString \\[position \\]"
+          ],
+          "section": "22.1.3.8"
+        },
+        {
+          "name": "indexOf",
+          "parameters": [
+            "searchString \\[position \\]"
+          ],
+          "section": "22.1.3.9"
+        },
+        {
+          "name": "isWellFormed",
+          "parameters": [],
+          "section": "22.1.3.10"
+        },
+        {
+          "name": "lastIndexOf",
+          "parameters": [
+            "searchString \\[position \\]"
+          ],
+          "section": "22.1.3.11"
+        },
+        {
+          "name": "localeCompare",
+          "parameters": [
+            "that \\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "22.1.3.12"
+        },
+        {
+          "name": "match",
+          "parameters": [
+            "regexp"
+          ],
+          "section": "22.1.3.13"
+        },
+        {
+          "name": "matchAll",
+          "parameters": [
+            "regexp"
+          ],
+          "section": "22.1.3.14"
+        },
+        {
+          "name": "normalize",
+          "parameters": [
+            "\\[form \\]"
+          ],
+          "section": "22.1.3.15"
+        },
+        {
+          "name": "padEnd",
+          "parameters": [
+            "maxLength \\[fillString \\]"
+          ],
+          "section": "22.1.3.16"
+        },
+        {
+          "name": "padStart",
+          "parameters": [
+            "maxLength \\[fillString \\]"
+          ],
+          "section": "22.1.3.17"
+        },
+        {
+          "name": "repeat",
+          "parameters": [
+            "count"
+          ],
+          "section": "22.1.3.18"
+        },
+        {
+          "name": "replace",
+          "parameters": [
+            "searchValue",
+            "replaceValue"
+          ],
+          "section": "22.1.3.19"
+        },
+        {
+          "name": "replaceAll",
+          "parameters": [
+            "searchValue",
+            "replaceValue"
+          ],
+          "section": "22.1.3.20"
+        },
+        {
+          "name": "search",
+          "parameters": [
+            "regexp"
+          ],
+          "section": "22.1.3.21"
+        },
+        {
+          "name": "slice",
+          "parameters": [
+            "start",
+            "end"
+          ],
+          "section": "22.1.3.22"
+        },
+        {
+          "name": "split",
+          "parameters": [
+            "separator",
+            "limit"
+          ],
+          "section": "22.1.3.23"
+        },
+        {
+          "name": "startsWith",
+          "parameters": [
+            "searchString \\[position \\]"
+          ],
+          "section": "22.1.3.24"
+        },
+        {
+          "name": "substring",
+          "parameters": [
+            "start",
+            "end"
+          ],
+          "section": "22.1.3.25"
+        },
+        {
+          "name": "toLocaleLowerCase",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "22.1.3.26"
+        },
+        {
+          "name": "toLocaleUpperCase",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "22.1.3.27"
+        },
+        {
+          "name": "toLowerCase",
+          "parameters": [],
+          "section": "22.1.3.28"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "22.1.3.29"
+        },
+        {
+          "name": "toUpperCase",
+          "parameters": [],
+          "section": "22.1.3.30"
+        },
+        {
+          "name": "toWellFormed",
+          "parameters": [],
+          "section": "22.1.3.31"
+        },
+        {
+          "name": "trim",
+          "parameters": [],
+          "section": "22.1.3.32"
+        },
+        {
+          "name": "trimEnd",
+          "parameters": [],
+          "section": "22.1.3.33"
+        },
+        {
+          "name": "trimStart",
+          "parameters": [],
+          "section": "22.1.3.34"
+        },
+        {
+          "name": "valueOf",
+          "parameters": [],
+          "section": "22.1.3.35"
+        },
+        {
+          "name": "substr",
+          "parameters": [
+            "start",
+            "length"
+          ],
+          "section": "B.2.2.1"
+        },
+        {
+          "name": "anchor",
+          "parameters": [
+            "name"
+          ],
+          "section": "B.2.2.2"
+        },
+        {
+          "name": "big",
+          "parameters": [],
+          "section": "B.2.2.3"
+        },
+        {
+          "name": "blink",
+          "parameters": [],
+          "section": "B.2.2.4"
+        },
+        {
+          "name": "bold",
+          "parameters": [],
+          "section": "B.2.2.5"
+        },
+        {
+          "name": "fixed",
+          "parameters": [],
+          "section": "B.2.2.6"
+        },
+        {
+          "name": "fontcolor",
+          "parameters": [
+            "colour"
+          ],
+          "section": "B.2.2.7"
+        },
+        {
+          "name": "fontsize",
+          "parameters": [
+            "size"
+          ],
+          "section": "B.2.2.8"
+        },
+        {
+          "name": "italics",
+          "parameters": [],
+          "section": "B.2.2.9"
+        },
+        {
+          "name": "link",
+          "parameters": [
+            "url"
+          ],
+          "section": "B.2.2.10"
+        },
+        {
+          "name": "small",
+          "parameters": [],
+          "section": "B.2.2.11"
+        },
+        {
+          "name": "strike",
+          "parameters": [],
+          "section": "B.2.2.12"
+        },
+        {
+          "name": "sub",
+          "parameters": [],
+          "section": "B.2.2.13"
+        },
+        {
+          "name": "sup",
+          "parameters": [],
+          "section": "B.2.2.14"
+        },
+        {
+          "name": "trimLeft",
+          "parameters": [],
+          "section": "B.2.2.15"
+        },
+        {
+          "name": "trimRight",
+          "parameters": [],
+          "section": "B.2.2.16"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "22.1.2.3"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "22.1.3.6"
+        }
+      ],
+      "constructor_signature": "String(['value'])"
+    },
+    {
+      "name": "RegExp",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "exec",
+          "parameters": [
+            "string"
+          ],
+          "section": "22.2.6.2"
+        },
+        {
+          "name": "test",
+          "parameters": [
+            "S"
+          ],
+          "section": "22.2.6.16"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "22.2.6.17"
+        },
+        {
+          "name": "compile",
+          "parameters": [
+            "pattern",
+            "flags"
+          ],
+          "section": "B.2.4.1"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "22.2.5.2"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "22.2.6.1"
+        }
+      ],
+      "constructor_signature": "RegExp(['Regular Expression'])"
+    },
+    {
+      "name": "Array",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "at",
+          "parameters": [
+            "index"
+          ],
+          "section": "23.1.3.1"
+        },
+        {
+          "name": "concat",
+          "parameters": [
+            "...items"
+          ],
+          "section": "23.1.3.2"
+        },
+        {
+          "name": "copyWithin",
+          "parameters": [
+            "target",
+            "start \\[end \\]"
+          ],
+          "section": "23.1.3.4"
+        },
+        {
+          "name": "entries",
+          "parameters": [],
+          "section": "23.1.3.5"
+        },
+        {
+          "name": "every",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "23.1.3.6"
+        },
+        {
+          "name": "fill",
+          "parameters": [
+            "value \\[start \\[end \\] \\]"
+          ],
+          "section": "23.1.3.7"
+        },
+        {
+          "name": "filter",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "23.1.3.8"
+        },
+        {
+          "name": "find",
+          "parameters": [
+            "predicate \\[thisArg \\]"
+          ],
+          "section": "23.1.3.9"
+        },
+        {
+          "name": "findIndex",
+          "parameters": [
+            "predicate \\[thisArg \\]"
+          ],
+          "section": "23.1.3.10"
+        },
+        {
+          "name": "findLast",
+          "parameters": [
+            "predicate \\[thisArg \\]"
+          ],
+          "section": "23.1.3.11"
+        },
+        {
+          "name": "findLastIndex",
+          "parameters": [
+            "predicate \\[thisArg \\]"
+          ],
+          "section": "23.1.3.12"
+        },
+        {
+          "name": "flat",
+          "parameters": [
+            "\\[depth \\]"
+          ],
+          "section": "23.1.3.13"
+        },
+        {
+          "name": "flatMap",
+          "parameters": [
+            "mapperFunction \\[thisArg \\]"
+          ],
+          "section": "23.1.3.14"
+        },
+        {
+          "name": "forEach",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "23.1.3.15"
+        },
+        {
+          "name": "includes",
+          "parameters": [
+            "searchElement \\[fromIndex \\]"
+          ],
+          "section": "23.1.3.16"
+        },
+        {
+          "name": "indexOf",
+          "parameters": [
+            "searchElement \\[fromIndex \\]"
+          ],
+          "section": "23.1.3.17"
+        },
+        {
+          "name": "join",
+          "parameters": [
+            "separator"
+          ],
+          "section": "23.1.3.18"
+        },
+        {
+          "name": "keys",
+          "parameters": [],
+          "section": "23.1.3.19"
+        },
+        {
+          "name": "lastIndexOf",
+          "parameters": [
+            "searchElement \\[fromIndex \\]"
+          ],
+          "section": "23.1.3.20"
+        },
+        {
+          "name": "map",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "23.1.3.21"
+        },
+        {
+          "name": "pop",
+          "parameters": [],
+          "section": "23.1.3.22"
+        },
+        {
+          "name": "push",
+          "parameters": [
+            "...items"
+          ],
+          "section": "23.1.3.23"
+        },
+        {
+          "name": "reduce",
+          "parameters": [
+            "callback \\[initialValue \\]"
+          ],
+          "section": "23.1.3.24"
+        },
+        {
+          "name": "reduceRight",
+          "parameters": [
+            "callback \\[initialValue \\]"
+          ],
+          "section": "23.1.3.25"
+        },
+        {
+          "name": "reverse",
+          "parameters": [],
+          "section": "23.1.3.26"
+        },
+        {
+          "name": "shift",
+          "parameters": [],
+          "section": "23.1.3.27"
+        },
+        {
+          "name": "slice",
+          "parameters": [
+            "start",
+            "end"
+          ],
+          "section": "23.1.3.28"
+        },
+        {
+          "name": "some",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "23.1.3.29"
+        },
+        {
+          "name": "sort",
+          "parameters": [
+            "comparator"
+          ],
+          "section": "23.1.3.30"
+        },
+        {
+          "name": "splice",
+          "parameters": [
+            "start",
+            "deleteCount",
+            "...items"
+          ],
+          "section": "23.1.3.31"
+        },
+        {
+          "name": "toLocaleString",
+          "parameters": [
+            "\\[reserved1 \\[reserved2 \\] \\]"
+          ],
+          "section": "23.1.3.32"
+        },
+        {
+          "name": "toReversed",
+          "parameters": [],
+          "section": "23.1.3.33"
+        },
+        {
+          "name": "toSorted",
+          "parameters": [
+            "comparator"
+          ],
+          "section": "23.1.3.34"
+        },
+        {
+          "name": "toSpliced",
+          "parameters": [
+            "start",
+            "skipCount",
+            "...items"
+          ],
+          "section": "23.1.3.35"
+        },
+        {
+          "name": "toString",
+          "parameters": [],
+          "section": "23.1.3.36"
+        },
+        {
+          "name": "unshift",
+          "parameters": [
+            "...items"
+          ],
+          "section": "23.1.3.37"
+        },
+        {
+          "name": "values",
+          "parameters": [],
+          "section": "23.1.3.38"
+        },
+        {
+          "name": "with",
+          "parameters": [
+            "index",
+            "value"
+          ],
+          "section": "23.1.3.39"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "23.1.2.5"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "23.1.3.3"
+        }
+      ],
+      "constructor_signature": "Array(['. . .'])"
+    },
+    {
+      "name": "Uint8Array",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "setFromBase64",
+          "parameters": [
+            "string \\[options \\]"
+          ],
+          "section": "23.3.2.1"
+        },
+        {
+          "name": "setFromHex",
+          "parameters": [
+            "string"
+          ],
+          "section": "23.3.2.2"
+        },
+        {
+          "name": "toBase64",
+          "parameters": [
+            "\\[options \\]"
+          ],
+          "section": "23.3.2.3"
+        },
+        {
+          "name": "toHex",
+          "parameters": [],
+          "section": "23.3.2.4"
+        }
+      ],
+      "static_properties": [],
+      "prototype_properties": []
+    },
+    {
+      "name": "Map",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "clear",
+          "parameters": [],
+          "section": "24.1.3.1"
+        },
+        {
+          "name": "delete",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.1.3.3"
+        },
+        {
+          "name": "entries",
+          "parameters": [],
+          "section": "24.1.3.4"
+        },
+        {
+          "name": "forEach",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "24.1.3.5"
+        },
+        {
+          "name": "get",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.1.3.6"
+        },
+        {
+          "name": "getOrInsert",
+          "parameters": [
+            "key",
+            "value"
+          ],
+          "section": "24.1.3.7"
+        },
+        {
+          "name": "getOrInsertComputed",
+          "parameters": [
+            "key",
+            "callback"
+          ],
+          "section": "24.1.3.8"
+        },
+        {
+          "name": "has",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.1.3.9"
+        },
+        {
+          "name": "keys",
+          "parameters": [],
+          "section": "24.1.3.10"
+        },
+        {
+          "name": "set",
+          "parameters": [
+            "key",
+            "value"
+          ],
+          "section": "24.1.3.11"
+        },
+        {
+          "name": "values",
+          "parameters": [],
+          "section": "24.1.3.13"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "24.1.2.2"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "24.1.3.2"
+        }
+      ],
+      "constructor_signature": "Map(['\\\\[iterable \\\\]'])"
+    },
+    {
+      "name": "Set",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "add",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.2.4.1"
+        },
+        {
+          "name": "clear",
+          "parameters": [],
+          "section": "24.2.4.2"
+        },
+        {
+          "name": "delete",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.2.4.4"
+        },
+        {
+          "name": "difference",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.5"
+        },
+        {
+          "name": "entries",
+          "parameters": [],
+          "section": "24.2.4.6"
+        },
+        {
+          "name": "forEach",
+          "parameters": [
+            "callback \\[thisArg \\]"
+          ],
+          "section": "24.2.4.7"
+        },
+        {
+          "name": "has",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.2.4.8"
+        },
+        {
+          "name": "intersection",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.9"
+        },
+        {
+          "name": "isDisjointFrom",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.10"
+        },
+        {
+          "name": "isSubsetOf",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.11"
+        },
+        {
+          "name": "isSupersetOf",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.12"
+        },
+        {
+          "name": "keys",
+          "parameters": [],
+          "section": "24.2.4.13"
+        },
+        {
+          "name": "symmetricDifference",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.15"
+        },
+        {
+          "name": "union",
+          "parameters": [
+            "other"
+          ],
+          "section": "24.2.4.16"
+        },
+        {
+          "name": "values",
+          "parameters": [],
+          "section": "24.2.4.17"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "24.2.3.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "24.2.4.3"
+        }
+      ],
+      "constructor_signature": "Set(['O', 'P', 'V', 'Throw'])"
+    },
+    {
+      "name": "WeakMap",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "delete",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.3.3.2"
+        },
+        {
+          "name": "get",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.3.3.3"
+        },
+        {
+          "name": "getOrInsert",
+          "parameters": [
+            "key",
+            "value"
+          ],
+          "section": "24.3.3.4"
+        },
+        {
+          "name": "getOrInsertComputed",
+          "parameters": [
+            "key",
+            "callback"
+          ],
+          "section": "24.3.3.5"
+        },
+        {
+          "name": "has",
+          "parameters": [
+            "key"
+          ],
+          "section": "24.3.3.6"
+        },
+        {
+          "name": "set",
+          "parameters": [
+            "key",
+            "value"
+          ],
+          "section": "24.3.3.7"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "24.3.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "24.3.3.1"
+        }
+      ],
+      "constructor_signature": "WeakMap(['\\\\[iterable \\\\]'])"
+    },
+    {
+      "name": "WeakSet",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "add",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.4.3.1"
+        },
+        {
+          "name": "delete",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.4.3.3"
+        },
+        {
+          "name": "has",
+          "parameters": [
+            "value"
+          ],
+          "section": "24.4.3.4"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "24.4.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "24.4.3.2"
+        }
+      ],
+      "constructor_signature": "WeakSet(['\\\\[iterable \\\\]'])"
+    },
+    {
+      "name": "ArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "resize",
+          "parameters": [
+            "newLength"
+          ],
+          "section": "25.1.6.6"
+        },
+        {
+          "name": "slice",
+          "parameters": [
+            "start",
+            "end"
+          ],
+          "section": "25.1.6.7"
+        },
+        {
+          "name": "transfer",
+          "parameters": [
+            "\\[newLength \\]"
+          ],
+          "section": "25.1.6.8"
+        },
+        {
+          "name": "transferToFixedLength",
+          "parameters": [
+            "\\[newLength \\]"
+          ],
+          "section": "25.1.6.9"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "25.1.5.2"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "25.1.6.2"
+        }
+      ],
+      "constructor_signature": "ArrayBuffer(['. . .'])"
+    },
+    {
+      "name": "SharedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "grow",
+          "parameters": [
+            "newLength"
+          ],
+          "section": "25.2.5.3"
+        },
+        {
+          "name": "slice",
+          "parameters": [
+            "start",
+            "end"
+          ],
+          "section": "25.2.5.6"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "25.2.4.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "25.2.5.2"
+        }
+      ],
+      "constructor_signature": "SharedArrayBuffer(['length \\\\[options \\\\]'])"
+    },
+    {
+      "name": "DataView",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "getBigInt64",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.5"
+        },
+        {
+          "name": "getBigUint64",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.6"
+        },
+        {
+          "name": "getFloat16",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.7"
+        },
+        {
+          "name": "getFloat32",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.8"
+        },
+        {
+          "name": "getFloat64",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.9"
+        },
+        {
+          "name": "getInt8",
+          "parameters": [
+            "byteOffset"
+          ],
+          "section": "25.3.4.10"
+        },
+        {
+          "name": "getInt16",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.11"
+        },
+        {
+          "name": "getInt32",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.12"
+        },
+        {
+          "name": "getUint8",
+          "parameters": [
+            "byteOffset"
+          ],
+          "section": "25.3.4.13"
+        },
+        {
+          "name": "getUint16",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.14"
+        },
+        {
+          "name": "getUint32",
+          "parameters": [
+            "byteOffset \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.15"
+        },
+        {
+          "name": "setBigInt64",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.16"
+        },
+        {
+          "name": "setBigUint64",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.17"
+        },
+        {
+          "name": "setFloat16",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.18"
+        },
+        {
+          "name": "setFloat32",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.19"
+        },
+        {
+          "name": "setFloat64",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.20"
+        },
+        {
+          "name": "setInt8",
+          "parameters": [
+            "byteOffset",
+            "value"
+          ],
+          "section": "25.3.4.21"
+        },
+        {
+          "name": "setInt16",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.22"
+        },
+        {
+          "name": "setInt32",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.23"
+        },
+        {
+          "name": "setUint8",
+          "parameters": [
+            "byteOffset",
+            "value"
+          ],
+          "section": "25.3.4.24"
+        },
+        {
+          "name": "setUint16",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.25"
+        },
+        {
+          "name": "setUint32",
+          "parameters": [
+            "byteOffset",
+            "value \\[littleEndian \\]"
+          ],
+          "section": "25.3.4.26"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "25.3.3.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "25.3.4.4"
+        }
+      ],
+      "constructor_signature": "DataView(['. . .'])"
+    },
+    {
+      "name": "WeakRef",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "deref",
+          "parameters": [],
+          "section": "26.1.3.2"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "26.1.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "26.1.3.1"
+        }
+      ],
+      "constructor_signature": "WeakRef(['target'])"
+    },
+    {
+      "name": "FinalizationRegistry",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "register",
+          "parameters": [
+            "target",
+            "heldValue \\[unregisterToken \\]"
+          ],
+          "section": "26.2.3.2"
+        },
+        {
+          "name": "unregister",
+          "parameters": [
+            "unregisterToken"
+          ],
+          "section": "26.2.3.3"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "26.2.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "26.2.3.1"
+        }
+      ],
+      "constructor_signature": "FinalizationRegistry(['cleanupCallback'])"
+    },
+    {
+      "name": "Iterator",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "drop",
+          "parameters": [
+            "limit"
+          ],
+          "section": "27.1.3.3.2"
+        },
+        {
+          "name": "every",
+          "parameters": [
+            "predicate"
+          ],
+          "section": "27.1.3.3.3"
+        },
+        {
+          "name": "filter",
+          "parameters": [
+            "predicate"
+          ],
+          "section": "27.1.3.3.4"
+        },
+        {
+          "name": "find",
+          "parameters": [
+            "predicate"
+          ],
+          "section": "27.1.3.3.5"
+        },
+        {
+          "name": "flatMap",
+          "parameters": [
+            "mapper"
+          ],
+          "section": "27.1.3.3.6"
+        },
+        {
+          "name": "forEach",
+          "parameters": [
+            "procedure"
+          ],
+          "section": "27.1.3.3.7"
+        },
+        {
+          "name": "map",
+          "parameters": [
+            "mapper"
+          ],
+          "section": "27.1.3.3.8"
+        },
+        {
+          "name": "reduce",
+          "parameters": [
+            "reducer \\[initialValue \\]"
+          ],
+          "section": "27.1.3.3.9"
+        },
+        {
+          "name": "some",
+          "parameters": [
+            "predicate"
+          ],
+          "section": "27.1.3.3.10"
+        },
+        {
+          "name": "take",
+          "parameters": [
+            "limit"
+          ],
+          "section": "27.1.3.3.11"
+        },
+        {
+          "name": "toArray",
+          "parameters": [],
+          "section": "27.1.3.3.12"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "27.1.3.2.3"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "27.1.3.3.1"
+        }
+      ],
+      "constructor_signature": "Iterator([])"
+    },
+    {
+      "name": "Promise",
+      "static_methods": [],
+      "prototype_methods": [
+        {
+          "name": "catch",
+          "parameters": [
+            "onRejected"
+          ],
+          "section": "27.2.5.1"
+        },
+        {
+          "name": "finally",
+          "parameters": [
+            "onFinally"
+          ],
+          "section": "27.2.5.3"
+        },
+        {
+          "name": "then",
+          "parameters": [
+            "onFulfilled",
+            "onRejected"
+          ],
+          "section": "27.2.5.4"
+        }
+      ],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "27.2.4.4"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "27.2.5.2"
+        }
+      ],
+      "constructor_signature": "Promise(['executor'])"
+    },
+    {
+      "name": "Completion",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Completion(['completionRecord'])"
+    },
+    {
+      "name": "StringIndexOf",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringIndexOf(['string', 'searchValue', 'fromIndex'])"
+    },
+    {
+      "name": "StringLastIndexOf",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringLastIndexOf(['string', 'searchValue', 'fromIndex'])"
+    },
+    {
+      "name": "NormalCompletion",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NormalCompletion(['value'])"
+    },
+    {
+      "name": "ThrowCompletion",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThrowCompletion(['value'])"
+    },
+    {
+      "name": "ReturnCompletion",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ReturnCompletion(['value'])"
+    },
+    {
+      "name": "UpdateEmpty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "UpdateEmpty(['completionRecord', 'value'])"
+    },
+    {
+      "name": "IsPropertyReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsPropertyReference(['V'])"
+    },
+    {
+      "name": "IsUnresolvableReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsUnresolvableReference(['V'])"
+    },
+    {
+      "name": "IsSuperReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsSuperReference(['V'])"
+    },
+    {
+      "name": "IsPrivateReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsPrivateReference(['V'])"
+    },
+    {
+      "name": "GetValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetValue(['V'])"
+    },
+    {
+      "name": "PutValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PutValue(['V', 'W'])"
+    },
+    {
+      "name": "GetThisValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetThisValue(['V'])"
+    },
+    {
+      "name": "InitializeReferencedBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeReferencedBinding(['V', 'W'])"
+    },
+    {
+      "name": "MakePrivateReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakePrivateReference(['baseValue', 'privateIdentifier'])"
+    },
+    {
+      "name": "IsAccessorDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsAccessorDescriptor(['Desc'])"
+    },
+    {
+      "name": "IsDataDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsDataDescriptor(['Desc'])"
+    },
+    {
+      "name": "IsGenericDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsGenericDescriptor(['Desc'])"
+    },
+    {
+      "name": "FromPropertyDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FromPropertyDescriptor(['Desc'])"
+    },
+    {
+      "name": "ToPropertyDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToPropertyDescriptor(['Obj'])"
+    },
+    {
+      "name": "CompletePropertyDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CompletePropertyDescriptor(['Desc'])"
+    },
+    {
+      "name": "CreateByteDataBlock",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateByteDataBlock(['size'])"
+    },
+    {
+      "name": "CreateSharedByteDataBlock",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateSharedByteDataBlock(['size'])"
+    },
+    {
+      "name": "CopyDataBlockBytes",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CopyDataBlockBytes(['toBlock', 'toIndex', 'fromBlock', 'fromIndex', 'count'])"
+    },
+    {
+      "name": "ToPrimitive",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToPrimitive(['input \\\\[preferredType \\\\]'])"
+    },
+    {
+      "name": "OrdinaryToPrimitive",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryToPrimitive(['O', 'hint'])"
+    },
+    {
+      "name": "ToBoolean",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToBoolean(['argument'])"
+    },
+    {
+      "name": "ToNumeric",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToNumeric(['value'])"
+    },
+    {
+      "name": "ToNumber",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToNumber(['argument'])"
+    },
+    {
+      "name": "StringToNumber",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringToNumber(['str'])"
+    },
+    {
+      "name": "RoundMVResult",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RoundMVResult(['n'])"
+    },
+    {
+      "name": "ToIntegerOrInfinity",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToIntegerOrInfinity(['argument'])"
+    },
+    {
+      "name": "ToInt32",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToInt32(['argument'])"
+    },
+    {
+      "name": "ToUint32",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToUint32(['argument'])"
+    },
+    {
+      "name": "ToInt16",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToInt16(['argument'])"
+    },
+    {
+      "name": "ToUint16",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToUint16(['argument'])"
+    },
+    {
+      "name": "ToInt8",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToInt8(['argument'])"
+    },
+    {
+      "name": "RequireObjectCoercible",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RequireObjectCoercible(['argument'])"
+    },
+    {
+      "name": "IsArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsArray(['argument'])"
+    },
+    {
+      "name": "IsCallable",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsCallable(['argument'])"
+    },
+    {
+      "name": "IsConstructor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsConstructor(['argument'])"
+    },
+    {
+      "name": "IsExtensible",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsExtensible(['O'])"
+    },
+    {
+      "name": "IsRegExp",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsRegExp(['argument'])"
+    },
+    {
+      "name": "SameType",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SameType(['x', 'y'])"
+    },
+    {
+      "name": "SameValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SameValue(['x', 'y'])"
+    },
+    {
+      "name": "SameValueZero",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SameValueZero(['x', 'y'])"
+    },
+    {
+      "name": "MakeBasicObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeBasicObject(['internalSlotsList'])"
+    },
+    {
+      "name": "Get",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Get(['O', 'P'])"
+    },
+    {
+      "name": "GetV",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetV(['V', 'P'])"
+    },
+    {
+      "name": "CreateDataProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateDataProperty(['O', 'P', 'V'])"
+    },
+    {
+      "name": "CreateDataPropertyOrThrow",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateDataPropertyOrThrow(['O', 'P', 'V'])"
+    },
+    {
+      "name": "CreateNonEnumerableDataPropertyOrThrow",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateNonEnumerableDataPropertyOrThrow(['O', 'P', 'V'])"
+    },
+    {
+      "name": "DefinePropertyOrThrow",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DefinePropertyOrThrow(['O', 'P', 'desc'])"
+    },
+    {
+      "name": "DeletePropertyOrThrow",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DeletePropertyOrThrow(['O', 'P'])"
+    },
+    {
+      "name": "GetMethod",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetMethod(['V', 'P'])"
+    },
+    {
+      "name": "GetIteratorDirect",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetIteratorDirect(['obj'])"
+    },
+    {
+      "name": "GetIteratorFromMethod",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetIteratorFromMethod(['obj', 'method'])"
+    },
+    {
+      "name": "GetIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetIterator(['obj', 'kind'])"
+    },
+    {
+      "name": "GetIteratorFlattenable",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetIteratorFlattenable(['obj', 'primitiveHandling'])"
+    },
+    {
+      "name": "IteratorNext",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IteratorNext(['iteratorRecord \\\\[value \\\\]'])"
+    },
+    {
+      "name": "IteratorComplete",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IteratorComplete(['iteratorResult'])"
+    },
+    {
+      "name": "IteratorValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IteratorValue(['iteratorResult'])"
+    },
+    {
+      "name": "IteratorStep",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IteratorStep(['iteratorRecord'])"
+    },
+    {
+      "name": "IteratorStepValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IteratorStepValue(['iteratorRecord'])"
+    },
+    {
+      "name": "InitializeBoundName",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeBoundName(['name', 'value', 'environment'])"
+    },
+    {
+      "name": "HasBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HasBinding(['N'])"
+    },
+    {
+      "name": "CreateMutableBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateMutableBinding(['N', 'D'])"
+    },
+    {
+      "name": "CreateImmutableBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateImmutableBinding(['N', 'S'])"
+    },
+    {
+      "name": "InitializeBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeBinding(['N', 'V'])"
+    },
+    {
+      "name": "SetMutableBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetMutableBinding(['N', 'V', 'S'])"
+    },
+    {
+      "name": "GetBindingValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetBindingValue(['N', 'S'])"
+    },
+    {
+      "name": "DeleteBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DeleteBinding(['N'])"
+    },
+    {
+      "name": "HasThisBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HasThisBinding([])"
+    },
+    {
+      "name": "GetThisBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetThisBinding([])"
+    },
+    {
+      "name": "HasSuperBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HasSuperBinding([])"
+    },
+    {
+      "name": "BindThisValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BindThisValue(['envRec', 'V'])"
+    },
+    {
+      "name": "GetSuperBase",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetSuperBase(['envRec'])"
+    },
+    {
+      "name": "CreateImportBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateImportBinding(['envRec', 'N', 'M', 'N2'])"
+    },
+    {
+      "name": "GetIdentifierReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetIdentifierReference(['env', 'name', 'strict'])"
+    },
+    {
+      "name": "NewDeclarativeEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewDeclarativeEnvironment(['E'])"
+    },
+    {
+      "name": "NewObjectEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewObjectEnvironment(['O', 'W', 'E'])"
+    },
+    {
+      "name": "NewFunctionEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewFunctionEnvironment(['F', 'newTarget'])"
+    },
+    {
+      "name": "NewGlobalEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewGlobalEnvironment(['G', 'thisValue'])"
+    },
+    {
+      "name": "NewModuleEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewModuleEnvironment(['E'])"
+    },
+    {
+      "name": "NewPrivateEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewPrivateEnvironment(['outerPrivateEnv'])"
+    },
+    {
+      "name": "ResolvePrivateIdentifier",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ResolvePrivateIdentifier(['privateEnv', 'identifier'])"
+    },
+    {
+      "name": "InitializeHostDefinedRealm",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeHostDefinedRealm([])"
+    },
+    {
+      "name": "CreateIntrinsics",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateIntrinsics(['realmRec'])"
+    },
+    {
+      "name": "SetDefaultGlobalBindings",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetDefaultGlobalBindings(['realmRec'])"
+    },
+    {
+      "name": "GetActiveScriptOrModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetActiveScriptOrModule([])"
+    },
+    {
+      "name": "ResolveBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ResolveBinding(['name \\\\[env \\\\]'])"
+    },
+    {
+      "name": "GetThisEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetThisEnvironment([])"
+    },
+    {
+      "name": "ResolveThisBinding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ResolveThisBinding([])"
+    },
+    {
+      "name": "GetNewTarget",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetNewTarget([])"
+    },
+    {
+      "name": "GetGlobalObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetGlobalObject([])"
+    },
+    {
+      "name": "HostMakeJobCallback",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostMakeJobCallback(['callback'])"
+    },
+    {
+      "name": "HostCallJobCallback",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostCallJobCallback(['jobCallback', 'V', 'argumentsList'])"
+    },
+    {
+      "name": "HostEnqueueGenericJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEnqueueGenericJob(['job', 'realm'])"
+    },
+    {
+      "name": "HostEnqueuePromiseJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEnqueuePromiseJob(['job', 'realm'])"
+    },
+    {
+      "name": "HostEnqueueTimeoutJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEnqueueTimeoutJob(['timeoutJob', 'realm', 'milliseconds'])"
+    },
+    {
+      "name": "AgentSignifier",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AgentSignifier([])"
+    },
+    {
+      "name": "AgentCanSuspend",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AgentCanSuspend([])"
+    },
+    {
+      "name": "IncrementModuleAsyncEvaluationCount",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IncrementModuleAsyncEvaluationCount([])"
+    },
+    {
+      "name": "HostEnqueueFinalizationRegistryCleanupJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEnqueueFinalizationRegistryCleanupJob(['finalizationRegistry'])"
+    },
+    {
+      "name": "ClearKeptObjects",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ClearKeptObjects([])"
+    },
+    {
+      "name": "OrdinaryGetPrototypeOf",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryGetPrototypeOf(['O'])"
+    },
+    {
+      "name": "OrdinarySetPrototypeOf",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinarySetPrototypeOf(['O', 'V'])"
+    },
+    {
+      "name": "OrdinaryIsExtensible",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryIsExtensible(['O'])"
+    },
+    {
+      "name": "OrdinaryPreventExtensions",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryPreventExtensions(['O'])"
+    },
+    {
+      "name": "OrdinaryGetOwnProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryGetOwnProperty(['O', 'P'])"
+    },
+    {
+      "name": "OrdinaryDefineOwnProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryDefineOwnProperty(['O', 'P', 'Desc'])"
+    },
+    {
+      "name": "IsCompatiblePropertyDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsCompatiblePropertyDescriptor(['Extensible', 'Desc', 'Current'])"
+    },
+    {
+      "name": "ValidateAndApplyPropertyDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateAndApplyPropertyDescriptor(['O', 'P', 'extensible', 'Desc', 'current'])"
+    },
+    {
+      "name": "OrdinaryHasProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryHasProperty(['O', 'P'])"
+    },
+    {
+      "name": "OrdinaryGet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryGet(['O', 'P', 'Receiver'])"
+    },
+    {
+      "name": "OrdinarySet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinarySet(['O', 'P', 'V', 'Receiver'])"
+    },
+    {
+      "name": "OrdinarySetWithOwnDescriptor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinarySetWithOwnDescriptor(['O', 'P', 'V', 'Receiver', 'ownDesc'])"
+    },
+    {
+      "name": "OrdinaryDelete",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryDelete(['O', 'P'])"
+    },
+    {
+      "name": "OrdinaryOwnPropertyKeys",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryOwnPropertyKeys(['O'])"
+    },
+    {
+      "name": "PrepareForOrdinaryCall",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PrepareForOrdinaryCall(['F', 'newTarget'])"
+    },
+    {
+      "name": "OrdinaryCallBindThis",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryCallBindThis(['F', 'calleeContext', 'thisArgument'])"
+    },
+    {
+      "name": "OrdinaryCallEvaluateBody",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryCallEvaluateBody(['F', 'argumentsList'])"
+    },
+    {
+      "name": "OrdinaryFunctionCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "OrdinaryFunctionCreate(['functionPrototype', 'sourceText', 'ParameterList', 'Body', 'thisMode', 'env', 'privateEnv'])"
+    },
+    {
+      "name": "AddRestrictedFunctionProperties",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AddRestrictedFunctionProperties(['F', 'realm'])"
+    },
+    {
+      "name": "MakeConstructor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeConstructor(['F \\\\[writablePrototype \\\\[prototype \\\\] \\\\]'])"
+    },
+    {
+      "name": "MakeClassConstructor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeClassConstructor(['F'])"
+    },
+    {
+      "name": "MakeMethod",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeMethod(['F', 'homeObject'])"
+    },
+    {
+      "name": "DefineMethodProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DefineMethodProperty(['homeObject', 'key', 'closure', 'enumerable'])"
+    },
+    {
+      "name": "SetFunctionName",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetFunctionName(['F', 'name \\\\[prefix \\\\]'])"
+    },
+    {
+      "name": "SetFunctionLength",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetFunctionLength(['F', 'length'])"
+    },
+    {
+      "name": "BuiltinCallOrConstruct",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BuiltinCallOrConstruct(['F', 'thisArgument', 'argumentsList', 'newTarget'])"
+    },
+    {
+      "name": "CreateBuiltinFunction",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateBuiltinFunction(['behaviour', 'length', 'name', 'additionalInternalSlotsList \\\\[realm \\\\[prototype \\\\[prefix \\\\[async \\\\] \\\\] \\\\] \\\\]'])"
+    },
+    {
+      "name": "BoundFunctionCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BoundFunctionCreate(['targetFunction', 'boundThis', 'boundArgs'])"
+    },
+    {
+      "name": "ArrayCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ArrayCreate(['length \\\\[proto \\\\]'])"
+    },
+    {
+      "name": "ArraySpeciesCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ArraySpeciesCreate(['originalArray', 'length'])"
+    },
+    {
+      "name": "ArraySetLength",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ArraySetLength(['A', 'Desc'])"
+    },
+    {
+      "name": "StringCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringCreate(['value', 'prototype'])"
+    },
+    {
+      "name": "StringGetOwnProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringGetOwnProperty(['S', 'P'])"
+    },
+    {
+      "name": "CreateUnmappedArgumentsObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateUnmappedArgumentsObject(['argumentsList'])"
+    },
+    {
+      "name": "CreateMappedArgumentsObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateMappedArgumentsObject(['func', 'formals', 'argumentsList', 'env'])"
+    },
+    {
+      "name": "MakeArgGetter",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeArgGetter(['name', 'env'])"
+    },
+    {
+      "name": "MakeArgSetter",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeArgSetter(['name', 'env'])"
+    },
+    {
+      "name": "MakeTypedArrayWithBufferWitnessRecord",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeTypedArrayWithBufferWitnessRecord(['obj', 'order'])"
+    },
+    {
+      "name": "SetImmutablePrototype",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetImmutablePrototype(['O', 'V'])"
+    },
+    {
+      "name": "GetTemplateObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetTemplateObject(['templateLiteral'])"
+    },
+    {
+      "name": "EvaluatePropertyAccessWithExpressionKey",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluatePropertyAccessWithExpressionKey(['baseValue', 'expression', 'strict'])"
+    },
+    {
+      "name": "EvaluatePropertyAccessWithIdentifierKey",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluatePropertyAccessWithIdentifierKey(['baseValue', 'identifierName', 'strict'])"
+    },
+    {
+      "name": "EvaluateNew",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluateNew(['constructExpr', 'arguments'])"
+    },
+    {
+      "name": "EvaluateCall",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluateCall(['func', 'ref', 'arguments', 'tailPosition'])"
+    },
+    {
+      "name": "GetSuperConstructor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetSuperConstructor([])"
+    },
+    {
+      "name": "MakeSuperPropertyReference",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeSuperPropertyReference(['actualThis', 'propertyKey', 'strict'])"
+    },
+    {
+      "name": "EvaluateImportCall",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluateImportCall(['specifierExpression \\\\[optionsExpression \\\\]'])"
+    },
+    {
+      "name": "ContinueDynamicImport",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ContinueDynamicImport(['promiseCapability', 'moduleCompletion'])"
+    },
+    {
+      "name": "HostGetImportMetaProperties",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostGetImportMetaProperties(['moduleRecord'])"
+    },
+    {
+      "name": "HostFinalizeImportMeta",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostFinalizeImportMeta(['importMeta', 'moduleRecord'])"
+    },
+    {
+      "name": "InstanceofOperator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InstanceofOperator(['V', 'target'])"
+    },
+    {
+      "name": "ApplyStringOrNumericBinaryOperator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ApplyStringOrNumericBinaryOperator(['lVal', 'opText', 'rVal'])"
+    },
+    {
+      "name": "EvaluateStringOrNumericBinaryExpression",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluateStringOrNumericBinaryExpression(['leftOperand', 'opText', 'rightOperand'])"
+    },
+    {
+      "name": "BlockDeclarationInstantiation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BlockDeclarationInstantiation(['code', 'env'])"
+    },
+    {
+      "name": "LoopContinues",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "LoopContinues(['completion', 'labelSet'])"
+    },
+    {
+      "name": "ForBodyEvaluation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ForBodyEvaluation(['test', 'increment', 'stmt', 'perIterationBindings', 'labelSet'])"
+    },
+    {
+      "name": "CreatePerIterationEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreatePerIterationEnvironment(['perIterationBindings'])"
+    },
+    {
+      "name": "EnumerateObjectProperties",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EnumerateObjectProperties(['O'])"
+    },
+    {
+      "name": "CreateForInIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateForInIterator(['object'])"
+    },
+    {
+      "name": "CaseClauseIsSelected",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CaseClauseIsSelected(['C', 'input'])"
+    },
+    {
+      "name": "PrepareForTailCall",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PrepareForTailCall([])"
+    },
+    {
+      "name": "ParseScript",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseScript(['sourceText', 'realm', 'hostDefined'])"
+    },
+    {
+      "name": "ScriptEvaluation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ScriptEvaluation(['scriptRecord'])"
+    },
+    {
+      "name": "GlobalDeclarationInstantiation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GlobalDeclarationInstantiation(['script', 'env'])"
+    },
+    {
+      "name": "ModuleRequestsEqual",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ModuleRequestsEqual(['left', 'right'])"
+    },
+    {
+      "name": "EvaluateModuleSync",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvaluateModuleSync(['module'])"
+    },
+    {
+      "name": "LoadRequestedModules",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "LoadRequestedModules(['\\\\[hostDefined \\\\]'])"
+    },
+    {
+      "name": "InnerModuleLoading",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InnerModuleLoading(['state', 'module'])"
+    },
+    {
+      "name": "ContinueModuleLoading",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ContinueModuleLoading(['state', 'moduleCompletion'])"
+    },
+    {
+      "name": "Link",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Link([])"
+    },
+    {
+      "name": "InnerModuleLinking",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InnerModuleLinking(['module', 'stack', 'index'])"
+    },
+    {
+      "name": "Evaluate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Evaluate([])"
+    },
+    {
+      "name": "InnerModuleEvaluation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InnerModuleEvaluation(['module', 'stack', 'index'])"
+    },
+    {
+      "name": "ExecuteAsyncModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ExecuteAsyncModule(['module'])"
+    },
+    {
+      "name": "GatherAvailableAncestors",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GatherAvailableAncestors(['module', 'execList'])"
+    },
+    {
+      "name": "AsyncModuleExecutionFulfilled",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncModuleExecutionFulfilled(['module'])"
+    },
+    {
+      "name": "AsyncModuleExecutionRejected",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncModuleExecutionRejected(['module', 'error'])"
+    },
+    {
+      "name": "ParseModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseModule(['sourceText', 'realm', 'hostDefined'])"
+    },
+    {
+      "name": "GetExportedNames",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetExportedNames(['\\\\[exportStarSet \\\\]'])"
+    },
+    {
+      "name": "ResolveExport",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ResolveExport(['exportName \\\\[resolveSet \\\\]'])"
+    },
+    {
+      "name": "InitializeEnvironment",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeEnvironment([])"
+    },
+    {
+      "name": "ExecuteModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ExecuteModule(['\\\\[capability \\\\]'])"
+    },
+    {
+      "name": "CreateDefaultExportSyntheticModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateDefaultExportSyntheticModule(['defaultExport'])"
+    },
+    {
+      "name": "ParseJSONModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseJSONModule(['source'])"
+    },
+    {
+      "name": "SetSyntheticModuleExport",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetSyntheticModuleExport(['module', 'exportName', 'exportValue'])"
+    },
+    {
+      "name": "GetImportedModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetImportedModule(['referrer', 'request'])"
+    },
+    {
+      "name": "HostLoadImportedModule",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostLoadImportedModule(['referrer', 'moduleRequest', 'hostDefined', 'payload'])"
+    },
+    {
+      "name": "HostGetSupportedImportAttributes",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostGetSupportedImportAttributes([])"
+    },
+    {
+      "name": "PerformEval",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformEval(['x', 'strictCaller', 'direct'])"
+    },
+    {
+      "name": "HostEnsureCanCompileStrings",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEnsureCanCompileStrings(['calleeRealm', 'parameterStrings', 'bodyString', 'direct'])"
+    },
+    {
+      "name": "EvalDeclarationInstantiation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EvalDeclarationInstantiation(['body', 'varEnv', 'lexEnv', 'privateEnv', 'strict'])"
+    },
+    {
+      "name": "Encode",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Encode(['string', 'extraUnescaped'])"
+    },
+    {
+      "name": "Decode",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Decode(['string', 'preserveEscapeSet'])"
+    },
+    {
+      "name": "ParseHexOctet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseHexOctet(['string', 'position'])"
+    },
+    {
+      "name": "AggregateError",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "20.5.7.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "20.5.7.3.1"
+        },
+        {
+          "name": "message",
+          "section": "20.5.7.3.2"
+        },
+        {
+          "name": "name",
+          "section": "20.5.7.3.3"
+        }
+      ],
+      "constructor_signature": "AggregateError(['. . .'])"
+    },
+    {
+      "name": "BigInt64Array",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BigInt64Array(['. . .'])"
+    },
+    {
+      "name": "BigUint64Array",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BigUint64Array(['. . .'])"
+    },
+    {
+      "name": "ObjectDefineProperties",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ObjectDefineProperties(['O', 'Properties'])"
+    },
+    {
+      "name": "GetOwnPropertyKeys",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetOwnPropertyKeys(['O', 'type'])"
+    },
+    {
+      "name": "CreateDynamicFunction",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateDynamicFunction(['constructor', 'newTarget', 'kind', 'parameterArgs', 'bodyArg'])"
+    },
+    {
+      "name": "HostHasSourceTextAvailable",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostHasSourceTextAvailable(['func'])"
+    },
+    {
+      "name": "ThisBooleanValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThisBooleanValue(['value'])"
+    },
+    {
+      "name": "SymbolDescriptiveString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SymbolDescriptiveString(['sym'])"
+    },
+    {
+      "name": "ThisSymbolValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThisSymbolValue(['value'])"
+    },
+    {
+      "name": "KeyForSymbol",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "KeyForSymbol(['sym'])"
+    },
+    {
+      "name": "InstallErrorCause",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InstallErrorCause(['O', 'options'])"
+    },
+    {
+      "name": "ThisNumberValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThisNumberValue(['value'])"
+    },
+    {
+      "name": "NumberToBigInt",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NumberToBigInt(['number'])"
+    },
+    {
+      "name": "ThisBigIntValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThisBigIntValue(['value'])"
+    },
+    {
+      "name": "Day",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Day(['t'])"
+    },
+    {
+      "name": "TimeWithinDay",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TimeWithinDay(['t'])"
+    },
+    {
+      "name": "DaysInYear",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DaysInYear(['y'])"
+    },
+    {
+      "name": "DayFromYear",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DayFromYear(['y'])"
+    },
+    {
+      "name": "TimeFromYear",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TimeFromYear(['y'])"
+    },
+    {
+      "name": "YearFromTime",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "YearFromTime(['t'])"
+    },
+    {
+      "name": "DayWithinYear",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DayWithinYear(['t'])"
+    },
+    {
+      "name": "InLeapYear",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InLeapYear(['t'])"
+    },
+    {
+      "name": "IsTimeZoneOffsetString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsTimeZoneOffsetString(['offsetString'])"
+    },
+    {
+      "name": "ParseTimeZoneOffsetString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseTimeZoneOffsetString(['offsetString'])"
+    },
+    {
+      "name": "TimeString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TimeString(['tv'])"
+    },
+    {
+      "name": "DateString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DateString(['tv'])"
+    },
+    {
+      "name": "TimeZoneString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TimeZoneString(['tv'])"
+    },
+    {
+      "name": "ToDateString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToDateString(['tv'])"
+    },
+    {
+      "name": "StringPaddingBuiltinsImpl",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringPaddingBuiltinsImpl(['O', 'maxLength', 'fillString', 'placement'])"
+    },
+    {
+      "name": "StringPad",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "StringPad(['S', 'maxLength', 'fillString', 'placement'])"
+    },
+    {
+      "name": "ToZeroPaddedDecimalString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ToZeroPaddedDecimalString(['n', 'minLength'])"
+    },
+    {
+      "name": "GetSubstitution",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetSubstitution(['matched', 'str', 'position', 'captures', 'namedCaptures', 'replacementTemplate'])"
+    },
+    {
+      "name": "TrimString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TrimString(['string', 'where'])"
+    },
+    {
+      "name": "ThisStringValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ThisStringValue(['value'])"
+    },
+    {
+      "name": "RepeatMatcher",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RepeatMatcher(['m', 'min', 'max', 'greedy', 'x', 'c', 'parenIndex', 'parenCount'])"
+    },
+    {
+      "name": "EmptyMatcher",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EmptyMatcher([])"
+    },
+    {
+      "name": "MatchTwoAlternatives",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MatchTwoAlternatives(['m1', 'm2'])"
+    },
+    {
+      "name": "MatchSequence",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MatchSequence(['m1', 'm2', 'direction'])"
+    },
+    {
+      "name": "IsWordChar",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsWordChar(['rer', 'Input', 'e'])"
+    },
+    {
+      "name": "CharacterSetMatcher",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CharacterSetMatcher(['rer', 'A', 'invert', 'direction'])"
+    },
+    {
+      "name": "BackreferenceMatcher",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "BackreferenceMatcher(['rer', 'ns', 'direction'])"
+    },
+    {
+      "name": "Canonicalize",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Canonicalize(['rer', 'ch'])"
+    },
+    {
+      "name": "UpdateModifiers",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "UpdateModifiers(['rer', 'add', 'remove'])"
+    },
+    {
+      "name": "CharacterRange",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CharacterRange(['A', 'B'])"
+    },
+    {
+      "name": "HasEitherUnicodeFlag",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HasEitherUnicodeFlag(['rer'])"
+    },
+    {
+      "name": "WordCharacters",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "WordCharacters(['rer'])"
+    },
+    {
+      "name": "AllCharacters",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AllCharacters(['rer'])"
+    },
+    {
+      "name": "MaybeSimpleCaseFolding",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MaybeSimpleCaseFolding(['rer', 'A'])"
+    },
+    {
+      "name": "CharacterComplement",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CharacterComplement(['rer', 'S'])"
+    },
+    {
+      "name": "UnicodeMatchProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "UnicodeMatchProperty(['rer', 'p'])"
+    },
+    {
+      "name": "UnicodeMatchPropertyValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "UnicodeMatchPropertyValue(['p', 'v'])"
+    },
+    {
+      "name": "RegExpCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpCreate(['P', 'F'])"
+    },
+    {
+      "name": "RegExpAlloc",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpAlloc(['newTarget'])"
+    },
+    {
+      "name": "RegExpInitialize",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpInitialize(['obj', 'pattern', 'flags'])"
+    },
+    {
+      "name": "EncodeForRegExpEscape",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EncodeForRegExpEscape(['cp'])"
+    },
+    {
+      "name": "RegExpHasFlag",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpHasFlag(['R', 'codeUnit'])"
+    },
+    {
+      "name": "EscapeRegExpPattern",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EscapeRegExpPattern(['P', 'F'])"
+    },
+    {
+      "name": "RegExpExec",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpExec(['R', 'S'])"
+    },
+    {
+      "name": "RegExpBuiltinExec",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RegExpBuiltinExec(['R', 'S'])"
+    },
+    {
+      "name": "AdvanceStringIndex",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AdvanceStringIndex(['S', 'index', 'unicode'])"
+    },
+    {
+      "name": "GetStringIndex",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetStringIndex(['S', 'codePointIndex'])"
+    },
+    {
+      "name": "GetMatchString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetMatchString(['S', 'match'])"
+    },
+    {
+      "name": "GetMatchIndexPair",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetMatchIndexPair(['S', 'match'])"
+    },
+    {
+      "name": "MakeMatchIndicesIndexPairArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeMatchIndicesIndexPairArray(['S', 'indices', 'groupNames', 'hasGroups'])"
+    },
+    {
+      "name": "CreateRegExpStringIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateRegExpStringIterator(['R', 'S', 'global', 'fullUnicode'])"
+    },
+    {
+      "name": "IsConcatSpreadable",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsConcatSpreadable(['O'])"
+    },
+    {
+      "name": "FindViaPredicate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FindViaPredicate(['O', 'len', 'direction', 'predicate', 'thisArg'])"
+    },
+    {
+      "name": "FlattenIntoArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FlattenIntoArray(['target', 'source', 'sourceLen', 'start', 'depth \\\\[mapperFunction \\\\[thisArg \\\\] \\\\]'])"
+    },
+    {
+      "name": "SortIndexedProperties",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SortIndexedProperties(['obj', 'len', 'SortCompare', 'holes'])"
+    },
+    {
+      "name": "CompareArrayElements",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CompareArrayElements(['x', 'y', 'comparator'])"
+    },
+    {
+      "name": "CreateArrayIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateArrayIterator(['array', 'kind'])"
+    },
+    {
+      "name": "SetTypedArrayFromArrayLike",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetTypedArrayFromArrayLike(['target', 'targetOffset', 'source'])"
+    },
+    {
+      "name": "SetTypedArrayFromTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetTypedArrayFromTypedArray(['target', 'targetOffset', 'source'])"
+    },
+    {
+      "name": "TypedArrayCreateFromConstructor",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TypedArrayCreateFromConstructor(['constructor', 'argumentList'])"
+    },
+    {
+      "name": "TypedArrayCreateSameType",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TypedArrayCreateSameType(['exemplar', 'length'])"
+    },
+    {
+      "name": "TypedArraySpeciesCreate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TypedArraySpeciesCreate(['exemplar', 'argumentList'])"
+    },
+    {
+      "name": "ValidateTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateTypedArray(['O', 'order'])"
+    },
+    {
+      "name": "TypedArrayElementSize",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TypedArrayElementSize(['O'])"
+    },
+    {
+      "name": "TypedArrayElementType",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TypedArrayElementType(['O'])"
+    },
+    {
+      "name": "CompareTypedArrayElements",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CompareTypedArrayElements(['x', 'y', 'comparator'])"
+    },
+    {
+      "name": "AllocateTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AllocateTypedArray(['constructorName', 'newTarget', 'defaultProto \\\\[length \\\\]'])"
+    },
+    {
+      "name": "InitializeTypedArrayFromTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeTypedArrayFromTypedArray(['O', 'srcArray'])"
+    },
+    {
+      "name": "InitializeTypedArrayFromArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeTypedArrayFromArrayBuffer(['O', 'buffer', 'byteOffset', 'length'])"
+    },
+    {
+      "name": "InitializeTypedArrayFromList",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeTypedArrayFromList(['O', 'values'])"
+    },
+    {
+      "name": "InitializeTypedArrayFromArrayLike",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InitializeTypedArrayFromArrayLike(['O', 'arrayLike'])"
+    },
+    {
+      "name": "AllocateTypedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AllocateTypedArrayBuffer(['O', 'length'])"
+    },
+    {
+      "name": "ValidateUint8Array",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateUint8Array(['ta'])"
+    },
+    {
+      "name": "GetUint8ArrayBytes",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetUint8ArrayBytes(['ta'])"
+    },
+    {
+      "name": "SetUint8ArrayBytes",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetUint8ArrayBytes(['into', 'bytes'])"
+    },
+    {
+      "name": "SkipAsciiWhitespace",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SkipAsciiWhitespace(['string', 'index'])"
+    },
+    {
+      "name": "DecodeFinalBase64Chunk",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DecodeFinalBase64Chunk(['chunk', 'throwOnExtraBits'])"
+    },
+    {
+      "name": "DecodeFullLengthBase64Chunk",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DecodeFullLengthBase64Chunk(['chunk'])"
+    },
+    {
+      "name": "FromBase64",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FromBase64(['string', 'alphabet', 'lastChunkHandling \\\\[maxLength \\\\]'])"
+    },
+    {
+      "name": "FromHex",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FromHex(['string \\\\[maxLength \\\\]'])"
+    },
+    {
+      "name": "AddEntriesFromIterable",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AddEntriesFromIterable(['target', 'iterable', 'adder'])"
+    },
+    {
+      "name": "CreateMapIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateMapIterator(['map', 'kind'])"
+    },
+    {
+      "name": "GetSetRecord",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetSetRecord(['obj'])"
+    },
+    {
+      "name": "SetDataHas",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetDataHas(['setData', 'value'])"
+    },
+    {
+      "name": "SetDataIndex",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetDataIndex(['setData', 'value'])"
+    },
+    {
+      "name": "SetDataSize",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetDataSize(['setData'])"
+    },
+    {
+      "name": "CreateSetIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateSetIterator(['set', 'kind'])"
+    },
+    {
+      "name": "CanonicalizeKeyedCollectionKey",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CanonicalizeKeyedCollectionKey(['key'])"
+    },
+    {
+      "name": "AllocateArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AllocateArrayBuffer(['constructor', 'byteLength \\\\[maxByteLength \\\\]'])"
+    },
+    {
+      "name": "ArrayBufferByteLength",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ArrayBufferByteLength(['arrayBuffer', 'order'])"
+    },
+    {
+      "name": "ArrayBufferCopyAndDetach",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ArrayBufferCopyAndDetach(['arrayBuffer', 'newLength', 'preserveResizability'])"
+    },
+    {
+      "name": "IsDetachedBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsDetachedBuffer(['arrayBuffer'])"
+    },
+    {
+      "name": "DetachArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "DetachArrayBuffer(['arrayBuffer \\\\[key \\\\]'])"
+    },
+    {
+      "name": "CloneArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CloneArrayBuffer(['srcBuffer', 'srcByteOffset', 'srcLength'])"
+    },
+    {
+      "name": "GetArrayBufferMaxByteLengthOption",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetArrayBufferMaxByteLengthOption(['options'])"
+    },
+    {
+      "name": "HostResizeArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostResizeArrayBuffer(['buffer', 'newByteLength'])"
+    },
+    {
+      "name": "IsFixedLengthArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsFixedLengthArrayBuffer(['arrayBuffer'])"
+    },
+    {
+      "name": "IsUnsignedElementType",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsUnsignedElementType(['type'])"
+    },
+    {
+      "name": "AllocateSharedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AllocateSharedArrayBuffer(['constructor', 'byteLength \\\\[maxByteLength \\\\]'])"
+    },
+    {
+      "name": "IsSharedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsSharedArrayBuffer(['obj'])"
+    },
+    {
+      "name": "IsGrowableSharedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsGrowableSharedArrayBuffer(['obj'])"
+    },
+    {
+      "name": "HostGrowSharedArrayBuffer",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostGrowSharedArrayBuffer(['buffer', 'newByteLength'])"
+    },
+    {
+      "name": "MakeDataViewWithBufferWitnessRecord",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "MakeDataViewWithBufferWitnessRecord(['obj', 'order'])"
+    },
+    {
+      "name": "GetViewByteLength",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetViewByteLength(['viewRecord'])"
+    },
+    {
+      "name": "IsViewOutOfBounds",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsViewOutOfBounds(['viewRecord'])"
+    },
+    {
+      "name": "GetViewValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetViewValue(['view', 'requestIndex', 'isLittleEndian', 'type'])"
+    },
+    {
+      "name": "SetViewValue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SetViewValue(['view', 'requestIndex', 'isLittleEndian', 'type', 'value'])"
+    },
+    {
+      "name": "ValidateIntegerTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateIntegerTypedArray(['typedArray', 'waitable'])"
+    },
+    {
+      "name": "ValidateAtomicAccess",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateAtomicAccess(['taRecord', 'requestIndex'])"
+    },
+    {
+      "name": "ValidateAtomicAccessOnIntegerTypedArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValidateAtomicAccessOnIntegerTypedArray(['typedArray', 'requestIndex'])"
+    },
+    {
+      "name": "RevalidateAtomicAccess",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RevalidateAtomicAccess(['typedArray', 'byteIndexInBuffer'])"
+    },
+    {
+      "name": "GetWaiterList",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetWaiterList(['block', 'i'])"
+    },
+    {
+      "name": "EnterCriticalSection",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EnterCriticalSection(['WL'])"
+    },
+    {
+      "name": "LeaveCriticalSection",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "LeaveCriticalSection(['WL'])"
+    },
+    {
+      "name": "AddWaiter",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AddWaiter(['WL', 'waiterRecord'])"
+    },
+    {
+      "name": "RemoveWaiter",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RemoveWaiter(['WL', 'waiterRecord'])"
+    },
+    {
+      "name": "RemoveWaiters",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RemoveWaiters(['WL', 'c'])"
+    },
+    {
+      "name": "ParseJSON",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ParseJSON(['text'])"
+    },
+    {
+      "name": "CreateJSONParseRecord",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateJSONParseRecord(['parseNode', 'key', 'val'])"
+    },
+    {
+      "name": "InternalizeJSONProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "InternalizeJSONProperty(['holder', 'name', 'reviver', 'parseRecord'])"
+    },
+    {
+      "name": "SerializeJSONProperty",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SerializeJSONProperty(['state', 'key', 'holder'])"
+    },
+    {
+      "name": "QuoteJSONString",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "QuoteJSONString(['value'])"
+    },
+    {
+      "name": "UnicodeEscape",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "UnicodeEscape(['C'])"
+    },
+    {
+      "name": "SerializeJSONObject",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SerializeJSONObject(['state', 'value'])"
+    },
+    {
+      "name": "SerializeJSONArray",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SerializeJSONArray(['state', 'value'])"
+    },
+    {
+      "name": "WeakRefDeref",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "WeakRefDeref(['weakRef'])"
+    },
+    {
+      "name": "CreateAsyncFromSyncIterator",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateAsyncFromSyncIterator(['syncIteratorRecord'])"
+    },
+    {
+      "name": "AsyncFromSyncIteratorContinuation",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncFromSyncIteratorContinuation(['result', 'promiseCapability', 'syncIteratorRecord', 'closeOnRejection'])"
+    },
+    {
+      "name": "IfAbruptRejectPromise",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IfAbruptRejectPromise(['value', 'capability'])"
+    },
+    {
+      "name": "CreateResolvingFunctions",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateResolvingFunctions(['toResolve'])"
+    },
+    {
+      "name": "FulfillPromise",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "FulfillPromise(['promise', 'value'])"
+    },
+    {
+      "name": "NewPromiseCapability",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewPromiseCapability(['C'])"
+    },
+    {
+      "name": "IsPromise",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "IsPromise(['x'])"
+    },
+    {
+      "name": "RejectPromise",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "RejectPromise(['promise', 'reason'])"
+    },
+    {
+      "name": "TriggerPromiseReactions",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "TriggerPromiseReactions(['reactions', 'argument'])"
+    },
+    {
+      "name": "HostPromiseRejectionTracker",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostPromiseRejectionTracker(['promise', 'operation'])"
+    },
+    {
+      "name": "NewPromiseReactionJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewPromiseReactionJob(['reaction', 'argument'])"
+    },
+    {
+      "name": "NewPromiseResolveThenableJob",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "NewPromiseResolveThenableJob(['promiseToResolve', 'thenable', 'then'])"
+    },
+    {
+      "name": "GetPromiseResolve",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetPromiseResolve(['promiseConstructor'])"
+    },
+    {
+      "name": "PerformPromiseAll",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformPromiseAll(['iteratorRecord', 'constructor', 'resultCapability', 'promiseResolve'])"
+    },
+    {
+      "name": "PerformPromiseAllSettled",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformPromiseAllSettled(['iteratorRecord', 'constructor', 'resultCapability', 'promiseResolve'])"
+    },
+    {
+      "name": "PerformPromiseAny",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformPromiseAny(['iteratorRecord', 'constructor', 'resultCapability', 'promiseResolve'])"
+    },
+    {
+      "name": "PerformPromiseRace",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformPromiseRace(['iteratorRecord', 'constructor', 'resultCapability', 'promiseResolve'])"
+    },
+    {
+      "name": "PromiseResolve",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PromiseResolve(['C', 'x'])"
+    },
+    {
+      "name": "PerformPromiseThen",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "PerformPromiseThen(['promise', 'onFulfilled', 'onRejected \\\\[resultCapability \\\\]'])"
+    },
+    {
+      "name": "GeneratorFunction",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "27.3.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "27.3.3.1"
+        },
+        {
+          "name": "prototype",
+          "section": "27.3.3.2"
+        }
+      ],
+      "constructor_signature": "GeneratorFunction(['...parameterArgs', 'bodyArg'])"
+    },
+    {
+      "name": "AsyncGeneratorFunction",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "27.4.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "27.4.3.1"
+        },
+        {
+          "name": "prototype",
+          "section": "27.4.3.2"
+        }
+      ],
+      "constructor_signature": "AsyncGeneratorFunction(['...parameterArgs', 'bodyArg'])"
+    },
+    {
+      "name": "GeneratorStart",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GeneratorStart(['generator', 'generatorBody'])"
+    },
+    {
+      "name": "GeneratorValidate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GeneratorValidate(['generator', 'generatorBrand'])"
+    },
+    {
+      "name": "GeneratorResume",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GeneratorResume(['generator', 'value', 'generatorBrand'])"
+    },
+    {
+      "name": "GeneratorResumeAbrupt",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GeneratorResumeAbrupt(['generator', 'abruptCompletion', 'generatorBrand'])"
+    },
+    {
+      "name": "GetGeneratorKind",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GetGeneratorKind([])"
+    },
+    {
+      "name": "GeneratorYield",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "GeneratorYield(['iteratorResult'])"
+    },
+    {
+      "name": "Yield",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Yield(['value'])"
+    },
+    {
+      "name": "CreateIteratorFromClosure",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateIteratorFromClosure(['closure', 'generatorBrand', 'generatorPrototype \\\\[extraSlots \\\\]'])"
+    },
+    {
+      "name": "AsyncGeneratorStart",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorStart(['generator', 'generatorBody'])"
+    },
+    {
+      "name": "AsyncGeneratorValidate",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorValidate(['generator', 'generatorBrand'])"
+    },
+    {
+      "name": "AsyncGeneratorEnqueue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorEnqueue(['generator', 'completion', 'promiseCapability'])"
+    },
+    {
+      "name": "AsyncGeneratorCompleteStep",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorCompleteStep(['generator', 'completion', 'done \\\\[realm \\\\]'])"
+    },
+    {
+      "name": "AsyncGeneratorResume",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorResume(['generator', 'completion'])"
+    },
+    {
+      "name": "AsyncGeneratorUnwrapYieldResumption",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorUnwrapYieldResumption(['resumptionValue'])"
+    },
+    {
+      "name": "AsyncGeneratorYield",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorYield(['value'])"
+    },
+    {
+      "name": "AsyncGeneratorAwaitReturn",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorAwaitReturn(['generator'])"
+    },
+    {
+      "name": "AsyncGeneratorDrainQueue",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncGeneratorDrainQueue(['generator'])"
+    },
+    {
+      "name": "AsyncFunction",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [
+        {
+          "name": "prototype",
+          "section": "27.7.2.1"
+        }
+      ],
+      "prototype_properties": [
+        {
+          "name": "constructor",
+          "section": "27.7.3.1"
+        }
+      ],
+      "constructor_signature": "AsyncFunction(['...parameterArgs', 'bodyArg'])"
+    },
+    {
+      "name": "AsyncFunctionStart",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncFunctionStart(['promiseCapability', 'asyncFunctionBody'])"
+    },
+    {
+      "name": "AsyncBlockStart",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "AsyncBlockStart(['promiseCapability', 'asyncBody', 'asyncContext'])"
+    },
+    {
+      "name": "Await",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Await(['value'])"
+    },
+    {
+      "name": "Proxy",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "Proxy(['target', 'handler'])"
+    },
+    {
+      "name": "EventSet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "EventSet(['execution'])"
+    },
+    {
+      "name": "SharedDataBlockEventSet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "SharedDataBlockEventSet(['execution'])"
+    },
+    {
+      "name": "HostEventSet",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "HostEventSet(['execution'])"
+    },
+    {
+      "name": "ComposeWriteEventBytes",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ComposeWriteEventBytes(['execution', 'byteIndex', 'Ws'])"
+    },
+    {
+      "name": "ValueOfReadEvent",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "ValueOfReadEvent(['execution', 'R'])"
+    },
+    {
+      "name": "CharacterRangeOrUnion",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CharacterRangeOrUnion(['rer', 'A', 'B'])"
+    },
+    {
+      "name": "CreateHTML",
+      "static_methods": [],
+      "prototype_methods": [],
+      "static_properties": [],
+      "prototype_properties": [],
+      "constructor_signature": "CreateHTML(['string', 'tag', 'attribute', 'value'])"
+    }
+  ],
+  "abstract_operations": [
+    {
+      "name": "StringIndexOf",
+      "parameters": [
+        "string",
+        "searchValue",
+        "fromIndex"
+      ],
+      "section": "6.1.4.1"
+    },
+    {
+      "name": "StringLastIndexOf",
+      "parameters": [
+        "string",
+        "searchValue",
+        "fromIndex"
+      ],
+      "section": "6.1.4.2"
+    },
+    {
+      "name": "NumberBitwiseOp",
+      "parameters": [
+        "op",
+        "x",
+        "y"
+      ],
+      "section": "6.1.6.1.16"
+    },
+    {
+      "name": "BinaryAnd",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "6.1.6.2.14"
+    },
+    {
+      "name": "BinaryOr",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "6.1.6.2.15"
+    },
+    {
+      "name": "BinaryXor",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "6.1.6.2.16"
+    },
+    {
+      "name": "BigIntBitwiseOp",
+      "parameters": [
+        "op",
+        "x",
+        "y"
+      ],
+      "section": "6.1.6.2.17"
+    },
+    {
+      "name": "NormalCompletion",
+      "parameters": [
+        "value"
+      ],
+      "section": "6.2.4.1"
+    },
+    {
+      "name": "ThrowCompletion",
+      "parameters": [
+        "value"
+      ],
+      "section": "6.2.4.2"
+    },
+    {
+      "name": "ReturnCompletion",
+      "parameters": [
+        "value"
+      ],
+      "section": "6.2.4.3"
+    },
+    {
+      "name": "UpdateEmpty",
+      "parameters": [
+        "completionRecord",
+        "value"
+      ],
+      "section": "6.2.4.4"
+    },
+    {
+      "name": "IsPropertyReference",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.1"
+    },
+    {
+      "name": "IsUnresolvableReference",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.2"
+    },
+    {
+      "name": "IsSuperReference",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.3"
+    },
+    {
+      "name": "IsPrivateReference",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.4"
+    },
+    {
+      "name": "GetValue",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.5"
+    },
+    {
+      "name": "PutValue",
+      "parameters": [
+        "V",
+        "W"
+      ],
+      "section": "6.2.5.6"
+    },
+    {
+      "name": "GetThisValue",
+      "parameters": [
+        "V"
+      ],
+      "section": "6.2.5.7"
+    },
+    {
+      "name": "InitializeReferencedBinding",
+      "parameters": [
+        "V",
+        "W"
+      ],
+      "section": "6.2.5.8"
+    },
+    {
+      "name": "MakePrivateReference",
+      "parameters": [
+        "baseValue",
+        "privateIdentifier"
+      ],
+      "section": "6.2.5.9"
+    },
+    {
+      "name": "IsAccessorDescriptor",
+      "parameters": [
+        "Desc"
+      ],
+      "section": "6.2.6.1"
+    },
+    {
+      "name": "IsDataDescriptor",
+      "parameters": [
+        "Desc"
+      ],
+      "section": "6.2.6.2"
+    },
+    {
+      "name": "IsGenericDescriptor",
+      "parameters": [
+        "Desc"
+      ],
+      "section": "6.2.6.3"
+    },
+    {
+      "name": "FromPropertyDescriptor",
+      "parameters": [
+        "Desc"
+      ],
+      "section": "6.2.6.4"
+    },
+    {
+      "name": "ToPropertyDescriptor",
+      "parameters": [
+        "Obj"
+      ],
+      "section": "6.2.6.5"
+    },
+    {
+      "name": "CompletePropertyDescriptor",
+      "parameters": [
+        "Desc"
+      ],
+      "section": "6.2.6.6"
+    },
+    {
+      "name": "CreateByteDataBlock",
+      "parameters": [
+        "size"
+      ],
+      "section": "6.2.9.1"
+    },
+    {
+      "name": "CreateSharedByteDataBlock",
+      "parameters": [
+        "size"
+      ],
+      "section": "6.2.9.2"
+    },
+    {
+      "name": "CopyDataBlockBytes",
+      "parameters": [
+        "toBlock",
+        "toIndex",
+        "fromBlock",
+        "fromIndex",
+        "count"
+      ],
+      "section": "6.2.9.3"
+    },
+    {
+      "name": "ToPrimitive",
+      "parameters": [
+        "input \\[preferredType \\]"
+      ],
+      "section": "7.1.1"
+    },
+    {
+      "name": "OrdinaryToPrimitive",
+      "parameters": [
+        "O",
+        "hint"
+      ],
+      "section": "7.1.1.1"
+    },
+    {
+      "name": "ToBoolean",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.2"
+    },
+    {
+      "name": "ToNumeric",
+      "parameters": [
+        "value"
+      ],
+      "section": "7.1.3"
+    },
+    {
+      "name": "ToNumber",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.4"
+    },
+    {
+      "name": "StringToNumber",
+      "parameters": [
+        "str"
+      ],
+      "section": "7.1.4.1.1"
+    },
+    {
+      "name": "RoundMVResult",
+      "parameters": [
+        "n"
+      ],
+      "section": "7.1.4.1.3"
+    },
+    {
+      "name": "ToIntegerOrInfinity",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.5"
+    },
+    {
+      "name": "ToInt32",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.6"
+    },
+    {
+      "name": "ToUint32",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.7"
+    },
+    {
+      "name": "ToInt16",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.8"
+    },
+    {
+      "name": "ToUint16",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.9"
+    },
+    {
+      "name": "ToInt8",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.10"
+    },
+    {
+      "name": "ToUint8",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.11"
+    },
+    {
+      "name": "ToUint8Clamp",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.12"
+    },
+    {
+      "name": "ToBigInt",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.13"
+    },
+    {
+      "name": "StringToBigInt",
+      "parameters": [
+        "str"
+      ],
+      "section": "7.1.14"
+    },
+    {
+      "name": "ToBigInt64",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.15"
+    },
+    {
+      "name": "ToBigUint64",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.16"
+    },
+    {
+      "name": "ToString",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.17"
+    },
+    {
+      "name": "ToObject",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.18"
+    },
+    {
+      "name": "ToPropertyKey",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.19"
+    },
+    {
+      "name": "ToLength",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.20"
+    },
+    {
+      "name": "CanonicalNumericIndexString",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.1.21"
+    },
+    {
+      "name": "ToIndex",
+      "parameters": [
+        "value"
+      ],
+      "section": "7.1.22"
+    },
+    {
+      "name": "RequireObjectCoercible",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.2.1"
+    },
+    {
+      "name": "IsArray",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.2.2"
+    },
+    {
+      "name": "IsCallable",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.2.3"
+    },
+    {
+      "name": "IsConstructor",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.2.4"
+    },
+    {
+      "name": "IsExtensible",
+      "parameters": [
+        "O"
+      ],
+      "section": "7.2.5"
+    },
+    {
+      "name": "IsRegExp",
+      "parameters": [
+        "argument"
+      ],
+      "section": "7.2.6"
+    },
+    {
+      "name": "SameType",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.8"
+    },
+    {
+      "name": "SameValue",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.9"
+    },
+    {
+      "name": "SameValueZero",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.10"
+    },
+    {
+      "name": "SameValueNonNumber",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.11"
+    },
+    {
+      "name": "IsLessThan",
+      "parameters": [
+        "x",
+        "y",
+        "LeftFirst"
+      ],
+      "section": "7.2.12"
+    },
+    {
+      "name": "IsLooselyEqual",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.13"
+    },
+    {
+      "name": "IsStrictlyEqual",
+      "parameters": [
+        "x",
+        "y"
+      ],
+      "section": "7.2.14"
+    },
+    {
+      "name": "MakeBasicObject",
+      "parameters": [
+        "internalSlotsList"
+      ],
+      "section": "7.3.1"
+    },
+    {
+      "name": "Get",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.2"
+    },
+    {
+      "name": "GetV",
+      "parameters": [
+        "V",
+        "P"
+      ],
+      "section": "7.3.3"
+    },
+    {
+      "name": "Set",
+      "parameters": [
+        "O",
+        "P",
+        "V",
+        "Throw"
+      ],
+      "section": "7.3.4"
+    },
+    {
+      "name": "CreateDataProperty",
+      "parameters": [
+        "O",
+        "P",
+        "V"
+      ],
+      "section": "7.3.5"
+    },
+    {
+      "name": "CreateDataPropertyOrThrow",
+      "parameters": [
+        "O",
+        "P",
+        "V"
+      ],
+      "section": "7.3.6"
+    },
+    {
+      "name": "CreateNonEnumerableDataPropertyOrThrow",
+      "parameters": [
+        "O",
+        "P",
+        "V"
+      ],
+      "section": "7.3.7"
+    },
+    {
+      "name": "DefinePropertyOrThrow",
+      "parameters": [
+        "O",
+        "P",
+        "desc"
+      ],
+      "section": "7.3.8"
+    },
+    {
+      "name": "DeletePropertyOrThrow",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.9"
+    },
+    {
+      "name": "GetMethod",
+      "parameters": [
+        "V",
+        "P"
+      ],
+      "section": "7.3.10"
+    },
+    {
+      "name": "HasProperty",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.11"
+    },
+    {
+      "name": "HasOwnProperty",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.12"
+    },
+    {
+      "name": "Call",
+      "parameters": [
+        "F",
+        "V \\[argumentsList \\]"
+      ],
+      "section": "7.3.13"
+    },
+    {
+      "name": "Construct",
+      "parameters": [
+        "F \\[argumentsList \\[newTarget \\] \\]"
+      ],
+      "section": "7.3.14"
+    },
+    {
+      "name": "SetIntegrityLevel",
+      "parameters": [
+        "O",
+        "level"
+      ],
+      "section": "7.3.15"
+    },
+    {
+      "name": "TestIntegrityLevel",
+      "parameters": [
+        "O",
+        "level"
+      ],
+      "section": "7.3.16"
+    },
+    {
+      "name": "CreateArrayFromList",
+      "parameters": [
+        "elements"
+      ],
+      "section": "7.3.17"
+    },
+    {
+      "name": "LengthOfArrayLike",
+      "parameters": [
+        "obj"
+      ],
+      "section": "7.3.18"
+    },
+    {
+      "name": "CreateListFromArrayLike",
+      "parameters": [
+        "obj \\[validElementTypes \\]"
+      ],
+      "section": "7.3.19"
+    },
+    {
+      "name": "Invoke",
+      "parameters": [
+        "V",
+        "P \\[argumentsList \\]"
+      ],
+      "section": "7.3.20"
+    },
+    {
+      "name": "OrdinaryHasInstance",
+      "parameters": [
+        "C",
+        "O"
+      ],
+      "section": "7.3.21"
+    },
+    {
+      "name": "SpeciesConstructor",
+      "parameters": [
+        "O",
+        "defaultConstructor"
+      ],
+      "section": "7.3.22"
+    },
+    {
+      "name": "EnumerableOwnProperties",
+      "parameters": [
+        "O",
+        "kind"
+      ],
+      "section": "7.3.23"
+    },
+    {
+      "name": "GetFunctionRealm",
+      "parameters": [
+        "obj"
+      ],
+      "section": "7.3.24"
+    },
+    {
+      "name": "CopyDataProperties",
+      "parameters": [
+        "target",
+        "source",
+        "excludedItems"
+      ],
+      "section": "7.3.25"
+    },
+    {
+      "name": "PrivateElementFind",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.26"
+    },
+    {
+      "name": "PrivateFieldAdd",
+      "parameters": [
+        "O",
+        "P",
+        "value"
+      ],
+      "section": "7.3.27"
+    },
+    {
+      "name": "PrivateMethodOrAccessorAdd",
+      "parameters": [
+        "O",
+        "method"
+      ],
+      "section": "7.3.28"
+    },
+    {
+      "name": "HostEnsureCanAddPrivateElement",
+      "parameters": [
+        "O"
+      ],
+      "section": "7.3.29"
+    },
+    {
+      "name": "PrivateGet",
+      "parameters": [
+        "O",
+        "P"
+      ],
+      "section": "7.3.30"
+    },
+    {
+      "name": "PrivateSet",
+      "parameters": [
+        "O",
+        "P",
+        "value"
+      ],
+      "section": "7.3.31"
+    },
+    {
+      "name": "DefineField",
+      "parameters": [
+        "receiver",
+        "fieldRecord"
+      ],
+      "section": "7.3.32"
+    },
+    {
+      "name": "InitializeInstanceElements",
+      "parameters": [
+        "O",
+        "constructor"
+      ],
+      "section": "7.3.33"
+    },
+    {
+      "name": "AddValueToKeyedGroup",
+      "parameters": [
+        "groups",
+        "key",
+        "value"
+      ],
+      "section": "7.3.34"
+    },
+    {
+      "name": "GroupBy",
+      "parameters": [
+        "items",
+        "callback",
+        "keyCoercion"
+      ],
+      "section": "7.3.35"
+    },
+    {
+      "name": "GetOptionsObject",
+      "parameters": [
+        "options"
+      ],
+      "section": "7.3.36"
+    },
+    {
+      "name": "SetterThatIgnoresPrototypeProperties",
+      "parameters": [
+        "thisValue",
+        "home",
+        "p",
+        "v"
+      ],
+      "section": "7.3.37"
+    },
+    {
+      "name": "GetIteratorDirect",
+      "parameters": [
+        "obj"
+      ],
+      "section": "7.4.2"
+    },
+    {
+      "name": "GetIteratorFromMethod",
+      "parameters": [
+        "obj",
+        "method"
+      ],
+      "section": "7.4.3"
+    },
+    {
+      "name": "GetIterator",
+      "parameters": [
+        "obj",
+        "kind"
+      ],
+      "section": "7.4.4"
+    },
+    {
+      "name": "GetIteratorFlattenable",
+      "parameters": [
+        "obj",
+        "primitiveHandling"
+      ],
+      "section": "7.4.5"
+    },
+    {
+      "name": "IteratorNext",
+      "parameters": [
+        "iteratorRecord \\[value \\]"
+      ],
+      "section": "7.4.6"
+    },
+    {
+      "name": "IteratorComplete",
+      "parameters": [
+        "iteratorResult"
+      ],
+      "section": "7.4.7"
+    },
+    {
+      "name": "IteratorValue",
+      "parameters": [
+        "iteratorResult"
+      ],
+      "section": "7.4.8"
+    },
+    {
+      "name": "IteratorStep",
+      "parameters": [
+        "iteratorRecord"
+      ],
+      "section": "7.4.9"
+    },
+    {
+      "name": "IteratorStepValue",
+      "parameters": [
+        "iteratorRecord"
+      ],
+      "section": "7.4.10"
+    },
+    {
+      "name": "IteratorClose",
+      "parameters": [
+        "iteratorRecord",
+        "completion"
+      ],
+      "section": "7.4.11"
+    },
+    {
+      "name": "IteratorCloseAll",
+      "parameters": [
+        "iters",
+        "completion"
+      ],
+      "section": "7.4.12"
+    },
+    {
+      "name": "IfAbruptCloseIterator",
+      "parameters": [
+        "value",
+        "iteratorRecord"
+      ],
+      "section": "7.4.13"
+    },
+    {
+      "name": "AsyncIteratorClose",
+      "parameters": [
+        "iteratorRecord",
+        "completion"
+      ],
+      "section": "7.4.14"
+    },
+    {
+      "name": "IfAbruptCloseAsyncIterator",
+      "parameters": [
+        "value",
+        "iteratorRecord"
+      ],
+      "section": "7.4.15"
+    },
+    {
+      "name": "CreateIteratorResultObject",
+      "parameters": [
+        "value",
+        "done"
+      ],
+      "section": "7.4.16"
+    },
+    {
+      "name": "CreateListIteratorRecord",
+      "parameters": [
+        "list"
+      ],
+      "section": "7.4.17"
+    },
+    {
+      "name": "IteratorToList",
+      "parameters": [
+        "iteratorRecord"
+      ],
+      "section": "7.4.18"
+    }
+  ],
+  "well_known_symbols": [
+    "asyncIterator",
+    "hasInstance",
+    "hasinstance",
+    "isConcatSpreadable",
+    "iterator",
+    "match",
+    "matchAll",
+    "name",
+    "replace",
+    "search",
+    "species",
+    "split",
+    "toPrimitive",
+    "toStringTag",
+    "toprimitive",
+    "tostringtag",
+    "unscopables"
+  ],
+  "well_known_intrinsics": [
+    "20at",
+    "20dot",
+    "AggregateError",
+    "AggregateError.prototype",
+    "Array",
+    "Array.prototype",
+    "Array.prototype.toString",
+    "Array.prototype.values",
+    "ArrayBuffer",
+    "ArrayBuffer.prototype",
+    "ArrayIteratorPrototype",
+    "AsyncFromSyncIteratorPrototype",
+    "AsyncFunction",
+    "AsyncFunction.prototype",
+    "AsyncGeneratorFunction",
+    "AsyncGeneratorFunction.prototype",
+    "AsyncGeneratorFunction.prototype.prototype",
+    "AsyncGeneratorPrototype",
+    "AsyncIteratorPrototype",
+    "Atomics",
+    "BigInt",
+    "BigInt.prototype",
+    "BigInt64Array",
+    "BigUint64Array",
+    "Boolean",
+    "Boolean.prototype",
+    "DataView",
+    "DataView.prototype",
+    "Date",
+    "Date.prototype",
+    "Date.prototype.toUTCString",
+    "Error",
+    "Error.prototype",
+    "EvalError",
+    "EvalError.prototype",
+    "FinalizationRegistry",
+    "FinalizationRegistry.prototype",
+    "Float16Array",
+    "Float32Array",
+    "Float64Array",
+    "ForInIteratorPrototype",
+    "Function",
+    "Function.prototype",
+    "GeneratorFunction",
+    "GeneratorFunction.prototype",
+    "GeneratorFunction.prototype.prototype",
+    "GeneratorPrototype",
+    "GeneratorPrototype.next",
+    "Int16Array",
+    "Int32Array",
+    "Int8Array",
+    "Iterator",
+    "Iterator.prototype",
+    "IteratorHelperPrototype",
+    "JSON",
+    "Map",
+    "Map.prototype",
+    "Map.prototype.entries",
+    "MapIteratorPrototype",
+    "Math",
+    "Number",
+    "Number.prototype",
+    "Object",
+    "Object.prototype",
+    "Object.prototype.toString",
+    "Promise",
+    "Promise.prototype",
+    "Proxy",
+    "RangeError",
+    "RangeError.prototype",
+    "ReferenceError",
+    "ReferenceError.prototype",
+    "Reflect",
+    "RegExp",
+    "RegExp.prototype",
+    "RegExp.prototype.exec",
+    "RegExpStringIteratorPrototype",
+    "Set",
+    "Set.prototype",
+    "Set.prototype.values",
+    "SetIteratorPrototype",
+    "SharedArrayBuffer",
+    "SharedArrayBuffer.prototype",
+    "String",
+    "String.prototype",
+    "String.prototype.trimEnd",
+    "String.prototype.trimStart",
+    "StringIteratorPrototype",
+    "Symbol",
+    "Symbol.asyncIterator",
+    "Symbol.hasInstance",
+    "Symbol.isConcatSpreadable",
+    "Symbol.iterator",
+    "Symbol.match",
+    "Symbol.matchAll",
+    "Symbol.name",
+    "Symbol.prototype",
+    "Symbol.replace",
+    "Symbol.search",
+    "Symbol.species",
+    "Symbol.split",
+    "Symbol.toPrimitive",
+    "Symbol.toStringTag",
+    "Symbol.unscopables",
+    "SyntaxError",
+    "SyntaxError.prototype",
+    "ThrowTypeError",
+    "TypeError",
+    "TypeError.prototype",
+    "TypedArray",
+    "TypedArray.prototype",
+    "TypedArray.prototype.values",
+    "URIError",
+    "URIError.prototype",
+    "Uint16Array",
+    "Uint32Array",
+    "Uint8Array",
+    "Uint8Array.prototype",
+    "Uint8ClampedArray",
+    "WeakMap",
+    "WeakMap.prototype",
+    "WeakRef",
+    "WeakRef.prototype",
+    "WeakSet",
+    "WeakSet.prototype",
+    "WrapForValidIteratorPrototype",
+    "arrayiteratorprototype",
+    "asyncfromsynciteratorprototype",
+    "asynciteratorprototype",
+    "decodeURI",
+    "decodeURIComponent",
+    "encodeURI",
+    "encodeURIComponent",
+    "escape",
+    "eval",
+    "foriniteratorprototype",
+    "isFinite",
+    "isNaN",
+    "iterator.prototype",
+    "iteratorhelperprototype",
+    "iteratorprototype",
+    "mapiteratorprototype",
+    "name",
+    "name.a.b",
+    "parseFloat",
+    "parseInt",
+    "regexpstringiteratorprototype",
+    "setiteratorprototype",
+    "stringiteratorprototype",
+    "symbol.asynciterator",
+    "symbol.hasinstance",
+    "symbol.iterator",
+    "symbol.match",
+    "symbol.matchall",
+    "symbol.replace",
+    "symbol.search",
+    "symbol.species",
+    "symbol.split",
+    "symbol.toprimitive",
+    "symbol.tostringtag",
+    "symbol.unscopables",
+    "throwtypeerror",
+    "typedarray",
+    "typedarrayprototype",
+    "unescape",
+    "wrapforvaliditeratorprototype"
+  ],
+  "grammar_productions": []
+}

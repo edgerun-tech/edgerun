@@ -23,3 +23,9 @@ plugins:
     opt:
       - enable_type_names
     strategy: all
+  # ECMAScript types (edgerun.v0.ecmascript)
+  - local: protoc-gen-prost
+    out: crates/edgerun-ecmascript/src/gen
+    opt:
+      - enable_type_names
+    strategy: all

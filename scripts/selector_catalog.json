@@ -1,0 +1,448 @@
+{
+  "spec": "Selectors Level 4",
+  "spec_date": "2026-04-10",
+  "total_pseudo_classes": 59,
+  "total_pseudo_elements": 15,
+  "total_combinators": 5,
+  "total_attr_ops": 9,
+  "pseudo_classes": [
+    {
+      "name": ":root",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":empty",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":nth-child",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":nth-last-child",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":first-child",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":last-child",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":only-child",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":nth-of-type",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":nth-last-of-type",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":first-of-type",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":last-of-type",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":only-of-type",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":is",
+      "arguments": "forgiving selector list",
+      "description": ""
+    },
+    {
+      "name": ":where",
+      "arguments": "forgiving selector list",
+      "description": ""
+    },
+    {
+      "name": ":not",
+      "arguments": "forgiving selector list",
+      "description": ""
+    },
+    {
+      "name": ":has",
+      "arguments": "forgiving selector list",
+      "description": ""
+    },
+    {
+      "name": ":hover",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":active",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":focus",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":focus-within",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":focus-visible",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":visited",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":link",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":target",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":target-within",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":lang",
+      "arguments": "language list",
+      "description": ""
+    },
+    {
+      "name": ":dir",
+      "arguments": "ltr or rtl",
+      "description": ""
+    },
+    {
+      "name": ":any-link",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":local-link",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":scope",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":defined",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":checked",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":indeterminate",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":default",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":valid",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":invalid",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":in-range",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":out-of-range",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":required",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":optional",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":blank",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":placeholder-shown",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":read-only",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":read-write",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":disabled",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":enabled",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":playing",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":paused",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":current",
+      "arguments": "selector list",
+      "description": ""
+    },
+    {
+      "name": ":past",
+      "arguments": "selector list",
+      "description": ""
+    },
+    {
+      "name": ":future",
+      "arguments": "selector list",
+      "description": ""
+    },
+    {
+      "name": ":host",
+      "arguments": "selector list",
+      "description": ""
+    },
+    {
+      "name": ":host-context",
+      "arguments": "selector list",
+      "description": ""
+    },
+    {
+      "name": ":popover-open",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":modal",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":fullscreen",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":picture-in-picture",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":autofill",
+      "arguments": "",
+      "description": ""
+    },
+    {
+      "name": ":user-invalid",
+      "arguments": "",
+      "description": ""
+    }
+  ],
+  "pseudo_elements": [
+    {
+      "name": "::before"
+    },
+    {
+      "name": "::marker"
+    },
+    {
+      "name": "::after"
+    },
+    {
+      "name": "::first-line"
+    },
+    {
+      "name": "::slotted"
+    },
+    {
+      "name": "::lang"
+    },
+    {
+      "name": "::column"
+    },
+    {
+      "name": "::first-letter"
+    },
+    {
+      "name": "::shadow"
+    },
+    {
+      "name": "::placeholder"
+    },
+    {
+      "name": "::selection"
+    },
+    {
+      "name": "::backdrop"
+    },
+    {
+      "name": "::file-selector-button"
+    },
+    {
+      "name": "::page"
+    },
+    {
+      "name": "::part"
+    }
+  ],
+  "combinators": [
+    {
+      "name": "descendant",
+      "syntax": " ",
+      "char": "",
+      "description": "E F matches F descendant of E"
+    },
+    {
+      "name": "child",
+      "syntax": ">",
+      "char": ">",
+      "description": "E > F matches F direct child of E"
+    },
+    {
+      "name": "next_sibling",
+      "syntax": "+",
+      "char": "+",
+      "description": "E + F matches F next sibling of E"
+    },
+    {
+      "name": "subsequent_sibling",
+      "syntax": "~",
+      "char": "~",
+      "description": "E ~ F matches F subsequent sibling of E"
+    },
+    {
+      "name": "column",
+      "syntax": "||",
+      "char": "||",
+      "description": "E || F matches F in column E"
+    }
+  ],
+  "attribute_selector_operators": [
+    {
+      "operator": "",
+      "name": "exists",
+      "description": "[attr] — element has attribute"
+    },
+    {
+      "operator": "=",
+      "name": "equals",
+      "description": "[attr=\"val\"] — exact match"
+    },
+    {
+      "operator": "~=",
+      "name": "contains_word",
+      "description": "[attr~=\"val\"] — whitespace-separated word"
+    },
+    {
+      "operator": "|=",
+      "name": "prefix_hyphen",
+      "description": "[attr|=\"val\"] — equals or prefix with hyphen"
+    },
+    {
+      "operator": "^=",
+      "name": "prefix",
+      "description": "[attr^=\"val\"] — starts with"
+    },
+    {
+      "operator": "$=",
+      "name": "suffix",
+      "description": "[attr$=\"val\"] — ends with"
+    },
+    {
+      "operator": "*=",
+      "name": "contains",
+      "description": "[attr*=\"val\"] — contains substring"
+    },
+    {
+      "modifier": "i",
+      "name": "case_insensitive",
+      "description": "Case-insensitive match"
+    },
+    {
+      "modifier": "s",
+      "name": "case_sensitive",
+      "description": "Case-sensitive match"
+    }
+  ],
+  "specificity": [
+    {
+      "component": "A",
+      "name": "id_selectors",
+      "description": "Count of ID selectors"
+    },
+    {
+      "component": "B",
+      "name": "class_attr_pseudo",
+      "description": "Classes, attributes, pseudo-classes"
+    },
+    {
+      "component": "C",
+      "name": "type_pseudo_element",
+      "description": "Type selectors and pseudo-elements"
+    }
+  ]
+}

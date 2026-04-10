@@ -36,6 +36,17 @@ pub mod edgerun {
                 include!("gen/edgerun.v0.css.at_rules.rs");
             }
         }
+        pub mod ecmascript {
+            pub mod objects {
+                include!("gen/edgerun.v0.ecmascript.objects.rs");
+            }
+            pub mod abstract_ops {
+                include!("gen/edgerun.v0.ecmascript.abstract_ops.rs");
+            }
+            pub mod globals {
+                include!("gen/edgerun.v0.ecmascript.globals.rs");
+            }
+        }
         pub mod identity {
             include!("gen/edgerun.v0.identity.rs");
         }
