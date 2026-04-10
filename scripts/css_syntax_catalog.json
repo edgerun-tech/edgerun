@@ -1,0 +1,146 @@
+{
+  "spec": "CSS Syntax Level 3",
+  "spec_date": "2026-04-10",
+  "token_types": [
+    [
+      "Ident",
+      "Identifier (e.g., font-family)"
+    ],
+    [
+      "Function",
+      "Function name (e.g., rgb("
+    ],
+    [
+      "AtKeyword",
+      "@-keyword (e.g., @media"
+    ],
+    [
+      "Hash",
+      "Hash/id (e.g., #id"
+    ],
+    [
+      "String",
+      "Quoted string"
+    ],
+    [
+      "BadString",
+      "Unterminated string"
+    ],
+    [
+      "Url",
+      "URL token"
+    ],
+    [
+      "BadUrl",
+      "Unterminated URL"
+    ],
+    [
+      "Delim",
+      "Delimiter (single char)"
+    ],
+    [
+      "Number",
+      "Number value"
+    ],
+    [
+      "Percentage",
+      "Percentage value"
+    ],
+    [
+      "Dimension",
+      "Number with unit (e.g., 12px"
+    ],
+    [
+      "UnicodeRange",
+      "Unicode range (e.g., U+0025-00FF"
+    ],
+    [
+      "Colon",
+      "Colon :"
+    ],
+    [
+      "Semicolon",
+      "Semicolon ;"
+    ],
+    [
+      "Comma",
+      "Comma ,"
+    ],
+    [
+      "OpenParen",
+      "Open parenthesis ("
+    ],
+    [
+      "CloseParen",
+      "Close parenthesis )"
+    ],
+    [
+      "OpenSquare",
+      "Open square bracket ["
+    ],
+    [
+      "CloseSquare",
+      "Close square bracket ]"
+    ],
+    [
+      "OpenCurly",
+      "Open curly brace {"
+    ],
+    [
+      "CloseCurly",
+      "Close curly brace }"
+    ],
+    [
+      "Cdo",
+      "<!-- comment open"
+    ],
+    [
+      "Cdc",
+      "--> comment close"
+    ],
+    [
+      "WhiteSpace",
+      "Whitespace"
+    ],
+    [
+      "Eof",
+      "End of file"
+    ]
+  ],
+  "whitespace_chars": [
+    "\t",
+    "\n",
+    "\f",
+    "\r",
+    " "
+  ],
+  "newline_chars": [
+    "\n",
+    "\r",
+    "\f"
+  ],
+  "comment_markers": [
+    [
+      "/*",
+      "*/"
+    ]
+  ],
+  "range_syntax": [
+    [
+      "U+XXXX",
+      "Single code point"
+    ],
+    [
+      "U+XXXX-YYYY",
+      "Code point range"
+    ],
+    [
+      "U+XXXX?",
+      "Wildcard range (e.g., U+00?? for U+0000-00FF)"
+    ],
+    [
+      "U+XXX???",
+      "Shortened wildcard"
+    ]
+  ]
+}

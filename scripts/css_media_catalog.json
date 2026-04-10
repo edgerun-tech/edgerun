@@ -1,0 +1,159 @@
+{
+  "spec": "Media Queries Level 4",
+  "spec_date": "2026-04-10",
+  "media_types": [
+    "all",
+    "print",
+    "screen",
+    "speech"
+  ],
+  "logical_operators": [
+    "not",
+    "and",
+    "only",
+    "or",
+    "comma"
+  ],
+  "media_features": [
+    [
+      "width",
+      "<length>",
+      "Viewport width"
+    ],
+    [
+      "height",
+      "<length>",
+      "Viewport height"
+    ],
+    [
+      "aspect-ratio",
+      "<ratio>",
+      "Width-to-height ratio"
+    ],
+    [
+      "orientation",
+      "portrait | landscape",
+      "Viewport orientation"
+    ],
+    [
+      "resolution",
+      "<resolution>",
+      "Device pixel density"
+    ],
+    [
+      "scan",
+      "progressive | interlace",
+      "Scanning method"
+    ],
+    [
+      "grid",
+      "0 | 1",
+      "Grid vs bitmap device"
+    ],
+    [
+      "update",
+      "none | slow | fast",
+      "Update frequency"
+    ],
+    [
+      "overflow-block",
+      "none | scroll | optional-paged | paged",
+      "Overflow handling"
+    ],
+    [
+      "overflow-inline",
+      "none | scroll",
+      "Inline overflow"
+    ],
+    [
+      "color",
+      "<integer>",
+      "Bits per color component"
+    ],
+    [
+      "color-index",
+      "<integer>",
+      "Entries in color lookup table"
+    ],
+    [
+      "monochrome",
+      "<integer>",
+      "Bits per pixel in monochrome"
+    ],
+    [
+      "color-gamut",
+      "srgb | p3 | rec2020",
+      "Supported color gamut"
+    ],
+    [
+      "inverted-colors",
+      "none | inverted",
+      "Colors inverted by OS"
+    ],
+    [
+      "pointer",
+      "none | coarse | fine",
+      "Pointing device accuracy"
+    ],
+    [
+      "hover",
+      "none | on-demand",
+      "Hover capability"
+    ],
+    [
+      "any-pointer",
+      "none | coarse | fine",
+      "Any pointing device"
+    ],
+    [
+      "any-hover",
+      "none | on-demand",
+      "Any hover capability"
+    ],
+    [
+      "prefers-reduced-motion",
+      "no-preference | reduce",
+      "Reduced motion preference"
+    ],
+    [
+      "prefers-reduced-transparency",
+      "no-preference | reduce",
+      "Reduced transparency"
+    ],
+    [
+      "prefers-contrast",
+      "no-preference | more | less | custom",
+      "Contrast preference"
+    ],
+    [
+      "prefers-color-scheme",
+      "light | dark",
+      "Color scheme preference"
+    ],
+    [
+      "prefers-reduced-data",
+      "no-preference | reduce",
+      "Reduced data preference"
+    ],
+    [
+      "display-mode",
+      "browser | minimal-ui | standalone | fullscreen",
+      "Display mode"
+    ],
+    [
+      "scripting",
+      "none | initial-only | enabled",
+      "Scripting capability"
+    ],
+    [
+      "device-width",
+      "<length>",
+      "Device screen width"
+    ],
+    [
+      "device-height",
+      "<length>",
+      "Device screen height"
+    ]
+  ]
+}

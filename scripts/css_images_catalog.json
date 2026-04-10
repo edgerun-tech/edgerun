@@ -1,0 +1,147 @@
+{
+  "spec": "CSS Images Level 4",
+  "spec_date": "2026-04-10",
+  "gradient_types": [
+    [
+      "linear-gradient",
+      "linear-gradient(angle or to side, color-stops)",
+      "Gradient along a line"
+    ],
+    [
+      "repeating-linear-gradient",
+      "repeating-linear-gradient(angle, color-stops)",
+      "Repeating linear gradient"
+    ],
+    [
+      "radial-gradient",
+      "radial-gradient(shape size at position, color-stops)",
+      "Gradient radiating from center"
+    ],
+    [
+      "repeating-radial-gradient",
+      "repeating-radial-gradient(shape, color-stops)",
+      "Repeating radial gradient"
+    ],
+    [
+      "conic-gradient",
+      "conic-gradient(from angle at position, color-stops)",
+      "Gradient around a cone"
+    ],
+    [
+      "repeating-conic-gradient",
+      "repeating-conic-gradient(from angle, color-stops)",
+      "Repeating conic gradient"
+    ]
+  ],
+  "shape_types": [
+    [
+      "circle",
+      "Circular"
+    ],
+    [
+      "ellipse",
+      "Elliptical"
+    ]
+  ],
+  "size_keywords": [
+    [
+      "closest-side"
+    ],
+    [
+      "closest-corner"
+    ],
+    [
+      "farthest-side"
+    ],
+    [
+      "farthest-corner"
+    ],
+    [
+      "contain"
+    ],
+    [
+      "cover"
+    ]
+  ],
+  "position_keywords": [
+    [
+      "left"
+    ],
+    [
+      "right"
+    ],
+    [
+      "top"
+    ],
+    [
+      "bottom"
+    ],
+    [
+      "center"
+    ]
+  ],
+  "side_keywords": [
+    [
+      "to left"
+    ],
+    [
+      "to right"
+    ],
+    [
+      "to top"
+    ],
+    [
+      "to bottom"
+    ],
+    [
+      "to top left"
+    ],
+    [
+      "to top right"
+    ],
+    [
+      "to bottom left"
+    ],
+    [
+      "to bottom right"
+    ]
+  ],
+  "image_types": [
+    [
+      "url",
+      "url() \u2014 external image resource"
+    ],
+    [
+      "image",
+      "image() \u2014 image with fallback"
+    ],
+    [
+      "image-set",
+      "image-set() \u2014 resolution-dependent images"
+    ],
+    [
+      "cross-fade",
+      "cross-fade() \u2014 blended images"
+    ],
+    [
+      "element",
+      "element() \u2014 live element snapshot"
+    ],
+    [
+      "paint",
+      "paint() \u2014 CSS Paint API worklet"
+    ],
+    [
+      "linear-gradient",
+      "linear-gradient()"
+    ],
+    [
+      "radial-gradient",
+      "radial-gradient()"
+    ],
+    [
+      "conic-gradient",
+      "conic-gradient()"
+    ]
+  ]
+}

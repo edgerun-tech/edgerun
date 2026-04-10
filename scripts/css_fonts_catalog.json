@@ -1,0 +1,147 @@
+{
+  "spec": "CSS Fonts Level 4",
+  "spec_date": "2026-04-10",
+  "font_face_descriptors": [
+    [
+      "src",
+      "url | local",
+      "Source locations for font"
+    ],
+    [
+      "font-family",
+      "family-name",
+      "Font family name"
+    ],
+    [
+      "font-style",
+      "normal | italic | oblique",
+      "Font style"
+    ],
+    [
+      "font-weight",
+      "normal | bold | number",
+      "Font weight"
+    ],
+    [
+      "font-stretch",
+      "normal | condensed | expanded",
+      "Font stretch"
+    ],
+    [
+      "font-display",
+      "auto | block | swap | fallback | optional",
+      "Font loading strategy"
+    ],
+    [
+      "unicode-range",
+      "U+XXXX ranges",
+      "Supported Unicode ranges"
+    ],
+    [
+      "font-variant",
+      "normal | small-caps | etc.",
+      "Font variant features"
+    ],
+    [
+      "font-feature-settings",
+      "opentype feature tags",
+      "Low-level OpenType features"
+    ],
+    [
+      "ascent-override",
+      "percentage",
+      "Ascent override"
+    ],
+    [
+      "descent-override",
+      "percentage",
+      "Descent override"
+    ],
+    [
+      "line-gap-override",
+      "percentage",
+      "Line gap override"
+    ]
+  ],
+  "font_variant_ligatures": [
+    "normal",
+    "none",
+    "common-ligatures",
+    "no-common-ligatures",
+    "discretionary-ligatures",
+    "no-discretionary-ligatures",
+    "historical-ligatures",
+    "no-historical-ligatures",
+    "contextual",
+    "no-contextual"
+  ],
+  "font_variant_caps": [
+    "normal",
+    "small-caps",
+    "all-small-caps",
+    "petite-caps",
+    "all-petite-caps",
+    "unicase",
+    "titling-caps"
+  ],
+  "font_weight_keywords": [
+    [
+      "thin",
+      "100"
+    ],
+    [
+      "extra-light",
+      "200"
+    ],
+    [
+      "light",
+      "300"
+    ],
+    [
+      "normal",
+      "400"
+    ],
+    [
+      "medium",
+      "500"
+    ],
+    [
+      "semi-bold",
+      "600"
+    ],
+    [
+      "bold",
+      "700"
+    ],
+    [
+      "extra-bold",
+      "800"
+    ],
+    [
+      "black",
+      "900"
+    ]
+  ],
+  "font_display_values": [
+    [
+      "auto",
+      "Browser default"
+    ],
+    [
+      "block",
+      "Invisible period then swap"
+    ],
+    [
+      "swap",
+      "Fallback then swap when ready"
+    ],
+    [
+      "fallback",
+      "Brief invisible then swap"
+    ],
+    [
+      "optional",
+      "May skip font entirely"
+    ]
+  ]
+}
