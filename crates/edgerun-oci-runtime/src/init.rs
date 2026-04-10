@@ -11,8 +11,6 @@
 //! Usage: wrap the workload process by calling `run_as_pid1()` which
 //! execs a shell that runs the workload and then loops reaping zombies.
 
-use std::io;
-
 /// Generate a shell wrapper that acts as PID 1 init + signal forwarder.
 ///
 /// The generated script:

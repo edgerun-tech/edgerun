@@ -433,6 +433,14 @@ pub fn setup_child_for_create(spec: &OciSpec, bundle: &std::path::Path) -> io::R
         cfg.cap_ambient.as_deref(),
     );
 
+    // Seccomp — fail-closed (spec-driven or fallback allow-list)
+    apply_seccomp_from_spec(cfg.seccomp.as_ref()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
+        )
+    })?;
+
     // Resource limits
     for rl in &cfg.rlimits {
         if let Some(resource) = rlimit_name_to_int(&rl.ns_type) {

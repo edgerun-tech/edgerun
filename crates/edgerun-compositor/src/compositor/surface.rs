@@ -22,6 +22,10 @@ pub struct Surface {
     pub buffer_transform: i32,
     /// Whether this surface is opaque.
     pub opaque: bool,
+    /// Opaque region rectangles (in surface coordinates).
+    pub opaque_region: Vec<DamageRect>,
+    /// Input region rectangles (in surface coordinates). None = entire surface.
+    pub input_region: Option<Vec<DamageRect>>,
     /// Frame callbacks waiting to be fired.
     pub frame_callbacks: Vec<u32>, // callback object ids
     /// Width of current buffer.
@@ -197,6 +201,8 @@ impl SurfaceTree {
             buffer_scale: 1,
             buffer_transform: 0,
             opaque: false,
+            opaque_region: Vec::new(),
+            input_region: None,
             frame_callbacks: Vec::new(),
             width: 0,
             height: 0,
@@ -271,6 +277,67 @@ impl SurfaceTree {
     pub fn set_viewport_destination(&mut self, id: u32, w: i32, h: i32) {
         if let Some(s) = self.surfaces.get_mut(&id) {
             s.viewport_dst = Some((w, h));
+        }
+    }
+
+    /// Set the opaque region for a surface.
+    /// Replaces the entire opaque region with the given rectangles.
+    pub fn set_opaque_region(&mut self, id: u32, rects: Vec<DamageRect>) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.opaque_region = rects;
+        }
+    }
+
+    /// Add a rectangle to the opaque region.
+    pub fn add_opaque_region_rect(&mut self, id: u32, rect: DamageRect) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.opaque_region.push(rect);
+        }
+    }
+
+    /// Subtract a rectangle from the opaque region.
+    pub fn subtract_opaque_region_rect(&mut self, id: u32, rect: DamageRect) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            // Simple subtraction: remove any existing rects that overlap.
+            // A full implementation would do proper region subtraction.
+            s.opaque_region.retain(|r| {
+                r.x >= rect.x + rect.width
+                    || r.x + r.width <= rect.x
+                    || r.y >= rect.y + rect.height
+                    || r.y + r.height <= rect.y
+            });
+        }
+    }
+
+    /// Set the input region for a surface.
+    /// None = entire surface accepts input.
+    pub fn set_input_region(&mut self, id: u32, rects: Option<Vec<DamageRect>>) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            s.input_region = rects;
+        }
+    }
+
+    /// Add a rectangle to the input region.
+    pub fn add_input_region_rect(&mut self, id: u32, rect: DamageRect) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            if s.input_region.is_none() {
+                s.input_region = Some(Vec::new());
+            }
+            s.input_region.as_mut().unwrap().push(rect);
+        }
+    }
+
+    /// Subtract a rectangle from the input region.
+    pub fn subtract_input_region_rect(&mut self, id: u32, rect: DamageRect) {
+        if let Some(s) = self.surfaces.get_mut(&id) {
+            if let Some(ref mut region) = s.input_region {
+                region.retain(|r| {
+                    r.x >= rect.x + rect.width
+                        || r.x + r.width <= rect.x
+                        || r.y >= rect.y + rect.height
+                        || r.y + r.height <= rect.y
+                });
+            }
         }
     }
 

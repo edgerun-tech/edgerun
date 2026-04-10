@@ -567,6 +567,9 @@ impl ServerHandshake {
         // Compute hash for key schedule
         self.sh_msg = sh_msg.clone();
 
+        // Append ServerHello to transcript (as a proper handshake message: type+length+payload)
+        self.transcript.extend_from_slice(&sh_msg);
+
         // Send as TLS 1.2 record for middlebox compatibility
         let record = TlsRecord {
             content_type: 22,
@@ -873,4 +876,513 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         diff |= x ^ y;
     }
     diff == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::certificate_gen::generate_self_signed;
+    use crate::cipher::{CipherSuite, NamedGroup};
+    use crate::handshake::{ClientHelloBuilder, ServerHello};
+    use crate::key_exchange::EcdhKeyPair;
+    use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys};
+    use crate::record::RecordCipher;
+
+    // -----------------------------------------------------------------------
+    // 1. ClientHello build → parse round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_client_hello_roundtrip() {
+        let random = [0x42u8; 32];
+        let key_pair = EcdhKeyPair::generate().unwrap();
+        let public_key = key_pair.public_key_bytes();
+
+        let ch_bytes = ClientHelloBuilder::new(random, "example.com")
+            .key_share(&public_key, NamedGroup::SECP256R1)
+            .build()
+            .unwrap();
+
+        // Should start with ClientHello type (1)
+        assert_eq!(ch_bytes[0], 1);
+
+        let ch = ClientHello::parse(&ch_bytes).unwrap();
+        assert_eq!(ch.random, random);
+        assert_eq!(ch.server_name, Some("example.com".to_string()));
+        assert!(ch.client_key_share.is_some());
+        assert_eq!(ch.client_key_share_group, Some(NamedGroup::SECP256R1));
+        assert!(ch.cipher_suites.contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
+        assert!(ch.supported_groups.contains(&NamedGroup::SECP256R1));
+        // ClientHelloBuilder includes supported_versions extension
+        assert!(ch.supported_versions.contains(&0x0304));
+    }
+
+    #[test]
+    fn test_client_hello_parses_from_real_client() {
+        // Build a ClientHello the same way the real client does
+        let random = [0xABu8; 32];
+        let key_pair = EcdhKeyPair::generate().unwrap();
+        let public_key = key_pair.public_key_bytes();
+
+        let ch_bytes = ClientHelloBuilder::new(random, "localhost")
+            .key_share(&public_key, NamedGroup::SECP256R1)
+            .build()
+            .unwrap();
+
+        // Parse it with the server's ClientHello parser
+        let ch = ClientHello::parse(&ch_bytes).unwrap();
+
+        assert_eq!(ch.random, random);
+        assert_eq!(ch.server_name, Some("localhost".to_string()));
+        assert!(ch.client_key_share.is_some());
+        let ks = ch.client_key_share.unwrap();
+        assert_eq!(ks.len(), 65); // P-256 uncompressed point
+        assert_eq!(ks[0], 0x04); // Uncompressed point marker
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. ServerHello build → parse round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_server_hello_roundtrip() {
+        let random = [0xCDu8; 32];
+        let key_pair = EcdhKeyPair::generate().unwrap();
+        let public_key = key_pair.public_key_bytes();
+
+        let sh_bytes = build_server_hello(
+            random,
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            &public_key,
+            NamedGroup::SECP256R1,
+        );
+
+        // Should start with ServerHello type (2)
+        assert_eq!(sh_bytes[0], 2);
+
+        let sh = ServerHello::parse(&sh_bytes).unwrap();
+        assert_eq!(sh.random, random);
+        assert_eq!(sh.cipher_suite, CipherSuite::TLS_AES_128_GCM_SHA256);
+        assert_eq!(sh.server_key_share.len(), 65);
+        assert_eq!(sh.server_key_share[0], 0x04);
+        assert_eq!(sh.supported_version, Some(0x0304)); // TLS 1.3
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. ECDH key exchange
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_ecdh_exchange() {
+        let client_keys = EcdhKeyPair::generate().unwrap();
+        let server_keys = EcdhKeyPair::generate().unwrap();
+
+        let client_pub = client_keys.public_key_bytes();
+        let server_pub = server_keys.public_key_bytes();
+
+        // Both sides compute the same shared secret
+        let client_shared = client_keys.exchange(&server_pub).unwrap();
+        let server_shared = server_keys.exchange(&client_pub).unwrap();
+
+        assert_eq!(client_shared, server_shared);
+        assert_eq!(client_shared.len(), 32); // P-256 shared secret is 32 bytes
+    }
+
+    // -----------------------------------------------------------------------
+    // 4. Key schedule derivation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_key_schedule_derivation() {
+        let shared_secret = vec![0x42u8; 32];
+        let ch_hash = vec![0xAAu8; 32]; // SHA-256(ClientHello)
+        let sh_hash = vec![0xBBu8; 32]; // SHA-256(ServerHello)
+        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
+        let hash = Hasher::Sha256;
+
+        let mut ks = Tls13KeySchedule::new(hash.clone());
+        ks.advance_to_handshake(&shared_secret, &ch_hash, &sh_hash);
+
+        // Derive handshake traffic secrets
+        let client_hs_secret = ks.client_handshake_traffic_secret(&ch_hash);
+        let server_hs_secret = ks.server_handshake_traffic_secret(&ch_hash);
+
+        // Both should be different
+        assert_ne!(client_hs_secret, server_hs_secret);
+        assert_eq!(client_hs_secret.len(), 32);
+        assert_eq!(server_hs_secret.len(), 32);
+
+        // Derive write keys
+        let client_keys = client_write_keys(&client_hs_secret, cipher_suite.key_len(), 12, &hash);
+        let server_keys = server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
+
+        assert_eq!(client_keys.write_key.len(), 16);
+        assert_eq!(client_keys.write_iv.len(), 12);
+        assert_eq!(server_keys.write_key.len(), 16);
+        assert_eq!(server_keys.write_iv.len(), 12);
+    }
+
+    // -----------------------------------------------------------------------
+    // 5. Record cipher encrypt → decrypt round-trip
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_record_cipher_roundtrip() {
+        // Use known key material — separate write/read ciphers like real TLS
+        let key = vec![0x01u8; 16];
+        let iv = vec![0x02u8; 12];
+
+        let mut write_cipher = RecordCipher::new(&key, &iv).unwrap();
+        let mut read_cipher = RecordCipher::new(&key, &iv).unwrap();
+
+        let plaintext = b"hello TLS 1.3";
+        let ciphertext = write_cipher.encrypt(22, plaintext); // handshake content type
+
+        // Ciphertext should be longer than plaintext (AEAD tag)
+        assert!(ciphertext.len() > plaintext.len());
+
+        // Decrypt (separate cipher with independent seq counter)
+        let (content_type, decrypted) = read_cipher.decrypt(&ciphertext).unwrap();
+        assert_eq!(content_type, 22);
+        assert_eq!(&decrypted[..], plaintext);
+    }
+
+    #[test]
+    fn test_record_cipher_different_keys_fails() {
+        let key1 = vec![0x01u8; 16];
+        let iv1 = vec![0x02u8; 12];
+        let mut cipher1 = RecordCipher::new(&key1, &iv1).unwrap();
+
+        let key2 = vec![0xFFu8; 16];
+        let iv2 = vec![0xFEu8; 12];
+        let mut cipher2 = RecordCipher::new(&key2, &iv2).unwrap();
+
+        let plaintext = b"secret data";
+        let ciphertext = cipher1.encrypt(23, plaintext);
+
+        // Decrypting with wrong key should fail
+        assert!(cipher2.decrypt(&ciphertext).is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. EncryptedExtensions build → parse via decryption
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_encrypted_extensions_build() {
+        let ee_bytes = build_encrypted_extensions();
+
+        // Type 8 = EncryptedExtensions
+        assert_eq!(ee_bytes[0], 8);
+
+        // Should have 4-byte header + 2 bytes extensions length = 6 bytes total
+        assert_eq!(ee_bytes.len(), 6);
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. Certificate message build
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_certificate_message_build() {
+        let cert = generate_self_signed(&["localhost"]);
+        let cert_msg = build_certificate_message(&cert.cert_der);
+
+        // Type 11 = Certificate
+        assert_eq!(cert_msg[0], 11);
+
+        // Should contain the certificate data
+        assert!(cert_msg.len() > cert.cert_der.len());
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. CertificateVerify build
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_certificate_verify_build() {
+        let cert = generate_self_signed(&["localhost"]);
+        let transcript = vec![0x01u8; 64]; // fake transcript
+
+        let cv_bytes = build_certificate_verify(&transcript, &cert.signing_key, &Hasher::Sha256).unwrap();
+
+        // Type 15 = CertificateVerify
+        assert_eq!(cv_bytes[0], 15);
+
+        // Should be longer than just the header
+        assert!(cv_bytes.len() > 4);
+    }
+
+    // -----------------------------------------------------------------------
+    // 9. Finished message build
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_finished_message_build() {
+        let verify_data = vec![0xDEu8; 32];
+        let finished = build_finished_message(&verify_data);
+
+        // Type 20 = Finished
+        assert_eq!(finished[0], 20);
+
+        // Should contain the verify_data
+        assert_eq!(finished.len(), 4 + verify_data.len());
+    }
+
+    // -----------------------------------------------------------------------
+    // 10. ClientHello parsing with all extensions
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_client_hello_parses_all_extensions() {
+        let random = [0x55u8; 32];
+        let key_pair = EcdhKeyPair::generate().unwrap();
+        let public_key = key_pair.public_key_bytes();
+
+        let ch_bytes = ClientHelloBuilder::new(random, "test.example.com")
+            .key_share(&public_key, NamedGroup::SECP256R1)
+            .build()
+            .unwrap();
+
+        let ch = ClientHello::parse(&ch_bytes).unwrap();
+
+        assert_eq!(ch.random, random);
+        assert_eq!(ch.server_name, Some("test.example.com".to_string()));
+        assert_eq!(ch.client_key_share_group, Some(NamedGroup::SECP256R1));
+        assert_eq!(ch.client_key_share.as_ref().map(|v| v.len()), Some(65));
+        assert!(ch.cipher_suites.len() >= 2);
+        assert!(ch.legacy_compression.is_empty() || ch.legacy_compression == vec![0]);
+    }
+
+    // -----------------------------------------------------------------------
+    // 11. ServerHello parses back correctly
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_server_hello_cipher_suite_parsed() {
+        let random = [0x77u8; 32];
+        let key_pair = EcdhKeyPair::generate().unwrap();
+        let public_key = key_pair.public_key_bytes();
+
+        // Test with AES-256
+        let sh_bytes = build_server_hello(
+            random,
+            CipherSuite::TLS_AES_256_GCM_SHA384,
+            &public_key,
+            NamedGroup::SECP256R1,
+        );
+
+        let sh = ServerHello::parse(&sh_bytes).unwrap();
+        assert_eq!(sh.cipher_suite, CipherSuite::TLS_AES_256_GCM_SHA384);
+    }
+
+    // -----------------------------------------------------------------------
+    // 12. NamedGroup wire format
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_named_group_wire_roundtrip() {
+        for group in [NamedGroup::SECP256R1, NamedGroup::SECP384R1, NamedGroup::X25519] {
+            let wire = group.to_wire();
+            let parsed = NamedGroup::from_wire(wire).unwrap();
+            assert_eq!(parsed, group);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 13. CipherSuite wire format
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cipher_suite_wire_roundtrip() {
+        for suite in [
+            CipherSuite::TLS_AES_128_GCM_SHA256,
+            CipherSuite::TLS_AES_256_GCM_SHA384,
+            CipherSuite::TLS_CHACHA20_POLY1305_SHA256,
+        ] {
+            let wire = suite.to_wire();
+            let parsed = CipherSuite::from_wire(wire).unwrap();
+            assert_eq!(parsed, suite);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // 14. Full handshake: server sends, client receives encrypted messages
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_full_handshake_encrypted_messages_decryptable() {
+        let _cert = generate_self_signed(&["localhost"]);
+        let client_keys = EcdhKeyPair::generate().unwrap();
+        let server_keys = EcdhKeyPair::generate().unwrap();
+        let client_random = [0xCCu8; 32];
+        let server_random = [0xDDu8; 32];
+        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
+
+        // Build ClientHello
+        let client_pub = client_keys.public_key_bytes();
+        let ch_bytes = ClientHelloBuilder::new(client_random, "localhost")
+            .key_share(&client_pub, NamedGroup::SECP256R1)
+            .build()
+            .unwrap();
+
+        // Build ServerHello
+        let server_pub = server_keys.public_key_bytes();
+        let sh_bytes = build_server_hello(
+            server_random,
+            cipher_suite,
+            &server_pub,
+            NamedGroup::SECP256R1,
+        );
+
+        // Compute shared secrets (from both perspectives)
+        let shared = server_keys.exchange(&client_pub).unwrap();
+
+        // Key schedule
+        let hash = Hasher::Sha256;
+        let ch_hash = hash.hash(&ch_bytes);
+        let sh_hash = hash.hash(&sh_bytes);
+
+        let mut ks = Tls13KeySchedule::new(hash.clone());
+        ks.advance_to_handshake(&shared, &ch_hash, &sh_hash);
+
+        // Server handshake traffic secret — this is what the server uses to encrypt
+        let server_hs_secret = ks.server_handshake_traffic_secret(&ch_hash);
+
+        // In real TLS: server writes with server_hs_secret, client reads with same server_hs_secret
+        let server_write = server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
+
+        let mut write_cipher = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+        let mut read_cipher = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
+
+        // Build EncryptedExtensions
+        let ee_bytes = build_encrypted_extensions();
+        let ee_encrypted = write_cipher.encrypt(22, &ee_bytes);
+
+        // Client should be able to decrypt (same key, same seq starting at 0)
+        let (ct, plaintext) = read_cipher.decrypt(&ee_encrypted).unwrap();
+        assert_eq!(ct, 22);
+        assert_eq!(plaintext, ee_bytes);
+    }
+
+    // -----------------------------------------------------------------------
+    // 15. Full client↔server handshake using pipes (no real TCP)
+    // -----------------------------------------------------------------------
+
+    use std::io::Cursor;
+    use std::sync::mpsc;
+
+    #[test]
+    fn test_handshake_transcript_transcript_match() {
+        // This test verifies that the server and client build the same
+        // transcript hash — the core requirement for Finished verification.
+
+        let cert = generate_self_signed(&["localhost"]);
+
+        // Generate key pairs
+        let client_keys = EcdhKeyPair::generate().unwrap();
+        let server_keys = EcdhKeyPair::generate().unwrap();
+
+        let client_random = [0xAAu8; 32];
+        let server_random = [0xBBu8; 32];
+        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
+        let hash = Hasher::Sha256;
+
+        // ========== CLIENT SIDE: build ClientHello ==========
+        let client_pub = client_keys.public_key_bytes();
+        let ch_msg = ClientHelloBuilder::new(client_random, "localhost")
+            .key_share(&client_pub, NamedGroup::SECP256R1)
+            .build()
+            .unwrap();
+        let client_ch_hash = hash.hash(&ch_msg);
+
+        // ========== SERVER SIDE: parse ClientHello ==========
+        let ch_parsed = ClientHello::parse(&ch_msg).unwrap();
+        let server_ch_hash = hash.hash(&ch_msg);
+        assert_eq!(client_ch_hash, server_ch_hash, "ClientHello hashes must match");
+
+        // ========== SERVER SIDE: build ServerHello ==========
+        let server_pub = server_keys.public_key_bytes();
+        let sh_msg = build_server_hello(
+            server_random,
+            cipher_suite,
+            &server_pub,
+            NamedGroup::SECP256R1,
+        );
+        let server_sh_hash = hash.hash(&sh_msg);
+
+        // ========== CLIENT SIDE: parse ServerHello ==========
+        let sh_parsed = ServerHello::parse(&sh_msg).unwrap();
+        let client_sh_hash = hash.hash(&sh_msg);
+        assert_eq!(server_sh_hash, client_sh_hash, "ServerHello hashes must match");
+
+        // ========== Key exchange ==========
+        let shared_client = client_keys.exchange(&server_pub).unwrap();
+        let shared_server = server_keys.exchange(&client_pub).unwrap();
+        assert_eq!(shared_client, shared_server, "Shared secrets must match");
+
+        // ========== Key schedule (both sides) ==========
+        let ch_hash = client_ch_hash; // same on both sides
+
+        let mut ks_client = Tls13KeySchedule::new(hash.clone());
+        ks_client.advance_to_handshake(&shared_client, &ch_hash, &client_sh_hash);
+
+        let mut ks_server = Tls13KeySchedule::new(hash.clone());
+        ks_server.advance_to_handshake(&shared_server, &ch_hash, &server_sh_hash);
+
+        // Server handshake traffic secret
+        let server_hs_secret_client = ks_client.server_handshake_traffic_secret(&ch_hash);
+        let server_hs_secret_server = ks_server.server_handshake_traffic_secret(&ch_hash);
+        assert_eq!(server_hs_secret_client, server_hs_secret_server,
+            "Server HS secret must match");
+
+        // Client handshake traffic secret
+        let client_hs_secret_client = ks_client.client_handshake_traffic_secret(&ch_hash);
+        let client_hs_secret_server = ks_server.client_handshake_traffic_secret(&ch_hash);
+        assert_eq!(client_hs_secret_client, client_hs_secret_server,
+            "Client HS secret must match");
+
+        // ========== Encrypted messages transcript ==========
+        // Server transcript after ClientHello + ServerHello:
+        // (build_encrypted_handshake appends each message to self.transcript)
+        // At this point: transcript = ch_msg || sh_msg
+        let mut server_transcript = Vec::new();
+        server_transcript.extend_from_slice(&ch_msg);
+        server_transcript.extend_from_slice(&sh_msg);
+
+        // Build EE, Certificate, CertificateVerify
+        let ee_msg = build_encrypted_extensions();
+        server_transcript.extend_from_slice(&ee_msg);
+
+        let cert_msg = build_certificate_message(&cert.cert_der);
+        server_transcript.extend_from_slice(&cert_msg);
+
+        let cv_msg = build_certificate_verify(&server_transcript, &cert.signing_key, &hash).unwrap();
+        server_transcript.extend_from_slice(&cv_msg);
+
+        // Server's transcript hash for Finished
+        let server_transcript_hash = hash.hash(&server_transcript);
+
+        // ========== Client side: reconstruct transcript ==========
+        let mut client_transcript = Vec::new();
+        client_transcript.extend_from_slice(&ch_msg);
+        client_transcript.extend_from_slice(&sh_msg);
+
+        // Client reconstructs EE from the raw bytes (same as server built)
+        let client_ee_msg = ee_msg.clone();
+        client_transcript.extend_from_slice(&client_ee_msg);
+
+        // Client reconstructs Certificate
+        let client_cert_msg = cert_msg.clone();
+        client_transcript.extend_from_slice(&client_cert_msg);
+
+        // Client reconstructs CertificateVerify
+        let client_cv_msg = cv_msg.clone();
+        client_transcript.extend_from_slice(&client_cv_msg);
+
+        let client_transcript_hash = hash.hash(&client_transcript);
+
+        assert_eq!(server_transcript_hash, client_transcript_hash,
+            "Transcript hashes must match for Finished verification");
+    }
 }

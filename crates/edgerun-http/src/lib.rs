@@ -103,5 +103,8 @@ pub mod http1;
 pub mod http2;
 pub mod http3;
 
+#[cfg(feature = "tls")]
+pub mod tls;
+
 #[cfg(test)]
 mod semantics_conformance;

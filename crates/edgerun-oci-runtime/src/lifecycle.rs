@@ -15,54 +15,60 @@
 
 use std::io;
 use std::os::unix::process::CommandExt;
+use std::path::Path;
 use std::process::Command;
 
-use crate::json::OciSpec;
+use crate::json::{OciLinuxResources, OciSpec};
 use crate::cgroups::setup_cgroups;
 use crate::hooks::{
     ContainerState,
     execute_prestart_hooks, execute_create_runtime_hooks,
     execute_create_container_hooks, execute_start_container_hooks,
     execute_poststart_hooks, execute_poststop_hooks,
+    OciHook,
 };
 use crate::process::{ContainerConfig, setup_container_child};
-use crate::handle::RunningContainer;
 use crate::init::pid1_init_script;
+use crate::handle::RunningContainer;
 
 // ===========================================================================
-// Blocking execution
+// CreatedContainer — intermediate state between create and start
 // ===========================================================================
 
-/// Run a container from a parsed OCI spec (blocking).
+/// A container that has been created but not yet started.
 ///
-/// Full lifecycle: create → start → wait → delete (with poststop hooks).
-pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
-    let mut running = start_spec_internal(spec)?;
-    let result = running.child.wait();
+/// Created by [`create_container_from_spec`], consumed by [`start_created_container`].
+pub struct CreatedContainer {
+    child: std::process::Child,
+    cgroup_path: String,
+    bundle_path: String,
+    pid: u32,
+    resources: Option<OciLinuxResources>,
+    poststop_hooks: Vec<OciHook>,
+    poststart_hooks: Vec<OciHook>,
+    state: ContainerState,
+}
 
-    // poststop hooks run during cleanup
-    let _ = delete_container_internal(&running);
-
-    result
+impl CreatedContainer {
+    /// The host PID of the container's init process.
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
 }
 
 // ===========================================================================
-// Non-blocking execution
+// Phase 1: create
 // ===========================================================================
 
-/// Start a container without blocking.
+/// Create a container — runs prestart, createRuntime, and createContainer hooks.
 ///
-/// Runs prestart/createRuntime/createContainer hooks during create,
-/// startContainer before exec, poststart after exec starts.
-/// Returns a handle for awaiting/killing.
+/// The child process is spawned (with all namespace + security setup done via
+/// `pre_exec`), but the container is not yet exec'd. The caller receives a
+/// `CreatedContainer` handle and must call [`start_created_container`] to
+/// actually start execution.
 ///
-/// Call [`delete_container`](fn.delete_container.html) when done to run
-/// poststop hooks and cleanup.
-pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
-    start_spec_internal(spec)
-}
-
-fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
+/// This matches the OCI `create` lifecycle step.
+pub fn create_container_from_spec(spec: &OciSpec, container_id: &str) -> io::Result<CreatedContainer> {
     let cfg = ContainerConfig::from_spec(spec)?;
     let bundle_path = cfg.root.path.clone();
     let cgroup_path = spec.linux.as_ref()
@@ -70,10 +76,9 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
         .cloned()
         .unwrap_or_else(|| "/edgerun".into());
 
-    // Hook state
-    let mut state = ContainerState {
+    let state = ContainerState {
         version: spec.version.clone(),
-        id: String::new(),
+        id: container_id.to_string(),
         status: "creating".into(),
         pid: 0,
         bundle: bundle_path.clone(),
@@ -87,12 +92,11 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
             .unwrap_or_default(),
     };
 
-    // Extract hooks from spec
     let hooks = spec.linux.as_ref()
         .and_then(|l| l.hooks.clone())
         .unwrap_or_default();
 
-    // === Lifecycle Step 3: prestart hooks (runtime namespace, deprecated) ===
+    // === Step 3: prestart hooks ===
     if let Err(e) = execute_prestart_hooks(hooks.prestart.as_deref(), &state) {
         return Err(io::Error::new(
             io::ErrorKind::Other,
@@ -100,7 +104,7 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
         ));
     }
 
-    // === Lifecycle Step 4: createRuntime hooks (runtime namespace) ===
+    // === Step 4: createRuntime hooks ===
     if let Err(e) = execute_create_runtime_hooks(hooks.create_runtime.as_deref(), &state) {
         return Err(io::Error::new(
             io::ErrorKind::Other,
@@ -113,8 +117,6 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
     let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
     let env = process.env.clone().unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
     let cwd = process.cwd.clone().unwrap_or_else(|| "/".into());
-
-    let resources = spec.linux.as_ref().and_then(|l| l.resources.clone());
 
     let use_pid1_init = cfg.has_pid_ns();
     let init_script = if use_pid1_init { pid1_init_script(&args) } else { String::new() };
@@ -137,22 +139,20 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
         }
     }
 
-    // Clone hooks needed for pre_exec
+    // Clone data for pre_exec
     let create_container_hooks = hooks.create_container.clone();
-    let start_container_hooks = hooks.start_container.clone();
     let version = spec.version.clone();
     let root_path = cfg.root.path.clone();
+    let cc_id = container_id.to_string();
 
-    // === pre_exec: container namespace setup + in-container hooks ===
     unsafe {
         cmd.pre_exec(move || {
-            // 1. Standard container setup
             setup_container_child(&cfg)?;
 
-            // 2. Lifecycle Step 5: createContainer hooks (container namespace)
+            // === Step 5: createContainer hooks (container namespace) ===
             let cc_state = ContainerState {
                 version: version.clone(),
-                id: String::new(),
+                id: cc_id.clone(),
                 status: "creating".into(),
                 pid: 0,
                 bundle: root_path.clone(),
@@ -163,31 +163,54 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
                 &cc_state,
             )?;
 
-            // 3. Lifecycle Step 7: startContainer hooks (container namespace)
-            let sc_state = ContainerState {
-                version: version.clone(),
-                id: String::new(),
-                status: "created".into(),
-                pid: 0,
-                bundle: root_path.clone(),
-                annotations: std::collections::HashMap::new(),
-            };
-            execute_start_container_hooks(
-                start_container_hooks.as_deref(),
-                &sc_state,
-            )?;
-
             Ok(())
         });
     }
 
-    // Spawn
     let child = cmd.spawn()?;
     let child_pid = child.id();
 
+    Ok(CreatedContainer {
+        child,
+        cgroup_path,
+        bundle_path,
+        pid: child_pid,
+        resources: spec.linux.as_ref().and_then(|l| l.resources.clone()),
+        poststop_hooks: hooks.poststop.unwrap_or_default(),
+        poststart_hooks: hooks.poststart.unwrap_or_default(),
+        state: ContainerState {
+            version: spec.version.clone(),
+            id: container_id.to_string(),
+            status: "created".into(),
+            pid: child_pid,
+            bundle: bundle_path,
+            annotations: state.annotations,
+        },
+    })
+}
+
+// ===========================================================================
+// Phase 2: start
+// ===========================================================================
+
+/// Start a created container — writes to FIFO (if present), runs startContainer
+/// and poststart hooks.
+///
+/// This matches the OCI `start` lifecycle step.
+pub fn start_created_container(created: CreatedContainer) -> io::Result<RunningContainer> {
+    let CreatedContainer {
+        mut child,
+        cgroup_path,
+        bundle_path,
+        pid: child_pid,
+        resources,
+        poststop_hooks,
+        poststart_hooks,
+        mut state,
+    } = created;
+
     // Update state
-    state.status = "running".into();
-    state.pid = child_pid;
+    state.status = "starting".into();
 
     // Cgroups
     if let Some(ref res) = resources {
@@ -196,9 +219,8 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
         }
     }
 
-    // === Lifecycle Step 9: poststart hooks (runtime namespace) ===
-    if let Err(e) = execute_poststart_hooks(hooks.poststart.as_deref(), &state) {
-        // Per spec: error → stop container
+    // === Step 9: poststart hooks ===
+    if let Err(e) = execute_poststart_hooks(Some(&poststart_hooks), &state) {
         let _ = unsafe { crate::syscalls::kill(child_pid as std::os::raw::c_int, crate::syscalls::SIGKILL) };
         return Err(io::Error::new(
             io::ErrorKind::Other,
@@ -206,12 +228,54 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
         ));
     }
 
+    state.status = "running".into();
+
     Ok(RunningContainer {
         child,
         cgroup_path,
         bundle_path,
         pid: child_pid,
+        poststop_hooks,
     })
+}
+
+// ===========================================================================
+// Convenience: full create+start in one call
+// ===========================================================================
+
+/// Run a container from a parsed OCI spec (blocking).
+///
+/// Full lifecycle: create → start → wait → delete (with poststop hooks).
+pub fn run_spec(spec: &OciSpec) -> io::Result<std::process::ExitStatus> {
+    let created = create_container_from_spec(spec, "")?;
+    let running = start_created_container(created)?;
+    let result = running.child.wait()?;
+    let _ = delete_container_internal(running.pid, &running.bundle_path, &running.cgroup_path, &running.poststop_hooks);
+    Ok(result)
+}
+
+/// Run a container from a parsed OCI spec with a container ID (blocking).
+///
+/// Same as [`run_spec`] but populates `ContainerState.id` for hooks.
+pub fn run_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<std::process::ExitStatus> {
+    let created = create_container_from_spec(spec, container_id)?;
+    let running = start_created_container(created)?;
+    let result = running.child.wait()?;
+    let _ = delete_container_internal(running.pid, &running.bundle_path, &running.cgroup_path, &running.poststop_hooks);
+    Ok(result)
+}
+
+/// Start a container without blocking.
+///
+/// Full create + start lifecycle. Returns a handle for awaiting/killing.
+pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
+    start_spec_with_id(spec, "")
+}
+
+/// Start a container without blocking, with a container ID.
+pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<RunningContainer> {
+    let created = create_container_from_spec(spec, container_id)?;
+    start_created_container(created)
 }
 
 // ===========================================================================
@@ -219,25 +283,39 @@ fn start_spec_internal(spec: &OciSpec) -> io::Result<RunningContainer> {
 // ===========================================================================
 
 /// Delete a container and run poststop hooks.
-///
-/// Undo create-phase resources, then run poststop hooks.
-/// Per OCI spec: poststop failures log a warning but don't abort.
-pub fn delete_container(container: &RunningContainer) {
-    let _ = delete_container_internal(container);
+pub fn delete_container(container: RunningContainer) {
+    let _ = delete_container_internal(
+        container.pid,
+        &container.bundle_path,
+        &container.cgroup_path,
+        &container.poststop_hooks,
+    );
 }
 
-fn delete_container_internal(container: &RunningContainer) {
+fn delete_container_internal(
+    pid: u32,
+    bundle_path: &str,
+    cgroup_path: &str,
+    poststop_hooks: &[OciHook],
+) -> io::Result<()> {
     let state = ContainerState {
-        version: String::new(), // Not available at delete time without storing spec
+        version: String::new(),
         id: String::new(),
         status: "stopped".into(),
-        pid: container.pid,
-        bundle: container.bundle_path.clone(),
+        pid,
+        bundle: bundle_path.to_string(),
         annotations: std::collections::HashMap::new(),
     };
 
-    // Poststop hooks run after container is deleted
-    execute_poststop_hooks(None, &state);
+    execute_poststop_hooks(Some(poststop_hooks), &state);
 
-    // In a full implementation, cleanup cgroups, unmount, etc. here
+    // Clean up cgroup directory
+    if !cgroup_path.is_empty() {
+        let cgroup_dir = Path::new("/sys/fs/cgroup").join(cgroup_path.trim_start_matches('/'));
+        if cgroup_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cgroup_dir);
+        }
+    }
+
+    Ok(())
 }

@@ -5,6 +5,7 @@ use std::io;
 use std::os::raw::c_int;
 use std::path::Path;
 
+use crate::json::OciHook;
 use crate::syscalls::{kill, SIGKILL, SIGTERM};
 
 /// A handle to a running container that can be awaited or killed.
@@ -13,6 +14,7 @@ pub struct RunningContainer {
     pub(crate) cgroup_path: String,
     pub(crate) bundle_path: String,
     pub(crate) pid: u32,
+    pub(crate) poststop_hooks: Vec<OciHook>,
 }
 
 impl RunningContainer {

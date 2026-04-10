@@ -33,7 +33,7 @@ pub mod cli;
 // Re-export public API
 pub use bundle::{create_bundle, write_bundle};
 pub use cgroups::shares_to_weight;
-pub use container::{run_bundle, run_spec, start_bundle, start_spec, RunningContainer, delete_container};
+pub use container::{run_bundle, run_spec, run_spec_with_id, start_bundle, start_spec, start_spec_with_id, RunningContainer, delete_container};
 pub use rootfs::{apply_whiteouts, build_rootfs};
 pub use hooks::{
     ContainerState, HookError,

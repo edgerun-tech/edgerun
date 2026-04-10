@@ -1,9 +1,8 @@
 [package]
 name = "edgerun-color"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
-description = "CSS Color types generated from W3C Color Level 4"
+publish.workspace = true
 
 [dependencies]

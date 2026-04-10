@@ -1,9 +1,8 @@
 [package]
 name = "edgerun-uievents"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
-description = "UI Events types from W3C UI Events spec"
+publish.workspace = true
 
 [dependencies]

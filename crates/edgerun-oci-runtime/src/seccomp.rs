@@ -408,6 +408,19 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                 insns.push(bpf_insn(0x20, 0, 0, arg_offset));
                 let lo_val = arg.value as u32;
 
+                // BPF comparison operators:
+                //   0x25 = BPF_JGT (unsigned): jt if A > K, jf if A <= K
+                //   0x30 = BPF_JGE (unsigned): jt if A >= K, jf if A < K
+                //   0x15 = BPF_JEQ: jt if A == K, jf if A != K
+                //
+                // For each operator we want: "skip when comparison is FALSE"
+                //   EQ: A != K → skip  → JEQ, jt=0, jf=skip  ✓
+                //   NE: A == K → skip  → JEQ, jt=skip, jf=0  ✓
+                //   LT: A < K true → continue. A >= K → skip  → JGE, jt=skip, jf=0
+                //   LE: A <= K true → continue. A > K → skip  → JGT, jt=skip, jf=0
+                //   GE: A >= K true → continue. A < K → skip  → JGE, jt=0, jf=skip
+                //   GT: A > K true → continue. A <= K → skip  → JGT, jt=0, jf=skip
+
                 match arg.op.as_str() {
                     // EQ: A == K → match → continue (jt=0). A != K → no match → skip (jf=skip)
                     "SCMP_CMP_EQ" => {
@@ -417,34 +430,32 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                     "SCMP_CMP_NE" => {
                         insns.push(bpf_insn(0x15, 0, skip_to_ret, lo_val));
                     }
-                    // LT: A < K (unsigned). If A >= K → skip. JGE: if A >= K → jt.
+                    // LT: A < K. If A >= K → skip. JGE: if A >= K → jt=skip.
                     "SCMP_CMP_LT" => {
-                        insns.push(bpf_insn(0x30, 0, skip_to_default, lo_val));
+                        insns.push(bpf_insn(0x30, skip_to_default, 0, lo_val));
                     }
-                    // LE: A <= K. If A > K → skip. JGT: if A > K → jt.
+                    // LE: A <= K. If A > K → skip. JGT: if A > K → jt=skip.
                     "SCMP_CMP_LE" => {
-                        insns.push(bpf_insn(0x25, 0, skip_to_default, lo_val));
+                        insns.push(bpf_insn(0x25, skip_to_default, 0, lo_val));
                     }
                     // GE: A >= K. If A >= K → continue (jt=0). If A < K → skip (jf=skip).
-                    // JGE: if A >= K → jt=0. if A < K → jf=skip.
                     "SCMP_CMP_GE" => {
                         insns.push(bpf_insn(0x30, 0, skip_to_default, lo_val));
                     }
                     // GT: A > K. If A > K → continue (jt=0). If A <= K → skip (jf=skip).
-                    // JGT: if A > K → jt=0. if A <= K → jf=skip.
                     "SCMP_CMP_GT" => {
                         insns.push(bpf_insn(0x25, 0, skip_to_default, lo_val));
                     }
-                    // MASKED_EQ: (A & mask) == valueTwo. Check if masked bits match.
+                    // MASKED_EQ: (A & mask) == valueTwo
+                    //   Step 1: AND low 32 bits with mask, check == expected low
+                    //   Step 2: AND high 32 bits with mask, check == expected high
+                    //   Both halves must match to pass.
                     "SCMP_CMP_MASKED_EQ" => {
-                        let _mask = arg.value as u32;
-                        let expected = arg.value_two as u32;
-                        // JSET: A & K. if result != 0 → jt. if result == 0 → jf.
-                        // We need (A & mask) == expected. This requires XOR after masking.
-                        // For now: check (A & mask) has all expected bits set.
-                        // (A & mask) & expected == expected. Simplified: A & expected == expected.
-                        insns.push(bpf_insn(0x50, 0, skip_to_default, expected)); // JEQ after AND
-                        // Note: Full implementation would need: XOR then JEQ on result==0
+                        // AND low 32 bits with mask, then check == expected low
+                        insns.push(bpf_insn(0x50, 0, 0, arg.value as u32));
+                        // JEQ expected_lo → continue to hi check. Mismatch → skip past hi check + RET + remaining args
+                        let skip_total = (remaining_args * 2 + 2 + 1).min(255) as u8; // remaining + hi_load + hi_jeq + ret
+                        insns.push(bpf_insn(0x15, 0, skip_total, arg.value_two as u32));
                     }
                     _ => {
                         insns.push(bpf_insn(0x15, 0, skip_to_default, lo_val));
@@ -465,21 +476,31 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                     "SCMP_CMP_NE" => {
                         insns.push(bpf_insn(0x15, 1, 0, hi_val));
                     }
+                    // LT: A < K. If hi > K_hi → A > K → skip. If hi < K_hi → A < K → continue.
                     "SCMP_CMP_LT" => {
-                        insns.push(bpf_insn(0x30, 0, 1, hi_val));
+                        insns.push(bpf_insn(0x25, 1, 0, hi_val));
                     }
+                    // LE: A <= K. If hi > K_hi → skip.
                     "SCMP_CMP_LE" => {
-                        insns.push(bpf_insn(0x25, 0, 1, hi_val));
+                        insns.push(bpf_insn(0x25, 1, 0, hi_val));
                     }
+                    // GE: A >= K. If hi < K_hi → skip.
                     "SCMP_CMP_GE" => {
                         insns.push(bpf_insn(0x30, 0, 1, hi_val));
                     }
+                    // GT: A > K. If hi > K_hi → continue. If hi <= K_hi → skip.
+                    //   (lo already matched exactly, so hi==K_hi means A==K, not >)
+                    //   JGT: if A > K → jt=0 (continue). if A <= K → jf=1 (skip RET).
                     "SCMP_CMP_GT" => {
                         insns.push(bpf_insn(0x25, 0, 1, hi_val));
                     }
+                    // MASKED_EQ hi: AND high 32 bits with mask, check == expected high
                     "SCMP_CMP_MASKED_EQ" => {
-                        let hi_expected = (arg.value_two >> 32) as u32;
-                        insns.push(bpf_insn(0x50, 0, 1, hi_expected));
+                        let mask_hi = (arg.value >> 32) as u32;
+                        let expected_hi = (arg.value_two >> 32) as u32;
+                        insns.push(bpf_insn(0x50, 0, 0, mask_hi));  // A = A & mask_hi
+                        // Skip past RET on mismatch
+                        insns.push(bpf_insn(0x15, 0, 1, expected_hi));
                     }
                     _ => {
                         insns.push(bpf_insn(0x15, 0, 1, hi_val));
@@ -843,6 +864,247 @@ mod tests {
             assert_eq!(syscall_nr("write"), Some(64));
             assert_eq!(syscall_nr("exit"), Some(93));
             assert_eq!(syscall_nr("getpid"), Some(172));
+        }
+    }
+
+    /// Verify that LT uses JGE (0x30) with jt=skip, jf=0
+    #[test]
+    fn bpf_lt_uses_jge() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Kill),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_LT".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8, "should have multiple instructions");
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0);
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_jge_for_lt = false;
+            let mut found_jgt_for_hi = false;
+            for insn in insns {
+                let code = u16::from_le_bytes([insn[0], insn[1]]);
+                let jt = insn[2];
+                let jf = insn[3];
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                // JGE with jt=skip, jf=0 for lo check (LT: skip when >=)
+                if code == 0x30 && jt > 0 && jf == 0 && k == 0x100 {
+                    found_jge_for_lt = true;
+                }
+                // JGT with jt=1, jf=0 for hi check
+                if code == 0x25 && jt == 1 && jf == 0 && k == 0 {
+                    found_jgt_for_hi = true;
+                }
+            }
+            assert!(found_jge_for_lt, "LT should use JGE (0x30) with jt=skip, jf=0 for lo");
+            assert!(found_jgt_for_hi, "LT should use JGT (0x25) with jt=1, jf=0 for hi");
+        }
+    }
+
+    /// Verify that GT uses JGT (0x25) with jt=0, jf=skip for hi check
+    #[test]
+    fn bpf_gt_uses_jgt() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_GT".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8);
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0);
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_jgt_lo = false;
+            let mut found_jgt_hi = false;
+            for insn in insns {
+                let code = u16::from_le_bytes([insn[0], insn[1]]);
+                let jt = insn[2];
+                let jf = insn[3];
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                if code == 0x25 && jt == 0 && jf > 0 && k == 0x100 {
+                    found_jgt_lo = true;
+                }
+                if code == 0x25 && jt == 0 && jf == 1 && k == 0 {
+                    found_jgt_hi = true;
+                }
+            }
+            assert!(found_jgt_lo, "GT should use JGT (0x25) with jt=0, jf=skip for lo");
+            assert!(found_jgt_hi, "GT should use JGT (0x25) with jt=0, jf=1 for hi");
+        }
+    }
+
+    /// Verify GE uses JGE (0x30)
+    #[test]
+    fn bpf_ge_uses_jge() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_GE".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8);
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0);
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_jge_lo = false;
+            let mut found_jge_hi = false;
+            for insn in insns {
+                let code = u16::from_le_bytes([insn[0], insn[1]]);
+                let jt = insn[2];
+                let jf = insn[3];
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                if code == 0x30 && jt == 0 && jf > 0 && k == 0x100 {
+                    found_jge_lo = true;
+                }
+                if code == 0x30 && jt == 0 && jf == 1 && k == 0 {
+                    found_jge_hi = true;
+                }
+            }
+            assert!(found_jge_lo, "GE should use JGE (0x30) with jt=0, jf=skip for lo");
+            assert!(found_jge_hi, "GE should use JGE (0x30) with jt=0, jf=1 for hi");
+        }
+    }
+
+    /// Verify LE uses JGT (0x25)
+    #[test]
+    fn bpf_le_uses_jgt() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 0, value: 0x100, value_two: 0, op: "SCMP_CMP_LE".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8);
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0);
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_jgt_lo = false;
+            let mut found_jgt_hi = false;
+            for insn in insns {
+                let code = u16::from_le_bytes([insn[0], insn[1]]);
+                let jt = insn[2];
+                let jf = insn[3];
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                if code == 0x25 && jt > 0 && jf == 0 && k == 0x100 {
+                    found_jgt_lo = true;
+                }
+                if code == 0x25 && jt == 1 && jf == 0 && k == 0 {
+                    found_jgt_hi = true;
+                }
+            }
+            assert!(found_jgt_lo, "LE should use JGT (0x25) with jt=skip, jf=0 for lo");
+            assert!(found_jgt_hi, "LE should use JGT (0x25) with jt=1, jf=0 for hi");
+        }
+    }
+
+    /// Verify MASKED_EQ uses AND (0x50) + JEQ (0x15) for both halves
+    #[test]
+    fn bpf_masked_eq_uses_and_then_jeq() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            default_errno_ret: None,
+            architectures: Some(vec!["SCMP_ARCH_X86_64".into()]),
+            listener_path: None,
+            listener_metadata: None,
+            syscalls: Some(vec![
+                OciSeccompSyscallEntry {
+                    names: Some(vec!["openat".into()]),
+                    action: Some(OciSeccompAction::Allow),
+                    errno_ret: None,
+                    args: Some(vec![crate::json::OciSeccompArg {
+                        index: 0, value: 0xFF, value_two: 0x42, op: "SCMP_CMP_MASKED_EQ".into(),
+                    }]),
+                },
+            ]),
+        };
+        let prog = build_seccomp_prog(&spec);
+        let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
+        assert!(len >= 8);
+
+        let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
+        let ptr = u64::from_le_bytes(ptr_bytes);
+        assert_ne!(ptr, 0);
+
+        unsafe {
+            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
+            let mut found_and_lo = false;
+            let mut found_jeq_lo = false;
+            for insn in insns {
+                let code = u16::from_le_bytes([insn[0], insn[1]]);
+                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+                if code == 0x50 && k == 0xFF { found_and_lo = true; }
+                if code == 0x15 && k == 0x42 { found_jeq_lo = true; }
+            }
+            assert!(found_and_lo, "MASKED_EQ should use AND (0x50) with mask");
+            assert!(found_jeq_lo, "MASKED_EQ should use JEQ (0x15) with expected value");
         }
     }
 }

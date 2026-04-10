@@ -10,11 +10,11 @@ use std::io;
 use std::path::Path;
 
 use crate::json::OciSpec;
-pub use crate::lifecycle::{run_spec, start_spec};
+pub use crate::lifecycle::{run_spec, run_spec_with_id, start_spec, start_spec_with_id, create_container_from_spec, start_created_container, CreatedContainer};
 pub use crate::handle::RunningContainer;
 
 /// Delete a container and run poststop hooks.
-pub fn delete_container(container: &RunningContainer) {
+pub fn delete_container(container: RunningContainer) {
     crate::lifecycle::delete_container(container);
 }
 

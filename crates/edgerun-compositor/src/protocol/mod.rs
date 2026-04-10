@@ -32,6 +32,7 @@ pub mod input_method_v2;
 pub mod primary_selection;
 pub mod data_control;
 pub mod dispatch;
+mod dispatch_legacy;
 pub mod single_pixel_buffer;
 pub mod fractional_scale;
 pub mod tearing_control;

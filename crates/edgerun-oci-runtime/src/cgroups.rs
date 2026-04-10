@@ -6,9 +6,19 @@
 
 use std::fs;
 use std::io;
+use std::io::Write;
 use std::path::Path;
 
 use crate::json::OciLinuxResources;
+
+/// Write to a cgroup file, logging errors to /dev/kmsg (best-effort).
+fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
+    if let Err(e) = fs::write(cgroup_root.join(file), content) {
+        if let Ok(mut kmsg) = fs::OpenOptions::new().write(true).open("/dev/kmsg") {
+            let _ = writeln!(kmsg, "edgerun: cgroup write error {}/{}: {}", cgroup_root.display(), file, e);
+        }
+    }
+}
 
 /// Apply cgroup v2 resource limits by writing to /sys/fs/cgroup.
 pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str) -> io::Result<()> {
@@ -22,24 +32,24 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
     if let Some(ref mem) = resources.memory {
         if let Some(limit) = mem.limit {
             if limit >= 0 {
-                let _ = fs::write(cgroup_root.join("memory.max"), format!("{}", limit));
+                cgroup_write(&cgroup_root, "memory.max", &format!("{}", limit));
             }
         }
         if let Some(swap) = mem.swap {
             if swap >= 0 {
-                let _ = fs::write(cgroup_root.join("memory.swap.max"), format!("{}", swap));
+                cgroup_write(&cgroup_root, "memory.swap.max", &format!("{}", swap));
             }
         }
         // Memory swappiness (0-100); cgroup v2 uses memory.swap.max=0 for no swap
         // For cgroup v1 compatibility, write to memory.swappiness
         if let Some(reservation) = mem.reservation {
             if reservation >= 0 {
-                let _ = fs::write(cgroup_root.join("memory.low"), format!("{}", reservation));
+                cgroup_write(&cgroup_root, "memory.low", &format!("{}", reservation));
             }
         }
         if let Some(kernel) = mem.kernel {
             if kernel >= 0 {
-                let _ = fs::write(cgroup_root.join("memory.kmem.max"), format!("{}", kernel));
+                cgroup_write(&cgroup_root, "memory.kmem.max", &format!("{}", kernel));
             }
         }
     }
@@ -49,31 +59,31 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         if let Some(period) = cpu.period {
             if period > 0 {
                 let quota = cpu.quota.unwrap_or(-1);
-                let _ = fs::write(cgroup_root.join("cpu.max"), format!("{} {}", quota, period));
+                cgroup_write(&cgroup_root, "cpu.max", &format!("{} {}", quota, period));
             }
         }
         // CPU realtime limits: cpu.max.rt
         if let Some(rt_runtime) = cpu.realtime_runtime {
             if let Some(rt_period) = cpu.realtime_period {
                 if rt_period > 0 {
-                    let _ = fs::write(cgroup_root.join("cpu.max.rt"), format!("{} {}", rt_runtime, rt_period));
+                    cgroup_write(&cgroup_root, "cpu.max.rt", &format!("{} {}", rt_runtime, rt_period));
                 }
             }
         }
         if let Some(shares) = cpu.shares {
             if shares > 0 {
-                let _ = fs::write(cgroup_root.join("cpu.weight"), format!("{}", shares_to_weight(shares)));
+                cgroup_write(&cgroup_root, "cpu.weight", &format!("{}", shares_to_weight(shares)));
             }
         }
         // CPU affinity: cpuset.cpus and cpuset.mems
         if let Some(ref cpus) = cpu.cpus {
             if !cpus.is_empty() {
-                let _ = fs::write(cgroup_root.join("cpuset.cpus"), cpus);
+                cgroup_write(&cgroup_root, "cpuset.cpus", cpus);
             }
         }
         if let Some(ref mems) = cpu.mems {
             if !mems.is_empty() {
-                let _ = fs::write(cgroup_root.join("cpuset.mems"), mems);
+                cgroup_write(&cgroup_root, "cpuset.mems", mems);
             }
         }
     }
@@ -81,7 +91,7 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
     // PID limits
     if let Some(ref pids) = resources.pids {
         if pids.limit > 0 {
-            let _ = fs::write(cgroup_root.join("pids.max"), format!("{}", pids.limit));
+            cgroup_write(&cgroup_root, "pids.max", &format!("{}", pids.limit));
         }
     }
 
@@ -91,9 +101,9 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
             if weight > 0 {
                 // cgroup v2 weight is 1-10000, blkio weight is 10-1000
                 let v2_weight = (weight as u64).saturating_mul(100).min(10000).max(1);
-                let _ = fs::write(cgroup_root.join("io.bfq.weight"), format!("{}", v2_weight));
+                cgroup_write(&cgroup_root, "io.bfq.weight", &format!("{}", v2_weight));
                 // Also try io.weight (depends on IO scheduler)
-                let _ = fs::write(cgroup_root.join("io.weight"), format!("{}", v2_weight));
+                cgroup_write(&cgroup_root, "io.weight", &format!("{}", v2_weight));
             }
         }
         // Throttle devices
@@ -106,20 +116,19 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
     // Hugepage limits
     if let Some(ref hugepages) = resources.hugepage_limits {
         for hp in hugepages {
-            let path = cgroup_root.join(format!("hugetlb.{}.max", hp.pagesize));
-            let _ = fs::write(&path, format!("{}", hp.limit));
+            cgroup_write(&cgroup_root, &format!("hugetlb.{}.max", hp.pagesize), &format!("{}", hp.limit));
         }
     }
 
     // Network class ID (cgroup v1 compatibility — written to net_cls.classid)
     if let Some(ref net) = resources.network {
         if let Some(class_id) = net.class_id {
-            let _ = fs::write(cgroup_root.join("net_cls.classid"), format!("{}", class_id));
+            cgroup_write(&cgroup_root, "net_cls.classid", &format!("{}", class_id));
         }
         // Network priorities
         if let Some(ref priorities) = net.priorities {
             for p in priorities {
-                let _ = fs::write(cgroup_root.join("net_prio.prioidx"), format!("{} {}", p.name, p.priority));
+                cgroup_write(&cgroup_root, "net_prio.prioidx", &format!("{} {}", p.name, p.priority));
             }
         }
     }
@@ -135,8 +144,8 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
 
             let rule = format!("{} {}:{} {}", dev_type, major, minor, access);
             // Write to devices.allow (v1) — best-effort for v2
-            let _ = fs::write(cgroup_root.join("devices.allow"), &rule);
-            let _ = fs::write(cgroup_root.join("cgroup.devices.allow"), &rule);
+            cgroup_write(&cgroup_root, "devices.allow", &rule);
+            cgroup_write(&cgroup_root, "cgroup.devices.allow", &rule);
         }
     }
 
@@ -161,7 +170,7 @@ fn write_throttle_devices(
         .collect::<Vec<_>>()
         .join("\n");
 
-    let _ = fs::write(cgroup_root.join(file), content);
+    cgroup_write(cgroup_root, file, &content);
     Ok(())
 }
 

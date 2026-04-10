@@ -476,9 +476,9 @@ extern "C" {
 
 ## OCI Conformance Status
 
-From `corpus/oci-conformance/STATUS.md`:
+From `corpus/oci-conformance/STATUS.md` (updated 2026-04-10 code audit):
 
-**Unit tests**: 54/54 passing (`cargo test -p edgerun-oci-runtime`)
+**Unit tests**: 55/55 passing (`cargo test -p edgerun-oci-runtime`)
 
 ### Implemented Features (✅)
 
@@ -494,15 +494,28 @@ From `corpus/oci-conformance/STATUS.md`:
 - ✅ Namespaces without path (create new)
 - ✅ Namespaces with path (join existing)
 - ✅ Namespace type validation
-- ✅ Cgroups: memory, cpu, pids, devices, blkio, hugetlb, network
+- ✅ Cgroups: memory, cpu, pids, blkio, hugetlb
 - ✅ Device creation from spec
-- ✅ Seccomp filtering (full spec-driven with argument filters)
+- ✅ Seccomp filtering (spec-driven; ⚠️ BPF operator bugs in LT/LE/GE/GT, MASKED_EQ incomplete)
 - ✅ Masked paths and readonly paths
+- ✅ Hostname via UTS namespace
+- ✅ Hook lifecycle (prestart/createRuntime/createContainer/startContainer/poststart)
+- ✅ CLI commands: create, start, state, kill, delete
+- ✅ PID file via `--pid-file` flag
+
+### Partially Implemented (⚠️)
+
+- ⚠️ Seccomp: CLI create path skips seccomp entirely (`setup_child_for_create()`)
+- ⚠️ Poststop hooks: never executed — `delete_container_internal()` passes `None`
+- ⚠️ Cgroup device/network: v1-only files, fail silently on cgroup v2
+- ⚠️ Cgroup errors: all silently discarded (`let _ =`)
+- ⚠️ CLI hooks: create/start/delete bypass hook execution
+- ⚠️ No cgroup cleanup on container delete
 
 ### Not Implemented (❌)
 
-- ❌ CLI lifecycle commands (create/start/delete/kill/state) — library-only in some contexts
-- ❌ PID file creation
+- ❌ Live config updates (`config_updates_without_affect`)
+- ❌ Cgroup cleanup on delete (`delete_resources`)
 - ❌ Live config updates to running containers
 - ❌ Kill on non-running containers
 
@@ -680,13 +693,24 @@ Tests are organized in `lib.rs` and individual module `#[cfg(test)]` blocks:
 |---------|---------------------|------|------|-------|
 | **Language** | Rust | Go | C | Rust |
 | **Binary Size** | ~2 MB (with LTO) | ~8 MB | ~200 KB | ~5 MB |
-| **External Deps** | 0 | libseccomp, libcap | libseccomp, libcap, libyajl | libseccomp, libcap |
+| **External Deps** | 1 (`mkfifo` for CLI) | libseccomp, libcap | libseccomp, libcap, libyajl | libseccomp, libcap |
 | **OCI Spec** | v1.0.2 | v1.x | v1.x | v1.x |
-| **Cgroups** | v2 (v1 fallback) | v1 + v2 | v1 + v2 | v1 + v2 |
-| **Seccomp** | Built-in BPF gen | libseccomp | libseccomp | libseccomp |
-| **Hooks** | Full OCI hooks | Full OCI hooks | Full OCI hooks | Full OCI hooks |
+| **Cgroups** | v2 (v1 fallback, some controllers v1-only) | v1 + v2 | v1 + v2 | v1 + v2 |
+| **Seccomp** | Built-in BPF gen (⚠️ operator bugs) | libseccomp | libseccomp | libseccomp |
+| **Hooks** | Library: full OCI hooks; CLI: none | Full OCI hooks | Full OCI hooks | Full OCI hooks |
 | **Rootless** | Partial (user ns) | Full | Full | Partial |
 | **Systemd Integration** | No | Yes | Yes | No |
+| **Conformance** | 41/59 ✅, 15/59 ⚠️ (69%+25%) | ~100% | ~100% | ~95% |
+
+## Known Bugs (from 2026-04-10 code audit)
+
+1. **Seccomp BPF operator errors**: `SCMP_CMP_LT`/`SCMP_CMP_GE` use `0x30` (JSET, bitwise AND-test) instead of comparison operators. `SCMP_CMP_LE`/`SCMP_CMP_GT` use `0x25` (JGT). These produce incorrect 64-bit argument filtering.
+2. **Seccomp MASKED_EQ incomplete**: Checks `A & expected == expected` — only verifies expected bits are set, doesn't verify other bits are cleared.
+3. **Seccomp skipped in CLI create**: `setup_child_for_create()` does not call seccomp — containers created via CLI have no filtering.
+4. **Poststop hooks never run**: `delete_container_internal()` passes `None` for hooks; CLI delete doesn't load config.json.
+5. **Container ID never populated**: `ContainerState.id` is always `String::new()` in hooks.
+6. **Cgroup errors silently discarded**: All writes use `let _ =`.
+7. **No cgroup cleanup on delete**: `delete_container_internal()` is a stub.
 
 ## Future Enhancements
 
@@ -698,6 +722,16 @@ Tests are organized in `lib.rs` and individual module `#[cfg(test)]` blocks:
 4. **Personality**: Execution domain personality
 5. **AppArmor fully wired**: Profile application only, no stack/allow rules
 6. **SELinux mount label**: Written but not enforced beyond data string
+
+### Bug Fixes Needed
+
+1. Fix BPF operator encoding for SCMP_CMP_LT/LE/GE/GT (use proper comparison ops)
+2. Implement full SCMP_CMP_MASKED_EQ (XOR then JEQ on result==0)
+3. Wire seccomp into `setup_child_for_create()` CLI path
+4. Load spec and run poststop hooks in delete path
+5. Populate `ContainerState.id` from actual container ID
+6. Add cgroup cleanup to `delete_container_internal()`
+7. Add error reporting for cgroup setup failures
 
 ### CLI Improvements
 
@@ -719,10 +753,13 @@ Tests are organized in `lib.rs` and individual module `#[cfg(test)]` blocks:
 
 `edgerun-oci-runtime` is a well-architected, security-focused minimal OCI runtime that prioritizes:
 
-- **Simplicity**: No external dependencies, direct kernel syscalls
-- **Correctness**: Comprehensive test coverage, OCI spec compliance
+- **Simplicity**: 1 external dependency (`mkfifo` for CLI), direct kernel syscalls
+- **Correctness**: 55/55 unit tests passing, OCI spec compliance (41/59 fully, 15/59 partially)
 - **Security**: Seccomp-BPF, capabilities, namespace isolation, fail-closed design
-- **Maintainability**: Clear module structure, extensive documentation
+
+**Current conformance: 41/59 ✅ (69%), 15/59 ⚠️ (25%), 3/59 ❌ (5%).**
+
+The library API is solid — the main gaps are in the CLI layer (hooks not wired, seccomp skipped in create path, poststop hooks never executed) and several seccomp BPF bugs that need fixing before production use.
 
 It's suitable for:
 - Embedded/container edge deployments (minimal footprint)

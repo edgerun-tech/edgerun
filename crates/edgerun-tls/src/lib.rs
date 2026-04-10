@@ -425,14 +425,14 @@ impl Handshake {
 
             let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
 
-            // Reconstruct handshake message for transcript
-            let hs_msg_len = plaintext.len() + 1; // +1 for type byte
-            let mut hs_msg = Vec::with_capacity(4 + plaintext.len());
-            hs_msg.push(inner_type);
-            hs_msg.extend_from_slice(&(hs_msg_len as u32).to_be_bytes()[1..]); // 3-byte length
-            hs_msg.extend_from_slice(&plaintext);
+            // The plaintext IS the handshake message in wire format: type(1) + length(3) + payload
+            // Reconstruct it for the transcript hash (it's already in the right format)
+            let hs_msg = plaintext.clone();
 
-            match inner_type {
+            // The handshake message type is the first byte of plaintext
+            let hs_type = if !hs_msg.is_empty() { hs_msg[0] } else { inner_type };
+
+            match hs_type {
                 8 => {
                     // EncryptedExtensions — append to transcript
                     self.transcript.extend_from_slice(&hs_msg);
@@ -440,11 +440,11 @@ impl Handshake {
                 11 => {
                     // Certificate — append to transcript
                     self.transcript.extend_from_slice(&hs_msg);
-                    if plaintext.len() >= 3 {
+                    if hs_msg.len() >= 4 {
                         let cert_list_len =
-                            u32::from_be_bytes([0, plaintext[0], plaintext[1], plaintext[2]]) as usize;
-                        if plaintext.len() >= 3 + cert_list_len {
-                            let cert_data = &plaintext[3..3 + cert_list_len];
+                            u32::from_be_bytes([0, hs_msg[1], hs_msg[2], hs_msg[3]]) as usize;
+                        if hs_msg.len() >= 4 + cert_list_len {
+                            let cert_data = &hs_msg[4..4 + cert_list_len];
                             let certs = Certificate::parse_list(cert_data)?;
 
                             // Basic validation

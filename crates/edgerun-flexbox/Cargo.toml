@@ -1,9 +1,8 @@
 [package]
 name = "edgerun-flexbox"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
-description = "CSS Flexbox types generated from W3C spec"
+publish.workspace = true
 
 [dependencies]
