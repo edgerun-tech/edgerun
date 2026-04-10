@@ -1,0 +1,88 @@
+{
+  "spec": "CSS Flexible Box Layout",
+  "spec_date": "2026-04-10",
+  "container_properties": [
+    {
+      "name": "display",
+      "values": "flex, inline-flex",
+      "description": "Establishes flex formatting context"
+    },
+    {
+      "name": "flex-direction",
+      "values": "row, row-reverse, column, column-reverse",
+      "description": "Main axis direction"
+    },
+    {
+      "name": "flex-wrap",
+      "values": "nowrap, wrap, wrap-reverse",
+      "description": "Whether items wrap"
+    },
+    {
+      "name": "flex-flow",
+      "values": "flex-direction flex-wrap",
+      "description": "Shorthand for direction + wrap"
+    },
+    {
+      "name": "justify-content",
+      "values": "flex-start, flex-end, center, space-between, space-around, space-evenly, start, end, left, right",
+      "description": "Main axis alignment"
+    },
+    {
+      "name": "align-content",
+      "values": "flex-start, flex-end, center, space-between, space-around, space-evenly, stretch, baseline, first baseline, last baseline, start, end, left, right",
+      "description": "Cross axis alignment of lines"
+    },
+    {
+      "name": "align-items",
+      "values": "flex-start, flex-end, center, baseline, stretch, start, end, self-start, self-end, first baseline, last baseline",
+      "description": "Cross axis alignment of items"
+    },
+    {
+      "name": "gap",
+      "values": "<length-percentage>{1,2}",
+      "description": "Gaps between flex items"
+    },
+    {
+      "name": "row-gap",
+      "values": "<length-percentage>",
+      "description": "Row gap"
+    },
+    {
+      "name": "column-gap",
+      "values": "<length-percentage>",
+      "description": "Column gap"
+    }
+  ],
+  "child_properties": [
+    {
+      "name": "order",
+      "values": "<integer>",
+      "description": "Paint/order reordering"
+    },
+    {
+      "name": "flex-grow",
+      "values": "<number>",
+      "description": "Growth factor"
+    },
+    {
+      "name": "flex-shrink",
+      "values": "<number>",
+      "description": "Shrinkage factor"
+    },
+    {
+      "name": "flex-basis",
+      "values": "content | <width>",
+      "description": "Initial main size"
+    },
+    {
+      "name": "flex",
+      "values": "none | flex-grow [flex-shrink flex-basis]",
+      "description": "Shorthand for grow + shrink + basis"
+    },
+    {
+      "name": "align-self",
+      "values": "auto, flex-start, flex-end, center, baseline, stretch, start, end, self-start, self-end",
+      "description": "Individual cross axis alignment"
+    }
+  ]
+}

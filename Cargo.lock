@@ -594,6 +594,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-color"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-compositor"
 version = "0.1.0"
 dependencies = [
@@ -786,6 +790,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-flexbox"
+version = "0.1.0"
+
+[[package]]
 name = "edgerun-goodix-fingerprint"
 version = "0.1.0"
 dependencies = [
@@ -799,6 +807,10 @@ version = "0.1.0"
 dependencies = [
  "edgerun-capabilities",
 ]
+
+[[package]]
+name = "edgerun-grid"
+version = "0.1.0"
 
 [[package]]
 name = "edgerun-hardware-signing"
@@ -1310,6 +1322,10 @@ dependencies = [
 
 [[package]]
 name = "edgerun-virtual-disk"
+version = "0.1.0"
+
+[[package]]
+name = "edgerun-webidl"
 version = "0.1.0"
 
 [[package]]

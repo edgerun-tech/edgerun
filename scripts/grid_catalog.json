@@ -1,0 +1,176 @@
+{
+  "spec": "CSS Grid Layout",
+  "spec_date": "2026-04-10",
+  "properties": [
+    {
+      "name": "display",
+      "values": "grid, inline-grid",
+      "description": "Establishes grid formatting context"
+    },
+    {
+      "name": "grid-template-columns",
+      "values": "none | track-list | subgrid",
+      "description": "Column track definitions"
+    },
+    {
+      "name": "grid-template-rows",
+      "values": "none | track-list | subgrid",
+      "description": "Row track definitions"
+    },
+    {
+      "name": "grid-template-areas",
+      "values": "none | string+",
+      "description": "Named grid areas"
+    },
+    {
+      "name": "grid-template",
+      "values": "Template shorthand",
+      "description": "Shorthand for columns + rows + areas"
+    },
+    {
+      "name": "grid-auto-columns",
+      "values": "track-size+",
+      "description": "Implicit column size"
+    },
+    {
+      "name": "grid-auto-rows",
+      "values": "track-size+",
+      "description": "Implicit row size"
+    },
+    {
+      "name": "grid-auto-flow",
+      "values": "row, column, dense, row dense, column dense",
+      "description": "Auto-placement algorithm"
+    },
+    {
+      "name": "grid",
+      "values": "Template + auto-flow shorthand",
+      "description": "Shorthand for all template + auto properties"
+    },
+    {
+      "name": "grid-column-start",
+      "values": "line name, span, auto",
+      "description": "Column start line"
+    },
+    {
+      "name": "grid-column-end",
+      "values": "line name, span, auto",
+      "description": "Column end line"
+    },
+    {
+      "name": "grid-row-start",
+      "values": "line name, span, auto",
+      "description": "Row start line"
+    },
+    {
+      "name": "grid-row-end",
+      "values": "line name, span, auto",
+      "description": "Row end line"
+    },
+    {
+      "name": "grid-column",
+      "values": "start / end shorthand",
+      "description": "Column placement"
+    },
+    {
+      "name": "grid-row",
+      "values": "start / end shorthand",
+      "description": "Row placement"
+    },
+    {
+      "name": "grid-area",
+      "values": "name or start/end shorthand",
+      "description": "Grid area placement"
+    },
+    {
+      "name": "column-gap",
+      "values": "<length-percentage>",
+      "description": "Column gutters"
+    },
+    {
+      "name": "row-gap",
+      "values": "<length-percentage>",
+      "description": "Row gutters"
+    },
+    {
+      "name": "gap",
+      "values": "<length-percentage>{1,2}",
+      "description": "Shorthand for row + column gap"
+    },
+    {
+      "name": "justify-content",
+      "values": "start, end, center, stretch, space-between, space-around, space-evenly",
+      "description": "Inline alignment of grid"
+    },
+    {
+      "name": "align-content",
+      "values": "start, end, center, stretch, space-between, space-around, space-evenly",
+      "description": "Block alignment of grid"
+    },
+    {
+      "name": "place-content",
+      "values": "align justify",
+      "description": "Shorthand for align-content + justify-content"
+    },
+    {
+      "name": "justify-items",
+      "values": "start, end, center, stretch, baseline",
+      "description": "Inline alignment of items"
+    },
+    {
+      "name": "align-items",
+      "values": "start, end, center, stretch, baseline",
+      "description": "Block alignment of items"
+    },
+    {
+      "name": "place-items",
+      "values": "align justify",
+      "description": "Shorthand for align-items + justify-items"
+    },
+    {
+      "name": "justify-self",
+      "values": "auto, start, end, center, stretch, baseline",
+      "description": "Individual inline alignment"
+    },
+    {
+      "name": "align-self",
+      "values": "auto, start, end, center, stretch, baseline",
+      "description": "Individual block alignment"
+    },
+    {
+      "name": "place-self",
+      "values": "align justify",
+      "description": "Shorthand for align-self + justify-self"
+    }
+  ],
+  "track_functions": [
+    {
+      "name": "repeat",
+      "syntax": "repeat(N, track-list)"
+    },
+    {
+      "name": "minmax",
+      "syntax": "minmax(min, max)"
+    },
+    {
+      "name": "fit-content",
+      "syntax": "fit-content(length)"
+    },
+    {
+      "name": "max-content",
+      "syntax": "max-content"
+    },
+    {
+      "name": "min-content",
+      "syntax": "min-content"
+    },
+    {
+      "name": "auto",
+      "syntax": "auto"
+    },
+    {
+      "name": "fr",
+      "syntax": "<flex>fr"
+    }
+  ]
+}

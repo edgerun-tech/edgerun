@@ -1,0 +1,149 @@
+{
+  "spec": "Web IDL",
+  "spec_date": "2026-04-10",
+  "primitive_types": [
+    "boolean",
+    "byte",
+    "octet",
+    "short",
+    "unsigned short",
+    "long",
+    "unsigned long",
+    "long long",
+    "unsigned long long",
+    "float",
+    "double",
+    "unrestricted float",
+    "unrestricted double"
+  ],
+  "string_types": [
+    "DOMString",
+    "ByteString",
+    "USVString"
+  ],
+  "object_types": [
+    "object",
+    "Promise",
+    "FrozenArray",
+    "sequence",
+    "record",
+    "ObservableArray"
+  ],
+  "special_types": [
+    "any",
+    "undefined",
+    "symbol",
+    "ArrayBuffer",
+    "DataView",
+    "Int8Array",
+    "Uint8Array",
+    "Int16Array",
+    "Uint16Array",
+    "Int32Array",
+    "Uint32Array",
+    "BigInt64Array",
+    "BigUint64Array",
+    "Float32Array",
+    "Float64Array",
+    "ArrayBufferView",
+    "BufferSource"
+  ],
+  "extended_attributes": [
+    {
+      "name": "Clamp",
+      "description": "Clamp integer to valid range"
+    },
+    {
+      "name": "EnforceRange",
+      "description": "Enforce valid range, throw on overflow"
+    },
+    {
+      "name": "LegacyNullToEmptyString",
+      "description": "Convert null to empty string"
+    },
+    {
+      "name": "LegacyLenientThis",
+      "description": "Don't throw on wrong this"
+    },
+    {
+      "name": "SameObject",
+      "description": "Attribute always returns same object"
+    },
+    {
+      "name": "PutForwards",
+      "description": "Forward set to property of returned object"
+    },
+    {
+      "name": "Unscopeable",
+      "description": "Exclude from with-scope"
+    },
+    {
+      "name": "LegacyUnforgeable",
+      "description": "Cannot be redefined"
+    },
+    {
+      "name": "LegacyWindowAlias",
+      "description": "Available under alternate name on Window"
+    },
+    {
+      "name": "LegacyNamespace",
+      "description": "Non-standard namespace"
+    },
+    {
+      "name": "LegacyFactoryFunction",
+      "description": "Constructor available on Window"
+    },
+    {
+      "name": "LegacyArrayClass",
+      "description": "Indexed property getter returns array"
+    },
+    {
+      "name": "CEReactions",
+      "description": "Run custom element reactions"
+    },
+    {
+      "name": "Exposed",
+      "description": "Expose to specified global scopes"
+    },
+    {
+      "name": "SecureContext",
+      "description": "Only expose in secure contexts"
+    },
+    {
+      "name": "HTMLConstructor",
+      "description": "Special constructor for custom elements"
+    },
+    {
+      "name": "WebGLHandlesContextLoss",
+      "description": "Handle WebGL context loss"
+    }
+  ],
+  "callback_rules": [
+    {
+      "name": "Call",
+      "description": "Called as a function"
+    },
+    {
+      "name": "Construct",
+      "description": "Called as a constructor"
+    },
+    {
+      "name": "LegacyCallWith",
+      "description": "Called with specific arguments"
+    }
+  ],
+  "null_behavior": [
+    {
+      "name": "Default",
+      "description": "null converts to null"
+    },
+    {
+      "name": "LegacyNullToEmptyString",
+      "description": "null converts to empty string"
+    },
+    {
+      "name": "TreatNullAs",
+      "description": "Custom null behavior"
+    }
+  ]
+}
