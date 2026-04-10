@@ -73,16 +73,7 @@ pub fn namespace_flags(namespaces: &[OciNamespace]) -> std::os::raw::c_int {
     }
     let mut flags: c_int = 0;
     for ns in namespaces {
-        flags |= match ns.ns_type.as_str() {
-            "mount"   => ns::NEWNS,
-            "cgroup"  => ns::NEWCGROUP,
-            "uts"     => ns::NEWUTS,
-            "ipc"     => ns::NEWIPC,
-            "user"    => ns::NEWUSER,
-            "pid"     => ns::NEWPID,
-            "network" => ns::NEWNET,
-            _ => 0,
-        };
+        flags |= process::ns_type_to_flag(&ns.ns_type).unwrap_or(0);
     }
     flags
 }

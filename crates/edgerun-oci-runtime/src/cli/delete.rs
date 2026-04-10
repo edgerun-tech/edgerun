@@ -34,7 +34,7 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
             }
         }
 
-        (p, b, s.bundle.clone())
+        (p, b, String::new())
     } else {
         (0, String::new(), String::new())
     };

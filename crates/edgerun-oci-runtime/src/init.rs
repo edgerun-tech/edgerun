@@ -4,61 +4,77 @@
 //! - Signals not explicitly handled are ignored (default disposition)
 //! - Orphaned children become zombies that are never reaped
 //!
-//! This module provides a minimal init process that:
-//! 1. Forwards SIGTERM/SIGINT/SIGQUIT to the child workload process
-//! 2. Reaps zombie children via waitpid in a loop
-//!
-//! Usage: wrap the workload process by calling `run_as_pid1()` which
-//! execs a shell that runs the workload and then loops reaping zombies.
+//! This module provides a Rust-based PID 1 init that:
+//! 1. Forks the workload as a direct child
+//! 2. Forwards SIGTERM/SIGINT/SIGQUIT to the workload child
+//! 3. Reaps ALL zombie children via `waitpid(-1)` (not just the workload)
+//! 4. Exits with the workload's exit code
 
-/// Generate a shell wrapper that acts as PID 1 init + signal forwarder.
+use std::io;
+
+static WORKLOAD_PID: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Fork the workload and enter PID 1 init loop.
 ///
-/// The generated script:
-/// 1. Sets up a trap for SIGTERM/SIGINT/SIGQUIT to forward to the child
-/// 2. Runs the workload in the background
-/// 3. Loops waiting for SIGCHLD, reaping zombies
-/// 4. Exits with the workload's exit code
+/// Called from the `pre_exec` closure after namespace/security setup.
 ///
-/// This replaces the direct exec with a minimal init shim.
-pub fn pid1_init_script(args: &[String]) -> String {
-    let workload = args.iter()
-        .map(|a| shell_escape(a))
-        .collect::<Vec<_>>()
-        .join(" ");
+/// - **Parent (PID 1)**: enters the init loop, never returns
+/// - **Child**: returns `Ok(())` so `pre_exec` completes and `exec` proceeds
+///
+/// The parent reaps ALL zombie children via `waitpid(-1)`.
+pub fn fork_and_init() -> io::Result<()> {
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        return Err(io::Error::last_os_error());
+    }
 
-    format!(
-        r#"#!/bin/sh
-# Minimal PID 1 init — forwards signals and reaps zombies
-
-# Forward signals to the child
-cleanup() {{
-    kill -$1 $PID 2>/dev/null
-}}
-
-trap 'cleanup 15' TERM
-trap 'cleanup 2' INT
-trap 'cleanup 3' QUIT
-
-# Run workload in background
-{workload} &
-PID=$!
-
-# Reap zombies in a loop
-while true; do
-    wait $PID 2>/dev/null
-    EXIT_CODE=$?
-    # If wait returned (child exited), check for other zombies then exit
-    while kill -0 $PID 2>/dev/null; do
-        sleep 0.1
-    done
-    exit $EXIT_CODE
-done
-"#
-    )
+    if pid > 0 {
+        // Parent: this is PID 1 in the new PID namespace.
+        pid1_init_loop(pid);
+    }
+    // Child: return Ok(()) so pre_exec completes and exec proceeds
+    Ok(())
 }
 
-/// Escape a string for safe use in a shell command.
-fn shell_escape(s: &str) -> String {
-    // Simple: wrap in single quotes, escape any embedded single quotes
-    format!("'{}'", s.replace('\'', "'\\''"))
+fn pid1_init_loop(workload_pid: libc::pid_t) -> ! {
+    WORKLOAD_PID.store(workload_pid, std::sync::atomic::Ordering::SeqCst);
+
+    unsafe {
+        libc::signal(libc::SIGTERM, forward_signal as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGINT, forward_signal as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGQUIT, forward_signal as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGCHLD, libc::SIG_DFL);
+    }
+
+    let mut workload_exited = false;
+    let mut workload_status: i32 = 0;
+
+    loop {
+        let mut status: i32 = 0;
+        let pid = unsafe { libc::waitpid(-1, &mut status, 0) };
+        if pid < 0 { continue; } // EINTR
+
+        if pid == workload_pid {
+            workload_exited = true;
+            workload_status = status;
+        }
+
+        if workload_exited {
+            while unsafe { libc::waitpid(-1, &mut status, libc::WNOHANG) } > 0 {}
+            if libc::WIFEXITED(workload_status) {
+                std::process::exit(libc::WEXITSTATUS(workload_status) as i32);
+            } else if libc::WIFSIGNALED(workload_status) {
+                std::process::exit(128 + libc::WTERMSIG(workload_status));
+            } else {
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+extern "C" fn forward_signal(signum: libc::c_int) {
+    let pid = WORKLOAD_PID.load(std::sync::atomic::Ordering::Relaxed);
+    if pid > 0 {
+        unsafe { libc::kill(pid, signum) };
+    }
 }

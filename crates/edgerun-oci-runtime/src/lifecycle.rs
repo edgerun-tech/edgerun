@@ -31,9 +31,16 @@ use crate::hooks::{
     execute_poststart_hooks, execute_poststop_hooks,
 };
 use crate::process::{ContainerConfig, setup_container_child};
-use crate::init::pid1_init_script;
 use crate::handle::RunningContainer;
 use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState};
+
+/// Extract hooks from an OCI spec, returning a default-empty set if absent.
+fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
+    spec.linux.as_ref()
+        .and_then(|l| l.hooks.as_ref())
+        .map(|h| h.clone())
+        .unwrap_or_default()
+}
 
 // ===========================================================================
 // Step 1: prestart hooks
@@ -41,10 +48,7 @@ use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as
 
 /// Run prestart hooks (runtime namespace). Returns hook state for subsequent steps.
 pub fn run_prestart_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> {
-    let hooks = spec.linux.as_ref()
-        .and_then(|l| l.hooks.as_ref())
-        .map(|h| h.clone())
-        .unwrap_or_default();
+    let hooks = get_hooks(spec);
 
     let state = make_state(spec, container_id, "creating", 0);
 
@@ -64,10 +68,7 @@ pub fn run_prestart_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> 
 
 /// Run createRuntime hooks (runtime namespace).
 pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> {
-    let hooks = spec.linux.as_ref()
-        .and_then(|l| l.hooks.as_ref())
-        .map(|h| h.clone())
-        .unwrap_or_default();
+    let hooks = get_hooks(spec);
 
     let state = make_state(spec, container_id, "creating", 0);
 
@@ -138,25 +139,18 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         .map(|h| h.clone())
         .unwrap_or_default();
 
-    // Build the workload command
+    // Build the workload command — always exec directly, no shell wrapper
     let process = spec.process.clone().unwrap_or_default();
     let args = process.args.clone().unwrap_or_else(|| vec!["/bin/sh".into()]);
     let env = process.env.clone().unwrap_or_else(|| crate::process::DEFAULT_ENV.iter().map(|s| s.to_string()).collect());
     let cwd = process.cwd.clone().unwrap_or_else(|| "/".into());
 
     let use_pid1_init = cfg.has_pid_ns();
-    let init_script = if use_pid1_init { pid1_init_script(&args) } else { String::new() };
 
-    let mut cmd = if use_pid1_init {
-        let mut c = Command::new("/bin/sh");
-        c.arg("-c");
-        c.arg(&init_script);
-        c
-    } else {
-        let mut c = Command::new(&args[0]);
-        c.args(&args[1..]);
-        c
-    };
+    let mut cmd = Command::new(&args[0]);
+    if args.len() > 1 {
+        cmd.args(&args[1..]);
+    }
     cmd.current_dir(&cwd);
     cmd.env_clear();
     for e in &env {
@@ -218,6 +212,11 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
                 if !hk.is_empty() {
                     execute_start_container_hooks(Some(hk), &sc_state)?;
                 }
+            }
+
+            // 5. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
+            if use_pid1_init {
+                crate::init::fork_and_init()?;
             }
 
             Ok(())
@@ -447,7 +446,6 @@ fn start_created_container_internal(child: ForkedChild, spec: &OciSpec, containe
     let resources = child.resources.clone();
     let cgroup_path = child.cgroup_path().to_string();
     let poststop_hooks = child.poststop_hooks.clone();
-    let _poststart_hooks = child.poststart_hooks.clone();
     let bundle_path = child.bundle_path().to_string();
 
     // Signal FIFO

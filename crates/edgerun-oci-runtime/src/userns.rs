@@ -1,40 +1,11 @@
 //! User namespace mapping and capability management.
 
-use std::fs;
 use std::io;
 
 use crate::syscalls::{
     cap_name_to_int, do_capset, do_prctl_cap_ambient, do_prctl_cap_bset_drop,
     do_prctl_set_dumpable, do_prctl_set_no_new_privs, prctl_const, setgid, setgroups, setuid,
 };
-
-// ===========================================================================
-// User namespace mapping
-// ===========================================================================
-
-// Note: The uid/gid mapping logic has been moved to container.rs where it
-// serializes mappings to strings (Clone-friendly for FnMut closures).
-
-/// Write a single UID mapping entry to /proc/self/uid_map.
-#[allow(dead_code)]
-pub fn write_uid_map(inside_uid: u32, outside_uid: u32, count: u32) -> io::Result<()> {
-    let content = format!("{} {} {}\n", inside_uid, outside_uid, count);
-    fs::write("/proc/self/uid_map", &content)?;
-    let _ = fs::write("/proc/self/setgroups", "deny");
-    Ok(())
-}
-
-/// Write a single GID mapping entry to /proc/self/gid_map.
-#[allow(dead_code)]
-pub fn write_gid_map(inside_gid: u32, outside_gid: u32, count: u32) -> io::Result<()> {
-    let content = format!("{} {} {}\n", inside_gid, outside_gid, count);
-    fs::write("/proc/self/gid_map", &content)?;
-    Ok(())
-}
-
-// ===========================================================================
-// Security hardening
-// ===========================================================================
 
 /// Set no_new_privs and dumpable flags.
 pub fn apply_security_hardening(no_new_privs: bool) -> io::Result<()> {
