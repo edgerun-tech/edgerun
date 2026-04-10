@@ -252,11 +252,37 @@ use crate::protocol::text_input_v3;
 use crate::protocol::text_input_v3::TextInputState;
 use crate::protocol::input_method_v2;
 use crate::protocol::input_method_v2::IMEState;
+use crate::wire::decode::ArgCursor;
 
 /// Helper: send delete_id to a client when destroying an object.
 fn send_delete_id(server: &mut WaylandServer, client_id: u32, obj_id: u32) {
     if let Some(client) = server.client_mut(client_id) {
         client.send_message(crate::protocol::wl_core::display_delete_id_event(obj_id));
+    }
+}
+
+impl DispatchContext<'_> {
+    /// Create an ArgCursor for the current message.
+    #[inline]
+    pub fn cursor(&self) -> ArgCursor {
+        ArgCursor::from_message(&self.msg)
+    }
+
+    /// Send a message to the client that sent the current request.
+    #[inline]
+    pub fn send(&mut self, msg: wire::Message) {
+        if let Some(client) = self.server.client_mut(self.client_id) {
+            client.send_message(msg);
+        }
+    }
+
+    /// Send a message and flush immediately.
+    #[inline]
+    pub fn send_flush(&mut self, msg: wire::Message) {
+        if let Some(client) = self.server.client_mut(self.client_id) {
+            client.send_message(msg);
+            let _ = client.flush();
+        }
     }
 }
 

@@ -23,6 +23,7 @@ rcgen = "0.13"
 [[bin]]
 name = "h2spec-server"
 path = "src/bin/h2spec-server.rs"
+required-features = ["tls"]
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

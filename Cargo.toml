@@ -16,7 +16,6 @@ members = [
   "crates/edgerun-capabilities",
   "crates/edgerun-capability-policy",
   "crates/edgerun-cec",
-  "crates/edgerun-cfg-if",
   "crates/edgerun-compositor",
   "crates/edgerun-compositor-tests",
   "crates/edgerun-core",

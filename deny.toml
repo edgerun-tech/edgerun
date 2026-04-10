@@ -4,8 +4,8 @@
 # Run:  cargo deny check
 #
 # CRITICAL: serde_json is banned as a direct dependency in this workspace.
-# The edgerun protocol uses CSE-v0 CBOR for all canonicalization.
-# If you need to serialize something for hashing or signing, use CSE-v0.
+# The edgerun protocol uses protobuf for all canonicalization.
+# If you need to serialize something for hashing or signing, use protobuf.
 
 [graph]
 targets = [
