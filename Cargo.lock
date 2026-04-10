@@ -743,6 +743,10 @@ dependencies = [
 [[package]]
 name = "edgerun-css-syntax"
 version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
 
 [[package]]
 name = "edgerun-dhcp"
@@ -871,6 +875,10 @@ version = "0.1.0"
 [[package]]
 name = "edgerun-fonts"
 version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
 
 [[package]]
 name = "edgerun-goodix-fingerprint"
@@ -926,6 +934,10 @@ dependencies = [
 [[package]]
 name = "edgerun-images"
 version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
 
 [[package]]
 name = "edgerun-input"
@@ -1062,6 +1074,10 @@ dependencies = [
 [[package]]
 name = "edgerun-media-queries"
 version = "0.1.0"
+dependencies = [
+ "prost",
+ "prost-types",
+]
 
 [[package]]
 name = "edgerun-mesh"

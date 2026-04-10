@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package edgerun.v0.css.syntax;
+
+/// CSS Syntax Types — generated from CSS Syntax Level 3.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform3.py
+
+/// A CSS token from the tokenizer.
+enum CssTokenType {
+  CSS_TOKEN_TYPE_UNSPECIFIED = 0;
+  Ident = 1; // Identifier (e.g., font-family)
+  Function = 2; // Function name (e.g., rgb(
+  AtKeyword = 3; // @-keyword (e.g., @media
+  Hash = 4; // Hash/id (e.g., #id
+  String = 5; // Quoted string
+  BadString = 6; // Unterminated string
+  Url = 7; // URL token
+  BadUrl = 8; // Unterminated URL
+  Delim = 9; // Delimiter (single char)
+  Number = 10; // Number value
+  Percentage = 11; // Percentage value
+  Dimension = 12; // Number with unit (e.g., 12px
+  UnicodeRange = 13; // Unicode range (e.g., U+0025-00FF
+  Colon = 14; // Colon :
+  Semicolon = 15; // Semicolon ;
+  Comma = 16; // Comma ,
+  OpenParen = 17; // Open parenthesis (
+  CloseParen = 18; // Close parenthesis )
+  OpenSquare = 19; // Open square bracket [
+  CloseSquare = 20; // Close square bracket ]
+  OpenCurly = 21; // Open curly brace {
+  CloseCurly = 22; // Close curly brace }
+  Cdo = 23; // <!-- comment open
+  Cdc = 24; // --> comment close
+  WhiteSpace = 25; // Whitespace
+  Eof = 26; // End of file
+}
+
+/// A CSS token with its value.
+message CssToken {
+  CssTokenType type = 1;
+  optional string value = 2;
+  optional uint32 line = 3;
+  optional uint32 column = 4;
+}
+
+/// Unicode range (e.g., U+0025-00FF).
+message UnicodeRangeMsg {
+  uint32 start = 1;
+  uint32 end = 2;
+}
+
+/// Tokenizer state machine state.
+enum TokenizerState {
+  TOKENIZER_STATE_UNSPECIFIED = 0;
+  DATA = 1;
+  COMMENT = 2;
+  STRING = 3;
+  STRING_STARTING_ESCAPE = 4;
+  URL = 5;
+  URL_BAD = 6;
+  NUMBER = 7;
+  NUMBER_STARTING_DASH = 8;
+  NUMBER_STARTING_DOT = 9;
+  IDENT = 10;
+  AT_KEYWORD = 11;
+  HASH = 12;
+  HASH_ALPHANUMERIC = 13;
+  CDO = 14;
+  CDC = 15;
+  HTML_COMMENT_OPEN = 16;
+  HTML_COMMENT_CLOSE = 17;
+  PERCENTAGE = 18;
+  DIMENSION = 19;
+  UNICODE_RANGE = 20;
+  EOF = 21;
+}

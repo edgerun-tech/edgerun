@@ -1,9 +1,10 @@
 [package]
 name = "edgerun-media-queries"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
-description = "CSS media-queries types generated from W3C spec"
+publish.workspace = true
 
 [dependencies]
+prost = { workspace = true }
+prost-types = { workspace = true }

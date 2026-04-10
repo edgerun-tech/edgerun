@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package edgerun.v0.css.media_queries;
+
+/// CSS Media Query Types — generated from Media Queries Level 4.
+/// DO NOT EDIT. Regenerate with: scripts/generate_web_platform3.py
+
+/// Media type.
+enum MediaType {
+  MEDIA_TYPE_UNSPECIFIED = 0;
+  All = 1;
+  Print = 2;
+  Screen = 3;
+  Speech = 4;
+}
+
+/// Media feature.
+enum MediaFeature {
+  MEDIA_FEATURE_UNSPECIFIED = 0;
+  Width = 1; // Viewport width
+  Height = 2; // Viewport height
+  AspectRatio = 3; // Width-to-height ratio
+  Orientation = 4; // Viewport orientation
+  Resolution = 5; // Device pixel density
+  Scan = 6; // Scanning method
+  Grid = 7; // Grid vs bitmap device
+  Update = 8; // Update frequency
+  OverflowBlock = 9; // Overflow handling
+  OverflowInline = 10; // Inline overflow
+  Color = 11; // Bits per color component
+  ColorIndex = 12; // Entries in color lookup table
+  Monochrome = 13; // Bits per pixel in monochrome
+  ColorGamut = 14; // Supported color gamut
+  InvertedColors = 15; // Colors inverted by OS
+  Pointer = 16; // Pointing device accuracy
+  Hover = 17; // Hover capability
+  AnyPointer = 18; // Any pointing device
+  AnyHover = 19; // Any hover capability
+  PrefersReducedMotion = 20; // Reduced motion preference
+  PrefersReducedTransparency = 21; // Reduced transparency
+  PrefersContrast = 22; // Contrast preference
+  PrefersColorScheme = 23; // Color scheme preference
+  PrefersReducedData = 24; // Reduced data preference
+  DisplayMode = 25; // Display mode
+  Scripting = 26; // Scripting capability
+  DeviceWidth = 27; // Device screen width
+  DeviceHeight = 28; // Device screen height
+}
+
+/// A media feature with optional value.
+message MediaFeatureValue {
+  MediaFeature feature = 1;
+  optional string value = 2;
+}
+
+/// Media condition: Feature, Not, And, Or.
+message MediaCondition {
+  oneof condition {
+    MediaFeatureValue feature = 1;
+    MediaCondition not_condition = 2;
+    MediaConditionList and_condition = 3;
+    MediaConditionList or_condition = 4;
+  }
+}
+
+message MediaConditionList {
+  repeated MediaCondition conditions = 1;
+}
+
+/// A complete media query.
+message MediaQuery {
+  optional MediaType media_type = 1;
+  optional MediaCondition condition = 2;
+}
