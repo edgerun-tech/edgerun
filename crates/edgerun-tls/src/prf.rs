@@ -98,8 +98,9 @@ impl Tls13KeySchedule {
         // derive_secret("derived")
         let derived = self.hash.expand_label(&self.secret, "derived", &[], self.hash.len());
 
-        // handshake_secret = HKDF-Extract(shared_secret, derived)
-        let handshake_secret = self.hash.extract(shared_secret, &derived);
+        // handshake_secret = HKDF-Extract(derived_secret, shared_secret)
+        // Per RFC 8446 §7.1: salt=derived, ikm=shared_secret
+        let handshake_secret = self.hash.extract(&derived, shared_secret);
         self.secret = handshake_secret;
     }
 
@@ -142,19 +143,39 @@ pub struct TrafficKeys {
     pub write_iv: Vec<u8>,
 }
 
-/// Derive AEAD keys for client → server
+/// Derive AEAD keys for client → server (handshake)
+/// Labels per RFC 8446 §7.3: "c hs key", "c hs iv"
 pub fn client_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "c hs key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "c hs iv", &[], iv_len),
     }
 }
 
-/// Derive AEAD keys for server → client
+/// Derive AEAD keys for server → client (handshake)
+/// Labels per RFC 8446 §7.3: "s hs key", "s hs iv"
 pub fn server_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
     TrafficKeys {
-        write_key: hash.expand_label(secret, "key", &[], cipher_key_len),
-        write_iv: hash.expand_label(secret, "iv", &[], iv_len),
+        write_key: hash.expand_label(secret, "s hs key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "s hs iv", &[], iv_len),
+    }
+}
+
+/// Derive AEAD keys for client → server (application data)
+/// Labels per RFC 8446 §7.3: "c ap key", "c ap iv"
+pub fn client_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+    TrafficKeys {
+        write_key: hash.expand_label(secret, "c ap key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "c ap iv", &[], iv_len),
+    }
+}
+
+/// Derive AEAD keys for server → client (application data)
+/// Labels per RFC 8446 §7.3: "s ap key", "s ap iv"
+pub fn server_app_write_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+    TrafficKeys {
+        write_key: hash.expand_label(secret, "s ap key", &[], cipher_key_len),
+        write_iv: hash.expand_label(secret, "s ap iv", &[], iv_len),
     }
 }
 

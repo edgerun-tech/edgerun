@@ -30,7 +30,7 @@ use crate::certificate_gen::CertificateAndKey;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{read_record_header, read_record_fragment};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
-use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys, hmac_sha256, hmac_sha384};
+use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys, client_app_write_keys, server_app_write_keys, hmac_sha256, hmac_sha384};
 use crate::record::{RecordCipher, TlsRecord};
 use crate::{Result, TlsError};
 
@@ -222,8 +222,8 @@ impl ClientHello {
                         }
                     }
                     51 => {
-                        // key_share
-                        // Parse all key shares, prefer SECP256R1 (our only supported group)
+                        // key_share — take the FIRST supported group
+                        // (client's preference order; typically X25519 first)
                         if ext_data_len >= 2 {
                             let ks_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
                             let mut kpos = 2;
@@ -232,12 +232,9 @@ impl ClientHello {
                                 let ke_len = u16::from_be_bytes([ext_data[kpos + 2], ext_data[kpos + 3]]) as usize;
                                 kpos += 4;
                                 if kpos + ke_len <= ext_data.len() {
-                                    if let Ok(g) = NamedGroup::from_wire(group) {
-                                        // Prefer SECP256R1; fall back to first valid group
-                                        if g == NamedGroup::SECP256R1 {
-                                            client_key_share_group = Some(g);
-                                            client_key_share = Some(ext_data[kpos..kpos + ke_len].to_vec());
-                                        } else if client_key_share.is_none() {
+                                    // Take the first group we support
+                                    if client_key_share.is_none() {
+                                        if let Ok(g) = NamedGroup::from_wire(group) {
                                             client_key_share_group = Some(g);
                                             client_key_share = Some(ext_data[kpos..kpos + ke_len].to_vec());
                                         }
@@ -504,16 +501,18 @@ impl ServerHandshake {
         let shared_secret = self.key_pair.as_ref().unwrap().exchange(&self.client_key_share)?;
         let hash = self.hasher();
 
-        // Compute transcript hash for key derivation
-        let ch_hash = hash.hash(&self.ch_msg);
-        let sh_hash = hash.hash(&self.sh_msg);
+        // Compute transcript hash: ClientHello || ServerHello
+        let mut transcript = Vec::new();
+        transcript.extend_from_slice(&self.ch_msg);
+        transcript.extend_from_slice(&self.sh_msg);
+        let transcript_hash = hash.hash(&transcript);
 
         let mut ks = Tls13KeySchedule::new(hash.clone());
-        ks.advance_to_handshake(&shared_secret, &ch_hash, &sh_hash);
+        ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
 
-        // Server handshake traffic secret (note: server uses "s hs traffic" label)
-        let server_hs_secret = ks.server_handshake_traffic_secret(&ch_hash);
-        let client_hs_secret = ks.client_handshake_traffic_secret(&ch_hash);
+        // Server handshake traffic secret
+        let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
+        let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
 
         let server_hs_keys = server_write_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &hash);
         let client_hs_keys = client_write_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &hash);
@@ -533,8 +532,8 @@ impl ServerHandshake {
         let server_app = ks.server_app_traffic_secret();
         let client_app = ks.client_app_traffic_secret();
 
-        let server_app_keys = server_write_keys(&server_app, self.cipher_suite.key_len(), 12, &hash);
-        let client_app_keys = client_write_keys(&client_app, self.cipher_suite.key_len(), 12, &hash);
+        let server_app_keys = server_app_write_keys(&server_app, self.cipher_suite.key_len(), 12, &hash);
+        let client_app_keys = client_app_write_keys(&client_app, self.cipher_suite.key_len(), 12, &hash);
 
         // Store final ciphers
         self.write_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
@@ -559,9 +558,11 @@ impl ServerHandshake {
             return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
         }
 
-        // Check cipher suite compatibility
+        // Check cipher suite compatibility - prefer AES-128 for maximum compatibility
         let common_suite = ch.cipher_suites.iter()
-            .find(|cs| matches!(cs, CipherSuite::TLS_AES_128_GCM_SHA256 | CipherSuite::TLS_AES_256_GCM_SHA384))
+            .find(|cs| matches!(cs, CipherSuite::TLS_AES_128_GCM_SHA256))
+            .or_else(|| ch.cipher_suites.iter()
+                .find(|cs| matches!(cs, CipherSuite::TLS_AES_256_GCM_SHA384)))
             .cloned();
 
         self.cipher_suite = common_suite.ok_or_else(||
@@ -943,7 +944,7 @@ mod tests {
     #[test]
     fn test_client_hello_roundtrip() {
         let random = [0x42u8; 32];
-        let key_pair = EcdhKeyPair::generate().unwrap();
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let public_key = key_pair.public_key_bytes();
 
         let ch_bytes = ClientHelloBuilder::new(random, "example.com")
@@ -969,7 +970,7 @@ mod tests {
     fn test_client_hello_parses_from_real_client() {
         // Build a ClientHello the same way the real client does
         let random = [0xABu8; 32];
-        let key_pair = EcdhKeyPair::generate().unwrap();
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let public_key = key_pair.public_key_bytes();
 
         let ch_bytes = ClientHelloBuilder::new(random, "localhost")
@@ -995,7 +996,7 @@ mod tests {
     #[test]
     fn test_server_hello_roundtrip() {
         let random = [0xCDu8; 32];
-        let key_pair = EcdhKeyPair::generate().unwrap();
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let public_key = key_pair.public_key_bytes();
 
         let sh_bytes = build_server_hello(
@@ -1023,8 +1024,8 @@ mod tests {
 
     #[test]
     fn test_ecdh_exchange() {
-        let client_keys = EcdhKeyPair::generate().unwrap();
-        let server_keys = EcdhKeyPair::generate().unwrap();
+        let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
+        let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
 
         let client_pub = client_keys.public_key_bytes();
         let server_pub = server_keys.public_key_bytes();
@@ -1185,7 +1186,7 @@ mod tests {
     #[test]
     fn test_client_hello_parses_all_extensions() {
         let random = [0x55u8; 32];
-        let key_pair = EcdhKeyPair::generate().unwrap();
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let public_key = key_pair.public_key_bytes();
 
         let ch_bytes = ClientHelloBuilder::new(random, "test.example.com")
@@ -1210,7 +1211,7 @@ mod tests {
     #[test]
     fn test_server_hello_cipher_suite_parsed() {
         let random = [0x77u8; 32];
-        let key_pair = EcdhKeyPair::generate().unwrap();
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let public_key = key_pair.public_key_bytes();
 
         // Test with AES-256
@@ -1263,8 +1264,8 @@ mod tests {
     #[test]
     fn test_full_handshake_encrypted_messages_decryptable() {
         let _cert = generate_self_signed(&["localhost"]);
-        let client_keys = EcdhKeyPair::generate().unwrap();
-        let server_keys = EcdhKeyPair::generate().unwrap();
+        let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
+        let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let client_random = [0xCCu8; 32];
         let server_random = [0xDDu8; 32];
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
@@ -1323,8 +1324,8 @@ mod tests {
     #[test]
     fn test_handshake_transcript_transcript_match() {
         let cert = generate_self_signed(&["localhost"]);
-        let client_keys = EcdhKeyPair::generate().unwrap();
-        let server_keys = EcdhKeyPair::generate().unwrap();
+        let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
+        let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let client_random = [0xAAu8; 32];
         let server_random = [0xBBu8; 32];
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;

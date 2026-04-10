@@ -3,7 +3,7 @@
 use edgerun_tls::cipher::{CipherSuite, NamedGroup};
 use edgerun_tls::certificate_gen::generate_self_signed;
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
-use edgerun_tls::key_exchange::EcdhKeyPair;
+use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use edgerun_tls::prf::{Hasher, Tls13KeySchedule, server_write_keys, hmac_sha256};
 use edgerun_tls::record::{RecordCipher, TlsRecord};
 use edgerun_tls::server::{build_server_hello, build_encrypted_extensions, build_certificate_message, build_certificate_verify, build_finished_message, ClientHello};
@@ -17,7 +17,7 @@ use edgerun_tls::server::{build_server_hello, build_encrypted_extensions, build_
 #[test]
 fn test_client_hello_rfc8446_format() {
     let random = [0xAAu8; 32];
-    let key_pair = EcdhKeyPair::generate().unwrap();
+    let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let public_key = key_pair.public_key_bytes();
 
     let ch_bytes = ClientHelloBuilder::new(random, "example.com")
@@ -58,7 +58,7 @@ fn test_client_hello_rfc8446_format() {
 #[test]
 fn test_client_hello_required_extensions() {
     let random = [0xBBu8; 32];
-    let key_pair = EcdhKeyPair::generate().unwrap();
+    let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let public_key = key_pair.public_key_bytes();
 
     let ch_bytes = ClientHelloBuilder::new(random, "test.example.com")
@@ -89,7 +89,7 @@ fn test_client_hello_required_extensions() {
 #[test]
 fn test_server_hello_rfc8446_format() {
     let random = [0xCCu8; 32];
-    let key_pair = EcdhKeyPair::generate().unwrap();
+    let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let public_key = key_pair.public_key_bytes();
 
     let sh_bytes = build_server_hello(
@@ -252,7 +252,7 @@ fn test_key_schedule_full_derivation() {
 /// Each encrypted handshake message must be decryptable with the correct keys.
 #[test]
 fn test_encrypted_extensions_roundtrip() {
-    let server_keys = EcdhKeyPair::generate().unwrap();
+    let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
     let hash = Hasher::Sha256;
 
@@ -342,8 +342,8 @@ fn test_finished_verify_data() {
 #[test]
 fn test_handshake_message_sequence() {
     let cert = generate_self_signed(&["localhost"]);
-    let client_keys = EcdhKeyPair::generate().unwrap();
-    let server_keys = EcdhKeyPair::generate().unwrap();
+    let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
+    let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let hash = Hasher::Sha256;
     let server_random = [0x22u8; 32];
     let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
@@ -443,7 +443,7 @@ fn test_tls_record_serialization_exact() {
 #[test]
 fn test_client_hello_extensions_present_in_wire() {
     let random = [0xFFu8; 32];
-    let key_pair = EcdhKeyPair::generate().unwrap();
+    let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let public_key = key_pair.public_key_bytes();
 
     let ch_bytes = ClientHelloBuilder::new(random, "ext-test.example.com")

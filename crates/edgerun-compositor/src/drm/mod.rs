@@ -7,6 +7,7 @@ pub mod ioctl;
 pub mod device;
 pub mod dumb;
 pub mod kms;
+pub mod syncobj;
 
 /// Get the size of a file descriptor via fstat.
 pub fn fd_size(fd: RawFd) -> io::Result<usize> {

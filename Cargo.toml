@@ -75,6 +75,7 @@ members = [
   "crates/edgerun-layout",
   "crates/edgerun-rasterizer",
   "crates/edgerun-demo",
+  "crates/edgerun-html-render",
   "crates/edgerun-linux-cec",
   "crates/edgerun-linux-gpu",
   "crates/edgerun-linux-netif",

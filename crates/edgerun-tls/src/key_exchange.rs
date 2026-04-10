@@ -6,7 +6,7 @@ use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::rand_core::OsRng;
 use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::x25519_dalek::{EphemeralSecret as X25519Secret, PublicKey as X25519PublicKey};
+use edgerun_crypto::x25519_dalek::{StaticSecret as X25519Secret, PublicKey as X25519PublicKey};
 
 /// Named group for key exchange
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

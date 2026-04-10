@@ -50,8 +50,8 @@ use edgerun_crypto::rand_core::RngCore;
 use crate::certificate::Certificate;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{ClientHelloBuilder, ServerHello};
-use crate::key_exchange::EcdhKeyPair;
-use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys};
+use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys, client_app_write_keys, server_app_write_keys};
 use crate::record::{RecordCipher, TlsRecord};
 
 pub use alert::{Alert, AlertLevel};
@@ -279,7 +279,7 @@ struct Handshake {
 impl Handshake {
     fn new(stream: TcpStream, server_name: &str) -> Self {
         let client_random = generate_random();
-        let key_pair = EcdhKeyPair::generate().expect("ECDH key generation failed");
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519).expect("ECDH key generation failed");
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
 
         // Dummy ciphers — replaced after key derivation
@@ -312,16 +312,16 @@ impl Handshake {
         // 3. Derive handshake keys
         let shared_secret = self.key_pair.exchange(&self.server_key_share()?)?;
         let hash = self.hasher();
-        let mut ks = Tls13KeySchedule::new(hash.clone());
-        ks.advance_to_handshake(&shared_secret, &self.ch_hash, &self.sh_hash);
 
-        // Note: The transcript hash for handshake traffic secret derivation should include
-        // all handshake messages so far (ClientHello || ServerHello). The current implementation
-        // uses ch_hash which is only ClientHello. This is a known limitation of this minimal client.
-        // In practice, this still works because both client and server derive the same keys
-        // from the same (incomplete) transcript.
-        let client_hs_secret = ks.client_handshake_traffic_secret(&self.ch_hash);
-        let server_hs_secret = ks.server_handshake_traffic_secret(&self.ch_hash);
+        // Compute transcript hash: ClientHello || ServerHello
+        // self.transcript already contains both messages at this point
+        let transcript_hash = hash.hash(&self.transcript);
+
+        let mut ks = Tls13KeySchedule::new(hash.clone());
+        ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
+
+        let client_hs_secret = ks.client_handshake_traffic_secret(&transcript_hash);
+        let server_hs_secret = ks.server_handshake_traffic_secret(&transcript_hash);
 
         let client_hs_keys = client_write_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &hash);
         let server_hs_keys = server_write_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &hash);
@@ -340,8 +340,8 @@ impl Handshake {
         let client_app = ks.client_app_traffic_secret();
         let server_app = ks.server_app_traffic_secret();
 
-        let client_app_keys = client_write_keys(&client_app, self.cipher_suite.key_len(), 12, &hash);
-        let server_app_keys = server_write_keys(&server_app, self.cipher_suite.key_len(), 12, &hash);
+        let client_app_keys = client_app_write_keys(&client_app, self.cipher_suite.key_len(), 12, &hash);
+        let server_app_keys = server_app_write_keys(&server_app, self.cipher_suite.key_len(), 12, &hash);
 
         self.write_cipher = RecordCipher::new(&client_app_keys.write_key, &client_app_keys.write_iv)?;
         self.read_cipher = RecordCipher::new(&server_app_keys.write_key, &server_app_keys.write_iv)?;
@@ -351,8 +351,12 @@ impl Handshake {
 
     fn send_client_hello(&mut self) -> Result<()> {
         let public_key = self.key_pair.public_key_bytes();
+        let group = match self.key_pair.group() {
+            KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
+            KeyExchangeGroup::X25519 => NamedGroup::X25519,
+        };
         let ch = ClientHelloBuilder::new(self.client_random, &self.server_name)
-            .key_share(&public_key, NamedGroup::SECP256R1)
+            .key_share(&public_key, group)
             .build()?;
 
         // Compute ch_hash = SHA-256(ClientHello message)

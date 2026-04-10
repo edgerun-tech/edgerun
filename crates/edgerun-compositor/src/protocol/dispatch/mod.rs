@@ -30,7 +30,7 @@ mod xdg_shell;
 mod xdg_ext;
 mod xdg_foreign;
 mod wp_ext;
-mod linux_ext;
+pub mod linux_ext;
 mod zwp_ext;
 mod wlroots_ext;
 mod ime;
@@ -199,6 +199,7 @@ pub struct DispatchContext<'a> {
     pub server: &'a mut WaylandServer,
     pub client_id: u32,
     pub msg: wire::Message,
+    pub drm_fd: std::os::fd::RawFd,
     pub surfaces: &'a mut SurfaceTree,
     pub buffers: &'a mut BufferRegistry,
     pub shm: &'a mut ShmManager,
@@ -265,6 +266,7 @@ pub fn process_message(
     server: &mut WaylandServer,
     client_id: u32,
     msg: wire::Message,
+    drm_fd: std::os::fd::RawFd,
     surfaces: &mut SurfaceTree,
     buffers: &mut BufferRegistry,
     shm: &mut ShmManager,
@@ -323,6 +325,7 @@ pub fn process_message(
         server,
         client_id,
         msg,
+        drm_fd,
         surfaces,
         buffers,
         shm,

@@ -458,6 +458,11 @@ fn main() {
             pending_render = false;
             flip_pending = true;
 
+            // Wait for acquire fences before compositing
+            for surface in surfaces.surfaces() {
+                shell.syncobj_state.wait_acquire(drm_device.as_raw_fd(), surface.id);
+            }
+
             // Render all surfaces and page flip
             if let Some(gl) = gl_compositor.as_mut() {
                 // GPU-accelerated path
@@ -606,6 +611,7 @@ fn main() {
                         for msg in messages {
                             dispatch::process_message(
                                 &mut server, client_id, msg,
+                                drm_device.as_raw_fd(),
                                 &mut surfaces, &mut buffers, &mut shm, &mut shell,
                                 &mut seat_obj, &mut keymap_obj, &mut modifiers,
                                 &mut cursor,
@@ -732,6 +738,11 @@ fn main() {
 
                     flip_pending = false;
                     pending_render = true;
+
+                    // Signal release fences for all surfaces after page flip completes
+                    for surface in surfaces.surfaces() {
+                        shell.syncobj_state.signal_release(drm_device.as_raw_fd(), surface.id);
+                    }
                 }
 
                 EventSource::EvdevDevice(dev_id) => {

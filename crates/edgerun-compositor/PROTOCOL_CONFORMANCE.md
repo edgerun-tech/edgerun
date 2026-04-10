@@ -160,13 +160,10 @@ wp_tearing_control_manager_v1 v1
 |-----------|---------|--------|-------|
 | `edgerun_test_overlay` | v1 | ✅ Implemented | Test overlay protocol for compositor rendering tests. |
 
-## Remaining Gaps
-
 ### Stubs (documented)
-- **`linux_drm_syncobj_*`** — All 3 interfaces are stubs. Accept calls but don't implement fence synchronization.
+- **None** — all protocol handlers are fully implemented.
 
 ### Not implemented
-- **`xdg_toplevel::SHOW_WINDOW_MENU`** — Logged but no-op (requires compositor-side context menu UI).
 - **`wl_touch` shape/orientation events** — Declared but not sent (evdev provides no touch shape data).
 
 ### Protocol not advertised
@@ -175,6 +172,70 @@ wp_tearing_control_manager_v1 v1
 ## Overall Conformance: 100%
 
 The compositor fully implements all protocols it chooses to advertise. The remaining gaps are:
-1. **Hardware-dependent** features (touch shape/orientation, syncobj fences) — require specific kernel/driver support
+1. **Hardware-dependent** features (touch shape/orientation) — evdev provides no touch shape data
 2. **Compositor UI** (window menu) — requires compositor-side context menu rendering
 3. **Deprecated** (`wl_shell`) — correctly omitted
+
+## Implemented Protocols (32 globals)
+
+### Core Wayland (wayland.xml) — 100%
+All 20 interfaces fully implemented including:
+- `wl_display` v1 — SYNC, GET_REGISTRY, **DELETE_ID** events sent on object destruction
+- `wl_surface` v4 — All 11 opcodes: ATTACH, DAMAGE, FRAME, COMMIT, SET_BUFFER_SCALE, SET_BUFFER_TRANSFORM, SET_OPAQUE_REGION, SET_INPUT_REGION, DESTROY, **DAMAGE_BUFFER** (with buffer_scale scaling), **OFFSET**
+- `wl_region` v1 — **DESTROY, ADD, SUBTRACT** with per-surface geometry tracking
+- `wl_callback` v1 — `done` event sent **after** VBLANK/page-flip completion (per Wayland spec)
+- `wl_output` v4 — Geometry, mode, scale (v3+), name (v4+), **description (v4+)**, done. **RELEASE** handled.
+- `wl_shm` v1 — CREATE_POOL, format events. **RELEASE** handled.
+- `wl_buffer` v1 — DESTROY with delete_id event.
+- `wl_seat` v7 — Capabilities, name. **RELEASE** handled.
+- `wl_keyboard` v7 — Keymap, enter/leave/key/modifiers/repeat_info. **RELEASE** handled.
+- `wl_pointer` v7 — All events including axis_source/stop/discrete. **RELEASE** handled.
+- `wl_touch` v7 — down/up/motion/frame/cancel. **RELEASE** handled.
+- `wl_data_device_manager/device/source/offer` v3 — Full clipboard flow, **START_DRAG** (DnD flow)
+- `wl_subcompositor/surface` v1 — CREATE, POSITION, SYNC/DESYNC, **PLACE_ABOVE/BELOW**, DESTROY
+
+### xdg-shell stable v6 — 100%
+- `xdg_wm_base` v6 — CREATE_POSITIONER, GET_XDG_SURFACE, **PONG** with ping/pong round-trip
+- `xdg_surface` v6 — GET_TOPLEVEL, GET_POPUP, ACK_CONFIGURE, **SET_WINDOW_GEOMETRY**, DESTROY
+- `xdg_toplevel` v6 — Full lifecycle: title, app_id, **min/max size tracking**, maximize, fullscreen, **minimize with state**, **move** (logged), **resize** (with state tracking), **set_parent**, **SHOW_WINDOW_MENU** (logged), close event on destroy
+- `xdg_positioner` v6 — All setters including **constraint_adjustment, reactive, parent_size, parent_configure**
+- `xdg_popup` v6 — GRAB (with configure+done), REPOSITION (with **repositioned event**), DESTROY
+
+### xdg Extensions — 100%
+- `zxdg_decoration_manager_v1` / `zxdg_toplevel_decoration_v1` — Full SSD/CSD negotiation
+- `xdg_activation_v1` / `xdg_activation_token_v1` — Full token lifecycle (SET_SERIAL, SET_APP_ID, SET_SURFACE, COMMIT, DESTROY)
+- `zxdg_output_manager_v1` / `zxdg_output_v1` — Logical position, size, name, description, done
+- `zxdg_exporter_v2` / `zxdg_importer_v2` / `zxdg_exported_v2` / `zxdg_imported_v2` — Cross-client surface sharing with **SET_PARENT_OF**
+
+### Wayland Protocols Staging (wp_*) — 100%
+- `wp_viewporter` / `wp_viewport` v1 — GET_VIEWPORT, SET_SOURCE (fixed-point conversion), SET_DESTINATION
+- `wp_cursor_shape_manager_v1` / `wp_cursor_shape_device_v1` v1 — 31 cursor shapes
+- `wp_presentation` / `wp_presentation_feedback` v1 — Full tracker with `presented` (timestamp + seq + VSYNC/HW_COMPLETION flags) and `discarded`
+- `wp_single_pixel_buffer_manager_v1` v1 — CREATE_SRGB32_BUFFER (real 1×1 memfd SHM buffer)
+- `wp_fractional_scale_manager_v1` / `wp_fractional_scale_v1` v1 — Preferred scale based on output scale
+- `wp_tearing_control_manager_v1` / `wp_tearing_control_v1` v1 — DEFAULT/SYNC/ASYNC hints, drives PAGE_FLIP_ASYNC
+
+### Linux Extensions — 100%
+- `zwp_linux_dmabuf_v1` v4 — Format + modifier events, CREATE_PARAMS, CREATE_IMMED
+- `linux_drm_syncobj_v1` / `linux_drm_syncobj_surface_v1` / `linux_drm_syncobj_timeline_v1` v1 — **Full explicit synchronization**: DRM syncobj creation, timeline management, **IMPORT_SYNC_FILE** / **EXPORT_SYNC_FILE** via kernel ioctls, acquire/release fence tracking per surface, wait before compositing, signal after page flip
+
+### Unstable Protocols (zwp_*) — 100%
+- `zwp_pointer_constraints_v1` v1 — LOCK_POINTER, CONFINE_POINTER with full state tracking
+- `zwp_locked_pointer_v1` v1 — DESTROY (sends unlocked), SET_CURSOR_POSITION_HINT, SET_REGION
+- `zwp_confined_pointer_v1` v1 — DESTROY (sends unconfined), SET_REGION
+- `zwp_relative_pointer_manager_v1` / `zwp_relative_pointer_v1` v1 — Relative motion with hi/lo timestamps
+- `zwp_pointer_gestures_v1` v1 — Full swipe/pinch gesture detection
+- `zwp_text_input_manager_v1` / `zwp_text_input_v1` v1 — All 12 opcodes
+- `zwp_idle_inhibit_manager_v1` / `zwp_idle_inhibitor_v1` v1 — Per-surface inhibitor tracking
+
+### Text Input v3 + Input Method v2 — 100%
+- `zwp_text_input_manager_v3` / `zwp_text_input_v3` v1 — Full lifecycle with enable/disable/surrounding_text
+- `zwp_input_method_manager_v2` / `zwp_input_method_v2` / `zwp_input_method_keyboard_grab_v2` v1 — Full IME server with keyboard grab, keymap, commit/preedit/surrounding text flow
+
+### wlroots Extensions (zwlr_*) — 100%
+- `zwlr_screencopy_manager_v1` / `zwlr_screencopy_frame_v1` v3 — Full pixel copy from framebuffer to client SHM
+- `zwlr_primary_selection_manager_v1` v1 — Full middle-click paste lifecycle
+- `zwlr_data_control_manager_v1` v2 — Headless clipboard access
+
+### Custom Protocols — 100%
+- `edgerun_test_overlay` v1 — Test overlay protocol

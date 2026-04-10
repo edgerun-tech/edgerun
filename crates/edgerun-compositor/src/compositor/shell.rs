@@ -2,6 +2,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::protocol::dispatch::linux_ext::SyncobjState;
+
 /// A toplevel window.
 #[derive(Debug)]
 pub struct Toplevel {
@@ -170,6 +172,11 @@ pub struct Shell {
     pub pending_token_serial: HashMap<u32, u64>,
     pub pending_token_app_id: HashMap<u32, String>,
     pub pending_token_surface: HashMap<u32, u32>,
+
+    // DRM syncobj state
+    pub syncobj_state: SyncobjState,
+    /// Map from syncobj_surface object ID to wl_surface ID.
+    pub syncobj_surface_map: HashMap<u32, u32>,
 }
 
 /// Positioner state from xdg_positioner protocol.
@@ -216,6 +223,8 @@ impl Shell {
             pending_token_serial: HashMap::new(),
             pending_token_app_id: HashMap::new(),
             pending_token_surface: HashMap::new(),
+            syncobj_state: SyncobjState::new(),
+            syncobj_surface_map: HashMap::new(),
         }
     }
 

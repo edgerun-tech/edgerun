@@ -127,6 +127,6 @@ impl NamedGroup {
 
     /// Client-preferred groups in order
     pub fn client_default() -> Vec<Self> {
-        vec![NamedGroup::SECP256R1, NamedGroup::X25519, NamedGroup::SECP384R1]
+        vec![NamedGroup::X25519, NamedGroup::SECP256R1, NamedGroup::SECP384R1]
     }
 }

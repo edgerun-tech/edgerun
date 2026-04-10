@@ -26,6 +26,77 @@ pub const DRM_IOCTL_MODE_GETPLANE: c_int = 0xc02064b6u32 as c_int;
 // Alias for backward compatibility
 pub const DRM_IOCTL_MODE_GETPLANES: c_int = DRM_IOCTL_MODE_GETPLANE;
 
+// DRM syncobj ioctls (kernel 4.12+ — explicit synchronization)
+pub const DRM_IOCTL_SYNCOBJ_CREATE: c_int = 0xc00c644bu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_DESTROY: c_int = 0xc004644cu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD: c_int = 0xc010644du32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE: c_int = 0xc00c644eu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT: c_int = 0x40286457u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL: c_int = 0x40286458u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_QUERY: c_int = 0xc018645cu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_IMPORT_SYNC_FILE: c_int = 0xc008645du32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_EXPORT_SYNC_FILE: c_int = 0xc008645eu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_WAIT: c_int = 0xc018644fu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_RESET: c_int = 0xc0086450u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_SIGNAL: c_int = 0xc0086451u32 as c_int;
+
+// ─── Syncobj structs ────────────────────────────────────────
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DrmSyncobjCreate {
+    pub flags: u32,
+    pub handle: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DrmSyncobjDestroy {
+    pub handle: u32,
+    pub pad: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DrmSyncobjFdToHandle {
+    pub fd: c_int,
+    pub handle: u32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DrmSyncobjImportSyncFile {
+    pub handle: u32,
+    pub fd: c_int,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DrmSyncobjExportSyncFile {
+    pub handle: u32,
+    pub fd: c_int,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DrmSyncobjTimelineWait {
+    pub handles_ptr: *mut u32,
+    pub timelines_ptr: *mut u64,
+    pub timeout_nsec: u64,
+    pub flags: u32,
+    pub count_handles: u32,
+    pub pad: [u8; 8],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct DrmSyncobjTimelineSignal {
+    pub handles_ptr: *mut u32,
+    pub timelines_ptr: *mut u64,
+    pub count_handles: u32,
+    pub flags: u32,
+}
+
 // ─── Struct definitions (matching kernel uapi exactly for 64-bit x86_64) ──
 
 #[repr(C)]
@@ -241,6 +312,17 @@ pub struct DrmModeAtomic {
     pub user_data: u64,
 }
 // sizeof = 56 ✓
+
+pub mod syncobj {
+    /// Timeline is a monotonic counter (not binary semaphore).
+    pub const CREATE_SIGNALED: u32 = 1 << 0;
+    /// Wait for any handle to be signaled (vs all).
+    pub const WAIT_ANY: u32 = 1 << 0;
+    /// Wait for submission (not yet signaled).
+    pub const WAIT_FOR_SUBMIT: u32 = 1 << 1;
+    /// Wait available (monotonic timeline).
+    pub const WAIT_AVAILABLE: u32 = 1 << 2;
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
