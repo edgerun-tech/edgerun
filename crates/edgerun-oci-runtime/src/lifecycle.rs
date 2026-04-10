@@ -37,7 +37,7 @@ use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as
 fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
     spec.linux.as_ref()
         .and_then(|l| l.hooks.as_ref())
-        .map(|h| h.clone())
+        .cloned()
         .unwrap_or_default()
 }
 
@@ -54,7 +54,7 @@ pub fn run_prestart_hooks(spec: &OciSpec, container_id: &str) -> io::Result<()> 
     if let Some(ref prestart) = hooks.prestart {
         if !prestart.is_empty() {
             if let Err(e) = execute_prestart_hooks(Some(prestart), &state) {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("prestart hook failed: {}", e)));
+                return Err(io::Error::other(format!("prestart hook failed: {}", e)));
             }
         }
     }
@@ -74,7 +74,7 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
     if let Some(ref create_runtime) = hooks.create_runtime {
         if !create_runtime.is_empty() {
             if let Err(e) = execute_create_runtime_hooks(Some(create_runtime), &state) {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("createRuntime hook failed: {}", e)));
+                return Err(io::Error::other(format!("createRuntime hook failed: {}", e)));
             }
         }
     }
@@ -301,7 +301,7 @@ pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32) -> io::R
 pub fn signal_start(container_id: &str) -> io::Result<()> {
     let fifo = fifo_path(container_id);
     let mut fifo_file = fs::File::create(&fifo)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("failed to open start FIFO: {}", e)))?;
+        .map_err(|e| io::Error::other(format!("failed to open start FIFO: {}", e)))?;
     let _ = fifo_file.write_all(b"go\n");
     let _ = fifo_file.flush();
     // Keep the FIFO open briefly to ensure the reader gets the data
@@ -341,7 +341,7 @@ pub fn run_poststart_hooks(spec: &OciSpec, container_id: &str, pid: u32) -> io::
         if !poststart.is_empty() {
             if let Err(e) = execute_poststart_hooks(Some(poststart), &state) {
                 let _ = unsafe { crate::syscalls::kill(pid as std::os::raw::c_int, crate::syscalls::SIGKILL) };
-                return Err(io::Error::new(io::ErrorKind::Other, format!("poststart hook failed: {}", e)));
+                return Err(io::Error::other(format!("poststart hook failed: {}", e)));
             }
         }
     }

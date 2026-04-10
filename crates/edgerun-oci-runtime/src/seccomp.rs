@@ -331,7 +331,7 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
     insns.push(bpf_insn(0x20, 0, 0, 4));
 
     // 2. Check architectures
-    let archs = spec.architectures.as_ref().map(|a| a.as_slice()).unwrap_or(&[]);
+    let archs = spec.architectures.as_deref().unwrap_or(&[]);
     let skip_past_arch_check: usize = if archs.is_empty() {
         1 // skip RET_KILL if not matching
     } else {
@@ -352,7 +352,7 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
     insns.push(bpf_insn(0x20, 0, 0, 0));
 
     // 4. Build syscall rules with argument filters
-    let entries = spec.syscalls.as_ref().map(|s| s.as_slice()).unwrap_or(&[]);
+    let entries = spec.syscalls.as_deref().unwrap_or(&[]);
     let default_action = spec.default_action.as_ref()
         .unwrap_or(&OciSeccompAction::Kill);
     let default_ret = action_to_bpf(default_action, spec.default_errno_ret);
@@ -361,7 +361,7 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
         let Some(names) = entry.names.as_ref() else { continue };
         let action = entry.action.as_ref().unwrap_or(default_action);
         let ret_val = action_to_bpf(action, entry.errno_ret);
-        let args = entry.args.as_ref().map(|a| a.as_slice()).unwrap_or(&[]);
+        let args = entry.args.as_deref().unwrap_or(&[]);
 
         // Count how many instructions this syscall entry will generate
         // Per syscall name: 1 (JEQ) + arg_check_count + 1 (RET)
@@ -381,8 +381,8 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                     .position(|n| n == name).unwrap_or(0) - 1;
                 count += remaining_in_entry * per_syscall_insns;
                 // For remaining entries
-                for j in (i + 1)..entries.len() {
-                    if let Some(e) = entries[j].names.as_ref() {
+                for entry in entries.iter().skip(i + 1) {
+                    if let Some(e) = entry.names.as_ref() {
                         count += e.len();
                     }
                 }
@@ -671,11 +671,11 @@ pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<()>
         seccomp_bpf_prog()
     };
 
-    let ret = do_seccomp(
+    let ret = unsafe { do_seccomp(
         SECCOMP_SET_MODE_FILTER,
         SECCOMP_FILTER_FLAG_TSYNC,
         prog.as_ptr() as *const c_void,
-    );
+    ) };
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 

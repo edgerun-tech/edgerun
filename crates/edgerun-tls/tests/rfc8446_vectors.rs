@@ -278,12 +278,10 @@ fn test_resumption_master_secret() {
 fn test_resumption_secret() {
     let hash = Hasher::Sha256;
     let v = vectors();
-    // The resumption secret uses the ticket_nonce as context. The vectors use nonce = 00.
-    // But the context for expand_label is the Hash(messages), not the raw nonce.
-    // For NewSessionTicket, the context is the ticket_nonce itself (not hashed).
-    // So we use expand_label directly with the nonce as context.
+    // The ticket_nonce in the vectors is 2 bytes: [0x00, 0x00]
+    // (from the NewSessionTicket: ticket_nonce_length=2, ticket_nonce=00 00)
     assert_eq!(
-        hash.expand_label(&v.resumption_master_secret, "resumption", &[0x00], hash.len()),
+        hash.expand_label(&v.resumption_master_secret, "resumption", &[0x00, 0x00], hash.len()),
         v.resumption_secret
     );
 }
