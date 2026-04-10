@@ -43,6 +43,9 @@ pub use sec1;
 pub use ff;
 pub use group;
 pub use rfc6979;
+pub use x25519_dalek;
+pub use curve25519_dalek;
+pub use chacha20poly1305;
 
 // ---------------------------------------------------------------------------
 // Signature trait abstraction

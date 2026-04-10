@@ -58,8 +58,12 @@ pub fn handle_imported(ctx: &mut DispatchContext) {
             }
         }
         xdg_foreign::imported_request::SET_PARENT_OF => {
-            // TODO: Validate that the surface handle exists and is visible
-            let _ = ctx.msg;
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let child_surface_id = cursor_obj.object().unwrap_or(0);
+            // Cross-client parent-child relationship: set the parent of child_surface_id
+            // to the surface associated with this exported handle.
+            // For now, log the relationship. Full validation requires tracking exported handles.
+            eprintln!("[edgerun-compositor] xdg_foreign SET_PARENT_OF: child_surface={}", child_surface_id);
         }
         _ => {}
     }

@@ -5,7 +5,6 @@
 
 use std::fs;
 use std::io;
-use std::os::raw::c_int;
 use std::process::Command;
 
 use crate::state::load_state;

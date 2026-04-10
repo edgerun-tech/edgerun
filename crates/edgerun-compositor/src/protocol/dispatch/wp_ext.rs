@@ -23,7 +23,11 @@ pub fn handle_viewporter(ctx: &mut DispatchContext) {
             }
             ctx.client_viewporter_ids.insert(ctx.client_id, viewport_id);
         }
-        wp_viewporter::viewporter_request::DESTROY => {}
+        wp_viewporter::viewporter_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -69,7 +73,11 @@ pub fn handle_cursor_shape_manager(ctx: &mut DispatchContext) {
             }
             ctx.client_cursor_shape_device_ids.insert(ctx.client_id, device_id);
         }
-        wp_cursor_shape::cursor_shape_manager_request::DESTROY => {}
+        wp_cursor_shape::cursor_shape_manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -101,7 +109,11 @@ pub fn handle_presentation(ctx: &mut DispatchContext) {
             }
             ctx.presentation_tracker.register(surface_id, feedback_id, ctx.client_id);
         }
-        wp_presentation_time::presentation_request::DESTROY => {}
+        wp_presentation_time::presentation_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -145,7 +157,11 @@ pub fn handle_single_pixel_buffer_manager(ctx: &mut DispatchContext) {
                 eprintln!("[edgerun-compositor] Failed to create memfd for single pixel buffer");
             }
         }
-        single_pixel_buffer::manager_request::DESTROY => {}
+        single_pixel_buffer::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -177,7 +193,11 @@ pub fn handle_fractional_scale_manager(ctx: &mut DispatchContext) {
                 let _ = client.flush();
             }
         }
-        fractional_scale::manager_request::DESTROY => {}
+        fractional_scale::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -204,7 +224,11 @@ pub fn handle_tearing_control_manager(ctx: &mut DispatchContext) {
             }
             ctx.client_tearing_control_ids.insert(control_id, surface_id);
         }
-        tearing_control::manager_request::DESTROY => {}
+        tearing_control::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

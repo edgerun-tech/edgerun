@@ -55,8 +55,38 @@ pub fn handle_subsurface(ctx: &mut DispatchContext) {
                 sub.sync = false;
             }
         }
-        wl_subcompositor::subsurface_request::PLACE_ABOVE => {}
-        wl_subcompositor::subsurface_request::PLACE_BELOW => {}
+        wl_subcompositor::subsurface_request::PLACE_ABOVE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let sibling_id = cursor_obj.object().unwrap_or(0);
+            if let Some(sub) = ctx.shell.subsurfaces.get(ctx.msg.sender_id) {
+                let parent_id = sub.parent_surface_id;
+                let parent_subs: Vec<u32> = ctx.shell.subsurfaces.for_parent(parent_id)
+                    .iter().map(|s| s.surface_id).collect();
+                if let Some(pos) = parent_subs.iter().position(|&s| s == sibling_id) {
+                    if let Some(sub) = ctx.shell.subsurfaces.get_mut(ctx.msg.sender_id) {
+                        sub.stack_index = pos + 1;
+                    }
+                } else if let Some(sub) = ctx.shell.subsurfaces.get_mut(ctx.msg.sender_id) {
+                    sub.stack_index = parent_subs.len();
+                }
+            }
+        }
+        wl_subcompositor::subsurface_request::PLACE_BELOW => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let sibling_id = cursor_obj.object().unwrap_or(0);
+            if let Some(sub) = ctx.shell.subsurfaces.get(ctx.msg.sender_id) {
+                let parent_id = sub.parent_surface_id;
+                let parent_subs: Vec<u32> = ctx.shell.subsurfaces.for_parent(parent_id)
+                    .iter().map(|s| s.surface_id).collect();
+                if let Some(pos) = parent_subs.iter().position(|&s| s == sibling_id) {
+                    if let Some(sub) = ctx.shell.subsurfaces.get_mut(ctx.msg.sender_id) {
+                        sub.stack_index = pos.saturating_sub(1);
+                    }
+                } else if let Some(sub) = ctx.shell.subsurfaces.get_mut(ctx.msg.sender_id) {
+                    sub.stack_index = 0;
+                }
+            }
+        }
         wl_subcompositor::subsurface_request::DESTROY => {
             ctx.shell.subsurfaces.destroy(ctx.msg.sender_id);
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {

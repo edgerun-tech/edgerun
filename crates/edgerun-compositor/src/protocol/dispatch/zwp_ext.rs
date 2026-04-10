@@ -51,7 +51,11 @@ pub fn handle_pointer_constraints(ctx: &mut DispatchContext) {
                 let _ = client.flush();
             }
         }
-        zwp_pointer_constraints::constraints_request::DESTROY => {}
+        zwp_pointer_constraints::constraints_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -108,7 +112,11 @@ pub fn handle_relative_pointer_manager(ctx: &mut DispatchContext) {
             }
             ctx.client_relative_pointer_ids.insert(ctx.client_id, relative_pointer_id);
         }
-        zwp_relative_pointer::relative_pointer_manager_request::DESTROY => {}
+        zwp_relative_pointer::relative_pointer_manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -142,7 +150,11 @@ pub fn handle_pointer_gestures(ctx: &mut DispatchContext) {
                 reg.register(gesture_id, "zwp_gesture_pinch_v1", 1, ctx.client_id);
             }
         }
-        zwp_pointer_gestures::pointer_gestures_request::DESTROY => {}
+        zwp_pointer_gestures::pointer_gestures_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -167,7 +179,11 @@ pub fn handle_text_input_manager(ctx: &mut DispatchContext) {
                 reg.register(text_input_id, "zwp_text_input_v1", 1, ctx.client_id);
             }
         }
-        zwp_text_input::text_input_manager_request::DESTROY => {}
+        zwp_text_input::text_input_manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -219,7 +235,11 @@ pub fn handle_idle_inhibit_manager(ctx: &mut DispatchContext) {
             ctx.shell.add_idle_inhibitor(inhibitor_id, surface_id);
             eprintln!("[edgerun-compositor] Idle inhibitor created for surface {}", surface_id);
         }
-        zxdg_idle_inhibit::idle_inhibit_request::DESTROY => {}
+        zxdg_idle_inhibit::idle_inhibit_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

@@ -167,6 +167,17 @@ pub fn handle_toplevel(ctx: &mut DispatchContext) {
                 }
             }
         }
+        xdg_shell::xdg_toplevel_request::SHOW_WINDOW_MENU => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let _seat_id = cursor_obj.object().unwrap_or(0);
+            let _serial = cursor_obj.uint().unwrap_or(0);
+            let x = cursor_obj.int().unwrap_or(0);
+            let y = cursor_obj.int().unwrap_or(0);
+            if let Some(tl) = ctx.shell.toplevels.get(&ctx.msg.sender_id) {
+                eprintln!("[edgerun-compositor] SHOW_WINDOW_MENU for toplevel {} at ({}, {})", tl.id, x, y);
+            }
+            // Full implementation would show a context menu. For now, log and no-op.
+        }
         xdg_shell::xdg_toplevel_request::SET_MIN_SIZE => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let w = cursor_obj.int().unwrap_or(0);

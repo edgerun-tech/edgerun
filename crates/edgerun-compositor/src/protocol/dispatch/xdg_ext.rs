@@ -111,17 +111,51 @@ pub fn handle_activation(ctx: &mut DispatchContext) {
                 }
             }
         }
-        xdg_activation::xdg_activation_request::DESTROY => {}
+        xdg_activation::xdg_activation_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
 
 pub fn handle_activation_token(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {
-        xdg_activation::xdg_activation_request::DESTROY => {
+        xdg_activation::xdg_activation_token_request::SET_SERIAL => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let serial = cursor_obj.uint().unwrap_or(0);
+            let _surface_id = cursor_obj.object().unwrap_or(0);
+            // Store serial for token generation
+            ctx.shell.set_pending_token_serial(ctx.msg.sender_id, serial as u64);
+        }
+        xdg_activation::xdg_activation_token_request::SET_APP_ID => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            if let Ok(Some(app_id)) = cursor_obj.string() {
+                ctx.shell.set_pending_token_app_id(ctx.msg.sender_id, &app_id.0);
+            }
+        }
+        xdg_activation::xdg_activation_token_request::SET_SURFACE => {
+            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
+            let surface_id = cursor_obj.object().unwrap_or(0);
+            ctx.shell.set_pending_token_surface(ctx.msg.sender_id, surface_id);
+        }
+        xdg_activation::xdg_activation_token_request::COMMIT => {
+            // Generate activation token and send done event
+            let token = format!("{:x}-{:x}", ctx.client_id, ctx.msg.sender_id);
+            if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+                client.send_message(xdg_activation::activation_done_event(ctx.msg.sender_id, &token));
+            }
+            // Track the token for later activation validation
+            ctx.shell.register_activation_token(&token, ctx.client_id);
+        }
+        xdg_activation::xdg_activation_token_request::DESTROY => {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
+            ctx.shell.pending_token_serial.remove(&ctx.msg.sender_id);
+            ctx.shell.pending_token_app_id.remove(&ctx.msg.sender_id);
+            ctx.shell.pending_token_surface.remove(&ctx.msg.sender_id);
         }
         _ => {}
     }
@@ -147,7 +181,11 @@ pub fn handle_output_manager(ctx: &mut DispatchContext) {
                 let _ = client.flush();
             }
         }
-        xdg_output::output_manager_request::DESTROY => {}
+        xdg_output::output_manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

@@ -345,6 +345,8 @@ fn test_handshake_message_sequence() {
     let client_keys = EcdhKeyPair::generate().unwrap();
     let server_keys = EcdhKeyPair::generate().unwrap();
     let hash = Hasher::Sha256;
+    let server_random = [0x22u8; 32];
+    let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
 
     // 1. ClientHello
     let client_pub = client_keys.public_key_bytes();
@@ -356,9 +358,9 @@ fn test_handshake_message_sequence() {
     // 2. ServerHello
     let server_pub = server_keys.public_key_bytes();
     let sh_msg = build_server_hello(
-        [0x22u8; 32],
+        server_random,
         &[],
-        CipherSuite::TLS_AES_128_GCM_SHA256,
+        cipher_suite,
         &server_pub,
         NamedGroup::SECP256R1,
     );

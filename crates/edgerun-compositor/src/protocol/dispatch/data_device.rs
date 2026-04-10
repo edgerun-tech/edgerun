@@ -23,7 +23,11 @@ pub fn handle_manager(ctx: &mut DispatchContext) {
             }
             ctx.client_data_device_ids.insert(ctx.client_id, device_id);
         }
-        wl_data_device::dnd_manager_request::DESTROY => {}
+        wl_data_device::dnd_manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -72,7 +76,11 @@ pub fn handle_offer(ctx: &mut DispatchContext) {
         }
         wl_data_device::data_offer_request::DISCRIPTION => {}
         wl_data_device::data_offer_request::SET_ACTIONS => {}
-        wl_data_device::data_offer_request::DESTROY => {}
+        wl_data_device::data_offer_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

@@ -21,6 +21,8 @@ pub struct OciSpec {
     #[serde(rename = "ociVersion")]
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<OciPlatform>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub process: Option<OciProcess>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<OciRoot>,
@@ -32,6 +34,49 @@ pub struct OciSpec {
     pub mounts: Option<Vec<OciMount>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<std::collections::HashMap<String, String>>,
+}
+
+/// Target platform the bundle was built for.
+/// Per OCI spec: runtime must reject bundles whose platform doesn't match the host.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciPlatform {
+    /// Operating system: "linux", "windows", "solaris", etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os: Option<String>,
+    /// CPU architecture: "amd64", "arm64", "riscv64", etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
+    /// OS variant (optional): e.g., "v1", "v2" for Windows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_version: Option<String>,
+    /// OS features (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub os_features: Option<Vec<String>>,
+}
+
+impl OciPlatform {
+    /// Check if this platform matches the current host.
+    pub fn matches_host(&self) -> bool {
+        // OS check
+        if let Some(ref os) = self.os {
+            let host_os = if cfg!(target_os = "linux") { "linux" }
+                          else if cfg!(target_os = "windows") { "windows" }
+                          else if cfg!(target_os = "solaris") { "solaris" }
+                          else { "unknown" };
+            if os != host_os { return false; }
+        }
+        // Arch check
+        if let Some(ref arch) = self.arch {
+            let host_arch = if cfg!(target_arch = "x86_64") { "amd64" }
+                            else if cfg!(target_arch = "aarch64") { "arm64" }
+                            else if cfg!(target_arch = "riscv64") { "riscv64" }
+                            else if cfg!(target_arch = "arm") { "arm" }
+                            else { "unknown" };
+            if arch != host_arch { return false; }
+        }
+        true
+    }
 }
 
 impl OciSpec {

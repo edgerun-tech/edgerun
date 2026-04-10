@@ -61,7 +61,11 @@ pub fn handle_screencopy_manager(ctx: &mut DispatchContext) {
                 let _ = client.flush();
             }
         }
-        screencopy::manager_request::DESTROY => {}
+        screencopy::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -173,7 +177,11 @@ pub fn handle_primary_selection_manager(ctx: &mut DispatchContext) {
                 }
             }
         }
-        primary_selection::manager_request::DESTROY => {}
+        primary_selection::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -279,7 +287,11 @@ pub fn handle_data_control_manager(ctx: &mut DispatchContext) {
                 }
             }
         }
-        data_control::manager_request::DESTROY => {}
+        data_control::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }

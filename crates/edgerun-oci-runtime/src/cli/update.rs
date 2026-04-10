@@ -7,7 +7,7 @@ use std::fs;
 use std::io;
 
 use crate::state::load_state;
-use crate::json::{OciSpec, OciLinuxResources};
+use crate::json::OciSpec;
 
 /// Parsed update options from CLI flags.
 #[derive(Debug, Default)]
@@ -42,7 +42,7 @@ pub fn cmd_update(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     }
 
     let id = &args[0];
-    let update_opts = parse_update_flags(&args[1..])?;
+    let update_opts = parse_update_flag(&args[1..])?;
 
     let state = load_state(id)?;
     let pid = state.pid.ok_or_else(|| {

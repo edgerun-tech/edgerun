@@ -11,6 +11,10 @@ use std::os::raw::c_int;
 use crate::state::load_state;
 use crate::cli::parse_kill_args;
 
+fn is_process_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as std::os::raw::c_int, 0) == 0 }
+}
+
 pub fn cmd_kill(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (sig_str, id) = parse_kill_args(args);
     let id = if id.is_empty() {

@@ -20,6 +20,7 @@ pub fn create_bundle(
 ) -> OciSpec {
     OciSpec {
         version: "1.0.2".into(),
+        platform: None,
         process: Some(OciProcess {
             args: Some(args),
             env,

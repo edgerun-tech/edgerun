@@ -1,64 +1,119 @@
-//! ECDH key exchange using P-256 (secp256r1) from the workspace p256 crate.
-//! All randomness flows through edgerun-core::crypto::fill_random.
+//! ECDH key exchange for TLS 1.3 key_share.
+//! Supports P-256 (SECP256R1) and X25519.
+//! All crypto flows through edgerun-crypto.
 
-use edgerun_crypto::p256::ecdh::EphemeralSecret;
-use edgerun_crypto::rand_core::{CryptoRng, RngCore};
+use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
+use edgerun_crypto::rand_core::OsRng;
+use edgerun_crypto::rand_core::RngCore;
+use edgerun_crypto::x25519_dalek::{EphemeralSecret as X25519Secret, PublicKey as X25519PublicKey};
 
-/// ECDH key pair using P-256
-pub struct EcdhKeyPair {
-    secret: EphemeralSecret,
-    public: EncodedPoint,
+/// Named group for key exchange
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyExchangeGroup {
+    /// secp256r1 (NIST P-256) — 65-byte uncompressed SEC1 points
+    SECP256R1,
+    /// x25519 (Curve25519) — 32-byte public keys
+    X25519,
+}
+
+impl KeyExchangeGroup {
+    pub fn from_wire(value: u16) -> Option<Self> {
+        match value {
+            0x0017 => Some(KeyExchangeGroup::SECP256R1),
+            0x001D => Some(KeyExchangeGroup::X25519),
+            _ => None,
+        }
+    }
+
+    pub fn to_wire(self) -> u16 {
+        match self {
+            KeyExchangeGroup::SECP256R1 => 0x0017,
+            KeyExchangeGroup::X25519 => 0x001D,
+        }
+    }
+
+    /// Expected public key length for this group
+    pub fn public_key_len(self) -> usize {
+        match self {
+            KeyExchangeGroup::SECP256R1 => 65, // 0x04 || x(32) || y(32)
+            KeyExchangeGroup::X25519 => 32,
+        }
+    }
+}
+
+/// A key pair for ECDH key exchange.
+/// Supports both P-256 and X25519.
+pub enum EcdhKeyPair {
+    P256 {
+        secret: P256Secret,
+        public: EncodedPoint,
+    },
+    X25519 {
+        secret: X25519Secret,
+        public: [u8; 32],
+    },
 }
 
 impl EcdhKeyPair {
-    /// Generate a new P-256 ECDH key pair
-    pub fn generate() -> Result<Self, String> {
-        let secret = EphemeralSecret::random(&mut CoreRng);
-        let public = EncodedPoint::from(secret.public_key());
-        Ok(EcdhKeyPair { secret, public })
+    /// Generate a new key pair for the specified group
+    pub fn generate(group: KeyExchangeGroup) -> Result<Self, String> {
+        match group {
+            KeyExchangeGroup::SECP256R1 => {
+                let secret = P256Secret::random(&mut OsRng);
+                let public = EncodedPoint::from(secret.public_key());
+                Ok(EcdhKeyPair::P256 { secret, public })
+            }
+            KeyExchangeGroup::X25519 => {
+                let mut secret_bytes = [0u8; 32];
+                OsRng.fill_bytes(&mut secret_bytes);
+                let secret = X25519Secret::from(secret_bytes);
+                let public: X25519PublicKey = (&secret).into();
+                Ok(EcdhKeyPair::X25519 {
+                    secret,
+                    public: public.to_bytes(),
+                })
+            }
+        }
     }
 
-    /// Raw public key bytes (uncompressed SEC1: 0x04 || x || y, 65 bytes)
+    /// Raw public key bytes (SEC1 uncompressed for P-256, raw 32 bytes for X25519)
     pub fn public_key_bytes(&self) -> Vec<u8> {
-        self.public.as_bytes().to_vec()
+        match self {
+            EcdhKeyPair::P256 { public, .. } => public.as_bytes().to_vec(),
+            EcdhKeyPair::X25519 { public, .. } => public.to_vec(),
+        }
     }
 
-    /// Compute the shared secret with the server's public key
-    pub fn exchange(&self, server_pk: &[u8]) -> Result<Vec<u8>, String> {
-        let server_pk =
-            edgerun_crypto::p256::PublicKey::from_sec1_bytes(server_pk).map_err(|e| format!("Invalid server public key: {:?}", e))?;
+    /// The group this key pair uses
+    pub fn group(&self) -> KeyExchangeGroup {
+        match self {
+            EcdhKeyPair::P256 { .. } => KeyExchangeGroup::SECP256R1,
+            EcdhKeyPair::X25519 { .. } => KeyExchangeGroup::X25519,
+        }
+    }
 
-        let shared = self.secret.diffie_hellman(&server_pk);
-        Ok(shared.raw_secret_bytes().to_vec())
+    /// Compute the shared secret with the peer's public key.
+    /// The peer_pk must match this key pair's group format.
+    pub fn exchange(&self, peer_pk: &[u8]) -> Result<Vec<u8>, String> {
+        match self {
+            EcdhKeyPair::P256 { secret, .. } => {
+                let peer_pk =
+                    edgerun_crypto::p256::PublicKey::from_sec1_bytes(peer_pk)
+                        .map_err(|e| format!("Invalid P-256 public key: {:?}", e))?;
+                let shared = secret.diffie_hellman(&peer_pk);
+                Ok(shared.raw_secret_bytes().to_vec())
+            }
+            EcdhKeyPair::X25519 { secret, .. } => {
+                if peer_pk.len() != 32 {
+                    return Err(format!("X25519 public key must be 32 bytes, got {}", peer_pk.len()));
+                }
+                let mut pk_bytes = [0u8; 32];
+                pk_bytes.copy_from_slice(peer_pk);
+                let peer_pk = X25519PublicKey::from(pk_bytes);
+                let shared = secret.diffie_hellman(&peer_pk);
+                Ok(shared.to_bytes().to_vec())
+            }
+        }
     }
 }
-
-/// RNG adapter — bridges edgerun_core::crypto::fill_random to p256's rand_core.
-/// All randomness comes from /dev/urandom via edgerun-core's fill_random.
-struct CoreRng;
-
-impl RngCore for CoreRng {
-    fn next_u32(&mut self) -> u32 {
-        let mut buf = [0u8; 4];
-        self.fill_bytes(&mut buf);
-        u32::from_le_bytes(buf)
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        let mut buf = [0u8; 8];
-        self.fill_bytes(&mut buf);
-        u64::from_le_bytes(buf)
-    }
-
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.try_fill_bytes(dest).expect("fill_random failed");
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), edgerun_crypto::p256::elliptic_curve::rand_core::Error> {
-        edgerun_crypto::rand_core::OsRng.fill_bytes(dest);
-        Ok(())
-    }
-}
-
-impl CryptoRng for CoreRng {}

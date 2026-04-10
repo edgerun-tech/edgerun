@@ -162,6 +162,14 @@ pub struct Shell {
     pub idle_inhibitors: HashSet<u32>,
     /// Map from inhibitor object ID to surface ID.
     pub inhibitor_to_surface: HashMap<u32, u32>,
+
+    // Activation token state
+    /// Registered activation tokens and their originating client.
+    pub activation_tokens: HashMap<String, u32>,
+    /// Pending token metadata keyed by token object ID.
+    pub pending_token_serial: HashMap<u32, u64>,
+    pub pending_token_app_id: HashMap<u32, String>,
+    pub pending_token_surface: HashMap<u32, u32>,
 }
 
 /// Positioner state from xdg_positioner protocol.
@@ -204,6 +212,10 @@ impl Shell {
             positioners: std::collections::HashMap::new(),
             idle_inhibitors: HashSet::new(),
             inhibitor_to_surface: HashMap::new(),
+            activation_tokens: HashMap::new(),
+            pending_token_serial: HashMap::new(),
+            pending_token_app_id: HashMap::new(),
+            pending_token_surface: HashMap::new(),
         }
     }
 
@@ -449,6 +461,23 @@ impl Shell {
     /// Check if a ping is currently pending.
     pub fn ping_pending(&self) -> bool {
         self.ping_serial.is_some()
+    }
+
+    // Activation token methods
+    pub fn set_pending_token_serial(&mut self, token_id: u32, serial: u64) {
+        self.pending_token_serial.insert(token_id, serial);
+    }
+    pub fn set_pending_token_app_id(&mut self, token_id: u32, app_id: &str) {
+        self.pending_token_app_id.insert(token_id, app_id.to_string());
+    }
+    pub fn set_pending_token_surface(&mut self, token_id: u32, surface_id: u32) {
+        self.pending_token_surface.insert(token_id, surface_id);
+    }
+    pub fn register_activation_token(&mut self, token: &str, client_id: u32) {
+        self.activation_tokens.insert(token.to_string(), client_id);
+    }
+    pub fn validate_activation_token(&self, token: &str) -> Option<u32> {
+        self.activation_tokens.get(token).copied()
     }
 
     /// Send configure with current state to a toplevel.

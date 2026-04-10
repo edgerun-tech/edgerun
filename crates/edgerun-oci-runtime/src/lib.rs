@@ -103,6 +103,7 @@ mod tests {
     fn oci_spec_default_roundtrip() {
         let spec = OciSpec {
             version: "1.0.2".into(),
+            platform: None,
             process: None,
             root: None,
             hostname: None,
@@ -119,6 +120,7 @@ mod tests {
     fn oci_spec_full_roundtrip() {
         let spec = OciSpec {
             version: "1.0.2".into(),
+            platform: None,
             process: Some(OciProcess {
                 terminal: Some(false),
                 user: Some(OciUser {

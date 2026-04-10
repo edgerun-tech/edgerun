@@ -94,6 +94,25 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
 ///
 /// Returns the child PID and a reference to the spec-derived config.
 pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
+    // Validate platform compatibility (OCI spec §3.2)
+    if let Some(ref platform) = spec.platform {
+        if !platform.matches_host() {
+            let host_os = if cfg!(target_os = "linux") { "linux" } else { "unknown" };
+            let host_arch = if cfg!(target_arch = "x86_64") { "amd64" }
+                            else if cfg!(target_arch = "aarch64") { "arm64" }
+                            else { "unknown" };
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "platform mismatch: bundle is for {}/{} but host is {}/{}",
+                    platform.os.as_deref().unwrap_or("unknown"),
+                    platform.arch.as_deref().unwrap_or("unknown"),
+                    host_os, host_arch,
+                ),
+            ));
+        }
+    }
+
     let cfg = ContainerConfig::from_spec(spec)?;
     let bundle_path = cfg.root.path.clone();
     let cgroup_path = spec.linux.as_ref()
@@ -349,7 +368,7 @@ pub fn into_running_container(child: ForkedChild) -> RunningContainer {
 // ===========================================================================
 
 /// Run poststop hooks and clean up cgroups.
-pub fn run_poststop_and_cleanup(_container_id: &str, pid: u32, bundle_path: &str, cgroup_path: &str, spec: &OciSpec) {
+pub fn run_poststop_and_cleanup(container_id: &str, pid: u32, bundle_path: &str, cgroup_path: &str, spec: &OciSpec) {
     // Poststop hooks
     let hooks = spec.linux.as_ref()
         .and_then(|l| l.hooks.as_ref())
@@ -357,12 +376,12 @@ pub fn run_poststop_and_cleanup(_container_id: &str, pid: u32, bundle_path: &str
         .unwrap_or_default();
 
     let state = ContainerState {
-        version: String::new(),
-        id: String::new(),
+        version: spec.version.clone(),
+        id: container_id.to_string(),
         status: "stopped".into(),
         pid,
         bundle: bundle_path.to_string(),
-        annotations: std::collections::HashMap::new(),
+        annotations: spec.annotations.clone().unwrap_or_default(),
     };
 
     if let Some(ref poststop) = hooks.poststop {
@@ -502,13 +521,6 @@ fn make_state(spec: &OciSpec, container_id: &str, status: &str, pid: u32) -> Con
         status: status.into(),
         pid,
         bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
-        annotations: spec.linux.as_ref()
-            .and_then(|l| l.sysctl.as_ref())
-            .map(|sysctl| {
-                sysctl.iter()
-                    .map(|(k, v)| (format!("sysctl:{}", k), v.clone()))
-                    .collect()
-            })
-            .unwrap_or_default(),
+        annotations: spec.annotations.clone().unwrap_or_default(),
     }
 }

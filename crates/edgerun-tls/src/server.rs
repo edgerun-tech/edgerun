@@ -29,7 +29,7 @@ use crate::alert::{Alert, AlertLevel};
 use crate::certificate_gen::CertificateAndKey;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{read_record_header, read_record_fragment};
-use crate::key_exchange::EcdhKeyPair;
+use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys, hmac_sha256, hmac_sha384};
 use crate::record::{RecordCipher, TlsRecord};
 use crate::{Result, TlsError};
@@ -210,10 +210,11 @@ impl ClientHello {
                     }
                     43 => {
                         // supported_versions
+                        // Format: length(1) + versions[length bytes]
                         if ext_data_len >= 1 {
-                            let versions_len = ext_data[0] as usize;
+                            let _versions_len = ext_data[0] as usize;
                             let mut vpos = 1;
-                            while vpos + 1 < versions_len && vpos + 1 < ext_data.len() {
+                            while vpos + 1 < ext_data.len() {
                                 let v = u16::from_be_bytes([ext_data[vpos], ext_data[vpos + 1]]);
                                 supported_versions.push(v);
                                 vpos += 2;
@@ -248,7 +249,8 @@ impl ClientHello {
                             }
                         }
                     }
-                    _ => {}
+                    _ => {
+                    }
                 }
             }
         }
@@ -449,23 +451,21 @@ struct ServerHandshake {
     cipher_suite: CipherSuite,
     client_random: [u8; 32],
     server_random: [u8; 32],
-    key_pair: EcdhKeyPair,
+    /// Key pair — set after read_client_hello (once we know the group)
+    key_pair: Option<EcdhKeyPair>,
+    /// The group we selected for key exchange
+    selected_group: KeyExchangeGroup,
     client_key_share: Vec<u8>,
     client_session_id: Vec<u8>,
-    /// ClientHello message bytes (for transcript)
     ch_msg: Vec<u8>,
-    /// ServerHello message bytes (for transcript)
     sh_msg: Vec<u8>,
-    /// Accumulated transcript of handshake messages
     transcript: Vec<u8>,
-    /// Final ciphers (set after handshake)
     write_cipher: RecordCipher,
     read_cipher: RecordCipher,
 }
 
 impl ServerHandshake {
     fn new(stream: TcpStream, cert_and_key: &CertificateAndKey) -> Self {
-        let key_pair = EcdhKeyPair::generate().expect("ECDH key generation failed");
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
         let write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
         let read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
@@ -477,7 +477,8 @@ impl ServerHandshake {
             cipher_suite,
             client_random: [0u8; 32],
             server_random: generate_random(),
-            key_pair,
+            key_pair: None,
+            selected_group: KeyExchangeGroup::X25519, // default, updated after ClientHello
             client_key_share: Vec::new(),
             client_session_id: Vec::new(),
             ch_msg: Vec::new(),
@@ -492,11 +493,15 @@ impl ServerHandshake {
         // 1. Read ClientHello
         self.read_client_hello()?;
 
-        // 2. Send ServerHello (plaintext)
+        // 2. Generate key pair for the client's preferred group
+        let group = self.selected_group;
+        self.key_pair = Some(EcdhKeyPair::generate(group).map_err(|e| TlsError::HandshakeFailure(e))?);
+
+        // 3. Send ServerHello (plaintext)
         self.send_server_hello()?;
 
-        // 3. Derive handshake keys
-        let shared_secret = self.key_pair.exchange(&self.client_key_share)?;
+        // 4. Derive handshake keys
+        let shared_secret = self.key_pair.as_ref().unwrap().exchange(&self.client_key_share)?;
         let hash = self.hasher();
 
         // Compute transcript hash for key derivation
@@ -517,13 +522,13 @@ impl ServerHandshake {
         let mut write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
         let mut read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
 
-        // 4. Send encrypted handshake messages
+        // 5. Send encrypted handshake messages
         self.send_encrypted_handshake(&mut write_cipher, &mut ks)?;
 
-        // 5. Read client Finished
+        // 6. Read client Finished
         self.read_client_finished(&mut read_cipher, &ks)?;
 
-        // 6. Derive application traffic keys
+        // 7. Derive application traffic keys
         ks.advance_to_master();
         let server_app = ks.server_app_traffic_secret();
         let client_app = ks.client_app_traffic_secret();
@@ -565,6 +570,16 @@ impl ServerHandshake {
 
         self.client_random = ch.random;
 
+        // Select key exchange group from client's key_share.
+        // Prefer X25519 (most common), fall back to P-256.
+        if let Some(group) = ch.client_key_share_group {
+            let keg = match group {
+                NamedGroup::X25519 => KeyExchangeGroup::X25519,
+                _ => KeyExchangeGroup::SECP256R1,
+            };
+            self.selected_group = keg;
+        }
+
         if let Some(ks) = ch.client_key_share {
             self.client_key_share = ks;
         } else {
@@ -582,14 +597,17 @@ impl ServerHandshake {
     }
 
     fn send_server_hello(&mut self) -> Result<()> {
-        let public_key = self.key_pair.public_key_bytes();
+        let public_key = self.key_pair.as_ref().unwrap().public_key_bytes();
+        let group = match self.selected_group {
+            KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
+            KeyExchangeGroup::X25519 => NamedGroup::X25519,
+        };
         let sh_msg = build_server_hello(
             self.server_random,
-            &[],
             &self.client_session_id,
             self.cipher_suite,
             &public_key,
-            NamedGroup::SECP256R1,
+            group,
         );
 
         // Compute hash for key schedule
@@ -743,7 +761,6 @@ impl ServerHandshake {
 /// Build a ServerHello handshake message
 pub fn build_server_hello(
     random: [u8; 32],
-    &[],
     session_id: &[u8],
     cipher_suite: CipherSuite,
     server_key_share: &[u8],
@@ -919,7 +936,7 @@ mod tests {
     use crate::certificate_gen::generate_self_signed;
     use crate::cipher::{CipherSuite, NamedGroup};
     use crate::handshake::{ClientHelloBuilder, ServerHello};
-    use crate::key_exchange::EcdhKeyPair;
+    use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
     use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys};
     use crate::record::RecordCipher;
 
@@ -1305,34 +1322,24 @@ mod tests {
 
     #[test]
     fn test_handshake_transcript_transcript_match() {
-        // This test verifies that the server and client build the same
-        // transcript hash — the core requirement for Finished verification.
-
         let cert = generate_self_signed(&["localhost"]);
-
-        // Generate key pairs
         let client_keys = EcdhKeyPair::generate().unwrap();
         let server_keys = EcdhKeyPair::generate().unwrap();
-
         let client_random = [0xAAu8; 32];
         let server_random = [0xBBu8; 32];
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
         let hash = Hasher::Sha256;
 
-        // ========== CLIENT SIDE: build ClientHello ==========
         let client_pub = client_keys.public_key_bytes();
         let ch_msg = ClientHelloBuilder::new(client_random, "localhost")
             .key_share(&client_pub, NamedGroup::SECP256R1)
             .build()
             .unwrap();
         let client_ch_hash = hash.hash(&ch_msg);
-
-        // ========== SERVER SIDE: parse ClientHello ==========
         let _ch_parsed = ClientHello::parse(&ch_msg).unwrap();
         let server_ch_hash = hash.hash(&ch_msg);
         assert_eq!(client_ch_hash, server_ch_hash, "ClientHello hashes must match");
 
-        // ========== SERVER SIDE: build ServerHello ==========
         let server_pub = server_keys.public_key_bytes();
         let sh_msg = build_server_hello(
             server_random,
@@ -1342,76 +1349,45 @@ mod tests {
             NamedGroup::SECP256R1,
         );
         let server_sh_hash = hash.hash(&sh_msg);
-
-        // ========== CLIENT SIDE: parse ServerHello ==========
         let _sh_parsed = ServerHello::parse(&sh_msg).unwrap();
         let client_sh_hash = hash.hash(&sh_msg);
         assert_eq!(server_sh_hash, client_sh_hash, "ServerHello hashes must match");
 
-        // ========== Key exchange ==========
         let shared_client = client_keys.exchange(&server_pub).unwrap();
         let shared_server = server_keys.exchange(&client_pub).unwrap();
         assert_eq!(shared_client, shared_server, "Shared secrets must match");
 
-        // ========== Key schedule (both sides) ==========
-        let ch_hash = client_ch_hash; // same on both sides
-
+        let ch_hash = client_ch_hash;
         let mut ks_client = Tls13KeySchedule::new(hash.clone());
         ks_client.advance_to_handshake(&shared_client, &ch_hash, &client_sh_hash);
-
         let mut ks_server = Tls13KeySchedule::new(hash.clone());
         ks_server.advance_to_handshake(&shared_server, &ch_hash, &server_sh_hash);
 
-        // Server handshake traffic secret
         let server_hs_secret_client = ks_client.server_handshake_traffic_secret(&ch_hash);
         let server_hs_secret_server = ks_server.server_handshake_traffic_secret(&ch_hash);
-        assert_eq!(server_hs_secret_client, server_hs_secret_server,
-            "Server HS secret must match");
+        assert_eq!(server_hs_secret_client, server_hs_secret_server, "Server HS secret must match");
 
-        // Client handshake traffic secret
         let client_hs_secret_client = ks_client.client_handshake_traffic_secret(&ch_hash);
         let client_hs_secret_server = ks_server.client_handshake_traffic_secret(&ch_hash);
-        assert_eq!(client_hs_secret_client, client_hs_secret_server,
-            "Client HS secret must match");
+        assert_eq!(client_hs_secret_client, client_hs_secret_server, "Client HS secret must match");
 
-        // ========== Encrypted messages transcript ==========
-        // Server transcript after ClientHello + ServerHello:
-        // (build_encrypted_handshake appends each message to self.transcript)
-        // At this point: transcript = ch_msg || sh_msg
         let mut server_transcript = Vec::new();
         server_transcript.extend_from_slice(&ch_msg);
         server_transcript.extend_from_slice(&sh_msg);
-
-        // Build EE, Certificate, CertificateVerify
         let ee_msg = build_encrypted_extensions();
         server_transcript.extend_from_slice(&ee_msg);
-
         let cert_msg = build_certificate_message(&cert.cert_der);
         server_transcript.extend_from_slice(&cert_msg);
-
         let cv_msg = build_certificate_verify(&server_transcript, &cert.signing_key, &hash).unwrap();
         server_transcript.extend_from_slice(&cv_msg);
-
-        // Server's transcript hash for Finished
         let server_transcript_hash = hash.hash(&server_transcript);
 
-        // ========== Client side: reconstruct transcript ==========
         let mut client_transcript = Vec::new();
         client_transcript.extend_from_slice(&ch_msg);
         client_transcript.extend_from_slice(&sh_msg);
-
-        // Client reconstructs EE from the raw bytes (same as server built)
-        let client_ee_msg = ee_msg.clone();
-        client_transcript.extend_from_slice(&client_ee_msg);
-
-        // Client reconstructs Certificate
-        let client_cert_msg = cert_msg.clone();
-        client_transcript.extend_from_slice(&client_cert_msg);
-
-        // Client reconstructs CertificateVerify
-        let client_cv_msg = cv_msg.clone();
-        client_transcript.extend_from_slice(&client_cv_msg);
-
+        client_transcript.extend_from_slice(&ee_msg);
+        client_transcript.extend_from_slice(&cert_msg);
+        client_transcript.extend_from_slice(&cv_msg);
         let client_transcript_hash = hash.hash(&client_transcript);
 
         assert_eq!(server_transcript_hash, client_transcript_hash,

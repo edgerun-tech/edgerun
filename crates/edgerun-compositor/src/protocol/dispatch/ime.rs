@@ -19,7 +19,11 @@ pub fn handle_text_input_manager(ctx: &mut DispatchContext) {
             }
             *ctx.text_input_state = Some(TextInputState::new(text_input_id, ctx.client_id));
         }
-        text_input_v3::manager_request::DESTROY => {}
+        text_input_v3::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
@@ -125,7 +129,11 @@ pub fn handle_input_method_manager(ctx: &mut DispatchContext) {
             *ctx.ime_state = Some(IMEState::new(im_id, ctx.client_id));
             eprintln!("[edgerun-compositor] IME server connected, client={}", ctx.client_id);
         }
-        input_method_v2::manager_request::DESTROY => {}
+        input_method_v2::manager_request::DESTROY => {
+            if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                reg.destroy(ctx.msg.sender_id);
+            }
+        }
         _ => {}
     }
 }
