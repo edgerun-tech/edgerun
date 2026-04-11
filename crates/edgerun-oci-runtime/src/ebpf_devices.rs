@@ -19,65 +19,6 @@ use std::path::Path;
 use crate::json::OciLinuxDeviceCgroup;
 use crate::syscalls::*;
 
-// ===========================================================================
-// eBPF instruction encoding (kernel bpf_insn format, 8 bytes each)
-// ===========================================================================
-
-/// Build an eBPF instruction.
-///
-/// Layout (from kernel include/linux/filter.h):
-///   code: u8  — opcode
-///   dst: u4, src: u4 — register encoding in byte 1
-///   off: i16 — offset (little-endian, bytes 2-3)
-///   imm: i32 — immediate (little-endian, bytes 4-7)
-fn ebpf(code: u8, dst: u8, src: u8, off: i16, imm: i32) -> [u8; 8] {
-    ebpf_insn(code, dst, src, off, imm)
-}
-
-/// BPF_LDX_MEM: dst = *(size *)(src + off)
-/// code = BPF_LDX | BPF_SIZE | BPF_MEM
-/// Kernel encoding: BPF_LDX=0x01, BPF_MEM=0x60 (not 0x40!), BPF_W=0x00
-/// So: code = 0x01 | 0x00 | 0x60 = 0x61 for BPF_W
-fn ld_imm(size: u8, dst: u8, src: u8, off: i16) -> [u8; 8] {
-    // BPF_LDX = 0x01, BPF_MEM = 0x60 (for LDX operations)
-    // BPF_W = 0x00, BPF_DW = 0x18
-    let code = 0x01 | size | 0x60;
-    ebpf(code, dst, src, off, 0)
-}
-
-/// BPF_ALU64_IMM: dst = imm (mov)
-/// code = BPF_ALU64 | BPF_MOV | BPF_K = 0xb7
-fn mov_imm(dst: u8, imm: i32) -> [u8; 8] {
-    ebpf(0xb7, dst, 0, 0, imm)
-}
-
-/// BPF_JMP_IMM: if (dst op imm) goto pc+off
-/// code = BPF_JMP | op | BPF_K
-/// op: BPF_JEQ=0x10, BPF_JNE=0x50, BPF_JGT=0x20, BPF_JGE=0x30, BPF_JLT=0xa0, BPF_JLE=0xb0
-fn jmp_imm(op: u8, dst: u8, imm: i32, off: i16) -> [u8; 8] {
-    let code = 0x05 | op; // BPF_JMP | op | BPF_K
-    ebpf(code, dst, 0, off, imm)
-}
-
-/// BPF_EXIT: return (value in r0)
-fn exit() -> [u8; 8] {
-    ebpf(0x95, 0, 0, 0, 0)
-}
-
-/// BPF_MOV64_REG: dst = src
-fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
-    // BPF_ALU64 | BPF_MOV | BPF_X = 0xbf
-    ebpf(0xbf, dst, src, 0, 0)
-}
-
-// ===========================================================================
-// Register and context constants
-// ===========================================================================
-
-// eBPF registers
-const R0: u8 = 0; // return value
-const R6: u8 = 6; // callee-saved (we save context here)
-const R7: u8 = 7; // callee-saved (temp for comparisons)
 
 // bpf_cgroup_dev_ctx field offsets (from kernel headers)
 const OFF_ACCESS_TYPE: i16 = 0;   // u32: 'r', 'w', 'm'

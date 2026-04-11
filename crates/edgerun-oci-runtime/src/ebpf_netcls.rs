@@ -13,56 +13,6 @@ use std::path::Path;
 use crate::json::OciLinuxNetworkPriority;
 use crate::syscalls::*;
 
-// ===========================================================================
-// eBPF instruction builders
-// ===========================================================================
-
-fn ebpf(code: u8, dst: u8, src: u8, off: i16, imm: i32) -> [u8; 8] {
-    ebpf_insn(code, dst, src, off, imm)
-}
-
-/// BPF_LDX_MEM: dst = *(size *)(src + off)
-fn ld_imm(size: u8, dst: u8, src: u8, off: i16) -> [u8; 8] {
-    let code = 0x01 | size | 0x60;
-    ebpf(code, dst, src, off, 0)
-}
-
-/// BPF_STX_MEM: *(size *)(dst + off) = src
-fn st_imm(size: u8, dst: u8, src: u8, off: i16) -> [u8; 8] {
-    // BPF_STX | BPF_SIZE | BPF_MEM = 0x03 | size | 0x60
-    let code = 0x03 | size | 0x60;
-    ebpf(code, dst, src, off, 0)
-}
-
-/// BPF_ALU64_IMM: dst = imm
-fn mov_imm(dst: u8, imm: i32) -> [u8; 8] {
-    ebpf(0xb7, dst, 0, 0, imm)
-}
-
-/// BPF_MOV64_REG: dst = src
-fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
-    ebpf(0xbf, dst, src, 0, 0)
-}
-
-/// BPF_JMP_IMM: if (dst op imm) goto pc+off
-fn jmp_imm(op: u8, dst: u8, imm: i32, off: i16) -> [u8; 8] {
-    let code = 0x05 | op;
-    ebpf(code, dst, 0, off, imm)
-}
-
-/// BPF_EXIT
-fn exit() -> [u8; 8] {
-    ebpf(0x95, 0, 0, 0, 0)
-}
-
-// ===========================================================================
-// Registers and context
-// ===========================================================================
-
-const R0: u8 = 0; // return value
-const R1: u8 = 1; // context pointer
-const R2: u8 = 2; // helper arg
-const R6: u8 = 6; // callee-saved
 
 // For cgroup skb programs, context is struct __sk_buff:
 //   priority is at offset 0x18 (24 bytes) from the __sk_buff base

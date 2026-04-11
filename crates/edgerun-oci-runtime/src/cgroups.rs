@@ -125,34 +125,10 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         }
     }
 
-    // Network class ID (cgroup v1 compatibility — written to net_cls.classid)
-    if let Some(ref net) = resources.network {
-        if let Some(class_id) = net.class_id {
-            cgroup_write(&cgroup_root, "net_cls.classid", &format!("{}", class_id));
-        }
-        // Network priorities
-        if let Some(ref priorities) = net.priorities {
-            for p in priorities {
-                cgroup_write(&cgroup_root, "net_prio.prioidx", &format!("{} {}", p.name, p.priority));
-            }
-        }
-    }
-
-    // Device cgroup rules (cgroup v1 — devices controller)
-    // For cgroup v2, devices are managed via eBPF and are not supported here.
-    if let Some(ref devices) = resources.devices {
-        for dev in devices {
-            let dev_type = &dev.ns_type;
-            let major = dev.major.map(|m| m.to_string()).unwrap_or_else(|| "*".into());
-            let minor = dev.minor.map(|m| m.to_string()).unwrap_or_else(|| "*".into());
-            let access = dev.access.as_deref().unwrap_or("rwm");
-
-            let rule = format!("{} {}:{} {}", dev_type, major, minor, access);
-            // Write to devices.allow (v1) — best-effort for v2
-            cgroup_write(&cgroup_root, "devices.allow", &rule);
-            cgroup_write(&cgroup_root, "cgroup.devices.allow", &rule);
-        }
-    }
+    // Note: Network class ID and device cgroup rules are not implemented via
+    // cgroup v2 file writes. Use the eBPF-based controllers instead:
+    // - `ebpf_netcls` for network priority/class ID
+    // - `ebpf_devices` for device access control
 
     Ok(())
 }
