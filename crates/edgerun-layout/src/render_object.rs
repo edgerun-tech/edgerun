@@ -1,7 +1,7 @@
 //! RenderObject hierarchy — generated from CSS Display + HTML element specs.
 //! DO NOT EDIT. Regenerate with: scripts/generate_renderer.py
 extern crate alloc;
-use alloc::{string::String, vec::Vec, boxed::Box};
+use alloc::{string::String, vec::Vec};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Color { pub r: f32, pub g: f32, pub b: f32, pub a: f32 }

@@ -3,7 +3,7 @@
 //! Gate with `feature = "android-keystore"`.
 
 use edgerun_android_keystore::{
-    sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel, AndroidKeystoreError,
+    sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel,
     AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
 };
 

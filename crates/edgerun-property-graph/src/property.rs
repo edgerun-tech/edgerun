@@ -1,7 +1,6 @@
 //! CSS Property metadata extracted from proto definitions.
 
 use alloc::string::String;
-use alloc::vec::Vec;
 
 /// A single CSS property with all its metadata.
 #[derive(Clone, Debug)]

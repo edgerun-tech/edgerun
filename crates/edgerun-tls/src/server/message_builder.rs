@@ -1,7 +1,6 @@
 //! TLS 1.3 server handshake message builders.
 
 use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::SignerMut};
-use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::prf::{Hasher, hmac_sha256, hmac_sha384};

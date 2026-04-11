@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use crate::compositor::surface::SurfaceTree;
 use crate::compositor::shell::Shell;
-use crate::compositor::seat::{self, Seat};
+use crate::compositor::seat::Seat;
 pub use crate::protocol::dispatch::{TouchState, TouchSlot, PointerConstraint, ConstraintType};
 use crate::input::evdev::EvdevManager;
 use crate::input::keymap::{self, Keymap, Modifiers};

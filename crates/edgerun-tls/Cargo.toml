@@ -17,6 +17,6 @@ edgerun-core = { path = "../edgerun-core" }
 edgerun-rt = { path = "../edgerun-rt" }
 
 [dev-dependencies]
-hex-literal = "0.4"
+hex-literal = "1.1"
 libc = "0.2"
 socket2 = "0.6"

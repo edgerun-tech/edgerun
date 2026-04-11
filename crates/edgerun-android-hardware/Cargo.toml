@@ -19,7 +19,7 @@ log = { version = "0.4", optional = true }
 
 # NDK bindings (FFI to Android native libraries)
 ndk-sys = { version = "0.6", optional = true }
-jni = { version = "0.21", optional = true }
+jni = { version = "0.22", optional = true }
 ndk-context = { version = "0.1", optional = true }
 once_cell = { version = "1", optional = true }
 libc.workspace = true

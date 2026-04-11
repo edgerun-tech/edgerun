@@ -3,7 +3,7 @@
 //! Allows clients to request tearing-free presentation or variable refresh
 //! rate for gaming/video playback.
 
-use crate::wire::{ArgType, Message};
+use crate::wire::ArgType;
 
 pub const WP_TEARING_CONTROL_MANAGER_V1: &str = "wp_tearing_control_manager_v1";
 pub const WP_TEARING_CONTROL_MANAGER_V1_VERSION: u32 = 1;

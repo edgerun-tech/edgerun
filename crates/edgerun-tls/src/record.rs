@@ -7,7 +7,6 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use edgerun_crypto::aes_gcm::aead::AeadInPlace;
 use edgerun_crypto::AesGcmCipher;
 
 /// TLS record layer for encryption/decryption
@@ -103,7 +102,7 @@ impl RecordCipher {
         let tag_offset = buffer.len() - Self::TAG_LEN;
         let tag_bytes: [u8; 16] = buffer[tag_offset..].try_into()
             .map_err(|_| "invalid tag length")?;
-        let tag = aes_gcm::Tag::from(tag_bytes);
+        let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
         let nonce_arr: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;

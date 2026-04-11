@@ -21,8 +21,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use edgerun_crypto::rand_core::RngCore;
-
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate::Certificate;
 use crate::certificate_gen::CertificateAndKey;
@@ -86,8 +84,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
             .map_err(|e| TlsError::HandshakeFailure(e))?;
         let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
-        let write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
-        let read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
+        let _write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
+        let _read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
 
         // 1. Send ClientHello
         let public_key = key_pair.public_key_bytes();
@@ -99,7 +97,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             .key_share(&public_key, group)
             .build()?;
 
-        let ch_hash = Hasher::Sha256.hash(&ch);
+        let _ch_hash = Hasher::Sha256.hash(&ch);
         let mut transcript = ch.clone();
 
         let record = crate::record::TlsRecord {
@@ -127,9 +125,9 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             )));
         }
 
-        let server_random = sh.random;
+        let _server_random = sh.random;
         let negotiated_suite = sh.cipher_suite;
-        let sh_hash = Hasher::Sha256.hash(&fragment);
+        let _sh_hash = Hasher::Sha256.hash(&fragment);
         transcript.extend_from_slice(&fragment);
 
         // 3. Derive handshake keys
@@ -146,19 +144,19 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         let client_hs_keys = client_write_keys(&client_hs_secret, cipher_suite.key_len(), 12, &hash);
         let server_hs_keys = server_write_keys(&server_hs_secret, cipher_suite.key_len(), 12, &hash);
 
-        let mut write_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
-        let mut read_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
+        let mut _write_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
+        let mut _read_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
 
         // 4. Read encrypted handshake messages
         async_read_encrypted_handshake_messages(
-            &mut stream, &mut read_cipher, &mut ks, &mut transcript, &hash, &transcript_hash,
+            &mut stream, &mut _read_cipher, &mut ks, &mut transcript, &hash, &transcript_hash,
             server_name,
         ).await?;
 
         let app_transcript_hash = hash.hash(&transcript);
 
         // 5. Send client Finished
-        async_send_client_finished(&mut stream, &mut write_cipher, &ks, &transcript, &hash).await?;
+        async_send_client_finished(&mut stream, &mut _write_cipher, &ks, &transcript, &hash).await?;
 
         // 6. Derive application keys
         ks.advance_to_master();
@@ -242,7 +240,6 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
             fragment: ciphertext,
         };
         let bytes = record.to_bytes();
-        let total = bytes.len();
         match async_write_all_poll(&mut self.stream, &bytes, cx) {
             Poll::Ready(Ok(())) => {
                 match async_flush_poll(&mut self.stream, cx) {
@@ -341,10 +338,10 @@ impl<S> AsyncTlsServerStream<S> {
 impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// Accept an async TLS 1.3 handshake from a connected stream.
     pub async fn accept(mut stream: S, cert_and_key: &CertificateAndKey) -> Result<Self> {
-        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
-        let server_random = generate_random();
-        let write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
-        let read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
+        let _cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
+        let _server_random = generate_random();
+        let _write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
+        let _read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
 
         // 1. Read ClientHello
         let (ct, _ver, len) = async_read_record_header(&mut stream).await?;
@@ -370,7 +367,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             TlsError::HandshakeFailure("No common cipher suite".into())
         )?;
 
-        let client_random = ch.random;
+        let _client_random = ch.random;
 
         let (selected_group, client_key_share) = if let Some((group, key)) = ch.all_key_shares.first() {
             let keg = match group {
@@ -389,7 +386,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         };
 
         let client_session_id = ch.session_id;
-        let ch_msg = fragment.clone();
+        let _ch_msg = fragment.clone();
         let mut transcript = fragment;
 
         // 2. Send ServerHello
@@ -407,7 +404,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
             &public_key,
             named_group,
         );
-        let sh_hash = Hasher::Sha256.hash(&sh_msg);
+        let _sh_hash = Hasher::Sha256.hash(&sh_msg);
         transcript.extend_from_slice(&sh_msg);
 
         let record = crate::record::TlsRecord {
@@ -432,14 +429,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         let server_hs_keys = server_write_keys(&server_hs_secret, negotiated_suite.key_len(), 12, &hash);
         let client_hs_keys = client_write_keys(&client_hs_secret, negotiated_suite.key_len(), 12, &hash);
 
-        let mut write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
-        let mut read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
+        let mut _write_cipher = RecordCipher::new(&server_hs_keys.write_key, &server_hs_keys.write_iv)?;
+        let mut _read_cipher = RecordCipher::new(&client_hs_keys.write_key, &client_hs_keys.write_iv)?;
 
         let handshake_transcript_hash = transcript_hash;
 
         // 4. Send encrypted handshake messages
         async_server_send_encrypted_handshake(
-            &mut stream, &mut write_cipher, &mut ks, &mut transcript, &hash,
+            &mut stream, &mut _write_cipher, &mut ks, &mut transcript, &hash,
             &handshake_transcript_hash, &cert_and_key.cert_der, &cert_and_key.signing_key,
         ).await?;
 
@@ -447,7 +444,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
 
         // 5. Read client Finished
         async_server_read_client_finished(
-            &mut stream, &mut read_cipher, &ks, &mut transcript, &hash, &handshake_transcript_hash,
+            &mut stream, &mut _read_cipher, &ks, &mut transcript, &hash, &handshake_transcript_hash,
         ).await?;
 
         // 6. Derive application keys

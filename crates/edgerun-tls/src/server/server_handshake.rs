@@ -3,8 +3,6 @@
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 
-use edgerun_crypto::rand_core::RngCore;
-
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate_gen::CertificateAndKey;
 use crate::cipher::CipherSuite;

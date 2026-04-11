@@ -12,4 +12,4 @@ edgerun-css-cascade = { path = "../edgerun-css-cascade" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 wgpu = "29"
 pollster = "0.4"
-png = "0.17"
+png = "0.18"

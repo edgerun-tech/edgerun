@@ -4,7 +4,7 @@
 //! full SHM buffers. Compositor creates a 1x1 buffer filled with the
 //! specified color.
 
-use crate::wire::{ArgType, Message};
+use crate::wire::ArgType;
 
 pub const WP_SINGLE_PIXEL_BUFFER_MANAGER_V1: &str = "wp_single_pixel_buffer_manager_v1";
 pub const WP_SINGLE_PIXEL_BUFFER_MANAGER_V1_VERSION: u32 = 1;

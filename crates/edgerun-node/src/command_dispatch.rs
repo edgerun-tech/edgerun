@@ -620,6 +620,7 @@ fn dispatch_execute_workload(
                         swap: None,
                         kernel: None,
                         kernel_tcp: None,
+                        check_before_update: None,
                     }),
                     cpu: Some(edgerun_oci_runtime::OciLinuxCpu {
                         shares: Some(shares),
@@ -629,6 +630,8 @@ fn dispatch_execute_workload(
                         realtime_period: None,
                         cpus: None,
                         mems: None,
+                        idle: None,
+                        burst: None,
                     }),
                     pids: Some(edgerun_oci_runtime::OciLinuxPids { limit: 256 }),
                     block_io: None,

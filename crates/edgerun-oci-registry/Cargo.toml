@@ -15,4 +15,3 @@ edgerun-tls = { path = "../edgerun-tls" }
 flate2 = "1"
 tar = "0.4"
 zstd = "0.13"
-serde = { version = "1", features = ["derive"] }

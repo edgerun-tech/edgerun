@@ -356,11 +356,13 @@ mod unit {
                 env: None, cwd: None, capabilities: None,
                 rlimits: None, no_new_privileges: None, oom_score_adj: None,
                 apparmor_profile: None, selinux_label: None, scheduler: None,
+                io_priority: None,
             }),
             root: Some(edgerun_oci_runtime::OciRoot {
                 path: "rootfs".into(), readonly: None,
             }),
             hostname: None,
+            domainname: None,
             linux: Some(edgerun_oci_runtime::OciLinux {
                 namespaces: Some(vec![
                     edgerun_oci_runtime::OciNamespace { ns_type: "time".into(), path: None },

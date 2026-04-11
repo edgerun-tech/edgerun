@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::crypto::sha256;
 use crate::result::{ReasonCode, ValidationResult, Verdict};
-use crate::util::{bytes_to_hex_prefixed, parse_rfc3339};
+use crate::util::bytes_to_hex_prefixed;
 use crate::value::Value;
 use crate::validators::{
     validate_canonical_case, validate_command_case, validate_control_change_case,

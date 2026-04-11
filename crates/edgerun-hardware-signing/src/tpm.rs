@@ -3,7 +3,7 @@
 //! Gate with `feature = "tpm"`.
 
 use edgerun_tpm::{
-    sign_record_with_tpm_checked, TpmAssuranceLevel, TpmError, TpmSignatureAlgorithm, TpmSigningKey,
+    sign_record_with_tpm_checked, TpmAssuranceLevel, TpmSignatureAlgorithm, TpmSigningKey,
 };
 
 use crate::{

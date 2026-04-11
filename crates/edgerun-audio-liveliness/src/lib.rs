@@ -31,13 +31,13 @@
 //! - **Latency check**: Measures response time (live speech has natural latency)
 //! - **Spectral analysis**: Checks for playback artifacts (flat frequency response, etc.)
 
-use edgerun_biometrics::{BiometricAssuranceStrength, BiometricModality, BiometricState};
+use edgerun_biometrics::{BiometricModality, BiometricState};
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider,
+    CapabilityOperation,
 };
 use edgerun_microphone::{
-    AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
+    AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
 use edgerun_speaker::{
     AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,

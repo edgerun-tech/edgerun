@@ -188,9 +188,8 @@ pub fn hkdf_sha256(salt: Option<&[u8]>, ikm: &[u8], info: &[u8], okm_len: usize)
 
 /// Generate a random P-256 ECDSA signing key.
 pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
-    use rand_core::RngCore;
     let mut bytes = [0u8; 32];
-    rand_core::OsRng.fill_bytes(&mut bytes);
+    getrandom::fill(&mut bytes).expect("random generation failed");
     p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
 }
 
@@ -202,10 +201,9 @@ pub fn random_p256_signing_key() -> p256::ecdsa::SigningKey {
 /// Returns `(nonce, ciphertext_and_tag)`.
 pub fn aes256_gcm_encrypt(key: &[u8; 32], plaintext: &[u8]) -> ([u8; 12], Vec<u8>) {
     use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
-    use rand_core::RngCore;
     let cipher = Aes256Gcm::new_from_slice(key).expect("valid AES-256 key");
     let mut nonce_bytes = [0u8; 12];
-    rand_core::OsRng.fill_bytes(&mut nonce_bytes);
+    getrandom::fill(&mut nonce_bytes).expect("random generation failed");
     let nonce = Nonce::from(nonce_bytes);
     let ct = cipher.encrypt(&nonce, plaintext).expect("encryption ok");
     (nonce_bytes, ct)

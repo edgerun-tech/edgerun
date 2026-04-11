@@ -3,7 +3,7 @@
 //! Gate with `feature = "yubikey"`.
 
 use edgerun_yubikey::{
-    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel, YubiKeyError,
+    sign_record_with_yubikey_checked, YubiKeyAssuranceLevel,
     YubiKeySignatureAlgorithm, YubiKeySigningKey,
 };
 

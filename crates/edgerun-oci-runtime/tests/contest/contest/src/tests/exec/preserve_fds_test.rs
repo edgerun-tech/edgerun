@@ -1,10 +1,9 @@
 use std::fs;
-use std::os::fd::AsRawFd;
+use std::os::fd::{AsRawFd, BorrowedFd};
 use std::os::unix::process::CommandExt;
 
 use anyhow::anyhow;
 use nix::fcntl::{FcntlArg, FdFlag, fcntl};
-use nix::unistd::dup2;
 use test_framework::{TestResult, test_result};
 
 use crate::utils::test_utils::{
@@ -47,11 +46,14 @@ pub(crate) fn preserve_fds_test() -> TestResult {
         // child processes, causing broken pipes or EPERM errors.
         unsafe {
             command.pre_exec(move || {
+                let borrowed = unsafe { BorrowedFd::borrow_raw(fd) };
                 let flags = FdFlag::from_bits_truncate(
-                    fcntl(fd, FcntlArg::F_GETFD).expect("from_bits_truncate failed"),
+                    fcntl(borrowed, FcntlArg::F_GETFD).expect("from_bits_truncate failed"),
                 );
-                fcntl(fd, FcntlArg::F_SETFD(flags & !FdFlag::FD_CLOEXEC)).expect("fcntl failed");
-                dup2(fd, 3).expect("dup2 failed");
+                fcntl(borrowed, FcntlArg::F_SETFD(flags & !FdFlag::FD_CLOEXEC)).expect("fcntl failed");
+                // Use libc dup2 since nix 0.31 dup2 requires AsFd for target
+                let ret = libc::dup2(fd, 3);
+                if ret < 0 { panic!("dup2 failed: {}", std::io::Error::last_os_error()); }
                 Ok(())
             });
         }

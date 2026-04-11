@@ -63,6 +63,7 @@ pub struct TreeBuilder {
     insertion_mode: InsertionMode,
     /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
     pending_tokenizer_mode: TokenizerMode,
+    #[allow(dead_code)]
     done: bool,
     parse_errors: usize,
 }
@@ -109,7 +110,7 @@ impl TreeBuilder {
     /// Generated from 5 rules.
     fn handle_initial(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _, self_closing: _ } => {
                 match &name[..] {
                 _ => {
                     self.parse_errors += 1;
@@ -122,7 +123,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -162,7 +163,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -209,7 +210,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -300,7 +301,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -895,7 +896,7 @@ impl TreeBuilder {
             Token::Character(text) => {
                 if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1023,7 +1024,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1048,7 +1049,7 @@ impl TreeBuilder {
     /// Generated from 6 rules.
     fn handle_in_table_text(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _, self_closing: _ } => {
                 match &name[..] {
                 _ => {
                     // reprocess token (TODO)
@@ -1063,12 +1064,12 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1152,7 +1153,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1246,7 +1247,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1425,7 +1426,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -1454,7 +1455,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
@@ -1498,10 +1499,10 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1523,7 +1524,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -1557,7 +1558,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
@@ -1588,7 +1589,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -1629,7 +1630,7 @@ impl TreeBuilder {
 
     /// Action: INSERT — create element and push to stack.
     fn insert(&mut self, name: &str, _attrs: &BTreeMap<String, String>, _self_closing: bool) {
-        let mut elem = Element::new(name);
+        let elem = Element::new(name);
         // Void elements are not pushed to the open elements stack
         if !_self_closing && !VOID_ELEMENTS.contains(&name) {
             self.open_elements.push(elem);

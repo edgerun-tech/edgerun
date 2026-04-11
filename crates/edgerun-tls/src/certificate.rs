@@ -235,6 +235,11 @@ impl Certificate {
     }
 
     /// Verify signature on the certificate against an issuer certificate.
+    ///
+    /// This performs actual cryptographic signature verification:
+    /// 1. Extract the issuer's ECDSA public key
+    /// 2. Hash the TBS certificate with the appropriate digest
+    /// 3. Verify the signature using ECDSA
     pub fn verify_signature(&self, issuer: &Certificate) -> Result<(), String> {
         if let Some(ref issuer_cn) = self.issuer_cn {
             if let Some(ref issuer_subject_cn) = issuer.subject_cn {
@@ -251,20 +256,61 @@ impl Certificate {
             return Err("Certificate has no issuer CN".into());
         }
 
-        let valid_sig_algos = [
-            vec![0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02], // ecdsa-with-sha256
-            vec![0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03], // ecdsa-with-sha384
-        ];
-        if !valid_sig_algos.contains(&self.signature_algorithm) {
-            return Err(format!(
-                "Unsupported signature algorithm: {:?}",
-                self.signature_algorithm
-            ));
-        }
+        // Determine the hash algorithm from the signature algorithm OID
+        // ecdsa-with-SHA256: 1.2.840.10045.4.3.2 -> [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02]
+        // ecdsa-with-SHA384: 1.2.840.10045.4.3.3 -> [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03]
+        let (hash, hasher_name) = match self.signature_algorithm.as_slice() {
+            [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x02] => {
+                use edgerun_crypto::sha2::Digest;
+                let mut hasher = edgerun_crypto::sha2::Sha256::new();
+                hasher.update(&self.tbs_certificate_der);
+                (hasher.finalize().to_vec(), "SHA-256")
+            }
+            [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x04, 0x03, 0x03] => {
+                use edgerun_crypto::sha2::Digest;
+                let mut hasher = edgerun_crypto::sha2::Sha384::new();
+                hasher.update(&self.tbs_certificate_der);
+                (hasher.finalize().to_vec(), "SHA-384")
+            }
+            _ => {
+                return Err(format!(
+                    "Unsupported signature algorithm: {:?}",
+                    self.signature_algorithm
+                ));
+            }
+        };
 
         if self.signature_value.is_empty() {
             return Err("Certificate signature value is empty".into());
         }
+
+        // Parse the issuer's P-256 public key
+        let issuer_pubkey = &issuer.subject_public_key;
+        if issuer_pubkey.is_empty() {
+            return Err("Issuer certificate has no public key".into());
+        }
+
+        // The issuer public key should be an uncompressed EC point (0x04 || X || Y)
+        // for P-256, that's 65 bytes total
+        let verifying_key = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
+            issuer_pubkey.as_slice(),
+        )
+        .map_err(|e| format!("Failed to parse issuer public key: {e}"))?;
+
+        // Parse the signature from DER format
+        // ECDSA signatures in X.509 are DER-encoded ASN.1 SEQUENCE of two INTEGERs (r, s)
+        let signature = edgerun_crypto::p256::ecdsa::Signature::from_der(&self.signature_value)
+            .map_err(|e| format!("Failed to parse ECDSA signature: {e}"))?;
+
+        // Verify the signature over the TBS certificate hash
+        use edgerun_crypto::signature::hazmat::PrehashVerifier;
+        verifying_key
+            .verify_prehash(&hash, &signature)
+            .map_err(|e| format!(
+                "ECDSA signature verification failed ({} over P-256): {e}",
+                hasher_name
+            ))?;
+
         Ok(())
     }
 

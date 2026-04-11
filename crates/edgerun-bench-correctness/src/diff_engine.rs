@@ -8,7 +8,7 @@
 //! - Regression tracking over time (append to history)
 
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufReader, BufWriter};
 
 /// Configuration for pixel-level comparison.
 #[derive(Clone, Copy)]
@@ -129,7 +129,8 @@ pub fn save_png(path: &str, rgba: &[u8], width: u32, height: u32) {
 /// Load RGBA pixels from PNG.
 pub fn load_png(path: &str) -> Option<(Vec<u8>, u32, u32)> {
     let file = File::open(path).ok()?;
-    let decoder = png::Decoder::new(file);
+    let reader = BufReader::new(file);
+    let decoder = png::Decoder::new(reader);
     let mut reader = decoder.read_info().ok()?;
     let info = reader.info();
     let width = info.width;

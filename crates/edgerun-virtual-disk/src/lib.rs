@@ -16,7 +16,6 @@ pub use remote::{
     BlockDeviceInfo, BlockError, BlockRequest, BlockResponse, BlockServer, FileBlockBackend,
     MemoryBlockBackend, RequestId, TcpBlockServer, UnixBlockServer, BLOCK_PROTOCOL_VERSION,
 };
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests {

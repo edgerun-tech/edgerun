@@ -4,8 +4,7 @@
 //! framework to compile and run against `edgerun-oci-runtime`.
 
 use std::fs;
-use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 

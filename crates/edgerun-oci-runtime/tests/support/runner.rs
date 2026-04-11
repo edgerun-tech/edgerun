@@ -170,7 +170,7 @@ fn cleanup(id: &str) {
 /// Run the edgerun-oci CLI binary.
 fn cli(args: &[&str]) -> io::Result<Output> {
     let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
-    if unsafe { libc::getuid() } == 0 {
+    if is_root() {
         Command::new(runtime).args(args).output()
     } else {
         Command::new("sudo").arg("-n").arg(runtime).args(args).output()
@@ -182,7 +182,7 @@ fn cli(args: &[&str]) -> io::Result<Output> {
 pub fn cli_create(id: &str, bundle_path: &Path) -> Output {
     let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
     let bundle_str = bundle_path.to_str().expect("invalid bundle path");
-    if unsafe { libc::getuid() } == 0 {
+    if is_root() {
         Command::new(runtime)
             .arg("--bundle").arg(bundle_str)
             .arg("create").arg(id)
@@ -193,5 +193,23 @@ pub fn cli_create(id: &str, bundle_path: &Path) -> Output {
             .arg("--bundle").arg(bundle_str)
             .arg("create").arg(id)
             .output().expect("create command failed")
+    }
+}
+
+/// Check if running as root (UID 0).
+fn is_root() -> bool {
+    // Read UID from /proc — avoids libc dependency
+    match std::fs::read_to_string("/proc/self/status") {
+        Ok(content) => content.lines().any(|line| {
+            line.starts_with("Uid:") && line.split_whitespace().nth(1) == Some("0")
+        }),
+        Err(_) => {
+            // Fallback: try `id -u` command
+            Command::new("id").arg("-u").output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+                .map(|s| s.trim() == "0")
+                .unwrap_or(false)
+        }
     }
 }

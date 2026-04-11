@@ -1,7 +1,6 @@
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_linux_sysfs::{
     parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed,
-    build_parent_child_relationships,
 };
 use edgerun_usb::{
     default_usb_descriptor, UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed,

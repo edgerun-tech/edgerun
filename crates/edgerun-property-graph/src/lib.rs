@@ -7,7 +7,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-use alloc::{string::String, string::ToString, vec::Vec, vec, collections::BTreeMap};
+use alloc::{string::String, string::ToString, vec::Vec, collections::BTreeMap};
 
 mod property;
 mod query;

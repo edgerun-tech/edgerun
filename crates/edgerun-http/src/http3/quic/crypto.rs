@@ -9,7 +9,8 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::aes_gcm::{aead::Aead, AesGcmCipher, Nonce};
+use edgerun_crypto::aes_gcm::aead::Aead;
+use edgerun_crypto::{AesGcmCipher, Nonce};
 
 use std::collections::HashMap;
 

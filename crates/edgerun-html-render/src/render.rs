@@ -13,7 +13,6 @@ use edgerun_rasterizer::framebuffer::Framebuffer;
 use edgerun_layout::position_layout::{PositionedNode, PositionedKind};
 
 use crate::html_parser::{parse_html, Node};
-use crate::css_parser::Stylesheet;
 use crate::layout_builder::build_layout;
 
 /// Render HTML + CSS into a RGBA pixel buffer.
@@ -70,7 +69,7 @@ fn paint_node(node: &PositionedNode, cmds: &mut Vec<RasterCommand>) {
                 });
             }
         }
-        PositionedKind::TextRun { text, font, style } => {
+        PositionedKind::TextRun { text, font: _, style } => {
             if text.trim().is_empty() {
                 return;
             }

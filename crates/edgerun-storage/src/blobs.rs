@@ -201,10 +201,10 @@ impl BlobStore {
                 "nonce must be 12 bytes".into(),
             ));
         }
-        let nonce = &nonce;
+        let nonce: [u8; 12] = nonce.try_into().expect("nonce length checked above");
         let cipher = edgerun_crypto::AesGcmCipher::new_from_slice(&self.key).expect("valid AES-256 key");
         cipher
-            .decrypt(nonce, ciphertext.as_ref())
+            .decrypt(&nonce, ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))
     }
 }

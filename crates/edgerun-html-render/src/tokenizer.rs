@@ -4395,6 +4395,7 @@ impl Tokenizer {
         self.current_attr_map.clear();
     }
 
+    #[allow(dead_code)]
     fn emit_null(&mut self) {
         self.text_buffer.push('\u{0000}');
     }
@@ -4466,6 +4467,7 @@ impl Tokenizer {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum TokenType {
     StartTag,

@@ -15,7 +15,6 @@
 //! - Timing: not_before / expires_at bounds must be respected
 //! - Delegation chain: if present, must validate end-to-end
 
-use crate::crypto::node_id_to_verifying_key;
 use crate::protocol::{
     canonical_bytes, CommandEnvelope, DelegationRecord, Digest, IdentityRef, ProtocolRecord,
 };
