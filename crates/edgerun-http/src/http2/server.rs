@@ -286,8 +286,8 @@ impl Http2Server {
             );
         }
 
-        // Self-referential dependency: stream depends on itself
-        if frame.exclusive && frame.stream_dependency == frame.stream_id {
+        // Self-referential dependency: stream depends on itself (RFC 7540 §5.3.1)
+        if frame.stream_dependency == frame.stream_id {
             return self.rst_stream(frame.stream_id, ErrorCode::PROTOCOL_ERROR.to_u32());
         }
 
