@@ -20,6 +20,13 @@ pub fn cgroup_write(cgroup_root: &Path, file: &str, content: &str) {
     }
 }
 
+/// Append a line to a cgroup file (for per-device weight entries).
+pub fn cgroup_append(cgroup_root: &Path, file: &str, content: &str) {
+    if let Ok(mut f) = fs::OpenOptions::new().append(true).open(cgroup_root.join(file)) {
+        let _ = writeln!(f, "{}", content);
+    }
+}
+
 /// Write to a specific cgroup file (public for update command).
 pub fn setup_container_cgroups_from_file(cgroup_root: &Path, file: &str, content: &str) {
     cgroup_write(cgroup_root, file, content);
@@ -104,11 +111,30 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
     if let Some(ref blkio) = resources.block_io {
         if let Some(weight) = blkio.weight {
             if weight > 0 {
-                // cgroup v2 weight is 1-10000, blkio weight is 10-1000
                 let v2_weight = (weight as u64).saturating_mul(100).clamp(1, 10000);
                 cgroup_write(&cgroup_root, "io.bfq.weight", &format!("{}", v2_weight));
-                // Also try io.weight (depends on IO scheduler)
                 cgroup_write(&cgroup_root, "io.weight", &format!("{}", v2_weight));
+            }
+        }
+        // Per-device weight: OCI weightDevice → cgroup v2 "major:minor weight"
+        // Must be written via append because the kernel file interface requires
+        // each device entry to be added separately after the default weight.
+        if let Some(ref weight_devs) = blkio.weight_device {
+            for wd in weight_devs {
+                if let Some(w) = wd.weight {
+                    let v2_w = (w as u64).saturating_mul(100).clamp(1, 10000);
+                    let entry = format!("{}:{}", wd.major, wd.minor);
+                    let line = format!("{} {}", entry, v2_w);
+                    // Write to io.bfq.weight and io.weight via append interface
+                    if let Ok(mut f1) = fs::OpenOptions::new().append(true)
+                        .open(cgroup_root.join("io.bfq.weight")) {
+                        let _ = writeln!(f1, "{}", line);
+                    }
+                    if let Ok(mut f2) = fs::OpenOptions::new().append(true)
+                        .open(cgroup_root.join("io.weight")) {
+                        let _ = writeln!(f2, "{}", line);
+                    }
+                }
             }
         }
         // Throttle devices

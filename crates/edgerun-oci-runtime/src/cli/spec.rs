@@ -52,6 +52,7 @@ fn default_spec() -> String {
             apparmor_profile: None,
             selinux_label: None,
             scheduler: None,
+            console_size: None,
         }),
         root: Some(OciRoot {
             path: "rootfs".into(),
@@ -89,6 +90,9 @@ fn default_spec() -> String {
                 source: Some("proc".into()),
                 options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/dev".into(),
@@ -96,6 +100,9 @@ fn default_spec() -> String {
                 source: Some("tmpfs".into()),
                 options: Some(vec!["nosuid".into(), "strictatime".into(), "mode=755".into(), "size=65536k".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/dev/pts".into(),
@@ -103,6 +110,9 @@ fn default_spec() -> String {
                 source: Some("devpts".into()),
                 options: Some(vec!["nosuid".into(), "noexec".into(), "newinstance".into(), "ptmxmode=0666".into(), "mode=0620".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/dev/shm".into(),
@@ -110,6 +120,9 @@ fn default_spec() -> String {
                 source: Some("shm".into()),
                 options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "mode=1777".into(), "size=65536k".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/dev/mqueue".into(),
@@ -117,6 +130,9 @@ fn default_spec() -> String {
                 source: Some("mqueue".into()),
                 options: Some(vec!["nosuid".into(), "nodev".into(), "noexec".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/sys".into(),
@@ -124,6 +140,9 @@ fn default_spec() -> String {
                 source: Some("sysfs".into()),
                 options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "ro".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
             OciMount {
                 destination: "/sys/fs/cgroup".into(),
@@ -131,6 +150,9 @@ fn default_spec() -> String {
                 source: Some("cgroup".into()),
                 options: Some(vec!["nosuid".into(), "noexec".into(), "nodev".into(), "relatime".into(), "ro".into()]),
                 label: None,
+                recursive: None,
+                uid_mappings: None,
+                gid_mappings: None,
             },
         ]),
         annotations: None,

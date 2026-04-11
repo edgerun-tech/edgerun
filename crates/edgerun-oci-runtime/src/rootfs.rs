@@ -10,12 +10,15 @@ use std::fs;
 use std::io;
 use std::os::raw::c_ulong;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
+use std::os::raw::c_int;
 use std::path::Path;
 
 use crate::json::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
-    do_mount, do_pivot_root, do_umount2, makedev, mknod,
+    chown, do_mount, do_pivot_root, do_umount2, makedev, mknod,
     ms, MNT_DETACH, S_IFCHR,
+    mount_attr, MountAttr, do_mount_setattr,
+    open_tree, move_mount, do_open_tree, do_move_mount,
 };
 
 // ===========================================================================
@@ -115,7 +118,213 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
         do_mount("none", &mount.destination, "", ms::REC | prop_flags, "")?;
     }
 
+    // OCI 1.1 mount.recursive — apply mount flags recursively to sub-mounts
+    // via mount_setattr(2) with MOUNT_ATTR_REC.
+    if mount.recursive == Some(true) {
+        let attr_set = mount_attr::REC | (flags & (mount_attr::RDONLY
+            | mount_attr::NOSUID | mount_attr::NODEV | mount_attr::NOEXEC));
+        let attr = MountAttr {
+            attr_set,
+            attr_clr: 0,
+            propagation: 0,
+            userns_fd: 0,
+        };
+        // Best-effort: kernel may not support mount_setattr (pre-5.12)
+        let _ = do_mount_setattr(
+            libc::AT_FDCWD,
+            &mount.destination,
+            &attr,
+            mount_attr::REC as u32,
+        );
+    }
+
+    // OCI 1.1/1.2 idmapped mounts — uid/gid mappings for the mount.
+    // Requires Linux 5.12+ and the new mount API (open_tree + move_mount).
+    if let Some(ref uid_mappings) = mount.uid_mappings {
+        if !uid_mappings.is_empty() {
+            let _ = setup_idmapped_mount(
+                &mount.destination,
+                source,
+                fstype,
+                uid_mappings,
+                mount.gid_mappings.as_deref(),
+            );
+        }
+    }
+
     Ok(())
+}
+
+/// Set up an idmapped mount using the new mount API (Linux 5.12+).
+///
+/// Creates a user namespace with the given uid/gid mappings, then uses
+/// open_tree + mount_setattr(MOUNT_ATTR_IDMAP) + move_mount to create
+/// an idmapped mount at the target path.
+///
+/// Flow:
+/// 1. fork child
+/// 2. child: unshare(CLONE_NEWUSER), write uid_map/gid_map, signal parent via pipe, pause
+/// 3. parent: open /proc/child_pid/ns/user → userns_fd
+/// 4. parent: open_tree(dest) → tree_fd
+/// 5. parent: mount_setattr(tree_fd, MOUNT_ATTR_IDMAP, userns_fd)
+/// 6. parent: move_mount(tree_fd, "", AT_FDCWD, dest)
+/// 7. parent: signal child to exit via pipe, waitpid
+fn setup_idmapped_mount(
+    dest: &str,
+    _source: &str,
+    _fstype: &str,
+    uid_mappings: &[crate::json::OciIdMapping],
+    gid_mappings: Option<&[crate::json::OciIdMapping]>,
+) -> io::Result<()> {
+    // Build uid_map string: "container_id host_id size\n" per entry
+    let uid_map_str: String = uid_mappings.iter()
+        .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
+        .collect();
+
+    // Build gid_map string (same format)
+    let gid_map_str: String = gid_mappings.map(|mappings| {
+        mappings.iter()
+            .map(|m| format!("{} {} {}\n", m.container_id, m.host_id, m.size))
+            .collect()
+    }).unwrap_or_default();
+
+    // Two pipes for bidirectional synchronization:
+    // child_ready: child writes "R" → parent reads
+    // parent_done: parent writes "D" → child reads
+    let mut child_ready: [c_int; 2] = [-1, -1]; // [0]=read(parent), [1]=write(child)
+    let mut parent_done: [c_int; 2] = [-1, -1]; // [0]=read(child), [1]=write(parent)
+    if unsafe { libc::pipe(child_ready.as_mut_ptr()) } != 0
+        || unsafe { libc::pipe(parent_done.as_mut_ptr()) } != 0
+    {
+        if child_ready[0] >= 0 { unsafe { libc::close(child_ready[0]) }; }
+        if child_ready[1] >= 0 { unsafe { libc::close(child_ready[1]) }; }
+        if parent_done[0] >= 0 { unsafe { libc::close(parent_done[0]) }; }
+        if parent_done[1] >= 0 { unsafe { libc::close(parent_done[1]) }; }
+        return Err(io::Error::last_os_error());
+    }
+
+    let pid = unsafe { libc::fork() };
+    if pid < 0 {
+        let _ = unsafe { libc::close(child_ready[0]) };
+        let _ = unsafe { libc::close(child_ready[1]) };
+        let _ = unsafe { libc::close(parent_done[0]) };
+        let _ = unsafe { libc::close(parent_done[1]) };
+        return Err(io::Error::last_os_error());
+    }
+
+    if pid == 0 {
+        // ====== CHILD PROCESS ======
+        // Close ends we don't use
+        unsafe { libc::close(child_ready[0]) }; // child doesn't read from child_ready
+        unsafe { libc::close(parent_done[1]) }; // child doesn't write to parent_done
+
+        // Create new user namespace
+        if unsafe { libc::unshare(libc::CLONE_NEWUSER) } != 0 {
+            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            unsafe { libc::_exit(1) };
+        }
+
+        // Write uid_map
+        if std::fs::write("/proc/self/uid_map", &uid_map_str).is_err() {
+            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            unsafe { libc::_exit(1) };
+        }
+
+        // Must deny setgroups before writing gid_map (kernel requirement)
+        let _ = std::fs::write("/proc/self/setgroups", "deny");
+
+        // Write gid_map (only if non-empty)
+        if !gid_map_str.is_empty() && std::fs::write("/proc/self/gid_map", &gid_map_str).is_err() {
+            let _ = unsafe { libc::write(child_ready[1], b"E" as *const _ as *const libc::c_void, 1) };
+            unsafe { libc::_exit(1) };
+        }
+
+        // Signal parent that mappings are ready
+        let _ = unsafe { libc::write(child_ready[1], b"R" as *const _ as *const libc::c_void, 1) };
+
+        // Wait for parent to signal completion (or error)
+        // Parent will write "D" (done) or "E" (error)
+        let mut buf = [0u8; 1];
+        let _ = unsafe { libc::read(parent_done[0], buf.as_mut_ptr() as *mut _, 1) };
+        unsafe { libc::close(child_ready[1]) };
+        unsafe { libc::close(parent_done[0]) };
+
+        unsafe { libc::_exit(0) };
+    }
+
+    // ====== PARENT PROCESS ======
+    // Close ends we don't use
+    unsafe { libc::close(child_ready[1]) }; // parent doesn't write to child_ready
+    unsafe { libc::close(parent_done[0]) }; // parent doesn't read from parent_done
+
+    // Wait for child to signal ready or error
+    let mut buf = [0u8; 1];
+    let n = unsafe { libc::read(child_ready[0], buf.as_mut_ptr() as *mut _, 1) };
+    unsafe { libc::close(child_ready[0]) };
+
+    if n != 1 || buf[0] != b'R' {
+        // Child failed — reap it
+        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "failed to create user namespace for idmapped mount",
+        ));
+    }
+
+    // Open child's user namespace fd
+    let userns_path = format!("/proc/{}/ns/user", pid);
+    let userns_cstr = match CString::new(userns_path.as_str()) {
+        Ok(c) => c,
+        Err(_) => {
+            unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid userns path"));
+        }
+    };
+    let userns_fd = unsafe { libc::open(userns_cstr.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+    if userns_fd < 0 {
+        let err = io::Error::last_os_error();
+        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+        return Err(err);
+    }
+
+    // Step 1: open_tree to get a reference to the existing mount at dest
+    let tree_fd = do_open_tree(libc::AT_FDCWD, dest, open_tree::CLONE | open_tree::CLOEXEC);
+    if tree_fd.is_err() {
+        unsafe { libc::close(userns_fd) };
+        unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+        // Fall back gracefully — kernel may not support open_tree (pre-5.6)
+        return Ok(());
+    }
+    let tree_fd = tree_fd.unwrap();
+
+    // Step 2: mount_setattr with MOUNT_ATTR_IDMAP
+    let attr = MountAttr {
+        attr_set: mount_attr::IDMAP,
+        attr_clr: 0,
+        propagation: 0,
+        userns_fd: userns_fd as u64,
+    };
+    let result = do_mount_setattr(tree_fd, "", &attr, move_mount::T_EMPTY_PATH);
+
+    // Step 3: If mount_setattr succeeded, move_mount to re-attach the idmapped mount
+    if result.is_ok() {
+        let _ = do_move_mount(tree_fd, "", libc::AT_FDCWD, dest, move_mount::F_EMPTY_PATH);
+    }
+
+    // Cleanup
+    unsafe { libc::close(tree_fd) };
+    unsafe { libc::close(userns_fd) };
+
+    // Signal child to exit (write "D" to parent_done pipe)
+    // This unblocks the child's read on parent_done[0]
+    let _ = unsafe { libc::write(parent_done[1], b"D" as *const _ as *const libc::c_void, 1) };
+    unsafe { libc::close(parent_done[1]) };
+
+    // Reap child
+    unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
+
+    // If mount_setattr failed, return Ok — kernel may not support idmapped mounts (pre-5.12)
+    result.or(Ok(()))
 }
 
 /// Check if a filesystem of the given type is already mounted at the destination.
@@ -190,6 +399,17 @@ fn create_spec_device(device: &OciLinuxDevice) -> io::Result<()> {
     if ret != 0 {
         return Err(io::Error::last_os_error());
     }
+
+    // Set ownership if uid/gid specified in the OCI spec
+    if device.uid.is_some() || device.gid.is_some() {
+        let uid = device.uid.unwrap_or(u32::MAX);
+        let gid = device.gid.unwrap_or(u32::MAX);
+        let ret = unsafe { chown(path_c.as_ptr(), uid, gid) };
+        if ret != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
     Ok(())
 }
 

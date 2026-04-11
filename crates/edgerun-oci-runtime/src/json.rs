@@ -91,6 +91,14 @@ impl OciSpec {
     }
 }
 
+/// Terminal console dimensions (cells, not pixels).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciBox {
+    pub width: u64,
+    pub height: u64,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OciProcess {
@@ -98,6 +106,9 @@ pub struct OciProcess {
     pub terminal: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<OciUser>,
+    /// Console size for terminal (width and height in cells).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "consoleSize")]
+    pub console_size: Option<OciBox>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -567,4 +578,14 @@ pub struct OciMount {
     pub options: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "label")]
     pub label: Option<String>,
+    /// Recursive mount attribute (OCI 1.1).
+    /// When true, mount options apply recursively to sub-mounts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recursive: Option<bool>,
+    /// UID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "uidMappings")]
+    pub uid_mappings: Option<Vec<OciIdMapping>>,
+    /// GID mappings for idmapped mounts (OCI 1.1/1.2, Linux 5.12+).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "gidMappings")]
+    pub gid_mappings: Option<Vec<OciIdMapping>>,
 }

@@ -61,7 +61,7 @@ const KNOWN_CAPABILITIES: &[&str] = &[
 
 /// Known namespace types for Linux.
 const KNOWN_NAMESPACES: &[&str] = &[
-    "mount", "pid", "network", "ipc", "uts", "user", "cgroup",
+    "mount", "pid", "network", "ipc", "uts", "user", "cgroup", "time",
 ];
 
 /// Validate an OCI spec for known-invalid values before container creation.

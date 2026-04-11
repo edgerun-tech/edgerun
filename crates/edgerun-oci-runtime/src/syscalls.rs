@@ -23,6 +23,7 @@ extern "C" {
     pub fn pivot_root(new_root: *const c_char, put_old: *const c_char) -> c_int;
     pub fn umount2(target: *const c_char, flags: c_int) -> c_int;
     pub fn mknod(path: *const c_char, mode: c_uint, dev: c_uint) -> c_int;
+    pub fn chown(path: *const c_char, owner: u32, group: u32) -> c_int;
     pub fn setuid(uid: u32) -> c_int;
     pub fn setgid(gid: u32) -> c_int;
     pub fn setgroups(size: usize, list: *const u32) -> c_int;
@@ -68,6 +69,104 @@ pub const MNT_DETACH: c_int = 2;
 pub const S_IFCHR: c_uint = 0o020000;
 pub const SIGTERM: c_int = 15;
 pub const SIGKILL: c_int = 9;
+
+// ===========================================================================
+// New mount API (Linux 5.6+) — open_tree, move_mount, mount_setattr
+// ===========================================================================
+
+/// open_tree(2) syscall number (same on x86_64 and aarch64).
+#[cfg(target_arch = "x86_64")]
+pub const SYS_OPEN_TREE: i64 = 428;
+#[cfg(target_arch = "aarch64")]
+pub const SYS_OPEN_TREE: i64 = 428;
+
+/// move_mount(2) syscall number (same on x86_64 and aarch64).
+#[cfg(target_arch = "x86_64")]
+pub const SYS_MOVE_MOUNT: i64 = 429;
+#[cfg(target_arch = "aarch64")]
+pub const SYS_MOVE_MOUNT: i64 = 429;
+
+/// mount_setattr(2) syscall number (same on x86_64 and aarch64).
+#[cfg(target_arch = "x86_64")]
+pub const SYS_MOUNT_SETATTR: i64 = 442;
+#[cfg(target_arch = "aarch64")]
+pub const SYS_MOUNT_SETATTR: i64 = 442;
+
+/// open_tree flags.
+pub mod open_tree {
+    use super::c_uint;
+    pub const CLOEXEC: c_uint   = 0x001;
+    pub const CLONE: c_uint     = 0x002;
+}
+
+/// move_mount flags.
+pub mod move_mount {
+    use super::c_uint;
+    pub const F_EMPTY_PATH: c_uint = 0x0100;
+    pub const T_EMPTY_PATH: c_uint = 0x0200;
+}
+
+/// mount_setattr flags (MOUNT_ATTR_*).
+pub mod mount_attr {
+    use super::c_ulong;
+    pub const RDONLY: c_ulong       = 0x00000001;
+    pub const NOSUID: c_ulong       = 0x00000002;
+    pub const NODEV: c_ulong        = 0x00000004;
+    pub const NOEXEC: c_ulong       = 0x00000008;
+    pub const REC: c_ulong          = 0x00001000;  // Apply recursively to sub-mounts
+    pub const IDMAP: c_ulong        = 0x00100000;  // Idmapped mount (Linux 5.12+)
+}
+
+/// mount_attr structure for mount_setattr(2).
+#[repr(C)]
+pub struct MountAttr {
+    pub attr_set: u64,
+    pub attr_clr: u64,
+    pub propagation: u64,
+    pub userns_fd: u64,
+}
+
+/// Open a mount tree at the given path.
+///
+/// Returns a file descriptor referencing the mount. Use with `move_mount` or `mount_setattr`.
+pub fn do_open_tree(dirfd: c_int, pathname: &str, flags: c_uint) -> io::Result<c_int> {
+    let path_c = CString::new(pathname).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { syscall(SYS_OPEN_TREE, dirfd, path_c.as_ptr(), flags) as c_int };
+    if ret < 0 { Err(io::Error::last_os_error()) } else { Ok(ret) }
+}
+
+/// Move a mount from one location to another.
+///
+/// `from_dfd`/`from_path` is the source mount (from `open_tree` or AT_FDCWD).
+/// `to_dfd`/`to_path` is the destination path.
+pub fn do_move_mount(from_dfd: c_int, from_path: &str, to_dfd: c_int, to_path: &str, flags: c_uint) -> io::Result<()> {
+    let from_c = CString::new(from_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let to_c = CString::new(to_path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { syscall(SYS_MOVE_MOUNT, from_dfd, from_c.as_ptr(), to_dfd, to_c.as_ptr(), flags) as c_int };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { syscall(SYS_MOVE_MOUNT, from_dfd, from_c.as_ptr(), to_dfd, to_c.as_ptr(), flags) as c_int };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Apply mount attributes recursively.
+///
+/// Used for `mount.recursive` (OCI 1.1) — sets/clears mount flags on all sub-mounts.
+pub fn do_mount_setattr(dirfd: c_int, path: &str, attr: &MountAttr, flags: c_uint) -> io::Result<()> {
+    let path_c = CString::new(path).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe {
+        syscall(SYS_MOUNT_SETATTR, dirfd, path_c.as_ptr(), flags, attr as *const _ as u64, std::mem::size_of::<MountAttr>() as u64) as c_int
+    };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe {
+        syscall(SYS_MOUNT_SETATTR, dirfd, path_c.as_ptr(), flags, attr as *const _ as u64, std::mem::size_of::<MountAttr>() as u64) as c_int
+    };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
 
 /// Seccomp syscall numbers per architecture.
 #[cfg(target_arch = "x86_64")]
@@ -569,3 +668,49 @@ pub const R7: u8 = 7;
 pub const R1: u8 = 1;
 /// R2 register number (second argument / temp).
 pub const R2: u8 = 2;
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mount_attr_constants_are_correct() {
+        // Verify mount attr constants match kernel values
+        assert_eq!(mount_attr::RDONLY, 0x00000001);
+        assert_eq!(mount_attr::NOSUID, 0x00000002);
+        assert_eq!(mount_attr::NODEV, 0x00000004);
+        assert_eq!(mount_attr::NOEXEC, 0x00000008);
+        assert_eq!(mount_attr::REC, 0x00001000);
+        assert_eq!(mount_attr::IDMAP, 0x00100000);
+    }
+
+    #[test]
+    fn open_tree_constants_are_correct() {
+        assert_eq!(open_tree::CLOEXEC, 0x001);
+        assert_eq!(open_tree::CLONE, 0x002);
+    }
+
+    #[test]
+    fn move_mount_constants_are_correct() {
+        assert_eq!(move_mount::F_EMPTY_PATH, 0x0100);
+        assert_eq!(move_mount::T_EMPTY_PATH, 0x0200);
+    }
+
+    #[test]
+    fn mount_attr_struct_size() {
+        // MountAttr must be exactly 32 bytes (4 × u64)
+        assert_eq!(std::mem::size_of::<MountAttr>(), 32);
+    }
+
+    #[test]
+    fn new_mount_syscall_numbers_match() {
+        // open_tree, move_mount, mount_setattr have the same numbers on both archs
+        assert_eq!(SYS_OPEN_TREE, 428);
+        assert_eq!(SYS_MOVE_MOUNT, 429);
+        assert_eq!(SYS_MOUNT_SETATTR, 442);
+    }
+}
