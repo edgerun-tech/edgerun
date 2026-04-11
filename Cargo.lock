@@ -1309,6 +1309,11 @@ dependencies = [
 [[package]]
 name = "edgerun-dns"
 version = "0.1.0"
+dependencies = [
+ "edgerun-log",
+ "edgerun-rt",
+ "edgerun-tls",
+]
 
 [[package]]
 name = "edgerun-dom"
@@ -1500,6 +1505,9 @@ name = "edgerun-http"
 version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-dns",
+ "edgerun-log",
+ "edgerun-rt",
  "edgerun-tls",
  "hpack-patched",
  "serde",
@@ -2054,6 +2062,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-core",
  "edgerun-crypto",
+ "edgerun-rt",
  "hex-literal",
  "libc",
  "socket2",
