@@ -54,13 +54,21 @@ use edgerun_rt::{AsyncRead, AsyncWrite};
 
 /// Async TLS 1.3 client stream wrapping any `AsyncRead + AsyncWrite` transport.
 pub struct AsyncTlsStream<S> {
+    /// The underlying transport stream.
     stream: S,
+    /// The expected server hostname for SNI and certificate verification.
     server_name: String,
+    /// The negotiated cipher suite.
     cipher_suite: CipherSuite,
+    /// Record cipher for writing (client → server).
     write_cipher: RecordCipher,
+    /// Record cipher for reading (server → client).
     read_cipher: RecordCipher,
+    /// Whether the TLS handshake has completed.
     handshake_done: bool,
+    /// Buffered application data that was read but not yet consumed.
     pending_data: Vec<u8>,
+    /// Current read position within `pending_data`.
     pending_offset: usize,
 }
 
@@ -252,10 +260,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
         }
     }
 
+    /// Flush the underlying transport.
     pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         async_flush_poll(&mut self.stream, cx)
     }
 
+    /// Shut down the underlying transport.
     pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         // TLS close_notify: send alert then shutdown
         // For simplicity, just shutdown the underlying stream
@@ -462,6 +472,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         })
     }
 
+    /// Read decrypted application data.
     pub fn poll_read(&mut self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
         if !self.handshake_done {
             return Poll::Ready(Err(std::io::Error::new(
@@ -497,6 +508,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         }
     }
 
+    /// Write encrypted application data.
     pub fn poll_write(&mut self, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
         if !self.handshake_done {
             return Poll::Ready(Err(std::io::Error::new(
@@ -527,10 +539,12 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         }
     }
 
+    /// Flush the underlying transport.
     pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         async_flush_poll(&mut self.stream, cx)
     }
 
+    /// Shut down the underlying transport.
     pub fn poll_shutdown(&mut self, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         Pin::new(&mut self.stream).poll_shutdown(cx)
     }

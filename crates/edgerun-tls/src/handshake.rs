@@ -23,6 +23,7 @@ pub struct ClientHelloBuilder {
 }
 
 impl ClientHelloBuilder {
+    /// Create a new ClientHello builder with the given random bytes and server name.
     pub fn new(random: [u8; 32], server_name: &str) -> Self {
         ClientHelloBuilder {
             random,
@@ -34,6 +35,7 @@ impl ClientHelloBuilder {
         }
     }
 
+    /// Add a key share entry for the given group and public key.
     pub fn key_share(mut self, public_key: &[u8], group: NamedGroup) -> Self {
         // KeyShareEntry encoding:
         //   group (2 bytes) + key_exchange length (2 bytes) + key_exchange (variable)
@@ -150,15 +152,22 @@ impl ClientHelloBuilder {
     }
 }
 
-/// Parsed ServerHello
+/// Parsed ServerHello message.
 #[derive(Debug)]
 pub struct ServerHello {
+    /// Legacy protocol version (should be 0x0303 for TLS 1.2).
     pub legacy_version: u16,
+    /// 32 bytes of server random data.
     pub random: [u8; 32],
+    /// Session ID echoed from ClientHello.
     pub session_id: Vec<u8>,
+    /// The cipher suite selected by the server.
     pub cipher_suite: CipherSuite,
+    /// Legacy compression method (always 0 for TLS 1.3).
     pub legacy_compression: u8,
+    /// Server's key exchange data.
     pub server_key_share: Vec<u8>,
+    /// Negotiated protocol version (Some(0x0304) for TLS 1.3).
     pub supported_version: Option<u16>,
 }
 

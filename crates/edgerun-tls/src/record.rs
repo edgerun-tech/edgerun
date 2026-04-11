@@ -167,10 +167,13 @@ impl RecordCipher {
     }
 }
 
-/// Parse a raw TLS record from the wire (unencrypted handshake records or outer encrypted records)
+/// A raw TLS record on the wire.
 pub struct TlsRecord {
+    /// Record content type (22=handshake, 23=application_data, 21=alert).
     pub content_type: u8,
+    /// Protocol version (0x0303 for TLS 1.2 compatibility on outer records).
     pub version: u16,
+    /// Encrypted or plaintext payload.
     pub fragment: Vec<u8>,
 }
 

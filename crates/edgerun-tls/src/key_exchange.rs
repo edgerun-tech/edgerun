@@ -18,6 +18,7 @@ pub enum KeyExchangeGroup {
 }
 
 impl KeyExchangeGroup {
+    /// Parse a key exchange group from its TLS wire-format value.
     pub fn from_wire(value: u16) -> Option<Self> {
         match value {
             0x0017 => Some(KeyExchangeGroup::SECP256R1),
@@ -26,6 +27,7 @@ impl KeyExchangeGroup {
         }
     }
 
+    /// Encode this group to its TLS wire-format value.
     pub fn to_wire(self) -> u16 {
         match self {
             KeyExchangeGroup::SECP256R1 => 0x0017,
@@ -33,7 +35,7 @@ impl KeyExchangeGroup {
         }
     }
 
-    /// Expected public key length for this group
+    /// Expected public key length in bytes for this group.
     pub fn public_key_len(self) -> usize {
         match self {
             KeyExchangeGroup::SECP256R1 => 65, // 0x04 || x(32) || y(32)
@@ -45,12 +47,18 @@ impl KeyExchangeGroup {
 /// A key pair for ECDH key exchange.
 /// Supports both P-256 and X25519.
 pub enum EcdhKeyPair {
+    /// P-256 (secp256r1) key pair with uncompressed point.
     P256 {
+        /// The secret scalar (private key).
         secret: P256Secret,
+        /// The public key as an uncompressed SEC1 encoded point.
         public: EncodedPoint,
     },
+    /// X25519 (Curve25519) key pair.
     X25519 {
+        /// The secret scalar (private key).
         secret: X25519Secret,
+        /// The public key as a 32-byte Montgomery point.
         public: [u8; 32],
     },
 }

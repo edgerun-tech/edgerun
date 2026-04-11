@@ -5,15 +5,17 @@
 use edgerun_crypto::hmac::{Hmac, Mac};
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
-/// Hash abstraction for TLS 1.3 key derivation
+/// Hash abstraction for TLS 1.3 key derivation.
 #[derive(Clone)]
 pub enum Hasher {
+    /// SHA-256 (used for TLS_AES_128_GCM_SHA256).
     Sha256,
+    /// SHA-384 (used for TLS_AES_256_GCM_SHA384).
     Sha384,
 }
 
 impl Hasher {
-    /// Output length in bytes
+    /// Output length of the hash function in bytes.
     pub fn len(&self) -> usize {
         match self {
             Hasher::Sha256 => 32,
@@ -21,7 +23,7 @@ impl Hasher {
         }
     }
 
-    /// HKDF-Extract(salt, ikm)
+    /// HKDF-Extract(salt, ikm) — derive a pseudorandom key from input keying material.
     pub fn extract(&self, salt: &[u8], ikm: &[u8]) -> Vec<u8> {
         match self {
             Self::Sha256 => {
@@ -148,9 +150,11 @@ impl Tls13KeySchedule {
     }
 }
 
-/// Derive record-layer keys from traffic secret
+/// Derived record-layer AEAD keys and IV.
 pub struct TrafficKeys {
+    /// AEAD encryption key.
     pub write_key: Vec<u8>,
+    /// Initialization vector (nonce) for AEAD.
     pub write_iv: Vec<u8>,
 }
 
@@ -202,6 +206,7 @@ fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
     out
 }
 
+/// Compute HMAC-SHA256.
 pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
     type HmacSha256Inner = Hmac<Sha256>;
     let mut mac = HmacSha256Inner::new_from_slice(key).expect("HMAC key length ok");
@@ -209,6 +214,7 @@ pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
+/// Compute HMAC-SHA384.
 pub fn hmac_sha384(key: &[u8], msg: &[u8]) -> Vec<u8> {
     type HmacSha384Inner = Hmac<Sha384>;
     let mut mac = HmacSha384Inner::new_from_slice(key).expect("HMAC key length ok");
