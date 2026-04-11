@@ -50,6 +50,7 @@ pub mod server;
 pub mod zone;
 pub mod record;
 pub mod name;
+pub mod dnssec;
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
@@ -59,3 +60,4 @@ pub use server::query::{ServerState, handle_query, MAX_UDP_RESPONSE};
 pub use zone::DnsZone;
 pub use record::{DnsRecordType, DnsRecordData};
 pub use name::{validate_name, normalize_name, NameError};
+pub use dnssec::{DnssecResult, compute_key_tag, verify_rrsig, verify_chain_of_trust, validate_response};
