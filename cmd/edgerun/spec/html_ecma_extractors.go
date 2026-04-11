@@ -24,9 +24,8 @@ func runHTML(cmd *cobra.Command, args []string) error {
 	matches := regexFindAllSubmatch(`interface\s+(HTML\w+)\s*:\s*(\w+)\s*\{(.*?)\};`, md)
 	for _, m := range matches {
 		elem := &pb.HtmlElement{
-			TagName:     strings.ToLower(strings.TrimPrefix(m[1], "HTML")),
+			TagName:      strings.ToLower(strings.TrimPrefix(m[1], "HTML")),
 			DomInterface: m[1],
-			Parent:      m[2],
 		}
 		cat.HtmlElements = append(cat.HtmlElements, elem)
 	}

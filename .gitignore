@@ -49,3 +49,4 @@ specs/http2-frame-test-case/
 # Large spec archives — keep .md sources, exclude downloaded HTML
 docs/*_spec.html
 docs/*.pdf
+edgerun-cli

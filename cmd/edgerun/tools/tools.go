@@ -88,7 +88,6 @@ func toolsRelease(cmd *cobra.Command, args []string) error {
 }
 
 func toolsDemoCapability(cmd *cobra.Command, args []string) error {
-	root := findRepoRoot()
 	addr := "127.0.0.1:8080"
 	fmt.Printf("Starting capability demo server on %s\n", addr)
 

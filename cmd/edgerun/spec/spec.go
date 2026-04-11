@@ -158,13 +158,6 @@ func writeProto(c *pb.Catalog) error {
 	return err
 }
 
-// writeTextProto outputs the catalog as proto text (human-readable) to stdout.
-func writeTextProto(c *pb.Catalog) error {
-	text := proto.MarshalOptions{Multiline: true}.Format(c)
-	_, err := os.Stdout.WriteString(text)
-	return err
-}
-
 // ---- CSS Extractor ----
 
 func runCSS(cmd *cobra.Command, args []string) error {
