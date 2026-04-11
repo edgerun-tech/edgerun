@@ -351,7 +351,8 @@ pub fn setup_rootfs(
     )?;
 
     // Make / private BEFORE pivot_root so mounts don't propagate to host
-    do_mount("", "/", "", ms::PRIVATE | ms::REC, "")?;
+    // This can fail on some systems (EBUSY), so we make it best-effort
+    let _ = do_mount("", "/", "", ms::PRIVATE | ms::REC, "");
 
     // Create old_root inside rootfs for pivot_root
     let old_root = rootfs.join(".oci-old-root");

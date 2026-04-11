@@ -14,6 +14,11 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
     let id = crate::cli::require_container_id(args)?;
 
+    // Chdir to bundle so relative root.path resolves correctly
+    std::env::set_current_dir(bundle).map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("cannot chdir to bundle: {}", e))
+    })?;
+
     // Check for duplicate ID
     if crate::state::state_file_path(id).exists() {
         return Err(io::Error::new(io::ErrorKind::AlreadyExists,

@@ -21,14 +21,24 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     let (pid, bundle, _cgroup_path) = if let Some(ref s) = state {
         let p = s.pid.unwrap_or(0);
         let b = s.bundle.clone();
+        let st = s.status.clone();
 
-        // Kill if running
-        if p > 0 && is_process_alive(p) {
-            if s.status == "running" && !force {
+        // OCI spec: delete MUST generate an error if container is not stopped
+        // unless --force is used
+        if st != "stopped" && !force {
+            if st == "running" {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput,
                     format!("container {} is still running, use --force", id)));
             }
-            if force || s.status != "running" {
+            if st == "created" {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    format!("container {} is not stopped (status: {}), use --force", id, st)));
+            }
+        }
+
+        // Kill if alive (force or non-stopped)
+        if p > 0 && is_process_alive(p) {
+            if force || st != "stopped" {
                 unsafe { libc::kill(p as c_int, libc::SIGKILL) };
                 unsafe { libc::usleep(50000) };
             }

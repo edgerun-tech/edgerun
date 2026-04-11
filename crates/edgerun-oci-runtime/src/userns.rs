@@ -59,6 +59,12 @@ pub fn set_capabilities(
     bounding: Option<&[String]>,
     ambient: Option<&[String]>,
 ) -> io::Result<()> {
+    // If no capabilities are specified at all, skip capset to keep parent's caps.
+    // Per OCI spec: if not specified, inherit from caller.
+    if effective.is_none() && permitted.is_none() && inheritable.is_none() && bounding.is_none() {
+        return Ok(());
+    }
+
     let eff_mask = caps_to_bitmask(effective.unwrap_or(&[]))?;
     let perm_mask = caps_to_bitmask(permitted.unwrap_or(&[]))?;
     let inh_mask = caps_to_bitmask(inheritable.unwrap_or(&[]))?;

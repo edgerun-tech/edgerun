@@ -10,6 +10,7 @@ use std::os::unix::io::AsRawFd;
 
 use crate::json::{OciIdMapping, OciLinuxDevice, OciRoot, OciSpec};
 use crate::rootfs::{setup_rootfs, apply_sysctl, set_rootfs_propagation};
+#[allow(unused_imports)]
 use crate::seccomp::apply_seccomp_from_spec;
 use crate::syscalls::{
     do_set_hostname, do_unshare, do_setns, do_setrlimit, do_umask, rlimit_name_to_int,
@@ -209,10 +210,7 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // 4. Hostname
     let _ = do_set_hostname(&cfg.hostname);
 
-    // 5. Security: no_new_privs + non-dumpable
-    apply_security_hardening(cfg.no_new_privs)?;
-
-    // 6. Capabilities
+    // 5. Capabilities (MUST come before no_new_privs — capset can only reduce caps after nnp)
     set_capabilities(
         cfg.cap_effective.as_deref(),
         cfg.cap_permitted.as_deref(),
@@ -221,7 +219,10 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         cfg.cap_ambient.as_deref(),
     )?;
 
-    // 7. Seccomp — fail-closed (spec-driven or fallback allow-list)
+    // 6. Security: no_new_privs + non-dumpable (after caps, before seccomp)
+    apply_security_hardening(cfg.no_new_privs)?;
+
+    // 7. Seccomp (requires no_new_privs set; works without CAP_SYS_ADMIN)
     apply_seccomp_from_spec(cfg.seccomp.as_ref()).map_err(|e| {
         io::Error::new(
             io::ErrorKind::PermissionDenied,

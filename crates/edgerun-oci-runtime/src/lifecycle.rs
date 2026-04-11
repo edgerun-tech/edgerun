@@ -94,8 +94,17 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
 ///
 /// Returns the child PID and a reference to the spec-derived config.
 pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
-    let cfg = ContainerConfig::from_spec(spec)?;
+    let mut cfg = ContainerConfig::from_spec(spec)?;
     let bundle_path = cfg.root.path.clone();
+
+    // Resolve rootfs path to absolute path before forking
+    // The child process inherits CWD but it's safer to have absolute paths
+    if !cfg.root.path.starts_with('/') {
+        if let Ok(abs) = std::fs::canonicalize(&cfg.root.path) {
+            cfg.root.path = abs.to_string_lossy().to_string();
+        }
+    }
+
     let cgroup_path = spec.linux.as_ref()
         .and_then(|l| l.cgroups_path.as_ref())
         .cloned()
@@ -141,9 +150,15 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
 
     if child_pid == 0 {
         // Child process
-        // 1. Standard container setup
-        if let Err(e) = setup_container_child(&cfg) {
-            eprintln!("edgerun: container setup failed: {}", e);
+
+        // Open FIFO for reading BEFORE pivot_root (path becomes invalid after pivot_root)
+        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
+        if fifo_fd < 0 {
+            unsafe { libc::_exit(1) };
+        }
+
+        // 1. Standard container setup (mount ns, pivot_root, etc.)
+        if let Err(_e) = setup_container_child(&cfg) {
             unsafe { libc::_exit(1) };
         }
 
@@ -158,24 +173,19 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         };
         if let Some(ref hk) = create_container_hooks {
             if !hk.is_empty() {
-                if let Err(e) = execute_create_container_hooks(Some(hk), &cc_state) {
-                    eprintln!("edgerun: createContainer hook failed: {}", e);
+                if let Err(_e) = execute_create_container_hooks(Some(hk), &cc_state) {
+                    // hook failed
                     unsafe { libc::_exit(1) };
                 }
             }
         }
 
-        // 3. Wait on FIFO for start signal
-        let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
-        if fifo_fd < 0 {
-            eprintln!("edgerun: failed to open FIFO: {}", io::Error::last_os_error());
-            unsafe { libc::_exit(1) };
-        }
+        // 3. Wait on FIFO fd for start signal (fd was opened before pivot_root)
         let mut buf = [0u8; 4];
         let n = unsafe { libc::read(fifo_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
         unsafe { libc::close(fifo_fd) };
         if n <= 0 {
-            eprintln!("edgerun: FIFO closed before start signal");
+            // fifo closed
             unsafe { libc::_exit(1) };
         }
 
@@ -190,8 +200,8 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         };
         if let Some(ref hk) = start_container_hooks {
             if !hk.is_empty() {
-                if let Err(e) = execute_start_container_hooks(Some(hk), &sc_state) {
-                    eprintln!("edgerun: startContainer hook failed: {}", e);
+                if let Err(_e) = execute_start_container_hooks(Some(hk), &sc_state) {
+                    // hook failed
                     unsafe { libc::_exit(1) };
                 }
             }
@@ -199,21 +209,13 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
 
         // 5. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
         if use_pid1_init {
-            if let Err(e) = crate::init::fork_and_init() {
-                eprintln!("edgerun: PID 1 init failed: {}", e);
+            if let Err(_e) = crate::init::fork_and_init() {
+                // init failed
                 unsafe { libc::_exit(1) };
             }
         }
 
         // 6. Exec the workload
-        let exe_cstr = CString::new(workload_args[0].as_bytes()).unwrap();
-        let c_args: Vec<CString> = workload_args.iter()
-            .map(|a| CString::new(a.as_bytes()).unwrap())
-            .collect();
-        let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
-            .map(|s| s.as_ptr())
-            .chain(std::iter::once(std::ptr::null()))
-            .collect();
 
         // Set environment
         for e in &env {
@@ -239,9 +241,40 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         let cwd_c = CString::new(cwd.as_bytes()).unwrap();
         unsafe { libc::chdir(cwd_c.as_ptr()) };
 
-        // execvp
-        unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr() as *const *const libc::c_char) };
-        eprintln!("edgerun: exec failed: {}", io::Error::last_os_error());
+        // Resolve executable path
+        let exe_path = if workload_args[0].starts_with('/') {
+            workload_args[0].clone()
+        } else {
+            let exe_name = &workload_args[0];
+            let path_env = env.iter()
+                .find(|e| e.starts_with("PATH="))
+                .map(|e| &e[5..])
+                .unwrap_or("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+            let mut found = None;
+            for dir in path_env.split(':') {
+                let candidate = format!("{}/{}", dir, exe_name);
+                if std::path::Path::new(&candidate).exists() {
+                    found = Some(candidate);
+                    break;
+                }
+            }
+            found.unwrap_or_else(|| exe_name.clone())
+        };
+
+        // execvp — variables are used by execvp which is noreturn
+        #[allow(unused_variables, unused_assignments)]
+        {
+            let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
+            let c_args: Vec<CString> = workload_args.iter()
+                .map(|a| CString::new(a.as_bytes()).unwrap())
+                .collect();
+            let c_ptrs: Vec<*const libc::c_char> = c_args.iter()
+                .map(|s| s.as_ptr())
+                .chain(std::iter::once(std::ptr::null()))
+                .collect();
+            unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr() as *const *const libc::c_char) };
+        }
+        // exec failed
         unsafe { libc::_exit(127) };
     }
 
