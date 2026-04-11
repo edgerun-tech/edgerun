@@ -30,6 +30,16 @@ pub enum DnsRecordType {
     AAAA = 28,
     /// Service locator
     SRV = 33,
+    /// Naming Authority Pointer (RFC 3403)
+    NAPTR = 35,
+    /// Certificate Authority Authorization (RFC 8659)
+    CAA = 257,
+    /// TLSA — DANE certificate binding (RFC 6698)
+    TLSA = 52,
+    /// HTTPS service binding (RFC 9460)
+    HTTPS = 65,
+    /// SVCB service binding (RFC 9460)
+    SVCB = 64,
     /// Any record (AXFR/IXFR)
     AXFR = 252,
     /// Any record (wildcard query)
@@ -51,8 +61,13 @@ impl DnsRecordType {
             16 => Some(Self::TXT),
             28 => Some(Self::AAAA),
             33 => Some(Self::SRV),
+            35 => Some(Self::NAPTR),
+            52 => Some(Self::TLSA),
+            64 => Some(Self::SVCB),
+            65 => Some(Self::HTTPS),
             252 => Some(Self::AXFR),
             255 => Some(Self::ANY),
+            257 => Some(Self::CAA),
             41 => Some(Self::OPT),
             _ => None,
         }
@@ -75,8 +90,13 @@ impl DnsRecordType {
             Self::TXT => "TXT",
             Self::AAAA => "AAAA",
             Self::SRV => "SRV",
+            Self::NAPTR => "NAPTR",
+            Self::TLSA => "TLSA",
+            Self::SVCB => "SVCB",
+            Self::HTTPS => "HTTPS",
             Self::AXFR => "AXFR",
             Self::ANY => "ANY",
+            Self::CAA => "CAA",
             Self::OPT => "OPT",
         }
     }
@@ -141,6 +161,54 @@ pub enum DnsRecordData {
         port: u16,
         /// Hostname of the machine providing the service.
         target: String,
+    },
+    /// NAPTR — Naming Authority Pointer (RFC 3403).
+    /// Used for URI/telephone routing and ENUM.
+    NAPTR {
+        /// Order — processed before weight (lower first).
+        order: u16,
+        /// Preference — processed before higher (lower first).
+        preference: u16,
+        /// Flags — controls rewrite behavior (e.g. "u", "s", "a", "p").
+        flags: String,
+        /// Services — protocol+service tuple (e.g. "SIP+D2U").
+        services: String,
+        /// Regexp — POSIX extended regex for URI rewriting.
+        regexp: String,
+        /// Replacement — domain name if regexp is empty.
+        replacement: String,
+    },
+    /// CAA — Certificate Authority Authorization (RFC 8659).
+    /// Restricts which CAs may issue certificates for a domain.
+    CAA {
+        /// Critical flag — if set, CA must not issue if it doesn't understand the tag.
+        critical: bool,
+        /// Tag — "issue", "issuewild", or "iodef".
+        tag: String,
+        /// Value — CA domain name or URI for reports.
+        value: String,
+    },
+    /// TLSA — DANE certificate binding (RFC 6698).
+    /// Associates a TLS certificate with a domain name via DNSSEC.
+    TLSA {
+        /// Certificate usage: 0=CA, 1=service cert, 2=trust anchor, 3=leaf cert.
+        usage: u8,
+        /// Selector: 0=full cert, 1=subject public key info.
+        selector: u8,
+        /// Matching type: 0=exact, 1=SHA-256, 2=SHA-512.
+        matching_type: u8,
+        /// Certificate association data.
+        certificate: Vec<u8>,
+    },
+    /// SVCB/HTTPS — Service Binding (RFC 9460).
+    /// Specifies how to reach a service (protocol, port, ALPN, IPs, etc.).
+    SVCB {
+        /// Priority — 0 means "alias mode" (points to another name).
+        priority: u16,
+        /// Target domain name.
+        target: String,
+        /// SVCB parameters (encoded wire format: key + length + value).
+        params: Vec<u8>,
     },
     /// Unknown or uninterpreted raw record data.
     Raw(Vec<u8>),
@@ -210,20 +278,59 @@ impl DnsRecordData {
                 buf.extend_from_slice(&minimum.to_be_bytes());
                 buf
             }
-            (
-                DnsRecordType::SRV,
-                DnsRecordData::SRV {
-                    priority,
-                    weight,
-                    port,
-                    target,
-                },
-            ) => {
+            (DnsRecordType::SRV, DnsRecordData::SRV {
+                priority,
+                weight,
+                port,
+                target,
+            }) => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(&priority.to_be_bytes());
                 buf.extend_from_slice(&weight.to_be_bytes());
                 buf.extend_from_slice(&port.to_be_bytes());
                 buf.extend_from_slice(&encode_domain_name(target));
+                buf
+            }
+            (DnsRecordType::NAPTR, DnsRecordData::NAPTR {
+                order, preference, flags, services, regexp, replacement,
+            }) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&order.to_be_bytes());
+                buf.extend_from_slice(&preference.to_be_bytes());
+                // Character strings: length byte + data
+                buf.push(flags.len() as u8);
+                buf.extend_from_slice(flags.as_bytes());
+                buf.push(services.len() as u8);
+                buf.extend_from_slice(services.as_bytes());
+                buf.push(regexp.len() as u8);
+                buf.extend_from_slice(regexp.as_bytes());
+                buf.extend_from_slice(&encode_domain_name(replacement));
+                buf
+            }
+            (DnsRecordType::CAA, DnsRecordData::CAA { critical, tag, value }) => {
+                let mut buf = Vec::new();
+                buf.push(if *critical { 0x80 } else { 0 });
+                buf.push(tag.len() as u8);
+                buf.extend_from_slice(tag.as_bytes());
+                buf.extend_from_slice(value.as_bytes());
+                buf
+            }
+            (DnsRecordType::TLSA, DnsRecordData::TLSA {
+                usage, selector, matching_type, certificate,
+            }) => {
+                let mut buf = Vec::new();
+                buf.push(*usage);
+                buf.push(*selector);
+                buf.push(*matching_type);
+                buf.extend_from_slice(certificate);
+                buf
+            }
+            (DnsRecordType::HTTPS, DnsRecordData::SVCB { priority, target, params })
+            | (DnsRecordType::SVCB, DnsRecordData::SVCB { priority, target, params }) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&priority.to_be_bytes());
+                buf.extend_from_slice(&encode_domain_name(target));
+                buf.extend_from_slice(params);
                 buf
             }
             (_, DnsRecordData::Raw(data)) => data.clone(),
@@ -325,6 +432,64 @@ impl DnsRecordData {
                     port,
                     target,
                 })
+            }
+            DnsRecordType::NAPTR => {
+                if data.len() < 4 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let order = u16::from_be_bytes([data[0], data[1]]);
+                let preference = u16::from_be_bytes([data[2], data[3]]);
+                let mut pos = 4;
+                // Character strings: length byte + data
+                let parse_charstr = |d: &[u8], p: &mut usize| -> String {
+                    if *p >= d.len() { return String::new(); }
+                    let len = d[*p] as usize;
+                    *p += 1;
+                    let end = (*p + len).min(d.len());
+                    let s = String::from_utf8_lossy(&d[*p..end]).to_string();
+                    *p = end;
+                    s
+                };
+                let flags = parse_charstr(data, &mut pos);
+                let services = parse_charstr(data, &mut pos);
+                let regexp = parse_charstr(data, &mut pos);
+                let replacement = decode_domain_name(data, pos, offset_map).unwrap_or_default();
+                Ok(Self::NAPTR {
+                    order, preference, flags, services, regexp, replacement,
+                })
+            }
+            DnsRecordType::CAA => {
+                if data.len() < 2 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let critical = (data[0] & 0x80) != 0;
+                let tag_len = data[1] as usize;
+                let tag_start = 2;
+                let tag_end = tag_start + tag_len.min(data.len().saturating_sub(2));
+                let tag = String::from_utf8_lossy(&data[tag_start..tag_end]).to_string();
+                let value = String::from_utf8_lossy(&data[tag_end..]).to_string();
+                Ok(Self::CAA { critical, tag, value })
+            }
+            DnsRecordType::TLSA => {
+                if data.len() < 3 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                Ok(Self::TLSA {
+                    usage: data[0],
+                    selector: data[1],
+                    matching_type: data[2],
+                    certificate: data[3..].to_vec(),
+                })
+            }
+            DnsRecordType::HTTPS | DnsRecordType::SVCB => {
+                if data.len() < 2 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let priority = u16::from_be_bytes([data[0], data[1]]);
+                let target = decode_domain_name(data, 2, offset_map)?;
+                let target_len = domain_name_wire_len(data, 2);
+                let params = data[2 + target_len..].to_vec();
+                Ok(Self::SVCB { priority, target, params })
             }
             DnsRecordType::OPT => {
                 if data.len() < 4 {
@@ -552,5 +717,77 @@ mod tests {
         let offset_map: Vec<(usize, usize)> = (0..data.len()).map(|i| (i, i)).collect();
         let name = decode_domain_name(&data, 0, &offset_map).unwrap();
         assert_eq!(name, "www.example.com");
+    }
+
+    #[test]
+    fn test_naptr_wire() {
+        let data = DnsRecordData::NAPTR {
+            order: 100,
+            preference: 10,
+            flags: "u".to_string(),
+            services: "SIP+D2U".to_string(),
+            regexp: "!^.*$!sip:customer-service@example.com!".to_string(),
+            replacement: String::new(),
+        };
+        let wire = data.to_wire(DnsRecordType::NAPTR);
+        assert_eq!(wire[0..2], [0, 100]); // order
+        assert_eq!(wire[2..4], [0, 10]);  // preference
+        assert_eq!(wire[4], 1);            // flags length
+        assert_eq!(&wire[5..6], b"u");
+    }
+
+    #[test]
+    fn test_caa_wire() {
+        let data = DnsRecordData::CAA {
+            critical: true,
+            tag: "issue".to_string(),
+            value: "letsencrypt.org".to_string(),
+        };
+        let wire = data.to_wire(DnsRecordType::CAA);
+        assert_eq!(wire[0], 0x80); // critical flag
+        assert_eq!(wire[1], 5);    // tag length
+        assert_eq!(&wire[2..7], b"issue");
+        assert_eq!(&wire[7..], b"letsencrypt.org");
+    }
+
+    #[test]
+    fn test_tlsa_wire() {
+        let data = DnsRecordData::TLSA {
+            usage: 3,
+            selector: 1,
+            matching_type: 1,
+            certificate: vec![0xDE, 0xAD, 0xBE, 0xEF],
+        };
+        let wire = data.to_wire(DnsRecordType::TLSA);
+        assert_eq!(wire[0], 3);
+        assert_eq!(wire[1], 1);
+        assert_eq!(wire[2], 1);
+        assert_eq!(&wire[3..], &[0xDE, 0xAD, 0xBE, 0xEF]);
+    }
+
+    #[test]
+    fn test_svcb_wire() {
+        let data = DnsRecordData::SVCB {
+            priority: 1,
+            target: "example.com".to_string(),
+            params: vec![0, 4, 0, 8, 0, 1, 0x05, 0x06], // alpn=h2
+        };
+        let wire = data.to_wire(DnsRecordType::HTTPS);
+        assert_eq!(wire[0..2], [0, 1]); // priority
+        // target is domain-name encoded after priority
+    }
+
+    #[test]
+    fn test_record_type_extended() {
+        assert_eq!(DnsRecordType::from_u16(35), Some(DnsRecordType::NAPTR));
+        assert_eq!(DnsRecordType::from_u16(257), Some(DnsRecordType::CAA));
+        assert_eq!(DnsRecordType::from_u16(52), Some(DnsRecordType::TLSA));
+        assert_eq!(DnsRecordType::from_u16(65), Some(DnsRecordType::HTTPS));
+        assert_eq!(DnsRecordType::from_u16(64), Some(DnsRecordType::SVCB));
+        assert_eq!(DnsRecordType::NAPTR.as_str(), "NAPTR");
+        assert_eq!(DnsRecordType::CAA.as_str(), "CAA");
+        assert_eq!(DnsRecordType::TLSA.as_str(), "TLSA");
+        assert_eq!(DnsRecordType::HTTPS.as_str(), "HTTPS");
+        assert_eq!(DnsRecordType::SVCB.as_str(), "SVCB");
     }
 }

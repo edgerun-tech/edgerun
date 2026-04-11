@@ -134,6 +134,37 @@ impl DnsZone {
         self.add_record(rr);
     }
 
+    /// Add a NAPTR record (RFC 3403 — URI/telephone routing).
+    pub fn add_naptr(&mut self, name: &str, order: u16, preference: u16,
+                     flags: &str, services: &str, regexp: &str, replacement: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::naptr(full_name, order, preference, flags.to_string(),
+                                  services.to_string(), regexp.to_string(), replacement.to_string(), ttl);
+        self.add_record(rr);
+    }
+
+    /// Add a CAA record (RFC 8659 — Certificate Authority Authorization).
+    pub fn add_caa(&mut self, name: &str, critical: bool, tag: &str, value: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::caa(full_name, critical, tag.to_string(), value.to_string(), ttl);
+        self.add_record(rr);
+    }
+
+    /// Add a TLSA record (RFC 6698 — DANE certificate binding).
+    pub fn add_tlsa(&mut self, name: &str, usage: u8, selector: u8, matching_type: u8,
+                    certificate: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::tlsa(full_name, usage, selector, matching_type, certificate, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an HTTPS/SVCB record (RFC 9460 — Service Binding).
+    pub fn add_https(&mut self, name: &str, priority: u16, target: &str, params: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::svcb(full_name, priority, target.to_string(), params, ttl);
+        self.add_record(rr);
+    }
+
     /// Add a raw record directly.
     pub fn add_record(&mut self, rr: DnsRecord) {
         let name = rr.name.to_lowercase();

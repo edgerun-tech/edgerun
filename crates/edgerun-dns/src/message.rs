@@ -423,6 +423,52 @@ impl DnsRecord {
         }
     }
 
+    /// Create a NAPTR record (RFC 3403 — URI/telephone routing).
+    pub fn naptr(name: String, order: u16, preference: u16, flags: String,
+                 services: String, regexp: String, replacement: String, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::NAPTR,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::NAPTR { order, preference, flags, services, regexp, replacement },
+        }
+    }
+
+    /// Create a CAA record (RFC 8659 — Certificate Authority Authorization).
+    pub fn caa(name: String, critical: bool, tag: String, value: String, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::CAA,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::CAA { critical, tag, value },
+        }
+    }
+
+    /// Create a TLSA record (RFC 6698 — DANE certificate binding).
+    pub fn tlsa(name: String, usage: u8, selector: u8, matching_type: u8,
+                certificate: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::TLSA,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::TLSA { usage, selector, matching_type, certificate },
+        }
+    }
+
+    /// Create an SVCB/HTTPS record (RFC 9460 — Service Binding).
+    pub fn svcb(name: String, priority: u16, target: String, params: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::HTTPS,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::SVCB { priority, target, params },
+        }
+    }
+
     /// Create an EDNS0 OPT pseudo-record (RFC 6891).
     ///
     /// The `rclass` field holds the UDP payload size, and `ttl` encodes
