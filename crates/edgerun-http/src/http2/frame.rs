@@ -140,7 +140,11 @@ impl Frame {
     }
 
     /// Parse frame from bytes
-    pub fn from_bytes(data: &[u8]) -> Result<(Self, usize)> {
+    ///
+    /// Note: frame size validation uses `max_frame_size` parameter (from
+    /// negotiated `SETTINGS_MAX_FRAME_SIZE`), not the hardcoded default.
+    /// Callers should pass their current negotiated max frame size.
+    pub fn from_bytes(data: &[u8], max_frame_size: u32) -> Result<(Self, usize)> {
         if data.len() < 9 {
             return Err(Http2Error::FrameParse(
                 "Frame header too short".to_string(),
@@ -165,12 +169,11 @@ impl Frame {
             | ((data[7] as u32) << 8)
             | (data[8] as u32);
 
-        // Validate frame size
-        if length > Self::DEFAULT_MAX_FRAME_SIZE {
+        // Validate frame size against negotiated limit
+        if length > max_frame_size {
             return Err(Http2Error::FrameParse(format!(
                 "Frame size {} exceeds maximum {}",
-                length,
-                Self::DEFAULT_MAX_FRAME_SIZE
+                length, max_frame_size
             )));
         }
 
@@ -314,18 +317,16 @@ impl Frame {
                 }
             }
             FrameType::WindowUpdate => {
-                // WINDOW_UPDATE payload MUST be exactly 4 octets
-                // Window size increment MUST NOT be 0
-                if self.stream_id != 0 && self.payload.len() != 4 {
+                // WINDOW_UPDATE payload MUST be exactly 4 octets (RFC 9113 §6.9)
+                if self.payload.len() != 4 {
                     return Err(ErrorCode::FRAME_SIZE_ERROR.to_u32());
                 }
-                if self.payload.len() == 4 {
-                    let inc = u32::from_be_bytes([
-                        self.payload[0], self.payload[1], self.payload[2], self.payload[3],
-                    ]) & 0x7FFFFFFF;
-                    if inc == 0 {
-                        return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
-                    }
+                // Window size increment MUST NOT be 0
+                let inc = u32::from_be_bytes([
+                    self.payload[0], self.payload[1], self.payload[2], self.payload[3],
+                ]) & 0x7FFFFFFF;
+                if inc == 0 {
+                    return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
                 }
             }
             FrameType::Continuation => {
@@ -1176,7 +1177,7 @@ mod tests {
         // Header (9 bytes) + payload (5 bytes) = 14
         assert_eq!(bytes.len(), 14);
 
-        let (parsed, _) = Frame::from_bytes(&bytes).unwrap();
+        let (parsed, _) = Frame::from_bytes(&bytes, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
         assert_eq!(parsed.frame_type, FrameType::Data);
         assert_eq!(parsed.flags, 0x1);
         assert_eq!(parsed.stream_id, 1);
@@ -1185,7 +1186,7 @@ mod tests {
 
     #[test]
     fn test_frame_from_bytes_too_short() {
-        assert!(Frame::from_bytes(&[0, 0]).is_err());
+        assert!(Frame::from_bytes(&[0, 0], Frame::DEFAULT_MAX_FRAME_SIZE).is_err());
     }
 
     #[test]

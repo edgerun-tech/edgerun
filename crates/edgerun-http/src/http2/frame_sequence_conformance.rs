@@ -124,7 +124,7 @@ fn frame_sequence_valid_client_preface_settings_headers_data() {
         0x04, 0x01,       // Type = SETTINGS, Flags = ACK
         0x00, 0x00, 0x00, 0x00,
     ];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // HEADERS on stream 1 with END_HEADERS
@@ -134,7 +134,7 @@ fn frame_sequence_valid_client_preface_settings_headers_data() {
         0x00, 0x00, 0x00, 0x01, // Stream ID = 1
         0x82, 0x86, 0x84, 0x41, 0x8a, // dummy HPACK
     ];
-    let (headers, _) = Frame::from_bytes(headers_wire).unwrap();
+    let (headers, _) = Frame::from_bytes(headers_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&headers).is_ok());
     assert!(!validator.expecting_continuation());
 
@@ -145,7 +145,7 @@ fn frame_sequence_valid_client_preface_settings_headers_data() {
         0x00, 0x00, 0x00, 0x01, // Stream ID = 1
         0x48, 0x65, 0x6c, 0x6c, 0x6f, // "Hello"
     ];
-    let (data, _) = Frame::from_bytes(data_wire).unwrap();
+    let (data, _) = Frame::from_bytes(data_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&data).is_ok());
 }
 
@@ -158,7 +158,7 @@ fn frame_sequence_invalid_data_before_headers() {
     let settings_wire: &[u8] = &[
         0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00,
     ];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // DATA on stream 1 without prior HEADERS
@@ -166,7 +166,7 @@ fn frame_sequence_invalid_data_before_headers() {
         0x00, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
         0x48, 0x65, 0x6c, 0x6c, 0x6f,
     ];
-    let (data, _) = Frame::from_bytes(data_wire).unwrap();
+    let (data, _) = Frame::from_bytes(data_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&data).is_err());
 }
 
@@ -179,7 +179,7 @@ fn frame_sequence_invalid_continuation_without_headers() {
         0x00, 0x00, 0x05, 0x09, 0x04, 0x00, 0x00, 0x00, 0x01,
         0x82, 0x86, 0x84, 0x41, 0x8a,
     ];
-    let (cont, _) = Frame::from_bytes(cont_wire).unwrap();
+    let (cont, _) = Frame::from_bytes(cont_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&cont).is_err());
 }
 
@@ -190,7 +190,7 @@ fn frame_sequence_headers_without_end_headers_expects_continuation() {
 
     // SETTINGS
     let settings_wire: &[u8] = &[0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // HEADERS without END_HEADERS
@@ -198,7 +198,7 @@ fn frame_sequence_headers_without_end_headers_expects_continuation() {
         0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x82, 0x86, 0x84,
     ];
-    let (headers, _) = Frame::from_bytes(headers_wire).unwrap();
+    let (headers, _) = Frame::from_bytes(headers_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&headers).is_ok());
     assert!(validator.expecting_continuation());
 }
@@ -210,7 +210,7 @@ fn frame_sequence_continuation_after_headers() {
 
     // SETTINGS
     let settings_wire: &[u8] = &[0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // HEADERS without END_HEADERS
@@ -218,7 +218,7 @@ fn frame_sequence_continuation_after_headers() {
         0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x82, 0x86, 0x84,
     ];
-    let (headers, _) = Frame::from_bytes(headers_wire).unwrap();
+    let (headers, _) = Frame::from_bytes(headers_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&headers).is_ok());
 
     // CONTINUATION
@@ -226,7 +226,7 @@ fn frame_sequence_continuation_after_headers() {
         0x00, 0x00, 0x03, 0x09, 0x04, 0x00, 0x00, 0x00, 0x01,
         0x41, 0x8a, 0x8c,
     ];
-    let (cont, _) = Frame::from_bytes(cont_wire).unwrap();
+    let (cont, _) = Frame::from_bytes(cont_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&cont).is_ok());
     assert!(!validator.expecting_continuation());
 }
@@ -238,7 +238,7 @@ fn frame_sequence_data_after_goaway_rejected() {
 
     // SETTINGS
     let settings_wire: &[u8] = &[0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // GOAWAY
@@ -249,7 +249,7 @@ fn frame_sequence_data_after_goaway_rejected() {
         0x00, 0x00, 0x00, 0x00, // Last stream ID = 0
         0x00, 0x00, 0x00, 0x00, // Error code = 0
     ];
-    let (goaway, _) = Frame::from_bytes(goaway_wire).unwrap();
+    let (goaway, _) = Frame::from_bytes(goaway_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&goaway).is_ok());
 
     // DATA on stream 1 after GOAWAY
@@ -257,7 +257,7 @@ fn frame_sequence_data_after_goaway_rejected() {
         0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x48, 0x65, 0x6c, 0x6c, 0x6f,
     ];
-    let (data, _) = Frame::from_bytes(data_wire).unwrap();
+    let (data, _) = Frame::from_bytes(data_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&data).is_err());
 }
 
@@ -268,7 +268,7 @@ fn frame_sequence_rst_stream_closes_stream() {
 
     // SETTINGS
     let settings_wire: &[u8] = &[0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00];
-    let (settings, _) = Frame::from_bytes(settings_wire).unwrap();
+    let (settings, _) = Frame::from_bytes(settings_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&settings).is_ok());
 
     // HEADERS on stream 1
@@ -276,7 +276,7 @@ fn frame_sequence_rst_stream_closes_stream() {
         0x00, 0x00, 0x05, 0x01, 0x04, 0x00, 0x00, 0x00, 0x01,
         0x82, 0x86, 0x84, 0x41, 0x8a,
     ];
-    let (headers, _) = Frame::from_bytes(headers_wire).unwrap();
+    let (headers, _) = Frame::from_bytes(headers_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&headers).is_ok());
 
     // RST_STREAM on stream 1
@@ -284,7 +284,7 @@ fn frame_sequence_rst_stream_closes_stream() {
         0x00, 0x00, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x00, 0x00, 0x00, 0x00, // Error code = 0
     ];
-    let (rst, _) = Frame::from_bytes(rst_wire).unwrap();
+    let (rst, _) = Frame::from_bytes(rst_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&rst).is_ok());
 
     // DATA on stream 1 after RST_STREAM
@@ -292,7 +292,7 @@ fn frame_sequence_rst_stream_closes_stream() {
         0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x48, 0x65, 0x6c, 0x6c, 0x6f,
     ];
-    let (data, _) = Frame::from_bytes(data_wire).unwrap();
+    let (data, _) = Frame::from_bytes(data_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert!(validator.validate(&data).is_err());
 }
 
@@ -302,7 +302,7 @@ fn frame_sequence_rst_stream_on_stream_zero_rejected() {
         0x00, 0x00, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
     ];
-    let (rst, _) = Frame::from_bytes(rst_wire).unwrap();
+    let (rst, _) = Frame::from_bytes(rst_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     let mut validator = FrameSequenceValidator::new();
     assert!(validator.validate(&rst).is_err());
 }
@@ -313,7 +313,7 @@ fn frame_sequence_goaway_on_nonzero_stream_rejected() {
         0x00, 0x00, 0x08, 0x07, 0x00, 0x00, 0x00, 0x00, 0x01,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
-    let (goaway, _) = Frame::from_bytes(goaway_wire).unwrap();
+    let (goaway, _) = Frame::from_bytes(goaway_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     let mut validator = FrameSequenceValidator::new();
     assert!(validator.validate(&goaway).is_err());
 }

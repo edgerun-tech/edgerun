@@ -10,7 +10,7 @@
 //! - Hardcoded test keys for unit testing the packet layer
 
 use edgerun_crypto::aes_gcm::{
-    aead::{Aead, KeyInit},
+    aead::{Aead, AeadCore, KeyInit, Payload},
     Aes128Gcm, Aes256Gcm, Key, Nonce,
 };
 
@@ -150,43 +150,43 @@ impl PacketProtection {
 
     /// Protect (encrypt) a packet payload
     ///
-    /// AAD = unprotected packet header
+    /// AAD = unprotected packet header (authenticated but not encrypted)
     /// Nonce = write_iv XOR (packet_number << 8)
-    pub fn protect(&mut self, header: &[u8], plaintext: &[u8]) -> Vec<u8> {
+    pub fn protect(&mut self, header: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let pn = self.packet_number;
         self.packet_number += 1;
 
         let nonce = self.make_nonce(&self.write_iv, pn);
+        let payload = Payload { msg: plaintext, aad: header };
 
         match &self.write_aead {
             AeadCipher::Aes128(aead) => {
                 let nonce = Nonce::from_slice(&nonce);
-                aead.encrypt(nonce, plaintext)
-                    .unwrap_or_else(|_| plaintext.to_vec())
+                aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
             }
             AeadCipher::Aes256(aead) => {
                 let nonce = Nonce::from_slice(&nonce);
-                aead.encrypt(nonce, plaintext)
-                    .unwrap_or_else(|_| plaintext.to_vec())
+                aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
             }
         }
     }
 
     /// Unprotect (decrypt) a packet payload
     ///
-    /// AAD = unprotected packet header
+    /// AAD = unprotected packet header (authenticated but not encrypted)
     /// Nonce = read_iv XOR (packet_number << 8)
-    pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext: &[u8]) -> Option<Vec<u8>> {
+    pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
         let nonce = self.make_nonce(&self.read_iv, packet_number);
+        let payload = Payload { msg: ciphertext, aad: header };
 
         match &self.read_aead {
             AeadCipher::Aes128(aead) => {
                 let nonce = Nonce::from_slice(&nonce);
-                aead.decrypt(nonce, ciphertext).ok()
+                aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
             }
             AeadCipher::Aes256(aead) => {
                 let nonce = Nonce::from_slice(&nonce);
-                aead.decrypt(nonce, ciphertext).ok()
+                aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
             }
         }
     }
@@ -334,14 +334,14 @@ mod tests {
 
         let header = b"header";
         let plaintext = b"hello quic";
-        let ciphertext = protection.protect(header, plaintext);
+        let ciphertext = protection.protect(header, plaintext).expect("encrypt failed");
 
         assert_ne!(ciphertext, plaintext.to_vec());
         assert!(ciphertext.len() > plaintext.len()); // includes tag
 
         // Decrypt
-        let decrypted = protection.unprotect(header, 0, &ciphertext);
-        assert_eq!(decrypted.as_deref(), Some(plaintext.as_ref()));
+        let decrypted = protection.unprotect(header, 0, &ciphertext).expect("decrypt failed");
+        assert_eq!(decrypted.as_slice(), plaintext.as_slice());
     }
 
     #[test]

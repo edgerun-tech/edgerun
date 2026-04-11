@@ -1,0 +1,928 @@
+{
+  "char_classes": {
+    "EOF": 0,
+    "LT": 1,
+    "GT": 2,
+    "SLASH": 3,
+    "ALPHA": 4,
+    "ALNUM": 5,
+    "WS": 6,
+    "AMP": 7,
+    "QUOT": 8,
+    "APOS": 9,
+    "EQ": 10,
+    "NULL": 11,
+    "OTHER": 12
+  },
+  "token_types": {
+    "NONE": 0,
+    "START_TAG": 1,
+    "END_TAG": 2,
+    "CHARACTER": 3,
+    "COMMENT": 4,
+    "DOCTYPE": 5,
+    "EOF": 6
+  },
+  "states": {
+    "DATA": 0,
+    "TAG_OPEN": 1,
+    "END_TAG_OPEN": 2,
+    "TAG_NAME": 3,
+    "BEFORE_ATTRIBUTE_NAME": 4,
+    "ATTRIBUTE_NAME": 5,
+    "AFTER_ATTRIBUTE_NAME": 6,
+    "BEFORE_ATTRIBUTE_VALUE": 7,
+    "ATTRIBUTE_VALUE_DOUBLE_QUOTED": 8,
+    "ATTRIBUTE_VALUE_SINGLE_QUOTED": 9,
+    "ATTRIBUTE_VALUE_UNQUOTED": 10,
+    "SELF_CLOSING_START_TAG": 11,
+    "EOF": 12
+  },
+  "actions": {
+    "NONE": 0,
+    "EMIT_CHAR": 1,
+    "EMIT_EOF": 2,
+    "START_TAG": 3,
+    "END_TAG": 4,
+    "APPEND_TAG_NAME": 5,
+    "APPEND_ATTR_NAME": 6,
+    "APPEND_ATTR_VALUE": 7,
+    "EMIT_TOKEN": 8,
+    "PARSE_ERROR": 9,
+    "SET_SELF_CLOSING": 10,
+    "SWITCH_TO_RAWTEXT": 11,
+    "SWITCH_TO_RCDATA": 12
+  },
+  "transitions": [
+    {
+      "state": "DATA",
+      "char_class": "LT",
+      "next": "TAG_OPEN",
+      "actions": [],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "AMP",
+      "next": "DATA",
+      "actions": [
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "EOF",
+      "next": "EOF",
+      "actions": [
+        "EMIT_EOF"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "ALPHA",
+      "next": "DATA",
+      "actions": [
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "ALNUM",
+      "next": "DATA",
+      "actions": [
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "WS",
+      "next": "DATA",
+      "actions": [
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "DATA",
+      "char_class": "OTHER",
+      "next": "DATA",
+      "actions": [
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.1"
+    },
+    {
+      "state": "TAG_OPEN",
+      "char_class": "SLASH",
+      "next": "END_TAG_OPEN",
+      "actions": [],
+      "spec": "13.2.5.6"
+    },
+    {
+      "state": "TAG_OPEN",
+      "char_class": "ALPHA",
+      "next": "TAG_NAME",
+      "actions": [
+        "START_TAG",
+        "APPEND_TAG_NAME"
+      ],
+      "spec": "13.2.5.6"
+    },
+    {
+      "state": "TAG_OPEN",
+      "char_class": "OTHER",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.6"
+    },
+    {
+      "state": "END_TAG_OPEN",
+      "char_class": "ALPHA",
+      "next": "TAG_NAME",
+      "actions": [
+        "END_TAG",
+        "APPEND_TAG_NAME"
+      ],
+      "spec": "13.2.5.7"
+    },
+    {
+      "state": "END_TAG_OPEN",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR"
+      ],
+      "spec": "13.2.5.7"
+    },
+    {
+      "state": "END_TAG_OPEN",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR"
+      ],
+      "spec": "13.2.5.7"
+    },
+    {
+      "state": "END_TAG_OPEN",
+      "char_class": "OTHER",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_CHAR"
+      ],
+      "spec": "13.2.5.7"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "WS",
+      "next": "BEFORE_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "SLASH",
+      "next": "SELF_CLOSING_START_TAG",
+      "actions": [],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "NULL",
+      "next": "TAG_NAME",
+      "actions": [
+        "PARSE_ERROR",
+        "APPEND_TAG_NAME"
+      ],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "ALNUM",
+      "next": "TAG_NAME",
+      "actions": [
+        "APPEND_TAG_NAME"
+      ],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "TAG_NAME",
+      "char_class": "OTHER",
+      "next": "TAG_NAME",
+      "actions": [
+        "APPEND_TAG_NAME"
+      ],
+      "spec": "13.2.5.8"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "WS",
+      "next": "BEFORE_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "SLASH",
+      "next": "SELF_CLOSING_START_TAG",
+      "actions": [],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "QUOT",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "APOS",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "EQ",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_NAME",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.36"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "WS",
+      "next": "AFTER_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "SLASH",
+      "next": "SELF_CLOSING_START_TAG",
+      "actions": [],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "EQ",
+      "next": "BEFORE_ATTRIBUTE_VALUE",
+      "actions": [],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "QUOT",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "APOS",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "ATTRIBUTE_NAME",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.40"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "WS",
+      "next": "AFTER_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "SLASH",
+      "next": "SELF_CLOSING_START_TAG",
+      "actions": [],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "QUOT",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "APOS",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "EQ",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "AFTER_ATTRIBUTE_NAME",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_NAME",
+      "actions": [
+        "APPEND_ATTR_NAME"
+      ],
+      "spec": "13.2.5.41"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "WS",
+      "next": "BEFORE_ATTRIBUTE_VALUE",
+      "actions": [],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "QUOT",
+      "next": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "actions": [],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "APOS",
+      "next": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "actions": [],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_VALUE_UNQUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "BEFORE_ATTRIBUTE_VALUE",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_VALUE_UNQUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.42"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "char_class": "QUOT",
+      "next": "AFTER_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.43"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "char_class": "AMP",
+      "next": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.43"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.43"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.43"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_VALUE_DOUBLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.43"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "char_class": "APOS",
+      "next": "AFTER_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.44"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "char_class": "AMP",
+      "next": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.44"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.44"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.44"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_VALUE_SINGLE_QUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.44"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "WS",
+      "next": "BEFORE_ATTRIBUTE_NAME",
+      "actions": [],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "AMP",
+      "next": "ATTRIBUTE_VALUE_UNQUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "ALNUM",
+      "next": "ATTRIBUTE_VALUE_UNQUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "ATTRIBUTE_VALUE_UNQUOTED",
+      "char_class": "OTHER",
+      "next": "ATTRIBUTE_VALUE_UNQUOTED",
+      "actions": [
+        "APPEND_ATTR_VALUE"
+      ],
+      "spec": "13.2.5.45"
+    },
+    {
+      "state": "SELF_CLOSING_START_TAG",
+      "char_class": "GT",
+      "next": "DATA",
+      "actions": [
+        "SET_SELF_CLOSING",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.38"
+    },
+    {
+      "state": "SELF_CLOSING_START_TAG",
+      "char_class": "EOF",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR",
+        "EMIT_TOKEN"
+      ],
+      "spec": "13.2.5.38"
+    },
+    {
+      "state": "SELF_CLOSING_START_TAG",
+      "char_class": "OTHER",
+      "next": "DATA",
+      "actions": [
+        "PARSE_ERROR"
+      ],
+      "spec": "13.2.5.38"
+    }
+  ],
+  "tree_rules": [
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "div"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "span"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "p"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "a"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "h1"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "h2"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "h3"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "ul"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "li"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "start_tag": "any"
+      },
+      "actions": [
+        "INSERT"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "end_tag": "div"
+      },
+      "actions": [
+        "POP_UNTIL"
+      ],
+      "pop_until": "div",
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "end_tag": "span"
+      },
+      "actions": [
+        "POP_UNTIL"
+      ],
+      "pop_until": "span",
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "end_tag": "p"
+      },
+      "actions": [
+        "POP_UNTIL"
+      ],
+      "pop_until": "p",
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "end_tag": "any"
+      },
+      "actions": [
+        "POP_UNTIL"
+      ],
+      "pop_until": null,
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "character": true
+      },
+      "actions": [
+        "APPEND_CHARACTER"
+      ],
+      "next_mode": "IN_BODY",
+      "spec": "13.2.6.4.16.7"
+    },
+    {
+      "mode": "IN_BODY",
+      "trigger": {
+        "eof": true
+      },
+      "actions": [],
+      "next_mode": "AFTER_BODY",
+      "spec": "13.2.6.4.16.7"
+    }
+  ],
+  "entities": [
+    {
+      "name": "amp",
+      "code_point_1": 38,
+      "code_point_2": 0,
+      "semicolon_required": true
+    },
+    {
+      "name": "lt",
+      "code_point_1": 60,
+      "code_point_2": 0,
+      "semicolon_required": true
+    },
+    {
+      "name": "gt",
+      "code_point_1": 62,
+      "code_point_2": 0,
+      "semicolon_required": true
+    },
+    {
+      "name": "quot",
+      "code_point_1": 34,
+      "code_point_2": 0,
+      "semicolon_required": true
+    },
+    {
+      "name": "apos",
+      "code_point_1": 39,
+      "code_point_2": 0,
+      "semicolon_required": true
+    },
+    {
+      "name": "nbsp",
+      "code_point_1": 160,
+      "code_point_2": 0,
+      "semicolon_required": true
+    }
+  ],
+  "void_elements": [
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr"
+  ],
+  "raw_text_elements": [
+    "script",
+    "style"
+  ],
+  "escapable_raw_text_elements": [
+    "textarea",
+    "title"
+  ]
+}

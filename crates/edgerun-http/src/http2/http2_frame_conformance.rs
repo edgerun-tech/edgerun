@@ -93,7 +93,7 @@ fn run_frame_decode_conformance() {
             // Normal case: decode and compare header fields + payload.
             let expected = tc.frame.as_ref().unwrap();
 
-            match Frame::from_bytes(&wire) {
+            match Frame::from_bytes(&wire, Frame::DEFAULT_MAX_FRAME_SIZE) {
                 Ok((frame, _consumed)) => {
                     let mut case_ok = true;
 
@@ -157,7 +157,7 @@ fn run_frame_decode_conformance() {
         } else if tc.error.is_some() {
             // Error case: first try low-level frame parsing, then semantic validation.
             let expected_errors = tc.error.as_ref().unwrap();
-            match Frame::from_bytes(&wire) {
+            match Frame::from_bytes(&wire, Frame::DEFAULT_MAX_FRAME_SIZE) {
                 Ok((frame, _consumed)) => {
                     // Frame structure is valid, check semantic rules.
                     match frame.validate_semantics() {

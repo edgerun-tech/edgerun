@@ -28,6 +28,10 @@ impl Response {
 
     /// Parse an HTTP/1.1 response from raw bytes.
     ///
+    /// The `is_head` parameter should be `true` if the corresponding request
+    /// was a HEAD request, since HEAD responses MUST NOT contain a body
+    /// (even if Content-Length is present).
+    ///
     /// Handles:
     /// - Status line parsing
     /// - Header parsing until blank line (CRLF CRLF)
@@ -35,7 +39,7 @@ impl Response {
     ///   - Content-Length header
     ///   - Chunked Transfer-Encoding (RFC 9112 §7.1)
     ///   - No body for HEAD responses, 1xx, 204, 304 responses
-    pub fn from_bytes(raw: &[u8]) -> Result<Self> {
+    pub fn from_bytes(raw: &[u8], is_head: bool) -> Result<Self> {
         let mut pos = 0;
 
         // Find end of status line (CRLF)
@@ -84,7 +88,7 @@ impl Response {
                 let name = line[..colon_pos].trim();
                 let value = line[colon_pos + 1..].trim();
                 if !name.is_empty() {
-                    headers.insert(name, value);
+                    let _ = headers.insert(name, value); // skip invalid headers
                 }
             }
             pos = crlf + 2;
@@ -92,7 +96,6 @@ impl Response {
 
         // Determine body length and extract body
         let status_code_val = status.as_u16();
-        let is_head = false; // We don't know the request method here
 
         // Responses to HEAD requests and 1xx/204/304 responses MUST NOT have a body
         if is_head || status_code_val < 200 || status_code_val == 204 || status_code_val == 304 {
@@ -125,8 +128,10 @@ impl Response {
     }
 
     /// Create a response from HTTP response string (convenience wrapper).
+    /// Assumes this is NOT a HEAD response. For HEAD responses, use
+    /// [`Response::from_bytes`] with `is_head = true`.
     pub fn from_http(response: &str) -> Result<Self> {
-        Self::from_bytes(response.as_bytes())
+        Self::from_bytes(response.as_bytes(), false)
     }
 
     /// Find CRLF starting at position `pos`.
@@ -206,7 +211,7 @@ impl Response {
                         let name = line[..colon].trim();
                         let value = line[colon + 1..].trim();
                         if !name.is_empty() {
-                            trailers.insert(name, value);
+                            let _ = trailers.insert(name, value); // skip invalid trailers
                         }
                     }
                     pos = end + 2;

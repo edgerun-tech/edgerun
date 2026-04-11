@@ -7,7 +7,9 @@
 //!
 //! Run with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --ignored --test-threads=1`
 
+#[path = "support/runner.rs"]
 mod runner;
+#[path = "support/bundle.rs"]
 mod bundle;
 
 use edgerun_oci_runtime::json::*;

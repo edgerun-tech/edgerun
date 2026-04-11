@@ -73,7 +73,8 @@ impl Uri {
             let (host_str, port_str) = if auth_without_userinfo.starts_with('[') {
                 // IPv6
                 if let Some(bracket_end) = auth_without_userinfo.find(']') {
-                    let host = &auth_without_userinfo[..bracket_end + 1];
+                    // Strip brackets: host is between '[' and ']'
+                    let host = &auth_without_userinfo[1..bracket_end];
                     let port = if bracket_end + 1 < auth_without_userinfo.len()
                         && auth_without_userinfo.as_bytes()[bracket_end + 1] == b':'
                     {
@@ -83,7 +84,7 @@ impl Uri {
                     };
                     (host, port)
                 } else {
-                    (auth_without_userinfo, None)
+                    return Err("Invalid IPv6 address in URI".to_string());
                 }
             } else if let Some(pos) = auth_without_userinfo.rfind(':') {
                 (&auth_without_userinfo[..pos], Some(&auth_without_userinfo[pos + 1..]))
@@ -93,7 +94,9 @@ impl Uri {
 
             host = Some(host_str.to_string());
             if let Some(port_str) = port_str {
-                port = port_str.parse::<u16>().ok();
+                port = Some(port_str.parse::<u16>().map_err(|_| {
+                    format!("Invalid port number: {}", port_str)
+                })?);
             }
         }
 

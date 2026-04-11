@@ -143,6 +143,9 @@ impl QpackDecoder {
             return Err(QpackError::DecoderStream("Not enough data".to_string()));
         }
 
+        // Check Huffman flag (bit 7 per RFC 9204 §5)
+        let huffman = (data[start] & 0x80) != 0;
+
         let (str_len, bytes_read) = super::decode_varint(data, start, 7)?;
 
         if start + bytes_read + str_len as usize > data.len() {
@@ -151,7 +154,18 @@ impl QpackDecoder {
 
         let str_data =
             &data[start + bytes_read..start + bytes_read + str_len as usize];
-        let value = String::from_utf8_lossy(str_data).to_string();
+
+        let value = if huffman {
+            // Huffman decoding is not yet implemented — reject rather than
+            // silently returning garbage (RFC 9204 §5).
+            return Err(QpackError::DecoderStream(
+                "Huffman-encoded strings not yet supported".to_string(),
+            ));
+        } else {
+            String::from_utf8(str_data.to_vec()).map_err(|_| {
+                QpackError::DecoderStream("Invalid UTF-8 in string".to_string())
+            })?
+        };
 
         Ok((value, bytes_read + str_len as usize))
     }

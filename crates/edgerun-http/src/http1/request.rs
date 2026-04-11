@@ -86,7 +86,7 @@ impl Request {
                         let name = line[..colon].trim();
                         let value = line[colon + 1..].trim();
                         if !name.is_empty() {
-                            headers.insert(name, value);
+                            let _ = headers.insert(name, value); // skip invalid headers
                         }
                     }
                     pos = end + 2;
@@ -288,13 +288,9 @@ impl RequestBuilder {
         self
     }
 
-    /// Add a header
-    pub fn header(
-        mut self,
-        name: impl Into<crate::HeaderName>,
-        value: impl Into<crate::HeaderValue>,
-    ) -> Self {
-        self.headers.insert(name, value);
+    /// Add a header. Panics if the name or value is invalid.
+    pub fn header(mut self, name: &str, value: &str) -> Self {
+        self.headers.insert(name, value).expect("Invalid header name or value");
         self
     }
 
@@ -306,7 +302,7 @@ impl RequestBuilder {
 
     /// Set the body as JSON (sets Content-Type header)
     pub fn json_body(mut self, json: &str) -> Self {
-        self.headers.insert("Content-Type", "application/json");
+        let _ = self.headers.insert("Content-Type", "application/json");
         self.body = Some(json.as_bytes().to_vec());
         self
     }

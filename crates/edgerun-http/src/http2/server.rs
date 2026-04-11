@@ -269,7 +269,8 @@ impl Http2Server {
             s.close();
         }
         // Don't clean up immediately — post-closure frames may still arrive.
-        FrameAction::WriteFrames(vec![RstStreamFrame::new(rst.stream_id, rst.error_code).to_frame()])
+        // RST_STREAM is one-way — silently accept, don't echo back (RFC 7540 §6.4)
+        FrameAction::None
     }
 
     /// Process an incoming PRIORITY frame.
@@ -1014,8 +1015,8 @@ mod tests {
 
         let rst = RstStreamFrame::new(1, 0).to_frame();
         let action = server.handle_rst_stream(&rst);
-        // RST_STREAM returns the frame to be written to the client
-        assert!(matches!(action, FrameAction::WriteFrames(_)));
+        // RST_STREAM is one-way — silently accept, don't echo back (RFC 7540 §6.4)
+        assert!(matches!(action, FrameAction::None));
         // Stream is marked closed but NOT cleaned up immediately —
         // post-closure frames may still arrive per RFC 7540 §5.1.
         let s = server.stream_manager.get_stream(1).unwrap();

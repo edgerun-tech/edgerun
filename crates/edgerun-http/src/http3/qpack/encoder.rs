@@ -98,34 +98,38 @@ impl QpackEncoder {
         let mut output = Vec::new();
 
         if is_static {
-            // 1 1 S------  (6-bit prefix for index)
-            if index < 64 {
-                output.push(0xC0 | (index as u8));
-            } else {
-                output.push(0xFF);
-                let mut remaining = index - 63;
-                while remaining >= 128 {
-                    output.push((remaining % 128 + 128) as u8);
-                    remaining /= 128;
-                }
-                output.push(remaining as u8);
-            }
+            // 1 1 S------  (6-bit prefix, type = 0b11)
+            Self::encode_prefixed_varint(&mut output, index as u64, 6, 0xC0);
         } else {
-            // 1 0 N----  (6-bit prefix for dynamic index)
-            if index < 64 {
-                output.push(0x80 | (index as u8));
-            } else {
-                output.push(0xBF);
-                let mut remaining = index - 63;
-                while remaining >= 128 {
-                    output.push((remaining % 128 + 128) as u8);
-                    remaining /= 128;
-                }
-                output.push(remaining as u8);
-            }
+            // 1 0 N------  (6-bit prefix, type = 0b10)
+            Self::encode_prefixed_varint(&mut output, index as u64, 6, 0x80);
         }
 
         output
+    }
+
+    /// Encode a QPACK varint with a type prefix.
+    ///
+    /// Writes the value as a QPACK integer with `prefix_bits` data bits in the
+    /// first byte, OR-ing `type_prefix` into the first byte's type bits.
+    fn encode_prefixed_varint(
+        output: &mut Vec<u8>,
+        value: u64,
+        prefix_bits: u8,
+        type_prefix: u8,
+    ) {
+        let max_prefix = (1u64 << prefix_bits) - 1;
+        if value < max_prefix {
+            output.push(type_prefix | (value as u8));
+        } else {
+            output.push(type_prefix | max_prefix as u8);
+            let mut remaining = value - max_prefix;
+            while remaining >= 128 {
+                output.push((remaining % 128 + 128) as u8);
+                remaining /= 128;
+            }
+            output.push(remaining as u8);
+        }
     }
 
     /// Encode literal header field with indexing (name reference)
@@ -135,38 +139,27 @@ impl QpackEncoder {
         is_static: bool,
         value: &[u8],
     ) {
-        let prefix_bits = if is_static { 4 } else { 6 };
-
         if is_static {
-            // 0 1 T N----
-            output.push(0x40 | ((name_index >> 8) & 0x0F) as u8);
-            if name_index > 15 {
-                output.push((name_index & 0xFF) as u8);
-            }
+            // 0 1 T S-----  (4-bit prefix, type = 0b01)
+            Self::encode_prefixed_varint(output, name_index as u64, 4, 0x40);
         } else {
-            // 0 1 T N-----
-            output.push(0x20 | ((name_index >> 8) & 0x3F) as u8);
-            if name_index > 63 {
-                output.push((name_index & 0xFF) as u8);
-            }
+            // 0 1 T N-----  (6-bit prefix, type = 0b01 with 6-bit dynamic)
+            Self::encode_prefixed_varint(output, name_index as u64, 6, 0x20);
         }
 
-        // Encode value as string
-        output.push(value.len() as u8);
+        // Encode value as string (7-bit prefix)
+        super::encode_varint(value.len() as u64, 7, output);
         output.extend_from_slice(value);
     }
 
     /// Encode literal header field with indexing (new name)
     fn encode_literal_with_indexing_new_name(output: &mut Vec<u8>, name: &[u8], value: &[u8]) {
-        // 0 0 1 T N----
-        output.push(0x10 | ((name.len() >> 8) & 0x0F) as u8);
-        if name.len() > 15 {
-            output.push((name.len() & 0xFF) as u8);
-        }
+        // 0 0 1 T N----  (5-bit prefix for name length, type = 0b001)
+        Self::encode_prefixed_varint(output, name.len() as u64, 5, 0x10);
         output.extend_from_slice(name);
 
-        // Value
-        output.push(value.len() as u8);
+        // Value length with 7-bit prefix
+        super::encode_varint(value.len() as u64, 7, output);
         output.extend_from_slice(value);
     }
 

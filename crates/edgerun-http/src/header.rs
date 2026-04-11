@@ -29,7 +29,7 @@ impl HeaderName {
 }
 
 /// Check if a byte is a valid HTTP token character (RFC 9110 Section 5.6.2).
-fn is_tchar(b: u8) -> bool {
+pub fn is_tchar(b: u8) -> bool {
     match b {
         b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+'
         | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~' => true,
@@ -44,15 +44,19 @@ impl fmt::Display for HeaderName {
     }
 }
 
-impl From<&str> for HeaderName {
-    fn from(s: &str) -> Self {
-        HeaderName::new(s.to_string()).expect("Invalid header name")
+impl TryFrom<&str> for HeaderName {
+    type Error = String;
+
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+        HeaderName::new(s.to_string())
     }
 }
 
-impl From<String> for HeaderName {
-    fn from(s: String) -> Self {
-        HeaderName::new(s).expect("Invalid header name")
+impl TryFrom<String> for HeaderName {
+    type Error = String;
+
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        HeaderName::new(s)
     }
 }
 
@@ -87,15 +91,19 @@ impl fmt::Display for HeaderValue {
     }
 }
 
-impl From<&str> for HeaderValue {
-    fn from(s: &str) -> Self {
-        HeaderValue::new(s.to_string()).expect("Invalid header value")
+impl TryFrom<&str> for HeaderValue {
+    type Error = String;
+
+    fn try_from(s: &str) -> std::result::Result<Self, Self::Error> {
+        HeaderValue::new(s.to_string())
     }
 }
 
-impl From<String> for HeaderValue {
-    fn from(s: String) -> Self {
-        HeaderValue::new(s).expect("Invalid header value")
+impl TryFrom<String> for HeaderValue {
+    type Error = String;
+
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        HeaderValue::new(s)
     }
 }
 
@@ -113,11 +121,12 @@ impl HeaderMap {
         }
     }
 
-    /// Insert a header
-    pub fn insert(&mut self, name: impl Into<HeaderName>, value: impl Into<HeaderValue>) {
-        let name = name.into();
-        let value = value.into();
+    /// Insert a header. Returns `Err` if the name or value is invalid.
+    pub fn insert(&mut self, name: &str, value: &str) -> std::result::Result<(), String> {
+        let name = HeaderName::new(name.to_string())?;
+        let value = HeaderValue::new(value.to_string())?;
         self.headers.push((name, value));
+        Ok(())
     }
 
     /// Get the first value for a header name (case-insensitive)

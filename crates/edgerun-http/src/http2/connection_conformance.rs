@@ -28,7 +28,7 @@ fn connection_preface_parse_as_frame() {
     // followed by 15 bytes of payload (but it's actually special — not a valid frame).
     // The first 3 bytes are "PRI" which would decode as length 0x505249 = 5,263,945
     // which exceeds the default max frame size (16,384). So from_bytes rejects it.
-    let result = Frame::from_bytes(PREFACE);
+    let result = Frame::from_bytes(PREFACE, Frame::DEFAULT_MAX_FRAME_SIZE);
     // The preface is NOT a valid frame — it's a magic string that MUST be
     // recognized by the server before frame parsing begins.
     assert!(result.is_err(), "Connection preface should not parse as a valid frame");
@@ -60,7 +60,7 @@ fn settings_frame_parse() {
         0x00, 0x03, 0x00, 0x00, 0x13, 0x88,
     ];
 
-    let (frame, consumed) = Frame::from_bytes(wire).unwrap();
+    let (frame, consumed) = Frame::from_bytes(wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(consumed, wire.len());
     assert_eq!(frame.frame_type, FrameType::Settings);
     assert_eq!(frame.flags, 0x00);
@@ -81,7 +81,7 @@ fn settings_ack_frame_parse() {
         0x00, 0x00, 0x00, 0x00, // Stream ID = 0
     ];
 
-    let (frame, consumed) = Frame::from_bytes(wire).unwrap();
+    let (frame, consumed) = Frame::from_bytes(wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(consumed, wire.len());
     assert_eq!(frame.frame_type, FrameType::Settings);
     assert_eq!(frame.flags, 0x01);
@@ -101,7 +101,7 @@ fn settings_ack_with_payload_rejected() {
         0x00, 0x01, 0x00, 0x00, 0x20, 0x00, // payload (6 bytes)
     ];
 
-    let (frame, _) = Frame::from_bytes(wire).unwrap();
+    let (frame, _) = Frame::from_bytes(wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(frame.validate_semantics(), Err(crate::http2::ErrorCode::FRAME_SIZE_ERROR.to_u32()));
 }
 
@@ -116,7 +116,7 @@ fn settings_on_nonzero_stream_rejected() {
         0x00, 0x01, 0x00, 0x00, 0x20, 0x00,
     ];
 
-    let (frame, _) = Frame::from_bytes(wire).unwrap();
+    let (frame, _) = Frame::from_bytes(wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(frame.validate_semantics(), Err(crate::http2::ErrorCode::PROTOCOL_ERROR.to_u32()));
 }
 
@@ -131,7 +131,7 @@ fn settings_partial_payload_rejected() {
         0x00, 0x01, 0x00, // only 3 bytes of a setting
     ];
 
-    let (frame, _) = Frame::from_bytes(wire).unwrap();
+    let (frame, _) = Frame::from_bytes(wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(frame.validate_semantics(), Err(crate::http2::ErrorCode::FRAME_SIZE_ERROR.to_u32()));
 }
 
@@ -341,7 +341,7 @@ fn settings_roundtrip_encode_decode() {
     frame_wire.extend_from_slice(&0u32.to_be_bytes()); // Stream ID = 0
     frame_wire.extend_from_slice(&wire);
 
-    let (frame, consumed) = Frame::from_bytes(&frame_wire).unwrap();
+    let (frame, consumed) = Frame::from_bytes(&frame_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(consumed, frame_wire.len());
     assert_eq!(frame.frame_type, FrameType::Settings);
     assert_eq!(frame.stream_id, 0);
@@ -385,7 +385,7 @@ fn settings_roundtrip_custom_values() {
     frame_wire.extend_from_slice(&0u32.to_be_bytes());
     frame_wire.extend_from_slice(&wire);
 
-    let (frame, _) = Frame::from_bytes(&frame_wire).unwrap();
+    let (frame, _) = Frame::from_bytes(&frame_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
 
     // Decode
     let settings_entries: Vec<(u16, u32)> = frame
@@ -445,7 +445,7 @@ fn settings_ack_frame_has_no_payload() {
         0x04, 0x01,       // Type = SETTINGS, Flags = ACK
         0x00, 0x00, 0x00, 0x00,
     ];
-    let (frame, _) = Frame::from_bytes(ack_wire).unwrap();
+    let (frame, _) = Frame::from_bytes(ack_wire, Frame::DEFAULT_MAX_FRAME_SIZE).unwrap();
     assert_eq!(frame.payload.len(), 0);
     assert_eq!(frame.flags, 0x01);
     assert!(frame.validate_semantics().is_ok());

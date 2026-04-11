@@ -159,24 +159,29 @@ impl Http3Connection {
         Ok(())
     }
 
-    /// Poll for incoming frames on a stream
+    /// Poll for incoming frames on the given stream.
+    ///
+    /// Returns the parsed [`Http3Frame`] if one was received, `None` if no data
+    /// is available, or an error if the frame is malformed.
     pub fn poll_stream(&mut self, stream_id: u64) -> Result<Option<Http3Frame>> {
         // Try to receive data from QUIC
         match self.quic.recv_stream_data() {
             Ok(Some((recv_stream_id, data, _fin))) => {
-                let _ = recv_stream_id;
-                // Parse HTTP/3 frame from the data
+                // Verify the data belongs to the requested stream
+                if recv_stream_id != stream_id {
+                    // Return data to buffer for later (simplified: just report None)
+                    return Ok(None);
+                }
                 if data.is_empty() {
                     return Ok(None);
                 }
-                // Try to parse as HTTP/3 frame
-                match Http3Frame::from_bytes(&data) {
-                    Ok((frame, _consumed)) => Ok(Some(frame)),
-                    Err(_) => Ok(None),
-                }
+                // Parse as HTTP/3 frame
+                Http3Frame::from_bytes(&data)
+                    .map(|(frame, _consumed)| Some(frame))
+                    .map_err(|e| Http3Error::ProtocolViolation(format!("Malformed HTTP/3 frame: {:?}", e)))
             }
             Ok(None) => Ok(None),
-            Err(_) => Ok(None),
+            Err(e) => Err(Http3Error::QuicError(e)),
         }
     }
 
@@ -217,11 +222,15 @@ impl Http3Connection {
             output.push(((value >> 8) as u8) | 0x40);
             output.push(value as u8);
         } else if value < 1073741824 {
-            output.push(((value >> 24) as u8) | 0x80);
-            output.extend_from_slice(&(value as u32).to_be_bytes());
+            let bytes = (value as u32).to_be_bytes();
+            output.push(bytes[0] | 0x80);
+            output.push(bytes[1]);
+            output.push(bytes[2]);
+            output.push(bytes[3]);
         } else {
-            output.push(((value >> 56) as u8) | 0xC0);
-            output.extend_from_slice(&value.to_be_bytes());
+            let bytes = value.to_be_bytes();
+            output.push(bytes[0] | 0xC0);
+            output.extend_from_slice(&bytes[1..]);
         }
     }
 }

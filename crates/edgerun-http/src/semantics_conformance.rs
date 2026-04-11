@@ -317,8 +317,8 @@ fn header_value_rejects_control_chars() {
 #[test]
 fn header_map_insert_and_get() {
     let mut map = HeaderMap::new();
-    map.insert("content-type", "application/json");
-    map.insert("accept", "text/html");
+    let _ = map.insert("content-type", "application/json");
+    let _ = map.insert("accept", "text/html");
 
     assert!(map.contains_key("content-type"));
     assert!(map.contains_key("Content-Type")); // case-insensitive
@@ -328,8 +328,8 @@ fn header_map_insert_and_get() {
 #[test]
 fn header_map_multiple_values() {
     let mut map = HeaderMap::new();
-    map.insert("accept", "text/html");
-    map.insert("accept", "application/json");
+    let _ = map.insert("accept", "text/html");
+    let _ = map.insert("accept", "application/json");
 
     let all = map.get_all("accept");
     assert_eq!(all.len(), 2);

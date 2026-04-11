@@ -48,8 +48,6 @@ pub struct Connection<S> {
     pending_pings: HashMap<u64, bool>,
     /// Last stream ID received
     last_stream_received: u32,
-    /// Read buffer
-    read_buffer: Vec<u8>,
     /// Write buffer
     write_buffer: Vec<u8>,
 }
@@ -68,7 +66,6 @@ impl<S: Read + Write> Connection<S> {
             ping_id: 0,
             pending_pings: HashMap::new(),
             last_stream_received: 0,
-            read_buffer: Vec::new(),
             write_buffer: Vec::new(),
         };
 
@@ -91,7 +88,6 @@ impl<S: Read + Write> Connection<S> {
             ping_id: 0,
             pending_pings: HashMap::new(),
             last_stream_received: 0,
-            read_buffer: Vec::new(),
             write_buffer: Vec::new(),
         };
 
@@ -127,7 +123,9 @@ impl<S: Read + Write> Connection<S> {
         self.stream.write_all(&frame_bytes)?;
         self.stream.flush()?;
 
-        self.state = ConnectionState::PrefaceSent;
+        // Per RFC 9113 §3.4, after sending SETTINGS the connection is established
+        // (the client's SETTINGS will be processed during the first poll)
+        self.state = ConnectionState::Established;
         self.pending_settings = true;
 
         Ok(())
@@ -144,7 +142,8 @@ impl<S: Read + Write> Connection<S> {
         self.stream.write_all(&frame_bytes)?;
         self.stream.flush()?;
 
-        self.state = ConnectionState::PrefaceSent;
+        // Per RFC 9113 §3.4, after sending preface + SETTINGS the connection is established
+        self.state = ConnectionState::Established;
         self.pending_settings = true;
 
         Ok(())
@@ -156,24 +155,31 @@ impl<S: Read + Write> Connection<S> {
         let mut header = [0u8; 9];
         self.stream.read_exact(&mut header)?;
 
-        // Extend read buffer
-        self.read_buffer.extend_from_slice(&header);
-
         // Parse frame length
         let length = ((header[0] as u32) << 16) | ((header[1] as u32) << 8) | (header[2] as u32);
 
-        // Read frame payload
+        // Validate frame size BEFORE allocating payload buffer (prevent unbounded allocation)
+        let max_frame_size = self.remote_settings.max_frame_size.max(Frame::DEFAULT_MAX_FRAME_SIZE);
+        if length > max_frame_size {
+            return Err(Http2Error::FrameParse(format!(
+                "Frame size {} exceeds maximum {}",
+                length, max_frame_size
+            )));
+        }
+
+        // Read frame payload (now safe — bounded)
         let mut payload = vec![0u8; length as usize];
         if length > 0 {
             self.stream.read_exact(&mut payload)?;
-            self.read_buffer.extend_from_slice(&payload);
         }
 
-        // Parse frame
-        let (frame, _) = Frame::from_bytes(&self.read_buffer)?;
+        // Reconstruct frame bytes for parsing
+        let mut frame_bytes = Vec::with_capacity(9 + payload.len());
+        frame_bytes.extend_from_slice(&header);
+        frame_bytes.extend_from_slice(&payload);
 
-        // Clear read buffer
-        self.read_buffer.clear();
+        // Parse frame
+        let (frame, _) = Frame::from_bytes(&frame_bytes, max_frame_size)?;
 
         // Process frame
         self.process_frame(&frame)?;
@@ -292,6 +298,13 @@ impl<S: Read + Write> Connection<S> {
                 .increment_connection(wu_frame.window_increment)?;
         } else {
             // Stream-level window update
+            // WINDOW_UPDATE on a stream that was never created is a connection-level PROTOCOL_ERROR
+            if self.streams.get_stream(wu_frame.stream_id).is_none() {
+                return Err(Http2Error::ProtocolViolation(format!(
+                    "WINDOW_UPDATE on idle stream {}",
+                    wu_frame.stream_id
+                )));
+            }
             self.flow_control
                 .increment_stream(wu_frame.stream_id, wu_frame.window_increment)?;
         }
@@ -376,6 +389,15 @@ impl<S: Read + Write> Connection<S> {
     /// Process PUSH_PROMISE frame (RFC 7540 §6.6)
     /// Creates a new server-initiated stream for the promised resource.
     fn process_push_promise(&mut self, pp_frame: &PushPromiseFrame) -> Result<()> {
+        // If push is disabled (our local SETTINGS_ENABLE_PUSH = 0), receiving
+        // PUSH_PROMISE is a connection-level PROTOCOL_ERROR (RFC 7540 §6.6).
+        // We sent this setting to the server to tell it whether we accept push.
+        if self.local_settings.enable_push == 0 {
+            return Err(Http2Error::ProtocolViolation(
+                "PUSH_PROMISE received but push is disabled".to_string(),
+            ));
+        }
+
         // Promised stream ID must be even (server-initiated)
         if pp_frame.promised_stream_id % 2 == 0 {
             // Create the promised stream
@@ -526,22 +548,22 @@ impl<S: Read + Write> Connection<S> {
 
 impl<S: Read + Write> Read for Connection<S> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Read next frame and extract data
-        let frame = self.poll().map_err(io::Error::from)?;
+        // Read frames until we find DATA or get None
+        loop {
+            let frame = self.poll().map_err(io::Error::from)?;
 
-        match frame {
-            Some(frame) => {
-                if frame.frame_type == FrameType::Data {
-                    let data_frame = DataFrame::from_frame(&frame).map_err(io::Error::from)?;
-                    let len = data_frame.data.len().min(buf.len());
-                    buf[..len].copy_from_slice(&data_frame.data[..len]);
-                    Ok(len)
-                } else {
-                    // Not a DATA frame, try again
-                    self.read(buf)
+            match frame {
+                Some(frame) => {
+                    if frame.frame_type == FrameType::Data {
+                        let data_frame = DataFrame::from_frame(&frame).map_err(io::Error::from)?;
+                        let len = data_frame.data.len().min(buf.len());
+                        buf[..len].copy_from_slice(&data_frame.data[..len]);
+                        return Ok(len);
+                    }
+                    // Non-DATA frame, continue looping
                 }
+                None => return Ok(0),
             }
-            None => Ok(0),
         }
     }
 }

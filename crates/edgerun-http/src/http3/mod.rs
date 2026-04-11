@@ -4,6 +4,7 @@ pub mod connection;
 pub mod http3;
 pub mod qpack;
 pub mod quic;
+pub mod varint;
 
 pub use connection::Http3Connection;
 pub use qpack::{QpackDecoder, QpackEncoder};

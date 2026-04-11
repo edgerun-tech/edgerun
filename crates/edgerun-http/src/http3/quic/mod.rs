@@ -42,9 +42,6 @@ impl QuicConnection {
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
         let crypto = QuicCrypto::new();
 
-        // Set up test keys for Initial level so the packet layer works
-        let test_keys = ProtKeys::test_keys();
-
         Ok(QuicConnection {
             socket,
             server_addr: server.to_string(),
@@ -111,10 +108,18 @@ impl QuicConnection {
 
         let packet_bytes = pkt.to_bytes();
 
+        // Encrypt if we have protection
+        let send_bytes = if let Some(ref mut prot) = self.protection {
+            prot.protect(&packet_bytes[..9], &packet_bytes[9..])
+                .unwrap_or_else(|e| panic!("Packet protection failed: {}", e))
+        } else {
+            packet_bytes
+        };
+
         // Send via UDP
         let addr = format!("{}:443", self.server_addr);
         self.socket
-            .send_to(&packet_bytes, &addr)
+            .send_to(&send_bytes, &addr)
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
         self.transport.update_activity();
@@ -152,8 +157,10 @@ impl QuicConnection {
 
                 // Try to decrypt if we have protection
                 let plaintext = if let Some(ref mut prot) = self.protection {
-                    prot.unprotect(&[], pn, &packet.payload)
-                        .unwrap_or(packet.payload)
+                    match prot.unprotect(&[], pn, &packet.payload) {
+                        Ok(pt) => pt,
+                        Err(_) => return Err("Packet authentication failed".to_string()),
+                    }
                 } else {
                     packet.payload
                 };
@@ -209,18 +216,12 @@ impl ConnectionId {
         ConnectionId { data }
     }
 
-    /// Generate random connection ID
+    /// Generate random connection ID using CSPRNG
     pub fn random() -> Self {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let mut data = Vec::with_capacity(8);
-        for i in 0..8 {
-            data.push(((ts >> (i * 8)) & 0xFF) as u8);
-        }
-        ConnectionId { data }
+        let mut data = [0u8; 8];
+        edgerun_crypto::getrandom::getrandom(&mut data)
+            .expect("CSPRNG failure");
+        ConnectionId { data: data.to_vec() }
     }
 
     /// Get raw bytes

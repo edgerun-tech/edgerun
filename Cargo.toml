@@ -138,6 +138,8 @@ members = [
   "crates/edgerun-wgpu",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
+  "tests/contest/contest",
+  "tests/contest/test_framework",
 ]
 
 [workspace.package]

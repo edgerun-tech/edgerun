@@ -1,5 +1,6 @@
 //! HTTP methods (RFC 9110 Section 9)
 
+use crate::is_tchar;
 use std::fmt;
 use std::str::FromStr;
 
@@ -78,15 +79,6 @@ impl fmt::Display for Method {
     }
 }
 
-/// Check if a byte is a valid HTTP token character (RFC 9110 Section 5.6.2).
-fn is_tchar(b: u8) -> bool {
-    matches!(b,
-        b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+'
-        | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~'
-        | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z'
-    )
-}
-
 impl FromStr for Method {
     type Err = String;
 
@@ -98,19 +90,16 @@ impl FromStr for Method {
             return Err(format!("Invalid HTTP method: {s}"));
         }
 
-        // Case-insensitive match for standard methods
-        match s.to_uppercase().as_str() {
-            "GET" => Ok(Method::GET),
-            "POST" => Ok(Method::POST),
-            "PUT" => Ok(Method::PUT),
-            "DELETE" => Ok(Method::DELETE),
-            "PATCH" => Ok(Method::PATCH),
-            "HEAD" => Ok(Method::HEAD),
-            "OPTIONS" => Ok(Method::OPTIONS),
-            "CONNECT" => Ok(Method::CONNECT),
-            "TRACE" => Ok(Method::TRACE),
-            // RFC 9110 Section 9.1: extension methods are allowed
-            other => Ok(Method::Extension(other.to_string())),
-        }
+        // Case-insensitive match for standard methods (no allocation)
+        if s.eq_ignore_ascii_case("GET") { Ok(Method::GET) }
+        else if s.eq_ignore_ascii_case("POST") { Ok(Method::POST) }
+        else if s.eq_ignore_ascii_case("PUT") { Ok(Method::PUT) }
+        else if s.eq_ignore_ascii_case("DELETE") { Ok(Method::DELETE) }
+        else if s.eq_ignore_ascii_case("PATCH") { Ok(Method::PATCH) }
+        else if s.eq_ignore_ascii_case("HEAD") { Ok(Method::HEAD) }
+        else if s.eq_ignore_ascii_case("OPTIONS") { Ok(Method::OPTIONS) }
+        else if s.eq_ignore_ascii_case("CONNECT") { Ok(Method::CONNECT) }
+        else if s.eq_ignore_ascii_case("TRACE") { Ok(Method::TRACE) }
+        else { Ok(Method::Extension(s.to_string())) }
     }
 }

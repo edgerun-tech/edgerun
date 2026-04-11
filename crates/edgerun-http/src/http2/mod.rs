@@ -136,14 +136,12 @@ pub enum ErrorCode {
     STREAM_CLOSED = 0x5,
     /// Frame size error
     FRAME_SIZE_ERROR = 0x6,
-    /// Compressed header list too large
+    /// Refused to process the stream
     REFUSED_STREAM = 0x7,
-    /// Settings not acknowledged
+    /// Stream cancelled
     CANCEL = 0x8,
     /// Connection compression context no longer valid
     COMPRESSION_ERROR = 0x9,
-    /// CONNECT request without :authority
-    CONNECT_ERROR = 0xA,
     /// Endpoint detected excess load
     ENHANCE_YOUR_CALM = 0xB,
     /// Client sent request with inadequate security
@@ -166,7 +164,6 @@ impl ErrorCode {
             0x7 => ErrorCode::REFUSED_STREAM,
             0x8 => ErrorCode::CANCEL,
             0x9 => ErrorCode::COMPRESSION_ERROR,
-            0xA => ErrorCode::CONNECT_ERROR,
             0xB => ErrorCode::ENHANCE_YOUR_CALM,
             0xC => ErrorCode::INADEQUATE_SECURITY,
             0xD => ErrorCode::HTTP_1_1_REQUIRED,

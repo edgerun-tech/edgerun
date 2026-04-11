@@ -91,7 +91,7 @@ pub mod uri;
 pub mod error;
 
 pub use error::{Error, HttpError, Result};
-pub use header::{HeaderMap, HeaderName, HeaderValue};
+pub use header::{is_tchar, HeaderMap, HeaderName, HeaderValue};
 pub use method::Method;
 pub use status::StatusCode;
 pub use uri::{Scheme, Uri};

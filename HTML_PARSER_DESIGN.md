@@ -1,228 +1,450 @@
-import os, zipfile, textwrap, shutil
+# Generated HTML Parser — Design & Implementation Plan
 
-base = "/mnt/data/html_parser_project_v3"
-if os.path.exists(base):
-    shutil.rmtree(base)
-os.makedirs(base)
+## Goal
 
-def write(path, content):
-    p = os.path.join(base, path)
-    os.makedirs(os.path.dirname(p), exist_ok=True)
-    with open(p, "w") as f:
-        f.write(content)
+Compile the WHATWG HTML spec into a generated, deterministic Rust parser.
 
-# README
-write("README.md", textwrap.dedent("""
-# HTML Parser Compiler (Phase 3 – Real State Machine + DOM)
+**Spec → Proto IR → Codegen → Rust Parser**
 
-Features:
-- Table-driven tokenizer
-- Proper start/end tag parsing
-- Token stream
-- Minimal DOM tree builder (stack-based)
+No browser generates its HTML parser from spec data. Chrome's is ~500K lines of hand-written C++. Ours is generated from proto — the same pipeline as our rasterizer, WGSL shaders, and layout engine.
 
-Run:
-python3 scripts/build_ir.py
-python3 scripts/generate_parser.py
-cd rust
-cargo run
-"""))
+---
 
-# IR builder
-write("scripts/build_ir.py", textwrap.dedent("""
-import json, os
+## Architecture
 
-ir = {
-    "states": ["DATA","TAG_OPEN","END_TAG_OPEN","TAG_NAME"],
-    "transitions": [
-        ("DATA","<","TAG_OPEN",[]),
-        ("DATA","*","DATA",["EMIT_CHAR"]),
+```
+WHATWG HTML Spec (11MB, docs/html_spec.md)
+    ↓ extract_html_spec.py (already exists)
+html_element_catalog.json (already exists)
+    ↓ generate_parser_ir.py (NEW)
+┌───────────────────────────────────────────┐
+│            Parser IR (Proto)               │
+│                                            │
+│  tokenizer_states.proto  — 86 states       │
+│  tree_builder.proto      — 23 modes        │
+│  entities.proto          — 2,231 refs      │
+└───────────────┬───────────────────────────┘
+                ↓ buf generate (existing pipeline)
+┌───────────────────────────────────────────┐
+│       Generated Rust Types (prost)         │
+│  — TokenizerState enum                     │
+│  — InsertionMode enum                      │
+│  — StateTransition table                   │
+│  — TreeRule table                          │
+│  — EntityCatalog                           │
+└───────────────┬───────────────────────────┘
+                ↓ generate_html_parser.py (NEW)
+┌───────────────────────────────────────────┐
+│       Generated Rust Parser                │
+│                                            │
+│  tokenizer.rs           — state machine    │
+│  tree_builder.rs        — insertion modes  │
+│  entity_decoder.rs      — 2,231 entities   │
+│  attribute_validator.rs — typed attrs      │
+│  html_parser.rs         — entry point      │
+└───────────────┬───────────────────────────┘
+                ↓ wired into edgerun-html-render
+┌───────────────────────────────────────────┐
+│       edgerun-html-render                  │
+│  parse_html() → Tokenizer → TreeBuilder    │
+│              → DOM tree (Node/Element)     │
+│  Compatible with existing:                 │
+│    layout_builder.rs, computed_style.rs    │
+└───────────────────────────────────────────┘
+```
 
-        ("TAG_OPEN","/","END_TAG_OPEN",[]),
-        ("TAG_OPEN","*","TAG_NAME",["START_TAG","APPEND_NAME"]),
+---
 
-        ("END_TAG_OPEN","*","TAG_NAME",["END_TAG","APPEND_NAME"]),
+## Runtime Model
 
-        ("TAG_NAME",">","DATA",["EMIT_TOKEN"]),
-        ("TAG_NAME","*","TAG_NAME",["APPEND_NAME"])
-    ]
+```
+Parser = Tokenizer (FSM) + TreeBuilder (rules + procedures)
+
+Input:  &str ("<!DOCTYPE html><html><body>Hello</body></html>")
+Output: Node tree (Element / Text / Comment)
+```
+
+### Tokenizer — Pure FSM
+
+Table-driven state machine. Each step:
+```
+table[current_state][char_class] → (next_state, actions[])
+```
+
+- **86 states** from WHATWG §13.2.5
+- **19 character classes** (EOF, whitespace, alpha, digit, `<`, `>`, `&`, etc.)
+- **~1,600 transitions** total
+- **Zero heap allocation** in the hot path — only reads input, writes tokens
+
+### Tree Builder — Rules + Procedures
+
+Rule dispatch on token type + tag name:
+```
+rules[current_mode][token_type] → (actions[], next_mode)
+```
+
+- **23 insertion modes** from WHATWG §13.2.6
+- **Stack conditions**: "has element in scope", "in button scope", "in list scope", "in table scope"
+- **Procedures**: foster parenting, implicit tag closing, reset insertion mode
+- **~3,000 rules** covering all mode × token combinations
+
+### Entity Decoder — Lookup + FSM
+
+- **2,231 named character references** (`&amp;`, `&nbsp;`, `&notindot;`, etc.)
+- Trie-based O(1) lookup — no hashmaps
+- Handles ambiguous ampersands, missing semicolons, two-codepoint entities
+
+---
+
+## Constraints
+
+| Constraint | Rationale |
+|-----------|-----------|
+| No `HashMap` in hot path | Deterministic, `no_std` compatible, predictable performance |
+| Numeric tag IDs | `HtmlElement` enum discriminant (1–108), not string comparison |
+| No heap alloc in tokenizer | Tokenizer reads `&str`, produces `Token` on a bounded arena |
+| Proto is single source of truth | Same pipeline as all other behavioral crates |
+| `no_std` with alloc | Runs on bare metal, no OS needed |
+| Generated, not handwritten | Update proto → regenerate parser |
+
+---
+
+## Proto IR Files
+
+### `tokenizer_states.proto` (already created)
+
+Defines the complete tokenizer state machine:
+- **`TokenizerState`** — 86 variants (DATA, TAG_OPEN, TAG_NAME, ... through CDATA_SECTION_END)
+- **`CharClass`** — 24 character classes (EOF, TAB, LF, SPACE, QUOT, AMP, LT, GT, ALPHA_LOWER, ALPHA_UPPER, DIGIT, ...)
+- **`TokenType`** — 7 token types (DOCTYPE, START_TAG, END_TAG, COMMENT, CHARACTER, EOF, NULL)
+- **`StateTransition`** — `current_state + char_class → next_state + actions[]`
+- **`TokenizerStateMachine`** — the full table: all transitions + initial state
+
+### `tree_builder.proto` (already created)
+
+Defines the complete tree builder rule set:
+- **`InsertionMode`** — 23 variants (INITIAL, BEFORE_HTML, BEFORE_HEAD, ... through AFTER_AFTER_FRAMESET)
+- **`TreeAction`** — 18 actions (INSERT, INSERT_FOSTER, IGNORE, POP, POP_UNTIL, REPROCESS, ...)
+- **`TokenTrigger`** — what kind of token fires the rule (start tag "div", end tag "p", EOF, character, ...)
+- **`StackCondition`** — scope checks (has_in_scope, has_in_button_scope, has_in_table_scope, ...)
+- **`TreeRule`** — `mode + trigger → actions[] + next_mode + spec_paragraph`
+- **`TreeBuilderRuleSet`** — the full rule set: all rules for all modes
+
+### `entities.proto` (already created)
+
+Defines the complete entity reference map:
+- **`NamedEntity`** — `name → code_point_1 + code_point_2 + semicolon_required`
+- **`TrieNode`** — trie structure for O(1) entity lookup
+- **`EntityCatalog`** — all 2,231 entities + trie
+
+---
+
+## Phased Implementation
+
+### Phase 1: Minimal Parser (scaffold)
+
+**What**: Table-driven tokenizer with 4 states, basic token emission, minimal DOM builder.
+
+**Deliverable**: Parses `<div>Hello</div>` → DOM tree. Proves the pipeline works.
+
+```
+generate_parser_ir.py  →  tokenizer_states.proto (subset: 4 states)
+buf generate            →  Rust types
+generate_html_parser.py →  tokenizer.rs (4 states) + html_parser.rs
+cargo build && cargo test
+```
+
+**Existing proto files already have the full 86-state enum.** Phase 1 uses a subset of transitions.
+
+### Phase 2: Full Tokenizer + Entities
+
+**What**: All 86 tokenizer states, 2,231 entity references, attribute parsing.
+
+**Deliverable**: Parses `<div class="foo" title="&amp;bar">text</div>` → correct tokens with typed attributes.
+
+```
+generate_parser_ir.py  →  tokenizer_states.proto (full 86 states)
+                        →  entities.proto (2,231 entries)
+generate_html_parser.py →  tokenizer.rs (full state machine)
+                        →  entity_decoder.rs
+cargo build && cargo test
+```
+
+### Phase 3: Tree Builder (body mode)
+
+**What**: IN_BODY_MODE insertion mode — handles the common case of parsing `<div>`, `<p>`, `<span>`, headings, lists, etc.
+
+**Deliverable**: Parses nested elements with implicit tag closing: `<p><div>nested</div></p>` → `<p></p><div>nested</div>`.
+
+```
+generate_parser_ir.py  →  tree_builder.proto (IN_BODY rules)
+generate_html_parser.py →  tree_builder.rs (body mode + stack management)
+cargo build && cargo test
+```
+
+### Phase 4: Full Spec (tables, foreign content, edge cases)
+
+**What**: All 23 insertion modes, foster parenting, SVG/MathML integration, DOCTYPE parsing, error recovery.
+
+**Deliverable**: Parses any valid HTML document. Conformance dashboard tracks coverage.
+
+```
+generate_parser_ir.py  →  tree_builder.proto (all 23 modes)
+generate_html_parser.py →  tree_builder.rs (complete)
+                        →  attribute_validator.rs
+generate_conformance    →  ~5,000 parser tests
+cargo build && cargo test
+```
+
+---
+
+## Implementation Steps
+
+### Step 1: Write `scripts/generate_parser_ir.py`
+
+Reads WHATWG spec data → populates the 3 proto files with actual transition tables and rules.
+
+**Input:**
+- `docs/html_spec.md` (11MB spec text)
+- `scripts/html_element_catalog.json` (108 elements with content models)
+- WHATWG §13.2.5 tokenizer algorithm (line 236,885+ in spec)
+- WHATWG §13.2.6 tree builder algorithm (line 240,488+ in spec)
+
+**Output:**
+- `proto/edgerun/v0/html/tokenizer_states.proto` (already has enums, needs transition table data)
+- `proto/edgerun/v0/html/tree_builder.proto` (already has enums, needs rule data)
+- `proto/edgerun/v0/html/entities.proto` (needs 2,231 entity entries)
+
+**How:** The spec defines each state as a deterministic algorithm ("Consume the next input character: U+0026 → switch to character reference state; U+003C → switch to tag open state; ..."). The generator translates these algorithms into proto `StateTransition` messages. Same for tree builder rules.
+
+**Effort:** One-time encoding of the spec. Start with Phase 1 (4 states), expand to full spec.
+
+### Step 2: `buf generate` — Generate Rust Types
+
+Already works. The 3 new proto files flow through the existing `buf generate` pipeline, producing Rust structs via `prost`.
+
+### Step 3: Write `scripts/generate_html_parser.py`
+
+Reads proto data → generates 5 Rust source files:
+
+| File | Lines | Content |
+|------|-------|---------|
+| `tokenizer.rs` | ~1,500 | `struct Tokenizer` with `fn step(&mut self) -> Option<Token>`. State machine driven by `StateTransition` table. |
+| `tree_builder.rs` | ~2,000 | `struct TreeBuilder` with `fn handle_token(&mut self, Token)`. Insertion mode dispatch driven by `TreeRule` table. |
+| `entity_decoder.rs` | ~800 | `fn decode_entity(&mut self) -> Option<&str>`. Trie lookup for 2,231 entities. |
+| `attribute_validator.rs` | ~1,000 | Per-element attribute validation from `html_attributes.proto`. |
+| `html_parser.rs` | ~300 | `pub fn parse_html(input: &str) -> Node`. Wires tokenizer → tree builder. |
+
+### Step 4: Wire Into Existing Pipeline
+
+Replace the current 140-line `edgerun-html-render/src/html_parser.rs` with the generated version.
+
+Existing consumers need zero changes:
+- `edgerun-demo/src/main.rs` — calls `parse_html()`, same return type
+- `edgerun-html-render/src/layout_builder.rs` — consumes `Node` tree, unchanged
+- `edgerun-html-render/src/computed_style.rs` — consumes element attributes, unchanged
+
+### Step 5: Generate Conformance Tests
+
+Extend `scripts/generate_conformance_tests.py`:
+
+```rust
+// Generated from tokenizer_states.proto
+#[test]
+fn tokenizer_data_state_lt_transitions_to_tag_open() {
+    let mut t = Tokenizer::new("<div>");
+    assert_eq!(t.current_state(), TokenizerState::DATA);
+    let tok = t.step(); // consumes '<'
+    assert_eq!(t.current_state(), TokenizerState::TAG_OPEN);
 }
 
-os.makedirs("ir", exist_ok=True)
-with open("ir/tokenizer.json","w") as f:
-    json.dump(ir,f)
-
-print("IR built")
-"""))
-
-# Generator
-write("scripts/generate_parser.py", textwrap.dedent("""
-import os
-
-code = '''
-#[derive(Debug)]
-pub enum Token {
-    StartTag(String),
-    EndTag(String),
-    Text(String),
+// Generated from tree_builder.proto
+#[test]
+fn tree_builder_in_body_p_auto_closes_before_div() {
+    let dom = parse_html("<p><div>nested</div></p>");
+    // <p> should be auto-closed before <div>
+    let children = dom.children();
+    assert_eq!(children[0].tag(), "p");
+    assert_eq!(children[0].children().len(), 0);
+    assert_eq!(children[1].tag(), "div");
 }
 
-#[derive(Debug)]
-pub struct Node {
-    pub name: String,
-    pub children: Vec<Node>,
-    pub text: Option<String>,
+// Generated from entities.proto
+#[test]
+fn entity_decode_amp() {
+    let dom = parse_html("&amp;");
+    assert_eq!(extract_text(&dom), "&");
 }
+```
 
-pub struct Parser {
-    state: State,
-    buffer: String,
-    current_tag: String,
-    tokens: Vec<Token>,
-}
+Each test maps to a spec item → conformance dashboard updates parser coverage.
 
-#[derive(Copy, Clone)]
-enum State {
-    Data,
-    TagOpen,
-    EndTagOpen,
-    TagName,
-}
+### Step 6: Build, Test, Iterate
 
-impl Parser {
-    pub fn new() -> Self {
-        Self {
-            state: State::Data,
-            buffer: String::new(),
-            current_tag: String::new(),
-            tokens: vec![],
+```bash
+# Generate IR (populate proto files with spec data)
+python3 scripts/generate_parser_ir.py
+
+# Generate Rust types
+buf generate
+
+# Generate parser code
+python3 scripts/generate_html_parser.py
+
+# Build
+cargo build --package edgerun-html-render
+
+# Test
+cargo test --package edgerun-html-render
+
+# Conformance
+python3 scripts/generate_conformance_tests.py
+cargo test --package edgerun-conformance
+```
+
+---
+
+## What We Get
+
+| Feature | Current (140-line) | Generated Parser |
+|---------|-------------------|------------------|
+| Lines of code | ~140 | ~5,600 (generated) |
+| Tokenizer states | 0 (recursive descent) | 86 (spec-compliant FSM) |
+| Insertion modes | 0 | 23 (spec-compliant) |
+| Entity decoding | ❌ | ✅ 2,231 entities |
+| DOCTYPE parsing | ❌ | ✅ |
+| Implicit tag closing | ❌ | ✅ |
+| Foster parenting | ❌ | ✅ |
+| Foreign content (SVG/MathML) | ❌ | ✅ (Phase 4) |
+| Attribute type validation | ❌ | ✅ from proto |
+| Error recovery | ❌ | ✅ parse errors + recovery |
+| Spec-mapped decisions | ❌ | ✅ each rule → spec paragraph |
+| Conformance tests | 0 | ~5,000 (generated) |
+| Maintained by | Hand edits | Update proto → regenerate |
+| Breaks Spec→Proto→Code | Yes | No |
+
+---
+
+## Phase 1 Detailed: Working Scaffold
+
+This is the immediate first step. It proves the pipeline end-to-end with a minimal subset.
+
+### Tokenizer (4 states)
+
+```
+States: DATA, TAG_OPEN, END_TAG_OPEN, TAG_NAME
+Character classes: <, /, *, >, EOF
+
+Transitions:
+  DATA         + "<"  → TAG_OPEN        (no action)
+  DATA         + "*"  → DATA            (EMIT_CHAR)
+  DATA         + EOF  → EOF             (EMIT_EOF)
+
+  TAG_OPEN     + "/"  → END_TAG_OPEN    (no action)
+  TAG_OPEN     + "*"  → TAG_NAME        (START_TAG, APPEND_NAME)
+
+  END_TAG_OPEN + "*"  → TAG_NAME        (END_TAG, APPEND_NAME)
+
+  TAG_NAME     + ">"  → DATA            (EMIT_TOKEN)
+  TAG_NAME     + "*"  → TAG_NAME        (APPEND_NAME)
+  TAG_NAME     + EOF  → EOF             (PARSE_ERROR, EMIT_TOKEN)
+```
+
+### Tree Builder (1 mode)
+
+```
+Mode: IN_BODY_MODE
+
+  IN_BODY + StartTag("div") → INSERT, stay in IN_BODY
+  IN_BODY + StartTag("span") → INSERT, stay in IN_BODY
+  IN_BODY + EndTag("div")   → POP_UNTIL("div"), stay in IN_BODY
+  IN_BODY + Character("*")  → APPEND_CHARACTER, stay in IN_BODY
+  IN_BODY + EOF             → done
+```
+
+### Entity Decoder (5 entities)
+
+```
+& → &amp;
+< → &lt;
+> → &gt;
+" → &quot;
+' → &apos;
+```
+
+### Result
+
+```
+Input:  "<div>Hello</div>"
+Output: Element { tag: "div", children: [Text("Hello")] }
+```
+
+### Files Changed
+
+| File | Action |
+|------|--------|
+| `scripts/generate_parser_ir.py` | **NEW** — generates IR for 4 states |
+| `scripts/generate_html_parser.py` | **NEW** — generates tokenizer.rs + html_parser.rs |
+| `crates/edgerun-html-render/src/html_parser.rs` | **REPLACE** — generated, replaces 140-line ad-hoc |
+| `crates/edgerun-html-render/src/tokenizer.rs` | **NEW** — generated state machine |
+
+### Test
+
+```rust
+#[test]
+fn parse_simple_element() {
+    let dom = parse_html("<div>Hello</div>");
+    match dom {
+        Node::Element(e) => {
+            assert_eq!(e.tag, "div");
+            assert_eq!(e.children.len(), 1);
+            match &e.children[0] {
+                Node::Text(t) => assert_eq!(t, "Hello"),
+                _ => panic!("expected text"),
+            }
         }
-    }
-
-    pub fn parse(&mut self, input: &str) -> Node {
-        for c in input.chars() {
-            self.step(c);
-        }
-
-        self.build_dom()
-    }
-
-    fn step(&mut self, c: char) {
-        match self.state {
-            State::Data => {
-                if c == '<' {
-                    if !self.buffer.is_empty() {
-                        self.tokens.push(Token::Text(self.buffer.clone()));
-                        self.buffer.clear();
-                    }
-                    self.state = State::TagOpen;
-                } else {
-                    self.buffer.push(c);
-                }
-            }
-
-            State::TagOpen => {
-                if c == '/' {
-                    self.state = State::EndTagOpen;
-                } else {
-                    self.current_tag.clear();
-                    self.current_tag.push(c);
-                    self.state = State::TagName;
-                }
-            }
-
-            State::EndTagOpen => {
-                self.current_tag.clear();
-                self.current_tag.push(c);
-                self.state = State::TagName;
-            }
-
-            State::TagName => {
-                if c == '>' {
-                    if self.tokens.last().map(|t| matches!(t, Token::StartTag(_))).unwrap_or(false) {
-                        self.tokens.push(Token::EndTag(self.current_tag.clone()));
-                    } else {
-                        self.tokens.push(Token::StartTag(self.current_tag.clone()));
-                    }
-                    self.state = State::Data;
-                } else {
-                    self.current_tag.push(c);
-                }
-            }
-        }
-    }
-
-    fn build_dom(&self) -> Node {
-        let mut stack: Vec<Node> = vec![Node {
-            name: "root".into(),
-            children: vec![],
-            text: None,
-        }];
-
-        for token in &self.tokens {
-            match token {
-                Token::StartTag(name) => {
-                    stack.push(Node {
-                        name: name.clone(),
-                        children: vec![],
-                        text: None,
-                    });
-                }
-
-                Token::EndTag(_) => {
-                    if stack.len() > 1 {
-                        let node = stack.pop().unwrap();
-                        stack.last_mut().unwrap().children.push(node);
-                    }
-                }
-
-                Token::Text(t) => {
-                    stack.last_mut().unwrap().children.push(Node {
-                        name: "text".into(),
-                        children: vec![],
-                        text: Some(t.clone()),
-                    });
-                }
-            }
-        }
-
-        stack.remove(0)
+        _ => panic!("expected element"),
     }
 }
-'''
 
-os.makedirs("rust/src", exist_ok=True)
-with open("rust/src/parser.rs","w") as f:
-    f.write(code)
-
-print("Parser generated")
-"""))
-
-# Cargo
-write("rust/Cargo.toml", "[package]\nname=\"html_parser\"\nversion=\"0.3.0\"\nedition=\"2021\"")
-
-# main
-write("rust/src/main.rs", textwrap.dedent("""
-mod parser;
-use parser::*;
-
-fn main() {
-    let mut p = Parser::new();
-    let dom = p.parse("<div>Hello<span>World</span></div>");
-    println!("{:#?}", dom);
+#[test]
+fn parse_nested() {
+    let dom = parse_html("<div><span>Hello</span></div>");
+    // ... verify nested structure
 }
-"""))
+```
 
-# zip
-zip_path = "/mnt/data/html_parser_project_v3.zip"
-zf = zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED)
+---
 
-for root, dirs, files in os.walk(base):
-    for file in files:
-        full = os.path.join(root, file)
-        rel = os.path.relpath(full, base)
-        zf.write(full, rel)
+## Risks & Mitigations
 
-zf.close()
+| Risk | Mitigation |
+|------|-----------|
+| Spec is ambiguous in edge cases | Match Chrome/Firefox behavior, document divergence |
+| Tokenizer state machine is complex (86 states) | Encode as data table — generator emits code, no hand-writing |
+| Tree builder has subtle scope rules | Each scope is a separate proto message, generator emits the check |
+| Entity list is large (2,231 entries) | Perfect hash function at build time, O(1) lookup |
+| Generator script is a big one-time effort | Start with Phase 1 (4 states, 1 mode, 5 entities), expand incrementally |
 
-zip_path
+---
+
+## Design Decisions
+
+1. **Proto over JSON** — Schema validation, `prost` types, same pipeline as everything else
+2. **Table-driven, not handwritten** — State transitions are data, code is generated
+3. **Phase-based delivery** — Each phase produces working code, no big-bang release
+4. **Numeric tag IDs** — `HtmlElement` enum discriminant, never compare tag name strings
+5. **No heap in tokenizer** — Bounded arena for tokens, `no_std` compatible
+6. **Spec traceability** — Every rule maps to a `spec_paragraph` field
+7. **Compatible with existing pipeline** — `parse_html()` returns same `Node` type, zero downstream changes
+
+---
+
+## The Bottom Line
+
+Chrome's HTML parser is ~500,000 lines of hand-written, unverified C++.
+
+Ours is ~5,600 lines of generated Rust, compiled from spec data, with conformance tests mapped to every spec rule.
+
+Innovation #1: Spec → Proto → Generated Code (rasterizer, layout, WGSL)
+Innovation #2: Same pipeline, applied to HTML parsing — no browser does this
