@@ -153,7 +153,7 @@ fn map_hardware_to_tpm_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_tpm::{TpmAssuranceLevel, TpmKeyInfo, TpmSignatureAlgorithm};
+    use edgerun_tpm::{TpmAssuranceLevel, TpmError, TpmKeyInfo, TpmSignatureAlgorithm};
     use crate::{HardwareAssuranceStrength, MESH_SIGNATURE_LENGTH};
     use crate::validate_hardware_key_info;
 

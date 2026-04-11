@@ -10,3 +10,6 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-input = { path = "../edgerun-input" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 libc.workspace = true
+
+[lints]
+workspace = true

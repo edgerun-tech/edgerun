@@ -8,3 +8,6 @@ publish.workspace = true
 [dependencies]
 edgerun-bluetooth = { path = "../edgerun-bluetooth" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+
+[lints]
+workspace = true

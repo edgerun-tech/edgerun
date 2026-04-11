@@ -694,7 +694,7 @@ const file_edgerun_v0_css_css_text_proto_rawDesc = "" +
 	"\rTJ_INTER_WORD\x10\x03\x12\x16\n" +
 	"\x12TJ_INTER_CHARACTER\x10\x04\x12\x11\n" +
 	"\rTJ_DISTRIBUTE\x10\x05B\xc2\x01\n" +
-	"\x17com.edgerun.v0.css.textB\fCssTextProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCT\xaa\x02\x13Edgerun.V0.Css.Text\xca\x02\x13Edgerun\\V0\\Css\\Text\xe2\x02\x1fEdgerun\\V0\\Css\\Text\\GPBMetadata\xea\x02\x16Edgerun::V0::Css::Textb\x06proto3"
+	"\x17com.edgerun.v0.css.textB\fCssTextProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCT\xaa\x02\x13Edgerun.V0.Css.Text\xca\x02\x13Edgerun\\V0\\Css\\Text\xe2\x02\x1fEdgerun\\V0\\Css\\Text\\GPBMetadata\xea\x02\x16Edgerun::V0::Css::Textb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_text_proto_rawDescOnce sync.Once

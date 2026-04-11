@@ -15,3 +15,6 @@ name = "edgerun-oci"
 path = "src/bin/edgerun-oci.rs"
 
 
+
+[lints]
+workspace = true

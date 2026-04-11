@@ -7,3 +7,6 @@ publish.workspace = true
 
 [dependencies]
 edgerun-core = { path = "../edgerun-core" }
+
+[lints]
+workspace = true

@@ -8,3 +8,6 @@ description = "Proto-driven fuzz testing for edgerun crates"
 [dependencies]
 libfuzzer-sys = "0.4"
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+
+[lints]
+workspace = true

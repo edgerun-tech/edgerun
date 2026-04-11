@@ -543,7 +543,7 @@ const file_edgerun_v0_css_css_media_queries_proto_rawDesc = "" +
 	"\tScripting\x10\x1a\x12\x0f\n" +
 	"\vDeviceWidth\x10\x1b\x12\x10\n" +
 	"\fDeviceHeight\x10\x1cB\xf3\x01\n" +
-	" com.edgerun.v0.css.media_queriesB\x14CssMediaQueriesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCM\xaa\x02\x1bEdgerun.V0.Css.MediaQueries\xca\x02\x1bEdgerun\\V0\\Css\\MediaQueries\xe2\x02'Edgerun\\V0\\Css\\MediaQueries\\GPBMetadata\xea\x02\x1eEdgerun::V0::Css::MediaQueriesb\x06proto3"
+	" com.edgerun.v0.css.media_queriesB\x14CssMediaQueriesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCM\xaa\x02\x1bEdgerun.V0.Css.MediaQueries\xca\x02\x1bEdgerun\\V0\\Css\\MediaQueries\xe2\x02'Edgerun\\V0\\Css\\MediaQueries\\GPBMetadata\xea\x02\x1eEdgerun::V0::Css::MediaQueriesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_media_queries_proto_rawDescOnce sync.Once

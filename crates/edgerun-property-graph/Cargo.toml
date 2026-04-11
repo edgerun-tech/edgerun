@@ -11,3 +11,6 @@ edgerun-rasterizer = { path = "../edgerun-rasterizer", optional = true }
 [features]
 default = []
 rasterizer = ["edgerun-rasterizer"]
+
+[lints]
+workspace = true

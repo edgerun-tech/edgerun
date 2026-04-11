@@ -24,3 +24,6 @@ edgerun-crypto.workspace = true
 
 [dev-dependencies]
 hex = "0.4"
+
+[lints]
+workspace = true

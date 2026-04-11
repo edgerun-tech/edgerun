@@ -143,7 +143,7 @@ fn map_hardware_to_keystore_algorithm(
 mod tests {
     use super::*;
     use edgerun_android_keystore::{
-        AndroidKeystoreAssuranceLevel, AndroidKeystoreKeyInfo, AndroidKeystoreSignatureAlgorithm,
+        AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo, AndroidKeystoreSignatureAlgorithm,
     };
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
 

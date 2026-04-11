@@ -340,7 +340,7 @@ const file_edgerun_v0_css_css_writing_modes_proto_rawDesc = "" +
 	"\x0eCAPTION_BOTTOM\x10\x02\x12\x17\n" +
 	"\x13CAPTION_BLOCK_START\x10\x03\x12\x15\n" +
 	"\x11CAPTION_BLOCK_END\x10\x04B\xf3\x01\n" +
-	" com.edgerun.v0.css.writing_modesB\x14CssWritingModesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCW\xaa\x02\x1bEdgerun.V0.Css.WritingModes\xca\x02\x1bEdgerun\\V0\\Css\\WritingModes\xe2\x02'Edgerun\\V0\\Css\\WritingModes\\GPBMetadata\xea\x02\x1eEdgerun::V0::Css::WritingModesb\x06proto3"
+	" com.edgerun.v0.css.writing_modesB\x14CssWritingModesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCW\xaa\x02\x1bEdgerun.V0.Css.WritingModes\xca\x02\x1bEdgerun\\V0\\Css\\WritingModes\xe2\x02'Edgerun\\V0\\Css\\WritingModes\\GPBMetadata\xea\x02\x1eEdgerun::V0::Css::WritingModesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_writing_modes_proto_rawDescOnce sync.Once

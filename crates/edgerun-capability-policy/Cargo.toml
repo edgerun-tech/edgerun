@@ -11,3 +11,6 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
 prost-types.workspace = true
 edgerun-core = { path = "../edgerun-core" }
+
+[lints]
+workspace = true

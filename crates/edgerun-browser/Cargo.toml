@@ -7,3 +7,6 @@ publish = false
 description = "Browser engine core types from WHATWG/W3C/ECMA-262"
 
 [dependencies]
+
+[lints]
+workspace = true

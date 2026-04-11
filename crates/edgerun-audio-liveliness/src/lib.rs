@@ -1297,7 +1297,7 @@ fn dtw_distance(seq_a: &[f32], seq_b: &[f32]) -> f32 {
 
     for i in 1..=n {
         let j_start = (1.max(i as isize - window as isize) as usize).max(1);
-        let j_end = (m.min(i + window));
+        let j_end = m.min(i + window);
 
         curr_row[0] = f32::MAX;
 

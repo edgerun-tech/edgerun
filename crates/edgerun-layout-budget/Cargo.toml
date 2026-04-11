@@ -8,3 +8,6 @@ description = "Layer 14: Predictive layout budget estimator"
 [dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
 edgerun-incremental-layout = { path = "../edgerun-incremental-layout" }
+
+[lints]
+workspace = true

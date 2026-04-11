@@ -38,3 +38,6 @@ android-real = [
     "dep:android_log-sys",
     "dep:log",
 ]
+
+[lints]
+workspace = true

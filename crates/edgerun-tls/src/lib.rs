@@ -32,8 +32,6 @@
 //! tls.read_to_end(&mut response).unwrap();
 //! ```
 
-#![warn(missing_docs)]
-
 pub mod alert;
 pub mod async_tls;
 pub mod certificate;

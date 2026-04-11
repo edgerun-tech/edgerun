@@ -28,3 +28,6 @@ edgerun-goodix-fingerprint = { path = "../edgerun-goodix-fingerprint" }
 edgerun-mgmt-bluetooth = { path = "../edgerun-mgmt-bluetooth" }
 edgerun-linux-wifi = { path = "../edgerun-linux-wifi" }
 prost.workspace = true
+
+[lints]
+workspace = true

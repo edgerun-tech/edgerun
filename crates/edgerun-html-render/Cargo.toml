@@ -10,3 +10,6 @@ edgerun-layout = { path = "../edgerun-layout" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 edgerun-css-value-parser = { path = "../edgerun-css-value-parser" }
 edgerun-color = { path = "../edgerun-color" }
+
+[lints]
+workspace = true

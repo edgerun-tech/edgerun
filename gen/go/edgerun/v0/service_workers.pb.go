@@ -603,7 +603,7 @@ const file_edgerun_v0_service_workers_proto_rawDesc = "" +
 	"\x04FONT\x10\a\x12\f\n" +
 	"\bPREFETCH\x10\b\x12\r\n" +
 	"\tPREFLIGHT\x10\tB\xe2\x01\n" +
-	"\x1ecom.edgerun.v0.service_workersB\x13ServiceWorkersProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x19Edgerun.V0.ServiceWorkers\xca\x02\x19Edgerun\\V0\\ServiceWorkers\xe2\x02%Edgerun\\V0\\ServiceWorkers\\GPBMetadata\xea\x02\x1bEdgerun::V0::ServiceWorkersb\x06proto3"
+	"\x1ecom.edgerun.v0.service_workersB\x13ServiceWorkersProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x19Edgerun.V0.ServiceWorkers\xca\x02\x19Edgerun\\V0\\ServiceWorkers\xe2\x02%Edgerun\\V0\\ServiceWorkers\\GPBMetadata\xea\x02\x1bEdgerun::V0::ServiceWorkersb\x06proto3"
 
 var (
 	file_edgerun_v0_service_workers_proto_rawDescOnce sync.Once

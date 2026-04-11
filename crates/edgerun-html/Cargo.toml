@@ -9,3 +9,6 @@ description = "HTML element definitions generated from the WHATWG HTML Living St
 [dependencies]
 prost = { workspace = true }
 prost-types = { workspace = true }
+
+[lints]
+workspace = true

@@ -420,13 +420,15 @@ fn parse_nth(s: &str) -> PseudoClass {
     let s = s.trim();
     if s == "odd" { return PseudoClass::NthChild(2, 1); }
     if s == "even" { return PseudoClass::NthChild(2, 0); }
-    let mut a = 0i32; let mut b = 0i32;
-    if let Some(n_pos) = s.find('n') {
+    let (a, b) = if let Some(n_pos) = s.find('n') {
         let a_str = &s[..n_pos];
-        a = if a_str.is_empty() || a_str == "+" { 1 } else if a_str == "-" { -1 } else { a_str.parse().unwrap_or(0) };
+        let a = if a_str.is_empty() || a_str == "+" { 1 } else if a_str == "-" { -1 } else { a_str.parse().unwrap_or(0) };
         let b_str = s[n_pos + 1..].trim().trim_start_matches('+');
-        b = if b_str.is_empty() { 0 } else { b_str.parse().unwrap_or(0) };
-    } else { b = s.parse().unwrap_or(0); }
+        let b = if b_str.is_empty() { 0 } else { b_str.parse().unwrap_or(0) };
+        (a, b)
+    } else {
+        (0, s.parse().unwrap_or(0))
+    };
     PseudoClass::NthChild(a, b)
 }
 

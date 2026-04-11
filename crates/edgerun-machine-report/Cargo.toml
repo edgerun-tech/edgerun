@@ -15,3 +15,6 @@ edgerun-network-interface = { path = "../edgerun-network-interface" }
 edgerun-pci = { path = "../edgerun-pci" }
 edgerun-usb = { path = "../edgerun-usb" }
 edgerun-wifi = { path = "../edgerun-wifi" }
+
+[lints]
+workspace = true

@@ -1,6 +1,6 @@
 package parserir
 
-import "edgerun-reference-core/gen/go/edgerun/v0/html"
+import "edgerunrefcore/gen/go/edgerun/v0/html"
 
 func aEmitChar() *html.TransitionAction {
 	return &html.TransitionAction{Action: &html.TransitionAction_EmitCurrentChar{EmitCurrentChar: true}}

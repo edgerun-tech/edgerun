@@ -890,7 +890,7 @@ const file_edgerun_v0_html_tree_builder_proto_rawDesc = "" +
 	"\x1aTREE_ACTION_APPEND_DOCTYPE\x10\x10\x12#\n" +
 	"\x1fTREE_ACTION_SET_FRAMESET_NOT_OK\x10\x11\x12\x17\n" +
 	"\x13TREE_ACTION_POP_ALL\x10\x12B\xf0\x01\n" +
-	" com.edgerun.v0.html.tree_builderB\x10TreeBuilderProtoP\x01Z*edgerun-reference-core/gen/edgerun/v0/html\xa2\x02\x04EVHT\xaa\x02\x1bEdgerun.V0.Html.TreeBuilder\xca\x02\x1bEdgerun\\V0\\Html\\TreeBuilder\xe2\x02'Edgerun\\V0\\Html\\TreeBuilder\\GPBMetadata\xea\x02\x1eEdgerun::V0::Html::TreeBuilderb\x06proto3"
+	" com.edgerun.v0.html.tree_builderB\x10TreeBuilderProtoP\x01Z*edgerunrefcore/gen/edgerun/v0/html\xa2\x02\x04EVHT\xaa\x02\x1bEdgerun.V0.Html.TreeBuilder\xca\x02\x1bEdgerun\\V0\\Html\\TreeBuilder\xe2\x02'Edgerun\\V0\\Html\\TreeBuilder\\GPBMetadata\xea\x02\x1eEdgerun::V0::Html::TreeBuilderb\x06proto3"
 
 var (
 	file_edgerun_v0_html_tree_builder_proto_rawDescOnce sync.Once

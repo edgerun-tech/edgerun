@@ -8,3 +8,6 @@ description = "Scanline rasterizer generated from CSS/HTML proto data"
 
 [dependencies]
 libm = "0.2"
+
+[lints]
+workspace = true

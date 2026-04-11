@@ -16,3 +16,6 @@ edgerun-crypto.workspace = true
 [[bin]]
 name = "edgerun-bench"
 path = "src/main.rs"
+
+[lints]
+workspace = true

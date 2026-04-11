@@ -1160,7 +1160,7 @@ const file_edgerun_v0_css_css_values_proto_rawDesc = "" +
 	"\n" +
 	"\x06REVERT\x10\x04\x12\x10\n" +
 	"\fREVERT_LAYER\x10\x05B\xce\x01\n" +
-	"\x19com.edgerun.v0.css.valuesB\x0eCssValuesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCV\xaa\x02\x15Edgerun.V0.Css.Values\xca\x02\x15Edgerun\\V0\\Css\\Values\xe2\x02!Edgerun\\V0\\Css\\Values\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Valuesb\x06proto3"
+	"\x19com.edgerun.v0.css.valuesB\x0eCssValuesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCV\xaa\x02\x15Edgerun.V0.Css.Values\xca\x02\x15Edgerun\\V0\\Css\\Values\xe2\x02!Edgerun\\V0\\Css\\Values\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Valuesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_values_proto_rawDescOnce sync.Once

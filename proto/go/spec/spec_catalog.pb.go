@@ -142,36 +142,47 @@ func (WebIdlTypeKind) EnumDescriptor() ([]byte, []int) {
 
 // Top-level catalog containing all spec domains.
 type Catalog struct {
-	state                 protoimpl.MessageState `protogen:"open.v1"`
-	SpecName              string                 `protobuf:"bytes,1,opt,name=spec_name,json=specName,proto3" json:"spec_name,omitempty"`
-	SpecDate              string                 `protobuf:"bytes,2,opt,name=spec_date,json=specDate,proto3" json:"spec_date,omitempty"`
-	CssProperties         []*CssProperty         `protobuf:"bytes,3,rep,name=css_properties,json=cssProperties,proto3" json:"css_properties,omitempty"`
-	CssValueTypes         []*CssValueType        `protobuf:"bytes,4,rep,name=css_value_types,json=cssValueTypes,proto3" json:"css_value_types,omitempty"`
-	CssAtRules            []*CssAtRule           `protobuf:"bytes,5,rep,name=css_at_rules,json=cssAtRules,proto3" json:"css_at_rules,omitempty"`
-	DomInterfaces         []*DomInterface        `protobuf:"bytes,6,rep,name=dom_interfaces,json=domInterfaces,proto3" json:"dom_interfaces,omitempty"`
-	DomEvents             []*DomEvent            `protobuf:"bytes,7,rep,name=dom_events,json=domEvents,proto3" json:"dom_events,omitempty"`
-	HtmlElements          []*HtmlElement         `protobuf:"bytes,8,rep,name=html_elements,json=htmlElements,proto3" json:"html_elements,omitempty"`
-	PseudoClasses         []*PseudoClassDef      `protobuf:"bytes,9,rep,name=pseudo_classes,json=pseudoClasses,proto3" json:"pseudo_classes,omitempty"`
-	PseudoElements        []*PseudoElementDef    `protobuf:"bytes,10,rep,name=pseudo_elements,json=pseudoElements,proto3" json:"pseudo_elements,omitempty"`
-	Combinators           []*CombinatorDef       `protobuf:"bytes,11,rep,name=combinators,proto3" json:"combinators,omitempty"`
-	AttrMatchOps          []*AttrMatchOpDef      `protobuf:"bytes,12,rep,name=attr_match_ops,json=attrMatchOps,proto3" json:"attr_match_ops,omitempty"`
-	JsBuiltins            []*JsBuiltInObjectDef  `protobuf:"bytes,13,rep,name=js_builtins,json=jsBuiltins,proto3" json:"js_builtins,omitempty"`
-	JsAbstractOps         []*JsAbstractOpDef     `protobuf:"bytes,14,rep,name=js_abstract_ops,json=jsAbstractOps,proto3" json:"js_abstract_ops,omitempty"`
-	JsWellKnownSymbols    []string               `protobuf:"bytes,15,rep,name=js_well_known_symbols,json=jsWellKnownSymbols,proto3" json:"js_well_known_symbols,omitempty"`
-	JsWellKnownIntrinsics []string               `protobuf:"bytes,16,rep,name=js_well_known_intrinsics,json=jsWellKnownIntrinsics,proto3" json:"js_well_known_intrinsics,omitempty"`
-	Encodings             []*EncodingDef         `protobuf:"bytes,17,rep,name=encodings,proto3" json:"encodings,omitempty"`
-	BomTable              []*BomEntry            `protobuf:"bytes,18,rep,name=bom_table,json=bomTable,proto3" json:"bom_table,omitempty"`
-	FetchEnums            []*FetchEnumDef        `protobuf:"bytes,19,rep,name=fetch_enums,json=fetchEnums,proto3" json:"fetch_enums,omitempty"`
-	UrlStates             []*UrlParserStateDef   `protobuf:"bytes,20,rep,name=url_states,json=urlStates,proto3" json:"url_states,omitempty"`
-	KeyEvents             []*KeyEventDef         `protobuf:"bytes,21,rep,name=key_events,json=keyEvents,proto3" json:"key_events,omitempty"`
-	WebidlTypes           []*WebIdlType          `protobuf:"bytes,22,rep,name=webidl_types,json=webidlTypes,proto3" json:"webidl_types,omitempty"`
-	FlexboxProperties     []*FlexPropertyDef     `protobuf:"bytes,23,rep,name=flexbox_properties,json=flexboxProperties,proto3" json:"flexbox_properties,omitempty"`
-	GridProperties        []*GridPropertyDef     `protobuf:"bytes,24,rep,name=grid_properties,json=gridProperties,proto3" json:"grid_properties,omitempty"`
-	ColorDefs             []*ColorDef            `protobuf:"bytes,25,rep,name=color_defs,json=colorDefs,proto3" json:"color_defs,omitempty"`
-	MediaProperties       []*MediaPropertyDef    `protobuf:"bytes,26,rep,name=media_properties,json=mediaProperties,proto3" json:"media_properties,omitempty"`
-	SyntaxDefs            []*SyntaxDef           `protobuf:"bytes,27,rep,name=syntax_defs,json=syntaxDefs,proto3" json:"syntax_defs,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	SpecName                 string                 `protobuf:"bytes,1,opt,name=spec_name,json=specName,proto3" json:"spec_name,omitempty"`
+	SpecDate                 string                 `protobuf:"bytes,2,opt,name=spec_date,json=specDate,proto3" json:"spec_date,omitempty"`
+	CssProperties            []*CssProperty         `protobuf:"bytes,3,rep,name=css_properties,json=cssProperties,proto3" json:"css_properties,omitempty"`
+	CssValueTypes            []*CssValueType        `protobuf:"bytes,4,rep,name=css_value_types,json=cssValueTypes,proto3" json:"css_value_types,omitempty"`
+	CssAtRules               []*CssAtRule           `protobuf:"bytes,5,rep,name=css_at_rules,json=cssAtRules,proto3" json:"css_at_rules,omitempty"`
+	DomInterfaces            []*DomInterface        `protobuf:"bytes,6,rep,name=dom_interfaces,json=domInterfaces,proto3" json:"dom_interfaces,omitempty"`
+	DomEvents                []*DomEvent            `protobuf:"bytes,7,rep,name=dom_events,json=domEvents,proto3" json:"dom_events,omitempty"`
+	HtmlElements             []*HtmlElement         `protobuf:"bytes,8,rep,name=html_elements,json=htmlElements,proto3" json:"html_elements,omitempty"`
+	PseudoClasses            []*PseudoClassDef      `protobuf:"bytes,9,rep,name=pseudo_classes,json=pseudoClasses,proto3" json:"pseudo_classes,omitempty"`
+	PseudoElements           []*PseudoElementDef    `protobuf:"bytes,10,rep,name=pseudo_elements,json=pseudoElements,proto3" json:"pseudo_elements,omitempty"`
+	Combinators              []*CombinatorDef       `protobuf:"bytes,11,rep,name=combinators,proto3" json:"combinators,omitempty"`
+	AttrMatchOps             []*AttrMatchOpDef      `protobuf:"bytes,12,rep,name=attr_match_ops,json=attrMatchOps,proto3" json:"attr_match_ops,omitempty"`
+	JsBuiltins               []*JsBuiltInObjectDef  `protobuf:"bytes,13,rep,name=js_builtins,json=jsBuiltins,proto3" json:"js_builtins,omitempty"`
+	JsAbstractOps            []*JsAbstractOpDef     `protobuf:"bytes,14,rep,name=js_abstract_ops,json=jsAbstractOps,proto3" json:"js_abstract_ops,omitempty"`
+	JsWellKnownSymbols       []string               `protobuf:"bytes,15,rep,name=js_well_known_symbols,json=jsWellKnownSymbols,proto3" json:"js_well_known_symbols,omitempty"`
+	JsWellKnownIntrinsics    []string               `protobuf:"bytes,16,rep,name=js_well_known_intrinsics,json=jsWellKnownIntrinsics,proto3" json:"js_well_known_intrinsics,omitempty"`
+	Encodings                []*EncodingDef         `protobuf:"bytes,17,rep,name=encodings,proto3" json:"encodings,omitempty"`
+	BomTable                 []*BomEntry            `protobuf:"bytes,18,rep,name=bom_table,json=bomTable,proto3" json:"bom_table,omitempty"`
+	FetchEnums               []*FetchEnumDef        `protobuf:"bytes,19,rep,name=fetch_enums,json=fetchEnums,proto3" json:"fetch_enums,omitempty"`
+	UrlStates                []*UrlParserStateDef   `protobuf:"bytes,20,rep,name=url_states,json=urlStates,proto3" json:"url_states,omitempty"`
+	KeyEvents                []*KeyEventDef         `protobuf:"bytes,21,rep,name=key_events,json=keyEvents,proto3" json:"key_events,omitempty"`
+	WebidlTypes              []*WebIdlType          `protobuf:"bytes,22,rep,name=webidl_types,json=webidlTypes,proto3" json:"webidl_types,omitempty"`
+	FlexboxProperties        []*FlexPropertyDef     `protobuf:"bytes,23,rep,name=flexbox_properties,json=flexboxProperties,proto3" json:"flexbox_properties,omitempty"`
+	GridProperties           []*GridPropertyDef     `protobuf:"bytes,24,rep,name=grid_properties,json=gridProperties,proto3" json:"grid_properties,omitempty"`
+	ColorDefs                []*ColorDef            `protobuf:"bytes,25,rep,name=color_defs,json=colorDefs,proto3" json:"color_defs,omitempty"`
+	MediaProperties          []*MediaPropertyDef    `protobuf:"bytes,26,rep,name=media_properties,json=mediaProperties,proto3" json:"media_properties,omitempty"`
+	SyntaxDefs               []*SyntaxDef           `protobuf:"bytes,27,rep,name=syntax_defs,json=syntaxDefs,proto3" json:"syntax_defs,omitempty"`
+	TotalProperties          int32                  `protobuf:"varint,28,opt,name=total_properties,json=totalProperties,proto3" json:"total_properties,omitempty"`
+	TotalValueTypes          int32                  `protobuf:"varint,29,opt,name=total_value_types,json=totalValueTypes,proto3" json:"total_value_types,omitempty"`
+	TotalAtRules             int32                  `protobuf:"varint,30,opt,name=total_at_rules,json=totalAtRules,proto3" json:"total_at_rules,omitempty"`
+	TotalInterfaces          int32                  `protobuf:"varint,31,opt,name=total_interfaces,json=totalInterfaces,proto3" json:"total_interfaces,omitempty"`
+	TotalEvents              int32                  `protobuf:"varint,32,opt,name=total_events,json=totalEvents,proto3" json:"total_events,omitempty"`
+	TotalElements            int32                  `protobuf:"varint,33,opt,name=total_elements,json=totalElements,proto3" json:"total_elements,omitempty"`
+	TotalBuiltInObjects      int32                  `protobuf:"varint,34,opt,name=total_built_in_objects,json=totalBuiltInObjects,proto3" json:"total_built_in_objects,omitempty"`
+	TotalAbstractOps         int32                  `protobuf:"varint,35,opt,name=total_abstract_ops,json=totalAbstractOps,proto3" json:"total_abstract_ops,omitempty"`
+	TotalWellKnownSymbols    int32                  `protobuf:"varint,36,opt,name=total_well_known_symbols,json=totalWellKnownSymbols,proto3" json:"total_well_known_symbols,omitempty"`
+	TotalWellKnownIntrinsics int32                  `protobuf:"varint,37,opt,name=total_well_known_intrinsics,json=totalWellKnownIntrinsics,proto3" json:"total_well_known_intrinsics,omitempty"`
+	TotalEncodings           int32                  `protobuf:"varint,38,opt,name=total_encodings,json=totalEncodings,proto3" json:"total_encodings,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *Catalog) Reset() {
@@ -391,6 +402,83 @@ func (x *Catalog) GetSyntaxDefs() []*SyntaxDef {
 		return x.SyntaxDefs
 	}
 	return nil
+}
+
+func (x *Catalog) GetTotalProperties() int32 {
+	if x != nil {
+		return x.TotalProperties
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalValueTypes() int32 {
+	if x != nil {
+		return x.TotalValueTypes
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalAtRules() int32 {
+	if x != nil {
+		return x.TotalAtRules
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalInterfaces() int32 {
+	if x != nil {
+		return x.TotalInterfaces
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalEvents() int32 {
+	if x != nil {
+		return x.TotalEvents
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalElements() int32 {
+	if x != nil {
+		return x.TotalElements
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalBuiltInObjects() int32 {
+	if x != nil {
+		return x.TotalBuiltInObjects
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalAbstractOps() int32 {
+	if x != nil {
+		return x.TotalAbstractOps
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalWellKnownSymbols() int32 {
+	if x != nil {
+		return x.TotalWellKnownSymbols
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalWellKnownIntrinsics() int32 {
+	if x != nil {
+		return x.TotalWellKnownIntrinsics
+	}
+	return 0
+}
+
+func (x *Catalog) GetTotalEncodings() int32 {
+	if x != nil {
+		return x.TotalEncodings
+	}
+	return 0
 }
 
 type CssProperty struct {
@@ -2133,7 +2221,7 @@ var File_spec_catalog_proto protoreflect.FileDescriptor
 
 const file_spec_catalog_proto_rawDesc = "" +
 	"\n" +
-	"\x12spec_catalog.proto\x12\x0fedgerun.v0.spec\"\xbe\r\n" +
+	"\x12spec_catalog.proto\x12\x0fedgerun.v0.spec\"\xb4\x11\n" +
 	"\aCatalog\x12\x1b\n" +
 	"\tspec_name\x18\x01 \x01(\tR\bspecName\x12\x1b\n" +
 	"\tspec_date\x18\x02 \x01(\tR\bspecDate\x12C\n" +
@@ -2170,7 +2258,18 @@ const file_spec_catalog_proto_rawDesc = "" +
 	"color_defs\x18\x19 \x03(\v2\x19.edgerun.v0.spec.ColorDefR\tcolorDefs\x12L\n" +
 	"\x10media_properties\x18\x1a \x03(\v2!.edgerun.v0.spec.MediaPropertyDefR\x0fmediaProperties\x12;\n" +
 	"\vsyntax_defs\x18\x1b \x03(\v2\x1a.edgerun.v0.spec.SyntaxDefR\n" +
-	"syntaxDefs\"\xc8\x02\n" +
+	"syntaxDefs\x12)\n" +
+	"\x10total_properties\x18\x1c \x01(\x05R\x0ftotalProperties\x12*\n" +
+	"\x11total_value_types\x18\x1d \x01(\x05R\x0ftotalValueTypes\x12$\n" +
+	"\x0etotal_at_rules\x18\x1e \x01(\x05R\ftotalAtRules\x12)\n" +
+	"\x10total_interfaces\x18\x1f \x01(\x05R\x0ftotalInterfaces\x12!\n" +
+	"\ftotal_events\x18  \x01(\x05R\vtotalEvents\x12%\n" +
+	"\x0etotal_elements\x18! \x01(\x05R\rtotalElements\x123\n" +
+	"\x16total_built_in_objects\x18\" \x01(\x05R\x13totalBuiltInObjects\x12,\n" +
+	"\x12total_abstract_ops\x18# \x01(\x05R\x10totalAbstractOps\x127\n" +
+	"\x18total_well_known_symbols\x18$ \x01(\x05R\x15totalWellKnownSymbols\x12=\n" +
+	"\x1btotal_well_known_intrinsics\x18% \x01(\x05R\x18totalWellKnownIntrinsics\x12'\n" +
+	"\x0ftotal_encodings\x18& \x01(\x05R\x0etotalEncodings\"\xc8\x02\n" +
 	"\vCssProperty\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x18\n" +
@@ -2326,7 +2425,7 @@ const file_spec_catalog_proto_rawDesc = "" +
 	"\x12WEBIDL_TYPE_STRING\x10\x02\x12\x16\n" +
 	"\x12WEBIDL_TYPE_OBJECT\x10\x03\x12\x17\n" +
 	"\x13WEBIDL_TYPE_SPECIAL\x10\x04\x12\x1d\n" +
-	"\x19WEBIDL_TYPE_EXTENDED_ATTR\x10\x05B*Z(github.com/edgerun/edgerun/proto/go/specb\x06proto3"
+	"\x19WEBIDL_TYPE_EXTENDED_ATTR\x10\x05B&Z$edgerunrefcore/proto/go/specb\x06proto3"
 
 var (
 	file_spec_catalog_proto_rawDescOnce sync.Once

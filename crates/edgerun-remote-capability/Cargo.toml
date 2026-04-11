@@ -24,3 +24,6 @@ edgerun-crypto.workspace = true
 prost.workspace = true
 
 edgerun-core = { path = "../edgerun-core" }
+
+[lints]
+workspace = true

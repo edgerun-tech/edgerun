@@ -698,7 +698,7 @@ const file_edgerun_v0_ecmascript_ecmascript_globals_proto_rawDesc = "" +
 	"\x13INTRINSIC_PARSE_INT\x10}\x12!\n" +
 	"\x1dINTRINSIC_TYPEDARRAYPROTOTYPE\x10~\x12\x16\n" +
 	"\x12INTRINSIC_UNESCAPE\x10\x7fB\x85\x02\n" +
-	"!com.edgerun.v0.ecmascript.globalsB\x16EcmascriptGlobalsProtoP\x01Z0edgerun-reference-core/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEG\xaa\x02\x1dEdgerun.V0.Ecmascript.Globals\xca\x02\x1dEdgerun\\V0\\Ecmascript\\Globals\xe2\x02)Edgerun\\V0\\Ecmascript\\Globals\\GPBMetadata\xea\x02 Edgerun::V0::Ecmascript::Globalsb\x06proto3"
+	"!com.edgerun.v0.ecmascript.globalsB\x16EcmascriptGlobalsProtoP\x01Z0edgerunrefcore/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEG\xaa\x02\x1dEdgerun.V0.Ecmascript.Globals\xca\x02\x1dEdgerun\\V0\\Ecmascript\\Globals\xe2\x02)Edgerun\\V0\\Ecmascript\\Globals\\GPBMetadata\xea\x02 Edgerun::V0::Ecmascript::Globalsb\x06proto3"
 
 var (
 	file_edgerun_v0_ecmascript_ecmascript_globals_proto_rawDescOnce sync.Once

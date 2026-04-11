@@ -8,3 +8,6 @@ publish.workspace = true
 [dependencies]
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-npu = { path = "../edgerun-npu" }
+
+[lints]
+workspace = true

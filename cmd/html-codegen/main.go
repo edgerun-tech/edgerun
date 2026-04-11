@@ -21,8 +21,8 @@ import (
 	"os"
 	"path/filepath"
 
-	codegen "edgerun-reference-core/cmd/html-codegen/codegen"
-	"edgerun-reference-core/gen/go/edgerun/v0/html"
+	codegen "edgerunrefcore/cmd/html-codegen/codegen"
+	"edgerunrefcore/gen/go/edgerun/v0/html"
 	"google.golang.org/protobuf/encoding/prototext"
 )
 

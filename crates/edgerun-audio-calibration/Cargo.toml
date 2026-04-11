@@ -11,3 +11,6 @@ edgerun-alsa-speaker = { path = "../edgerun-alsa-speaker" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
+
+[lints]
+workspace = true

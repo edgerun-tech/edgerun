@@ -460,7 +460,7 @@ const file_edgerun_v0_ui_touch_events_proto_rawDesc = "" +
 	"\n" +
 	"PINCH_ZOOM\x10\n" +
 	"B\xc5\x01\n" +
-	"\x17com.edgerun.v0.ui.touchB\x10TouchEventsProtoP\x01Z(edgerun-reference-core/gen/edgerun/v0/ui\xa2\x02\x04EVUT\xaa\x02\x13Edgerun.V0.Ui.Touch\xca\x02\x13Edgerun\\V0\\Ui\\Touch\xe2\x02\x1fEdgerun\\V0\\Ui\\Touch\\GPBMetadata\xea\x02\x16Edgerun::V0::Ui::Touchb\x06proto3"
+	"\x17com.edgerun.v0.ui.touchB\x10TouchEventsProtoP\x01Z(edgerunrefcore/gen/edgerun/v0/ui\xa2\x02\x04EVUT\xaa\x02\x13Edgerun.V0.Ui.Touch\xca\x02\x13Edgerun\\V0\\Ui\\Touch\xe2\x02\x1fEdgerun\\V0\\Ui\\Touch\\GPBMetadata\xea\x02\x16Edgerun::V0::Ui::Touchb\x06proto3"
 
 var (
 	file_edgerun_v0_ui_touch_events_proto_rawDescOnce sync.Once

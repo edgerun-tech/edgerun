@@ -13,3 +13,6 @@ edgerun-proto = { path = "../edgerun-proto" }
 
 [dev-dependencies]
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+
+[lints]
+workspace = true

@@ -1405,7 +1405,7 @@ const file_edgerun_v0_css_css_value_types_proto_rawDesc = "" +
 	"\x12CSS_KEYWORD_REVERT\x10\x06\x12\x1c\n" +
 	"\x18CSS_KEYWORD_REVERT_LAYER\x10\a\x12\x1d\n" +
 	"\x19CSS_KEYWORD_CURRENT_COLOR\x10\bB\xe7\x01\n" +
-	"\x1ecom.edgerun.v0.css.value_typesB\x12CssValueTypesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCV\xaa\x02\x19Edgerun.V0.Css.ValueTypes\xca\x02\x19Edgerun\\V0\\Css\\ValueTypes\xe2\x02%Edgerun\\V0\\Css\\ValueTypes\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::ValueTypesb\x06proto3"
+	"\x1ecom.edgerun.v0.css.value_typesB\x12CssValueTypesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCV\xaa\x02\x19Edgerun.V0.Css.ValueTypes\xca\x02\x19Edgerun\\V0\\Css\\ValueTypes\xe2\x02%Edgerun\\V0\\Css\\ValueTypes\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::ValueTypesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_value_types_proto_rawDescOnce sync.Once

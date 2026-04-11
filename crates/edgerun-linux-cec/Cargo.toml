@@ -10,3 +10,6 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-cec = { path = "../edgerun-cec" }
 edgerun-linux-gpu = { path = "../edgerun-linux-gpu" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+
+[lints]
+workspace = true

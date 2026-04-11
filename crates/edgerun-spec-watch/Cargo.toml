@@ -8,3 +8,5 @@ description = "Layer 10: Monitor W3C/WHATWG specs for changes"
 [dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
 walkdir = "2"
+[lints]
+workspace = true

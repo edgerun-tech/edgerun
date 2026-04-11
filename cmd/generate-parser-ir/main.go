@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"edgerun-reference-core/pkg/parserir"
+	"edgerunrefcore/pkg/parserir"
 )
 
 func main() {

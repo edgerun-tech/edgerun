@@ -1359,7 +1359,7 @@ const file_edgerun_v0_html_tokenizer_states_proto_rawDesc = "" +
 	"\x1bCDATA_SECTION_BRACKET_STATE\x10T\x12\x1b\n" +
 	"\x17CDATA_SECTION_END_STATE\x10U\x12\r\n" +
 	"\tEOF_STATE\x10VB\xe9\x01\n" +
-	"\x1dcom.edgerun.v0.html.tokenizerB\x14TokenizerStatesProtoP\x01Z*edgerun-reference-core/gen/edgerun/v0/html\xa2\x02\x04EVHT\xaa\x02\x19Edgerun.V0.Html.Tokenizer\xca\x02\x19Edgerun\\V0\\Html\\Tokenizer\xe2\x02%Edgerun\\V0\\Html\\Tokenizer\\GPBMetadata\xea\x02\x1cEdgerun::V0::Html::Tokenizerb\x06proto3"
+	"\x1dcom.edgerun.v0.html.tokenizerB\x14TokenizerStatesProtoP\x01Z*edgerunrefcore/gen/edgerun/v0/html\xa2\x02\x04EVHT\xaa\x02\x19Edgerun.V0.Html.Tokenizer\xca\x02\x19Edgerun\\V0\\Html\\Tokenizer\xe2\x02%Edgerun\\V0\\Html\\Tokenizer\\GPBMetadata\xea\x02\x1cEdgerun::V0::Html::Tokenizerb\x06proto3"
 
 var (
 	file_edgerun_v0_html_tokenizer_states_proto_rawDescOnce sync.Once

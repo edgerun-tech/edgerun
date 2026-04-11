@@ -767,7 +767,7 @@ const file_edgerun_v0_network_proto_rawDesc = "" +
 	"\x1cPAYLOAD_KIND_RESULT_FRAGMENT\x10\x03\x12 \n" +
 	"\x1cPAYLOAD_KIND_OBJECT_FRAGMENT\x10\x04\x12 \n" +
 	"\x1cPAYLOAD_KIND_SESSION_MESSAGE\x10\x05B\xb7\x01\n" +
-	"\x16com.edgerun.v0.networkB\fNetworkProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVN\xaa\x02\x12Edgerun.V0.Network\xca\x02\x12Edgerun\\V0\\Network\xe2\x02\x1eEdgerun\\V0\\Network\\GPBMetadata\xea\x02\x14Edgerun::V0::Networkb\x06proto3"
+	"\x16com.edgerun.v0.networkB\fNetworkProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVN\xaa\x02\x12Edgerun.V0.Network\xca\x02\x12Edgerun\\V0\\Network\xe2\x02\x1eEdgerun\\V0\\Network\\GPBMetadata\xea\x02\x14Edgerun::V0::Networkb\x06proto3"
 
 var (
 	file_edgerun_v0_network_proto_rawDescOnce sync.Once

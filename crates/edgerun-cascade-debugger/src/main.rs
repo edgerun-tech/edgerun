@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Layer 7: Visual Cascade Debugger
 //!
 //! Shows the complete CSS cascade resolution for any element:

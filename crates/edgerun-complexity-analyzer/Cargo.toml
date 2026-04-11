@@ -7,3 +7,6 @@ description = "Layer 16: CSS complexity analyzer — score stylesheets on mainta
 
 [dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
+
+[lints]
+workspace = true

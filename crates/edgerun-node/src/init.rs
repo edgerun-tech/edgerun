@@ -43,9 +43,14 @@ pub fn install_signal_handlers() {
     }
 
     unsafe {
+        // These casts are the standard way to register signal handlers with libc.
+        #[allow(function_casts_as_integer)]
         libc::signal(libc::SIGTERM, handle_signal as libc::sighandler_t);
+        #[allow(function_casts_as_integer)]
         libc::signal(libc::SIGINT, handle_signal as libc::sighandler_t);
+        #[allow(function_casts_as_integer)]
         libc::signal(libc::SIGHUP, handle_signal as libc::sighandler_t);
+        #[allow(function_casts_as_integer)]
         libc::signal(libc::SIGCHLD, handle_signal as libc::sighandler_t);
     }
 }

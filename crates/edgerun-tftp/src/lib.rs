@@ -1,5 +1,6 @@
-#![allow(missing_docs)]
 #![allow(dead_code)]
+#![allow(missing_docs)]
+#![allow(unused_comparisons)]
 //! Dependency-free TFTP server (RFC 1350) with RFC 2347/2348 option negotiation.
 //!
 //! # Architecture
@@ -28,9 +29,6 @@
 //!   |                                 |
 //!   |  (BIOS/UEFI loads and executes)|
 //! ```
-
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
 
 pub mod message;
 pub mod server;

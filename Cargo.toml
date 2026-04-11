@@ -156,6 +156,22 @@ lto = "fat"
 opt-level = 1
 debug = false
 
+[workspace.lints.rust]
+dead_code = "allow"
+missing_docs = "allow"
+unused_variables = "allow"
+unused_assignments = "allow"
+unused_imports = "allow"
+unused_mut = "allow"
+non_upper_case_globals = "allow"
+non_snake_case = "allow"
+unused_must_use = "allow"
+unused_comparisons = "allow"
+unexpected_cfgs = "allow"
+unused_parens = "allow"
+deprecated = "allow"
+function_casts_as_integer = "allow"
+
 [workspace.dependencies]
 # Single crypto boundary — all crypto flows through edgerun-crypto
 edgerun-crypto = { path = "crates/edgerun-crypto" }

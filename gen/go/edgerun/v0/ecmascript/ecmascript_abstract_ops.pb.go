@@ -643,7 +643,7 @@ const file_edgerun_v0_ecmascript_ecmascript_abstract_ops_proto_rawDesc = "" +
 	"\x1dCREATE_ITERATOR_RESULT_OBJECT\x10w\x12\x1f\n" +
 	"\x1bCREATE_LIST_ITERATOR_RECORD\x10x\x12\x14\n" +
 	"\x10ITERATOR_TO_LIST\x10yB\x9e\x02\n" +
-	"&com.edgerun.v0.ecmascript.abstract_opsB\x1aEcmascriptAbstractOpsProtoP\x01Z0edgerun-reference-core/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEA\xaa\x02!Edgerun.V0.Ecmascript.AbstractOps\xca\x02!Edgerun\\V0\\Ecmascript\\AbstractOps\xe2\x02-Edgerun\\V0\\Ecmascript\\AbstractOps\\GPBMetadata\xea\x02$Edgerun::V0::Ecmascript::AbstractOpsb\x06proto3"
+	"&com.edgerun.v0.ecmascript.abstract_opsB\x1aEcmascriptAbstractOpsProtoP\x01Z0edgerunrefcore/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEA\xaa\x02!Edgerun.V0.Ecmascript.AbstractOps\xca\x02!Edgerun\\V0\\Ecmascript\\AbstractOps\xe2\x02-Edgerun\\V0\\Ecmascript\\AbstractOps\\GPBMetadata\xea\x02$Edgerun::V0::Ecmascript::AbstractOpsb\x06proto3"
 
 var (
 	file_edgerun_v0_ecmascript_ecmascript_abstract_ops_proto_rawDescOnce sync.Once

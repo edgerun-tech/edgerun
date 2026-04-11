@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	pb "github.com/edgerun/edgerun/proto/go/spec"
+	pb "edgerunrefcore/proto/go/spec"
 )
 
 // ---- HTML Extractor ----

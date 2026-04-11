@@ -7,3 +7,6 @@ publish = false
 description = "CSS Selectors Level 4 types generated from W3C spec"
 
 [dependencies]
+
+[lints]
+workspace = true

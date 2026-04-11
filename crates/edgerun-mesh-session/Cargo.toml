@@ -10,3 +10,6 @@ edgerun-mesh = { path = "../edgerun-mesh" }
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-crypto.workspace = true
 edgerun-core = { path = "../edgerun-core" }
+
+[lints]
+workspace = true

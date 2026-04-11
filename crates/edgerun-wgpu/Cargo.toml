@@ -9,3 +9,6 @@ publish.workspace = true
 wgpu = "29"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.4"
+
+[lints]
+workspace = true

@@ -13,7 +13,8 @@ use std::time::Duration;
 
 use edgerun_http::http1::{Server, Client, into_handler, into_handler_async, Request, Response, HttpVersion, ConnectionState, determine_connection};
 use edgerun_http::{Method, StatusCode};
-use edgerun_rt::{Runtime, AsyncRead, AsyncWriteExt, ConnectFuture};
+use edgerun_rt::{Runtime, AsyncRead, AsyncReadExt, AsyncWriteExt, ConnectFuture};
+use tokio::io::ReadBuf;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,7 +29,7 @@ fn next_port() -> u16 {
 fn run<F, Fut>(name: &str, f: F)
 where
     F: FnOnce(u16) -> Fut,
-    Fut: std::future::Future<Output = io::Result<()>>,
+    Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>,
 {
     eprintln!("[integration] {}", name);
     let port = next_port();
@@ -248,7 +249,7 @@ fn test_keep_alive_multiple_requests() {
 
         // Connect raw TCP and send multiple requests
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         // Send 3 requests back-to-back
         write.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await?;
@@ -303,7 +304,7 @@ fn test_malformed_request() {
         });
 
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         write.write_all(b"GIBBERISH\r\n\r\n").await?;
         drop(write);
@@ -450,7 +451,7 @@ fn test_keep_alive_header() {
         });
 
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         write.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await?;
 
@@ -487,7 +488,7 @@ fn test_invalid_utf8_in_request_line() {
         });
 
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         // Invalid UTF-8: 0x80 is a continuation byte without a start byte
         write.write_all(b"GET /path\x80 HTTP/1.1\r\nHost: localhost\r\n\r\n").await?;
@@ -529,7 +530,7 @@ fn test_chunked_response() {
         std::thread::sleep(Duration::from_millis(50));
 
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         write.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await?;
 
@@ -611,7 +612,7 @@ fn test_content_length_accuracy() {
         });
 
         let stream = connect_with_retry(&format!("127.0.0.1:{}", port), 5).await?;
-        let (read, mut write) = stream.split();
+        let (mut read, mut write) = stream.split();
 
         write.write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n").await?;
 

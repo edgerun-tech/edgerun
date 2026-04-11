@@ -7,3 +7,6 @@ publish.workspace = true
 
 [dependencies]
 edgerun-biometrics = { path = "../edgerun-biometrics" }
+
+[lints]
+workspace = true

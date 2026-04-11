@@ -1,6 +1,6 @@
 package parserir
 
-import "edgerun-reference-core/gen/go/edgerun/v0/html"
+import "edgerunrefcore/gen/go/edgerun/v0/html"
 
 // Entities builds the entity catalog — full WHATWG §13.1.4.22 catalog.
 func Entities() *html.EntityCatalog {

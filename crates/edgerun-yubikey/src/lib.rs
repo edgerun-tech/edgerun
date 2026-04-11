@@ -1,7 +1,7 @@
-use edgerun_core::crypto::signature_input;
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
 
+use edgerun_core::crypto::signature_input;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::OpenOptionsExt;

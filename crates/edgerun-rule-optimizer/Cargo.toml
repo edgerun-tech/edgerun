@@ -7,3 +7,6 @@ description = "Layer 18: CSS rule optimization engine — merge, remove, flatten
 
 [dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
+
+[lints]
+workspace = true

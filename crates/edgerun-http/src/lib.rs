@@ -77,8 +77,6 @@
 //! Note: RFC 9110–9113 (2022) obsolete RFC 7230–7235 (the original HTTP/1.1 suite),
 //! RFC 7540 (HTTP/2), RFC 7541 (HPACK), and RFC 7231 (Semantics).
 
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
 #![allow(non_camel_case_types)] // HTTP/2 error code names follow RFC 9113
 
 // ---------------------------------------------------------------------------

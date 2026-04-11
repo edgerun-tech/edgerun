@@ -130,7 +130,7 @@ fn map_hardware_to_yubikey_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_yubikey::{YubiKeyAssuranceLevel, YubiKeyKeyInfo, YubiKeyPinPolicy, YubiKeyTouchPolicy, YubiKeySignatureAlgorithm};
+    use edgerun_yubikey::{YubiKeyAssuranceLevel, YubiKeyError, YubiKeyKeyInfo, YubiKeyPinPolicy, YubiKeyTouchPolicy, YubiKeySignatureAlgorithm};
     use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
 
     // -----------------------------------------------------------------------

@@ -670,5 +670,5 @@ pub struct GpuLayoutResult {
 }
 
 impl GpuLayoutResult {
-    pub const SIZE: usize = 72;
+    pub const SIZE: usize = 88;
 }

@@ -416,7 +416,7 @@ const file_edgerun_v0_css_css_transforms_proto_rawDesc = "" +
 	"\n" +
 	"STROKE_BOX\x10\x04\x12\f\n" +
 	"\bVIEW_BOX\x10\x05B\xe6\x01\n" +
-	"\x1dcom.edgerun.v0.css.transformsB\x12CssTransformsProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCT\xaa\x02\x19Edgerun.V0.Css.Transforms\xca\x02\x19Edgerun\\V0\\Css\\Transforms\xe2\x02%Edgerun\\V0\\Css\\Transforms\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::Transformsb\x06proto3"
+	"\x1dcom.edgerun.v0.css.transformsB\x12CssTransformsProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCT\xaa\x02\x19Edgerun.V0.Css.Transforms\xca\x02\x19Edgerun\\V0\\Css\\Transforms\xe2\x02%Edgerun\\V0\\Css\\Transforms\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::Transformsb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_transforms_proto_rawDescOnce sync.Once

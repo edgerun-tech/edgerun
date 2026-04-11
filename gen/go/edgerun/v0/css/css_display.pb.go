@@ -336,7 +336,7 @@ const file_edgerun_v0_css_css_display_proto_rawDesc = "" +
 	"\vLOWER_ALPHA\x10\r\x12\x0f\n" +
 	"\vUPPER_ALPHA\x10\x0e\x12\r\n" +
 	"\tLIST_NONE\x10\x0fB\xd4\x01\n" +
-	"\x1acom.edgerun.v0.css.displayB\x0fCssDisplayProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCD\xaa\x02\x16Edgerun.V0.Css.Display\xca\x02\x16Edgerun\\V0\\Css\\Display\xe2\x02\"Edgerun\\V0\\Css\\Display\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Displayb\x06proto3"
+	"\x1acom.edgerun.v0.css.displayB\x0fCssDisplayProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCD\xaa\x02\x16Edgerun.V0.Css.Display\xca\x02\x16Edgerun\\V0\\Css\\Display\xe2\x02\"Edgerun\\V0\\Css\\Display\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Displayb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_display_proto_rawDescOnce sync.Once

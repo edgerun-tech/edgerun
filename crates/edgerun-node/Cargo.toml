@@ -157,3 +157,6 @@ edgerun-android-keystore = { path = "../edgerun-android-keystore", optional = tr
 [dev-dependencies]
 edgerun-hardware-signing = { path = "../edgerun-hardware-signing" }
 edgerun-alsa-microphone = { path = "../edgerun-alsa-microphone" }
+
+[lints]
+workspace = true

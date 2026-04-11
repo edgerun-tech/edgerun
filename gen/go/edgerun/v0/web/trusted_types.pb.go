@@ -251,7 +251,7 @@ const file_edgerun_v0_web_trusted_types_proto_rawDesc = "" +
 	"\x0eTRUSTED_SCRIPT\x10\x01\x12\x16\n" +
 	"\x12TRUSTED_SCRIPT_URL\x10\x02\x12\x10\n" +
 	"\fTRUSTED_HTML\x10\x03B\xda\x01\n" +
-	"\x1ccom.edgerun.v0.trusted_typesB\x11TrustedTypesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/web\xa2\x02\x03EVT\xaa\x02\x17Edgerun.V0.TrustedTypes\xca\x02\x17Edgerun\\V0\\TrustedTypes\xe2\x02#Edgerun\\V0\\TrustedTypes\\GPBMetadata\xea\x02\x19Edgerun::V0::TrustedTypesb\x06proto3"
+	"\x1ccom.edgerun.v0.trusted_typesB\x11TrustedTypesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/web\xa2\x02\x03EVT\xaa\x02\x17Edgerun.V0.TrustedTypes\xca\x02\x17Edgerun\\V0\\TrustedTypes\xe2\x02#Edgerun\\V0\\TrustedTypes\\GPBMetadata\xea\x02\x19Edgerun::V0::TrustedTypesb\x06proto3"
 
 var (
 	file_edgerun_v0_web_trusted_types_proto_rawDescOnce sync.Once

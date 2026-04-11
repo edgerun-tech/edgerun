@@ -12,3 +12,6 @@ edgerun-crypto.workspace = true
 prost-types.workspace = true
 
 [dev-dependencies]
+
+[lints]
+workspace = true

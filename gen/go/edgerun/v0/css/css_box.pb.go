@@ -531,7 +531,7 @@ const file_edgerun_v0_css_css_box_proto_rawDesc = "" +
 	"\fAVOID_REGION\x10\r\x12\n" +
 	"\n" +
 	"\x06REGION\x10\x0eB\xbc\x01\n" +
-	"\x16com.edgerun.v0.css.boxB\vCssBoxProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCB\xaa\x02\x12Edgerun.V0.Css.Box\xca\x02\x12Edgerun\\V0\\Css\\Box\xe2\x02\x1eEdgerun\\V0\\Css\\Box\\GPBMetadata\xea\x02\x15Edgerun::V0::Css::Boxb\x06proto3"
+	"\x16com.edgerun.v0.css.boxB\vCssBoxProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCB\xaa\x02\x12Edgerun.V0.Css.Box\xca\x02\x12Edgerun\\V0\\Css\\Box\xe2\x02\x1eEdgerun\\V0\\Css\\Box\\GPBMetadata\xea\x02\x15Edgerun::V0::Css::Boxb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_box_proto_rawDescOnce sync.Once

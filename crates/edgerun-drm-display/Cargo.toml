@@ -9,3 +9,6 @@ publish.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-display = { path = "../edgerun-display" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
+
+[lints]
+workspace = true

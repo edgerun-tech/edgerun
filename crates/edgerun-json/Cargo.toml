@@ -41,3 +41,6 @@ criterion = "0.8"
 name = "unified"
 required-features = ["serde_json_bench"]
 harness = false
+
+[lints]
+workspace = true

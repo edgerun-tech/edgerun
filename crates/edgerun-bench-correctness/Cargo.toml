@@ -10,3 +10,6 @@ edgerun-wgpu = { path = "../edgerun-wgpu" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 png = "0.18"
 bytemuck = "1"
+
+[lints]
+workspace = true

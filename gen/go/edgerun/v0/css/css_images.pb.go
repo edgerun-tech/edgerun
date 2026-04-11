@@ -981,7 +981,7 @@ const file_edgerun_v0_css_css_images_proto_rawDesc = "" +
 	"ToTopRight\x10\x06\x12\x10\n" +
 	"\fToBottomLeft\x10\a\x12\x11\n" +
 	"\rToBottomRight\x10\bB\xce\x01\n" +
-	"\x19com.edgerun.v0.css.imagesB\x0eCssImagesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCI\xaa\x02\x15Edgerun.V0.Css.Images\xca\x02\x15Edgerun\\V0\\Css\\Images\xe2\x02!Edgerun\\V0\\Css\\Images\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Imagesb\x06proto3"
+	"\x19com.edgerun.v0.css.imagesB\x0eCssImagesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCI\xaa\x02\x15Edgerun.V0.Css.Images\xca\x02\x15Edgerun\\V0\\Css\\Images\xe2\x02!Edgerun\\V0\\Css\\Images\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Imagesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_images_proto_rawDescOnce sync.Once

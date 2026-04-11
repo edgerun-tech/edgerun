@@ -1111,7 +1111,7 @@ const file_edgerun_v0_html_html_elements_proto_rawDesc = "" +
 	"\x15ATTRIBUTE_TYPE_UINT32\x10\x04\x12\x1a\n" +
 	"\x16ATTRIBUTE_TYPE_FLOAT64\x10\x05\x12\x17\n" +
 	"\x13ATTRIBUTE_TYPE_ENUM\x10\x06B\xe1\x01\n" +
-	"\x1ccom.edgerun.v0.html.elementsB\x11HtmlElementsProtoP\x01Z*edgerun-reference-core/gen/edgerun/v0/html\xa2\x02\x04EVHE\xaa\x02\x18Edgerun.V0.Html.Elements\xca\x02\x18Edgerun\\V0\\Html\\Elements\xe2\x02$Edgerun\\V0\\Html\\Elements\\GPBMetadata\xea\x02\x1bEdgerun::V0::Html::Elementsb\x06proto3"
+	"\x1ccom.edgerun.v0.html.elementsB\x11HtmlElementsProtoP\x01Z*edgerunrefcore/gen/edgerun/v0/html\xa2\x02\x04EVHE\xaa\x02\x18Edgerun.V0.Html.Elements\xca\x02\x18Edgerun\\V0\\Html\\Elements\xe2\x02$Edgerun\\V0\\Html\\Elements\\GPBMetadata\xea\x02\x1bEdgerun::V0::Html::Elementsb\x06proto3"
 
 var (
 	file_edgerun_v0_html_html_elements_proto_rawDescOnce sync.Once

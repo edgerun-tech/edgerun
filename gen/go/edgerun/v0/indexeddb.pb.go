@@ -827,7 +827,7 @@ const file_edgerun_v0_indexeddb_proto_rawDesc = "" +
 	"\x16STORE_TYPE_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tKEY_VALUE\x10\x01\x12\t\n" +
 	"\x05INDEX\x10\x02B\xc3\x01\n" +
-	"\x18com.edgerun.v0.indexeddbB\x0eIndexeddbProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVI\xaa\x02\x14Edgerun.V0.Indexeddb\xca\x02\x14Edgerun\\V0\\Indexeddb\xe2\x02 Edgerun\\V0\\Indexeddb\\GPBMetadata\xea\x02\x16Edgerun::V0::Indexeddbb\x06proto3"
+	"\x18com.edgerun.v0.indexeddbB\x0eIndexeddbProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVI\xaa\x02\x14Edgerun.V0.Indexeddb\xca\x02\x14Edgerun\\V0\\Indexeddb\xe2\x02 Edgerun\\V0\\Indexeddb\\GPBMetadata\xea\x02\x16Edgerun::V0::Indexeddbb\x06proto3"
 
 var (
 	file_edgerun_v0_indexeddb_proto_rawDescOnce sync.Once

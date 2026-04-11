@@ -27,7 +27,7 @@ pub struct LayoutConfig {
     pub node_count: u32,
     pub rule_count: u32,
     pub text_len: u32,
-    pub pass: u32,           // 0=cascade, 1=inherit, 2=heights
+    pub compute_phase: u32,  // 0=cascade, 1=inherit, 2=heights
     pub avail_width: f32,
     pub base_x: f32,
     pub base_y: f32,
@@ -295,7 +295,7 @@ impl LayoutComputePipeline {
             node_count,
             rule_count: rules.len() as u32,
             text_len: text_data.len() as u32,
-            pass: 0,
+            compute_phase: 0,
             avail_width,
             base_x: 0.0,
             base_y,
@@ -305,7 +305,7 @@ impl LayoutComputePipeline {
 
         // Pass 1: Style inheritance
         let config_inherit = LayoutConfig {
-            pass: 1,
+            compute_phase: 1,
             ..config_cascade
         };
         self.run_pass(device, queue, nodes, rules, text_data, &config_inherit);
@@ -314,7 +314,7 @@ impl LayoutComputePipeline {
         // Run twice — first pass computes leaf heights, second sums children
         for _ in 0..2 {
             let config_heights = LayoutConfig {
-                pass: 2,
+                compute_phase: 2,
                 ..config_cascade
             };
             self.run_pass(device, queue, nodes, rules, text_data, &config_heights);

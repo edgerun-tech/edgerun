@@ -1,7 +1,7 @@
 // Package parserir encodes WHATWG HTML §13.2.5 as proto IR data.
 package parserir
 
-import "edgerun-reference-core/gen/go/edgerun/v0/html"
+import "edgerunrefcore/gen/go/edgerun/v0/html"
 
 // Char class aliases
 const (

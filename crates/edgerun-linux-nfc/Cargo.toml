@@ -9,3 +9,6 @@ publish.workspace = true
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-linux-sysfs = { path = "../edgerun-linux-sysfs" }
 edgerun-nfc = { path = "../edgerun-nfc" }
+
+[lints]
+workspace = true

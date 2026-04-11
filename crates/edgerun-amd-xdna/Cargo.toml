@@ -10,3 +10,6 @@ edgerun-linux-npu = { path = "../edgerun-linux-npu" }
 edgerun-npu = { path = "../edgerun-npu" }
 libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

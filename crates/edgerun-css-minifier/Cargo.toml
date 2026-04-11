@@ -9,3 +9,6 @@ description = "Layer 13: CSS minification via proto enum canonical forms"
 
 [dev-dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
+
+[lints]
+workspace = true

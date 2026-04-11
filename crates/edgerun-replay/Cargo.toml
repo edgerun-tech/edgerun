@@ -7,3 +7,6 @@ description = "Layer 17: Deterministic replay engine — record and replay rende
 
 [dependencies]
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+
+[lints]
+workspace = true

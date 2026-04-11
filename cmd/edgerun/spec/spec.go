@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
 
-	pb "github.com/edgerun/edgerun/proto/go/spec"
+	pb "edgerunrefcore/proto/go/spec"
 )
 
 func Cmd() *cobra.Command {
@@ -160,7 +160,7 @@ func writeProto(c *pb.Catalog) error {
 
 // writeTextProto outputs the catalog as proto text (human-readable) to stdout.
 func writeTextProto(c *pb.Catalog) error {
-	text := proto.MarshalTextString(c)
+	text := proto.MarshalOptions{Multiline: true}.Format(c)
 	_, err := os.Stdout.WriteString(text)
 	return err
 }

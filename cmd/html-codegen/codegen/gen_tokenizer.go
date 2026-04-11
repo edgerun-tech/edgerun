@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"edgerun-reference-core/gen/go/edgerun/v0/html"
+	"edgerunrefcore/gen/go/edgerun/v0/html"
 )
 
 // GenerateTokenizerRust produces the full tokenizer.rs source file.

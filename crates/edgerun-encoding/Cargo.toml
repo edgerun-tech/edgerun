@@ -7,3 +7,6 @@ publish = false
 description = "Encoding Living Standard types"
 
 [dependencies]
+
+[lints]
+workspace = true

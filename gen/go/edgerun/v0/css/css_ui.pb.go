@@ -495,7 +495,7 @@ const file_edgerun_v0_css_css_ui_proto_rawDesc = "" +
 	"\bNAV_LEFT\x10\x04\x12\r\n" +
 	"\tNAV_RIGHT\x10\x05B\xb6\x01\n" +
 	"\x15com.edgerun.v0.css.uiB\n" +
-	"CssUiProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCU\xaa\x02\x11Edgerun.V0.Css.Ui\xca\x02\x11Edgerun\\V0\\Css\\Ui\xe2\x02\x1dEdgerun\\V0\\Css\\Ui\\GPBMetadata\xea\x02\x14Edgerun::V0::Css::Uib\x06proto3"
+	"CssUiProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCU\xaa\x02\x11Edgerun.V0.Css.Ui\xca\x02\x11Edgerun\\V0\\Css\\Ui\xe2\x02\x1dEdgerun\\V0\\Css\\Ui\\GPBMetadata\xea\x02\x14Edgerun::V0::Css::Uib\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_ui_proto_rawDescOnce sync.Once

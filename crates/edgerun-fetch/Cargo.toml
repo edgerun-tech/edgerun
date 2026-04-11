@@ -7,3 +7,6 @@ publish = false
 description = "Fetch Living Standard types"
 
 [dependencies]
+
+[lints]
+workspace = true

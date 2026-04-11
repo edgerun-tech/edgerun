@@ -7,3 +7,6 @@ description = "Layer 15: Accessibility conformance analyzer — WCAG 2.2 static 
 
 [dependencies]
 edgerun-property-graph = { path = "../edgerun-property-graph" }
+
+[lints]
+workspace = true

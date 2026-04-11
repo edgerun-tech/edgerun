@@ -425,7 +425,7 @@ const file_edgerun_v0_xml_types_proto_rawDesc = "" +
 	"\x12INTERNAL_PARAMETER\x10\x03\x12\x16\n" +
 	"\x12EXTERNAL_PARAMETER\x10\x04\x12\f\n" +
 	"\bUNPARSED\x10\x05B\xa4\x01\n" +
-	"\x12com.edgerun.v0.xmlB\rXmlTypesProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVX\xaa\x02\x0eEdgerun.V0.Xml\xca\x02\x0eEdgerun\\V0\\Xml\xe2\x02\x1aEdgerun\\V0\\Xml\\GPBMetadata\xea\x02\x10Edgerun::V0::Xmlb\x06proto3"
+	"\x12com.edgerun.v0.xmlB\rXmlTypesProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVX\xaa\x02\x0eEdgerun.V0.Xml\xca\x02\x0eEdgerun\\V0\\Xml\xe2\x02\x1aEdgerun\\V0\\Xml\\GPBMetadata\xea\x02\x10Edgerun::V0::Xmlb\x06proto3"
 
 var (
 	file_edgerun_v0_xml_types_proto_rawDescOnce sync.Once

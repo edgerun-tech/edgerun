@@ -805,7 +805,7 @@ const file_edgerun_v0_capability_runtime_proto_rawDesc = "" +
 	"#CAPABILITY_SESSION_MODE_UNSPECIFIED\x10\x00\x12!\n" +
 	"\x1dCAPABILITY_SESSION_MODE_UNARY\x10\x01\x12\"\n" +
 	"\x1eCAPABILITY_SESSION_MODE_STREAM\x10\x02B\xf4\x01\n" +
-	"!com.edgerun.v0.capability_runtimeB\x16CapabilityRuntimeProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x1cEdgerun.V0.CapabilityRuntime\xca\x02\x1cEdgerun\\V0\\CapabilityRuntime\xe2\x02(Edgerun\\V0\\CapabilityRuntime\\GPBMetadata\xea\x02\x1eEdgerun::V0::CapabilityRuntimeb\x06proto3"
+	"!com.edgerun.v0.capability_runtimeB\x16CapabilityRuntimeProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVC\xaa\x02\x1cEdgerun.V0.CapabilityRuntime\xca\x02\x1cEdgerun\\V0\\CapabilityRuntime\xe2\x02(Edgerun\\V0\\CapabilityRuntime\\GPBMetadata\xea\x02\x1eEdgerun::V0::CapabilityRuntimeb\x06proto3"
 
 var (
 	file_edgerun_v0_capability_runtime_proto_rawDescOnce sync.Once

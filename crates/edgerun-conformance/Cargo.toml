@@ -8,3 +8,6 @@ description = "Auto-generated conformance tests from proto definitions"
 
 [dev-dependencies]
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+
+[lints]
+workspace = true

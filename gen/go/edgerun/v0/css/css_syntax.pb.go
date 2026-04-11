@@ -453,7 +453,7 @@ const file_edgerun_v0_css_css_syntax_proto_rawDesc = "" +
 	"\tDIMENSION\x10\x13\x12\x11\n" +
 	"\rUNICODE_RANGE\x10\x14\x12\a\n" +
 	"\x03EOF\x10\x15B\xce\x01\n" +
-	"\x19com.edgerun.v0.css.syntaxB\x0eCssSyntaxProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCS\xaa\x02\x15Edgerun.V0.Css.Syntax\xca\x02\x15Edgerun\\V0\\Css\\Syntax\xe2\x02!Edgerun\\V0\\Css\\Syntax\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Syntaxb\x06proto3"
+	"\x19com.edgerun.v0.css.syntaxB\x0eCssSyntaxProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCS\xaa\x02\x15Edgerun.V0.Css.Syntax\xca\x02\x15Edgerun\\V0\\Css\\Syntax\xe2\x02!Edgerun\\V0\\Css\\Syntax\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Syntaxb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_syntax_proto_rawDescOnce sync.Once

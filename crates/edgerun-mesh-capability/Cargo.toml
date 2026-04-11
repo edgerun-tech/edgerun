@@ -14,3 +14,6 @@ edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-proto = { path = "../edgerun-proto" }
 edgerun-crypto.workspace = true
 prost.workspace = true
+
+[lints]
+workspace = true

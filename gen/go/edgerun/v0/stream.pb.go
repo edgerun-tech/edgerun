@@ -1470,7 +1470,7 @@ const file_edgerun_v0_stream_proto_rawDesc = "" +
 	"\x1aCOMMAND_TYPE_DELETE_SECRET\x10\xea\a\x12\x1e\n" +
 	"\x19COMMAND_TYPE_LIST_SECRETS\x10\xeb\a\x12\x18\n" +
 	"\x13COMMAND_TYPE_CUSTOM\x10\xd0\x0fB\xb1\x01\n" +
-	"\x15com.edgerun.v0.streamB\vStreamProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x11Edgerun.V0.Stream\xca\x02\x11Edgerun\\V0\\Stream\xe2\x02\x1dEdgerun\\V0\\Stream\\GPBMetadata\xea\x02\x13Edgerun::V0::Streamb\x06proto3"
+	"\x15com.edgerun.v0.streamB\vStreamProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVS\xaa\x02\x11Edgerun.V0.Stream\xca\x02\x11Edgerun\\V0\\Stream\xe2\x02\x1dEdgerun\\V0\\Stream\\GPBMetadata\xea\x02\x13Edgerun::V0::Streamb\x06proto3"
 
 var (
 	file_edgerun_v0_stream_proto_rawDescOnce sync.Once

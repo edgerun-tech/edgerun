@@ -270,7 +270,7 @@ const file_edgerun_v0_html_entities_proto_rawDesc = "" +
 	"\bkey_char\x18\x01 \x01(\tR\akeyChar\x12>\n" +
 	"\bchildren\x18\x02 \x03(\v2\".edgerun.v0.html.entities.TrieNodeR\bchildren\x12!\n" +
 	"\fentity_index\x18\x03 \x01(\x05R\ventityIndexB\xdd\x01\n" +
-	"\x1ccom.edgerun.v0.html.entitiesB\rEntitiesProtoP\x01Z*edgerun-reference-core/gen/edgerun/v0/html\xa2\x02\x04EVHE\xaa\x02\x18Edgerun.V0.Html.Entities\xca\x02\x18Edgerun\\V0\\Html\\Entities\xe2\x02$Edgerun\\V0\\Html\\Entities\\GPBMetadata\xea\x02\x1bEdgerun::V0::Html::Entitiesb\x06proto3"
+	"\x1ccom.edgerun.v0.html.entitiesB\rEntitiesProtoP\x01Z*edgerunrefcore/gen/edgerun/v0/html\xa2\x02\x04EVHE\xaa\x02\x18Edgerun.V0.Html.Entities\xca\x02\x18Edgerun\\V0\\Html\\Entities\xe2\x02$Edgerun\\V0\\Html\\Entities\\GPBMetadata\xea\x02\x1bEdgerun::V0::Html::Entitiesb\x06proto3"
 
 var (
 	file_edgerun_v0_html_entities_proto_rawDescOnce sync.Once

@@ -438,7 +438,7 @@ const file_edgerun_v0_ecmascript_ecmascript_objects_proto_rawDesc = "" +
 	"\x12GENERATOR_FUNCTION\x10\x19\x12\x1c\n" +
 	"\x18ASYNC_GENERATOR_FUNCTION\x10\x1a\x12\x12\n" +
 	"\x0eASYNC_FUNCTION\x10\x1bB\x85\x02\n" +
-	"!com.edgerun.v0.ecmascript.objectsB\x16EcmascriptObjectsProtoP\x01Z0edgerun-reference-core/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEO\xaa\x02\x1dEdgerun.V0.Ecmascript.Objects\xca\x02\x1dEdgerun\\V0\\Ecmascript\\Objects\xe2\x02)Edgerun\\V0\\Ecmascript\\Objects\\GPBMetadata\xea\x02 Edgerun::V0::Ecmascript::Objectsb\x06proto3"
+	"!com.edgerun.v0.ecmascript.objectsB\x16EcmascriptObjectsProtoP\x01Z0edgerunrefcore/gen/edgerun/v0/ecmascript\xa2\x02\x04EVEO\xaa\x02\x1dEdgerun.V0.Ecmascript.Objects\xca\x02\x1dEdgerun\\V0\\Ecmascript\\Objects\xe2\x02)Edgerun\\V0\\Ecmascript\\Objects\\GPBMetadata\xea\x02 Edgerun::V0::Ecmascript::Objectsb\x06proto3"
 
 var (
 	file_edgerun_v0_ecmascript_ecmascript_objects_proto_rawDescOnce sync.Once

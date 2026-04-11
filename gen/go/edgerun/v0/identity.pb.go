@@ -207,7 +207,7 @@ const file_edgerun_v0_identity_proto_rawDesc = "" +
 	"\fKeyAlgorithm\x12\x1d\n" +
 	"\x19KEY_ALGORITHM_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18KEY_ALGORITHM_ECDSA_P256\x10\x01B\xbd\x01\n" +
-	"\x17com.edgerun.v0.identityB\rIdentityProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVI\xaa\x02\x13Edgerun.V0.Identity\xca\x02\x13Edgerun\\V0\\Identity\xe2\x02\x1fEdgerun\\V0\\Identity\\GPBMetadata\xea\x02\x15Edgerun::V0::Identityb\x06proto3"
+	"\x17com.edgerun.v0.identityB\rIdentityProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVI\xaa\x02\x13Edgerun.V0.Identity\xca\x02\x13Edgerun\\V0\\Identity\xe2\x02\x1fEdgerun\\V0\\Identity\\GPBMetadata\xea\x02\x15Edgerun::V0::Identityb\x06proto3"
 
 var (
 	file_edgerun_v0_identity_proto_rawDescOnce sync.Once

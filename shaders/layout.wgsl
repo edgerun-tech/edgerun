@@ -78,7 +78,7 @@ struct LayoutConfig {
     node_count: u32,
     rule_count: u32,
     text_len: u32,
-    pass: u32,           // 0=cascade, 1=inherit, 2=heights
+    compute_phase: u32,    // 0=cascade, 1=inherit, 2=heights
     avail_width: f32,
     base_x: f32,
     base_y: f32,
@@ -388,11 +388,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let node_idx = global_id.x;
     if (node_idx >= config.node_count) { return; }
 
-    if (config.pass == 0u) {
+    if (config.compute_phase == 0u) {
         cascade_resolve(node_idx);
-    } else if (config.pass == 1u) {
+    } else if (config.compute_phase == 1u) {
         inherit_styles(node_idx);
-    } else if (config.pass == 2u) {
+    } else if (config.compute_phase == 2u) {
         compute_heights(node_idx);
     }
 }

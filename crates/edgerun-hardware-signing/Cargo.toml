@@ -22,3 +22,6 @@ edgerun-crypto.workspace = true
 edgerun-tpm = { path = "../edgerun-tpm", optional = true }
 edgerun-android-keystore = { path = "../edgerun-android-keystore", optional = true }
 edgerun-yubikey = { path = "../edgerun-yubikey", optional = true }
+
+[lints]
+workspace = true

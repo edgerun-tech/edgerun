@@ -14,3 +14,6 @@ edgerun-wifi = { path = "../edgerun-wifi" }
 libc.workspace = true
 edgerun-crypto.workspace = true
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

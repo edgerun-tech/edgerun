@@ -468,7 +468,7 @@ const file_edgerun_v0_css_css_fonts_proto_rawDesc = "" +
 	"\x04Bold\x10\a\x12\r\n" +
 	"\tExtraBold\x10\b\x12\t\n" +
 	"\x05Black\x10\tB\xc8\x01\n" +
-	"\x18com.edgerun.v0.css.fontsB\rCssFontsProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCF\xaa\x02\x14Edgerun.V0.Css.Fonts\xca\x02\x14Edgerun\\V0\\Css\\Fonts\xe2\x02 Edgerun\\V0\\Css\\Fonts\\GPBMetadata\xea\x02\x17Edgerun::V0::Css::Fontsb\x06proto3"
+	"\x18com.edgerun.v0.css.fontsB\rCssFontsProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCF\xaa\x02\x14Edgerun.V0.Css.Fonts\xca\x02\x14Edgerun\\V0\\Css\\Fonts\xe2\x02 Edgerun\\V0\\Css\\Fonts\\GPBMetadata\xea\x02\x17Edgerun::V0::Css::Fontsb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_fonts_proto_rawDescOnce sync.Once

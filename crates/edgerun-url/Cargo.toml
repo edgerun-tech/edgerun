@@ -7,3 +7,6 @@ publish = false
 description = "URL Living Standard types"
 
 [dependencies]
+
+[lints]
+workspace = true

@@ -1,4 +1,6 @@
 use super::*;
+use crate::http2::frame::{DataFrame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame};
+use crate::http2::{Decoder, Encoder, Frame, FrameType};
 
 fn h(name: &str, value: &str) -> (Vec<u8>, Vec<u8>) {
     (name.as_bytes().to_vec(), value.as_bytes().to_vec())

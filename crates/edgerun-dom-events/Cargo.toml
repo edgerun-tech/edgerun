@@ -7,3 +7,6 @@ publish = false
 description = "DOM event types generated from WHATWG DOM Living Standard"
 
 [dependencies]
+
+[lints]
+workspace = true

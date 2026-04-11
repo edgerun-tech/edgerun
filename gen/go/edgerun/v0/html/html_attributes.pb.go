@@ -2880,7 +2880,7 @@ const file_edgerun_v0_html_html_attributes_proto_rawDesc = "" +
 	"\x19POPOVER_STATE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12POPOVER_STATE_AUTO\x10\x01\x12\x18\n" +
 	"\x14POPOVER_STATE_MANUAL\x10\x02B\xed\x01\n" +
-	"\x1ecom.edgerun.v0.html.attributesB\x13HtmlAttributesProtoP\x01Z*edgerun-reference-core/gen/edgerun/v0/html\xa2\x02\x04EVHA\xaa\x02\x1aEdgerun.V0.Html.Attributes\xca\x02\x1aEdgerun\\V0\\Html\\Attributes\xe2\x02&Edgerun\\V0\\Html\\Attributes\\GPBMetadata\xea\x02\x1dEdgerun::V0::Html::Attributesb\x06proto3"
+	"\x1ecom.edgerun.v0.html.attributesB\x13HtmlAttributesProtoP\x01Z*edgerunrefcore/gen/edgerun/v0/html\xa2\x02\x04EVHA\xaa\x02\x1aEdgerun.V0.Html.Attributes\xca\x02\x1aEdgerun\\V0\\Html\\Attributes\xe2\x02&Edgerun\\V0\\Html\\Attributes\\GPBMetadata\xea\x02\x1dEdgerun::V0::Html::Attributesb\x06proto3"
 
 var (
 	file_edgerun_v0_html_html_attributes_proto_rawDescOnce sync.Once

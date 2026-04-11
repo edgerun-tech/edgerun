@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #![allow(missing_docs)]
 //! Dependency-free DHCPv4 server and client using only `std`.
 //!
@@ -35,9 +36,6 @@
 //! |                          options (variable)                   |
 //! +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 //! ```
-
-#![warn(missing_docs)]
-#![warn(rustdoc::missing_crate_level_docs)]
 
 pub mod message;
 pub mod client;

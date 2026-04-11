@@ -1,6 +1,6 @@
 package parserir
 
-import "edgerun-reference-core/gen/go/edgerun/v0/html"
+import "edgerunrefcore/gen/go/edgerun/v0/html"
 
 // TokenizerTransitions builds the complete state machine for WHATWG §13.2.5.
 func TokenizerTransitions() []*html.StateTransition {

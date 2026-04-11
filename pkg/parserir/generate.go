@@ -1,7 +1,7 @@
 package parserir
 
 import (
-	"edgerun-reference-core/gen/go/edgerun/v0/html"
+	"edgerunrefcore/gen/go/edgerun/v0/html"
 	"google.golang.org/protobuf/proto"
 )
 

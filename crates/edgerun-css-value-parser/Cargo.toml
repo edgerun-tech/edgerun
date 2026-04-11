@@ -8,3 +8,6 @@ description = "CSS value type parser — converts CSS value strings into typed v
 
 [dependencies]
 edgerun-color = { path = "../edgerun-color" }
+
+[lints]
+workspace = true

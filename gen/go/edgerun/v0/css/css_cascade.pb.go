@@ -328,7 +328,7 @@ const file_edgerun_v0_css_css_cascade_proto_rawDesc = "" +
 	"\x1bSCOPE_PROXIMITY_UNSPECIFIED\x10\x00\x12\b\n" +
 	"\x04NEAR\x10\x01\x12\a\n" +
 	"\x03FAR\x10\x02B\xd4\x01\n" +
-	"\x1acom.edgerun.v0.css.cascadeB\x0fCssCascadeProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCC\xaa\x02\x16Edgerun.V0.Css.Cascade\xca\x02\x16Edgerun\\V0\\Css\\Cascade\xe2\x02\"Edgerun\\V0\\Css\\Cascade\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Cascadeb\x06proto3"
+	"\x1acom.edgerun.v0.css.cascadeB\x0fCssCascadeProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCC\xaa\x02\x16Edgerun.V0.Css.Cascade\xca\x02\x16Edgerun\\V0\\Css\\Cascade\xe2\x02\"Edgerun\\V0\\Css\\Cascade\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Cascadeb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_cascade_proto_rawDescOnce sync.Once

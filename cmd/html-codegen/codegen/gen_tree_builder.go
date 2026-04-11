@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"edgerun-reference-core/gen/go/edgerun/v0/html"
+	"edgerunrefcore/gen/go/edgerun/v0/html"
 )
 
 // GenerateTreeBuilderRust produces the full tree_builder.rs source file.

@@ -1,4 +1,5 @@
 //! HTML/CSS → RenderObject + pixel rendering pipeline.
+#![allow(dead_code)]
 extern crate alloc;
 
 pub mod html_parser;

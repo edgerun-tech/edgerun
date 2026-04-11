@@ -7,7 +7,7 @@
 syntax = "proto3";
 package edgerun.v0.spec;
 
-option go_package = "github.com/edgerun/edgerun/proto/go/spec";
+option go_package = "edgerun-reference-core/proto/go/spec";
 
 // Top-level catalog containing all spec domains.
 message Catalog {
@@ -38,6 +38,17 @@ message Catalog {
   repeated ColorDef color_defs = 25;
   repeated MediaPropertyDef media_properties = 26;
   repeated SyntaxDef syntax_defs = 27;
+  int32 total_properties = 28;
+  int32 total_value_types = 29;
+  int32 total_at_rules = 30;
+  int32 total_interfaces = 31;
+  int32 total_events = 32;
+  int32 total_elements = 33;
+  int32 total_built_in_objects = 34;
+  int32 total_abstract_ops = 35;
+  int32 total_well_known_symbols = 36;
+  int32 total_well_known_intrinsics = 37;
+  int32 total_encodings = 38;
 }
 
 // -- CSS --

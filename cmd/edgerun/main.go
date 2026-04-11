@@ -3,11 +3,11 @@ package main
 import (
 	"os"
 
-	"github.com/edgerun/edgerun/cmd/edgerun/gen"
-	"github.com/edgerun/edgerun/cmd/edgerun/report"
-	"github.com/edgerun/edgerun/cmd/edgerun/spec"
-	"github.com/edgerun/edgerun/cmd/edgerun/test"
-	"github.com/edgerun/edgerun/cmd/edgerun/tools"
+	"edgerunrefcore/cmd/edgerun/gen"
+	"edgerunrefcore/cmd/edgerun/report"
+	"edgerunrefcore/cmd/edgerun/spec"
+	"edgerunrefcore/cmd/edgerun/test"
+	"edgerunrefcore/cmd/edgerun/tools"
 	"github.com/spf13/cobra"
 )
 

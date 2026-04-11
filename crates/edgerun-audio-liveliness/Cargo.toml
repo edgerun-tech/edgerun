@@ -10,3 +10,6 @@ edgerun-biometrics = { path = "../edgerun-biometrics" }
 edgerun-capabilities = { path = "../edgerun-capabilities" }
 edgerun-microphone = { path = "../edgerun-microphone" }
 edgerun-speaker = { path = "../edgerun-speaker" }
+
+[lints]
+workspace = true

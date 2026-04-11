@@ -232,7 +232,7 @@ const file_edgerun_v0_css_css_contain_proto_rawDesc = "" +
 	"\x14CONTAINER_BLOCK_SIZE\x10\x04\x12\x1a\n" +
 	"\x16CONTAINER_ASPECT_RATIO\x10\x05\x12\x19\n" +
 	"\x15CONTAINER_ORIENTATION\x10\x06B\xd4\x01\n" +
-	"\x1acom.edgerun.v0.css.containB\x0fCssContainProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCC\xaa\x02\x16Edgerun.V0.Css.Contain\xca\x02\x16Edgerun\\V0\\Css\\Contain\xe2\x02\"Edgerun\\V0\\Css\\Contain\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Containb\x06proto3"
+	"\x1acom.edgerun.v0.css.containB\x0fCssContainProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCC\xaa\x02\x16Edgerun.V0.Css.Contain\xca\x02\x16Edgerun\\V0\\Css\\Contain\xe2\x02\"Edgerun\\V0\\Css\\Contain\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::Containb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_contain_proto_rawDescOnce sync.Once

@@ -444,7 +444,7 @@ const file_edgerun_v0_css_css_page_proto_rawDesc = "" +
 	"\x04LEFT\x10\x02\x12\t\n" +
 	"\x05RIGHT\x10\x03\x12\t\n" +
 	"\x05BLANK\x10\x04B\xc2\x01\n" +
-	"\x17com.edgerun.v0.css.pageB\fCssPageProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCP\xaa\x02\x13Edgerun.V0.Css.Page\xca\x02\x13Edgerun\\V0\\Css\\Page\xe2\x02\x1fEdgerun\\V0\\Css\\Page\\GPBMetadata\xea\x02\x16Edgerun::V0::Css::Pageb\x06proto3"
+	"\x17com.edgerun.v0.css.pageB\fCssPageProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCP\xaa\x02\x13Edgerun.V0.Css.Page\xca\x02\x13Edgerun\\V0\\Css\\Page\xe2\x02\x1fEdgerun\\V0\\Css\\Page\\GPBMetadata\xea\x02\x16Edgerun::V0::Css::Pageb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_page_proto_rawDescOnce sync.Once

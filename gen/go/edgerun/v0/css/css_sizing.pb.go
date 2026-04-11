@@ -205,7 +205,7 @@ const file_edgerun_v0_css_css_sizing_proto_rawDesc = "" +
 	"\x18ASPECT_RATIO_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tPREFERRED\x10\x01\x12\x17\n" +
 	"\x13PREFERRED_FROM_SIZE\x10\x02B\xce\x01\n" +
-	"\x19com.edgerun.v0.css.sizingB\x0eCssSizingProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCS\xaa\x02\x15Edgerun.V0.Css.Sizing\xca\x02\x15Edgerun\\V0\\Css\\Sizing\xe2\x02!Edgerun\\V0\\Css\\Sizing\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Sizingb\x06proto3"
+	"\x19com.edgerun.v0.css.sizingB\x0eCssSizingProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCS\xaa\x02\x15Edgerun.V0.Css.Sizing\xca\x02\x15Edgerun\\V0\\Css\\Sizing\xe2\x02!Edgerun\\V0\\Css\\Sizing\\GPBMetadata\xea\x02\x18Edgerun::V0::Css::Sizingb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_sizing_proto_rawDescOnce sync.Once

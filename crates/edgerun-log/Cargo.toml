@@ -7,3 +7,6 @@ publish.workspace = true
 description = "Minimal structured logging — replaces tracing + tracing-subscriber"
 
 [dependencies]
+
+[lints]
+workspace = true

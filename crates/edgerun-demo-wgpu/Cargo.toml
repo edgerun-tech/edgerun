@@ -13,3 +13,6 @@ edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 wgpu = "29"
 pollster = "0.4"
 png = "0.18"
+
+[lints]
+workspace = true

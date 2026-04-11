@@ -15,3 +15,6 @@ libc.workspace = true
 edgerun-core = { path = "../edgerun-core" }
 edgerun-crypto.workspace = true
 edgerun-mesh = { path = "../edgerun-mesh" }
+
+[lints]
+workspace = true

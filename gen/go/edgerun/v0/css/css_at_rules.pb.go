@@ -176,7 +176,7 @@ const file_edgerun_v0_css_css_at_rules_proto_rawDesc = "" +
 	"\x04PAGE\x10\x05\x12\v\n" +
 	"\aCHARSET\x10\x06\x12\t\n" +
 	"\x05MEDIA\x10\aB\xd5\x01\n" +
-	"\x1bcom.edgerun.v0.css.at_rulesB\x0fCssAtRulesProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCA\xaa\x02\x16Edgerun.V0.Css.AtRules\xca\x02\x16Edgerun\\V0\\Css\\AtRules\xe2\x02\"Edgerun\\V0\\Css\\AtRules\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::AtRulesb\x06proto3"
+	"\x1bcom.edgerun.v0.css.at_rulesB\x0fCssAtRulesProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCA\xaa\x02\x16Edgerun.V0.Css.AtRules\xca\x02\x16Edgerun\\V0\\Css\\AtRules\xe2\x02\"Edgerun\\V0\\Css\\AtRules\\GPBMetadata\xea\x02\x19Edgerun::V0::Css::AtRulesb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_at_rules_proto_rawDescOnce sync.Once

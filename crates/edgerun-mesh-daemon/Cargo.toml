@@ -21,3 +21,6 @@ edgerun-crypto.workspace = true
 prost.workspace = true
 libc.workspace = true
 edgerun-log = { path = "../edgerun-log" }
+
+[lints]
+workspace = true

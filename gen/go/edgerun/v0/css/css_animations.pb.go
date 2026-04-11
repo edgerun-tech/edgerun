@@ -525,7 +525,7 @@ const file_edgerun_v0_css_css_animations_proto_rawDesc = "" +
 	"\x11DIRECTION_REVERSE\x10\x02\x12\x17\n" +
 	"\x13DIRECTION_ALTERNATE\x10\x03\x12\x1f\n" +
 	"\x1bDIRECTION_ALTERNATE_REVERSE\x10\x04B\xe6\x01\n" +
-	"\x1dcom.edgerun.v0.css.animationsB\x12CssAnimationsProtoP\x01Z)edgerun-reference-core/gen/edgerun/v0/css\xa2\x02\x04EVCA\xaa\x02\x19Edgerun.V0.Css.Animations\xca\x02\x19Edgerun\\V0\\Css\\Animations\xe2\x02%Edgerun\\V0\\Css\\Animations\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::Animationsb\x06proto3"
+	"\x1dcom.edgerun.v0.css.animationsB\x12CssAnimationsProtoP\x01Z)edgerunrefcore/gen/edgerun/v0/css\xa2\x02\x04EVCA\xaa\x02\x19Edgerun.V0.Css.Animations\xca\x02\x19Edgerun\\V0\\Css\\Animations\xe2\x02%Edgerun\\V0\\Css\\Animations\\GPBMetadata\xea\x02\x1cEdgerun::V0::Css::Animationsb\x06proto3"
 
 var (
 	file_edgerun_v0_css_css_animations_proto_rawDescOnce sync.Once

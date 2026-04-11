@@ -1,6 +1,6 @@
 package parserir
 
-import "edgerun-reference-core/gen/go/edgerun/v0/html"
+import "edgerunrefcore/gen/go/edgerun/v0/html"
 
 // TreeRules builds the complete tree builder rule set for all insertion modes.
 func TreeRules() []*html.TreeRule {

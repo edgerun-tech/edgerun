@@ -19,3 +19,6 @@ edgerun-compositor = { path = "../edgerun-compositor" }
 
 [dev-dependencies]
 edgerun-compositor = { path = "../edgerun-compositor" }
+
+[lints]
+workspace = true

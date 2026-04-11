@@ -1568,7 +1568,7 @@ const file_edgerun_v0_access_proto_rawDesc = "" +
 	"\"PROOF_PAYLOAD_TYPE_RESULT_FRAGMENT\x10\x05\x12(\n" +
 	"$PROOF_PAYLOAD_TYPE_AGGREGATE_SUMMARY\x10\x06\x12#\n" +
 	"\x1fPROOF_PAYLOAD_TYPE_TRUST_POLICY\x10\aB\xb1\x01\n" +
-	"\x15com.edgerun.v0.accessB\vAccessProtoP\x01Z%edgerun-reference-core/gen/edgerun/v0\xa2\x02\x03EVA\xaa\x02\x11Edgerun.V0.Access\xca\x02\x11Edgerun\\V0\\Access\xe2\x02\x1dEdgerun\\V0\\Access\\GPBMetadata\xea\x02\x13Edgerun::V0::Accessb\x06proto3"
+	"\x15com.edgerun.v0.accessB\vAccessProtoP\x01Z%edgerunrefcore/gen/edgerun/v0\xa2\x02\x03EVA\xaa\x02\x11Edgerun.V0.Access\xca\x02\x11Edgerun\\V0\\Access\xe2\x02\x1dEdgerun\\V0\\Access\\GPBMetadata\xea\x02\x13Edgerun::V0::Accessb\x06proto3"
 
 var (
 	file_edgerun_v0_access_proto_rawDescOnce sync.Once

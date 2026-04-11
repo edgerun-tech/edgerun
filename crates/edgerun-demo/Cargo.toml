@@ -9,3 +9,6 @@ publish = false
 edgerun-html-render = { path = "../edgerun-html-render" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 edgerun-css-cascade = { path = "../edgerun-css-cascade" }
+
+[lints]
+workspace = true
