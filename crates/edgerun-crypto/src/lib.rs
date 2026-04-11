@@ -36,6 +36,8 @@ pub use aes_gcm;
 // Elliptic curve / asymmetric
 // ---------------------------------------------------------------------------
 pub use p256;
+pub use rsa;
+pub use ed448_goldilocks;
 pub use ecdsa;
 pub use elliptic_curve;
 pub use primeorder;
@@ -89,6 +91,17 @@ pub use p256::ecdh::EphemeralSecret;
 pub use p256::{PublicKey, EncodedPoint, FieldBytes};
 pub use p256::elliptic_curve::sec1::ToEncodedPoint;
 
+// RSA
+pub use rsa::RsaPublicKey;
+pub use rsa::pkcs1::DecodeRsaPublicKey;
+
+// ED25519 (RFC 8080 DNSSEC algorithm 15)
+pub use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey, Signature as Ed25519Signature};
+
+// ED448 (RFC 8080 DNSSEC algorithm 16)
+pub use ed448_goldilocks::Signature as Ed448Signature;
+pub use ed448_goldilocks::VerifyingKey as Ed448VerifyingKey;
+
 // Hash
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
 
@@ -105,9 +118,6 @@ pub use aes_gcm::{
 // Signature traits
 pub use signature::{Signer, Verifier};
 pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
-
-// ED25519 (RFC 8080 DNSSEC algorithm 15)
-pub use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey, Signature as Ed25519Signature};
 
 // DER
 pub use der::Tag;

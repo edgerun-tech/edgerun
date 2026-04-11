@@ -178,11 +178,45 @@ fn verify_signature(
             if signature.len() < 256 {
                 return DnssecResult::BadSignature;
             }
-            // RSA verification requires edgerun-crypto RSA support
-            // which may not be fully available. Mark as insecure.
-            // TODO: Implement actual RSA-SHA256 verification.
-            let _ = (signed_data, public_key, signature);
-            DnssecResult::Insecure
+            // RSA public key in DNSKEY RDATA format: exponent + modulus
+            // DNSKEY public_key: exponent_length(1 or 3 bytes) + exponent + modulus
+            if public_key.len() < 5 {
+                return DnssecResult::BadSignature;
+            }
+            let (exp_len, exp_start) = if public_key[0] == 0 {
+                // 3-byte exponent length
+                let exp_len = ((public_key[1] as usize) << 8) | (public_key[2] as usize);
+                (exp_len, 3)
+            } else {
+                // 1-byte exponent length
+                (public_key[0] as usize, 1)
+            };
+            if exp_start + exp_len >= public_key.len() {
+                return DnssecResult::BadSignature;
+            }
+            let modulus = &public_key[exp_start + exp_len..];
+            let exponent = &public_key[exp_start..exp_start + exp_len];
+
+            // Construct RsaPublicKey from modulus and exponent, then verify
+            use edgerun_crypto::rsa::RsaPublicKey;
+            use edgerun_crypto::sha2::{Digest, Sha256};
+
+            let n = edgerun_crypto::rsa::BigUint::from_bytes_be(modulus);
+            let e = edgerun_crypto::rsa::BigUint::from_bytes_be(exponent);
+
+            if let Ok(rsa_pub) = RsaPublicKey::new(n, e) {
+                let mut hasher = Sha256::new();
+                hasher.update(signed_data);
+                let hashed = hasher.finalize();
+                if rsa_pub.verify(
+                    edgerun_crypto::rsa::Pkcs1v15Sign::new::<Sha256>(),
+                    &hashed,
+                    signature,
+                ).is_ok() {
+                    return DnssecResult::Valid;
+                }
+            }
+            DnssecResult::BadSignature
         }
         // ECDSAP256SHA256 (RFC 6605)
         13 => {
@@ -237,7 +271,26 @@ fn verify_signature(
         }
         // ED448 (RFC 8080)
         16 => {
-            DnssecResult::Insecure
+            if signature.len() != 114 || public_key.len() != 57 {
+                return DnssecResult::BadSignature;
+            }
+            use edgerun_crypto::Ed448VerifyingKey;
+            use edgerun_crypto::Ed448Signature;
+
+            let mut pk_bytes = [0u8; 57];
+            pk_bytes.copy_from_slice(public_key);
+            let mut sig_bytes = [0u8; 114];
+            sig_bytes.copy_from_slice(signature);
+
+            if let Ok(vk) = Ed448VerifyingKey::from_bytes(&pk_bytes) {
+                let sig = Ed448Signature::from_bytes(&sig_bytes);
+                return if vk.verify_raw(&sig, signed_data).is_ok() {
+                    DnssecResult::Valid
+                } else {
+                    DnssecResult::BadSignature
+                };
+            }
+            DnssecResult::BadSignature
         }
         _ => DnssecResult::Insecure, // Unknown algorithm
     }
