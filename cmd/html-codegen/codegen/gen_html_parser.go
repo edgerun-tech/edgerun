@@ -14,8 +14,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
-pub use crate::tokenizer::{Tokenizer, Token, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
-pub use crate::tree_builder::{TreeBuilder, InsertionMode};
+pub use crate::tokenizer::{Tokenizer, Token, State, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
+pub use crate::tree_builder::{TreeBuilder, InsertionMode, TokenizerMode};
 pub use crate::entity_decoder::decode_entities_in_text;
 
 /// Block-level elements — used by layout for block vs inline distinction.
@@ -79,6 +79,22 @@ pub fn parse_html(html: &str) -> Node {
         match tokenizer.step() {
             Some(token) => {
                 tree_builder.handle_token(&token);
+                // Check if tree builder signaled a tokenizer mode switch
+                // (e.g., entering <script>, <style>, <noscript>, <textarea>, <title>)
+                if let Some(mode) = tree_builder.take_tokenizer_mode() {
+                    // Extract the tag name from the token so the tokenizer knows
+                    // which end tag to look for
+                    if let Token::StartTag { name, .. } = &token {
+                        let state = match mode {
+                            TokenizerMode::Rawtext => State::Rawtext,
+                            TokenizerMode::Rcdata => State::Rcdata,
+                            TokenizerMode::ScriptData => State::ScriptData,
+                            _ => continue,
+                        };
+                        tokenizer.set_raw_text_tag(name, state);
+                        tokenizer.set_state(state);
+                    }
+                }
                 if matches!(token, Token::Eof) { break; }
             }
             None => break,

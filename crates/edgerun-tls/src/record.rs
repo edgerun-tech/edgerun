@@ -7,25 +7,18 @@
 //!
 //! The AEAD nonce is computed as: nonce = write_iv XOR (sequence_number as 12 bytes)
 
-use edgerun_crypto::aes_gcm::{
-    aead::{AeadInPlace, KeyInit},
-    Aes128Gcm, Aes256Gcm, Nonce,
-};
+use edgerun_crypto::aes_gcm::aead::AeadInPlace;
+use edgerun_crypto::AesGcmCipher;
 
 /// TLS record layer for encryption/decryption
 pub struct RecordCipher {
-    inner: CipherImpl,
+    cipher: AesGcmCipher,
     /// 96-bit nonce base (write_iv)
     iv: [u8; 12],
     /// Sequence number for record ordering
     seq: u64,
     /// AEAD tag length in bytes
     tag_len: usize,
-}
-
-enum CipherImpl {
-    Aes128(Aes128Gcm),
-    Aes256(Aes256Gcm),
 }
 
 impl RecordCipher {
@@ -37,18 +30,10 @@ impl RecordCipher {
         let mut iv_arr = [0u8; 12];
         iv_arr.copy_from_slice(iv);
 
-        let inner = match key.len() {
-            16 => CipherImpl::Aes128(
-                Aes128Gcm::new_from_slice(key).map_err(|e| format!("Invalid AES-128 key: {:?}", e))?,
-            ),
-            32 => CipherImpl::Aes256(
-                Aes256Gcm::new_from_slice(key).map_err(|e| format!("Invalid AES-256 key: {:?}", e))?,
-            ),
-            _ => return Err(format!("Unsupported key length: {} bytes", key.len())),
-        };
+        let cipher = AesGcmCipher::new_from_slice(key)?;
 
         Ok(RecordCipher {
-            inner,
+            cipher,
             iv: iv_arr,
             seq: 0,
             tag_len: 16, // AES-GCM tag length
@@ -91,14 +76,8 @@ impl RecordCipher {
         let aad = Self::build_aad(0x17, plaintext.len()); // 0x17 = application_data
 
         let nonce = self.make_nonce();
-        let tag = match &self.inner {
-            CipherImpl::Aes128(cipher) => cipher
-                .encrypt_in_place_detached(&nonce, &aad, &mut buffer)
-                .expect("AEAD encryption failed"),
-            CipherImpl::Aes256(cipher) => cipher
-                .encrypt_in_place_detached(&nonce, &aad, &mut buffer)
-                .expect("AEAD encryption failed"),
-        };
+        let tag = self.cipher.encrypt_in_place_detached(&nonce, &aad, &mut buffer)
+            .expect("AEAD encryption failed");
 
         buffer.extend_from_slice(tag.as_ref());
         self.seq += 1;
@@ -118,26 +97,18 @@ impl RecordCipher {
         let nonce = self.make_nonce();
 
         // AAD is the 5-byte record header
-        // content_type is always 0x17 (application_data) for TLS 1.3 encrypted records
-        // ciphertext = original_plaintext + 1(content_type) + 16(tag)
-        // build_aad expects the original plaintext length
         let aad = Self::build_aad(0x17, ciphertext.len() - Self::TAG_LEN - 1);
 
         let mut buffer = ciphertext.to_vec();
         let tag_offset = buffer.len() - Self::TAG_LEN;
         let tag_bytes: [u8; 16] = buffer[tag_offset..].try_into()
             .map_err(|_| "invalid tag length")?;
-        let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
+        let tag = aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
-        match &self.inner {
-            CipherImpl::Aes128(cipher) => cipher
-                .decrypt_in_place_detached(&nonce, &aad, &mut buffer, &tag)
-                .map_err(|e| format!("AEAD decryption failed: {:?}", e))?,
-            CipherImpl::Aes256(cipher) => cipher
-                .decrypt_in_place_detached(&nonce, &aad, &mut buffer, &tag)
-                .map_err(|e| format!("AEAD decryption failed: {:?}", e))?,
-        };
+        let nonce_arr: [u8; 12] = nonce.try_into().map_err(|_| "invalid nonce length")?;
+        self.cipher.decrypt_in_place_detached(&nonce_arr, &aad, &mut buffer, &tag)
+            .map_err(|e| format!("AEAD decryption failed: {:?}", e))?;
 
         // Last byte is the real ContentType (RFC 8446 §5.4)
         if buffer.is_empty() {
@@ -157,7 +128,7 @@ impl RecordCipher {
     ///
     /// Where the sequence number is zero-padded on the left to 12 bytes.
     /// This is equivalent to: nonce[0..4] = iv[0..4], nonce[4..12] = iv[4..12] XOR seq.
-    fn make_nonce(&self) -> Nonce<edgerun_crypto::aes_gcm::aead::consts::U12> {
+    fn make_nonce(&self) -> [u8; 12] {
         let mut nonce = [0u8; 12];
         let seq_bytes = self.seq.to_be_bytes();
         // Copy the full IV, then XOR the sequence number into the last 8 bytes
@@ -165,7 +136,7 @@ impl RecordCipher {
         for i in 0..8 {
             nonce[4 + i] ^= seq_bytes[i];
         }
-        Nonce::from(nonce)
+        nonce
     }
 }
 

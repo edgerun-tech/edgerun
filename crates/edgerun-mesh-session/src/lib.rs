@@ -96,7 +96,7 @@ pub const MAX_SESSION_AGE: Duration = Duration::from_secs(300); // 5 minutes
 /// persisted or transmitted**. It lives only in memory and is zeroed on drop.
 pub struct MeshSession {
     peer: NodeID,
-    cipher: Aes256Gcm,
+    cipher: edgerun_crypto::AesGcmCipher,
     /// 4-byte random prefix (unique per session).
     nonce_prefix: [u8; 4],
     /// Monotonically increasing counter (8 bytes).
@@ -115,7 +115,7 @@ impl MeshSession {
 
         Self {
             peer,
-            cipher: Aes256Gcm::new_from_slice(&key).expect("valid AES-256 key"),
+            cipher: edgerun_crypto::AesGcmCipher::new_from_slice(&key).expect("valid AES-256 key"),
             nonce_prefix,
             nonce_counter: 0,
             highest_seen_counter: None,
@@ -137,8 +137,7 @@ impl MeshSession {
         nonce_bytes[4..].copy_from_slice(&self.nonce_counter.to_be_bytes());
         self.nonce_counter = self.nonce_counter.wrapping_add(1);
 
-        let nonce = Nonce::from(nonce_bytes);
-        let ciphertext = self.cipher.encrypt(nonce, plaintext).expect("AES-GCM encrypt failed");
+        let ciphertext = self.cipher.encrypt(&nonce_bytes, plaintext).expect("AES-GCM encrypt failed");
 
         let mut out = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
         out.extend_from_slice(&nonce_bytes);
@@ -168,11 +167,11 @@ impl MeshSession {
         }
         self.highest_seen_counter = Some(counter);
 
-        let nonce = Nonce::from(nonce_bytes);
+        let nonce_arr: [u8; 12] = nonce_bytes.try_into().unwrap();
         let payload = &ciphertext[NONCE_SIZE..];
 
         self.cipher
-            .decrypt(nonce, payload)
+            .decrypt(&nonce_arr, payload)
             .map_err(|_| SessionError::DecryptionFailed)
     }
 

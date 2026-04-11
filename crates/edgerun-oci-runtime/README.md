@@ -61,9 +61,9 @@ delete  →  (poststop + cgroup cleanup)                                     →
 
 ## Test Results
 
-**Last run:** 2025-04-11 | **All green:** 144 tests (120 unit + 24 integration), 0 clippy warnings
+**Last run:** 2025-04-11 | **All green:** 149 tests (125 unit + 24 integration), 0 clippy warnings
 
-### Unit tests: 120 passed, 0 failed
+### Unit tests: 125 passed, 0 failed
 
 ### Integration tests: 24 passed, 0 failed
 
@@ -102,7 +102,8 @@ Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test confo
 | `mounts` fields | 7/7 | 5/7 | ⚠️ (recursive + idmapped types only) |
 | `linux` fields | 14/14 | 14/14 | ✅ |
 | Namespaces | 8/8 | 8/8 | ✅ |
-| Cgroup v2 resources | 27/27 | 26/27 | ⚠️ (leaf weights v1-only) |
+| `domainname` | 1/1 | 1/1 | ✅ |
+| Cgroup v2 resources | 32/32 | 31/32 | ⚠️ (leaf weights v1-only) |
 | Seccomp fields | 7/7 | 7/7 | ✅ |
 | Hook types | 6/6 | 6/6 | ✅ |
 | Linux devices | 7/7 | 7/7 | ✅ |
@@ -118,30 +119,46 @@ Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test confo
 | `blockIO.weightDevice` | Per-device writes to `io.weight` / `io.bfq.weight` via append | `cgroup_weight_device_per_device_written` | ✅ Code applied (kernel needs BFQ for per-device) |
 | `linux.time` namespace | `"time"` in `KNOWN_NAMESPACES`, flag mapped | `time_namespace_accepted_by_validator` | ✅ Applied + Tested |
 | `process.consoleSize` | `TIOCSWINSZ` ioctl after PTY allocation | — | ✅ Code applied |
-| `linux.personality` | `personality(2)` syscall in `setup_container_child` | — | ✅ Code applied |
+| `linux.personality` | `personality(2)` syscall in `setup_container_child` | — | ✅ Applied |
 | `seccomp.listenerMetadata` | Written to `<bundle>/.edgerun-seccomp-metadata` | — | ✅ Applied |
 | `resources.rdma` | Writes to `rdma/<name>/max` | — | ✅ Applied |
-| `bundle_path` threading | Full lifecycle propagation to seccomp | — | ✅ Applied |
-| `mount.recursive` | Type defined, no `mount_setattr` syscall | — | ⚠️ Type only |
-| `mount.uidMappings/gidMappings` | Type defined, no new mount API | — | ⚠️ Type only |
+| `cpu.idle` (v1.1.0) | Writes `1` to `cpu.idle` when idle != 0 | — | ✅ Applied |
+| `cpu.burst` (v1.1.0) | Writes burst value to `cpu.max.burst` | — | ✅ Applied |
+| `hugetlb[].rsvd` (v1.1.0) | Writes to `hugetlb.<size>.rsvd.max` when rsvd=true | — | ✅ Applied |
+| `process.ioPriority` (v1.1.0) | `ioprio_set(2)` syscall with class+priority | — | ✅ Applied |
+| `domainname` (v1.1.0) | `setdomainname(2)` syscall | — | ✅ Applied |
+| `intelRdt.schemata` (v1.3.0) | Combined schemata field overrides individual fields | — | ✅ Applied |
+| `intelRdt.enableMonitoring` (v1.3.0) | Creates `monitors/` directory in clos | — | ✅ Applied |
+| `mount.recursive` | `mount_setattr` with `MOUNT_ATTR_REC`, error logged to kmsg on failure | — | ✅ Applied (error logged) |
+| `mount.uidMappings/gidMappings` | Full `setup_idmapped_mount` (fork+unshare+open_tree+mount_setattr+move_mount), error logged to kmsg on failure | — | ✅ Applied (error logged) |
+| `mount.recursive` dest (v1.2.0) | Relative mount destinations allowed with escape checking | — | ✅ Applied |
+| `mount.idmap/ridmap` opts (v1.2.0) | Option strings recognized (handled via uidMappings) | — | ✅ Applied |
+| `memory.checkBeforeUpdate` (v1.1.0) | Type defined (runtime hint) | — | ⚠️ Type only |
 | `leafWeight/leafWeightDevice` | Type defined, v1-only, intentionally skipped | — | ⚠️ Type only (correct for v2) |
 
 ### Remaining Gaps
 
-#### Kernel API required
-
-1. **mount.recursive** — Needs `mount_setattr` syscall (#442) with `AT_RECURSIVE` after mount.
-2. **idmapped mounts** — Needs `open_tree`, `move_mount`, `mount_setattr` with `MOUNT_ATTR_IDMAP`. Linux 5.12+.
-
 #### Integration tests needed
 
-3. **personality end-to-end** — Code applies `personality(2)` but no container-level test verifies it.
-4. **consoleSize end-to-end** — Code applies `TIOCSWINSZ` but no container-level test verifies terminal dimensions.
-5. **listenerMetadata end-to-end** — Code writes metadata file but no test verifies file creation.
+1. **personality end-to-end** — Code applies `personality(2)` but no container-level test verifies it.
+2. **consoleSize end-to-end** — Code applies `TIOCSWINSZ` but no container-level test verifies terminal dimensions.
+3. **listenerMetadata end-to-end** — Code writes metadata file but no test verifies file creation.
+4. **cpu.idle end-to-end** — `cpu.idle` cgroup write but no container-level test verifies idle state.
+5. **cpu.burst end-to-end** — `cpu.max.burst` cgroup write but no container-level test verifies burst behavior.
+6. **I/O priority end-to-end** — `ioprio_set(2)` but no container-level test verifies I/O priority.
+7. **domainname end-to-end** — `setdomainname(2)` but no container-level test verifies NIS domain.
+8. **hugetlb rsvd end-to-end** — `hugetlb.<size>.rsvd.max` write but no container-level test verifies reserved accounting.
 
 #### Intentionally skipped
 
-6. **leafWeight / leafWeightDevice** — Cgroup v1-only. This runtime is v2-only. Correct to skip.
+9. **leafWeight / leafWeightDevice** — Cgroup v1-only. This runtime is v2-only. Correct to skip.
+10. **memory.checkBeforeUpdate** — Runtime hint only, not a cgroup file. Type defined for spec compliance.
+
+#### Future OCI versions (v1.3.0 VM support)
+
+11. **hwConfig / VM containers** — Entire new runtime model requiring hypervisor integration. Major feature.
+12. **netDevices** — Network device configuration for VM containers.
+13. **memoryPolicy** — NUMA memory policy configuration.
 
 #### Previously Fixed
 
@@ -202,17 +219,25 @@ Run integration tests with: `sudo cargo test -p edgerun-oci-runtime --test confo
 | eBPF network class/priority | ✅ Applied |
 | Live cgroup updates | ✅ Applied |
 | Per-device block I/O weight | ✅ Applied (BFQ needed for per-device) |
+| CPU idle (OCI 1.1.0) | ✅ Applied |
+| CFS burst (OCI 1.1.0) | ✅ Applied |
+| Hugepage rsvd (OCI 1.1.0) | ✅ Applied |
+| I/O priority (OCI 1.1.0) | ✅ Applied |
+| Domainname (OCI 1.1.0) | ✅ Applied |
+| Intel RDT schemata (OCI 1.3.0) | ✅ Applied |
+| Intel RDT monitoring (OCI 1.3.0) | ✅ Applied |
+| Relative mount destinations (OCI 1.2.0) | ✅ Applied |
 | Personality (OCI 1.2) | ✅ Applied |
-| Rootfs propagation | ⚠️ Configurable, no default |
-| Mount recursive | ⚠️ Type only |
-| Idmapped mounts (OCI 1.1/1.2) | ⚠️ Type only |
+| Rootfs propagation | ✅ Configurable, no default |
+| Mount recursive | ✅ Applied (error logged) |
+| Idmapped mounts (OCI 1.1/1.2) | ✅ Applied (error logged) |
 
 ## Code Metrics
 
 | Metric | Value |
 |--------|-------|
-| Source lines | ~11,200 (Rust) |
-| Unit tests | 120 |
+| Source lines | ~11,800 (Rust) |
+| Unit tests | 125 |
 | Integration tests | 24 |
 | Clippy warnings | 0 |
 | External dependencies | 3 (`edgerun-json`, `serde`, `libc`) |
@@ -234,7 +259,7 @@ No async runtime, no external libraries (no libseccomp, no libcontainer, no libc
 ```bash
 cargo build -p edgerun-oci-runtime                  # library + binary
 cargo build -p edgerun-oci-runtime --release         # optimized binary
-cargo test -p edgerun-oci-runtime --lib              # 120 unit tests
+cargo test -p edgerun-oci-runtime --lib              # 125 unit tests
 sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1  # 24 integration tests
 cargo clippy -p edgerun-oci-runtime                  # 0 warnings (enforced)
 ```

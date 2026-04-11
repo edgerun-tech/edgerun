@@ -1,18 +1,16 @@
 // DO NOT EDIT.
-// Auto-generated from Parser IR by scripts/generate_html_parser.py
-// Regenerate: python3 scripts/generate_parser_ir.py && python3 scripts/generate_html_parser.py
+// Auto-generated from Parser IR by cmd/html-codegen
+// Regenerate: go run ./cmd/html-codegen
 
 extern crate alloc;
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
-pub use crate::tokenizer::{Tokenizer, Token, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
-pub use crate::tree_builder::TreeBuilder;
-
-// Re-export for downstream consumers (edgerun-demo, layout_builder, etc.)
-pub use crate::entity_decoder::EntityDecoder;
+pub use crate::tokenizer::{Tokenizer, Token, State, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
+pub use crate::tree_builder::{TreeBuilder, InsertionMode, TokenizerMode};
+pub use crate::entity_decoder::decode_entities_in_text;
 
 /// Block-level elements — used by layout for block vs inline distinction.
 pub const BLOCK_ELEMENTS: &[&str] = &[
@@ -53,118 +51,52 @@ pub struct Element {
 
 impl Element {
     pub fn new(tag: &str) -> Self {
-        Self {
-            tag: tag.to_lowercase(),
-            attrs: BTreeMap::new(),
-            children: Vec::new(),
-        }
+        Self { tag: tag.to_lowercase(), attrs: BTreeMap::new(), children: Vec::new() }
     }
-
-    pub fn is_void(&self) -> bool {
-        VOID_ELEMENTS.contains(&self.tag.as_str())
-    }
-
-    pub fn attr(&self, name: &str) -> Option<&str> {
-        self.attrs.get(name).map(|s| s.as_str())
-    }
-
-    pub fn class(&self) -> Option<&str> {
-        self.attr("class")
-    }
-
-    pub fn id(&self) -> Option<&str> {
-        self.attr("id")
-    }
+    pub fn is_void(&self) -> bool { VOID_ELEMENTS.contains(&self.tag.as_str()) }
+    pub fn attr(&self, name: &str) -> Option<&str> { self.attrs.get(name).map(|s| s.as_str()) }
+    pub fn class(&self) -> Option<&str> { self.attr("class") }
+    pub fn id(&self) -> Option<&str> { self.attr("id") }
 }
 
 /// Parse an HTML string into a DOM tree.
 ///
-/// Pipeline: &str → Tokenizer → token stream → DOM tree
+/// Pipeline: &str → Tokenizer → TreeBuilder → DOM tree
 ///
-/// Generated from Parser IR — replaces the previous ad-hoc recursive descent parser.
+/// Generated from proto IR — the tokenizer is table-driven from §13.2.5,
+/// and the tree builder applies rule-based insertion modes from §13.2.6.
 pub fn parse_html(html: &str) -> Node {
     let mut tokenizer = Tokenizer::new(html);
-    let tokens = tokenizer.tokenize();
+    let mut tree_builder = TreeBuilder::new();
 
-    // Simple stack-based DOM builder from token stream.
-    #[derive(Debug)]
-    struct Frame {
-        elem: Element,
-        children: Vec<Node>,
-    }
-
-    let mut stack: Vec<Frame> = Vec::new();
-    let mut roots: Vec<Node> = Vec::new();
-
-    for token in tokens {
-        match token {
-            Token::StartTag { name, attrs, self_closing: _ } => {
-                let mut elem = Element::new(&name);
-                for (k, v) in attrs {
-                    elem.attrs.insert(k, v);
-                }
-                stack.push(Frame { elem, children: Vec::new() });
-            }
-            Token::EndTag { name } => {
-                // Pop frames until we find the matching tag
-                let mut found = None;
-                while let Some(frame) = stack.pop() {
-                    if frame.elem.tag == name {
-                        let mut elem = frame.elem;
-                        elem.children = frame.children;
-                        found = Some(Node::Element(elem));
-                        break;
-                    } else {
-                        // Implicit close
-                        let mut elem = frame.elem;
-                        elem.children = frame.children;
-                        let node = Node::Element(elem);
-                        if let Some(parent) = stack.last_mut() {
-                            parent.children.push(node);
-                        } else {
-                            roots.push(node);
-                        }
+    loop {
+        match tokenizer.step() {
+            Some(token) => {
+                tree_builder.handle_token(&token);
+                // Check if tree builder signaled a tokenizer mode switch
+                // (e.g., entering <script>, <style>, <noscript>, <textarea>, <title>)
+                if let Some(mode) = tree_builder.take_tokenizer_mode() {
+                    // Extract the tag name from the token so the tokenizer knows
+                    // which end tag to look for
+                    if let Token::StartTag { name, .. } = &token {
+                        let state = match mode {
+                            TokenizerMode::Rawtext => State::Rawtext,
+                            TokenizerMode::Rcdata => State::Rcdata,
+                            TokenizerMode::ScriptData => State::ScriptData,
+                            _ => continue,
+                        };
+                        tokenizer.set_raw_text_tag(name, state);
+                        tokenizer.set_state(state);
                     }
                 }
-                if let Some(node) = found {
-                    if let Some(parent) = stack.last_mut() {
-                        parent.children.push(node);
-                    } else {
-                        roots.push(node);
-                    }
-                }
+                if matches!(token, Token::Eof) { break; }
             }
-            Token::Character(text) => {
-                if !text.trim().is_empty() {
-                    if let Some(parent) = stack.last_mut() {
-                        parent.children.push(Node::Text(text));
-                    } else {
-                        roots.push(Node::Text(text));
-                    }
-                }
-            }
-            Token::Comment(text) => {
-                if let Some(parent) = stack.last_mut() {
-                    parent.children.push(Node::Comment(text));
-                } else {
-                    roots.push(Node::Comment(text));
-                }
-            }
-            Token::Eof => {
-                // Close all open elements
-                while let Some(frame) = stack.pop() {
-                    let mut elem = frame.elem;
-                    elem.children = frame.children;
-                    let node = Node::Element(elem);
-                    if let Some(parent) = stack.last_mut() {
-                        parent.children.push(node);
-                    } else {
-                        roots.push(node);
-                    }
-                }
-            }
+            None => break,
         }
     }
+
+    let mut roots = tree_builder.finish();
+    for root in &mut roots { decode_entities_in_node(root); }
 
     if roots.len() == 1 {
         roots.remove(0)
@@ -180,13 +112,19 @@ pub fn parse_html(html: &str) -> Node {
     }
 }
 
+fn decode_entities_in_node(node: &mut Node) {
+    match node {
+        Node::Text(text) => { *text = decode_entities_in_text(text); }
+        Node::Element(elem) => { for child in &mut elem.children { decode_entities_in_node(child); } }
+        Node::Comment(_) => {}
+    }
+}
+
 /// Count nodes in the DOM tree (for rendering).
 pub fn count_nodes(node: &Node) -> usize {
     match node {
         Node::Text(_) => 1,
         Node::Comment(_) => 1,
-        Node::Element(elem) => {
-            1 + elem.children.iter().map(count_nodes).sum::<usize>()
-        }
+        Node::Element(elem) => 1 + elem.children.iter().map(count_nodes).sum::<usize>()
     }
 }

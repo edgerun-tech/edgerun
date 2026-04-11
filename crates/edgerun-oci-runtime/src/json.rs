@@ -28,6 +28,10 @@ pub struct OciSpec {
     pub root: Option<OciRoot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hostname: Option<String>,
+    /// NIS domain name for the container (OCI 1.1.0).
+    /// Set via setdomainname(2) syscall.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domainname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linux: Option<OciLinux>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -130,6 +134,24 @@ pub struct OciProcess {
     /// Real-time scheduling policy and parameters (OCI 1.0.2).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scheduler: Option<OciScheduler>,
+    /// I/O priority for the container process (OCI 1.1.0).
+    /// Uses the Linux ioprio_set() interface: class 0-3, priority 0-7.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ioPriority")]
+    pub io_priority: Option<OciIoPriority>,
+}
+
+/// I/O priority configuration (OCI 1.1.0).
+/// Mirrors the Linux ioprio_set(2) interface.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciIoPriority {
+    /// I/O scheduling class: 0=none, 1=realtime, 2=best-effort, 3=idle.
+    #[serde(rename = "class")]
+    pub class: u32,
+    /// I/O priority level within the class (0-7, lower = higher priority).
+    /// Ignored for class 0 (none) and class 3 (idle).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u32>,
 }
 
 /// Real-time scheduling configuration.
@@ -328,6 +350,14 @@ pub struct OciLinuxCpu {
     pub cpus: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mems: Option<String>,
+    /// CPU idle cgroup control (OCI 1.1.0).
+    /// 0 = not idle, 1 = idle. When idle, CPU bandwidth is deprioritized.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub idle: Option<i64>,
+    /// CFS bandwidth burst size in nanoseconds (OCI 1.1.0).
+    /// Allows temporary CPU quota overrun for latency-sensitive workloads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub burst: Option<i64>,
 }
 
 // ===========================================================================
@@ -382,6 +412,10 @@ pub struct OciLinuxThrottleDevice {
 pub struct OciLinuxHugepageLimit {
     pub pagesize: String,
     pub limit: u64,
+    /// Reserved huge page accounting (OCI 1.1.0).
+    /// When true, apply limit to hugetlb.<size>.rsvd.max instead of hugetlb.<size>.max.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rsvd: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -414,6 +448,14 @@ pub struct OciLinuxIntelRdt {
     /// Class of Service ID
     #[serde(skip_serializing_if = "Option::is_none", rename = "closID")]
     pub clos_id: Option<String>,
+    /// Enable CMT/MBM monitoring for this container (OCI 1.3.0).
+    /// When true, the runtime should enable cache and memory bandwidth monitoring.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "enableMonitoring")]
+    pub enable_monitoring: Option<bool>,
+    /// Combined schemata format (OCI 1.3.0).
+    /// E.g., "L3:0=fff\nMB:0=70" — overrides l3_cache_schema and mem_bw_schema if set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schemata: Option<String>,
 }
 
 // ===========================================================================
@@ -564,6 +606,11 @@ pub struct OciLinuxMemory {
     pub kernel: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "kernelTCP")]
     pub kernel_tcp: Option<i64>,
+    /// Hint to runtime to validate memory limit before updating (OCI 1.1.0).
+    /// When true, the runtime should check if the new limit is feasible
+    /// before applying it, rather than failing after the fact.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "checkBeforeUpdate")]
+    pub check_before_update: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

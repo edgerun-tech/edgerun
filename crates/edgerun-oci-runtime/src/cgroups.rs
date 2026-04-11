@@ -98,6 +98,18 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
                 cgroup_write(&cgroup_root, "cpuset.mems", mems);
             }
         }
+        // CPU idle (OCI 1.1.0): 1 = idle (deprioritized), 0 = not idle
+        if let Some(idle) = cpu.idle {
+            if idle != 0 {
+                cgroup_write(&cgroup_root, "cpu.idle", "1");
+            }
+        }
+        // CFS burst (OCI 1.1.0): write to cpu.max.burst
+        if let Some(burst) = cpu.burst {
+            if burst > 0 {
+                cgroup_write(&cgroup_root, "cpu.max.burst", &format!("{}", burst));
+            }
+        }
     }
 
     // PID limits
@@ -147,7 +159,13 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
     // Hugepage limits
     if let Some(ref hugepages) = resources.hugepage_limits {
         for hp in hugepages {
-            cgroup_write(&cgroup_root, &format!("hugetlb.{}.max", hp.pagesize), &format!("{}", hp.limit));
+            // OCI 1.1.0: rsvd applies to reserved huge page accounting
+            let file = if hp.rsvd == Some(true) {
+                format!("hugetlb.{}.rsvd.max", hp.pagesize)
+            } else {
+                format!("hugetlb.{}.max", hp.pagesize)
+            };
+            cgroup_write(&cgroup_root, &file, &format!("{}", hp.limit));
         }
     }
 

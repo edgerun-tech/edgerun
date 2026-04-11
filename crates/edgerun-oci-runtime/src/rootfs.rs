@@ -39,6 +39,9 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
                 "slave"        => flags |= ms::SLAVE,
                 "private"      => flags |= ms::PRIVATE,
                 "unbindable"   => flags |= ms::UNBINDABLE,
+                // OCI 1.2.0: idmap/ridmap mount options (handled via setup_idmapped_mount below)
+                "idmap"        => {}  // Handled by uidMappings — no flag, uses new mount API
+                "ridmap"       => {}  // Recursive idmap — same handling
                 _ => {}
             }
         }
@@ -49,12 +52,50 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
 fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
     let dest = Path::new(&mount.destination);
 
-    // Validate: mount destination must be absolute and not escape rootfs.
+    // Validate: mount destination must be absolute, or a relative path that
+    // doesn't escape rootfs (OCI 1.2.0 allows relative mount destinations).
+    // Relative paths are resolved against "/" (the container rootfs).
     if !dest.is_absolute() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!("mount destination must be absolute: {}", mount.destination),
-        ));
+        // Check it doesn't escape via ".."
+        let normalized = dest.components().collect::<Vec<_>>();
+        let mut depth = 0isize;
+        for comp in &normalized {
+            use std::path::Component;
+            match comp {
+                Component::ParentDir => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("mount destination escapes rootfs: {}", mount.destination),
+                        ));
+                    }
+                }
+                _ => { depth += 1; }
+            }
+        }
+        // Relative paths are resolved against rootfs root: "./foo" -> "/foo"
+    } else {
+        // For absolute paths, also check for escape attempts via symlinks or ".."
+        let normalized = dest.components().collect::<Vec<_>>();
+        let mut depth = 0isize;
+        for comp in &normalized {
+            use std::path::Component;
+            match comp {
+                Component::RootDir => {}
+                Component::Normal(_) => depth += 1,
+                Component::ParentDir => {
+                    depth -= 1;
+                    if depth < 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("mount destination escapes rootfs: {}", mount.destination),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     let normalized = dest.components().collect::<Vec<_>>();
@@ -129,26 +170,33 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
             propagation: 0,
             userns_fd: 0,
         };
-        // Best-effort: kernel may not support mount_setattr (pre-5.12)
-        let _ = do_mount_setattr(
+        if let Err(e) = do_mount_setattr(
             libc::AT_FDCWD,
             &mount.destination,
             &attr,
             mount_attr::REC as u32,
-        );
+        ) {
+            let _ = std::fs::write("/dev/kmsg",
+                format!("edgerun: mount.recursive failed for {}: {} (kernel may not support mount_setattr)",
+                    mount.destination, e));
+        }
     }
 
     // OCI 1.1/1.2 idmapped mounts — uid/gid mappings for the mount.
     // Requires Linux 5.12+ and the new mount API (open_tree + move_mount).
     if let Some(ref uid_mappings) = mount.uid_mappings {
         if !uid_mappings.is_empty() {
-            let _ = setup_idmapped_mount(
+            if let Err(e) = setup_idmapped_mount(
                 &mount.destination,
                 source,
                 fstype,
                 uid_mappings,
                 mount.gid_mappings.as_deref(),
-            );
+            ) {
+                let _ = std::fs::write("/dev/kmsg",
+                    format!("edgerun: idmapped mount failed for {}: {} (kernel may not support idmapped mounts)",
+                        mount.destination, e));
+            }
         }
     }
 
@@ -323,8 +371,7 @@ fn setup_idmapped_mount(
     // Reap child
     unsafe { libc::waitpid(pid, std::ptr::null_mut(), 0) };
 
-    // If mount_setattr failed, return Ok — kernel may not support idmapped mounts (pre-5.12)
-    result.or(Ok(()))
+    result
 }
 
 /// Check if a filesystem of the given type is already mounted at the destination.

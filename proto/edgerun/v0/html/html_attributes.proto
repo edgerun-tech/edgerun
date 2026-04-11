@@ -4,7 +4,7 @@ package edgerun.v0.html.attributes;
 
 /// HTML Element-Specific Attribute Messages.
 /// Each message represents the attribute set for one HTML element.
-/// DO NOT EDIT. Regenerate with: scripts/generate_html_proto.py
+/// DO NOT EDIT. Regenerate with: go run ./cmd/html-codegen
 
 /// Global HTML attributes common to most elements.
 message GlobalAttributes {

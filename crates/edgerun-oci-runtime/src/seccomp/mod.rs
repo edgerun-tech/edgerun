@@ -1236,7 +1236,7 @@ pub fn uses_notify_action(spec: &OciLinuxSeccomp) -> bool {
 ///
 /// Note: Does NOT use TSYNC flag — the container child is single-threaded at this
 /// point (just forked). TSYNC requires CAP_SYS_ADMIN even with no_new_privs.
-pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<Option<i32>> {
+pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>, bundle_path: &str) -> io::Result<Option<i32>> {
     let has_rules = spec.as_ref()
         .and_then(|s| s.syscalls.as_ref())
         .map(|s| !s.is_empty())
@@ -1259,6 +1259,12 @@ pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<Opt
         flags,
         prog.as_ptr() as *const c_void,
     ) };
+
+    // Write listenerMetadata to bundle directory if specified
+    if let Some(metadata) = spec.and_then(|s| s.listener_metadata.as_ref()) {
+        let metadata_path = format!("{}/.edgerun-seccomp-metadata", bundle_path);
+        let _ = std::fs::write(&metadata_path, metadata.as_bytes());
+    }
 
     if ret < 0 {
         Err(io::Error::last_os_error())

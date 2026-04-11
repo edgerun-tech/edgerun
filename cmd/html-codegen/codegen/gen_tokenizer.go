@@ -124,8 +124,8 @@ pub enum Token {
 
 #[allow(dead_code)]
 /// Tokenizer states from WHATWG §13.2.5.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum State {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
     %s,
 }
 
@@ -148,6 +148,12 @@ pub struct Tokenizer {
     parse_errors: usize,
     done: bool,
     temp_buffer: String,
+    /// Tag name to look for when in raw text / RCDATA / script data mode.
+    raw_text_end_tag: String,
+    /// The raw text state we entered (Rawtext, Rcdata, or ScriptData).
+    raw_text_state: State,
+    /// State to return to after character reference decoding.
+    return_state: State,
 }
 
 impl Tokenizer {
@@ -167,6 +173,9 @@ impl Tokenizer {
             parse_errors: 0,
             done: false,
             temp_buffer: String::new(),
+            raw_text_end_tag: String::new(),
+            raw_text_state: State::Data,
+            return_state: State::Data,
         }
     }
 
@@ -194,7 +203,10 @@ impl Tokenizer {
             }
 
             let c = self.input[self.pos];
-            if self.state == State::Data && c == '<' && !self.text_buffer.is_empty() {
+
+            // Flush buffered text before processing '<' — applies to Data and raw text states.
+            // In raw text modes, '<' may start an end tag, so buffered text must be emitted first.
+            if !self.text_buffer.is_empty() && c == '<' {
                 let t = Token::Character(self.text_buffer.clone());
                 self.text_buffer.clear(); return Some(t);
             }
@@ -252,7 +264,7 @@ impl Tokenizer {
         self.current_attr_value.push(c);
     }
 
-    fn emit_token(&mut self, token_type: TokenType) {
+    fn emit_token(&mut self, _token_type: TokenType) {
         let tag = self.current_tag_name.clone();
         let attrs = self.current_attr_map.clone();
         let self_closing = self.current_token_is_self_closing;
@@ -266,6 +278,44 @@ impl Tokenizer {
 
     pub fn parse_errors(&self) -> usize {
         self.parse_errors
+    }
+
+    /// Set the tokenizer state — used when tree builder signals a mode switch
+    /// for raw text elements (style, script, noscript, noframes, title, textarea).
+    pub fn set_state(&mut self, state: State) {
+        self.state = state;
+    }
+
+    /// Set the tag name and state to look for when exiting a raw text / RCDATA / script element.
+    /// Called by the parser loop when the tree builder signals a mode switch.
+    pub fn set_raw_text_tag(&mut self, tag: &str, state: State) {
+        self.raw_text_end_tag = tag.to_ascii_lowercase();
+        self.raw_text_state = state;
+    }
+
+    /// Check whether the accumulated tag name matches the raw text end tag name.
+    /// If matched: emit end tag token, clear buffers, switch to Data state.
+    /// If not matched: switch back to raw_text_state, emit accumulated raw text, reconsume.
+    fn check_appropriate_end_tag(&mut self) {
+        if !self.raw_text_end_tag.is_empty() && self.current_tag_name.eq_ignore_ascii_case(&self.raw_text_end_tag) {
+            // Matched — emit end tag and exit raw text mode
+            self.pending_token = Some(Token::EndTag { name: self.current_tag_name.clone() });
+            self.current_tag_name.clear();
+            self.raw_text_end_tag.clear();
+            self.temp_buffer.clear();
+            self.state = State::Data;
+        } else {
+            // Not matched — emit everything as raw text and reconsume
+            self.raw_text_end_tag.clear();
+            let saved = self.temp_buffer.clone();
+            self.temp_buffer.clear();
+            self.current_tag_name.clear();
+            self.state = self.raw_text_state;
+            // Emit the raw text prefix (</tagname-so-far)
+            self.text_buffer.push('<');
+            self.text_buffer.push_str(&saved);
+            self.pos -= 1;  // reconsume current character
+        }
     }
 }
 
@@ -343,9 +393,12 @@ func transitionActionToRust(a *html.TransitionAction) string {
 	case a.GetSetSelfClosingFlag():
 		return "self.current_token_is_self_closing = true;"
 	case a.GetSetReturnState() != html.TokenizerState_TOKENIZER_STATE_UNSPECIFIED:
-		return "// set_return_state (TODO)"
+		// Emit code to store the return state for after character reference decoding.
+		nextState := TokenizerStateToRust(a.GetSetReturnState())
+		return fmt.Sprintf("self.return_state = State::%s;", nextState)
 	case a.GetSwitchTokenizerState() != html.TokenizerState_TOKENIZER_STATE_UNSPECIFIED:
-		return "// switch_tokenizer_state (handled by state transition)"
+		nextState := TokenizerStateToRust(a.GetSwitchTokenizerState())
+		return fmt.Sprintf("self.state = State::%s;", nextState)
 	case a.GetFlushCharRef():
 		return "// flush_char_ref (TODO)"
 	case a.GetCreateStartTagToken():
@@ -359,7 +412,7 @@ func transitionActionToRust(a *html.TransitionAction) string {
 	case a.GetSetDoctypeForceQuirks():
 		return "// set_doctype_force_quirks (TODO)"
 	case a.GetCheckAppropriateEndTag():
-		return "// check_appropriate_end_tag (TODO)"
+		return "self.check_appropriate_end_tag();"
 	case a.GetCheckTempBufferIsScript():
 		return "// check_temp_buffer_is_script (TODO)"
 	default:

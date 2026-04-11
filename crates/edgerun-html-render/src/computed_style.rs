@@ -166,7 +166,7 @@ fn parse_color_value(value: &str) -> Option<Color> {
 
 /// Convert edgerun_color::CssColor to layout Color (f32 RGBA).
 fn css_color_to_rgba(c: &edgerun_color::CssColor) -> Color {
-    use edgerun_color::{CssColor, NamedColor};
+    use edgerun_color::CssColor;
 
     // Resolve named colors to rgba
     if let CssColor::Named(name) = c {

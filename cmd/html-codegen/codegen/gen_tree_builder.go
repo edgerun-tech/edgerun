@@ -30,6 +30,13 @@ func GenerateTreeBuilderRust(ruleSet *html.TreeBuilderRuleSet, voidElements []st
 		html.InsertionMode_AFTER_HEAD_MODE,
 		html.InsertionMode_IN_BODY_MODE,
 		html.InsertionMode_TEXT_MODE,
+		html.InsertionMode_IN_TABLE_MODE,
+		html.InsertionMode_IN_TABLE_TEXT_MODE,
+		html.InsertionMode_IN_TABLE_BODY_MODE,
+		html.InsertionMode_IN_ROW_MODE,
+		html.InsertionMode_IN_CELL_MODE,
+		html.InsertionMode_IN_CAPTION_MODE,
+		html.InsertionMode_IN_COLUMN_GROUP_MODE,
 		html.InsertionMode_AFTER_BODY_MODE,
 		html.InsertionMode_IN_FRAMESET_MODE,
 		html.InsertionMode_AFTER_FRAMESET_MODE,
@@ -104,6 +111,15 @@ pub enum InsertionMode {
     AfterAfterFrameset,
 }
 
+/// Tokenizer state overrides — set by tree builder when entering raw text elements.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenizerMode {
+    None,
+    Rawtext,
+    Rcdata,
+    ScriptData,
+}
+
 /// WHATWG §13.2.6 HTML tree builder — rule-driven DOM construction.
 ///
 /// Generated from proto IR with %d tree rules across %d insertion modes.
@@ -115,6 +131,8 @@ pub struct TreeBuilder {
     /// Completed root elements (popped with no parent on stack).
     completed: Vec<Node>,
     insertion_mode: InsertionMode,
+    /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
+    pending_tokenizer_mode: TokenizerMode,
     done: bool,
     parse_errors: usize,
 }
@@ -125,6 +143,7 @@ impl TreeBuilder {
             open_elements: Vec::new(),
             completed: Vec::new(),
             insertion_mode: InsertionMode::Initial,
+            pending_tokenizer_mode: TokenizerMode::None,
             done: false,
             parse_errors: 0,
         }
@@ -159,11 +178,10 @@ impl TreeBuilder {
     }
 
     /// Action: INSERT — create element and push to stack.
-    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+    fn insert(&mut self, name: &str, _attrs: &BTreeMap<String, String>, _self_closing: bool) {
         let mut elem = Element::new(name);
-        for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
         // Void elements are not pushed to the open elements stack
-        if !self_closing && !VOID_ELEMENTS.contains(&name) {
+        if !_self_closing && !VOID_ELEMENTS.contains(&name) {
             self.open_elements.push(elem);
         }
     }
@@ -230,6 +248,31 @@ impl TreeBuilder {
 
     pub fn insertion_mode(&self) -> InsertionMode { self.insertion_mode }
     pub fn parse_errors(&self) -> usize { self.parse_errors }
+
+    /// Signal the tokenizer to switch to RAWTEXT mode (for <style>, <noscript>, <noframes>).
+    pub fn switch_to_rawtext(&mut self) {
+        self.pending_tokenizer_mode = TokenizerMode::Rawtext;
+    }
+
+    /// Signal the tokenizer to switch to RCDATA mode (for <title>, <textarea>).
+    pub fn switch_to_rcdata(&mut self) {
+        self.pending_tokenizer_mode = TokenizerMode::Rcdata;
+    }
+
+    /// Signal the tokenizer to switch to SCRIPT DATA mode (for <script>).
+    pub fn switch_to_script_data(&mut self) {
+        self.pending_tokenizer_mode = TokenizerMode::ScriptData;
+    }
+
+    /// Clear any pending tokenizer mode switch.
+    pub fn take_tokenizer_mode(&mut self) -> Option<TokenizerMode> {
+        let m = self.pending_tokenizer_mode;
+        self.pending_tokenizer_mode = TokenizerMode::None;
+        match m {
+            TokenizerMode::None => None,
+            _ => Some(m),
+        }
+    }
 }
 `,
 		voidSet,
@@ -339,24 +382,29 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 		return endTags[i].tag < endTags[j].tag
 	})
 
-	// Generate match arms
+	// Generate match arms - deduplicate by tag (keep first rule per tag)
+	type seenTag struct { tag string; hasCondition bool }
+	seenTags := make(map[string]bool)
 	var startArms, endArms []string
 	for _, r := range startTags {
+		// Skip if we already generated an arm for this tag
+		if seenTags[r.tag] {
+			continue
+		}
+		seenTags[r.tag] = true
+
 		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny)
 
 		// Add scope check prefix if condition exists
-		var scopeCheck string
+		// For conditional rules: check scope → if true, do pop_until → then always do the rest
 		if r.hasInScope != "" {
-			scopeCheck = fmt.Sprintf("if self.has_in_scope(\"%s\") {\n                        %s\n                    }\n                    ", r.hasInScope, rustActions)
-			rustActions = scopeCheck + rustActions
+			rustActions = fmt.Sprintf("if self.has_in_scope(\"%s\") { self.pop_until(\"%s\"); }\n                    %s", r.hasInScope, r.hasInScope, rustActions)
 		}
 		if r.hasInButton != "" {
-			scopeCheck = fmt.Sprintf("if self.has_in_button_scope(\"%s\") {\n                        %s\n                    }\n                    ", r.hasInButton, rustActions)
-			rustActions = scopeCheck + rustActions
+			rustActions = fmt.Sprintf("if self.has_in_button_scope(\"%s\") { self.pop_until(\"%s\"); }\n                    %s", r.hasInButton, r.hasInButton, rustActions)
 		}
 		if r.hasInLI != "" {
-			scopeCheck = fmt.Sprintf("if self.has_in_list_item_scope(\"%s\") {\n                        %s\n                    }\n                    ", r.hasInLI, rustActions)
-			rustActions = scopeCheck + rustActions
+			rustActions = fmt.Sprintf("if self.has_in_list_item_scope(\"%s\") { self.pop_until(\"%s\"); }\n                    %s", r.hasInLI, r.hasInLI, rustActions)
 		}
 
 		if r.isAny {
@@ -365,7 +413,11 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 			startArms = append(startArms, fmt.Sprintf("                \"%s\" => {\n                    %s\n                }", r.tag, rustActions))
 		}
 	}
+	seenEndTags := make(map[string]bool)
 	for _, r := range endTags {
+		if seenEndTags[r.tag] { continue }
+		seenEndTags[r.tag] = true
+
 		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny)
 		if r.isAny {
 			endArms = append(endArms, fmt.Sprintf("                _ => {\n                    %s\n                }", rustActions))
@@ -560,11 +612,11 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_APPEND_CHARACTER:
 		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }`
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_RCDATA:
-		return "// TODO: TREE_ACTION_SWITCH_TO_RCDATA"
+		return "self.switch_to_rcdata();"
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_RAWTEXT:
-		return "// TODO: TREE_ACTION_SWITCH_TO_RAWTEXT"
+		return "self.switch_to_rawtext();"
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_SCRIPT_DATA:
-		return "// TODO: TREE_ACTION_SWITCH_TO_SCRIPT_DATA"
+		return "self.switch_to_script_data();"
 	case html.TreeAction_TREE_ACTION_RESET_INSERTION_MODE:
 		return "// TODO: TREE_ACTION_RESET_INSERTION_MODE"
 	case html.TreeAction_TREE_ACTION_INSERT_FOSTER:
@@ -578,7 +630,7 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_SET_FRAMESET_NOT_OK:
 		return "// TODO: TREE_ACTION_SET_FRAMESET_NOT_OK"
 	case html.TreeAction_TREE_ACTION_POP_ALL:
-		return "// TODO: TREE_ACTION_POP_ALL"
+		return "while self.open_elements.pop().is_some() {}"
 	default:
 		return "// TODO: unknown tree action"
 	}

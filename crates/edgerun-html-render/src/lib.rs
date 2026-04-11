@@ -1,5 +1,4 @@
 //! HTML/CSS → RenderObject + pixel rendering pipeline.
-//! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
 extern crate alloc;
 
 pub mod html_parser;

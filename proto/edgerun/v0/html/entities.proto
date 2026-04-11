@@ -3,7 +3,7 @@ syntax = "proto3";
 package edgerun.v0.html.entities;
 
 /// HTML Named Character References — generated from WHATWG HTML Living Standard §13.1.4.22.
-/// DO NOT EDIT. Regenerate with: scripts/generate_parser_ir.py
+/// DO NOT EDIT. Regenerate with: go run ./cmd/html-codegen
 
 // ---------------------------------------------------------------------------
 /// A single named character reference.

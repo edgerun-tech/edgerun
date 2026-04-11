@@ -219,3 +219,91 @@ pub fn aes256_gcm_decrypt(key: &[u8; 32], nonce: &[u8; 12], ciphertext_and_tag: 
     let nonce = Nonce::from(*nonce);
     cipher.decrypt(&nonce, ciphertext_and_tag).map_err(|e| format!("decryption failed: {:?}", e))
 }
+
+// ---------------------------------------------------------------------------
+// Unified AEAD cipher enum
+// ---------------------------------------------------------------------------
+
+/// Unified AEAD cipher supporting AES-128-GCM and AES-256-GCM.
+///
+/// Use instead of duplicating the `Aes128Gcm | Aes256Gcm` enum pattern across
+/// crates (edgerun-tls, edgerun-http).
+pub enum AesGcmCipher {
+    Aes128Gcm(Aes128Gcm),
+    Aes256Gcm(Aes256Gcm),
+}
+
+impl AesGcmCipher {
+    /// Construct from a key. The key length determines the cipher: 16 bytes → AES-128, 32 bytes → AES-256.
+    pub fn new_from_slice(key: &[u8]) -> Result<Self, String> {
+        match key.len() {
+            16 => {
+                let k: [u8; 16] = key.try_into().map_err(|_| "invalid key slice")?;
+                Ok(AesGcmCipher::Aes128Gcm(Aes128Gcm::new(&k.into())))
+            }
+            32 => {
+                let k: [u8; 32] = key.try_into().map_err(|_| "invalid key slice")?;
+                Ok(AesGcmCipher::Aes256Gcm(Aes256Gcm::new(&k.into())))
+            }
+            _ => Err(format!("unsupported key length: {} (expected 16 or 32)", key.len())),
+        }
+    }
+
+    /// Encrypt plaintext with the given nonce. Returns ciphertext + tag.
+    pub fn encrypt(&self, nonce: &[u8; 12], plaintext: &[u8]) -> Result<Vec<u8>, String> {
+        use aes_gcm::aead::Aead;
+        let nonce = Nonce::from(*nonce);
+        match self {
+            AesGcmCipher::Aes128Gcm(c) => c.encrypt(&nonce, plaintext).map_err(|e| format!("encrypt: {:?}", e)),
+            AesGcmCipher::Aes256Gcm(c) => c.encrypt(&nonce, plaintext).map_err(|e| format!("encrypt: {:?}", e)),
+        }
+    }
+
+    /// Decrypt ciphertext with the given nonce. Returns plaintext.
+    pub fn decrypt(&self, nonce: &[u8; 12], ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, String> {
+        use aes_gcm::aead::Aead;
+        let nonce = Nonce::from(*nonce);
+        match self {
+            AesGcmCipher::Aes128Gcm(c) => c.decrypt(&nonce, ciphertext_and_tag).map_err(|e| format!("decrypt: {:?}", e)),
+            AesGcmCipher::Aes256Gcm(c) => c.decrypt(&nonce, ciphertext_and_tag).map_err(|e| format!("decrypt: {:?}", e)),
+        }
+    }
+
+    /// Encrypt in-place with detached tag. `buffer` is extended with ciphertext.
+    /// Returns the tag. `aad` is additional authenticated data.
+    pub fn encrypt_in_place_detached(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        buffer: &mut Vec<u8>,
+    ) -> Result<aes_gcm::Tag, String> {
+        use aes_gcm::aead::AeadInPlace;
+        use aes_gcm::Nonce as NonceInner;
+        let nonce = NonceInner::from(*nonce);
+        match self {
+            AesGcmCipher::Aes128Gcm(c) => c.encrypt_in_place_detached(&nonce, aad, buffer)
+                .map_err(|e| format!("encrypt: {:?}", e)),
+            AesGcmCipher::Aes256Gcm(c) => c.encrypt_in_place_detached(&nonce, aad, buffer)
+                .map_err(|e| format!("encrypt: {:?}", e)),
+        }
+    }
+
+    /// Decrypt in-place with detached tag. Returns Ok(()) on success.
+    pub fn decrypt_in_place_detached(
+        &self,
+        nonce: &[u8; 12],
+        aad: &[u8],
+        buffer: &mut Vec<u8>,
+        tag: &aes_gcm::Tag,
+    ) -> Result<(), String> {
+        use aes_gcm::aead::AeadInPlace;
+        use aes_gcm::Nonce as NonceInner;
+        let nonce = NonceInner::from(*nonce);
+        match self {
+            AesGcmCipher::Aes128Gcm(c) => c.decrypt_in_place_detached(&nonce, aad, buffer, tag)
+                .map_err(|e| format!("decrypt: {:?}", e)),
+            AesGcmCipher::Aes256Gcm(c) => c.decrypt_in_place_detached(&nonce, aad, buffer, tag)
+                .map_err(|e| format!("decrypt: {:?}", e)),
+        }
+    }
+}

@@ -9,10 +9,7 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use edgerun_crypto::aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, Payload},
-    Aes128Gcm, Aes256Gcm, Key, Nonce,
-};
+use edgerun_crypto::aes_gcm::{aead::Aead, AesGcmCipher, Nonce};
 
 use std::collections::HashMap;
 
@@ -98,9 +95,9 @@ impl ProtectionKeys {
 /// QUIC packet protection engine
 pub struct PacketProtection {
     /// Encryption AEAD
-    write_aead: AeadCipher,
+    write_aead: AesGcmCipher,
     /// Decryption AEAD
-    read_aead: AeadCipher,
+    read_aead: AesGcmCipher,
     /// Write IV
     write_iv: Vec<u8>,
     /// Read IV
@@ -109,31 +106,11 @@ pub struct PacketProtection {
     packet_number: u64,
 }
 
-enum AeadCipher {
-    Aes128(Aes128Gcm),
-    Aes256(Aes256Gcm),
-}
-
 impl PacketProtection {
     /// Create from protection keys
     pub fn new(keys: &ProtectionKeys) -> Self {
-        let write_aead = match keys.algorithm {
-            AeadAlgorithm::Aes128Gcm => {
-                AeadCipher::Aes128(Aes128Gcm::new_from_slice(&keys.write_key).expect("valid AES-128 key"))
-            }
-            AeadAlgorithm::Aes256Gcm => {
-                AeadCipher::Aes256(Aes256Gcm::new_from_slice(&keys.write_key).expect("valid AES-256 key"))
-            }
-        };
-
-        let read_aead = match keys.algorithm {
-            AeadAlgorithm::Aes128Gcm => {
-                AeadCipher::Aes128(Aes128Gcm::new_from_slice(&keys.read_key).expect("valid AES-128 key"))
-            }
-            AeadAlgorithm::Aes256Gcm => {
-                AeadCipher::Aes256(Aes256Gcm::new_from_slice(&keys.read_key).expect("valid AES-256 key"))
-            }
-        };
+        let write_aead = AesGcmCipher::new_from_slice(&keys.write_key).expect("valid write key");
+        let read_aead = AesGcmCipher::new_from_slice(&keys.read_key).expect("valid read key");
 
         PacketProtection {
             write_aead,
@@ -151,20 +128,8 @@ impl PacketProtection {
     pub fn protect(&mut self, header: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let pn = self.packet_number;
         self.packet_number += 1;
-
         let nonce = self.make_nonce(&self.write_iv, pn);
-        let payload = Payload { msg: plaintext, aad: header };
-
-        match &self.write_aead {
-            AeadCipher::Aes128(aead) => {
-                let nonce = Nonce::from(nonce);
-                aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
-            }
-            AeadCipher::Aes256(aead) => {
-                let nonce = Nonce::from(nonce);
-                aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
-            }
-        }
+        self.write_aead.encrypt(&nonce, plaintext)
     }
 
     /// Unprotect (decrypt) a packet payload
@@ -173,18 +138,7 @@ impl PacketProtection {
     /// Nonce = read_iv XOR (packet_number << 8)
     pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
         let nonce = self.make_nonce(&self.read_iv, packet_number);
-        let payload = Payload { msg: ciphertext, aad: header };
-
-        match &self.read_aead {
-            AeadCipher::Aes128(aead) => {
-                let nonce = Nonce::from(nonce);
-                aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
-            }
-            AeadCipher::Aes256(aead) => {
-                let nonce = Nonce::from(nonce);
-                aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
-            }
-        }
+        self.read_aead.decrypt(&nonce, ciphertext)
     }
 
     /// QUIC nonce construction: iv XOR (packet_number << 8)

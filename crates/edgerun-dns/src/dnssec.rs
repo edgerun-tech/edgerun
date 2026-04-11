@@ -226,12 +226,8 @@ fn verify_signature(
             if public_key.len() != 65 {
                 return DnssecResult::BadSignature;
             }
-            // Hash the signed data
-            let mut hasher = Sha256::new();
-            hasher.update(signed_data);
-            let _hash = hasher.finalize();
-
             // Verify ECDSA P-256 signature using edgerun-crypto
+            // ECDSA P-256-SHA256: the library hashes signed_data internally via Sha256
             use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
             use edgerun_crypto::Verifier;
             use edgerun_crypto::p256::EncodedPoint;

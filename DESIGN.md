@@ -184,7 +184,7 @@ Code generated **from proto data** — not handwritten:
 | `extract_css_specs.py` | W3C CSS spec markdown files | `css_property_catalog.json` |
 | `extract_ecmascript_spec.py` | ECMA-262 markdown | `ecmascript_catalog.json` |
 | `generate_css_proto.py` | `css_property_catalog.json` | 3 CSS proto files |
-| `generate_html_proto.py` | `html_element_catalog.json` | 3 HTML proto files |
+| `html-codegen` | `html_element_catalog.json` + spec data | HTML proto files + Rust parser |
 | `generate_ecmascript_proto.py` | `ecmascript_catalog.json` | 3 ECMAScript proto files |
 | `generate_wgsl.py` | color_lut, border_lut, blend_lut, text_bitmap | `shaders/render.wgsl` (1810 lines) |
 | `generate_conformance_tests.py` | 40 proto files + LUTs | 42 conformance tests |

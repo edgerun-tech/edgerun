@@ -1,5 +1,4 @@
 //! Layout builder — converts DOM + CSS → edgerun-layout RenderObject tree.
-//! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
 extern crate alloc;
 
 use alloc::string::String;

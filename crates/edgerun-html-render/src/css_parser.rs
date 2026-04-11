@@ -3,8 +3,6 @@
 //! Generated from:
 //! - 255 CSS property definitions (edgerun.v0.css.properties)
 //! - CSS value type definitions (edgerun.v0.css.value_types)
-//!
-//! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
 extern crate alloc;
 
 use alloc::string::{String, ToString};

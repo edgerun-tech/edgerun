@@ -638,6 +638,7 @@ mod tests {
             mounts: None,
             platform: None,
             annotations: None,
+            domainname: None,
         };
         let result = ContainerConfigBuilder::from_spec(&spec);
         assert!(result.is_err());

@@ -48,6 +48,7 @@ pub fn create_bundle(
             readonly: None,
         }),
         hostname: hostname.or_else(|| Some("edgerun".into())),
+        domainname: None,
         linux: Some(OciLinux {
             namespaces: Some(default_namespaces()),
             masked_paths: Some(vec![

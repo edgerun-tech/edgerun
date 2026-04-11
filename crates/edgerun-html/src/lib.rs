@@ -5,7 +5,7 @@
 //!
 //! Pipeline:
 //!   1. `scripts/extract_html_spec.py` — parses spec markdown → catalog JSON
-//!   2. `scripts/generate_html_proto.py` — catalog JSON → `.proto` files
+//!   2. `html-codegen` — catalog JSON + proto data → `.proto` files + Rust source
 //!   3. `buf generate` — `.proto` files → Rust source in `src/gen/`
 
 pub mod edgerun {

@@ -129,6 +129,13 @@ const (
 	inBody          = html.InsertionMode_IN_BODY_MODE
 	afterBody       = html.InsertionMode_AFTER_BODY_MODE
 	textMode        = html.InsertionMode_TEXT_MODE
+	inTable         = html.InsertionMode_IN_TABLE_MODE
+	inTableText     = html.InsertionMode_IN_TABLE_TEXT_MODE
+	inTableBody     = html.InsertionMode_IN_TABLE_BODY_MODE
+	inRow           = html.InsertionMode_IN_ROW_MODE
+	inCell          = html.InsertionMode_IN_CELL_MODE
+	inCaption       = html.InsertionMode_IN_CAPTION_MODE
+	inColumnGroup   = html.InsertionMode_IN_COLUMN_GROUP_MODE
 	inFrameset      = html.InsertionMode_IN_FRAMESET_MODE
 	afterFrameset   = html.InsertionMode_AFTER_FRAMESET_MODE
 	afterAfterBody  = html.InsertionMode_AFTER_AFTER_BODY_MODE

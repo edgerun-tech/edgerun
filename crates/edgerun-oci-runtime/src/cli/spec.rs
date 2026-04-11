@@ -53,12 +53,14 @@ fn default_spec() -> String {
             selinux_label: None,
             scheduler: None,
             console_size: None,
+            io_priority: None,
         }),
         root: Some(OciRoot {
             path: "rootfs".into(),
             readonly: Some(false),
         }),
         hostname: Some("edgerun".into()),
+        domainname: None,
         linux: Some(OciLinux {
             namespaces: Some(crate::default_namespaces()),
             masked_paths: Some(vec![

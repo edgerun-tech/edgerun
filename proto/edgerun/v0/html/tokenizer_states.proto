@@ -3,7 +3,7 @@ syntax = "proto3";
 package edgerun.v0.html.tokenizer;
 
 /// HTML Tokenizer State Machine — generated from WHATWG HTML Living Standard §13.2.5.
-/// DO NOT EDIT. Regenerate with: scripts/generate_parser_ir.py
+/// DO NOT EDIT. Regenerate with: go run ./cmd/html-codegen
 
 // ---------------------------------------------------------------------------
 // Character classes — each input code point maps to exactly one class.

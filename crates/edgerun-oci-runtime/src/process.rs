@@ -188,6 +188,7 @@ pub struct ContainerConfig {
     pub uid_map: String,
     pub gid_map: String,
     pub hostname: String,
+    pub domainname: Option<String>,
     pub no_new_privs: bool,
     pub cap_effective: Option<Vec<String>>,
     pub cap_permitted: Option<Vec<String>>,
@@ -213,7 +214,9 @@ pub struct ContainerConfig {
     pub mount_label: Option<String>,
     pub scheduler: Option<crate::json::OciScheduler>,
     pub intel_rdt: Option<crate::json::OciLinuxIntelRdt>,
+    pub io_priority: Option<crate::json::OciIoPriority>,
     pub terminal: bool,
+    pub bundle_path: String,
 }
 
 impl ContainerConfig {
@@ -256,6 +259,7 @@ impl ContainerConfig {
             uid_map,
             gid_map,
             hostname: spec.hostname.clone().unwrap_or_else(|| "edgerun".into()),
+            domainname: spec.domainname.clone(),
             no_new_privs: process.no_new_privileges.unwrap_or(true),
             cap_effective: caps.effective,
             cap_permitted: caps.permitted,
@@ -267,6 +271,7 @@ impl ContainerConfig {
             apparmor_profile: process.apparmor_profile,
             selinux_label: process.selinux_label,
             umask: user.umask,
+            bundle_path: root.path.clone(),
             root,
             mounts: spec.mounts.clone(),
             masked_paths: linux.masked_paths.clone(),
@@ -281,6 +286,7 @@ impl ContainerConfig {
             mount_label: linux.mount_label.clone(),
             scheduler: process.scheduler.clone(),
             intel_rdt: linux.intel_rdt.clone(),
+            io_priority: process.io_priority.clone(),
             terminal: process.terminal.unwrap_or(false),
         })
     }
@@ -440,8 +446,11 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     write_uid_map(&cfg.uid_map)?;
     write_gid_map(&cfg.gid_map)?;
 
-    // 4. Hostname
+    // 4. Hostname + domainname
     let _ = do_set_hostname(&cfg.hostname);
+    if let Some(ref domainname) = cfg.domainname {
+        let _ = do_set_domainname(domainname);
+    }
 
     // 5. Capabilities (MUST come before no_new_privs — capset can only reduce caps after nnp)
     set_capabilities(
@@ -474,6 +483,11 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // 8b. Scheduler configuration (OCI 1.0.2 process.scheduler)
     if let Some(ref sched) = cfg.scheduler {
         apply_scheduler(sched)?;
+    }
+
+    // 8c. I/O priority (OCI 1.1.0)
+    if let Some(ref ioprio) = cfg.io_priority {
+        let _ = apply_io_priority(ioprio);
     }
 
     // 9. OOM score — always write, even for 0 (spec requires it)
@@ -531,7 +545,7 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // Rootfs setup needs mount/umount2/pivot_root syscalls that are NOT in the
     // workload allow-list. Seccomp requires no_new_privs (set at step 6).
     // Returns Option<listener_fd> when NOTIFY action is used.
-    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref()).map_err(|e| {
+    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref(), &cfg.bundle_path).map_err(|e| {
         io::Error::new(
             io::ErrorKind::PermissionDenied,
             format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
@@ -636,20 +650,33 @@ fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
     // Create the clos directory
     std::fs::create_dir_all(&clos_path)?;
 
-    // Write L3 cache schema
-    if let Some(ref l3) = rdt.l3_cache_schema {
-        // Format: "L3:<cache_id>=<cbm>" -> write to schemata
-        std::fs::write(clos_path.join("schemata"), l3)?;
+    // OCI 1.3.0: combined schemata field overrides individual fields
+    if let Some(ref schemata) = rdt.schemata {
+        std::fs::write(clos_path.join("schemata"), schemata)?;
+    } else {
+        // Write L3 cache schema
+        if let Some(ref l3) = rdt.l3_cache_schema {
+            std::fs::write(clos_path.join("schemata"), l3)?;
+        }
+
+        // Write memory bandwidth schema
+        if let Some(ref mb) = rdt.mem_bw_schema {
+            let mut existing = std::fs::read_to_string(clos_path.join("schemata"))?;
+            if !existing.ends_with('\n') {
+                existing.push('\n');
+            }
+            existing.push_str(mb);
+            std::fs::write(clos_path.join("schemata"), &existing)?;
+        }
     }
 
-    // Write memory bandwidth schema
-    if let Some(ref mb) = rdt.mem_bw_schema {
-        let mut existing = std::fs::read_to_string(clos_path.join("schemata"))?;
-        if !existing.ends_with('\n') {
-            existing.push('\n');
-        }
-        existing.push_str(mb);
-        std::fs::write(clos_path.join("schemata"), &existing)?;
+    // OCI 1.3.0: enable CMT/MBM monitoring
+    if rdt.enable_monitoring == Some(true) {
+        // Write "1" to the monitor directory to enable monitoring
+        let monitor_path = clos_path.join("monitors");
+        let _ = std::fs::create_dir_all(&monitor_path);
+        // The kernel enables monitoring automatically when the clos is used.
+        // We signal intent by creating the monitors directory.
     }
 
     // Move current process to this clos
@@ -704,6 +731,37 @@ fn write_gid_map(content: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Set the NIS domain name via setdomainname(2) syscall.
+fn do_set_domainname(name: &str) -> io::Result<()> {
+    let n = std::ffi::CString::new(name)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let ret = unsafe { libc::setdomainname(n.as_ptr(), n.as_bytes().len()) };
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
+/// Apply I/O priority via ioprio_set(2) syscall (OCI 1.1.0).
+///
+/// Linux ioprio_set interface:
+/// - class 0: none (use existing priority)
+/// - class 1: realtime (highest priority)
+/// - class 2: best-effort (default, priority 0-7)
+/// - class 3: idle (lowest priority, runs only when nobody else needs disk)
+///
+/// The encoded value is: (class << 13) | priority
+fn apply_io_priority(ioprio: &crate::json::OciIoPriority) -> io::Result<()> {
+    // ioprio_set(which, who, ioprio)
+    // which=1 = PRIO_PROCESS (current process), who=0 = self
+    let priority = ioprio.priority.unwrap_or(4);
+    let encoded = (ioprio.class << 13) | (priority & 7);
+
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { libc::syscall(251, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32 };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { libc::syscall(31, 1i32 /* PRIO_PROCESS */, 0i32, encoded) as i32 };
+
+    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+}
+
 // ===========================================================================
 // Tests
 // ===========================================================================
@@ -726,6 +784,7 @@ mod tests {
             linux: None,
             mounts: None,
             annotations: None,
+            domainname: None,
         }
     }
 

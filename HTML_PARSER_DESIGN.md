@@ -16,13 +16,15 @@ No browser generates its HTML parser from spec data. Chrome's is ~500K lines of 
 WHATWG HTML Spec (11MB, docs/html_spec.md)
     ↓ extract_html_spec.py (already exists)
 html_element_catalog.json (already exists)
-    ↓ generate_parser_ir.py (NEW)
+    ↓ html-codegen (Go, cmd/html-codegen/)
 ┌───────────────────────────────────────────┐
 │            Parser IR (Proto)               │
 │                                            │
 │  tokenizer_states.proto  — 86 states       │
 │  tree_builder.proto      — 23 modes        │
 │  entities.proto          — 2,231 refs      │
+│  html_elements.proto     — 108 elements    │
+│  html_attributes.proto   — typed attrs     │
 └───────────────┬───────────────────────────┘
                 ↓ buf generate (existing pipeline)
 ┌───────────────────────────────────────────┐
@@ -32,8 +34,9 @@ html_element_catalog.json (already exists)
 │  — StateTransition table                   │
 │  — TreeRule table                          │
 │  — EntityCatalog                           │
+│  — HtmlElement enum                        │
 └───────────────┬───────────────────────────┘
-                ↓ generate_html_parser.py (NEW)
+                ↓ html-codegen (Go codegen)
 ┌───────────────────────────────────────────┐
 │       Generated Rust Parser                │
 │                                            │
@@ -148,9 +151,7 @@ Defines the complete entity reference map:
 **Deliverable**: Parses `<div>Hello</div>` → DOM tree. Proves the pipeline works.
 
 ```
-generate_parser_ir.py  →  tokenizer_states.proto (subset: 4 states)
-buf generate            →  Rust types
-generate_html_parser.py →  tokenizer.rs (4 states) + html_parser.rs
+html-codegen (subset)  →  tokenizer.rs (4 states) + html_parser.rs
 cargo build && cargo test
 ```
 
@@ -163,9 +164,7 @@ cargo build && cargo test
 **Deliverable**: Parses `<div class="foo" title="&amp;bar">text</div>` → correct tokens with typed attributes.
 
 ```
-generate_parser_ir.py  →  tokenizer_states.proto (full 86 states)
-                        →  entities.proto (2,231 entries)
-generate_html_parser.py →  tokenizer.rs (full state machine)
+html-codegen (full)    →  tokenizer.rs (full state machine)
                         →  entity_decoder.rs
 cargo build && cargo test
 ```
@@ -177,8 +176,7 @@ cargo build && cargo test
 **Deliverable**: Parses nested elements with implicit tag closing: `<p><div>nested</div></p>` → `<p></p><div>nested</div>`.
 
 ```
-generate_parser_ir.py  →  tree_builder.proto (IN_BODY rules)
-generate_html_parser.py →  tree_builder.rs (body mode + stack management)
+html-codegen           →  tree_builder.rs (body mode + stack management)
 cargo build && cargo test
 ```
 
@@ -189,10 +187,9 @@ cargo build && cargo test
 **Deliverable**: Parses any valid HTML document. Conformance dashboard tracks coverage.
 
 ```
-generate_parser_ir.py  →  tree_builder.proto (all 23 modes)
-generate_html_parser.py →  tree_builder.rs (complete)
+html-codegen           →  tree_builder.rs (complete)
                         →  attribute_validator.rs
-generate_conformance    →  ~5,000 parser tests
+generate_conformance   →  ~5,000 parser tests
 cargo build && cargo test
 ```
 
@@ -200,32 +197,33 @@ cargo build && cargo test
 
 ## Implementation Steps
 
-### Step 1: Write `scripts/generate_parser_ir.py`
+### Step 1: Populate Data Files
 
-Reads WHATWG spec data → populates the 3 proto files with actual transition tables and rules.
+Write Go code to encode WHATWG spec data into the 3 data textproto files.
 
 **Input:**
 - `docs/html_spec.md` (11MB spec text)
 - `scripts/html_element_catalog.json` (108 elements with content models)
-- WHATWG §13.2.5 tokenizer algorithm (line 236,885+ in spec)
-- WHATWG §13.2.6 tree builder algorithm (line 240,488+ in spec)
+- WHATWG §13.2.5 tokenizer algorithm
+- WHATWG §13.2.6 tree builder algorithm
+- HTML5 entity list
 
 **Output:**
-- `proto/edgerun/v0/html/tokenizer_states.proto` (already has enums, needs transition table data)
-- `proto/edgerun/v0/html/tree_builder.proto` (already has enums, needs rule data)
-- `proto/edgerun/v0/html/entities.proto` (needs 2,231 entity entries)
+- `data/tokenizer.textproto` (transition table data)
+- `data/tree_builder.textproto` (rule data)
+- `data/entities.textproto` (2,231 entity entries)
 
-**How:** The spec defines each state as a deterministic algorithm ("Consume the next input character: U+0026 → switch to character reference state; U+003C → switch to tag open state; ..."). The generator translates these algorithms into proto `StateTransition` messages. Same for tree builder rules.
+**How:** The spec defines each state as a deterministic algorithm. The Go encoder translates these into proto `StateTransition` messages. Same for tree builder rules and entities.
 
 **Effort:** One-time encoding of the spec. Start with Phase 1 (4 states), expand to full spec.
 
 ### Step 2: `buf generate` — Generate Rust Types
 
-Already works. The 3 new proto files flow through the existing `buf generate` pipeline, producing Rust structs via `prost`.
+Already works. The 5 proto files flow through the existing `buf generate` pipeline, producing Rust structs via `prost`.
 
-### Step 3: Write `scripts/generate_html_parser.py`
+### Step 3: `html-codegen` — Generate Rust Parser
 
-Reads proto data → generates 5 Rust source files:
+Go codegen reads proto data → generates 5 Rust source files:
 
 | File | Lines | Content |
 |------|-------|---------|
@@ -282,14 +280,11 @@ Each test maps to a spec item → conformance dashboard updates parser coverage.
 ### Step 6: Build, Test, Iterate
 
 ```bash
-# Generate IR (populate proto files with spec data)
-python3 scripts/generate_parser_ir.py
-
 # Generate Rust types
 buf generate
 
 # Generate parser code
-python3 scripts/generate_html_parser.py
+go run ./cmd/html-codegen
 
 # Build
 cargo build --package edgerun-html-render
@@ -383,8 +378,6 @@ Output: Element { tag: "div", children: [Text("Hello")] }
 
 | File | Action |
 |------|--------|
-| `scripts/generate_parser_ir.py` | **NEW** — generates IR for 4 states |
-| `scripts/generate_html_parser.py` | **NEW** — generates tokenizer.rs + html_parser.rs |
 | `crates/edgerun-html-render/src/html_parser.rs` | **REPLACE** — generated, replaces 140-line ad-hoc |
 | `crates/edgerun-html-render/src/tokenizer.rs` | **NEW** — generated state machine |
 

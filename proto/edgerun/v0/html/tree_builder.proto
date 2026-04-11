@@ -3,7 +3,7 @@ syntax = "proto3";
 package edgerun.v0.html.tree_builder;
 
 /// HTML Tree Builder Rules — generated from WHATWG HTML Living Standard §13.2.6.
-/// DO NOT EDIT. Regenerate with: scripts/generate_parser_ir.py
+/// DO NOT EDIT. Regenerate with: go run ./cmd/html-codegen
 
 import "edgerun/v0/html/tokenizer_states.proto";
 
