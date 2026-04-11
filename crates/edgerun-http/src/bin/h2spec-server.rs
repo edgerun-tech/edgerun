@@ -2,13 +2,13 @@
 //!
 //! Uses edgerun-tls for TLS 1.3 handshake and edgerun-http for HTTP/2 framing.
 //!
-//! Usage: `cargo run --bin h2spec-server -- --port 8081`
+//! Usage: `cargo run --bin h2spec-server --features tls -- --port 8081`
 //! Then run: `h2spec -h 127.0.0.1 -p 8081 -k`
 
-use edgerun_http::http2::frame::{
-    DataFrame, Frame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
-};
+use edgerun_http::http2::frame::{Frame, FrameType};
 use edgerun_http::http2::hpack::{Decoder, Encoder};
+use edgerun_http::http2::server::{FrameAction, Http2Server};
+use edgerun_http::http2::ErrorCode;
 use edgerun_http::tls::TlsHttp2Server;
 use edgerun_tls::certificate_gen::generate_self_signed;
 use std::io::{Read, Write};
@@ -33,9 +33,8 @@ fn main() {
         match stream {
             Ok(stream) => {
                 thread::spawn(move || {
-                    match handle_connection(stream) {
-                        Ok(()) => {},
-                        Err(e) => eprintln!("Connection error: {e:?}"),
+                    if let Err(e) = handle_connection(stream) {
+                        eprintln!("Connection error: {e:?}");
                     }
                 });
             }
@@ -47,11 +46,9 @@ fn main() {
 fn parse_args() -> u16 {
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--port" || args[i] == "-p" {
-            if let Some(port_str) = args.get(i + 1) {
-                if let Ok(port) = port_str.parse::<u16>() {
-                    return port;
-                }
+        if (args[i] == "--port" || args[i] == "-p") && i + 1 < args.len() {
+            if let Ok(port) = args[i + 1].parse::<u16>() {
+                return port;
             }
         }
     }
@@ -78,172 +75,180 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
 
     // 1. Read client preface (24 bytes)
     let mut preface = [0u8; 24];
-    read_exact_tls(&mut tls_stream, &mut preface)?;
+    if let Err(e) = read_exact_tls(&mut tls_stream, &mut preface) {
+        eprintln!("Failed to read preface: {e}");
+        return Ok(());
+    }
     if &preface != HTTP2_PREFACE {
         eprintln!("Invalid preface: {:?}", &preface);
         return Ok(());
     }
 
     // 2. Read client SETTINGS frame
-    let client_settings = read_frame(&mut tls_stream)?;
-    if client_settings.frame_type != edgerun_http::http2::frame::FrameType::Settings {
-        eprintln!("Expected SETTINGS, got {:?}", client_settings.frame_type);
+    let settings_frame = match read_frame(&mut tls_stream) {
+        Ok((f, _)) => f,
+        Err(e) => {
+            eprintln!("Failed to read client SETTINGS: {e}");
+            return Ok(());
+        }
+    };
+    if settings_frame.frame_type != FrameType::Settings {
+        eprintln!("Expected SETTINGS, got {:?}", settings_frame.frame_type);
         return Ok(());
     }
-    let settings_frame = SettingsFrame::from_frame(&client_settings)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
 
-    // Apply client settings (for now we just acknowledge)
-    let _settings = edgerun_http::http2::Settings::from_entries(&settings_frame.entries)
-        .unwrap_or_default();
+    // 3. Create server and apply client settings
+    let mut server = Http2Server::new();
+    let settings_typed = match edgerun_http::http2::frame::SettingsFrame::from_frame(&settings_frame) {
+        Ok(sf) => sf,
+        Err(e) => {
+            eprintln!("Failed to parse SETTINGS: {e}");
+            write_goaway(&mut tls_stream, 0, ErrorCode::PROTOCOL_ERROR.to_u32(), b"SETTINGS parse error");
+            return Ok(());
+        }
+    };
 
-    // 3. Send server preface: SETTINGS + ACK of client SETTINGS
-    let server_settings = edgerun_http::http2::Settings::new();
-    write_frame(
-        &mut tls_stream,
-        &SettingsFrame::new(server_settings.to_entries()).to_frame(),
-    )?;
-    write_frame(&mut tls_stream, &SettingsFrame::ack().to_frame())?;
+    match server.apply_client_settings(&settings_typed) {
+        FrameAction::WriteFrames(frames) => {
+            for frame in &frames {
+                write_frame(&mut tls_stream, frame)?;
+            }
+        }
+        FrameAction::Goaway { error_code, debug_data, .. } => {
+            write_goaway(&mut tls_stream, 0, error_code, &debug_data);
+            return Ok(());
+        }
+        _ => {}
+    }
 
     // Main frame loop
     let mut encoder = Encoder::new();
     let mut decoder = Decoder::new();
     let mut header_block_buf = Vec::new();
     let mut expecting_continuation = false;
-    let mut continuation_stream_id = 0;
+    let mut continuation_stream_id = 0u32;
 
     loop {
-        let frame = match read_frame(&mut tls_stream) {
+        let (frame, raw_type_byte) = match read_frame(&mut tls_stream) {
             Ok(f) => f,
             Err(_) => break,
         };
 
-        match frame.frame_type {
-            edgerun_http::http2::frame::FrameType::Settings => {
-                let sf = SettingsFrame::from_frame(&frame)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                if !sf.ack {
-                    // Acknowledge
-                    write_frame(&mut tls_stream, &SettingsFrame::ack().to_frame())?;
-                }
-            }
-            edgerun_http::http2::frame::FrameType::Ping => {
-                let pf = PingFrame::from_frame(&frame)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-                if !pf.ack {
-                    // Send PING ACK
-                    let ack = PingFrame::ack(pf.data);
-                    write_frame(&mut tls_stream, &ack.to_frame())?;
-                }
-            }
-            edgerun_http::http2::frame::FrameType::WindowUpdate => {
-                // Handle window update (just ignore for now)
-            }
-            edgerun_http::http2::frame::FrameType::RstStream => {
-                // Stream reset, ignore
-            }
-            edgerun_http::http2::frame::FrameType::Headers => {
-                let hf = HeadersFrame::from_frame(&frame)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        // Handle unknown frame types (RFC 7540 §4.1: MUST ignore)
+        if raw_type_byte >= 0xA {
+            eprintln!("Ignoring unknown frame type: {raw_type_byte:#x}");
+            continue;
+        }
 
-                if hf.end_stream {
-                    // Full headers in one frame
-                    let headers = decoder
-                        .decode(&hf.header_block)
-                        .unwrap_or_default();
-                    handle_request(
-                        &mut tls_stream,
-                        hf.stream_id,
-                        &headers,
-                        None,
-                        &mut encoder,
-                    )?;
-                } else if frame.flags & edgerun_http::http2::frame::flags::HEADERS_END_HEADERS != 0 {
-                    // END_HEADERS set but not END_STREAM — headers complete, no data yet
-                    let headers = decoder
-                        .decode(&hf.header_block)
-                        .unwrap_or_default();
-                    header_block_buf.clear();
-                    header_block_buf.extend_from_slice(&hf.header_block);
-                    continuation_stream_id = hf.stream_id;
-                    expecting_continuation = false; // headers are complete, waiting for DATA
-                } else {
-                    // Need CONTINUATION frames
-                    header_block_buf.clear();
-                    header_block_buf.extend_from_slice(&hf.header_block);
-                    continuation_stream_id = hf.stream_id;
-                    expecting_continuation = true;
-                }
+        // Check frame size against negotiated max
+        let payload_len = frame.payload.len() as u32;
+        if payload_len > server.max_frame_size {
+            write_goaway(
+                &mut tls_stream,
+                server.last_processed_stream_id,
+                ErrorCode::FRAME_SIZE_ERROR.to_u32(),
+                b"Frame too large",
+            );
+            break;
+        }
+
+        // Validate frame semantics
+        if let Err(error_code) = frame.validate_semantics() {
+            write_goaway(
+                &mut tls_stream,
+                server.last_processed_stream_id,
+                error_code,
+                b"Frame semantic violation",
+            );
+            break;
+        }
+
+        let action = match frame.frame_type {
+            FrameType::Settings => server.handle_settings(&frame),
+            FrameType::Ping => server.handle_ping(&frame),
+            FrameType::WindowUpdate => server.handle_window_update(&frame),
+            FrameType::RstStream => server.handle_rst_stream(&frame),
+            FrameType::Priority => {
+                // PRIORITY frames are always accepted per RFC 7540 §6.3
+                let pf = edgerun_http::http2::frame::PriorityFrame::from_frame(&frame)
+                    .unwrap_or_else(|_| {
+                        if frame.payload.len() >= 5 {
+                            let dep_raw = u32::from_be_bytes([
+                                frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3],
+                            ]);
+                            let exclusive = (dep_raw >> 31) != 0;
+                            let stream_dependency = dep_raw & 0x7FFFFFFF;
+                            let weight = frame.payload[4].wrapping_add(1);
+                            edgerun_http::http2::frame::PriorityFrame::new(
+                                frame.stream_id, exclusive, stream_dependency, weight,
+                            )
+                        } else {
+                            edgerun_http::http2::frame::PriorityFrame::new(frame.stream_id, false, 0, 16)
+                        }
+                    });
+                server.handle_priority(&pf)
             }
-            edgerun_http::http2::frame::FrameType::Continuation => {
-                if expecting_continuation {
-                    header_block_buf.extend_from_slice(&frame.payload);
-                    if frame.flags & edgerun_http::http2::frame::flags::HEADERS_END_HEADERS != 0 {
-                        expecting_continuation = false;
-                        let headers = decoder
-                            .decode(&header_block_buf)
-                            .unwrap_or_default();
-                        // Headers complete, but we might still need DATA
-                        // For h2spec, most requests end with HEADERS only (GET)
-                        // We'll wait for DATA with END_STREAM
+            FrameType::Headers => server.handle_headers(
+                &frame,
+                &mut header_block_buf,
+                &mut decoder,
+                &mut encoder,
+                &mut expecting_continuation,
+                &mut continuation_stream_id,
+            ),
+            FrameType::Continuation => server.handle_continuation(
+                &frame,
+                &mut header_block_buf,
+                &mut expecting_continuation,
+                &mut continuation_stream_id,
+                &mut decoder,
+                &mut encoder,
+            ),
+            FrameType::Data => server.handle_data(&frame, &mut encoder),
+            FrameType::Goaway => server.handle_goaway(),
+            FrameType::PushPromise => FrameAction::Goaway {
+                last_stream_id: server.last_processed_stream_id,
+                error_code: ErrorCode::PROTOCOL_ERROR.to_u32(),
+                debug_data: b"Client sent PUSH_PROMISE".to_vec(),
+            },
+        };
+
+        match action {
+            FrameAction::None => {}
+            FrameAction::WriteFrames(frames) => {
+                for f in &frames {
+                    if write_frame(&mut tls_stream, f).is_err() {
+                        break;
                     }
                 }
             }
-            edgerun_http::http2::frame::FrameType::Data => {
-                let df = DataFrame::from_frame(&frame)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-
-                // Send WINDOW_UPDATE to acknowledge data
-                let wu = WindowUpdateFrame::new(df.stream_id, df.data.len() as u32);
-                write_frame(&mut tls_stream, &wu.to_frame())?;
-
-                if df.end_stream {
-                    // Request complete — but we need headers first
-                    // For simplicity, send a default response
-                    handle_request(
-                        &mut tls_stream,
-                        df.stream_id,
-                        &[],
-                        Some(&df.data),
-                        &mut encoder,
-                    )?;
-                }
-            }
-            edgerun_http::http2::frame::FrameType::Goaway => {
+            FrameAction::Goaway {
+                last_stream_id,
+                error_code,
+                debug_data,
+            } => {
+                write_goaway(&mut tls_stream, last_stream_id, error_code, &debug_data);
                 break;
             }
-            _ => {}
+            FrameAction::CloseConnection => break,
         }
     }
 
-    // Send GOAWAY
-    let goaway = edgerun_http::http2::frame::GoawayFrame::new(0, 0, Vec::new());
-    let _ = write_frame(&mut tls_stream, &goaway.to_frame());
+    // Don't send GOAWAY here — if we got here due to read error,
+    // the peer already closed their side. Sending more data would
+    // trigger RST. If we got here via CloseConnection or client GOAWAY,
+    // goaway_sent is already true.
+
     Ok(())
 }
 
-fn handle_request(
-    stream: &mut impl Write,
-    stream_id: u32,
-    _request_headers: &[(Vec<u8>, Vec<u8>)],
-    _body: Option<&[u8]>,
-    encoder: &mut Encoder,
-) -> std::io::Result<()> {
-    // Build response headers
-    let response_headers = vec![
-        (":status", "200"),
-        ("content-type", "text/plain"),
-        ("content-length", "2"),
-    ];
-
-    let header_block =
-        encoder.encode(response_headers.iter().map(|(k, v)| (k.as_bytes(), v.as_bytes())));
-
-    // Send HEADERS with END_STREAM
-    let hf = HeadersFrame::new(stream_id, header_block, true);
-    write_frame(stream, &hf.to_frame())?;
-
-    Ok(())
+fn write_goaway(stream: &mut impl Write, last_stream_id: u32, error_code: u32, debug: &[u8]) {
+    let goaway = edgerun_http::http2::frame::GoawayFrame::new(
+        last_stream_id,
+        error_code,
+        debug.to_vec(),
+    );
+    let _ = write_frame(stream, &goaway.to_frame());
 }
 
 fn read_exact_tls(stream: &mut impl Read, buf: &mut [u8]) -> std::io::Result<()> {
@@ -261,32 +266,31 @@ fn read_exact_tls(stream: &mut impl Read, buf: &mut [u8]) -> std::io::Result<()>
     Ok(())
 }
 
-fn read_frame(stream: &mut impl Read) -> std::io::Result<Frame> {
-    // Read 9-byte header
+fn read_frame(stream: &mut impl Read) -> std::io::Result<(Frame, u8)> {
     let mut hdr = [0u8; 9];
     read_exact_tls(stream, &mut hdr)?;
 
     let length = ((hdr[0] as u32) << 16) | ((hdr[1] as u32) << 8) | (hdr[2] as u32);
-    let frame_type = hdr[3];
+    let raw_type_byte = hdr[3];
     let flags = hdr[4];
     let stream_id = u32::from_be_bytes([hdr[5], hdr[6], hdr[7], hdr[8]]) & 0x7FFFFFFF;
 
-    // Read payload
     let mut payload = vec![0u8; length as usize];
     if length > 0 {
         read_exact_tls(stream, &mut payload)?;
     }
 
-    // Parse frame type
-    let ft = edgerun_http::http2::frame::FrameType::from_u8(frame_type)
-        .unwrap_or(edgerun_http::http2::frame::FrameType::Data); // fallback, won't match anyway
+    let frame_type = FrameType::from_u8(raw_type_byte).unwrap_or(FrameType::Data);
 
-    Ok(Frame {
-        frame_type: ft,
-        flags,
-        stream_id,
-        payload,
-    })
+    Ok((
+        Frame {
+            frame_type,
+            flags,
+            stream_id,
+            payload,
+        },
+        raw_type_byte,
+    ))
 }
 
 fn write_frame(stream: &mut impl Write, frame: &Frame) -> std::io::Result<()> {

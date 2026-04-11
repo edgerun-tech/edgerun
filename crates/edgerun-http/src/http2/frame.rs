@@ -245,13 +245,13 @@ impl Frame {
                 }
             }
             FrameType::Priority => {
-                // PRIORITY frames MUST be sent on stream 0 (RFC 7540 §6.3)
+                // PRIORITY frames can be sent on most streams, but NOT stream 0 (RFC 7540 §6.3)
+                if self.stream_id == 0 {
+                    return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
+                }
                 // Payload MUST be exactly 5 octets
                 if self.payload.len() != 5 {
                     return Err(ErrorCode::FRAME_SIZE_ERROR.to_u32());
-                }
-                if self.stream_id != 0 {
-                    return Err(ErrorCode::PROTOCOL_ERROR.to_u32());
                 }
             }
             FrameType::RstStream => {
@@ -983,7 +983,7 @@ impl PriorityFrame {
         ]);
         let exclusive = (dep_raw >> 31) != 0;
         let stream_dependency = dep_raw & 0x7FFFFFFF;
-        let weight = frame.payload[4] + 1; // Wire format is weight - 1
+        let weight = frame.payload[4].wrapping_add(1); // Wire format is weight - 1 (0→1, 255→256)
 
         Ok(PriorityFrame {
             stream_id: frame.stream_id,

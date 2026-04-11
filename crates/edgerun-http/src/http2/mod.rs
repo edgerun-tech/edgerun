@@ -6,6 +6,8 @@ pub mod connection;
 pub mod flow_control;
 pub mod frame;
 pub mod hpack;
+pub mod headers;
+pub mod server;
 pub mod settings;
 pub mod stream;
 
@@ -22,6 +24,8 @@ pub use connection::Connection;
 pub use flow_control::FlowController;
 pub use frame::{Frame, FrameType};
 pub use hpack::{Decoder, Encoder};
+pub use headers::{validate_header_name_case, validate_request_headers};
+pub use server::{FrameAction, Http2Server};
 pub use settings::Settings;
 pub use stream::Stream;
 
