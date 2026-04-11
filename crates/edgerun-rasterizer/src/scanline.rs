@@ -78,3 +78,9 @@ pub fn cmd_fill(x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8) -> RasterCo
 pub fn cmd_text(x: u32, y: u32, text: &str, r: u8, g: u8, b: u8) -> RasterCommand {
     RasterCommand::Text { x, y, text: text.into(), r, g, b }
 }
+
+/// Rasterize into a tile-local framebuffer.
+/// Used by the tile module for per-tile rendering.
+pub fn rasterize_tile(fb: &mut Framebuffer, commands: &[RasterCommand]) {
+    rasterize(fb, commands);
+}
