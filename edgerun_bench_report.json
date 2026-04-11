@@ -1,0 +1,17 @@
+{
+  "scene": { "rects": 16, "text_commands": 12 },
+  "cpu_time_ms": 1.967087,
+  "gpu_time_ms": 406.202404,
+  "total_pixels": 614400,
+  "exact_matches": 392400,
+  "near_matches_le_4": 0,
+  "mismatches_gt_4": 222000,
+  "max_channel_diff": 229,
+  "breakdown": {
+    "background": { "exact": 386128, "mismatch": 36000 },
+    "solids": { "exact": 0, "near": 0, "mismatch": 138000 },
+    "gradients": { "exact": 0, "near": 0, "mismatch": 48000 },
+    "text": { "exact": 6272, "near": 0, "mismatch": 0 }
+  },
+  "speedup_gpu_vs_cpu": 0.0048
+}
