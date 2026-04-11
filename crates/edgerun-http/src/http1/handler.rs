@@ -213,6 +213,14 @@ pub fn method_not_allowed() -> Response {
     text_response(crate::StatusCode::new(405).unwrap(), "405 Method Not Allowed")
 }
 
+/// 101 Switching Protocols response with upgrade headers.
+///
+/// Use this to accept an HTTP upgrade. Add the appropriate upgrade-specific
+/// headers (e.g., WebSocket accept headers) to the returned response.
+pub fn switching_protocols_response() -> Response {
+    Response::switching_protocols()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

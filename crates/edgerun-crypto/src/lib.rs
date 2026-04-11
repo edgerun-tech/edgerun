@@ -77,7 +77,6 @@ pub use block_buffer;
 pub use rand_core;
 pub use subtle;
 pub use zeroize;
-pub use generic_array;
 pub use typenum;
 pub use getrandom;
 

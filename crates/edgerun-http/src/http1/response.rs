@@ -26,6 +26,14 @@ impl Response {
         }
     }
 
+    /// Create a 101 Switching Protocols response for upgrades
+    pub fn switching_protocols() -> Self {
+        let mut resp = Response::new(
+            StatusCode::new(101).expect("101 is a valid status code")
+        );
+        resp
+    }
+
     /// Create a response from parts.
     pub fn from_parts(status: StatusCode, headers: HeaderMap, body: Vec<u8>) -> Self {
         Response {

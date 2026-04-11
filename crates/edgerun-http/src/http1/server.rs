@@ -66,9 +66,12 @@ impl CertRef {
 
 use crate::http1::body::AsyncBodyReader;
 use crate::http1::buf_reader::BufReader;
+use crate::http1::connection::{determine_connection, ConnectionState};
 use crate::http1::handler::Handler;
 use crate::http1::request::Request;
 use crate::http1::response::Response;
+use crate::http1::upgrade::is_websocket_upgrade;
+use crate::http1::version::HttpVersion;
 use crate::{HeaderMap, Method, StatusCode};
 
 /// An HTTP/1.1 server.
@@ -352,6 +355,10 @@ async fn handle_tls_connection(
 /// Handle a single connection. Processes multiple requests over the same
 /// connection (HTTP/1.1 keep-alive) until the client closes, timeout fires,
 /// or a parse error occurs.
+///
+/// If an upgrade request is detected and accepted by the handler,
+/// the connection transitions to the upgraded protocol and this function
+/// returns `Ok(())` without closing the connection.
 async fn handle_connection<S>(
     stream: S,
     peer_addr: SocketAddr,
@@ -363,6 +370,7 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut buf_reader = BufReader::new(stream);
+    let mut conn_state = ConnectionState::KeepAlive;
 
     loop {
         // Read request headers with optional timeout
@@ -384,22 +392,44 @@ where
             Err(e) => {
                 edgerun_log::debug!("Request parse error from {}: {}", peer_addr, e);
                 let resp = Response::new(StatusCode::BAD_REQUEST);
-                write_response(&mut buf_reader, &resp, false).await?;
+                write_response(&mut buf_reader, &resp, false, HttpVersion::Http11).await?;
                 return Ok(());
             }
         };
 
         let method = request.method().clone();
         let is_head = method == Method::HEAD;
+        let version = *request.version();
+        let is_upgrade = is_websocket_upgrade(request.headers());
 
-        // Drain request body (discard it) through the BufReader
-        drain_body(&mut buf_reader, &request).await?;
+        // Determine connection state from headers + version
+        conn_state = determine_connection(request.headers(), version);
+
+        // For upgrade requests, don't drain the body — let handler deal with it
+        if !is_upgrade {
+            drain_body(&mut buf_reader, &request).await?;
+        }
 
         // Call handler
         let response = handler.handle(request).await;
 
-        // Write response
-        write_response(&mut buf_reader, &response, is_head).await?;
+        // Check if handler returned 101 Switching Protocols
+        let is_101 = response.status().as_u16() == 101;
+
+        // Write response with correct version
+        write_response(&mut buf_reader, &response, is_head, version).await?;
+
+        // If upgrade was accepted, transition to upgraded protocol
+        // (handler takes over the raw stream — we return here)
+        if is_101 {
+            edgerun_log::debug!("Upgrade accepted, transitioning to upgraded protocol");
+            return Ok(());
+        }
+
+        // Close connection if requested
+        if !conn_state.is_persistent() {
+            return Ok(());
+        }
     }
 }
 
@@ -509,7 +539,7 @@ async fn drain_trailers<R: AsyncRead + Unpin>(
     }
 }
 
-/// Read an HTTP/1.1 request (status line + headers) from the buffered reader.
+/// Read an HTTP/1.x request (status line + headers) from the buffered reader.
 ///
 /// Returns `Ok(Some(request))` on success, `Ok(None)` on clean EOF,
 /// or `Err` on parse error.
@@ -544,14 +574,10 @@ async fn read_request<R: AsyncRead + Unpin>(
 
     let request_target = parts[1];
 
-    // Validate HTTP version
-    let version = parts.get(2).copied().unwrap_or("");
-    if version != "HTTP/1.1" && version != "HTTP/1.0" {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("unsupported HTTP version: {}", version),
-        ));
-    }
+    // Parse HTTP version
+    let version_str = parts.get(2).copied().unwrap_or("HTTP/1.0");
+    let version = HttpVersion::from_str(version_str)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
     // Read headers
     let mut headers = HeaderMap::new();
@@ -592,7 +618,10 @@ async fn read_request<R: AsyncRead + Unpin>(
         format!("http://localhost{}", request_target)
     };
 
-    let mut builder = Request::builder().method(method).uri(&uri_str);
+    let mut builder = Request::builder()
+        .method(method)
+        .version(version)
+        .uri(&uri_str);
 
     for (name, value) in headers.iter() {
         builder = builder.header(name.as_str(), value.as_str());
@@ -604,18 +633,21 @@ async fn read_request<R: AsyncRead + Unpin>(
     Ok(Some(request))
 }
 
-/// Write an HTTP/1.1 response.
+/// Write an HTTP/1.x response.
 ///
 /// If `is_head` is true, the status line and headers are written but the body
 /// is suppressed (per RFC 9112 §6.3 — HEAD responses MUST NOT contain a body).
+/// The `version` parameter determines the HTTP version in the status line.
 async fn write_response<W: AsyncWrite + Unpin>(
     writer: &mut W,
     response: &Response,
     is_head: bool,
+    version: HttpVersion,
 ) -> std::io::Result<()> {
     let status = response.status();
     let mut buf = format!(
-        "HTTP/1.1 {} {}\r\n",
+        "{} {} {}\r\n",
+        version.as_str(),
         status.as_u16(),
         status.reason()
     ).into_bytes();
@@ -634,7 +666,14 @@ async fn write_response<W: AsyncWrite + Unpin>(
     }
 
     if !response.headers().contains_key("Connection") {
-        buf.extend_from_slice(b"Connection: keep-alive\r\n");
+        match version.default_connection_behavior() {
+            crate::http1::version::ConnectionDefault::Close => {
+                buf.extend_from_slice(b"Connection: close\r\n");
+            }
+            crate::http1::version::ConnectionDefault::KeepAlive => {
+                buf.extend_from_slice(b"Connection: keep-alive\r\n");
+            }
+        }
     }
 
     buf.extend_from_slice(b"\r\n");
@@ -665,7 +704,7 @@ mod tests {
         let output = rt.block_on(async move {
             let mut buf = Vec::new();
             let mut writer = VecWriter(&mut buf);
-            write_response(&mut writer, &resp, false).await.unwrap();
+            write_response(&mut writer, &resp, false, HttpVersion::Http11).await.unwrap();
             buf
         });
 
@@ -680,12 +719,12 @@ mod tests {
         let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 
         let mut resp = Response::new(StatusCode::new(200).unwrap());
-        resp.set_body(b"hello");
+        resp.set_body(b"hello".to_vec());
 
         let output = rt.block_on(async move {
             let mut buf = Vec::new();
             let mut writer = VecWriter(&mut buf);
-            write_response(&mut writer, &resp, true).await.unwrap();
+            write_response(&mut writer, &resp, true, HttpVersion::Http11).await.unwrap();
             buf
         });
 
@@ -695,6 +734,27 @@ mod tests {
         // Body must NOT be present for HEAD
         assert!(!output_str.ends_with("hello"));
         assert!(output_str.ends_with("\r\n\r\n"));
+    }
+
+    #[test]
+    fn test_write_response_http10() {
+        let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+
+        let mut resp = Response::new(StatusCode::new(200).unwrap());
+        resp.set_body(b"hello".to_vec());
+
+        let output = rt.block_on(async move {
+            let mut buf = Vec::new();
+            let mut writer = VecWriter(&mut buf);
+            write_response(&mut writer, &resp, false, HttpVersion::Http10).await.unwrap();
+            buf
+        });
+
+        let output_str = String::from_utf8_lossy(&output);
+        assert!(output_str.starts_with("HTTP/1.0 200 OK\r\n"));
+        assert!(output_str.contains("Content-Length: 5\r\n"));
+        assert!(output_str.contains("Connection: close\r\n"));
+        assert!(output_str.ends_with("\r\n\r\nhello"));
     }
 
     #[test]

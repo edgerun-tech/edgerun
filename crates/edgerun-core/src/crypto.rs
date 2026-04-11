@@ -190,9 +190,9 @@ pub fn verify_ecdsa_p256_raw(
         Ok(v) => v,
         Err(_) => return false,
     };
-    let r = p256::FieldBytes::from_slice(&signature_bytes[..32]);
-    let s = p256::FieldBytes::from_slice(&signature_bytes[32..]);
-    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(*r, *s) {
+    let r_bytes: [u8; 32] = signature_bytes[..32].try_into().unwrap();
+    let s_bytes: [u8; 32] = signature_bytes[32..].try_into().unwrap();
+    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(r_bytes, s_bytes) {
         Ok(sig) => sig,
         Err(_) => return false,
     };

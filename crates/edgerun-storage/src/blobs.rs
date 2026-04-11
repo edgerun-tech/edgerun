@@ -124,10 +124,10 @@ impl BlobStore {
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
         edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
 
         // Encrypt
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.key));
+        let cipher = Aes256Gcm::new_from_slice(&self.key).expect("valid AES-256 key");
         let ciphertext = cipher
             .encrypt(nonce, plaintext)
             .map_err(|e| StorageError::Encryption(format!("AES-GCM encryption failed: {}", e)))?;
@@ -201,8 +201,8 @@ impl BlobStore {
                 "nonce must be 12 bytes".into(),
             ));
         }
-        let nonce = Nonce::from_slice(nonce);
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&self.key));
+        let nonce = Nonce::from(nonce);
+        let cipher = Aes256Gcm::new_from_slice(&self.key).expect("valid AES-256 key");
         cipher
             .decrypt(nonce, ciphertext.as_ref())
             .map_err(|e| StorageError::Decryption(format!("AES-GCM decryption failed: {}", e)))

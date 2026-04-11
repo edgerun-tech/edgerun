@@ -174,10 +174,9 @@ fn verify_event_signature(event: &EventEnvelope, key: &[u8; 64]) -> bool {
 
     use edgerun_crypto::p256;
     use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-    let Ok(ecdsa_sig) = edgerun_crypto::p256::ecdsa::Signature::from_scalars(
-        *edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[..32]),
-        *edgerun_crypto::p256::FieldBytes::from_slice(&sig.value[32..]),
-    ) else {
+    let Ok(r): Result<[u8; 32], _> = sig.value[..32].try_into() else { return false };
+    let Ok(s): Result<[u8; 32], _> = sig.value[32..].try_into() else { return false };
+    let Ok(ecdsa_sig) = edgerun_crypto::p256::ecdsa::Signature::from_scalars(r, s) else {
         return false;
     };
 

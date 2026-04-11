@@ -115,7 +115,7 @@ impl MeshSession {
 
         Self {
             peer,
-            cipher: Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key)),
+            cipher: Aes256Gcm::new_from_slice(&key).expect("valid AES-256 key"),
             nonce_prefix,
             nonce_counter: 0,
             highest_seen_counter: None,
@@ -137,7 +137,7 @@ impl MeshSession {
         nonce_bytes[4..].copy_from_slice(&self.nonce_counter.to_be_bytes());
         self.nonce_counter = self.nonce_counter.wrapping_add(1);
 
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
         let ciphertext = self.cipher.encrypt(nonce, plaintext).expect("AES-GCM encrypt failed");
 
         let mut out = Vec::with_capacity(NONCE_SIZE + ciphertext.len());
@@ -168,7 +168,7 @@ impl MeshSession {
         }
         self.highest_seen_counter = Some(counter);
 
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce = Nonce::from(nonce_bytes);
         let payload = &ciphertext[NONCE_SIZE..];
 
         self.cipher
@@ -343,7 +343,7 @@ impl SessionManager {
         let their_pub = PublicKey::from_sec1_bytes(&accept.ephemeral_pub)
             .map_err(|_| SessionError::InvalidEcdhPublicKey)?;
         let shared = our_secret.diffie_hellman(&their_pub);
-        let session_key = derive_session_key(shared.raw_secret_bytes().as_slice());
+        let session_key = derive_session_key(&*shared.raw_secret_bytes());
 
         let session = MeshSession::new(accept.responder, session_key);
         self.sessions.insert(accept.responder, session);
@@ -372,7 +372,7 @@ impl SessionManager {
         ephemeral_pub.copy_from_slice(our_pub_bytes);
 
         let shared = our_secret.diffie_hellman(&their_pub);
-        let session_key = derive_session_key(shared.raw_secret_bytes().as_slice());
+        let session_key = derive_session_key(&*shared.raw_secret_bytes());
 
         let session = MeshSession::new(init.initiator, session_key);
         self.sessions.insert(init.initiator, session);
@@ -950,7 +950,7 @@ mod tests {
         let secret = SessionManager::random_ephemeral_secret();
         let pubkey = secret.public_key();
         let shared = secret.diffie_hellman(&pubkey);
-        let key = derive_session_key(shared.raw_secret_bytes().as_slice());
+        let key = derive_session_key(&*shared.raw_secret_bytes());
         assert_eq!(key.len(), 32);
     }
 

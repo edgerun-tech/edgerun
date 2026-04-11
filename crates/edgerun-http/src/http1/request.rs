@@ -1,10 +1,12 @@
-//! HTTP/1.1 request types
+//! HTTP/1.x request types
 
 use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::Result;
 use std::fmt;
+
+use super::version::HttpVersion;
 
 /// HTTP request
 #[derive(Debug, Clone)]
@@ -13,6 +15,7 @@ pub struct Request {
     uri: Uri,
     headers: HeaderMap,
     body: Option<Vec<u8>>,
+    version: HttpVersion,
 }
 
 impl Request {
@@ -21,11 +24,13 @@ impl Request {
         RequestBuilder::new()
     }
 
-    /// Parse an HTTP/1.1 request from a raw string.
+    /// Parse an HTTP/1.x request from a raw string.
     ///
     /// Handles the request line, headers, and body based on Content-Length.
     /// Supports all request target forms: origin-form, absolute-form,
     /// authority-form, and asterisk-form.
+    ///
+    /// Supports both HTTP/1.0 and HTTP/1.1.
     pub fn from_http(raw: &str) -> Result<Self> {
         // Find the end of the request line
         let line_end = raw.find("\r\n").ok_or_else(|| {
@@ -41,12 +46,13 @@ impl Request {
         let target = parts.next().ok_or_else(|| {
             crate::Error::InvalidRequest("No request target".to_string())
         })?;
-        let _version = parts.next().ok_or_else(|| {
+        let version_str = parts.next().ok_or_else(|| {
             crate::Error::InvalidRequest("No HTTP version".to_string())
         })?;
 
         let method: Method = method_str.parse().map_err(crate::Error::InvalidRequest)?;
         let uri = Uri::parse(target).map_err(crate::Error::InvalidRequest)?;
+        let version = HttpVersion::from_str(version_str)?;
 
         // Parse headers and body
         let after_line = &raw[line_end + 2..];
@@ -57,6 +63,7 @@ impl Request {
             uri,
             headers,
             body: Some(body).filter(|b| !b.is_empty()),
+            version,
         })
     }
 
@@ -171,6 +178,11 @@ impl Request {
             .map(|i| pos + i)
     }
 
+    /// Get the HTTP version
+    pub fn version(&self) -> &HttpVersion {
+        &self.version
+    }
+
     /// Get the method
     pub fn method(&self) -> &Method {
         &self.method
@@ -205,12 +217,13 @@ impl Request {
         String::from_utf8_lossy(&self.to_http_bytes()).into_owned()
     }
 
-    /// Format the request as HTTP/1.1 bytes (binary-safe).
+    /// Format the request as HTTP bytes (binary-safe).
     pub fn to_http_bytes(&self) -> Vec<u8> {
         let mut request = format!(
-            "{} {} HTTP/1.1\r\n",
+            "{} {} {}\r\n",
             self.method.as_str(),
-            self.uri.request_target()
+            self.uri.request_target(),
+            self.version.as_str()
         ).into_bytes();
 
         // Add Host header if not present
@@ -233,9 +246,16 @@ impl Request {
             let _ = std::io::Write::write_fmt(&mut request, format_args!("Content-Length: {}\r\n", len));
         }
 
-        // Add Connection header if not present
+        // Add Connection header based on version default if not present
         if !self.headers.contains_key("Connection") {
-            request.extend_from_slice(b"Connection: keep-alive\r\n");
+            match self.version.default_connection_behavior() {
+                super::version::ConnectionDefault::Close => {
+                    request.extend_from_slice(b"Connection: close\r\n");
+                }
+                super::version::ConnectionDefault::KeepAlive => {
+                    request.extend_from_slice(b"Connection: keep-alive\r\n");
+                }
+            }
         }
 
         request.extend_from_slice(self.headers.to_http_string().as_bytes());
@@ -268,6 +288,7 @@ pub struct RequestBuilder {
     uri: Option<Uri>,
     headers: HeaderMap,
     body: Option<Vec<u8>>,
+    version: HttpVersion,
 }
 
 impl RequestBuilder {
@@ -278,12 +299,19 @@ impl RequestBuilder {
             uri: None,
             headers: HeaderMap::new(),
             body: None,
+            version: HttpVersion::default(),
         }
     }
 
     /// Set the HTTP method
     pub fn method(mut self, method: Method) -> Self {
         self.method = method;
+        self
+    }
+
+    /// Set the HTTP version
+    pub fn version(mut self, version: HttpVersion) -> Self {
+        self.version = version;
         self
     }
 
@@ -323,6 +351,7 @@ impl RequestBuilder {
             uri,
             headers: self.headers,
             body: self.body,
+            version: self.version,
         })
     }
 }

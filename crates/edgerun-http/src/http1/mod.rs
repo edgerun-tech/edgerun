@@ -10,6 +10,12 @@ pub mod body;
 pub mod buf_reader;
 pub mod request;
 pub mod response;
+pub mod version;
+pub mod connection;
+pub mod upgrade;
+pub mod compression;
+pub mod multipart;
+pub mod range;
 
 pub use client::Client;
 pub use server::{Server, BoundServer};
@@ -20,3 +26,16 @@ pub use body::{Body, BodyReader, BodySender, AsyncBodyReader};
 pub use buf_reader::BufReader;
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
+pub use version::HttpVersion;
+pub use connection::{ConnectionState, determine_connection};
+pub use upgrade::{
+    UpgradeProtocol, UpgradeHandler, parse_upgrade_request, is_websocket_upgrade,
+    build_upgrade_response, build_websocket_accept_headers,
+};
+pub use compression::{ContentEncoding, negotiate_encoding, decompress_body, compress_body, is_encoding_supported, get_content_encoding};
+pub use multipart::{MultipartField, parse_multipart, extract_boundary, is_multipart};
+pub use range::{
+    RangeSpecifier, ByteRange, ContentRange, parse_range_header, resolve_byte_range,
+    is_range_satisfiable, has_range_header, get_range, build_partial_response,
+    range_not_satisfiable_response,
+};

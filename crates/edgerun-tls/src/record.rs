@@ -100,7 +100,7 @@ impl RecordCipher {
                 .expect("AEAD encryption failed"),
         };
 
-        buffer.extend_from_slice(tag.as_slice());
+        buffer.extend_from_slice(tag.as_ref());
         self.seq += 1;
         buffer
     }
@@ -125,7 +125,9 @@ impl RecordCipher {
 
         let mut buffer = ciphertext.to_vec();
         let tag_offset = buffer.len() - Self::TAG_LEN;
-        let tag: edgerun_crypto::aes_gcm::Tag = edgerun_crypto::aes_gcm::Tag::clone_from_slice(&buffer[tag_offset..]);
+        let tag_bytes: [u8; 16] = buffer[tag_offset..].try_into()
+            .map_err(|_| "invalid tag length")?;
+        let tag = edgerun_crypto::aes_gcm::Tag::from(tag_bytes);
         buffer.truncate(tag_offset);
 
         match &self.inner {

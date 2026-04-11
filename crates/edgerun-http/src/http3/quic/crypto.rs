@@ -119,23 +119,19 @@ impl PacketProtection {
     pub fn new(keys: &ProtectionKeys) -> Self {
         let write_aead = match keys.algorithm {
             AeadAlgorithm::Aes128Gcm => {
-                let key = Key::<Aes128Gcm>::from_slice(&keys.write_key);
-                AeadCipher::Aes128(Aes128Gcm::new(key))
+                AeadCipher::Aes128(Aes128Gcm::new_from_slice(&keys.write_key).expect("valid AES-128 key"))
             }
             AeadAlgorithm::Aes256Gcm => {
-                let key = Key::<Aes256Gcm>::from_slice(&keys.write_key);
-                AeadCipher::Aes256(Aes256Gcm::new(key))
+                AeadCipher::Aes256(Aes256Gcm::new_from_slice(&keys.write_key).expect("valid AES-256 key"))
             }
         };
 
         let read_aead = match keys.algorithm {
             AeadAlgorithm::Aes128Gcm => {
-                let key = Key::<Aes128Gcm>::from_slice(&keys.read_key);
-                AeadCipher::Aes128(Aes128Gcm::new(key))
+                AeadCipher::Aes128(Aes128Gcm::new_from_slice(&keys.read_key).expect("valid AES-128 key"))
             }
             AeadAlgorithm::Aes256Gcm => {
-                let key = Key::<Aes256Gcm>::from_slice(&keys.read_key);
-                AeadCipher::Aes256(Aes256Gcm::new(key))
+                AeadCipher::Aes256(Aes256Gcm::new_from_slice(&keys.read_key).expect("valid AES-256 key"))
             }
         };
 
@@ -161,11 +157,11 @@ impl PacketProtection {
 
         match &self.write_aead {
             AeadCipher::Aes128(aead) => {
-                let nonce = Nonce::from_slice(&nonce);
+                let nonce = Nonce::from(nonce);
                 aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
             }
             AeadCipher::Aes256(aead) => {
-                let nonce = Nonce::from_slice(&nonce);
+                let nonce = Nonce::from(nonce);
                 aead.encrypt(nonce, payload).map_err(|e| format!("AEAD encrypt failed: {:?}", e))
             }
         }
@@ -181,11 +177,11 @@ impl PacketProtection {
 
         match &self.read_aead {
             AeadCipher::Aes128(aead) => {
-                let nonce = Nonce::from_slice(&nonce);
+                let nonce = Nonce::from(nonce);
                 aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
             }
             AeadCipher::Aes256(aead) => {
-                let nonce = Nonce::from_slice(&nonce);
+                let nonce = Nonce::from(nonce);
                 aead.decrypt(nonce, payload).map_err(|e| format!("AEAD decrypt failed: {:?}", e))
             }
         }
