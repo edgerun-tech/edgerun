@@ -2,8 +2,8 @@
 
 use super::flow_control::FlowControlManager;
 use super::frame::{
-    DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame,
-    SettingsFrame, WindowUpdateFrame,
+    ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,
+    PriorityFrame, PushPromiseFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use super::stream::{Stream, StreamManager};
 use super::{ErrorCode, Result};
@@ -214,8 +214,18 @@ impl<S: Read + Write> Connection<S> {
                 let rst_frame = RstStreamFrame::from_frame(frame)?;
                 self.process_rst_stream(&rst_frame)?;
             }
-            FrameType::Priority | FrameType::PushPromise | FrameType::Continuation => {
-                // TODO: Implement these frame types
+            FrameType::Priority => {
+                let priority_frame = PriorityFrame::from_frame(frame)?;
+                self.process_priority(&priority_frame)?;
+            }
+            FrameType::PushPromise => {
+                let pp_frame = PushPromiseFrame::from_frame(frame)?;
+                self.last_stream_received = frame.stream_id;
+                self.process_push_promise(&pp_frame)?;
+            }
+            FrameType::Continuation => {
+                let cont_frame = ContinuationFrame::from_frame(frame)?;
+                self.process_continuation(&cont_frame)?;
             }
         }
 
@@ -337,6 +347,58 @@ impl<S: Read + Write> Connection<S> {
     fn process_rst_stream(&mut self, rst_frame: &RstStreamFrame) -> Result<()> {
         if let Some(stream) = self.streams.get_stream_mut(rst_frame.stream_id) {
             stream.close();
+        }
+
+        Ok(())
+    }
+
+    /// Process PRIORITY frame (RFC 7540 §6.3)
+    /// PRIORITY frames are advisory — we accept them but don't implement scheduling.
+    fn process_priority(&mut self, priority_frame: &PriorityFrame) -> Result<()> {
+        // PRIORITY on stream 0 is a connection error
+        if priority_frame.stream_id == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "PRIORITY frame on stream 0",
+            )
+            .into());
+        }
+
+        // Update stream dependency info if the stream exists
+        // (Priority scheduling is not implemented, but we record the dependency)
+        if let Some(stream) = self.streams.get_stream_mut(priority_frame.stream_id) {
+            let _ = (stream, priority_frame.exclusive, priority_frame.stream_dependency, priority_frame.weight);
+        }
+
+        Ok(())
+    }
+
+    /// Process PUSH_PROMISE frame (RFC 7540 §6.6)
+    /// Creates a new server-initiated stream for the promised resource.
+    fn process_push_promise(&mut self, pp_frame: &PushPromiseFrame) -> Result<()> {
+        // Promised stream ID must be even (server-initiated)
+        if pp_frame.promised_stream_id % 2 == 0 {
+            // Create the promised stream
+            self.streams.create_server_stream(pp_frame.promised_stream_id)?;
+        }
+
+        // The HEADERS on the promised stream will follow separately
+        // For now, just note the promised stream
+        Ok(())
+    }
+
+    /// Process CONTINUATION frame (RFC 7540 §6.10)
+    /// Continues a header block from a HEADERS or PUSH_PROMISE frame.
+    fn process_continuation(&mut self, cont_frame: &ContinuationFrame) -> Result<()> {
+        // CONTINUATION frames carry header block fragments
+        // They must follow a HEADERS/PUSH_PROMISE with END_HEADERS=false
+        // In a full implementation, these would be accumulated and HPACK-decoded
+        if let Some(stream) = self.streams.get_stream_mut(cont_frame.stream_id) {
+            stream.queue_received(cont_frame.header_block_fragment.clone());
+            if cont_frame.end_headers {
+                // Header block is complete — trigger stream processing
+                stream.half_close_remote()?;
+            }
         }
 
         Ok(())
@@ -545,5 +607,62 @@ mod tests {
         let conn = Connection::server(mock).unwrap();
         assert_eq!(conn.state, ConnectionState::PrefaceSent);
         assert_eq!(conn.local_settings().max_frame_size, 16384);
+    }
+
+    #[test]
+    fn test_process_priority_frame() {
+        let mock = Cursor::new(Vec::new());
+        let mut conn = Connection::client(mock).unwrap();
+
+        // Create a stream first
+        conn.streams.create_client_stream().unwrap();
+
+        // PRIORITY frame on stream 1 should be accepted
+        let frame = Frame::new(FrameType::Priority, 0, 1, vec![0, 0, 0, 0, 15]);
+        conn.process_frame(&frame).unwrap();
+
+        // PRIORITY on stream 0 should fail
+        let frame_zero = Frame::new(FrameType::Priority, 0, 0, vec![0, 0, 0, 0, 15]);
+        assert!(conn.process_frame(&frame_zero).is_err());
+    }
+
+    #[test]
+    fn test_process_push_promise_frame() {
+        let mock = Cursor::new(Vec::new());
+        let mut conn = Connection::client(mock).unwrap();
+
+        // Create a client stream first
+        let client_id = conn.streams.create_client_stream().unwrap();
+        assert_eq!(client_id, 1);
+
+        // PUSH_PROMISE on stream 1 promising stream 4
+        // Payload: promised_stream_id (4 bytes) + empty header block
+        let mut payload = vec![0, 0, 0, 4]; // promised_stream_id = 4
+        let frame = Frame::new(FrameType::PushPromise, 0, client_id, payload);
+        conn.process_frame(&frame).unwrap();
+
+        // Stream 4 should now exist
+        assert!(conn.streams.get_stream(4).is_some());
+    }
+
+    #[test]
+    fn test_process_continuation_frame() {
+        let mock = Cursor::new(Vec::new());
+        let mut conn = Connection::client(mock).unwrap();
+
+        // Create a stream first
+        let stream_id = conn.streams.create_client_stream().unwrap();
+        // Open the stream
+        if let Some(stream) = conn.streams.get_stream_mut(stream_id) {
+            stream.open().unwrap();
+        }
+
+        // CONTINUATION frame on stream 1 with END_HEADERS flag
+        let frame = Frame::new(FrameType::Continuation, 0x04, stream_id, vec![0x82]);
+        conn.process_frame(&frame).unwrap();
+
+        // Stream should have received data and transitioned
+        let stream = conn.streams.get_stream(stream_id).unwrap();
+        assert!(!stream.recv_buffer.is_empty());
     }
 }

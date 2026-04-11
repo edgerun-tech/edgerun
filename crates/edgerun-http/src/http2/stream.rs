@@ -254,6 +254,29 @@ impl StreamManager {
         Ok(stream_id)
     }
 
+
+    /// Create a server-initiated stream (for PUSH_PROMISE)
+    pub fn create_server_stream(&mut self, stream_id: u32) -> Result<u32> {
+        // Server streams must be even
+        if stream_id % 2 != 0 {
+            return Err(super::Http2Error::ProtocolViolation(
+                "Server stream ID must be even".to_string(),
+            ));
+        }
+
+        let stream = Stream::new(stream_id, self.initial_window_size);
+        self.streams.insert(stream_id, stream);
+
+        // Advance next_server_stream past this one
+        if stream_id >= self.next_server_stream {
+            self.next_server_stream = stream_id.saturating_add(2);
+        }
+
+        Ok(stream_id)
+    }
+
+
+
     /// Get or create a stream for received headers
     pub fn get_or_create_stream(&mut self, stream_id: u32) -> Result<&mut Stream> {
         if !self.streams.contains_key(&stream_id) {
@@ -399,5 +422,22 @@ mod tests {
 
         manager.cleanup_closed();
         assert_eq!(manager.active_count(), 0);
+    }
+
+    #[test]
+    fn test_create_server_stream() {
+        let mut manager = StreamManager::new(65535);
+
+        // Create a server-initiated stream (PUSH_PROMISE)
+        let id = manager.create_server_stream(4).unwrap();
+        assert_eq!(id, 4);
+        assert!(manager.get_stream(4).is_some());
+
+        // Odd stream ID should fail
+        assert!(manager.create_server_stream(3).is_err());
+
+        // Client streams still work
+        let client = manager.create_client_stream().unwrap();
+        assert_eq!(client, 1);
     }
 }
