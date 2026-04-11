@@ -342,10 +342,25 @@ impl Http2Server {
 
         self.update_last_stream(stream_id);
 
-        // Check stream state
+        // Check stream state BEFORE creating/transitioning
         let state_before = self.stream_manager.get_stream(stream_id).map(|s| s.state);
+        eprintln!("[SERVER] handle_headers: stream_id={}, state_before={:?}", stream_id, state_before);
         match state_before.unwrap_or(StreamState::Idle) {
-            StreamState::HalfClosedRemote | StreamState::Closed => {
+            StreamState::Closed => {
+                // HEADERS on closed stream = connection error (RFC 7540 §5.1)
+                return self.goaway(
+                    self.last_processed_stream_id,
+                    ErrorCode::STREAM_CLOSED.to_u32(),
+                    b"HEADERS on closed stream",
+                );
+            }
+            StreamState::HalfClosedRemote => {
+                // Could be trailers (second HEADERS after DATA) or protocol error.
+                // Check if headers contain pseudo-headers (trailers don't have them).
+                // For now, treat as trailers — decode and check for pseudo-headers.
+                // We'll handle this after header decoding below.
+            }
+            StreamState::HalfClosedLocal => {
                 return self.rst_stream(stream_id, ErrorCode::STREAM_CLOSED.to_u32());
             }
             _ => {}
@@ -360,7 +375,41 @@ impl Http2Server {
             );
         }
 
+        // Transition stream to Open if it's still Idle
+        if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+            if s.state == StreamState::Idle {
+                let _ = s.open();
+            }
+        }
+
         let end_headers = frame.flags & super::frame::flags::HEADERS_END_HEADERS != 0;
+
+        // Check for self-referential stream dependency (RFC 7540 §5.3.1)
+        if hf.exclusive && hf.stream_dependency == stream_id {
+            return self.rst_stream(stream_id, ErrorCode::PROTOCOL_ERROR.to_u32());
+        }
+
+        // Check if this is a trailers frame (HEADERS on HalfClosedRemote without pseudo-headers)
+        if state_before == Some(StreamState::HalfClosedRemote) && hf.end_stream && end_headers {
+            // This is a trailers frame — decode but don't validate as request headers
+            let _headers = match decoder.decode(&hf.header_block) {
+                Ok(h) => h,
+                Err(_) => {
+                    return self.goaway(
+                        self.last_processed_stream_id,
+                        ErrorCode::COMPRESSION_ERROR.to_u32(),
+                        b"HPACK decode error in trailers",
+                    );
+                }
+            };
+            // Trailers accepted — stream goes from HalfClosedRemote to Closed
+            if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+                let _ = s.half_close_remote();  // HalfClosedRemote -> Closed
+            }
+            self.stream_manager.cleanup_closed();
+            // Don't respond — the original response was already sent
+            return FrameAction::None;
+        }
 
         if hf.end_stream && end_headers {
             // Full request in HEADERS (GET with END_STREAM)
@@ -383,6 +432,16 @@ impl Http2Server {
             if let Err((ec, _)) = validate_header_name_case(&headers) {
                 return self.rst_stream(stream_id, ec);
             }
+
+            // Extract Content-Length if present
+            let content_length = headers.iter()
+                .find(|(k, _)| k == b"content-length")
+                .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<u64>().ok());
+
+            if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+                s.content_length = content_length;
+            }
+
             self.pending_headers.insert(stream_id, headers);
             *continuation_stream_id = stream_id;
             *expecting_continuation = false;
@@ -512,7 +571,7 @@ impl Http2Server {
                     b"DATA on idle stream",
                 );
             }
-            StreamState::HalfClosedRemote | StreamState::Closed => {
+            StreamState::HalfClosedRemote | StreamState::HalfClosedLocal | StreamState::Closed => {
                 return self.rst_stream(sid, ErrorCode::STREAM_CLOSED.to_u32());
             }
             _ => {}
@@ -542,6 +601,24 @@ impl Http2Server {
                 ErrorCode::FLOW_CONTROL_ERROR.to_u32(),
                 b"Flow control window exceeded",
             );
+        }
+
+        // Check Content-Length if known
+        if let Some(s) = self.stream_manager.get_stream(sid) {
+            if let Some(expected_cl) = s.content_length {
+                let bytes_so_far = s.bytes_received + data_len as u64;
+                if df.end_stream && bytes_so_far != expected_cl {
+                    return self.rst_stream(sid, ErrorCode::PROTOCOL_ERROR.to_u32());
+                }
+                if bytes_so_far > expected_cl {
+                    return self.rst_stream(sid, ErrorCode::PROTOCOL_ERROR.to_u32());
+                }
+            }
+        }
+
+        // Track bytes received
+        if let Some(s) = self.stream_manager.get_stream_mut(sid) {
+            s.bytes_received += data_len as u64;
         }
 
         let mut actions = vec![WindowUpdateFrame::new(0, data_len).to_frame()];
@@ -605,8 +682,26 @@ impl Http2Server {
             return self.rst_stream(stream_id, ec);
         }
 
+        // Extract Content-Length if present
+        let content_length = headers.iter()
+            .find(|(k, _)| k == b"content-length")
+            .and_then(|(_, v)| std::str::from_utf8(v).ok()?.parse::<u64>().ok());
+
+        if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+            s.content_length = content_length;
+            // Transition Idle -> Open before half-closing
+            if s.state == StreamState::Idle {
+                let _ = s.open();
+                eprintln!("[SERVER] process_complete_headers: opened stream {}", stream_id);
+            }
+        }
+
         let action = self.respond_with_200(stream_id, encoder);
+        eprintln!("[SERVER] process_complete_headers: after respond, stream state = {:?}",
+            self.stream_manager.get_stream(stream_id).map(|s| s.state));
         self.half_close_remote(stream_id);
+        eprintln!("[SERVER] process_complete_headers: after half_close_remote, stream state = {:?}",
+            self.stream_manager.get_stream(stream_id).map(|s| s.state));
         action
     }
 
@@ -910,6 +1005,35 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_handle_priority_self_referential_dependency() {
+        let mut server = Http2Server::new();
+        // Stream 1 depends on itself (exclusive)
+        let pf = PriorityFrame::new(1, true, 1, 16);
+        match server.handle_priority(&pf) {
+            FrameAction::WriteFrames(frames) => {
+                // Should be RST_STREAM
+                assert!(!frames.is_empty());
+                let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
+                assert_eq!(rst.stream_id, 1);
+                assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            }
+            other => panic!("expected RST_STREAM for self-referential PRIORITY, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_handle_priority_stream_zero() {
+        let mut server = Http2Server::new();
+        let pf = PriorityFrame::new(0, false, 0, 16);
+        match server.handle_priority(&pf) {
+            FrameAction::Goaway { error_code, .. } => {
+                assert_eq!(error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            }
+            other => panic!("expected Goaway for PRIORITY on stream 0, got {other:?}"),
+        }
+    }
+
     // ── HEADERS handling ──
 
     #[test]
@@ -1016,6 +1140,54 @@ mod tests {
     }
 
     // ── DATA handling ──
+
+    #[test]
+    fn test_handle_headers_self_referential_dependency() {
+        let mut server = Http2Server::new();
+        let mut encoder = Encoder::new();
+        let mut decoder = Decoder::new();
+        let mut expecting_continuation = false;
+        let mut continuation_stream_id = 0u32;
+
+        // HEADERS on stream 1 with exclusive dependency on itself
+        let headers = vec![
+            h(":method", "GET"),
+            h(":scheme", "https"),
+            h(":path", "/"),
+        ];
+        let block = encoder.encode(headers.iter().map(|(k, v)| (k.as_slice(), v.as_slice())));
+        // Manually construct HEADERS frame with priority info
+        // The HeadersFrame has exclusive=true and stream_dependency=1
+        let hf = HeadersFrame {
+            stream_id: 1,
+            end_stream: true,
+            exclusive: true,
+            stream_dependency: 1, // self-referential!
+            weight: 16,
+            padding: None,
+            header_block: block,
+        };
+        let frame = hf.to_frame();
+
+        let action = server.handle_headers(
+            &frame,
+            &mut Vec::new(),
+            &mut decoder,
+            &mut encoder,
+            &mut expecting_continuation,
+            &mut continuation_stream_id,
+        );
+
+        match action {
+            FrameAction::WriteFrames(frames) => {
+                assert!(!frames.is_empty());
+                let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
+                assert_eq!(rst.stream_id, 1);
+                assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+            }
+            other => panic!("expected RST_STREAM for self-referential HEADERS, got {other:?}"),
+        }
+    }
 
     #[test]
     fn test_handle_data_on_idle_stream() {

@@ -124,6 +124,8 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
     // Main frame loop
     let mut encoder = Encoder::new();
     let mut decoder = Decoder::new();
+    // Configure decoder with client's header table size setting
+    decoder.set_max_table_size(server.client_settings.header_table_size as usize);
     let mut header_block_buf = Vec::new();
     let mut expecting_continuation = false;
     let mut continuation_stream_id = 0u32;
@@ -163,8 +165,25 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
             break;
         }
 
+        // If we're expecting a CONTINUATION, only CONTINUATION frames are allowed.
+        // Any other frame type is a connection error (RFC 7540 §6.2).
+        if expecting_continuation && frame.frame_type != FrameType::Continuation {
+            write_goaway(
+                &mut tls_stream,
+                server.last_processed_stream_id,
+                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                b"Expected CONTINUATION frame",
+            );
+            break;
+        }
+
         let action = match frame.frame_type {
-            FrameType::Settings => server.handle_settings(&frame),
+            FrameType::Settings => {
+                let action = server.handle_settings(&frame);
+                // If settings changed, update decoder
+                decoder.set_max_table_size(server.client_settings.header_table_size as usize);
+                action
+            }
             FrameType::Ping => server.handle_ping(&frame),
             FrameType::WindowUpdate => server.handle_window_update(&frame),
             FrameType::RstStream => server.handle_rst_stream(&frame),
@@ -238,6 +257,10 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
     // the peer already closed their side. Sending more data would
     // trigger RST. If we got here via CloseConnection or client GOAWAY,
     // goaway_sent is already true.
+
+    // Graceful TCP shutdown to avoid RST
+    let _ = tls_stream.shutdown(std::net::Shutdown::Write);
+    let _ = tls_stream.shutdown(std::net::Shutdown::Both);
 
     Ok(())
 }

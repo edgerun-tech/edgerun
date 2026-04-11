@@ -66,6 +66,11 @@ impl TlsServerStream {
         self.stream.set_read_timeout(timeout)
     }
 
+    /// Shutdown the underlying TCP connection.
+    pub fn shutdown(&self, how: std::net::Shutdown) -> std::io::Result<()> {
+        self.stream.shutdown(how)
+    }
+
     fn send_alert(stream: &mut TcpStream, level: AlertLevel, alert: Alert) -> Result<()> {
         let msg = vec![level as u8, alert as u8];
         let record = TlsRecord {
