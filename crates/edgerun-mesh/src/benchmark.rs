@@ -209,6 +209,7 @@ fn node_id_with_byte(b: u8) -> NodeID {
     NodeID(bytes)
 }
 
+#[allow(dead_code)]
 fn node_id_with_pattern(v: u8) -> NodeID {
     let mut bytes = [0u8; 64];
     for b in bytes.iter_mut() {

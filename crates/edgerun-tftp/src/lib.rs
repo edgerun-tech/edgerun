@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+#![allow(dead_code)]
 //! Dependency-free TFTP server (RFC 1350) with RFC 2347/2348 option negotiation.
 //!
 //! # Architecture

@@ -155,17 +155,18 @@ impl TreeBuilder {
     pub fn handle_token(&mut self, token: &Token) {
         match self.insertion_mode {
 %s
-            _ => self.handle_fallback(token),
         }
     }
 
 %s
 
     /// Fallback handler for unimplemented insertion modes.
+    /// All 24 WHATWG modes are implemented — this is unreachable.
+    #[allow(dead_code, unreachable_code)]
     fn handle_fallback(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
@@ -346,7 +347,7 @@ impl TreeBuilder {
     }
 
     /// Action: INSERT — create element and push to stack.
-    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
         if VOID_ELEMENTS.contains(&name) {
@@ -519,7 +520,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 	hasEndCatchAll := false
 	for _, r := range startTags { if r.isAny { hasStartCatchAll = true; break } }
 	for _, r := range endTags { if r.isAny { hasEndCatchAll = true; break } }
-	if !hasStartCatchAll { startDispatch += "\n                _ => { self.insert(name, attrs, *self_closing); }" }
+	if !hasStartCatchAll { startDispatch += "\n                _ => { self.insert(name, _attrs, *_self_closing); }" }
 	if !hasEndCatchAll { endDispatch += "\n                _ => {\n                    if self.has_in_scope(name) { self.pop_until(name); }\n                    // otherwise: parse error, ignore\n                }" }
 
 	// Character handling
@@ -529,7 +530,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
                 self.insertion_mode = InsertionMode::%s;
                 self.handle_token(token);`, insertionModeToRust(reprocessMode))
 	} else if hasAction(charRule, html.TreeAction_TREE_ACTION_APPEND_CHARACTER) {
-		charCode = "if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }"
+		charCode = "if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }"
 	} else if hasAction(charRule, html.TreeAction_TREE_ACTION_PARSE_ERROR) && hasAction(charRule, html.TreeAction_TREE_ACTION_IGNORE) {
 		charCode = "// parse error, ignore character"
 	} else {
@@ -540,7 +541,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 	var commentCode string
 	if hasAction(commentRule, html.TreeAction_TREE_ACTION_APPEND_COMMENT) {
 		commentCode = `if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }`
@@ -594,7 +595,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
                 }`, startDispatch)
 		}
 	} else {
-		startBlock = "self.insert(name, attrs, *self_closing);"
+		startBlock = "self.insert(name, _attrs, *_self_closing);"
 	}
 
 	endBlock := ""
@@ -610,16 +611,16 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
     /// Generated from %d rules.
     fn handle_%s(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 %s
             }
             Token::EndTag { name } => {
                 %s
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 %s
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 %s
             }
             Token::Doctype => {
@@ -662,7 +663,7 @@ func tbActionsToRustWithMode(actions []html.TreeAction, popUntil string, isOther
 			parts = append(parts, "// parse error (no specific action)")
 		}
 	} else if len(parts) == 0 {
-		parts = append(parts, "self.insert(name, attrs, *self_closing);")
+		parts = append(parts, "self.insert(name, _attrs, *_self_closing);")
 	}
 	return strings.Join(parts, "\n                    ")
 }
@@ -685,7 +686,7 @@ func tbActionsToRust(actions []html.TreeAction, popUntil string) string {
 func treeActionToRust(a html.TreeAction, popUntil string) string {
 	switch a {
 	case html.TreeAction_TREE_ACTION_INSERT:
-		return "self.insert(name, attrs, *self_closing);"
+		return "self.insert(name, _attrs, *_self_closing);"
 	case html.TreeAction_TREE_ACTION_POP_UNTIL:
 		if popUntil != "" {
 			return fmt.Sprintf(`self.pop_until("%s");`, popUntil)
@@ -700,7 +701,7 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_REPROCESS:
 		return "" // handled by codegen via next_mode + loop
 	case html.TreeAction_TREE_ACTION_APPEND_CHARACTER:
-		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }`
+		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }`
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_RCDATA:
 		return "self.switch_to_rcdata();"
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_RAWTEXT:
@@ -710,11 +711,11 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_RESET_INSERTION_MODE:
 		return "self.reset_insertion_mode();"
 	case html.TreeAction_TREE_ACTION_INSERT_FOSTER:
-		return "self.insert_foster(name, attrs);"
+		return "self.insert_foster(name, _attrs);"
 	case html.TreeAction_TREE_ACTION_ACKNOWLEDGE_SELF_CLOSING:
 		return "" // self-closing flag is not tracked
 	case html.TreeAction_TREE_ACTION_APPEND_COMMENT:
-		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Comment(text.clone())); }`
+		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Comment(_text.clone())); }`
 	case html.TreeAction_TREE_ACTION_APPEND_DOCTYPE:
 		return "// DOCTYPE handled in Initial mode"
 	case html.TreeAction_TREE_ACTION_SET_FRAMESET_NOT_OK:

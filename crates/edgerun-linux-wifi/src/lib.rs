@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_must_use)]
+
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_linux_netif::{
     discover_network_interfaces, discover_network_interfaces_in, LinuxNetifBackend,

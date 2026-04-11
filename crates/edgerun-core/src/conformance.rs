@@ -1,4 +1,5 @@
 //! Conformance test harness — loads corpus/vectors-v0.1 and runs validators.
+#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

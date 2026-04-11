@@ -5,7 +5,6 @@
 //!
 //! This mirrors the algorithm proven in `edgerun-demo/src/main.rs` (measure_node + paint_node)
 //! but operates on the typed `RenderObject` tree instead of raw DOM nodes.
-#![cfg_attr(not(test), no_std)]
 extern crate alloc;
 use alloc::vec::Vec;
 

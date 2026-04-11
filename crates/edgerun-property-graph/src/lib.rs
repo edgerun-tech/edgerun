@@ -4,8 +4,6 @@
 //! their relationships: inheritance, layout/paint/composite effects,
 //! shorthand expansions, and animation behavior.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
 extern crate alloc;
 use alloc::{string::String, string::ToString, vec::Vec, collections::BTreeMap};
 

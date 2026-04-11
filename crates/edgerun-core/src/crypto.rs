@@ -58,10 +58,9 @@ pub struct HkdfSha256 {
 
 impl HkdfSha256 {
     pub fn new(salt: Option<&[u8]>, ikm: &[u8]) -> Self {
-        let (prk, hkdf) = Hkdf::<Sha256>::extract(salt, ikm);
+        let (_prk, hkdf) = Hkdf::<Sha256>::extract(salt, ikm);
         // We need the full HKDF object, not just the PRK.
         // Use expand_from_info on the extracted hkdf directly.
-        drop(prk); // We'll use the hkdf object which already has the PRK internally
         Self { inner: hkdf }
     }
 

@@ -1641,7 +1641,6 @@ impl<T: TpmTransport> TpmDevice<T> {
 
         let name_size = read_u16(&response, &mut offset, "createPrimary:name")? as usize;
         let name_start = offset;
-        offset += name_size;
 
         // Extract public key from outPublic (skip TPMT_PUBLIC header to get to unique)
         let pub_data = &response[out_public_start..out_public_start + out_public_size];

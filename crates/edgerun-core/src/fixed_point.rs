@@ -117,7 +117,7 @@ impl FixedPoint16 {
         let frac_4digits = ((frac_part as u64) * 10000 / 65536) as u32;
 
         let mut buf = [0u8; 16];
-        let mut len = 0;
+        let len;
 
         // Write integer part
         if int_part == 0 {

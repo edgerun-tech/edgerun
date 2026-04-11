@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Link-layer transport for the edgerun mesh.
 //!
 //! Provides three transport paths:

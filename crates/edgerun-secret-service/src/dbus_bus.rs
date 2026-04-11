@@ -219,7 +219,7 @@ pub fn read_one_message(stream: &mut UnixStream) -> io::Result<Option<Vec<u8>>> 
 
     let total_hf = 16 + hf_len;
     let aligned_hf = (total_hf + 7) & !7;
-    let pad = aligned_hf - total_hf;
+    let _pad = aligned_hf - total_hf;
     let total_len = aligned_hf + body_len;
 
     // Read the rest

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! File-based index — replaces SQLite.
 //!
 //! The index stores data as in-memory HashMaps, persisted to disk as
@@ -49,7 +50,7 @@ fn read_str(r: &mut impl Read) -> io::Result<String> {
 
 fn write_option_str(w: &mut impl Write, s: Option<&str>) -> io::Result<()> {
     match s {
-        Some(s) => { w.write_all(&[1])?; write_str(w, s); }
+        Some(s) => { w.write_all(&[1])?; write_str(w, s)?; }
         None => w.write_all(&[0])?,
     }
     Ok(())

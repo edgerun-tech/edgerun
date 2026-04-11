@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! A TLS 1.3 client implementation using workspace crypto primitives.
 //!
 //! # TLS 1.3 Handshake (1-RTT)

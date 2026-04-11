@@ -103,7 +103,6 @@ impl TreeBuilder {
             InsertionMode::InSelect => self.handle_in_select(token),
             InsertionMode::InSelectInTable => self.handle_in_select_in_table(token),
             InsertionMode::InTemplate => self.handle_in_template(token),
-            _ => self.handle_fallback(token),
         }
     }
 
@@ -111,7 +110,7 @@ impl TreeBuilder {
     /// Generated from 5 rules.
     fn handle_initial(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 _ => {
                     self.parse_errors += 1;
@@ -124,12 +123,12 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -148,10 +147,10 @@ impl TreeBuilder {
     /// Generated from 6 rules.
     fn handle_before_html(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
@@ -164,12 +163,12 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -187,13 +186,13 @@ impl TreeBuilder {
     /// Generated from 8 rules.
     fn handle_before_head(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "head" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
@@ -214,12 +213,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -237,48 +236,48 @@ impl TreeBuilder {
     /// Generated from 20 rules.
     fn handle_in_head(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "base" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "basefont" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "bgsound" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "head" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "link" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "meta" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "noframes" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "noscript" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "script" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_script_data();
                 }
                 "style" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "title" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rcdata();
                 }
                 _ => {
@@ -308,12 +307,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -331,7 +330,7 @@ impl TreeBuilder {
     /// Generated from 20 rules.
     fn handle_in_head_noscript(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "a" => {
                     self.parse_errors += 1;
@@ -393,10 +392,10 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -412,20 +411,20 @@ impl TreeBuilder {
     /// Generated from 11 rules.
     fn handle_after_head(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "body" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "frameset" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "head" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
@@ -451,12 +450,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -474,31 +473,31 @@ impl TreeBuilder {
     /// Generated from 171 rules.
     fn handle_in_body(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "a" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "abbr" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "address" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "article" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "aside" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "b" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "base" => {
                     self.parse_errors += 1;
@@ -513,86 +512,86 @@ impl TreeBuilder {
                     // ignore token
                 }
                 "big" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "blockquote" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "body" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "br" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "cite" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "code" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "dd" => {
                     if self.has_in_scope("dt") { self.pop_until("dt"); }
                     self.pop_until("dt");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "details" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "dfn" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "dialog" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "div" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "dl" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "dt" => {
                     if self.has_in_scope("dd") { self.pop_until("dd"); }
                     self.pop_until("dd");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "em" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "fieldset" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "figcaption" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "figure" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "footer" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "form" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "frameset" => {
                     self.parse_errors += 1;
@@ -601,64 +600,64 @@ impl TreeBuilder {
                 "h1" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "h2" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "h3" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "h4" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "h5" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "h6" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "header" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "hgroup" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "hr" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "html" => {
                     self.parse_errors += 1;
                 }
                 "i" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "img" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "input" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "li" => {
                     if self.has_in_list_item_scope("li") { self.pop_until("li"); }
                     self.pop_until("li");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "link" => {
                     self.parse_errors += 1;
@@ -667,12 +666,12 @@ impl TreeBuilder {
                 "main" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "menu" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "meta" => {
                     self.parse_errors += 1;
@@ -681,7 +680,7 @@ impl TreeBuilder {
                 "nav" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "noframes" => {
                     self.parse_errors += 1;
@@ -690,79 +689,79 @@ impl TreeBuilder {
                 "ol" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "p" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "pre" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "q" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "s" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "script" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_script_data();
                 }
                 "section" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "small" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "span" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "strong" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "style" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "sub" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "sup" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "table" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "textarea" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rcdata();
                 }
                 "title" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rcdata();
                 }
                 "u" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "ul" => {
                     if self.has_in_button_scope("p") { self.pop_until("p"); }
                     self.pop_until("p");
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 }
             }
@@ -935,12 +934,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -958,8 +957,8 @@ impl TreeBuilder {
     /// Generated from 8 rules.
     fn handle_text(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 match &name[..] {
@@ -987,10 +986,10 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1006,20 +1005,20 @@ impl TreeBuilder {
     /// Generated from 31 rules.
     fn handle_in_table(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "col" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "colgroup" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "form" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "input" => {
                     self.parse_errors += 1;
@@ -1027,12 +1026,12 @@ impl TreeBuilder {
                 }
                 "script" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_script_data();
                 }
                 "style" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "table" => {
@@ -1040,26 +1039,26 @@ impl TreeBuilder {
                     // ignore token
                 }
                 "tbody" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "td" => {
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 "tfoot" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "th" => {
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 "thead" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "tr" => {
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 _ => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 }
                 // Reprocess in next mode (otherwise rule)
@@ -1121,14 +1120,14 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1146,7 +1145,7 @@ impl TreeBuilder {
     /// Generated from 6 rules.
     fn handle_in_table_text(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 _ => {
                     self.parse_errors += 1;
@@ -1170,12 +1169,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1191,7 +1190,7 @@ impl TreeBuilder {
     /// Generated from 18 rules.
     fn handle_in_table_body(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
                     self.parse_errors += 1;
@@ -1207,12 +1206,12 @@ impl TreeBuilder {
                 }
                 "script" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_script_data();
                 }
                 "style" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "table" => {
@@ -1225,7 +1224,7 @@ impl TreeBuilder {
                 }
                 "td" => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 "tfoot" => {
                     self.parse_errors += 1;
@@ -1233,16 +1232,16 @@ impl TreeBuilder {
                 }
                 "th" => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
                 "thead" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "tr" => {
-                    self.insert_foster(name, attrs);
+                    self.insert_foster(name, _attrs);
                 }
-                _ => { self.insert(name, attrs, *self_closing); }
+                _ => { self.insert(name, _attrs, *_self_closing); }
                 }
             }
             Token::EndTag { name } => {
@@ -1262,14 +1261,14 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1287,7 +1286,7 @@ impl TreeBuilder {
     /// Generated from 18 rules.
     fn handle_in_row(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
                     self.parse_errors += 1;
@@ -1303,12 +1302,12 @@ impl TreeBuilder {
                 }
                 "script" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_script_data();
                 }
                 "style" => {
                     self.parse_errors += 1;
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                     self.switch_to_rawtext();
                 }
                 "table" => {
@@ -1320,14 +1319,14 @@ impl TreeBuilder {
                     // ignore token
                 }
                 "td" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "tfoot" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "th" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "thead" => {
                     self.parse_errors += 1;
@@ -1337,7 +1336,7 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                     // ignore token
                 }
-                _ => { self.insert(name, attrs, *self_closing); }
+                _ => { self.insert(name, _attrs, *_self_closing); }
                 }
             }
             Token::EndTag { name } => {
@@ -1359,14 +1358,14 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1384,7 +1383,7 @@ impl TreeBuilder {
     /// Generated from 15 rules.
     fn handle_in_cell(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
                     self.parse_errors += 1;
@@ -1414,7 +1413,7 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                 }
                 _ => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 }
             }
@@ -1432,12 +1431,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1455,7 +1454,7 @@ impl TreeBuilder {
     /// Generated from 14 rules.
     fn handle_in_caption(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
                     self.parse_errors += 1;
@@ -1485,7 +1484,7 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                 }
                 _ => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 }
             }
@@ -1500,12 +1499,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1523,10 +1522,10 @@ impl TreeBuilder {
     /// Generated from 6 rules.
     fn handle_in_column_group(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "col" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
@@ -1547,12 +1546,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // parse error, ignore character
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1570,20 +1569,20 @@ impl TreeBuilder {
     /// Generated from 3 rules.
     fn handle_after_body(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1601,15 +1600,15 @@ impl TreeBuilder {
     /// Generated from 4 rules.
     fn handle_in_frameset(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "frameset" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
-                _ => { self.insert(name, attrs, *self_closing); }
+                _ => { self.insert(name, _attrs, *_self_closing); }
                 }
             }
             Token::EndTag { name } => {
@@ -1623,10 +1622,10 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1642,18 +1641,18 @@ impl TreeBuilder {
     /// Generated from 2 rules.
     fn handle_after_frameset(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1671,25 +1670,25 @@ impl TreeBuilder {
     /// Generated from 4 rules.
     fn handle_after_after_body(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "html" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
-                _ => { self.insert(name, attrs, *self_closing); }
+                _ => { self.insert(name, _attrs, *_self_closing); }
                 }
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1707,18 +1706,18 @@ impl TreeBuilder {
     /// Generated from 2 rules.
     fn handle_after_after_frameset(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // no character rule defined
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1736,14 +1735,14 @@ impl TreeBuilder {
     /// Generated from 9 rules.
     fn handle_in_select(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "noscript" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "template" => {
-                    self.insert(name, attrs, *self_closing);
+                    self.insert(name, _attrs, *_self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
@@ -1767,12 +1766,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -1790,7 +1789,7 @@ impl TreeBuilder {
     /// Generated from 20 rules.
     fn handle_in_select_in_table(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "caption" => {
                     self.parse_errors += 1;
@@ -1866,12 +1865,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
+            Token::Character(_text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InSelect;
                 self.handle_token(token);
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1887,7 +1886,7 @@ impl TreeBuilder {
     /// Generated from 30 rules.
     fn handle_in_template(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
                 match &name[..] {
                 "base" => {
                     self.parse_errors += 1;
@@ -2041,12 +2040,12 @@ impl TreeBuilder {
                 }
                 }
             }
-            Token::Character(text) => {
-                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            Token::Character(_text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(_text.clone())); }
             }
-            Token::Comment(text) => {
+            Token::Comment(_text) => {
                 if let Some(parent) = self.open_elements.last_mut() {
-                    parent.children.push(Node::Comment(text.clone()));
+                    parent.children.push(Node::Comment(_text.clone()));
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
@@ -2063,10 +2062,12 @@ impl TreeBuilder {
 
 
     /// Fallback handler for unimplemented insertion modes.
+    /// All 24 WHATWG modes are implemented — this is unreachable.
+    #[allow(dead_code, unreachable_code)]
     fn handle_fallback(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs, self_closing } => {
-                self.insert(name, attrs, *self_closing);
+            Token::StartTag { name, attrs: _attrs, self_closing: _self_closing } => {
+                self.insert(name, _attrs, *_self_closing);
             }
             Token::EndTag { name } => {
                 self.pop_until(name);
@@ -2247,7 +2248,7 @@ impl TreeBuilder {
     }
 
     /// Action: INSERT — create element and push to stack.
-    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
         if VOID_ELEMENTS.contains(&name) {
