@@ -9,7 +9,6 @@
 //!   cargo run --bin ci_check -- --generate        # Generate golden image
 //!   cargo run --bin ci_check -- --max-mismatch 0.01  # Allow 0.01% mismatch
 
-use std::time::Instant;
 use std::process::ExitCode;
 
 use edgerun_bench_correctness::diff_engine;

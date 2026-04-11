@@ -145,7 +145,7 @@ pub fn load_png(path: &str) -> Option<(Vec<u8>, u32, u32)> {
 pub fn generate_diff_image(
     cpu: &[u8],
     gpu: &[u8],
-    width: u32,
+    _width: u32,
     config: &DiffConfig,
 ) -> Vec<u8> {
     let total = (cpu.len() / 4).min(gpu.len() / 4);
@@ -204,7 +204,7 @@ pub fn build_report(
 
     // Compare against golden if provided
     if let Some(path) = golden_path {
-        if let Some((golden, gw, gh)) = load_png(path) {
+        if let Some((golden, gw, _gh)) = load_png(path) {
             if gw == width {
                 let cpu_result = compare_pixels_with_threshold(cpu_pixels, &golden, width, config);
                 let gpu_result = compare_pixels_with_threshold(gpu_pixels, &golden, width, config);

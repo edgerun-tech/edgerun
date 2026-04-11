@@ -132,7 +132,7 @@ fn adjust_command(cmd: &RasterCommand, tile: &Tile) -> Option<RasterCommand> {
         RasterCommand::Text { x, y, text, r, g, b } => {
             let text_w = (text.len() as u32) * 8;
             let tx1 = *x + text_w;
-            let ty1 = *y + 8;
+            let _ty1 = *y + 8;
             if tx1 <= tile.x || *y >= tile.y + tile.h { return None; }
             Some(RasterCommand::Text {
                 x: x.saturating_sub(tile.x),

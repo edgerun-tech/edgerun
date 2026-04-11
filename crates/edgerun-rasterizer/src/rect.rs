@@ -2,8 +2,6 @@
 //! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 use crate::framebuffer::Framebuffer;
 use crate::border_lut;
-use crate::blend_lut;
-
 /// Draw a filled rectangle with optional alpha.
 pub fn fill_rect(fb: &mut Framebuffer<'_>, x: u32, y: u32, w: u32, h: u32, r: u8, g: u8, b: u8, alpha: u8) {
     if alpha == 0 { return; }

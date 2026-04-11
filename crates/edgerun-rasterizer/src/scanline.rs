@@ -5,7 +5,6 @@ use alloc::vec::Vec;
 
 use crate::framebuffer::Framebuffer;
 use crate::rect;
-use crate::color_lut;
 use crate::text_bitmap;
 use crate::gradient::{self, GradientStop};
 

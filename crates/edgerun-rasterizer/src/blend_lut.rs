@@ -6,7 +6,7 @@ use libm::sqrt;
 /// Uses integer math only — no floats.
 
 #[inline(always)]
-pub fn blend_normal(src: u8, dst: u8) -> u8 { src }
+pub fn blend_normal(src: u8, _dst: u8) -> u8 { src }
 
 #[inline(always)]
 pub fn blend_multiply(src: u8, dst: u8) -> u8 {
@@ -77,7 +77,7 @@ pub fn blend_exclusion(src: u8, dst: u8) -> u8 {
 }
 
 #[inline(always)]
-pub fn blend_hue(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
+pub fn blend_hue(_src_r: u8, _src_g: u8, _src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
     let lum = (dst_r as u32 * 77 + dst_g as u32 * 150 + dst_b as u32 * 29) / 256;
     *out_r = lum.min(255) as u8;
     *out_g = lum.min(255) as u8;
@@ -85,7 +85,7 @@ pub fn blend_hue(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, dst_b: u
 }
 
 #[inline(always)]
-pub fn blend_saturation(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
+pub fn blend_saturation(_src_r: u8, _src_g: u8, _src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
     let lum = (dst_r as u32 * 77 + dst_g as u32 * 150 + dst_b as u32 * 29) / 256;
     *out_r = lum.min(255) as u8;
     *out_g = lum.min(255) as u8;
@@ -95,13 +95,14 @@ pub fn blend_saturation(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, d
 #[inline(always)]
 pub fn blend_color(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
     let lum = (dst_r as u32 * 77 + dst_g as u32 * 150 + dst_b as u32 * 29) / 256;
+    let _ = lum;
     *out_r = src_r.min(255) as u8;
     *out_g = src_g.min(255) as u8;
     *out_b = src_b.min(255) as u8;
 }
 
 #[inline(always)]
-pub fn blend_luminosity(src_r: u8, src_g: u8, src_b: u8, dst_r: u8, dst_g: u8, dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
+pub fn blend_luminosity(src_r: u8, src_g: u8, src_b: u8, _dst_r: u8, _dst_g: u8, _dst_b: u8, out_r: &mut u8, out_g: &mut u8, out_b: &mut u8) {
     let lum = (src_r as u32 * 77 + src_g as u32 * 150 + src_b as u32 * 29) / 256;
     *out_r = lum.min(255) as u8;
     *out_g = lum.min(255) as u8;
