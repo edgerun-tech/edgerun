@@ -14,7 +14,6 @@ use super::Result;
 /// HTTP/3 connection
 pub struct Http3Connection {
     /// Underlying QUIC connection
-    #[allow(dead_code)]
     quic: QuicConn,
     /// QPACK encoder
     qpack_encoder: QpackEncoder,
@@ -39,6 +38,8 @@ pub struct Http3Connection {
     server_name: String,
     /// Control stream ID
     control_stream_id: Option<u64>,
+    /// Buffered CRYPTO data to send
+    pending_crypto: Vec<u8>,
 }
 
 impl Http3Connection {
@@ -58,6 +59,7 @@ impl Http3Connection {
             max_push_id: 0,
             server_name: server_name.to_string(),
             control_stream_id: None,
+            pending_crypto: Vec::new(),
         };
 
         // Send connection preface: create control stream and send SETTINGS
@@ -68,11 +70,11 @@ impl Http3Connection {
 
     /// Send connection preface (control stream + SETTINGS)
     fn send_connection_preface(&mut self) -> Result<()> {
-        // Create control stream (unidirectional, stream type 0x00)
+        // Create control stream (unidirectional)
         let control_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
 
-        // Stream type indicator
+        // Stream type indicator: 0x00 = control stream
         let mut stream_data = Vec::new();
         Self::encode_varint(stream_types::CONTROL, &mut stream_data);
 
@@ -82,9 +84,9 @@ impl Http3Connection {
         };
         stream_data.extend_from_slice(&settings_frame.to_bytes());
 
-        // Send via QUIC
-        // In a full implementation, this would open a unidirectional QUIC stream
-        // and write the data
+        // Send on QUIC unidirectional stream
+        self.quic.send_stream_data(control_stream_id, &stream_data, false)
+            .map_err(|e| format!("Failed to send control stream: {}", e))?;
 
         self.control_stream_id = Some(control_stream_id);
 
@@ -108,17 +110,20 @@ impl Http3Connection {
         let headers_frame = Http3Frame::Headers { header_block };
         let frame_data = headers_frame.to_bytes();
 
+        self.quic
+            .send_stream_data(stream_id, &frame_data, body.is_none())
+            .map_err(|e| format!("Failed to send headers: {}", e))?;
+
         // Send DATA frame if body present
         if let Some(body_data) = body {
             let data_frame = Http3Frame::Data {
                 payload: body_data,
             };
-            // frame_data.extend(data_frame.to_bytes());
-            let _ = data_frame;
+            let data_bytes = data_frame.to_bytes();
+            self.quic
+                .send_stream_data(stream_id, &data_bytes, true)
+                .map_err(|e| format!("Failed to send data: {}", e))?;
         }
-
-        // Write to QUIC stream
-        // self.quic.send_stream_data(stream_id, &frame_data)?;
 
         Ok(stream_id)
     }
@@ -131,16 +136,21 @@ impl Http3Connection {
         body: Option<Vec<u8>>,
     ) -> Result<()> {
         let headers_frame = Http3Frame::Headers { header_block };
-        let mut frame_data = headers_frame.to_bytes();
+        let frame_data = headers_frame.to_bytes();
+
+        self.quic
+            .send_stream_data(stream_id, &frame_data, body.is_none())
+            .map_err(|e| format!("Failed to send headers: {}", e))?;
 
         if let Some(body_data) = body {
             let data_frame = Http3Frame::Data {
                 payload: body_data,
             };
-            frame_data.extend(data_frame.to_bytes());
+            let data_bytes = data_frame.to_bytes();
+            self.quic
+                .send_stream_data(stream_id, &data_bytes, true)
+                .map_err(|e| format!("Failed to send data: {}", e))?;
         }
-
-        // self.quic.send_stream_data(stream_id, &frame_data)?;
 
         if let Some(stream) = self.streams.get_mut(&stream_id) {
             stream.half_close_local();
@@ -151,16 +161,37 @@ impl Http3Connection {
 
     /// Poll for incoming frames on a stream
     pub fn poll_stream(&mut self, stream_id: u64) -> Result<Option<Http3Frame>> {
-        // In a full implementation, read from QUIC stream and parse HTTP/3 frames
-        Ok(None)
+        // Try to receive data from QUIC
+        match self.quic.recv_stream_data() {
+            Ok(Some((recv_stream_id, data, _fin))) => {
+                let _ = recv_stream_id;
+                // Parse HTTP/3 frame from the data
+                if data.is_empty() {
+                    return Ok(None);
+                }
+                // Try to parse as HTTP/3 frame
+                match Http3Frame::from_bytes(&data) {
+                    Ok((frame, _consumed)) => Ok(Some(frame)),
+                    Err(_) => Ok(None),
+                }
+            }
+            Ok(None) => Ok(None),
+            Err(_) => Ok(None),
+        }
     }
 
     /// Send GOAWAY
     pub fn goaway(&mut self, stream_id: u64) -> Result<()> {
         let frame = Http3Frame::Goaway { stream_id };
-        // Send on control stream
-        // self.quic.send_stream_data(self.control_stream_id.unwrap(), &frame.to_bytes())?;
-        let _ = frame;
+        let frame_data = frame.to_bytes();
+
+        let control_id = self.control_stream_id
+            .ok_or_else(|| "No control stream established".to_string())?;
+
+        self.quic
+            .send_stream_data(control_id, &frame_data, false)
+            .map_err(|e| format!("Failed to send GOAWAY: {}", e))?;
+
         Ok(())
     }
 
@@ -213,6 +244,7 @@ mod tests {
             max_push_id: 0,
             server_name: "example.com".to_string(),
             control_stream_id: None,
+            pending_crypto: Vec::new(),
         };
 
         assert_eq!(conn.next_bidi_stream_id, 0);

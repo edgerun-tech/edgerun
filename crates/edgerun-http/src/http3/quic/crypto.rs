@@ -9,12 +9,12 @@
 //! - `ProtectionKeys` — derived traffic keys for Initial/Handshake/1-RTT levels
 //! - Hardcoded test keys for unit testing the packet layer
 
-use std::collections::HashMap;
-
-use aes_gcm::{
+use edgerun_crypto::aes_gcm::{
     aead::{Aead, KeyInit},
     Aes128Gcm, Aes256Gcm, Key, Nonce,
 };
+
+use std::collections::HashMap;
 
 /// Crypto phase / encryption level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +49,7 @@ impl AeadAlgorithm {
 }
 
 /// Keys for protecting packets at a given level
+#[derive(Clone)]
 pub struct ProtectionKeys {
     /// AEAD algorithm
     pub algorithm: AeadAlgorithm,

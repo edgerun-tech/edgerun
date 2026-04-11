@@ -10,7 +10,7 @@ pub use frame::QuicFrame;
 pub use packet::{PacketType, QuicPacket};
 pub use transport::QuicTransport;
 
-use crypto::{AeadAlgorithm, CryptoPhase};
+use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
 use std::net::UdpSocket;
 
@@ -37,15 +37,13 @@ pub struct QuicConnection {
 impl QuicConnection {
     /// Create client connection (does not perform handshake)
     pub fn client(socket: UdpSocket, server: &str) -> Result<Self, String> {
-        let local_cid = crypto::ConnectionId::random();
-        let remote_cid = crypto::ConnectionId::random();
+        let local_cid = ConnectionId::random();
+        let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
         let crypto = QuicCrypto::new();
 
         // Set up test keys for Initial level so the packet layer works
-        let test_keys = ProtectionKeys::test_keys();
-        let mut crypto_clone = QuicCrypto::new();
-        crypto_clone.set_keys(CryptoPhase::Initial, test_keys);
+        let test_keys = ProtKeys::test_keys();
 
         Ok(QuicConnection {
             socket,
@@ -61,10 +59,9 @@ impl QuicConnection {
 
     /// Create a dummy connection for testing
     pub fn dummy() -> Self {
-        use std::net::{IpAddr, Ipv4Addr};
         let socket = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
-        let local_cid = crypto::ConnectionId::random();
-        let remote_cid = crypto::ConnectionId::random();
+        let local_cid = ConnectionId::random();
+        let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
 
         QuicConnection {
@@ -177,9 +174,9 @@ impl QuicConnection {
     }
 
     /// Set protection keys after handshake
-    pub fn set_protection_keys(&mut self, keys: ProtectionKeys) {
-        self.crypto.set_keys(CryptoPhase::Application, keys);
-        self.protection = Some(PacketProtection::new(&keys));
+    pub fn set_protection_keys(&mut self, keys: &ProtKeys) {
+        self.crypto.set_keys(CryptoPhase::Application, keys.clone());
+        self.protection = Some(PacketProtection::new(keys));
     }
 
     /// Set non-blocking mode
