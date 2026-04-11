@@ -240,13 +240,17 @@ LLVM auto-vectorizes the scalar loop so well that our manual AVX2 adds no benefi
 ### Critical Gaps (blocks end-to-end HTML+CSS rendering)
 
 #### G1. CSS Value Type Parsing
-**Status**: ❌ Not started
-**Impact**: High — currently all CSS values are parsed as raw strings
-**What's needed**:
-- `css_value_types.proto` has 66 value types (em, rem, px, vw, vh, deg, s, Hz)
-- Generate `CssValue` enum: `Length { value: f64, unit: LengthUnit }`, `Angle`, `Time`, `Percentage`, etc.
-- Parser that converts `32px` → `CssValue::Length(32.0, Px)`
-- All behavioral crates (rasterizer, layout, cascade) need to consume typed values, not strings
+**Status**: ✅ Complete — `edgerun-css-value-parser`
+**Impact**: Resolved — behavioral crates now consume typed values
+**What was built**:
+- `edgerun-css-value-parser` crate (101 tests, `no_std`)
+- Parses 30+ length units (px, em, rem, vh, vw, dvh, etc.) with `to_px()` conversion
+- Parses all color formats: named (148), hex (#RGB/#RGBA/#RRGGBB/#RRGGBBAA), rgb(), rgba(), hsl(), hsla(), hwb(), lab(), lch(), oklab(), oklch(), currentColor, transparent
+- Parses 100+ CSS keywords (auto, none, bold, flex, center, etc.) + 5 CSS-wide keywords
+- Parses calc() with nested expressions, min()/max()/clamp(), multiplication, division
+- Parses var(), url(), percentages, plain numbers, identifiers
+- `match_unit()` for unit-only matching inside calc expressions
+- `LengthUnit::is_absolute()` distinguishes context-dependent vs fixed units
 
 #### G2. Text Shaping & Real Fonts
 **Status**: ❌ Not started
@@ -259,21 +263,24 @@ LLVM auto-vectorizes the scalar loop so well that our manual AVX2 adds no benefi
 - Currently: `text_bitmap.rs` has 128 glyphs, most are placeholder boxes
 
 #### G3. Style Inheritance (End-to-End)
-**Status**: ⚠️ Partial — GPU cascade does it, but demo doesn't use GPU cascade
-**Impact**: High — parent styles don't propagate in the demo path
-**What's needed**:
-- The GPU cascade engine (`layout.wgsl` Pass 1) implements inheritance for font-size and color
-- But `edgerun-demo` uses the CPU cascade (`edgerun-css-cascade`) which doesn't walk up the DOM tree
-- Need to connect the GPU cascade or fix the CPU cascade to do tree-walking inheritance
+**Status**: ✅ Complete — `edgerun-html-render::computed_style`
+**Impact**: Resolved — parent styles propagate to children via CSS cascade
+**What was built**:
+- `computed_style.rs` module maps `BTreeMap<String, String>` declarations → typed `ComputedStyle`
+- Style inheritance: `compute_style(decls, parent_style)` uses parent's computed values for relative units
+- `em`/`rem` font sizes resolve against inherited parent font size
+- `line-height` as unitless number multiplies computed font-size
+- 17 tests covering font-size, color, font-weight, opacity, position, z-index, border-width
+- `layout_builder.rs` now uses `compute_style()` instead of hardcoded tag-based defaults
 
 #### G4. Real HTML/CSS Parsing → Render Pipeline
-**Status**: ⚠️ Partial — demo works but is hardcoded
+**Status**: ⚠️ Partial — `edgerun-html-render::layout_builder` now uses typed CSS values, but demo still uses ad-hoc parsing
 **What's needed**:
-- `edgerun-demo` has a hardcoded HTML string and CSS string
-- No command-line argument to render arbitrary files
-- No integration with `edgerun-html-render` crate's parser
+- `edgerun-demo` has hardcoded HTML and CSS strings, no `--file` argument
+- No integration with `edgerun-html-render` crate's pipeline
 - No support for external stylesheets, `<link>`, `<style>` blocks
 - No `@import`, `@media`, `@font-face` handling
+- **Progress**: `layout_builder.rs` now consumes CSS declarations via `compute_style()` instead of hardcoded tag-based defaults
 
 ### Rendering Gaps
 
@@ -359,10 +366,12 @@ Behavioral crates:
   edgerun-rasterizer  ← color_lut, border_lut, blend_lut, gradient, scanline, framebuffer, simd_blend, tile
   edgerun-layout      ← render_object, box_model, paint_command, color_convert, text_layout
   edgerun-css-cascade ← specificity, origin/importance, combinators, attr selectors, pseudo-classes
+  edgerun-css-value-parser ← 30+ length units, all color formats, calc(), keywords, var(), url()
   edgerun-wgpu        ← WGSL shaders, GPU layout compute, GPU raster
   edgerun-edit        ← syn 2 AST-level Rust code editor
     ↓ (wired together)
 edgerun-demo: HTML+CSS → DOM → cascade → two-pass layout → raster → PNG
+edgerun-html-render: HTML+CSS → DOM → cascade → computed_style → RenderObject tree
 
 Analysis layers (13-18):
   edgerun-css-minifier    → proto-indexed varint encoding (60-70% compression)
@@ -384,6 +393,7 @@ Analysis layers (13-18):
 7. **Dual renderers (CPU + GPU)** — enables deterministic proof and visual regression detection
 8. **Per-property cascade** — each CSS property resolves independently (color from one rule, font-size from another)
 9. **Proto canonical encoding** — CSS property names as varint indices, not strings (60-70% size reduction)
+10. **Computed style with inheritance** — `compute_style(decls, parent)` resolves relative units (em/rem) against parent's computed values, enabling proper CSS cascade in the layout pipeline
 
 ## Test Summary
 
@@ -405,5 +415,7 @@ Analysis layers (13-18):
 | 16 | Complexity analyzer | **3** | ✅ Pass |
 | 17 | Replay engine | **5** | ✅ Pass |
 | 18 | Rule optimizer | **5** | ✅ Pass |
+| G1 | CSS value parser | **101** | ✅ Pass |
+| G1+ | Computed style | **17** | ✅ Pass |
 | Conformance | edgerun-conformance | **42** | ✅ Pass |
-| **Total** | | **74** | **All passing** |
+| **Total** | | **197** | **All passing** |
