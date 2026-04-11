@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-demo-wgpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+edgerun-wgpu = { path = "../edgerun-wgpu" }
+edgerun-html-render = { path = "../edgerun-html-render" }
+edgerun-css-cascade = { path = "../edgerun-css-cascade" }
+edgerun-rasterizer = { path = "../edgerun-rasterizer" }
+wgpu = "29"
+pollster = "0.4"
+png = "0.17"

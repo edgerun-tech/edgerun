@@ -1,0 +1,13 @@
+[package]
+name = "edgerun-property-graph"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "CSS Property Knowledge Graph — query the spec as a graph"
+
+[dependencies]
+edgerun-rasterizer = { path = "../edgerun-rasterizer", optional = true }
+
+[features]
+default = []
+rasterizer = ["edgerun-rasterizer"]

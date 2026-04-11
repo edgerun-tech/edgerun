@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-complexity-analyzer"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Layer 16: CSS complexity analyzer — score stylesheets on maintainability and rendering cost"
+
+[dependencies]
+edgerun-property-graph = { path = "../edgerun-property-graph" }

@@ -1,0 +1,9 @@
+[package]
+name = "edgerun-replay"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Layer 17: Deterministic replay engine — record and replay rendering sessions byte-for-byte"
+
+[dependencies]
+edgerun-rasterizer = { path = "../edgerun-rasterizer" }

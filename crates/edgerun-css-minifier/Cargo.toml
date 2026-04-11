@@ -1,0 +1,11 @@
+[package]
+name = "edgerun-css-minifier"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Layer 13: CSS minification via proto enum canonical forms"
+
+[dependencies]
+
+[dev-dependencies]
+edgerun-property-graph = { path = "../edgerun-property-graph" }

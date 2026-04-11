@@ -1,0 +1,10 @@
+[package]
+name = "edgerun-spec-watch"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Layer 10: Monitor W3C/WHATWG specs for changes"
+
+[dependencies]
+edgerun-property-graph = { path = "../edgerun-property-graph" }
+walkdir = "2"

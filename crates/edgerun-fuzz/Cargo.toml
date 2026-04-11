@@ -1,0 +1,10 @@
+[package]
+name = "edgerun-fuzz"
+version.workspace = true
+edition.workspace = true
+publish = false
+description = "Proto-driven fuzz testing for edgerun crates"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+edgerun-rasterizer = { path = "../edgerun-rasterizer" }
