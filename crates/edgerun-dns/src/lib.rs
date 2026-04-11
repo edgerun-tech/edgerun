@@ -49,6 +49,7 @@ pub mod client;
 pub mod server;
 pub mod zone;
 pub mod record;
+pub mod name;
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
@@ -56,3 +57,4 @@ pub use client::DnsClient;
 pub use server::{DnsServer, DnsServerConfig};
 pub use zone::DnsZone;
 pub use record::{DnsRecordType, DnsRecordData};
+pub use name::{validate_name, normalize_name, NameError};

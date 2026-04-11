@@ -349,6 +349,12 @@ impl DnsRecordData {
             _ => Ok(Self::Raw(data.to_vec())),
         }
     }
+
+    /// Check if this OPT record has the DNSSEC OK (DO) flag set (RFC 3225).
+    /// Returns `false` for non-OPT records.
+    pub fn is_do(&self) -> bool {
+        matches!(self, Self::OPT { flags, .. } if flags & 0x8000 != 0)
+    }
 }
 
 // ---------------------------------------------------------------------------

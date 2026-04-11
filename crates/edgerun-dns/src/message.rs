@@ -626,6 +626,25 @@ impl DnsMessage {
             additional: Vec::new(),
         }
     }
+
+    // -----------------------------------------------------------------------
+    // EDNS0 helpers (RFC 6891)
+    // -----------------------------------------------------------------------
+
+    /// Get the EDNS0 OPT record from the additional section, if present.
+    pub fn opt_record(&self) -> Option<&DnsRecord> {
+        self.additional.iter().find(|r| r.rtype == DnsRecordType::OPT)
+    }
+
+    /// Check if the client sent an EDNS0 query.
+    pub fn has_edns0(&self) -> bool {
+        self.opt_record().is_some()
+    }
+
+    /// Get the client's advertised UDP payload size (from EDNS0), defaulting to 512.
+    pub fn udp_payload_size(&self) -> u16 {
+        self.opt_record().map(|r| r.rclass).unwrap_or(512)
+    }
 }
 
 // ---------------------------------------------------------------------------
