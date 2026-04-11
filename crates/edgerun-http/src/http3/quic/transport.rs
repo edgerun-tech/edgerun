@@ -95,10 +95,110 @@ impl QuicTransport {
             QuicFrame::ConnectionClose {
                 error_code, reason, ..
             } => {
-                // Connection closed by peer
+                // Connection closed by peer (transport error)
                 let _ = (error_code, reason);
             }
-            _ => {}
+            QuicFrame::ConnectionCloseApplication {
+                error_code, reason, ..
+            } => {
+                // Connection closed by peer (application error)
+                let _ = (error_code, reason);
+            }
+            QuicFrame::ResetStream {
+                stream_id, error_code, final_size,
+            } => {
+                // Remote side reset a stream
+                let _ = (stream_id, error_code, final_size);
+            }
+            QuicFrame::StopSending {
+                stream_id, error_code,
+            } => {
+                // Remote side requests we stop sending on a stream
+                let _ = (stream_id, error_code);
+            }
+            QuicFrame::Ack {
+                largest_acknowledged,
+                ack_delay,
+                ack_range_count,
+                first_ack_range,
+                ack_ranges,
+            } => {
+                // Update RTT estimate based on ACK
+                let _ = (largest_acknowledged, ack_delay, ack_range_count, first_ack_range, ack_ranges);
+            }
+            QuicFrame::AckECN {
+                largest_acknowledged,
+                ack_delay,
+                ..
+            } => {
+                // ACK with ECN counts — same RTT handling as plain ACK
+                let _ = (largest_acknowledged, ack_delay);
+            }
+            QuicFrame::MaxStreamsBidi { max_streams } => {
+                self.params.initial_max_streams_bidi = *max_streams;
+            }
+            QuicFrame::MaxStreamsUni { max_streams } => {
+                self.params.initial_max_streams_uni = *max_streams;
+            }
+            QuicFrame::DataBlocked { max_data } => {
+                // Peer is blocked — could send MAX_DATA to help
+                let _ = max_data;
+            }
+            QuicFrame::StreamDataBlocked {
+                stream_id, max_stream_data,
+            } => {
+                // Peer is blocked on stream — could send MAX_STREAM_DATA
+                let _ = (stream_id, max_stream_data);
+            }
+            QuicFrame::StreamsBlockedBidi { max_streams } => {
+                // Peer is blocked on bidi stream count
+                let _ = max_streams;
+            }
+            QuicFrame::StreamsBlockedUni { max_streams } => {
+                // Peer is blocked on uni stream count
+                let _ = max_streams;
+            }
+            QuicFrame::PathChallenge { data } => {
+                // Respond with PATH_RESPONSE
+                let _ = data;
+            }
+            QuicFrame::PathResponse { data } => {
+                // Path validation complete
+                let _ = data;
+            }
+            QuicFrame::NewConnectionId {
+                sequence_number,
+                retire_prior_to,
+                connection_id,
+                stateless_reset_token,
+            } => {
+                // New connection ID for migration
+                let _ = (sequence_number, retire_prior_to, connection_id, stateless_reset_token);
+            }
+            QuicFrame::RetireConnectionId { sequence_number } => {
+                // Retire a connection ID
+                let _ = sequence_number;
+            }
+            QuicFrame::NewToken { token } => {
+                // New token for future connections
+                let _ = token;
+            }
+            QuicFrame::Crypto { offset, data } => {
+                // CRYPTO frame — handshake data
+                let _ = (offset, data);
+            }
+            QuicFrame::Stream {
+                stream_id,
+                offset,
+                fin,
+                data,
+            } => {
+                // STREAM frame — application data
+                let _ = (stream_id, offset, fin, data);
+            }
+            QuicFrame::Padding { .. } | QuicFrame::Ping | QuicFrame::HandshakeDone => {
+                // No-op frames
+            }
         }
         self.update_activity();
     }
