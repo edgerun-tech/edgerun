@@ -9,6 +9,7 @@ use super::record::{DnsRecordType, DnsRecordData, encode_domain_name, decode_dom
 // Constants
 // ---------------------------------------------------------------------------
 
+/// Standard DNS port number.
 pub const DNS_PORT: u16 = 53;
 const DNS_HEADER_SIZE: usize = 12;
 
@@ -17,23 +18,38 @@ const DNS_HEADER_SIZE: usize = 12;
 // ---------------------------------------------------------------------------
 
 /// DNS message header.
+///
+/// 12 bytes, always present at the start of every DNS message.
 #[derive(Debug, Clone)]
 pub struct DnsHeader {
+    /// Transaction ID — copied into the response to match query/response.
     pub id: u16,
+    /// `true` if this message is a response, `false` if a query.
     pub is_response: bool,
+    /// Type of query (`Query`, `Notify`, `Update`, …).
     pub opcode: DnsOpcode,
+    /// `true` if the server is authoritative for the domain.
     pub authoritative: bool,
+    /// `true` if the response was truncated (use TCP for full response).
     pub truncated: bool,
+    /// `true` if the client wants recursive resolution.
     pub recursion_desired: bool,
+    /// `true` if the server supports recursion.
     pub recursion_available: bool,
+    /// Result code (`NoError`, `NXDomain`, `ServFail`, …).
     pub response_code: DnsResponseCode,
+    /// Number of entries in the question section.
     pub question_count: u16,
+    /// Number of resource records in the answer section.
     pub answer_count: u16,
+    /// Number of resource records in the authority section.
     pub authority_count: u16,
+    /// Number of resource records in the additional section.
     pub additional_count: u16,
 }
 
 impl DnsHeader {
+    /// Create a query header.
     pub fn query(id: u16, recursion_desired: bool) -> Self {
         Self {
             id,
@@ -51,6 +67,7 @@ impl DnsHeader {
         }
     }
 
+    /// Create a response header with the given response code.
     pub fn response(id: u16, rcode: DnsResponseCode) -> Self {
         Self {
             id,
@@ -146,18 +163,24 @@ impl DnsHeader {
 // Opcode & RCODE
 // ---------------------------------------------------------------------------
 
-/// DNS opcode.
+/// DNS opcode — the type of DNS operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DnsOpcode {
+    /// Standard query.
     Query = 0,
+    /// Inverse query (deprecated, RFC 3425).
     IQuery = 1,
+    /// Server status request.
     Status = 2,
+    /// Zone change notification (RFC 1996).
     Notify = 4,
+    /// Dynamic update (RFC 2136).
     Update = 5,
 }
 
 impl DnsOpcode {
+    /// Parse an opcode from a raw u8 value. Returns `None` for unknown values.
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             0 => Some(Self::Query),
@@ -170,24 +193,36 @@ impl DnsOpcode {
     }
 }
 
-/// DNS response code.
+/// DNS response code (RCODE) — indicates the result of a query.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DnsResponseCode {
+    /// No error — the query was successful.
     NoError = 0,
+    /// Format error — the server could not interpret the query.
     FormErr = 1,
+    /// Server failure — the server encountered an internal problem.
     ServFail = 2,
+    /// Non-existent domain — the domain name does not exist.
     NXDomain = 3,
+    /// Not implemented — the server does not support this operation.
     NotImp = 4,
+    /// Refused — the server refused to perform the operation.
     Refused = 5,
+    /// Name should not exist but does (dynamic update).
     YXDomain = 6,
+    /// RR set should not exist but does (dynamic update).
     YXRRSet = 7,
+    /// RR set should exist but does not (dynamic update).
     NXRRSet = 8,
+    /// Server not authoritative for the zone.
     NotAuth = 9,
+    /// Server not a member of the zone (TSIG).
     NotZone = 10,
 }
 
 impl DnsResponseCode {
+    /// Parse a response code from a raw u8 value. Returns `None` for unknown values.
     pub fn from_u8(v: u8) -> Option<Self> {
         match v {
             0 => Some(Self::NoError),
@@ -205,6 +240,7 @@ impl DnsResponseCode {
         }
     }
 
+    /// Human-readable string representation of the response code.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::NoError => "NOERROR",
@@ -227,14 +263,20 @@ impl DnsResponseCode {
 // ---------------------------------------------------------------------------
 
 /// A DNS question section entry.
+///
+/// Contains the domain name, record type, and class being queried.
 #[derive(Debug, Clone)]
 pub struct DnsQuestion {
+    /// Domain name being queried (e.g. "www.example.com").
     pub name: String,
+    /// Record type requested (A, AAAA, MX, …).
     pub qtype: DnsRecordType,
+    /// Network class — always `1` for IN (Internet).
     pub qclass: u16,
 }
 
 impl DnsQuestion {
+    /// Create a new question for the given name and record type.
     pub fn new(name: String, qtype: DnsRecordType) -> Self {
         Self {
             name,
@@ -286,17 +328,25 @@ impl DnsQuestion {
 // Resource Record
 // ---------------------------------------------------------------------------
 
-/// A DNS resource record (answer, authority, or additional).
+/// A DNS resource record (answer, authority, or additional section).
+///
+/// Holds one piece of DNS data — an IP address, a mail server, a text string, etc.
 #[derive(Debug, Clone)]
 pub struct DnsRecord {
+    /// Domain name this record belongs to.
     pub name: String,
+    /// Record type (A, AAAA, CNAME, …).
     pub rtype: DnsRecordType,
+    /// Network class — always `1` for IN (Internet).
     pub rclass: u16,
+    /// Time-to-live in seconds — how long resolvers may cache this record.
     pub ttl: u32,
+    /// The actual record data (IP, hostname, text, …).
     pub data: DnsRecordData,
 }
 
 impl DnsRecord {
+    /// Create an A record (IPv4 address).
     pub fn a(name: String, ip: Ipv4Addr, ttl: u32) -> Self {
         Self {
             name,
@@ -307,6 +357,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create an AAAA record (IPv6 address).
     pub fn aaaa(name: String, ip: std::net::Ipv6Addr, ttl: u32) -> Self {
         Self {
             name,
@@ -317,6 +368,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create a CNAME record (canonical name / alias).
     pub fn cname(name: String, target: String, ttl: u32) -> Self {
         Self {
             name,
@@ -327,6 +379,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create an NS record (name server).
     pub fn ns(name: String, nameserver: String, ttl: u32) -> Self {
         Self {
             name,
@@ -337,6 +390,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create an MX record (mail exchange).
     pub fn mx(name: String, priority: u16, exchange: String, ttl: u32) -> Self {
         Self {
             name,
@@ -347,6 +401,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create a TXT record (arbitrary text, e.g. SPF records).
     pub fn txt(name: String, text: String, ttl: u32) -> Self {
         Self {
             name,
@@ -357,6 +412,7 @@ impl DnsRecord {
         }
     }
 
+    /// Create a PTR record (reverse DNS pointer).
     pub fn ptr(name: String, ptr_name: String, ttl: u32) -> Self {
         Self {
             name,
@@ -364,6 +420,25 @@ impl DnsRecord {
             rclass: 1,
             ttl,
             data: DnsRecordData::PTR(ptr_name),
+        }
+    }
+
+    /// Create an EDNS0 OPT pseudo-record (RFC 6891).
+    ///
+    /// The `rclass` field holds the UDP payload size, and `ttl` encodes
+    /// extended RCODE, version, and flags per the RFC.
+    pub fn opt(udp_payload_size: u16, ext_rcode: u8, version: u8, flags: u16, options: Vec<u8>) -> Self {
+        Self {
+            name: ".".to_string(),
+            rtype: DnsRecordType::OPT,
+            rclass: udp_payload_size,
+            ttl: ((ext_rcode as u32) << 24) | ((version as u32) << 16) | (flags as u32),
+            data: DnsRecordData::OPT {
+                ext_rcode,
+                version,
+                flags,
+                options,
+            },
         }
     }
 
@@ -434,13 +509,20 @@ impl DnsRecord {
 // Full message
 // ---------------------------------------------------------------------------
 
-/// A complete DNS message.
+/// A complete DNS message (query or response).
+///
+/// Contains a header, one question, and zero or more answer/authority/additional records.
 #[derive(Debug, Clone)]
 pub struct DnsMessage {
+    /// Message header — transaction ID, flags, and record counts.
     pub header: DnsHeader,
+    /// Question section — typically one entry per query.
     pub questions: Vec<DnsQuestion>,
+    /// Answer section — records matching the queried name and type.
     pub answers: Vec<DnsRecord>,
+    /// Authority section — name servers responsible for the domain.
     pub authority: Vec<DnsRecord>,
+    /// Additional section — extra helpful records (glue records, etc.).
     pub additional: Vec<DnsRecord>,
 }
 

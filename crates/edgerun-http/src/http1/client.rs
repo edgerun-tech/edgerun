@@ -1,14 +1,16 @@
 //! Async HTTP/1.1 client.
 //!
 //! Provides [`Client`] for making HTTP/1.1 requests with:
+//! - Async DNS resolution via [`edgerun_dns::DnsClient`]
 //! - Async connect via [`edgerun_rt::ConnectFuture`] with configurable timeout
 //! - Chunked transfer encoding support
 //! - Full body reading (buffered; streaming bodies require holding the reader)
 
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
+use edgerun_dns::DnsClient;
 use edgerun_rt::{
     AsyncWriteExt, AsyncTcpStream, AsyncReadHalf,
     ConnectFuture,
@@ -19,6 +21,9 @@ use crate::http1::buf_reader::BufReader;
 use crate::http1::request::Request;
 use crate::http1::response::Response;
 use crate::{Error, HeaderMap, Method, Result, StatusCode};
+
+/// DNS servers to try in order for hostname resolution.
+const DEFAULT_DNS_SERVERS: &[&str] = &["8.8.8.8:53", "1.1.1.1:53"];
 
 /// Async HTTP/1.1 client.
 ///
@@ -37,19 +42,31 @@ use crate::{Error, HeaderMap, Method, Result, StatusCode};
 /// ```
 pub struct Client {
     connect_timeout: Duration,
+    dns_timeout: Duration,
 }
 
 impl Client {
     /// Create a new client with default settings.
+    ///
+    /// DNS resolution uses the first available server from
+    /// `8.8.8.8:53` or `1.1.1.1:53`. Literal IP addresses
+    /// skip DNS entirely.
     pub fn new() -> Self {
         Client {
             connect_timeout: Duration::from_secs(10),
+            dns_timeout: Duration::from_secs(5),
         }
     }
 
     /// Set the connection timeout.
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
+        self
+    }
+
+    /// Set the DNS resolution timeout.
+    pub fn with_dns_timeout(mut self, timeout: Duration) -> Self {
+        self.dns_timeout = timeout;
         self
     }
 
@@ -120,9 +137,9 @@ impl Client {
     // ------------------------------------------------------------------
     /// Execute an HTTP request.
     ///
-    /// Connects to the server, sends the request, reads the full response
-    /// (headers + body), and returns a [`Response`] with the body buffered
-    /// in memory.
+    /// Resolves the hostname via [`edgerun_dns::DnsClient`], connects,
+    /// sends the request, reads the full response (headers + body),
+    /// and returns a [`Response`] with the body buffered in memory.
     ///
     /// For streaming response bodies, use [`Self::execute_streaming`].
     pub async fn execute(&self, request: &Request) -> Result<Response> {
@@ -132,17 +149,14 @@ impl Client {
         let host = uri.host()
             .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
         let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
-        let addr = format!("{}:{}", host, port);
 
-        let stream = self.connect(&addr).await?;
+        let stream = self.resolve_and_connect(host, port).await?;
         let (read_half, mut write_half) = stream.split();
 
-        // Write request
         let request_bytes = request.to_http_bytes();
         write_half.write_all(&request_bytes).await
             .map_err(Error::Network)?;
 
-        // Read response
         Self::read_response(read_half, is_head).await
     }
 
@@ -160,25 +174,57 @@ impl Client {
     ) -> Result<(Response, AsyncBodyReader<AsyncReadHalf>)> {
         let uri = request.uri();
         let is_head = request.method() == &Method::HEAD;
+    /// Resolve a hostname via edgerun-dns (or use it directly if it's an IP),
+    /// then connect via TCP with timeout.
+    async fn resolve_and_connect(&self, host: &str, port: u16) -> Result<Arc<AsyncTcpStream>> {
+        // If the host is already an IP address, skip DNS.
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            let addr = SocketAddr::new(ip, port);
+            return self.connect_sock(&addr).await;
+        }
 
-        let host = uri.host()
-            .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-        let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
+        // Try DNS resolution.
+        match self.dns_resolve(host).await {
+            Ok(resolved) => return self.connect_sock(&SocketAddr::new(resolved, port)).await,
+            Err(_) => {}
+        }
+
+        // DNS failed — fall back to sync resolution as last resort.
         let addr = format!("{}:{}", host, port);
-
-        let stream = self.connect(&addr).await?;
-        let (read_half, mut write_half) = stream.split();
-
-        let request_bytes = request.to_http_bytes();
-        write_half.write_all(&request_bytes).await
-            .map_err(Error::Network)?;
-
-        Self::read_response_headers(read_half, is_head).await
+        self.connect(&addr).await
     }
 
-    // ------------------------------------------------------------------
-    // Internal helpers
-    // ------------------------------------------------------------------
+    /// Resolve hostname via DNS, trying A then AAAA records.
+    async fn dns_resolve(&self, host: &str) -> Result<IpAddr> {
+        let mut local_dns = DnsClient::new(DEFAULT_DNS_SERVERS[0])
+            .map_err(|e| Error::ProtocolError(format!("DNS client creation failed: {}", e)))?;
+        local_dns.set_timeout(self.dns_timeout);
+
+        // Try A records first.
+        let ips = edgerun_rt::timeout(self.dns_timeout, local_dns.query_a(host)).await
+            .map_err(|_| Error::Timeout)?
+            .map_err(|e| Error::ProtocolError(format!("DNS A query failed: {}", e)))?;
+
+        if let Some(ip) = ips.first() {
+            return Ok(IpAddr::V4(*ip));
+        }
+
+        // Fall back to AAAA.
+        let ips6 = edgerun_rt::timeout(self.dns_timeout, local_dns.query_aaaa(host)).await
+            .map_err(|_| Error::Timeout)?
+            .map_err(|e| Error::ProtocolError(format!("DNS AAAA query failed: {}", e)))?;
+
+        if let Some(ip) = ips6.first() {
+            return Ok(IpAddr::V6(*ip));
+        }
+
+        Err(Error::InvalidUri(format!("DNS resolution failed for {}", host)))
+    }
+
+    /// Connect to a specific SocketAddr with timeout.
+    async fn connect_sock(&self, addr: &SocketAddr) -> Result<Arc<AsyncTcpStream>> {
+        self.connect(&addr.to_string()).await
+    }
 
     /// Connect with timeout.
     async fn connect(&self, addr: &str) -> Result<Arc<AsyncTcpStream>> {
@@ -286,11 +332,15 @@ mod tests {
     fn test_client_new() {
         let client = Client::new();
         assert_eq!(client.connect_timeout, Duration::from_secs(10));
+        assert_eq!(client.dns_timeout, Duration::from_secs(5));
     }
 
     #[test]
     fn test_client_with_timeout() {
-        let client = Client::new().with_connect_timeout(Duration::from_secs(30));
+        let client = Client::new()
+            .with_connect_timeout(Duration::from_secs(30))
+            .with_dns_timeout(Duration::from_secs(10));
         assert_eq!(client.connect_timeout, Duration::from_secs(30));
+        assert_eq!(client.dns_timeout, Duration::from_secs(10));
     }
 }

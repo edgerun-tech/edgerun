@@ -14,6 +14,7 @@ categories = ["cryptography", "network-programming"]
 libc = "0.2"
 edgerun-crypto.workspace = true
 edgerun-core = { path = "../edgerun-core" }
+edgerun-rt = { path = "../edgerun-rt" }
 
 [dev-dependencies]
 hex-literal = "0.4"

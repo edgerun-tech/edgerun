@@ -34,6 +34,8 @@ pub enum DnsRecordType {
     AXFR = 252,
     /// Any record (wildcard query)
     ANY = 255,
+    /// OPT pseudo-record for EDNS0 (RFC 6891).
+    OPT = 41,
 }
 
 impl DnsRecordType {
@@ -51,6 +53,7 @@ impl DnsRecordType {
             33 => Some(Self::SRV),
             252 => Some(Self::AXFR),
             255 => Some(Self::ANY),
+            41 => Some(Self::OPT),
             _ => None,
         }
     }
@@ -74,6 +77,7 @@ impl DnsRecordType {
             Self::SRV => "SRV",
             Self::AXFR => "AXFR",
             Self::ANY => "ANY",
+            Self::OPT => "OPT",
         }
     }
 }
@@ -101,29 +105,56 @@ pub enum DnsRecordData {
     NS(String),
     /// PTR record — pointer/reverse name.
     PTR(String),
-    /// MX record — mail exchange (priority, exchange).
-    MX { priority: u16, exchange: String },
-    /// TXT record — text strings.
+    /// Mail exchange — mail server with a priority (lower = preferred).
+    MX {
+        /// Priority — lower values are preferred.
+        priority: u16,
+        /// Hostname of the mail server.
+        exchange: String,
+    },
+    /// Text record — arbitrary text (SPF, DKIM, verification strings).
     TXT(String),
-    /// SOA record — start of authority.
+    /// Start of authority — zone metadata (serial, refresh, retry, expire).
     SOA {
+        /// Primary name server for the zone.
         mname: String,
+        /// Email of the responsible administrator (with `@` replaced by `.`).
         rname: String,
+        /// Zone serial number — incremented on each change.
         serial: u32,
+        /// Seconds between zone refresh checks.
         refresh: u32,
+        /// Seconds between retry attempts after a failed refresh.
         retry: u32,
+        /// Seconds after which the zone expires if not refreshed.
         expire: u32,
+        /// Minimum TTL — used as a default for negative caching.
         minimum: u32,
     },
-    /// SRV record — service location.
+    /// Service locator — specifies a host and port for a service.
     SRV {
+        /// Priority — lower values are preferred.
         priority: u16,
+        /// Weight — relative load distribution among same-priority targets.
         weight: u16,
+        /// TCP or UDP port the service listens on.
         port: u16,
+        /// Hostname of the machine providing the service.
         target: String,
     },
-    /// Unknown or uninterpreted record data (raw bytes).
+    /// Unknown or uninterpreted raw record data.
     Raw(Vec<u8>),
+    /// EDNS0 OPT pseudo-record data (RFC 6891).
+    OPT {
+        /// Extended RCODE upper bits.
+        ext_rcode: u8,
+        /// EDNS0 version (must be 0).
+        version: u8,
+        /// Flags — bit 15 is DO (DNSSEC OK).
+        flags: u16,
+        /// Raw option data (RFC 6891 options).
+        options: Vec<u8>,
+    },
 }
 
 impl DnsRecordData {
@@ -196,6 +227,14 @@ impl DnsRecordData {
                 buf
             }
             (_, DnsRecordData::Raw(data)) => data.clone(),
+            (DnsRecordType::OPT, DnsRecordData::OPT { ext_rcode, version, flags, options }) => {
+                let mut buf = Vec::with_capacity(4 + options.len());
+                buf.push(*ext_rcode);
+                buf.push(*version);
+                buf.extend_from_slice(&flags.to_be_bytes());
+                buf.extend_from_slice(options);
+                buf
+            }
             _ => Vec::new(),
         }
     }
@@ -285,6 +324,26 @@ impl DnsRecordData {
                     weight,
                     port,
                     target,
+                })
+            }
+            DnsRecordType::OPT => {
+                if data.len() < 4 {
+                    return Ok(Self::OPT {
+                        ext_rcode: 0,
+                        version: 0,
+                        flags: 0,
+                        options: data.to_vec(),
+                    });
+                }
+                let ext_rcode = data[0];
+                let version = data[1];
+                let flags = u16::from_be_bytes([data[2], data[3]]);
+                let options = data[4..].to_vec();
+                Ok(Self::OPT {
+                    ext_rcode,
+                    version,
+                    flags,
+                    options,
                 })
             }
             _ => Ok(Self::Raw(data.to_vec())),

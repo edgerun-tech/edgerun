@@ -34,6 +34,7 @@
 #![warn(missing_docs)]
 
 pub mod alert;
+pub mod async_tls;
 pub mod certificate;
 pub mod certificate_gen;
 pub mod cipher;
@@ -42,6 +43,8 @@ pub mod key_exchange;
 pub mod prf;
 pub mod record;
 pub mod server;
+
+pub use async_tls::{AsyncTlsStream, AsyncTlsServerStream};
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
