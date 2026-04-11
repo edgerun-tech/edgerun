@@ -2,8 +2,6 @@
 //!
 //! No libc crate — just direct `extern "C"` declarations and `std::os::raw`.
 
-#![allow(dead_code)]
-
 use std::ffi::CString;
 use std::io;
 use std::os::raw::{c_char, c_int, c_long, c_uint, c_ulong, c_void};

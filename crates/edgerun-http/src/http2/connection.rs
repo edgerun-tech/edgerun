@@ -80,7 +80,7 @@ impl<S: Read + Write> Connection<S> {
 
     /// Create a new HTTP/2 server connection
     pub fn server(stream: S) -> Result<Self> {
-        let conn = Connection {
+        let mut conn = Connection {
             stream,
             state: ConnectionState::Init,
             local_settings: Settings::new(),
@@ -95,7 +95,42 @@ impl<S: Read + Write> Connection<S> {
             write_buffer: Vec::new(),
         };
 
+        // Read and validate client connection preface
+        conn.receive_preface()?;
+
+        // Send initial SETTINGS
+        conn.send_initial_settings()?;
+
         Ok(conn)
+    }
+
+    /// Read and validate client connection preface
+    fn receive_preface(&mut self) -> Result<()> {
+        let mut preface = [0u8; CONNECTION_PREFACE.len()];
+        self.stream.read_exact(&mut preface)?;
+
+        if preface != CONNECTION_PREFACE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid HTTP/2 connection preface",
+            )
+            .into());
+        }
+
+        Ok(())
+    }
+
+    /// Send initial SETTINGS frame (server side)
+    fn send_initial_settings(&mut self) -> Result<()> {
+        let settings_frame = SettingsFrame::new(self.local_settings.to_entries());
+        let frame_bytes = settings_frame.to_frame().to_bytes();
+        self.stream.write_all(&frame_bytes)?;
+        self.stream.flush()?;
+
+        self.state = ConnectionState::PrefaceSent;
+        self.pending_settings = true;
+
+        Ok(())
     }
 
     /// Send connection preface
@@ -500,5 +535,15 @@ mod tests {
 
         assert_eq!(conn.local_settings().max_frame_size, 16384);
         assert_eq!(conn.remote_settings().initial_window_size, 65535);
+    }
+
+    #[test]
+    fn test_connection_server_receives_preface() {
+        // Provide client connection preface in the mock stream
+        let mut data = CONNECTION_PREFACE.to_vec();
+        let mock = Cursor::new(data);
+        let conn = Connection::server(mock).unwrap();
+        assert_eq!(conn.state, ConnectionState::PrefaceSent);
+        assert_eq!(conn.local_settings().max_frame_size, 16384);
     }
 }

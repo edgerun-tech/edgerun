@@ -16,7 +16,6 @@
 pub mod json;
 pub use json::*;
 
-pub mod syscalls;
 pub mod seccomp;
 pub mod userns;
 pub mod cgroups;
@@ -31,13 +30,19 @@ mod lifecycle;
 mod hooks;
 mod init;
 pub mod state;
+pub mod syscalls;
 pub mod cli;
 
 // Re-export public API
 pub use bundle::{create_bundle, write_bundle};
 pub use cgroups::shares_to_weight;
 pub use config_builder::{ContainerProcessConfig, ContainerConfigBuilder};
-pub use container::{run_bundle, run_spec, run_spec_with_id, start_bundle, start_spec, start_spec_with_id, ForkedChild, save_created_state, signal_start, setup_container_cgroups, run_poststart_hooks, update_state_running, into_running_container, run_poststop_and_cleanup, RunningContainer, delete_container};
+pub use lifecycle::{
+    run_bundle, run_spec, run_spec_with_id, start_bundle, start_spec, start_spec_with_id,
+    ForkedChild, save_created_state, signal_start, setup_container_cgroups,
+    run_poststart_hooks, update_state_running, into_running_container,
+    run_poststop_and_cleanup, RunningContainer, delete_container,
+};
 pub use rootfs::{apply_whiteouts, build_rootfs};
 pub use hooks::{
     ContainerState,
@@ -49,9 +54,6 @@ pub use error::{
     OciError, LifecycleError, RootfsError, SeccompError,
     CgroupError, ConfigError, FifoError, CapabilityError, NamespaceError,
 };
-
-// Thin re-exports so `container` module still works as a facade
-mod container;
 
 // ===========================================================================
 // Namespace helpers (need to be here since they use syscalls::ns)

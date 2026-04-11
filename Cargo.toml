@@ -59,6 +59,7 @@ members = [
   "crates/edgerun-edit",
   "crates/edgerun-css-cascade",
   "crates/edgerun-css-values",
+  "crates/edgerun-css-value-parser",
   "crates/edgerun-dom",
   "crates/edgerun-contain",
   "crates/edgerun-writing-modes",

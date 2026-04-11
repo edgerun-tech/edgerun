@@ -3,8 +3,6 @@
 //! Supports all 30 CSS length units from css_values.proto plus angle,
 //! time, frequency, and resolution units.
 
-use alloc::string::String;
-
 /// CSS length unit — matches `LengthUnit` enum from css_values.proto.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LengthUnit {
@@ -164,12 +162,53 @@ pub fn parse_resolution(input: &str) -> Option<Length> {
     Some(Length { value, unit })
 }
 
+/// Match a CSS unit at the start of the string, returning (unit, suffix_len).
+/// This matches ONLY the unit — no number prefix. Used by calc parser.
+pub(crate) fn match_unit(input: &str) -> Option<(LengthUnit, usize)> {
+    // Try longest unit names first to avoid ambiguity (e.g. "dvh" before "dv", "vh" before "v")
+    const UNITS: &[(LengthUnit, &str)] = &[
+        (LengthUnit::Dvmin, "dvmin"), (LengthUnit::Dvmax, "dvmax"),
+        (LengthUnit::Lvmin, "lvmin"), (LengthUnit::Lvmax, "lvmax"),
+        (LengthUnit::Svmin, "svmin"), (LengthUnit::Svmax, "svmax"),
+        (LengthUnit::Rcap, "rcap"), (LengthUnit::Rch, "rch"), (LengthUnit::Ric, "ric"),
+        (LengthUnit::Rlh, "rlh"), (LengthUnit::Rex, "rex"),
+        (LengthUnit::Dpcm, "dpcm"), (LengthUnit::Dppx, "dppx"),
+        (LengthUnit::Svw, "svw"), (LengthUnit::Svh, "svh"), (LengthUnit::Svi, "svi"),
+        (LengthUnit::Svb, "svb"), (LengthUnit::Lvw, "lvw"), (LengthUnit::Lvh, "lvh"),
+        (LengthUnit::Lvi, "lvi"), (LengthUnit::Lvb, "lvb"),
+        (LengthUnit::Dvw, "dvw"), (LengthUnit::Dvh, "dvh"), (LengthUnit::Dvi, "dvi"),
+        (LengthUnit::Dvb, "dvb"),
+        (LengthUnit::Vmin, "vmin"), (LengthUnit::Vmax, "vmax"),
+        (LengthUnit::Grad, "grad"), (LengthUnit::Turn, "turn"),
+        (LengthUnit::Khz, "khz"), (LengthUnit::Dpi, "dpi"),
+        (LengthUnit::Cap, "cap"), (LengthUnit::Rem, "rem"),
+        (LengthUnit::Vw, "vw"), (LengthUnit::Vh, "vh"),
+        (LengthUnit::Vi, "vi"), (LengthUnit::Vb, "vb"),
+        (LengthUnit::Em, "em"), (LengthUnit::Ex, "ex"),
+        (LengthUnit::Ch, "ch"), (LengthUnit::Ic, "ic"),
+        (LengthUnit::Lh, "lh"),
+        (LengthUnit::Px, "px"), (LengthUnit::Cm, "cm"),
+        (LengthUnit::Mm, "mm"), (LengthUnit::Pt, "pt"),
+        (LengthUnit::Pc, "pc"), (LengthUnit::Q, "q"),
+        (LengthUnit::In, "in"), (LengthUnit::Fr, "fr"),
+        (LengthUnit::Deg, "deg"), (LengthUnit::Rad, "rad"),
+        (LengthUnit::S, "s"), (LengthUnit::Ms, "ms"),
+        (LengthUnit::Hz, "hz"), (LengthUnit::X, "x"),
+    ];
+
+    for &(unit, suffix) in UNITS {
+        if input.starts_with(suffix) {
+            return Some((unit, suffix.len()));
+        }
+    }
+    None
+}
+
 /// Split a dimension string into (numeric_part, unit).
 /// E.g. "32px" → ("32", LengthUnit::Px)
-fn split_dimension(input: &str) -> Option<(&str, LengthUnit)> {
+pub(crate) fn split_dimension(input: &str) -> Option<(&str, LengthUnit)> {
     // Find the split point between number and unit
     let bytes = input.as_bytes();
-    let mut split_idx = 0;
 
     // Skip sign
     let mut i = 0;
@@ -196,8 +235,7 @@ fn split_dimension(input: &str) -> Option<(&str, LengthUnit)> {
         return None;
     }
 
-    split_idx = i;
-    let unit_str = &input[split_idx..];
+    let unit_str = &input[i..];
 
     let unit = match unit_str {
         // Length units — try longest matches first to avoid ambiguity
@@ -235,12 +273,37 @@ fn split_dimension(input: &str) -> Option<(&str, LengthUnit)> {
         _ => return None,
     };
 
-    Some((&input[..split_idx], unit))
+    Some((&input[..i], unit))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_split_dimension_simple() {
+        let result = split_dimension("10px");
+        assert!(result.is_some());
+        let (num, unit) = result.unwrap();
+        assert_eq!(num, "10");
+        assert_eq!(unit, LengthUnit::Px);
+    }
+
+    #[test]
+    fn test_match_unit_px() {
+        let result = match_unit("px");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().0, LengthUnit::Px);
+    }
+
+    #[test]
+    fn test_match_unit_with_trailing() {
+        let result = match_unit("px + 5px");
+        assert!(result.is_some());
+        let (unit, len) = result.unwrap();
+        assert_eq!(unit, LengthUnit::Px);
+        assert_eq!(len, 2);
+    }
 
     #[test]
     fn test_parse_simple_px() {

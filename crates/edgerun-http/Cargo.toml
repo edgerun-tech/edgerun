@@ -16,6 +16,7 @@ tls = ["edgerun-tls"]
 
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls", optional = true }
+edgerun-crypto = { path = "../edgerun-crypto" }
 hpack-patched = "0.3"
 
 [[bin]]

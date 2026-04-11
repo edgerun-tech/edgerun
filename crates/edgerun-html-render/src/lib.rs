@@ -5,4 +5,5 @@ extern crate alloc;
 
 pub mod html_parser;
 pub mod css_parser;
+pub mod computed_style;
 pub mod layout_builder;

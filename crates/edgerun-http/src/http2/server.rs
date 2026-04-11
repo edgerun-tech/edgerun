@@ -340,14 +340,19 @@ impl Http2Server {
             );
         }
 
-        self.update_last_stream(stream_id);
-
         // Check stream state BEFORE creating/transitioning
         let state_before = self.stream_manager.get_stream(stream_id).map(|s| s.state);
-        eprintln!("[SERVER] handle_headers: stream_id={}, state_before={:?}", stream_id, state_before);
-        match state_before.unwrap_or(StreamState::Idle) {
+        // If the stream doesn't exist but its ID is <= last_processed_stream_id,
+        // it was already closed and cleaned up. Treat as Closed.
+        let effective_state = match state_before {
+            Some(s) => s,
+            None if stream_id <= self.last_processed_stream_id => StreamState::Closed,
+            None => StreamState::Idle,
+        };
+        match effective_state {
             StreamState::Closed => {
                 // HEADERS on closed stream = connection error (RFC 7540 §5.1)
+                self.update_last_stream(stream_id);
                 return self.goaway(
                     self.last_processed_stream_id,
                     ErrorCode::STREAM_CLOSED.to_u32(),
@@ -365,6 +370,8 @@ impl Http2Server {
             }
             _ => {}
         }
+
+        self.update_last_stream(stream_id);
 
         // Get or create stream
         if self.stream_manager.get_or_create_stream(stream_id).is_err() {
@@ -692,16 +699,15 @@ impl Http2Server {
             // Transition Idle -> Open before half-closing
             if s.state == StreamState::Idle {
                 let _ = s.open();
-                eprintln!("[SERVER] process_complete_headers: opened stream {}", stream_id);
             }
         }
 
         let action = self.respond_with_200(stream_id, encoder);
-        eprintln!("[SERVER] process_complete_headers: after respond, stream state = {:?}",
-            self.stream_manager.get_stream(stream_id).map(|s| s.state));
+        // Server also sends END_STREAM, so close the stream completely
+        if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+            let _ = s.half_close_local();  // Open/HalfClosedRemote -> HalfClosedLocal/Closed
+        }
         self.half_close_remote(stream_id);
-        eprintln!("[SERVER] process_complete_headers: after half_close_remote, stream state = {:?}",
-            self.stream_manager.get_stream(stream_id).map(|s| s.state));
         action
     }
 

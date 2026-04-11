@@ -25,12 +25,11 @@ mod keywords;
 mod calc;
 
 pub use lengths::{LengthUnit, Length, parse_length, parse_angle, parse_time, parse_frequency, parse_resolution};
-pub use colors::{parse_color, parse_hash_color, HexColor};
+pub use colors::{parse_color, parse_hex_color, HexColor};
 pub use keywords::{CssKeyword, parse_keyword, parse_css_wide_keyword};
 pub use calc::{CalcExpr, CalcTerm, CalcFactor, parse_calc};
 
-use alloc::string::String;
-use edgerun_color::{CssColor, NamedColor};
+use edgerun_color::CssColor;
 
 /// A parsed CSS value.
 ///
@@ -96,17 +95,17 @@ pub fn parse_css_value(input: &str) -> Option<CssValue> {
     if let Some(length) = parse_length(input) {
         return Some(CssValue::Length { value: length.value, unit: length.unit });
     }
-    if let Some(angle) = parse_angle(input) {
-        return Some(CssValue::Length { value: angle.value, unit: LengthUnit::Deg });
+    if let Some(dim) = parse_angle(input) {
+        return Some(CssValue::Length { value: dim.value, unit: dim.unit });
     }
-    if let Some(time) = parse_time(input) {
-        return Some(CssValue::Length { value: time.value, unit: LengthUnit::S });
+    if let Some(dim) = parse_time(input) {
+        return Some(CssValue::Length { value: dim.value, unit: dim.unit });
     }
-    if let Some(freq) = parse_frequency(input) {
-        return Some(CssValue::Length { value: freq.value, unit: LengthUnit::Hz });
+    if let Some(dim) = parse_frequency(input) {
+        return Some(CssValue::Length { value: dim.value, unit: dim.unit });
     }
-    if let Some(res) = parse_resolution(input) {
-        return Some(CssValue::Length { value: res.value, unit: LengthUnit::Dpi });
+    if let Some(dim) = parse_resolution(input) {
+        return Some(CssValue::Length { value: dim.value, unit: dim.unit });
     }
 
     // 7. Percentage
@@ -207,21 +206,10 @@ fn parse_url(input: &str) -> Option<alloc::string::String> {
     Some(inner.into())
 }
 
-/// Attempt to parse a function call: `name(args...)`
-/// Returns (name, args_string) or None.
-fn parse_function_call(input: &str) -> Option<(alloc::string::String, alloc::string::String)> {
-    let paren_pos = input.find('(')?;
-    if !input.ends_with(')') {
-        return None;
-    }
-    let name = input[..paren_pos].trim().into();
-    let args = input[paren_pos + 1..input.len() - 1].trim().into();
-    Some((name, args))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_color::NamedColor;
 
     // --- parse_css_value: Lengths ---
 
@@ -272,7 +260,7 @@ mod tests {
     #[test]
     fn test_parse_turn() {
         let v = parse_css_value("0.5turn").unwrap();
-        assert!(matches!(v, CssValue::Length { value: 0.5, unit: LengthUnit::Deg }));
+        assert!(matches!(v, CssValue::Length { value: 0.5, unit: LengthUnit::Turn }));
     }
 
     // --- parse_css_value: Times ---
@@ -286,7 +274,7 @@ mod tests {
     #[test]
     fn test_parse_ms() {
         let v = parse_css_value("500ms").unwrap();
-        assert!(matches!(v, CssValue::Length { value: 0.5, unit: LengthUnit::S }));
+        assert!(matches!(v, CssValue::Length { value: 500.0, unit: LengthUnit::Ms }));
     }
 
     // --- parse_css_value: Percentages ---
@@ -525,22 +513,22 @@ mod tests {
 
     #[test]
     fn test_length_to_px() {
-        let px = Length { value: 1.0, unit: LengthUnit::In }.to_px();
+        let px = Length { value: 1.0, unit: LengthUnit::In }.to_px().unwrap();
         assert!((px - 96.0).abs() < 0.01);
 
-        let pt = Length { value: 72.0, unit: LengthUnit::Pt }.to_px();
+        let pt = Length { value: 72.0, unit: LengthUnit::Pt }.to_px().unwrap();
         assert!((pt - 96.0).abs() < 0.01);
 
-        let cm = Length { value: 2.54, unit: LengthUnit::Cm }.to_px();
+        let cm = Length { value: 2.54, unit: LengthUnit::Cm }.to_px().unwrap();
         assert!((cm - 96.0).abs() < 1.0);
     }
 
     #[test]
     fn test_length_is_absolute() {
-        assert!(Length { value: 1.0, unit: LengthUnit::Px }.is_absolute());
-        assert!(Length { value: 1.0, unit: LengthUnit::In }.is_absolute());
-        assert!(Length { value: 1.0, unit: LengthUnit::Pt }.is_absolute());
-        assert!(!Length { value: 1.0, unit: LengthUnit::Em }.is_absolute());
-        assert!(!Length { value: 1.0, unit: LengthUnit::Vw }.is_absolute());
+        assert!(LengthUnit::Px.is_absolute());
+        assert!(LengthUnit::In.is_absolute());
+        assert!(LengthUnit::Pt.is_absolute());
+        assert!(!LengthUnit::Em.is_absolute());
+        assert!(!LengthUnit::Vw.is_absolute());
     }
 }

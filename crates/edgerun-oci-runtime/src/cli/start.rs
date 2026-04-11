@@ -10,11 +10,7 @@ use std::os::raw::c_int;
 use crate::state::load_state;
 use crate::json::parse_oci_spec;
 use crate::lifecycle::{signal_start, setup_container_cgroups, run_poststart_hooks, update_state_running, run_poststop_and_cleanup};
-
-/// Check if a process is alive by sending signal 0.
-fn is_alive(pid: u32) -> bool {
-    unsafe { libc::kill(pid as c_int, 0) == 0 }
-}
+use crate::cli::is_process_alive;
 
 pub fn cmd_start(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let id = crate::cli::require_container_id(args)?;
@@ -59,7 +55,7 @@ pub fn cmd_start(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<
 
     // Wait for the process to exit by polling (can't use waitpid for non-child)
     for _ in 0..300 {
-        if !is_alive(pid) {
+        if !is_process_alive(pid) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(100));

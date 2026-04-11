@@ -18,7 +18,6 @@
 use std::ffi::CString;
 use std::fs;
 use std::io;
-use std::io::Write;
 use std::path::Path;
 
 use crate::json::{OciLinuxResources, OciSpec, OciHook};
@@ -30,7 +29,7 @@ use crate::hooks::{
     execute_poststart_hooks, execute_poststop_hooks,
 };
 use crate::process::{ContainerConfig, setup_container_child};
-use crate::handle::RunningContainer;
+pub use crate::handle::RunningContainer;
 use crate::state::{container_state_dir, fifo_path, save_state, ContainerState as StateContainerState};
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
@@ -332,14 +331,8 @@ pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32) -> io::R
 
 /// Signal the container child to start by writing to the FIFO.
 pub fn signal_start(container_id: &str) -> io::Result<()> {
-    let fifo = fifo_path(container_id);
-    let mut fifo_file = fs::File::create(&fifo)
-        .map_err(|e| io::Error::other(format!("failed to open start FIFO: {}", e)))?;
-    let _ = fifo_file.write_all(b"go\n");
-    let _ = fifo_file.flush();
-    // Keep the FIFO open briefly to ensure the reader gets the data
-    std::thread::sleep(std::time::Duration::from_millis(100));
-    Ok(())
+    let fifo = crate::state::fifo_path(container_id);
+    crate::fifo::signal_start(&fifo)
 }
 
 // ===========================================================================
@@ -535,14 +528,14 @@ pub fn start_spec(spec: &OciSpec) -> io::Result<RunningContainer> {
     start_spec_with_id(spec, &container_id)
 }
 
-/// Start a container from a spec with explicit ID (non-blocking).
+/// Start a container from an OCI spec with explicit ID (non-blocking).
 pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<RunningContainer> {
     // Step 1: prestart hooks
     run_prestart_hooks(spec, container_id)?;
-    
+
     // Step 2: createRuntime hooks
     run_create_runtime_hooks(spec, container_id)?;
-    
+
     // Step 3: fork child
     let child = fork_container_child(spec, container_id)?;
     let pid = child.pid();
@@ -550,7 +543,7 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
 
     // Step 4: save created state
     save_created_state(spec, container_id, pid)?;
-    
+
     // Step 5: setup cgroups
     if let Some(ref res) = resources {
         if let Some(ref linux) = spec.linux {
@@ -558,16 +551,32 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
             setup_container_cgroups(pid, res, cgroup_path);
         }
     }
-    
+
     // Step 6: signal start
     signal_start(container_id)?;
-    
+
     // Step 7: poststart hooks
     run_poststart_hooks(spec, container_id, pid)?;
-    
+
     // Step 8: update state to running
     update_state_running(container_id, pid)?;
-    
+
     // Step 9: return handle
     Ok(into_running_container(child))
+}
+
+/// Run an OCI bundle (directory containing config.json + rootfs/).
+pub fn run_bundle(bundle_path: &Path) -> io::Result<std::process::ExitStatus> {
+    let config_data = fs::read(bundle_path.join("config.json"))?;
+    let spec: OciSpec = crate::json::parse_oci_spec(&config_data)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
+    run_spec(&spec)
+}
+
+/// Start a container from an OCI bundle without blocking.
+pub fn start_bundle(bundle_path: &Path) -> io::Result<RunningContainer> {
+    let config_data = fs::read(bundle_path.join("config.json"))?;
+    let spec: OciSpec = crate::json::parse_oci_spec(&config_data)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
+    start_spec(&spec)
 }

@@ -1079,6 +1079,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-css-value-parser"
+version = "0.1.0"
+dependencies = [
+ "edgerun-color",
+]
+
+[[package]]
 name = "edgerun-css-values"
 version = "0.1.0"
 dependencies = [

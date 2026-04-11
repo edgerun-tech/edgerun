@@ -9,33 +9,38 @@ use alloc::format;
 
 use crate::html_parser::{Node, Element, BLOCK_ELEMENTS, INLINE_ELEMENTS, VOID_ELEMENTS};
 use crate::css_parser::Stylesheet;
+use crate::computed_style::{compute_style, default_style};
 use edgerun_layout::render_object::{RenderObject, ComputedStyle, FormattingContext, LayoutAlgorithm, PositionType, FontSelection, Color};
 use edgerun_layout::layout_context::{determine_formatting_context, determine_layout_algorithm};
 
 pub fn build_layout(node: &Node, stylesheet: &Stylesheet, _viewport_width: u32) -> RenderObject {
-    build_node(node, stylesheet)
+    build_node(node, stylesheet, &default_style())
 }
 
-fn build_node(node: &Node, ss: &Stylesheet) -> RenderObject {
+fn build_node(node: &Node, ss: &Stylesheet, parent_style: &ComputedStyle) -> RenderObject {
     match node {
-        Node::Element(elem) => build_element(elem, ss),
+        Node::Element(elem) => build_element(elem, ss, parent_style),
         Node::Text(text) => RenderObject::TextRun {
             text: text.clone(),
-            font: FontSelection { family: "sans-serif".into(), weight: 400, size: 16.0, line_height: 20.0 },
-            style: default_style(FormattingContext::Inline),
+            font: parent_style.font.clone(),
+            style: parent_style.clone(),
         },
         Node::Comment(_) => RenderObject::TextRun {
             text: String::new(),
-            font: FontSelection { family: "sans-serif".into(), weight: 400, size: 16.0, line_height: 20.0 },
-            style: default_style(FormattingContext::Inline),
+            font: parent_style.font.clone(),
+            style: parent_style.clone(),
         },
     }
 }
 
-fn build_element(elem: &Element, ss: &Stylesheet) -> RenderObject {
+fn build_element(elem: &Element, ss: &Stylesheet, parent_style: &ComputedStyle) -> RenderObject {
     let class = elem.class();
     let id = elem.id();
-    let _decls = ss.compute(&elem.tag, class, id);
+    let decls = ss.compute(&elem.tag, class, id);
+
+    // Compute styled values from CSS declarations (with parent inheritance)
+    let style = compute_style(&decls, parent_style);
+
     let is_block = BLOCK_ELEMENTS.contains(&elem.tag.as_str());
     let _is_void = VOID_ELEMENTS.contains(&elem.tag.as_str());
 
@@ -45,27 +50,8 @@ fn build_element(elem: &Element, ss: &Stylesheet) -> RenderObject {
     );
     let algo = determine_layout_algorithm(fc);
 
-    let font_size = if elem.tag == "h1" { 32.0 } else if elem.tag == "h2" { 24.0 } else { 16.0 };
-    let line_height = font_size * 1.25;
-    let weight = if elem.tag.starts_with('h') { 700 } else { 400 };
-
-    let bg = if elem.tag == "h1" {
-        Some(Color { r: 1.0, g: 0.3, b: 0.0, a: 1.0 })
-    } else { None };
-
-    let style = ComputedStyle {
-        formatting_context: fc, position: PositionType::Static, opacity: 1.0, z_index: None,
-        background_color: bg,
-        border_color: Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, border_width: 0.0,
-        color: Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-        font: FontSelection {
-            family: "sans-serif".into(), weight, size: font_size, line_height,
-        },
-        has_transform: false, will_change: Vec::new(),
-    };
-
     let children: Vec<RenderObject> = elem.children.iter()
-        .map(|c| build_node(c, ss))
+        .map(|c| build_node(c, ss, &style))
         .collect();
 
     if is_block && !children.is_empty() {
@@ -80,7 +66,7 @@ fn build_element(elem: &Element, ss: &Stylesheet) -> RenderObject {
                         if !buf.is_empty() {
                             grouped.push(RenderObject::BlockContainer {
                                 children: core::mem::take(&mut buf),
-                                style: default_style(FormattingContext::Inline),
+                                style: default_style(),
                             });
                         }
                         grouped.push(child);
@@ -88,7 +74,7 @@ fn build_element(elem: &Element, ss: &Stylesheet) -> RenderObject {
                 }
             }
             if !buf.is_empty() {
-                grouped.push(RenderObject::BlockContainer { children: buf, style: default_style(FormattingContext::Inline) });
+                grouped.push(RenderObject::BlockContainer { children: buf, style: default_style() });
             }
             return match algo {
                 LayoutAlgorithm::FlexMainAxis | LayoutAlgorithm::FlexCrossAxis => RenderObject::FlexContainer { children: grouped, style },
@@ -102,16 +88,5 @@ fn build_element(elem: &Element, ss: &Stylesheet) -> RenderObject {
         LayoutAlgorithm::FlexMainAxis | LayoutAlgorithm::FlexCrossAxis => RenderObject::FlexContainer { children, style },
         LayoutAlgorithm::GridTracks => RenderObject::GridContainer { children, style },
         _ => RenderObject::BlockContainer { children, style },
-    }
-}
-
-fn default_style(fc: FormattingContext) -> ComputedStyle {
-    ComputedStyle {
-        formatting_context: fc, position: PositionType::Static, opacity: 1.0, z_index: None,
-        background_color: None,
-        border_color: Color { r: 0.0, g: 0.0, b: 0.0, a: 1.0 }, border_width: 0.0,
-        color: Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
-        font: FontSelection { family: "sans-serif".into(), weight: 400, size: 16.0, line_height: 20.0 },
-        has_transform: false, will_change: Vec::new(),
     }
 }

@@ -5,8 +5,6 @@
 //! - Device creation from spec's `linux.devices`
 //! - Overlay whiteout char device handling (0:0 device check)
 
-#![allow(unused_variables)]
-
 use std::ffi::CString;
 use std::fs;
 use std::io;

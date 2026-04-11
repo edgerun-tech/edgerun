@@ -168,7 +168,21 @@ The following categories remain unaddressed (17 failures):
 | DATA idle | 106 | 34 | 5 | DATA on idle → GOAWAY |
 | Overflow fix | 121 | 19 | 5 | PRIORITY weight wrapping_add |
 | SETTINGS validation | 123 | 17 | 5 | Reject invalid settings values |
-| **Current best** | **123** | **17** | 5 | |
+| **Current best** | **131** | **9** | 5 | Closed stream tracking, full state machine, CONTINUATION guard |
+
+## Remaining Failures (9)
+
+| Category | Count | Root Cause |
+|----------|-------|------------|
+| WINDOW_UPDATE on half-closed (remote) | 1 | Server responds with HEADERS+END_STREAM (completing stream), client sends WINDOW_UPDATE but stream is already cleaned up → connection closed |
+| PRIORITY on half-closed (remote) | 1 | Same as above — stream cleaned up before PRIORITY arrives |
+| RST_STREAM on half-closed (remote) | 1 | Same pattern — server closes stream before RST_STREAM arrives |
+| PRIORITY self-dependency | 1 | Timeout — RST_STREAM may not be written or validate_semantics blocks it |
+| Unknown extension frame in header block | 1 | Timeout — binary doesn't detect unknown frame types during CONTINUATION sequence |
+| Dynamic table size at end of header block | 1 | hpack-patched decoder doesn't reject dynamic table size updates in the middle of header blocks |
+| Dynamic table size > SETTINGS_HEADER_TABLE_SIZE | 1 | Decoder.set_max_table_size is called but hpack-patched may not validate during decode |
+| POST with trailers | 1 | Trailers HEADERS on HalfClosedRemote returns RST_STREAM instead of being accepted |
+| SETTINGS_INITIAL_WINDOW_SIZE sync | 1 | Server doesn't properly handle flow control window updates |
 
 ## Unit Test Summary
 
@@ -181,7 +195,7 @@ The following categories remain unaddressed (17 failures):
 | `stream::` | 6 | All pass |
 | `frame::` | 12 | All pass |
 | `hpack_conformance::` | 2 | All pass |
-| **Total** | **249** | **All pass** |
+| **Total** | **252** | **All pass** |
 
 ## Lessons Learned
 

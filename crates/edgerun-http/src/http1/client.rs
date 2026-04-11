@@ -34,9 +34,7 @@ impl Client {
             .host()
             .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
 
-        let port = uri
-            .port()
-            .ok_or_else(|| Error::InvalidUri("No port in URI".to_string()))?;
+        let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
 
         // Connect to the server
         let addr = format!("{}:{}", host, port);
@@ -78,19 +76,14 @@ impl Client {
             }
         }
 
-        // Read body if Content-Length is present
-        if let Some(content_length) = reader
-            .get_ref()
-            .peek(&mut [0; 1])
-            .ok()
-            .filter(|&n| n > 0)
-            .and_then(|_| {
-                request
-                    .headers()
-                    .get("Content-Length")
-                    .and_then(|h| h.as_str().parse::<usize>().ok())
-            })
-        {
+        // Read body if Content-Length is present in the response
+        let content_length: Option<usize> = response_str
+            .lines()
+            .find(|line| line.to_lowercase().starts_with("content-length:"))
+            .and_then(|line| line.split(':').nth(1))
+            .and_then(|v| v.trim().parse().ok());
+
+        if let Some(content_length) = content_length {
             let mut body = vec![0u8; content_length];
             reader.read_exact(&mut body)?;
             response_str.push_str(&String::from_utf8_lossy(&body));

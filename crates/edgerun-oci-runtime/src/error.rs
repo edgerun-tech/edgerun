@@ -18,7 +18,7 @@ pub enum OciError {
     /// Cgroup resource error.
     Cgroup(CgroupError),
     /// Hook execution error.
-    Hook(HookError),
+    Hook(crate::hooks::HookError),
     /// Capability/identity error.
     Capability(CapabilityError),
     /// Namespace error.
@@ -182,23 +182,9 @@ impl fmt::Display for CgroupError {
     }
 }
 
-/// Hook execution error.
-#[derive(Debug)]
-pub struct HookError {
-    /// Path to the hook executable.
-    pub hook_path: String,
-    /// The underlying error.
-    pub error: String,
-    /// Whether this is a fatal error (true for prestart/createRuntime/etc., false for poststop).
-    pub fatal: bool,
-}
-
-impl fmt::Display for HookError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let severity = if self.fatal { "FATAL" } else { "WARNING" };
-        write!(f, "[{}] hook {:?} failed: {}", severity, self.hook_path, self.error)
-    }
-}
+/// Hook execution error (defined in hooks.rs — re-exported here for consistency).
+/// The actual implementation lives in `hooks::HookError`.
+pub type HookError = crate::hooks::HookError;
 
 /// Capability/identity error.
 #[derive(Debug)]
@@ -373,29 +359,20 @@ mod tests {
     }
 
     #[test]
-    fn hook_error_display_fatal() {
-        let e = HookError {
+    fn hook_error_display() {
+        let e = crate::hooks::HookError {
             hook_path: "/usr/bin/hook".into(),
-            error: "exit code 1".into(),
-            fatal: true,
+            error: std::io::Error::new(std::io::ErrorKind::Other, "exit code 1"),
         };
-        assert_eq!(
-            format!("{}", e),
-            "[FATAL] hook \"/usr/bin/hook\" failed: exit code 1"
-        );
+        let s = format!("{}", e);
+        assert!(s.contains("/usr/bin/hook"));
+        assert!(s.contains("exit code 1"));
     }
 
     #[test]
-    fn hook_error_display_non_fatal() {
-        let e = HookError {
-            hook_path: "/usr/bin/poststop".into(),
-            error: "exit code 2".into(),
-            fatal: false,
-        };
-        assert_eq!(
-            format!("{}", e),
-            "[WARNING] hook \"/usr/bin/poststop\" failed: exit code 2"
-        );
+    fn hook_error_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<crate::hooks::HookError>();
     }
 
     #[test]
@@ -445,7 +422,7 @@ mod tests {
             OciError::Rootfs(RootfsError::NotFound("y".into())),
             OciError::Seccomp(SeccompError::InvalidSyscall("z".into())),
             OciError::Cgroup(CgroupError::NotFound("a".into())),
-            OciError::Hook(HookError { hook_path: "b".into(), error: "c".into(), fatal: true }),
+            OciError::Hook(crate::hooks::HookError { hook_path: "b".into(), error: std::io::Error::new(std::io::ErrorKind::Other, "c") }),
             OciError::Capability(CapabilityError::UnknownCapability("d".into())),
             OciError::Namespace(NamespaceError::UnknownType("e".into())),
             OciError::Config(ConfigError::MissingField("f".into())),
@@ -456,16 +433,6 @@ mod tests {
             let s = format!("{}", err);
             assert!(!s.is_empty(), "error display should not be empty");
         }
-    }
-
-    // ===========================================================================
-    // HookError struct
-    // ===========================================================================
-
-    #[test]
-    fn hook_error_is_send_sync() {
-        fn assert_send_sync<T: Send + Sync>() {}
-        assert_send_sync::<HookError>();
     }
 
     #[test]

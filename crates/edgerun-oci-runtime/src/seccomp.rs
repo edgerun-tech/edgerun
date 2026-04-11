@@ -4,8 +4,6 @@
 //! and a built-in fallback allow-list when no spec rules are provided.
 //! Uses raw seccomp syscalls (no libseccomp dependency).
 
-#![allow(dead_code)]
-
 use std::io;
 use std::os::raw::c_void;
 
