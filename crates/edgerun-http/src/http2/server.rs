@@ -226,7 +226,11 @@ impl Http2Server {
             }
         } else {
             // Stream-level WINDOW_UPDATE
-            if self.stream_manager.get_stream(wu.stream_id).is_none() {
+            // If stream exists (even if closed), accept it.
+            // If stream never existed (idle, > last_processed), it's a connection error.
+            let stream_exists = self.stream_manager.get_stream(wu.stream_id).is_some();
+            let was_seen = wu.stream_id <= self.last_processed_stream_id;
+            if !stream_exists && !was_seen {
                 return self.goaway(
                     self.last_processed_stream_id,
                     ErrorCode::PROTOCOL_ERROR.to_u32(),
@@ -250,8 +254,11 @@ impl Http2Server {
             Ok(rst) => rst,
             Err(_) => return FrameAction::None,
         };
-        // RST_STREAM on idle stream = protocol error
-        if self.stream_manager.get_stream(rst.stream_id).is_none() {
+        // RST_STREAM on idle stream (never created) = protocol error.
+        // RST_STREAM on closed/existing streams is valid — silently accept.
+        let stream_exists = self.stream_manager.get_stream(rst.stream_id).is_some();
+        let was_seen = rst.stream_id <= self.last_processed_stream_id;
+        if !stream_exists && !was_seen {
             return self.goaway(
                 self.last_processed_stream_id,
                 ErrorCode::PROTOCOL_ERROR.to_u32(),
@@ -261,8 +268,8 @@ impl Http2Server {
         if let Some(s) = self.stream_manager.get_stream_mut(rst.stream_id) {
             s.close();
         }
-        self.stream_manager.cleanup_closed();
-        FrameAction::None
+        // Don't clean up immediately — post-closure frames may still arrive.
+        FrameAction::WriteFrames(vec![RstStreamFrame::new(rst.stream_id, rst.error_code).to_frame()])
     }
 
     /// Process an incoming PRIORITY frame.
@@ -413,7 +420,7 @@ impl Http2Server {
             if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
                 let _ = s.half_close_remote();  // HalfClosedRemote -> Closed
             }
-            self.stream_manager.cleanup_closed();
+            // Don't clean up immediately — post-closure frames may still arrive.
             // Don't respond — the original response was already sent
             return FrameAction::None;
         }
@@ -730,7 +737,9 @@ impl Http2Server {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
         }
-        self.stream_manager.cleanup_closed();
+        // Don't clean up immediately — post-closure frames (WINDOW_UPDATE,
+        // PRIORITY, RST_STREAM) are valid on closed streams per RFC 7540 §5.1.
+        // Cleanup is deferred to periodic cleanup.
     }
 
     fn rst_stream(&mut self, stream_id: u32, error_code: u32) -> FrameAction {
@@ -739,8 +748,15 @@ impl Http2Server {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             s.close();
         }
-        self.stream_manager.cleanup_closed();
+        // Don't clean up immediately — post-closure frames may still arrive.
         FrameAction::WriteFrames(frames)
+    }
+
+    /// Periodically clean up closed streams.
+    /// Should be called every N frames (e.g. every 100 frames) to prevent
+    /// memory growth from streams that have been closed but not removed.
+    pub fn cleanup_closed_streams(&mut self) {
+        self.stream_manager.cleanup_closed();
     }
 
     fn goaway(&mut self, last_stream_id: u32, error_code: u32, debug: &[u8]) -> FrameAction {
@@ -994,9 +1010,12 @@ mod tests {
 
         let rst = RstStreamFrame::new(1, 0).to_frame();
         let action = server.handle_rst_stream(&rst);
-        assert!(matches!(action, FrameAction::None));
-        // cleanup_closed removes it, so get_stream returns None
-        assert!(server.stream_manager.get_stream(1).is_none());
+        // RST_STREAM returns the frame to be written to the client
+        assert!(matches!(action, FrameAction::WriteFrames(_)));
+        // Stream is marked closed but NOT cleaned up immediately —
+        // post-closure frames may still arrive per RFC 7540 §5.1.
+        let s = server.stream_manager.get_stream(1).unwrap();
+        assert!(s.is_closed());
     }
 
     // ── PRIORITY handling ──
