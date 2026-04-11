@@ -2,7 +2,6 @@
 //!
 //! Uses the workspace `hkdf` and `hmac` crates backed by SHA-256/384.
 
-use edgerun_crypto::hmac::{Hmac, Mac};
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
 /// Hash abstraction for TLS 1.3 key derivation.
@@ -52,31 +51,19 @@ impl Hasher {
         self.expand_label(secret, label, &hash, self.len())
     }
 
-    /// HKDF-Expand(prk, info, length)
+    /// HKDF-Expand(prk, info, length) using the hkdf crate directly.
     fn expand(&self, prk: &[u8], info: &[u8], length: usize) -> Vec<u8> {
-        let hash_len = self.len();
-        let n = (length + hash_len - 1) / hash_len;
-        let mut okm = Vec::with_capacity(length);
-        let mut t = Vec::new();
-
-        for i in 1..=n {
-            let mut input = t.clone();
-            input.extend_from_slice(info);
-            input.push(i as u8);
-            t = match self {
-                Hasher::Sha256 => {
-                    type HmacSha256 = Hmac<Sha256>;
-                    hmac_sha256(prk, &input)
-                }
-                Hasher::Sha384 => {
-                    type HmacSha384 = Hmac<Sha384>;
-                    hmac_sha384(prk, &input)
-                }
-            };
-            okm.extend_from_slice(&t);
+        let mut okm = vec![0u8; length];
+        match self {
+            Hasher::Sha256 => {
+                let hk = Hkdf::<Sha256>::from_prk(prk).expect("valid PRK for HKDF-Expand");
+                hk.expand(info, &mut okm).expect("HKDF-Expand ok");
+            }
+            Hasher::Sha384 => {
+                let hk = Hkdf::<Sha384>::from_prk(prk).expect("valid PRK for HKDF-Expand");
+                hk.expand(info, &mut okm).expect("HKDF-Expand ok");
+            }
         }
-
-        okm.truncate(length);
         okm
     }
 
@@ -206,21 +193,8 @@ fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
     out
 }
 
-/// Compute HMAC-SHA256.
-pub fn hmac_sha256(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    type HmacSha256Inner = Hmac<Sha256>;
-    let mut mac = HmacSha256Inner::new_from_slice(key).expect("HMAC key length ok");
-    mac.update(msg);
-    mac.finalize().into_bytes().to_vec()
-}
-
-/// Compute HMAC-SHA384.
-pub fn hmac_sha384(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    type HmacSha384Inner = Hmac<Sha384>;
-    let mut mac = HmacSha384Inner::new_from_slice(key).expect("HMAC key length ok");
-    mac.update(msg);
-    mac.finalize().into_bytes().to_vec()
-}
+// HMAC helpers re-exported from edgerun-crypto (single source of truth)
+pub use edgerun_crypto::{hmac_sha256, hmac_sha384};
 
 // Re-export hkdf::Hkdf for internal use (the crate's extract/expand semantics)
 use edgerun_crypto::hkdf::Hkdf;

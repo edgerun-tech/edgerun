@@ -15,9 +15,9 @@ pub use edgerun_crypto::digest;
 pub use edgerun_crypto::sha2::{Sha256, Sha384, Sha512};
 pub use edgerun_crypto::sha2::Digest as Sha2Digest;
 pub use edgerun_crypto::hmac;
-pub use edgerun_crypto::hmac::{Hmac, Mac};
 pub use edgerun_crypto::hkdf;
 pub use edgerun_crypto::hkdf::Hkdf;
+pub use edgerun_crypto::{hmac_sha256, hmac_sha384, hkdf_sha256, random_p256_signing_key};
 pub use edgerun_crypto::p256;
 pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 pub use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -49,15 +49,6 @@ pub fn sha512(data: &[u8]) -> Vec<u8> {
     let mut hasher = Sha512::new();
     hasher.update(data);
     hasher.finalize().to_vec()
-}
-
-/// HMAC-SHA256.
-pub fn hmac_sha256(key: &[u8], message: &[u8]) -> Vec<u8> {
-    use edgerun_crypto::hmac::Mac;
-    type HmacSha256 = Hmac<Sha256>;
-    let mut mac = HmacSha256::new_from_slice(key).expect("HMAC can take any size key");
-    mac.update(message);
-    mac.finalize().into_bytes().to_vec()
 }
 
 /// HKDF-SHA256 wrapper.
