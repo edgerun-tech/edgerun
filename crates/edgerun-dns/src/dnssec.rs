@@ -181,7 +181,7 @@ fn verify_signature(
             // RSA verification requires edgerun-crypto RSA support
             // which may not be fully available. Mark as insecure.
             // TODO: Implement actual RSA-SHA256 verification.
-            let _ = (signed_data, public_key);
+            let _ = (signed_data, public_key, signature);
             DnssecResult::Insecure
         }
         // ECDSAP256SHA256 (RFC 6605)
@@ -260,7 +260,7 @@ pub fn verify_chain_of_trust(
                     continue;
                 }
                 if let DnsRecordData::DNSKEY {
-                    algorithm: key_algo, public_key, ..
+                    algorithm: key_algo, public_key: _, ..
                 } = &dnskey.data {
                     if *key_algo != *algorithm {
                         continue;

@@ -1,0 +1,10718 @@
+spec_section: "13.1.4.22"
+spec_date: "2024-01-01"
+entities: {
+  name: "AElig"
+  code_point_1: 198
+  semicolon_required: true
+}
+entities: {
+  name: "AMP"
+  code_point_1: 38
+  semicolon_required: true
+}
+entities: {
+  name: "Aacute"
+  code_point_1: 193
+  semicolon_required: true
+}
+entities: {
+  name: "Abreve"
+  code_point_1: 258
+  semicolon_required: true
+}
+entities: {
+  name: "Acirc"
+  code_point_1: 194
+  semicolon_required: true
+}
+entities: {
+  name: "Acy"
+  code_point_1: 1040
+  semicolon_required: true
+}
+entities: {
+  name: "Afr"
+  code_point_1: 120068
+  semicolon_required: true
+}
+entities: {
+  name: "Agrave"
+  code_point_1: 192
+  semicolon_required: true
+}
+entities: {
+  name: "Alpha"
+  code_point_1: 913
+  semicolon_required: true
+}
+entities: {
+  name: "Amacr"
+  code_point_1: 256
+  semicolon_required: true
+}
+entities: {
+  name: "And"
+  code_point_1: 10835
+  semicolon_required: true
+}
+entities: {
+  name: "Aogon"
+  code_point_1: 260
+  semicolon_required: true
+}
+entities: {
+  name: "Aopf"
+  code_point_1: 120120
+  semicolon_required: true
+}
+entities: {
+  name: "ApplyFunction"
+  code_point_1: 8289
+  semicolon_required: true
+}
+entities: {
+  name: "Aring"
+  code_point_1: 197
+  semicolon_required: true
+}
+entities: {
+  name: "Ascr"
+  code_point_1: 119964
+  semicolon_required: true
+}
+entities: {
+  name: "Assign"
+  code_point_1: 8788
+  semicolon_required: true
+}
+entities: {
+  name: "Atilde"
+  code_point_1: 195
+  semicolon_required: true
+}
+entities: {
+  name: "Auml"
+  code_point_1: 196
+  semicolon_required: true
+}
+entities: {
+  name: "Backslash"
+  code_point_1: 8726
+  semicolon_required: true
+}
+entities: {
+  name: "Barv"
+  code_point_1: 10983
+  semicolon_required: true
+}
+entities: {
+  name: "Barwed"
+  code_point_1: 8966
+  semicolon_required: true
+}
+entities: {
+  name: "Bcy"
+  code_point_1: 1041
+  semicolon_required: true
+}
+entities: {
+  name: "Because"
+  code_point_1: 8757
+  semicolon_required: true
+}
+entities: {
+  name: "Bernoullis"
+  code_point_1: 8492
+  semicolon_required: true
+}
+entities: {
+  name: "Beta"
+  code_point_1: 914
+  semicolon_required: true
+}
+entities: {
+  name: "Bfr"
+  code_point_1: 120069
+  semicolon_required: true
+}
+entities: {
+  name: "Bopf"
+  code_point_1: 120121
+  semicolon_required: true
+}
+entities: {
+  name: "Breve"
+  code_point_1: 728
+  semicolon_required: true
+}
+entities: {
+  name: "Bscr"
+  code_point_1: 8492
+  semicolon_required: true
+}
+entities: {
+  name: "Bumpeq"
+  code_point_1: 8782
+  semicolon_required: true
+}
+entities: {
+  name: "CHcy"
+  code_point_1: 1063
+  semicolon_required: true
+}
+entities: {
+  name: "COPY"
+  code_point_1: 169
+  semicolon_required: true
+}
+entities: {
+  name: "Cacute"
+  code_point_1: 262
+  semicolon_required: true
+}
+entities: {
+  name: "Cap"
+  code_point_1: 8914
+  semicolon_required: true
+}
+entities: {
+  name: "CapitalDifferentialD"
+  code_point_1: 8517
+  semicolon_required: true
+}
+entities: {
+  name: "Cayleys"
+  code_point_1: 8493
+  semicolon_required: true
+}
+entities: {
+  name: "Ccaron"
+  code_point_1: 268
+  semicolon_required: true
+}
+entities: {
+  name: "Ccedil"
+  code_point_1: 199
+  semicolon_required: true
+}
+entities: {
+  name: "Ccirc"
+  code_point_1: 264
+  semicolon_required: true
+}
+entities: {
+  name: "Cconint"
+  code_point_1: 8752
+  semicolon_required: true
+}
+entities: {
+  name: "Cdot"
+  code_point_1: 266
+  semicolon_required: true
+}
+entities: {
+  name: "Cedilla"
+  code_point_1: 184
+  semicolon_required: true
+}
+entities: {
+  name: "CenterDot"
+  code_point_1: 183
+  semicolon_required: true
+}
+entities: {
+  name: "Cfr"
+  code_point_1: 8493
+  semicolon_required: true
+}
+entities: {
+  name: "Chi"
+  code_point_1: 935
+  semicolon_required: true
+}
+entities: {
+  name: "CircleDot"
+  code_point_1: 8857
+  semicolon_required: true
+}
+entities: {
+  name: "CircleMinus"
+  code_point_1: 8854
+  semicolon_required: true
+}
+entities: {
+  name: "CirclePlus"
+  code_point_1: 8853
+  semicolon_required: true
+}
+entities: {
+  name: "CircleTimes"
+  code_point_1: 8855
+  semicolon_required: true
+}
+entities: {
+  name: "ClockwiseContourIntegral"
+  code_point_1: 8754
+  semicolon_required: true
+}
+entities: {
+  name: "CloseCurlyDoubleQuote"
+  code_point_1: 8221
+  semicolon_required: true
+}
+entities: {
+  name: "CloseCurlyQuote"
+  code_point_1: 8217
+  semicolon_required: true
+}
+entities: {
+  name: "Colon"
+  code_point_1: 8759
+  semicolon_required: true
+}
+entities: {
+  name: "Colone"
+  code_point_1: 10868
+  semicolon_required: true
+}
+entities: {
+  name: "Congruent"
+  code_point_1: 8801
+  semicolon_required: true
+}
+entities: {
+  name: "Conint"
+  code_point_1: 8751
+  semicolon_required: true
+}
+entities: {
+  name: "ContourIntegral"
+  code_point_1: 8750
+  semicolon_required: true
+}
+entities: {
+  name: "Copf"
+  code_point_1: 8450
+  semicolon_required: true
+}
+entities: {
+  name: "Coproduct"
+  code_point_1: 8720
+  semicolon_required: true
+}
+entities: {
+  name: "CounterClockwiseContourIntegral"
+  code_point_1: 8755
+  semicolon_required: true
+}
+entities: {
+  name: "Cross"
+  code_point_1: 10799
+  semicolon_required: true
+}
+entities: {
+  name: "Cscr"
+  code_point_1: 119966
+  semicolon_required: true
+}
+entities: {
+  name: "Cup"
+  code_point_1: 8915
+  semicolon_required: true
+}
+entities: {
+  name: "CupCap"
+  code_point_1: 8781
+  semicolon_required: true
+}
+entities: {
+  name: "DD"
+  code_point_1: 8517
+  semicolon_required: true
+}
+entities: {
+  name: "DDotrahd"
+  code_point_1: 10513
+  semicolon_required: true
+}
+entities: {
+  name: "DJcy"
+  code_point_1: 1026
+  semicolon_required: true
+}
+entities: {
+  name: "DScy"
+  code_point_1: 1029
+  semicolon_required: true
+}
+entities: {
+  name: "DZcy"
+  code_point_1: 1039
+  semicolon_required: true
+}
+entities: {
+  name: "Dagger"
+  code_point_1: 8225
+  semicolon_required: true
+}
+entities: {
+  name: "Darr"
+  code_point_1: 8609
+  semicolon_required: true
+}
+entities: {
+  name: "Dashv"
+  code_point_1: 10980
+  semicolon_required: true
+}
+entities: {
+  name: "Dcaron"
+  code_point_1: 270
+  semicolon_required: true
+}
+entities: {
+  name: "Dcy"
+  code_point_1: 1044
+  semicolon_required: true
+}
+entities: {
+  name: "Del"
+  code_point_1: 8711
+  semicolon_required: true
+}
+entities: {
+  name: "Delta"
+  code_point_1: 916
+  semicolon_required: true
+}
+entities: {
+  name: "Dfr"
+  code_point_1: 120071
+  semicolon_required: true
+}
+entities: {
+  name: "DiacriticalAcute"
+  code_point_1: 180
+  semicolon_required: true
+}
+entities: {
+  name: "DiacriticalDot"
+  code_point_1: 729
+  semicolon_required: true
+}
+entities: {
+  name: "DiacriticalDoubleAcute"
+  code_point_1: 733
+  semicolon_required: true
+}
+entities: {
+  name: "DiacriticalGrave"
+  code_point_1: 96
+  semicolon_required: true
+}
+entities: {
+  name: "DiacriticalTilde"
+  code_point_1: 732
+  semicolon_required: true
+}
+entities: {
+  name: "Diamond"
+  code_point_1: 8900
+  semicolon_required: true
+}
+entities: {
+  name: "DifferentialD"
+  code_point_1: 8518
+  semicolon_required: true
+}
+entities: {
+  name: "Dopf"
+  code_point_1: 120123
+  semicolon_required: true
+}
+entities: {
+  name: "Dot"
+  code_point_1: 168
+  semicolon_required: true
+}
+entities: {
+  name: "DotDot"
+  code_point_1: 8412
+  semicolon_required: true
+}
+entities: {
+  name: "DotEqual"
+  code_point_1: 8784
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleContourIntegral"
+  code_point_1: 8751
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleDot"
+  code_point_1: 168
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleDownArrow"
+  code_point_1: 8659
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLeftArrow"
+  code_point_1: 8656
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLeftRightArrow"
+  code_point_1: 8660
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLeftTee"
+  code_point_1: 10980
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLongLeftArrow"
+  code_point_1: 10232
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLongLeftRightArrow"
+  code_point_1: 10234
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleLongRightArrow"
+  code_point_1: 10233
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleRightArrow"
+  code_point_1: 8658
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleRightTee"
+  code_point_1: 8872
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleUpArrow"
+  code_point_1: 8657
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleUpDownArrow"
+  code_point_1: 8661
+  semicolon_required: true
+}
+entities: {
+  name: "DoubleVerticalBar"
+  code_point_1: 8741
+  semicolon_required: true
+}
+entities: {
+  name: "DownArrow"
+  code_point_1: 8595
+  semicolon_required: true
+}
+entities: {
+  name: "DownArrowBar"
+  code_point_1: 10515
+  semicolon_required: true
+}
+entities: {
+  name: "DownArrowUpArrow"
+  code_point_1: 8693
+  semicolon_required: true
+}
+entities: {
+  name: "DownBreve"
+  code_point_1: 785
+  semicolon_required: true
+}
+entities: {
+  name: "DownLeftRightVector"
+  code_point_1: 10576
+  semicolon_required: true
+}
+entities: {
+  name: "DownLeftTeeVector"
+  code_point_1: 10590
+  semicolon_required: true
+}
+entities: {
+  name: "DownLeftVector"
+  code_point_1: 8637
+  semicolon_required: true
+}
+entities: {
+  name: "DownLeftVectorBar"
+  code_point_1: 10582
+  semicolon_required: true
+}
+entities: {
+  name: "DownRightTeeVector"
+  code_point_1: 10591
+  semicolon_required: true
+}
+entities: {
+  name: "DownRightVector"
+  code_point_1: 8641
+  semicolon_required: true
+}
+entities: {
+  name: "DownRightVectorBar"
+  code_point_1: 10583
+  semicolon_required: true
+}
+entities: {
+  name: "DownTee"
+  code_point_1: 8868
+  semicolon_required: true
+}
+entities: {
+  name: "DownTeeArrow"
+  code_point_1: 8615
+  semicolon_required: true
+}
+entities: {
+  name: "Downarrow"
+  code_point_1: 8659
+  semicolon_required: true
+}
+entities: {
+  name: "Dscr"
+  code_point_1: 119967
+  semicolon_required: true
+}
+entities: {
+  name: "Dstrok"
+  code_point_1: 272
+  semicolon_required: true
+}
+entities: {
+  name: "ENG"
+  code_point_1: 330
+  semicolon_required: true
+}
+entities: {
+  name: "ETH"
+  code_point_1: 208
+  semicolon_required: true
+}
+entities: {
+  name: "Eacute"
+  code_point_1: 201
+  semicolon_required: true
+}
+entities: {
+  name: "Ecaron"
+  code_point_1: 282
+  semicolon_required: true
+}
+entities: {
+  name: "Ecirc"
+  code_point_1: 202
+  semicolon_required: true
+}
+entities: {
+  name: "Ecy"
+  code_point_1: 1069
+  semicolon_required: true
+}
+entities: {
+  name: "Edot"
+  code_point_1: 278
+  semicolon_required: true
+}
+entities: {
+  name: "Efr"
+  code_point_1: 120072
+  semicolon_required: true
+}
+entities: {
+  name: "Egrave"
+  code_point_1: 200
+  semicolon_required: true
+}
+entities: {
+  name: "Element"
+  code_point_1: 8712
+  semicolon_required: true
+}
+entities: {
+  name: "Emacr"
+  code_point_1: 274
+  semicolon_required: true
+}
+entities: {
+  name: "EmptySmallSquare"
+  code_point_1: 9723
+  semicolon_required: true
+}
+entities: {
+  name: "EmptyVerySmallSquare"
+  code_point_1: 9643
+  semicolon_required: true
+}
+entities: {
+  name: "Eogon"
+  code_point_1: 280
+  semicolon_required: true
+}
+entities: {
+  name: "Eopf"
+  code_point_1: 120124
+  semicolon_required: true
+}
+entities: {
+  name: "Epsilon"
+  code_point_1: 917
+  semicolon_required: true
+}
+entities: {
+  name: "Equal"
+  code_point_1: 10869
+  semicolon_required: true
+}
+entities: {
+  name: "EqualTilde"
+  code_point_1: 8770
+  semicolon_required: true
+}
+entities: {
+  name: "Equilibrium"
+  code_point_1: 8652
+  semicolon_required: true
+}
+entities: {
+  name: "Escr"
+  code_point_1: 8496
+  semicolon_required: true
+}
+entities: {
+  name: "Esim"
+  code_point_1: 10867
+  semicolon_required: true
+}
+entities: {
+  name: "Eta"
+  code_point_1: 919
+  semicolon_required: true
+}
+entities: {
+  name: "Euml"
+  code_point_1: 203
+  semicolon_required: true
+}
+entities: {
+  name: "Exists"
+  code_point_1: 8707
+  semicolon_required: true
+}
+entities: {
+  name: "ExponentialE"
+  code_point_1: 8519
+  semicolon_required: true
+}
+entities: {
+  name: "Fcy"
+  code_point_1: 1060
+  semicolon_required: true
+}
+entities: {
+  name: "Ffr"
+  code_point_1: 120073
+  semicolon_required: true
+}
+entities: {
+  name: "FilledSmallSquare"
+  code_point_1: 9724
+  semicolon_required: true
+}
+entities: {
+  name: "FilledVerySmallSquare"
+  code_point_1: 9642
+  semicolon_required: true
+}
+entities: {
+  name: "Fopf"
+  code_point_1: 120125
+  semicolon_required: true
+}
+entities: {
+  name: "ForAll"
+  code_point_1: 8704
+  semicolon_required: true
+}
+entities: {
+  name: "Fouriertrf"
+  code_point_1: 8497
+  semicolon_required: true
+}
+entities: {
+  name: "Fscr"
+  code_point_1: 8497
+  semicolon_required: true
+}
+entities: {
+  name: "GJcy"
+  code_point_1: 1027
+  semicolon_required: true
+}
+entities: {
+  name: "GT"
+  code_point_1: 62
+  semicolon_required: true
+}
+entities: {
+  name: "Gamma"
+  code_point_1: 915
+  semicolon_required: true
+}
+entities: {
+  name: "Gammad"
+  code_point_1: 988
+  semicolon_required: true
+}
+entities: {
+  name: "Gbreve"
+  code_point_1: 286
+  semicolon_required: true
+}
+entities: {
+  name: "Gcedil"
+  code_point_1: 290
+  semicolon_required: true
+}
+entities: {
+  name: "Gcirc"
+  code_point_1: 284
+  semicolon_required: true
+}
+entities: {
+  name: "Gcy"
+  code_point_1: 1043
+  semicolon_required: true
+}
+entities: {
+  name: "Gdot"
+  code_point_1: 288
+  semicolon_required: true
+}
+entities: {
+  name: "Gfr"
+  code_point_1: 120074
+  semicolon_required: true
+}
+entities: {
+  name: "Gg"
+  code_point_1: 8921
+  semicolon_required: true
+}
+entities: {
+  name: "Gopf"
+  code_point_1: 120126
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterEqual"
+  code_point_1: 8805
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterEqualLess"
+  code_point_1: 8923
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterFullEqual"
+  code_point_1: 8807
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterGreater"
+  code_point_1: 10914
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterLess"
+  code_point_1: 8823
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterSlantEqual"
+  code_point_1: 10878
+  semicolon_required: true
+}
+entities: {
+  name: "GreaterTilde"
+  code_point_1: 8819
+  semicolon_required: true
+}
+entities: {
+  name: "Gscr"
+  code_point_1: 119970
+  semicolon_required: true
+}
+entities: {
+  name: "Gt"
+  code_point_1: 8811
+}
+entities: {
+  name: "HARDcy"
+  code_point_1: 1066
+  semicolon_required: true
+}
+entities: {
+  name: "Hacek"
+  code_point_1: 711
+  semicolon_required: true
+}
+entities: {
+  name: "Hat"
+  code_point_1: 94
+  semicolon_required: true
+}
+entities: {
+  name: "Hcirc"
+  code_point_1: 292
+  semicolon_required: true
+}
+entities: {
+  name: "Hfr"
+  code_point_1: 8460
+  semicolon_required: true
+}
+entities: {
+  name: "HilbertSpace"
+  code_point_1: 8459
+  semicolon_required: true
+}
+entities: {
+  name: "Hopf"
+  code_point_1: 8461
+  semicolon_required: true
+}
+entities: {
+  name: "HorizontalLine"
+  code_point_1: 9472
+  semicolon_required: true
+}
+entities: {
+  name: "Hscr"
+  code_point_1: 8459
+  semicolon_required: true
+}
+entities: {
+  name: "Hstrok"
+  code_point_1: 294
+  semicolon_required: true
+}
+entities: {
+  name: "HumpDownHump"
+  code_point_1: 8782
+  semicolon_required: true
+}
+entities: {
+  name: "HumpEqual"
+  code_point_1: 8783
+  semicolon_required: true
+}
+entities: {
+  name: "IEcy"
+  code_point_1: 1045
+  semicolon_required: true
+}
+entities: {
+  name: "IJlig"
+  code_point_1: 306
+  semicolon_required: true
+}
+entities: {
+  name: "IOcy"
+  code_point_1: 1025
+  semicolon_required: true
+}
+entities: {
+  name: "Iacute"
+  code_point_1: 205
+  semicolon_required: true
+}
+entities: {
+  name: "Icirc"
+  code_point_1: 206
+  semicolon_required: true
+}
+entities: {
+  name: "Icy"
+  code_point_1: 1048
+  semicolon_required: true
+}
+entities: {
+  name: "Idot"
+  code_point_1: 304
+  semicolon_required: true
+}
+entities: {
+  name: "Ifr"
+  code_point_1: 8465
+  semicolon_required: true
+}
+entities: {
+  name: "Igrave"
+  code_point_1: 204
+  semicolon_required: true
+}
+entities: {
+  name: "Im"
+  code_point_1: 8465
+  semicolon_required: true
+}
+entities: {
+  name: "Imacr"
+  code_point_1: 298
+  semicolon_required: true
+}
+entities: {
+  name: "ImaginaryI"
+  code_point_1: 8520
+  semicolon_required: true
+}
+entities: {
+  name: "Implies"
+  code_point_1: 8658
+  semicolon_required: true
+}
+entities: {
+  name: "Int"
+  code_point_1: 8748
+  semicolon_required: true
+}
+entities: {
+  name: "Integral"
+  code_point_1: 8747
+  semicolon_required: true
+}
+entities: {
+  name: "Intersection"
+  code_point_1: 8898
+  semicolon_required: true
+}
+entities: {
+  name: "InvisibleComma"
+  code_point_1: 8291
+  semicolon_required: true
+}
+entities: {
+  name: "InvisibleTimes"
+  code_point_1: 8290
+  semicolon_required: true
+}
+entities: {
+  name: "Iogon"
+  code_point_1: 302
+  semicolon_required: true
+}
+entities: {
+  name: "Iopf"
+  code_point_1: 120128
+  semicolon_required: true
+}
+entities: {
+  name: "Iota"
+  code_point_1: 921
+  semicolon_required: true
+}
+entities: {
+  name: "Iscr"
+  code_point_1: 8464
+  semicolon_required: true
+}
+entities: {
+  name: "Itilde"
+  code_point_1: 296
+  semicolon_required: true
+}
+entities: {
+  name: "Iukcy"
+  code_point_1: 1030
+  semicolon_required: true
+}
+entities: {
+  name: "Iuml"
+  code_point_1: 207
+  semicolon_required: true
+}
+entities: {
+  name: "Jcirc"
+  code_point_1: 308
+  semicolon_required: true
+}
+entities: {
+  name: "Jcy"
+  code_point_1: 1049
+  semicolon_required: true
+}
+entities: {
+  name: "Jfr"
+  code_point_1: 120077
+  semicolon_required: true
+}
+entities: {
+  name: "Jopf"
+  code_point_1: 120129
+  semicolon_required: true
+}
+entities: {
+  name: "Jscr"
+  code_point_1: 119973
+  semicolon_required: true
+}
+entities: {
+  name: "Jsercy"
+  code_point_1: 1032
+  semicolon_required: true
+}
+entities: {
+  name: "Jukcy"
+  code_point_1: 1028
+  semicolon_required: true
+}
+entities: {
+  name: "KHcy"
+  code_point_1: 1061
+  semicolon_required: true
+}
+entities: {
+  name: "KJcy"
+  code_point_1: 1036
+  semicolon_required: true
+}
+entities: {
+  name: "Kappa"
+  code_point_1: 922
+  semicolon_required: true
+}
+entities: {
+  name: "Kcedil"
+  code_point_1: 310
+  semicolon_required: true
+}
+entities: {
+  name: "Kcy"
+  code_point_1: 1050
+  semicolon_required: true
+}
+entities: {
+  name: "Kfr"
+  code_point_1: 120078
+  semicolon_required: true
+}
+entities: {
+  name: "Kopf"
+  code_point_1: 120130
+  semicolon_required: true
+}
+entities: {
+  name: "Kscr"
+  code_point_1: 119974
+  semicolon_required: true
+}
+entities: {
+  name: "LJcy"
+  code_point_1: 1033
+  semicolon_required: true
+}
+entities: {
+  name: "LT"
+  code_point_1: 60
+  semicolon_required: true
+}
+entities: {
+  name: "Lacute"
+  code_point_1: 313
+  semicolon_required: true
+}
+entities: {
+  name: "Lambda"
+  code_point_1: 923
+  semicolon_required: true
+}
+entities: {
+  name: "Lang"
+  code_point_1: 10218
+  semicolon_required: true
+}
+entities: {
+  name: "Laplacetrf"
+  code_point_1: 8466
+  semicolon_required: true
+}
+entities: {
+  name: "Larr"
+  code_point_1: 8606
+  semicolon_required: true
+}
+entities: {
+  name: "Lcaron"
+  code_point_1: 317
+  semicolon_required: true
+}
+entities: {
+  name: "Lcedil"
+  code_point_1: 315
+  semicolon_required: true
+}
+entities: {
+  name: "Lcy"
+  code_point_1: 1051
+  semicolon_required: true
+}
+entities: {
+  name: "LeftAngleBracket"
+  code_point_1: 10216
+  semicolon_required: true
+}
+entities: {
+  name: "LeftArrow"
+  code_point_1: 8592
+  semicolon_required: true
+}
+entities: {
+  name: "LeftArrowBar"
+  code_point_1: 8676
+  semicolon_required: true
+}
+entities: {
+  name: "LeftArrowRightArrow"
+  code_point_1: 8646
+  semicolon_required: true
+}
+entities: {
+  name: "LeftCeiling"
+  code_point_1: 8968
+  semicolon_required: true
+}
+entities: {
+  name: "LeftDoubleBracket"
+  code_point_1: 10214
+  semicolon_required: true
+}
+entities: {
+  name: "LeftDownTeeVector"
+  code_point_1: 10593
+  semicolon_required: true
+}
+entities: {
+  name: "LeftDownVector"
+  code_point_1: 8643
+  semicolon_required: true
+}
+entities: {
+  name: "LeftDownVectorBar"
+  code_point_1: 10585
+  semicolon_required: true
+}
+entities: {
+  name: "LeftFloor"
+  code_point_1: 8970
+  semicolon_required: true
+}
+entities: {
+  name: "LeftRightArrow"
+  code_point_1: 8596
+  semicolon_required: true
+}
+entities: {
+  name: "LeftRightVector"
+  code_point_1: 10574
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTee"
+  code_point_1: 8867
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTeeArrow"
+  code_point_1: 8612
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTeeVector"
+  code_point_1: 10586
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTriangle"
+  code_point_1: 8882
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTriangleBar"
+  code_point_1: 10703
+  semicolon_required: true
+}
+entities: {
+  name: "LeftTriangleEqual"
+  code_point_1: 8884
+  semicolon_required: true
+}
+entities: {
+  name: "LeftUpDownVector"
+  code_point_1: 10577
+  semicolon_required: true
+}
+entities: {
+  name: "LeftUpTeeVector"
+  code_point_1: 10592
+  semicolon_required: true
+}
+entities: {
+  name: "LeftUpVector"
+  code_point_1: 8639
+  semicolon_required: true
+}
+entities: {
+  name: "LeftUpVectorBar"
+  code_point_1: 10584
+  semicolon_required: true
+}
+entities: {
+  name: "LeftVector"
+  code_point_1: 8636
+  semicolon_required: true
+}
+entities: {
+  name: "LeftVectorBar"
+  code_point_1: 10578
+  semicolon_required: true
+}
+entities: {
+  name: "Leftarrow"
+  code_point_1: 8656
+  semicolon_required: true
+}
+entities: {
+  name: "Leftrightarrow"
+  code_point_1: 8660
+  semicolon_required: true
+}
+entities: {
+  name: "LessEqualGreater"
+  code_point_1: 8922
+  semicolon_required: true
+}
+entities: {
+  name: "LessFullEqual"
+  code_point_1: 8806
+  semicolon_required: true
+}
+entities: {
+  name: "LessGreater"
+  code_point_1: 8822
+  semicolon_required: true
+}
+entities: {
+  name: "LessLess"
+  code_point_1: 10913
+  semicolon_required: true
+}
+entities: {
+  name: "LessSlantEqual"
+  code_point_1: 10877
+  semicolon_required: true
+}
+entities: {
+  name: "LessTilde"
+  code_point_1: 8818
+  semicolon_required: true
+}
+entities: {
+  name: "Lfr"
+  code_point_1: 120079
+  semicolon_required: true
+}
+entities: {
+  name: "Ll"
+  code_point_1: 8920
+  semicolon_required: true
+}
+entities: {
+  name: "Lleftarrow"
+  code_point_1: 8666
+  semicolon_required: true
+}
+entities: {
+  name: "Lmidot"
+  code_point_1: 319
+  semicolon_required: true
+}
+entities: {
+  name: "LongLeftArrow"
+  code_point_1: 10229
+  semicolon_required: true
+}
+entities: {
+  name: "LongLeftRightArrow"
+  code_point_1: 10231
+  semicolon_required: true
+}
+entities: {
+  name: "LongRightArrow"
+  code_point_1: 10230
+  semicolon_required: true
+}
+entities: {
+  name: "Longleftarrow"
+  code_point_1: 10232
+  semicolon_required: true
+}
+entities: {
+  name: "Longleftrightarrow"
+  code_point_1: 10234
+  semicolon_required: true
+}
+entities: {
+  name: "Longrightarrow"
+  code_point_1: 10233
+  semicolon_required: true
+}
+entities: {
+  name: "Lopf"
+  code_point_1: 120131
+  semicolon_required: true
+}
+entities: {
+  name: "LowerLeftArrow"
+  code_point_1: 8601
+  semicolon_required: true
+}
+entities: {
+  name: "LowerRightArrow"
+  code_point_1: 8600
+  semicolon_required: true
+}
+entities: {
+  name: "Lscr"
+  code_point_1: 8466
+  semicolon_required: true
+}
+entities: {
+  name: "Lsh"
+  code_point_1: 8624
+  semicolon_required: true
+}
+entities: {
+  name: "Lstrok"
+  code_point_1: 321
+  semicolon_required: true
+}
+entities: {
+  name: "Lt"
+  code_point_1: 8810
+}
+entities: {
+  name: "Map"
+  code_point_1: 10501
+  semicolon_required: true
+}
+entities: {
+  name: "Mcy"
+  code_point_1: 1052
+  semicolon_required: true
+}
+entities: {
+  name: "MediumSpace"
+  code_point_1: 8287
+  semicolon_required: true
+}
+entities: {
+  name: "Mellintrf"
+  code_point_1: 8499
+  semicolon_required: true
+}
+entities: {
+  name: "Mfr"
+  code_point_1: 120080
+  semicolon_required: true
+}
+entities: {
+  name: "MinusPlus"
+  code_point_1: 8723
+  semicolon_required: true
+}
+entities: {
+  name: "Mopf"
+  code_point_1: 120132
+  semicolon_required: true
+}
+entities: {
+  name: "Mscr"
+  code_point_1: 8499
+  semicolon_required: true
+}
+entities: {
+  name: "Mu"
+  code_point_1: 924
+  semicolon_required: true
+}
+entities: {
+  name: "NJcy"
+  code_point_1: 1034
+  semicolon_required: true
+}
+entities: {
+  name: "Nacute"
+  code_point_1: 323
+  semicolon_required: true
+}
+entities: {
+  name: "Ncaron"
+  code_point_1: 327
+  semicolon_required: true
+}
+entities: {
+  name: "Ncedil"
+  code_point_1: 325
+  semicolon_required: true
+}
+entities: {
+  name: "Ncy"
+  code_point_1: 1053
+  semicolon_required: true
+}
+entities: {
+  name: "NegativeMediumSpace"
+  code_point_1: 8203
+  semicolon_required: true
+}
+entities: {
+  name: "NegativeThickSpace"
+  code_point_1: 8203
+  semicolon_required: true
+}
+entities: {
+  name: "NegativeThinSpace"
+  code_point_1: 8203
+  semicolon_required: true
+}
+entities: {
+  name: "NegativeVeryThinSpace"
+  code_point_1: 8203
+  semicolon_required: true
+}
+entities: {
+  name: "NestedGreaterGreater"
+  code_point_1: 8811
+  semicolon_required: true
+}
+entities: {
+  name: "NestedLessLess"
+  code_point_1: 8810
+  semicolon_required: true
+}
+entities: {
+  name: "NewLine"
+  code_point_1: 10
+}
+entities: {
+  name: "Nfr"
+  code_point_1: 120081
+  semicolon_required: true
+}
+entities: {
+  name: "NoBreak"
+  code_point_1: 8288
+  semicolon_required: true
+}
+entities: {
+  name: "NonBreakingSpace"
+  code_point_1: 160
+  semicolon_required: true
+}
+entities: {
+  name: "Nopf"
+  code_point_1: 8469
+  semicolon_required: true
+}
+entities: {
+  name: "Not"
+  code_point_1: 10988
+  semicolon_required: true
+}
+entities: {
+  name: "NotCongruent"
+  code_point_1: 8802
+  semicolon_required: true
+}
+entities: {
+  name: "NotCupCap"
+  code_point_1: 8813
+  semicolon_required: true
+}
+entities: {
+  name: "NotDoubleVerticalBar"
+  code_point_1: 8742
+  semicolon_required: true
+}
+entities: {
+  name: "NotElement"
+  code_point_1: 8713
+  semicolon_required: true
+}
+entities: {
+  name: "NotEqual"
+  code_point_1: 8800
+  semicolon_required: true
+}
+entities: {
+  name: "NotEqualTilde"
+  code_point_1: 8770
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotExists"
+  code_point_1: 8708
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreater"
+  code_point_1: 8815
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterEqual"
+  code_point_1: 8817
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterFullEqual"
+  code_point_1: 8807
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterGreater"
+  code_point_1: 8811
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterLess"
+  code_point_1: 8825
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterSlantEqual"
+  code_point_1: 10878
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotGreaterTilde"
+  code_point_1: 8821
+  semicolon_required: true
+}
+entities: {
+  name: "NotHumpDownHump"
+  code_point_1: 8782
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotHumpEqual"
+  code_point_1: 8783
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotLeftTriangle"
+  code_point_1: 8938
+  semicolon_required: true
+}
+entities: {
+  name: "NotLeftTriangleBar"
+  code_point_1: 10703
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotLeftTriangleEqual"
+  code_point_1: 8940
+  semicolon_required: true
+}
+entities: {
+  name: "NotLess"
+  code_point_1: 8814
+  semicolon_required: true
+}
+entities: {
+  name: "NotLessEqual"
+  code_point_1: 8816
+  semicolon_required: true
+}
+entities: {
+  name: "NotLessGreater"
+  code_point_1: 8824
+  semicolon_required: true
+}
+entities: {
+  name: "NotLessLess"
+  code_point_1: 8810
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotLessSlantEqual"
+  code_point_1: 10877
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotLessTilde"
+  code_point_1: 8820
+  semicolon_required: true
+}
+entities: {
+  name: "NotNestedGreaterGreater"
+  code_point_1: 10914
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotNestedLessLess"
+  code_point_1: 10913
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotPrecedes"
+  code_point_1: 8832
+  semicolon_required: true
+}
+entities: {
+  name: "NotPrecedesEqual"
+  code_point_1: 10927
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotPrecedesSlantEqual"
+  code_point_1: 8928
+  semicolon_required: true
+}
+entities: {
+  name: "NotReverseElement"
+  code_point_1: 8716
+  semicolon_required: true
+}
+entities: {
+  name: "NotRightTriangle"
+  code_point_1: 8939
+  semicolon_required: true
+}
+entities: {
+  name: "NotRightTriangleBar"
+  code_point_1: 10704
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotRightTriangleEqual"
+  code_point_1: 8941
+  semicolon_required: true
+}
+entities: {
+  name: "NotSquareSubset"
+  code_point_1: 8847
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotSquareSubsetEqual"
+  code_point_1: 8930
+  semicolon_required: true
+}
+entities: {
+  name: "NotSquareSuperset"
+  code_point_1: 8848
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotSquareSupersetEqual"
+  code_point_1: 8931
+  semicolon_required: true
+}
+entities: {
+  name: "NotSubset"
+  code_point_1: 8834
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "NotSubsetEqual"
+  code_point_1: 8840
+  semicolon_required: true
+}
+entities: {
+  name: "NotSucceeds"
+  code_point_1: 8833
+  semicolon_required: true
+}
+entities: {
+  name: "NotSucceedsEqual"
+  code_point_1: 10928
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotSucceedsSlantEqual"
+  code_point_1: 8929
+  semicolon_required: true
+}
+entities: {
+  name: "NotSucceedsTilde"
+  code_point_1: 8831
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "NotSuperset"
+  code_point_1: 8835
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "NotSupersetEqual"
+  code_point_1: 8841
+  semicolon_required: true
+}
+entities: {
+  name: "NotTilde"
+  code_point_1: 8769
+  semicolon_required: true
+}
+entities: {
+  name: "NotTildeEqual"
+  code_point_1: 8772
+  semicolon_required: true
+}
+entities: {
+  name: "NotTildeFullEqual"
+  code_point_1: 8775
+  semicolon_required: true
+}
+entities: {
+  name: "NotTildeTilde"
+  code_point_1: 8777
+  semicolon_required: true
+}
+entities: {
+  name: "NotVerticalBar"
+  code_point_1: 8740
+  semicolon_required: true
+}
+entities: {
+  name: "Nscr"
+  code_point_1: 119977
+  semicolon_required: true
+}
+entities: {
+  name: "Ntilde"
+  code_point_1: 209
+  semicolon_required: true
+}
+entities: {
+  name: "Nu"
+  code_point_1: 925
+  semicolon_required: true
+}
+entities: {
+  name: "OElig"
+  code_point_1: 338
+  semicolon_required: true
+}
+entities: {
+  name: "Oacute"
+  code_point_1: 211
+  semicolon_required: true
+}
+entities: {
+  name: "Ocirc"
+  code_point_1: 212
+  semicolon_required: true
+}
+entities: {
+  name: "Ocy"
+  code_point_1: 1054
+  semicolon_required: true
+}
+entities: {
+  name: "Odblac"
+  code_point_1: 336
+  semicolon_required: true
+}
+entities: {
+  name: "Ofr"
+  code_point_1: 120082
+  semicolon_required: true
+}
+entities: {
+  name: "Ograve"
+  code_point_1: 210
+  semicolon_required: true
+}
+entities: {
+  name: "Omacr"
+  code_point_1: 332
+  semicolon_required: true
+}
+entities: {
+  name: "Omega"
+  code_point_1: 937
+  semicolon_required: true
+}
+entities: {
+  name: "Omicron"
+  code_point_1: 927
+  semicolon_required: true
+}
+entities: {
+  name: "Oopf"
+  code_point_1: 120134
+  semicolon_required: true
+}
+entities: {
+  name: "OpenCurlyDoubleQuote"
+  code_point_1: 8220
+  semicolon_required: true
+}
+entities: {
+  name: "OpenCurlyQuote"
+  code_point_1: 8216
+  semicolon_required: true
+}
+entities: {
+  name: "Or"
+  code_point_1: 10836
+  semicolon_required: true
+}
+entities: {
+  name: "Oscr"
+  code_point_1: 119978
+  semicolon_required: true
+}
+entities: {
+  name: "Oslash"
+  code_point_1: 216
+  semicolon_required: true
+}
+entities: {
+  name: "Otilde"
+  code_point_1: 213
+  semicolon_required: true
+}
+entities: {
+  name: "Otimes"
+  code_point_1: 10807
+  semicolon_required: true
+}
+entities: {
+  name: "Ouml"
+  code_point_1: 214
+  semicolon_required: true
+}
+entities: {
+  name: "OverBar"
+  code_point_1: 8254
+  semicolon_required: true
+}
+entities: {
+  name: "OverBrace"
+  code_point_1: 9182
+  semicolon_required: true
+}
+entities: {
+  name: "OverBracket"
+  code_point_1: 9140
+  semicolon_required: true
+}
+entities: {
+  name: "OverParenthesis"
+  code_point_1: 9180
+  semicolon_required: true
+}
+entities: {
+  name: "PartialD"
+  code_point_1: 8706
+  semicolon_required: true
+}
+entities: {
+  name: "Pcy"
+  code_point_1: 1055
+  semicolon_required: true
+}
+entities: {
+  name: "Pfr"
+  code_point_1: 120083
+  semicolon_required: true
+}
+entities: {
+  name: "Phi"
+  code_point_1: 934
+  semicolon_required: true
+}
+entities: {
+  name: "Pi"
+  code_point_1: 928
+  semicolon_required: true
+}
+entities: {
+  name: "PlusMinus"
+  code_point_1: 177
+  semicolon_required: true
+}
+entities: {
+  name: "Poincareplane"
+  code_point_1: 8460
+  semicolon_required: true
+}
+entities: {
+  name: "Popf"
+  code_point_1: 8473
+  semicolon_required: true
+}
+entities: {
+  name: "Pr"
+  code_point_1: 10939
+  semicolon_required: true
+}
+entities: {
+  name: "Precedes"
+  code_point_1: 8826
+  semicolon_required: true
+}
+entities: {
+  name: "PrecedesEqual"
+  code_point_1: 10927
+  semicolon_required: true
+}
+entities: {
+  name: "PrecedesSlantEqual"
+  code_point_1: 8828
+  semicolon_required: true
+}
+entities: {
+  name: "PrecedesTilde"
+  code_point_1: 8830
+  semicolon_required: true
+}
+entities: {
+  name: "Prime"
+  code_point_1: 8243
+  semicolon_required: true
+}
+entities: {
+  name: "Product"
+  code_point_1: 8719
+  semicolon_required: true
+}
+entities: {
+  name: "Proportion"
+  code_point_1: 8759
+  semicolon_required: true
+}
+entities: {
+  name: "Proportional"
+  code_point_1: 8733
+  semicolon_required: true
+}
+entities: {
+  name: "Pscr"
+  code_point_1: 119979
+  semicolon_required: true
+}
+entities: {
+  name: "Psi"
+  code_point_1: 936
+  semicolon_required: true
+}
+entities: {
+  name: "QUOT"
+  code_point_1: 34
+  semicolon_required: true
+}
+entities: {
+  name: "Qfr"
+  code_point_1: 120084
+  semicolon_required: true
+}
+entities: {
+  name: "Qopf"
+  code_point_1: 8474
+  semicolon_required: true
+}
+entities: {
+  name: "Qscr"
+  code_point_1: 119980
+  semicolon_required: true
+}
+entities: {
+  name: "RBarr"
+  code_point_1: 10512
+  semicolon_required: true
+}
+entities: {
+  name: "REG"
+  code_point_1: 174
+  semicolon_required: true
+}
+entities: {
+  name: "Racute"
+  code_point_1: 340
+  semicolon_required: true
+}
+entities: {
+  name: "Rang"
+  code_point_1: 10219
+  semicolon_required: true
+}
+entities: {
+  name: "Rarr"
+  code_point_1: 8608
+  semicolon_required: true
+}
+entities: {
+  name: "Rarrtl"
+  code_point_1: 10518
+  semicolon_required: true
+}
+entities: {
+  name: "Rcaron"
+  code_point_1: 344
+  semicolon_required: true
+}
+entities: {
+  name: "Rcedil"
+  code_point_1: 342
+  semicolon_required: true
+}
+entities: {
+  name: "Rcy"
+  code_point_1: 1056
+  semicolon_required: true
+}
+entities: {
+  name: "Re"
+  code_point_1: 8476
+  semicolon_required: true
+}
+entities: {
+  name: "ReverseElement"
+  code_point_1: 8715
+  semicolon_required: true
+}
+entities: {
+  name: "ReverseEquilibrium"
+  code_point_1: 8651
+  semicolon_required: true
+}
+entities: {
+  name: "ReverseUpEquilibrium"
+  code_point_1: 10607
+  semicolon_required: true
+}
+entities: {
+  name: "Rfr"
+  code_point_1: 8476
+  semicolon_required: true
+}
+entities: {
+  name: "Rho"
+  code_point_1: 929
+  semicolon_required: true
+}
+entities: {
+  name: "RightAngleBracket"
+  code_point_1: 10217
+  semicolon_required: true
+}
+entities: {
+  name: "RightArrow"
+  code_point_1: 8594
+  semicolon_required: true
+}
+entities: {
+  name: "RightArrowBar"
+  code_point_1: 8677
+  semicolon_required: true
+}
+entities: {
+  name: "RightArrowLeftArrow"
+  code_point_1: 8644
+  semicolon_required: true
+}
+entities: {
+  name: "RightCeiling"
+  code_point_1: 8969
+  semicolon_required: true
+}
+entities: {
+  name: "RightDoubleBracket"
+  code_point_1: 10215
+  semicolon_required: true
+}
+entities: {
+  name: "RightDownTeeVector"
+  code_point_1: 10589
+  semicolon_required: true
+}
+entities: {
+  name: "RightDownVector"
+  code_point_1: 8642
+  semicolon_required: true
+}
+entities: {
+  name: "RightDownVectorBar"
+  code_point_1: 10581
+  semicolon_required: true
+}
+entities: {
+  name: "RightFloor"
+  code_point_1: 8971
+  semicolon_required: true
+}
+entities: {
+  name: "RightTee"
+  code_point_1: 8866
+  semicolon_required: true
+}
+entities: {
+  name: "RightTeeArrow"
+  code_point_1: 8614
+  semicolon_required: true
+}
+entities: {
+  name: "RightTeeVector"
+  code_point_1: 10587
+  semicolon_required: true
+}
+entities: {
+  name: "RightTriangle"
+  code_point_1: 8883
+  semicolon_required: true
+}
+entities: {
+  name: "RightTriangleBar"
+  code_point_1: 10704
+  semicolon_required: true
+}
+entities: {
+  name: "RightTriangleEqual"
+  code_point_1: 8885
+  semicolon_required: true
+}
+entities: {
+  name: "RightUpDownVector"
+  code_point_1: 10575
+  semicolon_required: true
+}
+entities: {
+  name: "RightUpTeeVector"
+  code_point_1: 10588
+  semicolon_required: true
+}
+entities: {
+  name: "RightUpVector"
+  code_point_1: 8638
+  semicolon_required: true
+}
+entities: {
+  name: "RightUpVectorBar"
+  code_point_1: 10580
+  semicolon_required: true
+}
+entities: {
+  name: "RightVector"
+  code_point_1: 8640
+  semicolon_required: true
+}
+entities: {
+  name: "RightVectorBar"
+  code_point_1: 10579
+  semicolon_required: true
+}
+entities: {
+  name: "Rightarrow"
+  code_point_1: 8658
+  semicolon_required: true
+}
+entities: {
+  name: "Ropf"
+  code_point_1: 8477
+  semicolon_required: true
+}
+entities: {
+  name: "RoundImplies"
+  code_point_1: 10608
+  semicolon_required: true
+}
+entities: {
+  name: "Rrightarrow"
+  code_point_1: 8667
+  semicolon_required: true
+}
+entities: {
+  name: "Rscr"
+  code_point_1: 8475
+  semicolon_required: true
+}
+entities: {
+  name: "Rsh"
+  code_point_1: 8625
+  semicolon_required: true
+}
+entities: {
+  name: "RuleDelayed"
+  code_point_1: 10740
+  semicolon_required: true
+}
+entities: {
+  name: "SHCHcy"
+  code_point_1: 1065
+  semicolon_required: true
+}
+entities: {
+  name: "SHcy"
+  code_point_1: 1064
+  semicolon_required: true
+}
+entities: {
+  name: "SOFTcy"
+  code_point_1: 1068
+  semicolon_required: true
+}
+entities: {
+  name: "Sacute"
+  code_point_1: 346
+  semicolon_required: true
+}
+entities: {
+  name: "Sc"
+  code_point_1: 10940
+  semicolon_required: true
+}
+entities: {
+  name: "Scaron"
+  code_point_1: 352
+  semicolon_required: true
+}
+entities: {
+  name: "Scedil"
+  code_point_1: 350
+  semicolon_required: true
+}
+entities: {
+  name: "Scirc"
+  code_point_1: 348
+  semicolon_required: true
+}
+entities: {
+  name: "Scy"
+  code_point_1: 1057
+  semicolon_required: true
+}
+entities: {
+  name: "Sfr"
+  code_point_1: 120086
+  semicolon_required: true
+}
+entities: {
+  name: "ShortDownArrow"
+  code_point_1: 8595
+  semicolon_required: true
+}
+entities: {
+  name: "ShortLeftArrow"
+  code_point_1: 8592
+  semicolon_required: true
+}
+entities: {
+  name: "ShortRightArrow"
+  code_point_1: 8594
+  semicolon_required: true
+}
+entities: {
+  name: "ShortUpArrow"
+  code_point_1: 8593
+  semicolon_required: true
+}
+entities: {
+  name: "Sigma"
+  code_point_1: 931
+  semicolon_required: true
+}
+entities: {
+  name: "SmallCircle"
+  code_point_1: 8728
+  semicolon_required: true
+}
+entities: {
+  name: "Sopf"
+  code_point_1: 120138
+  semicolon_required: true
+}
+entities: {
+  name: "Sqrt"
+  code_point_1: 8730
+  semicolon_required: true
+}
+entities: {
+  name: "Square"
+  code_point_1: 9633
+  semicolon_required: true
+}
+entities: {
+  name: "SquareIntersection"
+  code_point_1: 8851
+  semicolon_required: true
+}
+entities: {
+  name: "SquareSubset"
+  code_point_1: 8847
+  semicolon_required: true
+}
+entities: {
+  name: "SquareSubsetEqual"
+  code_point_1: 8849
+  semicolon_required: true
+}
+entities: {
+  name: "SquareSuperset"
+  code_point_1: 8848
+  semicolon_required: true
+}
+entities: {
+  name: "SquareSupersetEqual"
+  code_point_1: 8850
+  semicolon_required: true
+}
+entities: {
+  name: "SquareUnion"
+  code_point_1: 8852
+  semicolon_required: true
+}
+entities: {
+  name: "Sscr"
+  code_point_1: 119982
+  semicolon_required: true
+}
+entities: {
+  name: "Star"
+  code_point_1: 8902
+  semicolon_required: true
+}
+entities: {
+  name: "Sub"
+  code_point_1: 8912
+  semicolon_required: true
+}
+entities: {
+  name: "Subset"
+  code_point_1: 8912
+  semicolon_required: true
+}
+entities: {
+  name: "SubsetEqual"
+  code_point_1: 8838
+  semicolon_required: true
+}
+entities: {
+  name: "Succeeds"
+  code_point_1: 8827
+  semicolon_required: true
+}
+entities: {
+  name: "SucceedsEqual"
+  code_point_1: 10928
+  semicolon_required: true
+}
+entities: {
+  name: "SucceedsSlantEqual"
+  code_point_1: 8829
+  semicolon_required: true
+}
+entities: {
+  name: "SucceedsTilde"
+  code_point_1: 8831
+  semicolon_required: true
+}
+entities: {
+  name: "SuchThat"
+  code_point_1: 8715
+  semicolon_required: true
+}
+entities: {
+  name: "Sum"
+  code_point_1: 8721
+  semicolon_required: true
+}
+entities: {
+  name: "Sup"
+  code_point_1: 8913
+  semicolon_required: true
+}
+entities: {
+  name: "Superset"
+  code_point_1: 8835
+  semicolon_required: true
+}
+entities: {
+  name: "SupersetEqual"
+  code_point_1: 8839
+  semicolon_required: true
+}
+entities: {
+  name: "Supset"
+  code_point_1: 8913
+  semicolon_required: true
+}
+entities: {
+  name: "THORN"
+  code_point_1: 222
+  semicolon_required: true
+}
+entities: {
+  name: "TRADE"
+  code_point_1: 8482
+  semicolon_required: true
+}
+entities: {
+  name: "TSHcy"
+  code_point_1: 1035
+  semicolon_required: true
+}
+entities: {
+  name: "TScy"
+  code_point_1: 1062
+  semicolon_required: true
+}
+entities: {
+  name: "Tab"
+  code_point_1: 9
+}
+entities: {
+  name: "Tau"
+  code_point_1: 932
+  semicolon_required: true
+}
+entities: {
+  name: "Tcaron"
+  code_point_1: 356
+  semicolon_required: true
+}
+entities: {
+  name: "Tcedil"
+  code_point_1: 354
+  semicolon_required: true
+}
+entities: {
+  name: "Tcy"
+  code_point_1: 1058
+  semicolon_required: true
+}
+entities: {
+  name: "Tfr"
+  code_point_1: 120087
+  semicolon_required: true
+}
+entities: {
+  name: "Therefore"
+  code_point_1: 8756
+  semicolon_required: true
+}
+entities: {
+  name: "Theta"
+  code_point_1: 920
+  semicolon_required: true
+}
+entities: {
+  name: "ThickSpace"
+  code_point_1: 8287
+  code_point_2: 8202
+  semicolon_required: true
+}
+entities: {
+  name: "ThinSpace"
+  code_point_1: 8201
+  semicolon_required: true
+}
+entities: {
+  name: "Tilde"
+  code_point_1: 8764
+  semicolon_required: true
+}
+entities: {
+  name: "TildeEqual"
+  code_point_1: 8771
+  semicolon_required: true
+}
+entities: {
+  name: "TildeFullEqual"
+  code_point_1: 8773
+  semicolon_required: true
+}
+entities: {
+  name: "TildeTilde"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "Topf"
+  code_point_1: 120139
+  semicolon_required: true
+}
+entities: {
+  name: "TripleDot"
+  code_point_1: 8411
+  semicolon_required: true
+}
+entities: {
+  name: "Tscr"
+  code_point_1: 119983
+  semicolon_required: true
+}
+entities: {
+  name: "Tstrok"
+  code_point_1: 358
+  semicolon_required: true
+}
+entities: {
+  name: "Uacute"
+  code_point_1: 218
+  semicolon_required: true
+}
+entities: {
+  name: "Uarr"
+  code_point_1: 8607
+  semicolon_required: true
+}
+entities: {
+  name: "Uarrocir"
+  code_point_1: 10569
+  semicolon_required: true
+}
+entities: {
+  name: "Ubrcy"
+  code_point_1: 1038
+  semicolon_required: true
+}
+entities: {
+  name: "Ubreve"
+  code_point_1: 364
+  semicolon_required: true
+}
+entities: {
+  name: "Ucirc"
+  code_point_1: 219
+  semicolon_required: true
+}
+entities: {
+  name: "Ucy"
+  code_point_1: 1059
+  semicolon_required: true
+}
+entities: {
+  name: "Udblac"
+  code_point_1: 368
+  semicolon_required: true
+}
+entities: {
+  name: "Ufr"
+  code_point_1: 120088
+  semicolon_required: true
+}
+entities: {
+  name: "Ugrave"
+  code_point_1: 217
+  semicolon_required: true
+}
+entities: {
+  name: "Umacr"
+  code_point_1: 362
+  semicolon_required: true
+}
+entities: {
+  name: "UnderBar"
+  code_point_1: 95
+  semicolon_required: true
+}
+entities: {
+  name: "UnderBrace"
+  code_point_1: 9183
+  semicolon_required: true
+}
+entities: {
+  name: "UnderBracket"
+  code_point_1: 9141
+  semicolon_required: true
+}
+entities: {
+  name: "UnderParenthesis"
+  code_point_1: 9181
+  semicolon_required: true
+}
+entities: {
+  name: "Union"
+  code_point_1: 8899
+  semicolon_required: true
+}
+entities: {
+  name: "UnionPlus"
+  code_point_1: 8846
+  semicolon_required: true
+}
+entities: {
+  name: "Uogon"
+  code_point_1: 370
+  semicolon_required: true
+}
+entities: {
+  name: "Uopf"
+  code_point_1: 120140
+  semicolon_required: true
+}
+entities: {
+  name: "UpArrow"
+  code_point_1: 8593
+  semicolon_required: true
+}
+entities: {
+  name: "UpArrowBar"
+  code_point_1: 10514
+  semicolon_required: true
+}
+entities: {
+  name: "UpArrowDownArrow"
+  code_point_1: 8645
+  semicolon_required: true
+}
+entities: {
+  name: "UpDownArrow"
+  code_point_1: 8597
+  semicolon_required: true
+}
+entities: {
+  name: "UpEquilibrium"
+  code_point_1: 10606
+  semicolon_required: true
+}
+entities: {
+  name: "UpTee"
+  code_point_1: 8869
+  semicolon_required: true
+}
+entities: {
+  name: "UpTeeArrow"
+  code_point_1: 8613
+  semicolon_required: true
+}
+entities: {
+  name: "Uparrow"
+  code_point_1: 8657
+  semicolon_required: true
+}
+entities: {
+  name: "Updownarrow"
+  code_point_1: 8661
+  semicolon_required: true
+}
+entities: {
+  name: "UpperLeftArrow"
+  code_point_1: 8598
+  semicolon_required: true
+}
+entities: {
+  name: "UpperRightArrow"
+  code_point_1: 8599
+  semicolon_required: true
+}
+entities: {
+  name: "Upsi"
+  code_point_1: 978
+  semicolon_required: true
+}
+entities: {
+  name: "Upsilon"
+  code_point_1: 933
+  semicolon_required: true
+}
+entities: {
+  name: "Uring"
+  code_point_1: 366
+  semicolon_required: true
+}
+entities: {
+  name: "Uscr"
+  code_point_1: 119984
+  semicolon_required: true
+}
+entities: {
+  name: "Utilde"
+  code_point_1: 360
+  semicolon_required: true
+}
+entities: {
+  name: "Uuml"
+  code_point_1: 220
+  semicolon_required: true
+}
+entities: {
+  name: "VDash"
+  code_point_1: 8875
+  semicolon_required: true
+}
+entities: {
+  name: "Vbar"
+  code_point_1: 10987
+  semicolon_required: true
+}
+entities: {
+  name: "Vcy"
+  code_point_1: 1042
+  semicolon_required: true
+}
+entities: {
+  name: "Vdash"
+  code_point_1: 8873
+  semicolon_required: true
+}
+entities: {
+  name: "Vdashl"
+  code_point_1: 10982
+  semicolon_required: true
+}
+entities: {
+  name: "Vee"
+  code_point_1: 8897
+  semicolon_required: true
+}
+entities: {
+  name: "Verbar"
+  code_point_1: 8214
+  semicolon_required: true
+}
+entities: {
+  name: "Vert"
+  code_point_1: 8214
+  semicolon_required: true
+}
+entities: {
+  name: "VerticalBar"
+  code_point_1: 8739
+  semicolon_required: true
+}
+entities: {
+  name: "VerticalLine"
+  code_point_1: 124
+  semicolon_required: true
+}
+entities: {
+  name: "VerticalSeparator"
+  code_point_1: 10072
+  semicolon_required: true
+}
+entities: {
+  name: "VerticalTilde"
+  code_point_1: 8768
+  semicolon_required: true
+}
+entities: {
+  name: "VeryThinSpace"
+  code_point_1: 8202
+  semicolon_required: true
+}
+entities: {
+  name: "Vfr"
+  code_point_1: 120089
+  semicolon_required: true
+}
+entities: {
+  name: "Vopf"
+  code_point_1: 120141
+  semicolon_required: true
+}
+entities: {
+  name: "Vscr"
+  code_point_1: 119985
+  semicolon_required: true
+}
+entities: {
+  name: "Vvdash"
+  code_point_1: 8874
+  semicolon_required: true
+}
+entities: {
+  name: "Wcirc"
+  code_point_1: 372
+  semicolon_required: true
+}
+entities: {
+  name: "Wedge"
+  code_point_1: 8896
+  semicolon_required: true
+}
+entities: {
+  name: "Wfr"
+  code_point_1: 120090
+  semicolon_required: true
+}
+entities: {
+  name: "Wopf"
+  code_point_1: 120142
+  semicolon_required: true
+}
+entities: {
+  name: "Wscr"
+  code_point_1: 119986
+  semicolon_required: true
+}
+entities: {
+  name: "Xfr"
+  code_point_1: 120091
+  semicolon_required: true
+}
+entities: {
+  name: "Xi"
+  code_point_1: 926
+  semicolon_required: true
+}
+entities: {
+  name: "Xopf"
+  code_point_1: 120143
+  semicolon_required: true
+}
+entities: {
+  name: "Xscr"
+  code_point_1: 119987
+  semicolon_required: true
+}
+entities: {
+  name: "YAcy"
+  code_point_1: 1071
+  semicolon_required: true
+}
+entities: {
+  name: "YIcy"
+  code_point_1: 1031
+  semicolon_required: true
+}
+entities: {
+  name: "YUcy"
+  code_point_1: 1070
+  semicolon_required: true
+}
+entities: {
+  name: "Yacute"
+  code_point_1: 221
+  semicolon_required: true
+}
+entities: {
+  name: "Ycirc"
+  code_point_1: 374
+  semicolon_required: true
+}
+entities: {
+  name: "Ycy"
+  code_point_1: 1067
+  semicolon_required: true
+}
+entities: {
+  name: "Yfr"
+  code_point_1: 120092
+  semicolon_required: true
+}
+entities: {
+  name: "Yopf"
+  code_point_1: 120144
+  semicolon_required: true
+}
+entities: {
+  name: "Yscr"
+  code_point_1: 119988
+  semicolon_required: true
+}
+entities: {
+  name: "Yuml"
+  code_point_1: 376
+  semicolon_required: true
+}
+entities: {
+  name: "ZHcy"
+  code_point_1: 1046
+  semicolon_required: true
+}
+entities: {
+  name: "Zacute"
+  code_point_1: 377
+  semicolon_required: true
+}
+entities: {
+  name: "Zcaron"
+  code_point_1: 381
+  semicolon_required: true
+}
+entities: {
+  name: "Zcy"
+  code_point_1: 1047
+  semicolon_required: true
+}
+entities: {
+  name: "Zdot"
+  code_point_1: 379
+  semicolon_required: true
+}
+entities: {
+  name: "ZeroWidthSpace"
+  code_point_1: 8203
+  semicolon_required: true
+}
+entities: {
+  name: "Zeta"
+  code_point_1: 918
+  semicolon_required: true
+}
+entities: {
+  name: "Zfr"
+  code_point_1: 8488
+  semicolon_required: true
+}
+entities: {
+  name: "Zopf"
+  code_point_1: 8484
+  semicolon_required: true
+}
+entities: {
+  name: "Zscr"
+  code_point_1: 119989
+  semicolon_required: true
+}
+entities: {
+  name: "aacute"
+  code_point_1: 225
+  semicolon_required: true
+}
+entities: {
+  name: "abreve"
+  code_point_1: 259
+  semicolon_required: true
+}
+entities: {
+  name: "ac"
+  code_point_1: 8766
+  semicolon_required: true
+}
+entities: {
+  name: "acE"
+  code_point_1: 8766
+  code_point_2: 819
+  semicolon_required: true
+}
+entities: {
+  name: "acd"
+  code_point_1: 8767
+  semicolon_required: true
+}
+entities: {
+  name: "acirc"
+  code_point_1: 226
+  semicolon_required: true
+}
+entities: {
+  name: "acute"
+  code_point_1: 180
+  semicolon_required: true
+}
+entities: {
+  name: "acy"
+  code_point_1: 1072
+  semicolon_required: true
+}
+entities: {
+  name: "aelig"
+  code_point_1: 230
+  semicolon_required: true
+}
+entities: {
+  name: "af"
+  code_point_1: 8289
+  semicolon_required: true
+}
+entities: {
+  name: "afr"
+  code_point_1: 120094
+  semicolon_required: true
+}
+entities: {
+  name: "agrave"
+  code_point_1: 224
+  semicolon_required: true
+}
+entities: {
+  name: "alefsym"
+  code_point_1: 8501
+  semicolon_required: true
+}
+entities: {
+  name: "aleph"
+  code_point_1: 8501
+  semicolon_required: true
+}
+entities: {
+  name: "alpha"
+  code_point_1: 945
+  semicolon_required: true
+}
+entities: {
+  name: "amacr"
+  code_point_1: 257
+  semicolon_required: true
+}
+entities: {
+  name: "amalg"
+  code_point_1: 10815
+  semicolon_required: true
+}
+entities: {
+  name: "amp"
+  code_point_1: 38
+  semicolon_required: true
+}
+entities: {
+  name: "and"
+  code_point_1: 8743
+  semicolon_required: true
+}
+entities: {
+  name: "andand"
+  code_point_1: 10837
+  semicolon_required: true
+}
+entities: {
+  name: "andd"
+  code_point_1: 10844
+  semicolon_required: true
+}
+entities: {
+  name: "andslope"
+  code_point_1: 10840
+  semicolon_required: true
+}
+entities: {
+  name: "andv"
+  code_point_1: 10842
+  semicolon_required: true
+}
+entities: {
+  name: "ang"
+  code_point_1: 8736
+  semicolon_required: true
+}
+entities: {
+  name: "ange"
+  code_point_1: 10660
+  semicolon_required: true
+}
+entities: {
+  name: "angle"
+  code_point_1: 8736
+  semicolon_required: true
+}
+entities: {
+  name: "angmsd"
+  code_point_1: 8737
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdaa"
+  code_point_1: 10664
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdab"
+  code_point_1: 10665
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdac"
+  code_point_1: 10666
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdad"
+  code_point_1: 10667
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdae"
+  code_point_1: 10668
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdaf"
+  code_point_1: 10669
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdag"
+  code_point_1: 10670
+  semicolon_required: true
+}
+entities: {
+  name: "angmsdah"
+  code_point_1: 10671
+  semicolon_required: true
+}
+entities: {
+  name: "angrt"
+  code_point_1: 8735
+  semicolon_required: true
+}
+entities: {
+  name: "angrtvb"
+  code_point_1: 8894
+  semicolon_required: true
+}
+entities: {
+  name: "angrtvbd"
+  code_point_1: 10653
+  semicolon_required: true
+}
+entities: {
+  name: "angsph"
+  code_point_1: 8738
+  semicolon_required: true
+}
+entities: {
+  name: "angst"
+  code_point_1: 197
+  semicolon_required: true
+}
+entities: {
+  name: "angzarr"
+  code_point_1: 9084
+  semicolon_required: true
+}
+entities: {
+  name: "aogon"
+  code_point_1: 261
+  semicolon_required: true
+}
+entities: {
+  name: "aopf"
+  code_point_1: 120146
+  semicolon_required: true
+}
+entities: {
+  name: "ap"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "apE"
+  code_point_1: 10864
+  semicolon_required: true
+}
+entities: {
+  name: "apacir"
+  code_point_1: 10863
+  semicolon_required: true
+}
+entities: {
+  name: "ape"
+  code_point_1: 8778
+  semicolon_required: true
+}
+entities: {
+  name: "apid"
+  code_point_1: 8779
+  semicolon_required: true
+}
+entities: {
+  name: "apos"
+  code_point_1: 39
+  semicolon_required: true
+}
+entities: {
+  name: "approx"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "approxeq"
+  code_point_1: 8778
+  semicolon_required: true
+}
+entities: {
+  name: "aring"
+  code_point_1: 229
+  semicolon_required: true
+}
+entities: {
+  name: "ascr"
+  code_point_1: 119990
+  semicolon_required: true
+}
+entities: {
+  name: "ast"
+  code_point_1: 42
+  semicolon_required: true
+}
+entities: {
+  name: "asymp"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "asympeq"
+  code_point_1: 8781
+  semicolon_required: true
+}
+entities: {
+  name: "atilde"
+  code_point_1: 227
+  semicolon_required: true
+}
+entities: {
+  name: "auml"
+  code_point_1: 228
+  semicolon_required: true
+}
+entities: {
+  name: "awconint"
+  code_point_1: 8755
+  semicolon_required: true
+}
+entities: {
+  name: "awint"
+  code_point_1: 10769
+  semicolon_required: true
+}
+entities: {
+  name: "bNot"
+  code_point_1: 10989
+  semicolon_required: true
+}
+entities: {
+  name: "backcong"
+  code_point_1: 8780
+  semicolon_required: true
+}
+entities: {
+  name: "backepsilon"
+  code_point_1: 1014
+  semicolon_required: true
+}
+entities: {
+  name: "backprime"
+  code_point_1: 8245
+  semicolon_required: true
+}
+entities: {
+  name: "backsim"
+  code_point_1: 8765
+  semicolon_required: true
+}
+entities: {
+  name: "backsimeq"
+  code_point_1: 8909
+  semicolon_required: true
+}
+entities: {
+  name: "barvee"
+  code_point_1: 8893
+  semicolon_required: true
+}
+entities: {
+  name: "barwed"
+  code_point_1: 8965
+  semicolon_required: true
+}
+entities: {
+  name: "barwedge"
+  code_point_1: 8965
+  semicolon_required: true
+}
+entities: {
+  name: "bbrk"
+  code_point_1: 9141
+  semicolon_required: true
+}
+entities: {
+  name: "bbrktbrk"
+  code_point_1: 9142
+  semicolon_required: true
+}
+entities: {
+  name: "bcong"
+  code_point_1: 8780
+  semicolon_required: true
+}
+entities: {
+  name: "bcy"
+  code_point_1: 1073
+  semicolon_required: true
+}
+entities: {
+  name: "bdquo"
+  code_point_1: 8222
+  semicolon_required: true
+}
+entities: {
+  name: "becaus"
+  code_point_1: 8757
+  semicolon_required: true
+}
+entities: {
+  name: "because"
+  code_point_1: 8757
+  semicolon_required: true
+}
+entities: {
+  name: "bemptyv"
+  code_point_1: 10672
+  semicolon_required: true
+}
+entities: {
+  name: "bepsi"
+  code_point_1: 1014
+  semicolon_required: true
+}
+entities: {
+  name: "bernou"
+  code_point_1: 8492
+  semicolon_required: true
+}
+entities: {
+  name: "beta"
+  code_point_1: 946
+  semicolon_required: true
+}
+entities: {
+  name: "beth"
+  code_point_1: 8502
+  semicolon_required: true
+}
+entities: {
+  name: "between"
+  code_point_1: 8812
+  semicolon_required: true
+}
+entities: {
+  name: "bfr"
+  code_point_1: 120095
+  semicolon_required: true
+}
+entities: {
+  name: "bigcap"
+  code_point_1: 8898
+  semicolon_required: true
+}
+entities: {
+  name: "bigcirc"
+  code_point_1: 9711
+  semicolon_required: true
+}
+entities: {
+  name: "bigcup"
+  code_point_1: 8899
+  semicolon_required: true
+}
+entities: {
+  name: "bigodot"
+  code_point_1: 10752
+  semicolon_required: true
+}
+entities: {
+  name: "bigoplus"
+  code_point_1: 10753
+  semicolon_required: true
+}
+entities: {
+  name: "bigotimes"
+  code_point_1: 10754
+  semicolon_required: true
+}
+entities: {
+  name: "bigsqcup"
+  code_point_1: 10758
+  semicolon_required: true
+}
+entities: {
+  name: "bigstar"
+  code_point_1: 9733
+  semicolon_required: true
+}
+entities: {
+  name: "bigtriangledown"
+  code_point_1: 9661
+  semicolon_required: true
+}
+entities: {
+  name: "bigtriangleup"
+  code_point_1: 9651
+  semicolon_required: true
+}
+entities: {
+  name: "biguplus"
+  code_point_1: 10756
+  semicolon_required: true
+}
+entities: {
+  name: "bigvee"
+  code_point_1: 8897
+  semicolon_required: true
+}
+entities: {
+  name: "bigwedge"
+  code_point_1: 8896
+  semicolon_required: true
+}
+entities: {
+  name: "bkarow"
+  code_point_1: 10509
+  semicolon_required: true
+}
+entities: {
+  name: "blacklozenge"
+  code_point_1: 10731
+  semicolon_required: true
+}
+entities: {
+  name: "blacksquare"
+  code_point_1: 9642
+  semicolon_required: true
+}
+entities: {
+  name: "blacktriangle"
+  code_point_1: 9652
+  semicolon_required: true
+}
+entities: {
+  name: "blacktriangledown"
+  code_point_1: 9662
+  semicolon_required: true
+}
+entities: {
+  name: "blacktriangleleft"
+  code_point_1: 9666
+  semicolon_required: true
+}
+entities: {
+  name: "blacktriangleright"
+  code_point_1: 9656
+  semicolon_required: true
+}
+entities: {
+  name: "blank"
+  code_point_1: 9251
+  semicolon_required: true
+}
+entities: {
+  name: "blk12"
+  code_point_1: 9618
+  semicolon_required: true
+}
+entities: {
+  name: "blk14"
+  code_point_1: 9617
+  semicolon_required: true
+}
+entities: {
+  name: "blk34"
+  code_point_1: 9619
+  semicolon_required: true
+}
+entities: {
+  name: "block"
+  code_point_1: 9608
+  semicolon_required: true
+}
+entities: {
+  name: "bne"
+  code_point_1: 61
+  code_point_2: 8421
+  semicolon_required: true
+}
+entities: {
+  name: "bnequiv"
+  code_point_1: 8801
+  code_point_2: 8421
+  semicolon_required: true
+}
+entities: {
+  name: "bnot"
+  code_point_1: 8976
+  semicolon_required: true
+}
+entities: {
+  name: "bopf"
+  code_point_1: 120147
+  semicolon_required: true
+}
+entities: {
+  name: "bot"
+  code_point_1: 8869
+  semicolon_required: true
+}
+entities: {
+  name: "bottom"
+  code_point_1: 8869
+  semicolon_required: true
+}
+entities: {
+  name: "bowtie"
+  code_point_1: 8904
+  semicolon_required: true
+}
+entities: {
+  name: "boxDL"
+  code_point_1: 9559
+  semicolon_required: true
+}
+entities: {
+  name: "boxDR"
+  code_point_1: 9556
+  semicolon_required: true
+}
+entities: {
+  name: "boxDl"
+  code_point_1: 9558
+  semicolon_required: true
+}
+entities: {
+  name: "boxDr"
+  code_point_1: 9555
+  semicolon_required: true
+}
+entities: {
+  name: "boxH"
+  code_point_1: 9552
+  semicolon_required: true
+}
+entities: {
+  name: "boxHD"
+  code_point_1: 9574
+  semicolon_required: true
+}
+entities: {
+  name: "boxHU"
+  code_point_1: 9577
+  semicolon_required: true
+}
+entities: {
+  name: "boxHd"
+  code_point_1: 9572
+  semicolon_required: true
+}
+entities: {
+  name: "boxHu"
+  code_point_1: 9575
+  semicolon_required: true
+}
+entities: {
+  name: "boxUL"
+  code_point_1: 9565
+  semicolon_required: true
+}
+entities: {
+  name: "boxUR"
+  code_point_1: 9562
+  semicolon_required: true
+}
+entities: {
+  name: "boxUl"
+  code_point_1: 9564
+  semicolon_required: true
+}
+entities: {
+  name: "boxUr"
+  code_point_1: 9561
+  semicolon_required: true
+}
+entities: {
+  name: "boxV"
+  code_point_1: 9553
+  semicolon_required: true
+}
+entities: {
+  name: "boxVH"
+  code_point_1: 9580
+  semicolon_required: true
+}
+entities: {
+  name: "boxVL"
+  code_point_1: 9571
+  semicolon_required: true
+}
+entities: {
+  name: "boxVR"
+  code_point_1: 9568
+  semicolon_required: true
+}
+entities: {
+  name: "boxVh"
+  code_point_1: 9579
+  semicolon_required: true
+}
+entities: {
+  name: "boxVl"
+  code_point_1: 9570
+  semicolon_required: true
+}
+entities: {
+  name: "boxVr"
+  code_point_1: 9567
+  semicolon_required: true
+}
+entities: {
+  name: "boxbox"
+  code_point_1: 10697
+  semicolon_required: true
+}
+entities: {
+  name: "boxdL"
+  code_point_1: 9557
+  semicolon_required: true
+}
+entities: {
+  name: "boxdR"
+  code_point_1: 9554
+  semicolon_required: true
+}
+entities: {
+  name: "boxdl"
+  code_point_1: 9488
+  semicolon_required: true
+}
+entities: {
+  name: "boxdr"
+  code_point_1: 9484
+  semicolon_required: true
+}
+entities: {
+  name: "boxh"
+  code_point_1: 9472
+  semicolon_required: true
+}
+entities: {
+  name: "boxhD"
+  code_point_1: 9573
+  semicolon_required: true
+}
+entities: {
+  name: "boxhU"
+  code_point_1: 9576
+  semicolon_required: true
+}
+entities: {
+  name: "boxhd"
+  code_point_1: 9516
+  semicolon_required: true
+}
+entities: {
+  name: "boxhu"
+  code_point_1: 9524
+  semicolon_required: true
+}
+entities: {
+  name: "boxminus"
+  code_point_1: 8863
+  semicolon_required: true
+}
+entities: {
+  name: "boxplus"
+  code_point_1: 8862
+  semicolon_required: true
+}
+entities: {
+  name: "boxtimes"
+  code_point_1: 8864
+  semicolon_required: true
+}
+entities: {
+  name: "boxuL"
+  code_point_1: 9563
+  semicolon_required: true
+}
+entities: {
+  name: "boxuR"
+  code_point_1: 9560
+  semicolon_required: true
+}
+entities: {
+  name: "boxul"
+  code_point_1: 9496
+  semicolon_required: true
+}
+entities: {
+  name: "boxur"
+  code_point_1: 9492
+  semicolon_required: true
+}
+entities: {
+  name: "boxv"
+  code_point_1: 9474
+  semicolon_required: true
+}
+entities: {
+  name: "boxvH"
+  code_point_1: 9578
+  semicolon_required: true
+}
+entities: {
+  name: "boxvL"
+  code_point_1: 9569
+  semicolon_required: true
+}
+entities: {
+  name: "boxvR"
+  code_point_1: 9566
+  semicolon_required: true
+}
+entities: {
+  name: "boxvh"
+  code_point_1: 9532
+  semicolon_required: true
+}
+entities: {
+  name: "boxvl"
+  code_point_1: 9508
+  semicolon_required: true
+}
+entities: {
+  name: "boxvr"
+  code_point_1: 9500
+  semicolon_required: true
+}
+entities: {
+  name: "bprime"
+  code_point_1: 8245
+  semicolon_required: true
+}
+entities: {
+  name: "breve"
+  code_point_1: 728
+  semicolon_required: true
+}
+entities: {
+  name: "brvbar"
+  code_point_1: 166
+  semicolon_required: true
+}
+entities: {
+  name: "bscr"
+  code_point_1: 119991
+  semicolon_required: true
+}
+entities: {
+  name: "bsemi"
+  code_point_1: 8271
+  semicolon_required: true
+}
+entities: {
+  name: "bsim"
+  code_point_1: 8765
+  semicolon_required: true
+}
+entities: {
+  name: "bsime"
+  code_point_1: 8909
+  semicolon_required: true
+}
+entities: {
+  name: "bsol"
+  code_point_1: 92
+  semicolon_required: true
+}
+entities: {
+  name: "bsolb"
+  code_point_1: 10693
+  semicolon_required: true
+}
+entities: {
+  name: "bsolhsub"
+  code_point_1: 10184
+  semicolon_required: true
+}
+entities: {
+  name: "bull"
+  code_point_1: 8226
+  semicolon_required: true
+}
+entities: {
+  name: "bullet"
+  code_point_1: 8226
+  semicolon_required: true
+}
+entities: {
+  name: "bump"
+  code_point_1: 8782
+  semicolon_required: true
+}
+entities: {
+  name: "bumpE"
+  code_point_1: 10926
+  semicolon_required: true
+}
+entities: {
+  name: "bumpe"
+  code_point_1: 8783
+  semicolon_required: true
+}
+entities: {
+  name: "bumpeq"
+  code_point_1: 8783
+  semicolon_required: true
+}
+entities: {
+  name: "cacute"
+  code_point_1: 263
+  semicolon_required: true
+}
+entities: {
+  name: "cap"
+  code_point_1: 8745
+  semicolon_required: true
+}
+entities: {
+  name: "capand"
+  code_point_1: 10820
+  semicolon_required: true
+}
+entities: {
+  name: "capbrcup"
+  code_point_1: 10825
+  semicolon_required: true
+}
+entities: {
+  name: "capcap"
+  code_point_1: 10827
+  semicolon_required: true
+}
+entities: {
+  name: "capcup"
+  code_point_1: 10823
+  semicolon_required: true
+}
+entities: {
+  name: "capdot"
+  code_point_1: 10816
+  semicolon_required: true
+}
+entities: {
+  name: "caps"
+  code_point_1: 8745
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "caret"
+  code_point_1: 8257
+  semicolon_required: true
+}
+entities: {
+  name: "caron"
+  code_point_1: 711
+  semicolon_required: true
+}
+entities: {
+  name: "ccaps"
+  code_point_1: 10829
+  semicolon_required: true
+}
+entities: {
+  name: "ccaron"
+  code_point_1: 269
+  semicolon_required: true
+}
+entities: {
+  name: "ccedil"
+  code_point_1: 231
+  semicolon_required: true
+}
+entities: {
+  name: "ccirc"
+  code_point_1: 265
+  semicolon_required: true
+}
+entities: {
+  name: "ccups"
+  code_point_1: 10828
+  semicolon_required: true
+}
+entities: {
+  name: "ccupssm"
+  code_point_1: 10832
+  semicolon_required: true
+}
+entities: {
+  name: "cdot"
+  code_point_1: 267
+  semicolon_required: true
+}
+entities: {
+  name: "cedil"
+  code_point_1: 184
+  semicolon_required: true
+}
+entities: {
+  name: "cemptyv"
+  code_point_1: 10674
+  semicolon_required: true
+}
+entities: {
+  name: "cent"
+  code_point_1: 162
+  semicolon_required: true
+}
+entities: {
+  name: "centerdot"
+  code_point_1: 183
+  semicolon_required: true
+}
+entities: {
+  name: "cfr"
+  code_point_1: 120096
+  semicolon_required: true
+}
+entities: {
+  name: "chcy"
+  code_point_1: 1095
+  semicolon_required: true
+}
+entities: {
+  name: "check"
+  code_point_1: 10003
+  semicolon_required: true
+}
+entities: {
+  name: "checkmark"
+  code_point_1: 10003
+  semicolon_required: true
+}
+entities: {
+  name: "chi"
+  code_point_1: 967
+  semicolon_required: true
+}
+entities: {
+  name: "cir"
+  code_point_1: 9675
+  semicolon_required: true
+}
+entities: {
+  name: "cirE"
+  code_point_1: 10691
+  semicolon_required: true
+}
+entities: {
+  name: "circ"
+  code_point_1: 710
+  semicolon_required: true
+}
+entities: {
+  name: "circeq"
+  code_point_1: 8791
+  semicolon_required: true
+}
+entities: {
+  name: "circlearrowleft"
+  code_point_1: 8634
+  semicolon_required: true
+}
+entities: {
+  name: "circlearrowright"
+  code_point_1: 8635
+  semicolon_required: true
+}
+entities: {
+  name: "circledR"
+  code_point_1: 174
+  semicolon_required: true
+}
+entities: {
+  name: "circledS"
+  code_point_1: 9416
+  semicolon_required: true
+}
+entities: {
+  name: "circledast"
+  code_point_1: 8859
+  semicolon_required: true
+}
+entities: {
+  name: "circledcirc"
+  code_point_1: 8858
+  semicolon_required: true
+}
+entities: {
+  name: "circleddash"
+  code_point_1: 8861
+  semicolon_required: true
+}
+entities: {
+  name: "cire"
+  code_point_1: 8791
+  semicolon_required: true
+}
+entities: {
+  name: "cirfnint"
+  code_point_1: 10768
+  semicolon_required: true
+}
+entities: {
+  name: "cirmid"
+  code_point_1: 10991
+  semicolon_required: true
+}
+entities: {
+  name: "cirscir"
+  code_point_1: 10690
+  semicolon_required: true
+}
+entities: {
+  name: "clubs"
+  code_point_1: 9827
+  semicolon_required: true
+}
+entities: {
+  name: "clubsuit"
+  code_point_1: 9827
+  semicolon_required: true
+}
+entities: {
+  name: "colon"
+  code_point_1: 58
+  semicolon_required: true
+}
+entities: {
+  name: "colone"
+  code_point_1: 8788
+  semicolon_required: true
+}
+entities: {
+  name: "coloneq"
+  code_point_1: 8788
+  semicolon_required: true
+}
+entities: {
+  name: "comma"
+  code_point_1: 44
+  semicolon_required: true
+}
+entities: {
+  name: "commat"
+  code_point_1: 64
+  semicolon_required: true
+}
+entities: {
+  name: "comp"
+  code_point_1: 8705
+  semicolon_required: true
+}
+entities: {
+  name: "compfn"
+  code_point_1: 8728
+  semicolon_required: true
+}
+entities: {
+  name: "complement"
+  code_point_1: 8705
+  semicolon_required: true
+}
+entities: {
+  name: "complexes"
+  code_point_1: 8450
+  semicolon_required: true
+}
+entities: {
+  name: "cong"
+  code_point_1: 8773
+  semicolon_required: true
+}
+entities: {
+  name: "congdot"
+  code_point_1: 10861
+  semicolon_required: true
+}
+entities: {
+  name: "conint"
+  code_point_1: 8750
+  semicolon_required: true
+}
+entities: {
+  name: "copf"
+  code_point_1: 120148
+  semicolon_required: true
+}
+entities: {
+  name: "coprod"
+  code_point_1: 8720
+  semicolon_required: true
+}
+entities: {
+  name: "copy"
+  code_point_1: 169
+  semicolon_required: true
+}
+entities: {
+  name: "copysr"
+  code_point_1: 8471
+  semicolon_required: true
+}
+entities: {
+  name: "crarr"
+  code_point_1: 8629
+  semicolon_required: true
+}
+entities: {
+  name: "cross"
+  code_point_1: 10007
+  semicolon_required: true
+}
+entities: {
+  name: "cscr"
+  code_point_1: 119992
+  semicolon_required: true
+}
+entities: {
+  name: "csub"
+  code_point_1: 10959
+  semicolon_required: true
+}
+entities: {
+  name: "csube"
+  code_point_1: 10961
+  semicolon_required: true
+}
+entities: {
+  name: "csup"
+  code_point_1: 10960
+  semicolon_required: true
+}
+entities: {
+  name: "csupe"
+  code_point_1: 10962
+  semicolon_required: true
+}
+entities: {
+  name: "ctdot"
+  code_point_1: 8943
+  semicolon_required: true
+}
+entities: {
+  name: "cudarrl"
+  code_point_1: 10552
+  semicolon_required: true
+}
+entities: {
+  name: "cudarrr"
+  code_point_1: 10549
+  semicolon_required: true
+}
+entities: {
+  name: "cuepr"
+  code_point_1: 8926
+  semicolon_required: true
+}
+entities: {
+  name: "cuesc"
+  code_point_1: 8927
+  semicolon_required: true
+}
+entities: {
+  name: "cularr"
+  code_point_1: 8630
+  semicolon_required: true
+}
+entities: {
+  name: "cularrp"
+  code_point_1: 10557
+  semicolon_required: true
+}
+entities: {
+  name: "cup"
+  code_point_1: 8746
+  semicolon_required: true
+}
+entities: {
+  name: "cupbrcap"
+  code_point_1: 10824
+  semicolon_required: true
+}
+entities: {
+  name: "cupcap"
+  code_point_1: 10822
+  semicolon_required: true
+}
+entities: {
+  name: "cupcup"
+  code_point_1: 10826
+  semicolon_required: true
+}
+entities: {
+  name: "cupdot"
+  code_point_1: 8845
+  semicolon_required: true
+}
+entities: {
+  name: "cupor"
+  code_point_1: 10821
+  semicolon_required: true
+}
+entities: {
+  name: "cups"
+  code_point_1: 8746
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "curarr"
+  code_point_1: 8631
+  semicolon_required: true
+}
+entities: {
+  name: "curarrm"
+  code_point_1: 10556
+  semicolon_required: true
+}
+entities: {
+  name: "curlyeqprec"
+  code_point_1: 8926
+  semicolon_required: true
+}
+entities: {
+  name: "curlyeqsucc"
+  code_point_1: 8927
+  semicolon_required: true
+}
+entities: {
+  name: "curlyvee"
+  code_point_1: 8910
+  semicolon_required: true
+}
+entities: {
+  name: "curlywedge"
+  code_point_1: 8911
+  semicolon_required: true
+}
+entities: {
+  name: "curren"
+  code_point_1: 164
+  semicolon_required: true
+}
+entities: {
+  name: "curvearrowleft"
+  code_point_1: 8630
+  semicolon_required: true
+}
+entities: {
+  name: "curvearrowright"
+  code_point_1: 8631
+  semicolon_required: true
+}
+entities: {
+  name: "cuvee"
+  code_point_1: 8910
+  semicolon_required: true
+}
+entities: {
+  name: "cuwed"
+  code_point_1: 8911
+  semicolon_required: true
+}
+entities: {
+  name: "cwconint"
+  code_point_1: 8754
+  semicolon_required: true
+}
+entities: {
+  name: "cwint"
+  code_point_1: 8753
+  semicolon_required: true
+}
+entities: {
+  name: "cylcty"
+  code_point_1: 9005
+  semicolon_required: true
+}
+entities: {
+  name: "dArr"
+  code_point_1: 8659
+  semicolon_required: true
+}
+entities: {
+  name: "dHar"
+  code_point_1: 10597
+  semicolon_required: true
+}
+entities: {
+  name: "dagger"
+  code_point_1: 8224
+  semicolon_required: true
+}
+entities: {
+  name: "daleth"
+  code_point_1: 8504
+  semicolon_required: true
+}
+entities: {
+  name: "darr"
+  code_point_1: 8595
+  semicolon_required: true
+}
+entities: {
+  name: "dash"
+  code_point_1: 8208
+  semicolon_required: true
+}
+entities: {
+  name: "dashv"
+  code_point_1: 8867
+  semicolon_required: true
+}
+entities: {
+  name: "dbkarow"
+  code_point_1: 10511
+  semicolon_required: true
+}
+entities: {
+  name: "dblac"
+  code_point_1: 733
+  semicolon_required: true
+}
+entities: {
+  name: "dcaron"
+  code_point_1: 271
+  semicolon_required: true
+}
+entities: {
+  name: "dcy"
+  code_point_1: 1076
+  semicolon_required: true
+}
+entities: {
+  name: "dd"
+  code_point_1: 8518
+  semicolon_required: true
+}
+entities: {
+  name: "ddagger"
+  code_point_1: 8225
+  semicolon_required: true
+}
+entities: {
+  name: "ddarr"
+  code_point_1: 8650
+  semicolon_required: true
+}
+entities: {
+  name: "ddotseq"
+  code_point_1: 10871
+  semicolon_required: true
+}
+entities: {
+  name: "deg"
+  code_point_1: 176
+  semicolon_required: true
+}
+entities: {
+  name: "delta"
+  code_point_1: 948
+  semicolon_required: true
+}
+entities: {
+  name: "demptyv"
+  code_point_1: 10673
+  semicolon_required: true
+}
+entities: {
+  name: "dfisht"
+  code_point_1: 10623
+  semicolon_required: true
+}
+entities: {
+  name: "dfr"
+  code_point_1: 120097
+  semicolon_required: true
+}
+entities: {
+  name: "dharl"
+  code_point_1: 8643
+  semicolon_required: true
+}
+entities: {
+  name: "dharr"
+  code_point_1: 8642
+  semicolon_required: true
+}
+entities: {
+  name: "diam"
+  code_point_1: 8900
+  semicolon_required: true
+}
+entities: {
+  name: "diamond"
+  code_point_1: 8900
+  semicolon_required: true
+}
+entities: {
+  name: "diamondsuit"
+  code_point_1: 9830
+  semicolon_required: true
+}
+entities: {
+  name: "diams"
+  code_point_1: 9830
+  semicolon_required: true
+}
+entities: {
+  name: "die"
+  code_point_1: 168
+  semicolon_required: true
+}
+entities: {
+  name: "digamma"
+  code_point_1: 989
+  semicolon_required: true
+}
+entities: {
+  name: "disin"
+  code_point_1: 8946
+  semicolon_required: true
+}
+entities: {
+  name: "div"
+  code_point_1: 247
+  semicolon_required: true
+}
+entities: {
+  name: "divide"
+  code_point_1: 247
+  semicolon_required: true
+}
+entities: {
+  name: "divideontimes"
+  code_point_1: 8903
+  semicolon_required: true
+}
+entities: {
+  name: "divonx"
+  code_point_1: 8903
+  semicolon_required: true
+}
+entities: {
+  name: "djcy"
+  code_point_1: 1106
+  semicolon_required: true
+}
+entities: {
+  name: "dlcorn"
+  code_point_1: 8990
+  semicolon_required: true
+}
+entities: {
+  name: "dlcrop"
+  code_point_1: 8973
+  semicolon_required: true
+}
+entities: {
+  name: "dollar"
+  code_point_1: 36
+  semicolon_required: true
+}
+entities: {
+  name: "dopf"
+  code_point_1: 120149
+  semicolon_required: true
+}
+entities: {
+  name: "dot"
+  code_point_1: 729
+  semicolon_required: true
+}
+entities: {
+  name: "doteq"
+  code_point_1: 8784
+  semicolon_required: true
+}
+entities: {
+  name: "doteqdot"
+  code_point_1: 8785
+  semicolon_required: true
+}
+entities: {
+  name: "dotminus"
+  code_point_1: 8760
+  semicolon_required: true
+}
+entities: {
+  name: "dotplus"
+  code_point_1: 8724
+  semicolon_required: true
+}
+entities: {
+  name: "dotsquare"
+  code_point_1: 8865
+  semicolon_required: true
+}
+entities: {
+  name: "doublebarwedge"
+  code_point_1: 8966
+  semicolon_required: true
+}
+entities: {
+  name: "downarrow"
+  code_point_1: 8595
+  semicolon_required: true
+}
+entities: {
+  name: "downdownarrows"
+  code_point_1: 8650
+  semicolon_required: true
+}
+entities: {
+  name: "downharpoonleft"
+  code_point_1: 8643
+  semicolon_required: true
+}
+entities: {
+  name: "downharpoonright"
+  code_point_1: 8642
+  semicolon_required: true
+}
+entities: {
+  name: "drbkarow"
+  code_point_1: 10512
+  semicolon_required: true
+}
+entities: {
+  name: "drcorn"
+  code_point_1: 8991
+  semicolon_required: true
+}
+entities: {
+  name: "drcrop"
+  code_point_1: 8972
+  semicolon_required: true
+}
+entities: {
+  name: "dscr"
+  code_point_1: 119993
+  semicolon_required: true
+}
+entities: {
+  name: "dscy"
+  code_point_1: 1109
+  semicolon_required: true
+}
+entities: {
+  name: "dsol"
+  code_point_1: 10742
+  semicolon_required: true
+}
+entities: {
+  name: "dstrok"
+  code_point_1: 273
+  semicolon_required: true
+}
+entities: {
+  name: "dtdot"
+  code_point_1: 8945
+  semicolon_required: true
+}
+entities: {
+  name: "dtri"
+  code_point_1: 9663
+  semicolon_required: true
+}
+entities: {
+  name: "dtrif"
+  code_point_1: 9662
+  semicolon_required: true
+}
+entities: {
+  name: "duarr"
+  code_point_1: 8693
+  semicolon_required: true
+}
+entities: {
+  name: "duhar"
+  code_point_1: 10607
+  semicolon_required: true
+}
+entities: {
+  name: "dwangle"
+  code_point_1: 10662
+  semicolon_required: true
+}
+entities: {
+  name: "dzcy"
+  code_point_1: 1119
+  semicolon_required: true
+}
+entities: {
+  name: "dzigrarr"
+  code_point_1: 10239
+  semicolon_required: true
+}
+entities: {
+  name: "eDDot"
+  code_point_1: 10871
+  semicolon_required: true
+}
+entities: {
+  name: "eDot"
+  code_point_1: 8785
+  semicolon_required: true
+}
+entities: {
+  name: "eacute"
+  code_point_1: 233
+  semicolon_required: true
+}
+entities: {
+  name: "easter"
+  code_point_1: 10862
+  semicolon_required: true
+}
+entities: {
+  name: "ecaron"
+  code_point_1: 283
+  semicolon_required: true
+}
+entities: {
+  name: "ecir"
+  code_point_1: 8790
+  semicolon_required: true
+}
+entities: {
+  name: "ecirc"
+  code_point_1: 234
+  semicolon_required: true
+}
+entities: {
+  name: "ecolon"
+  code_point_1: 8789
+  semicolon_required: true
+}
+entities: {
+  name: "ecy"
+  code_point_1: 1101
+  semicolon_required: true
+}
+entities: {
+  name: "edot"
+  code_point_1: 279
+  semicolon_required: true
+}
+entities: {
+  name: "ee"
+  code_point_1: 8519
+  semicolon_required: true
+}
+entities: {
+  name: "efDot"
+  code_point_1: 8786
+  semicolon_required: true
+}
+entities: {
+  name: "efr"
+  code_point_1: 120098
+  semicolon_required: true
+}
+entities: {
+  name: "eg"
+  code_point_1: 10906
+  semicolon_required: true
+}
+entities: {
+  name: "egrave"
+  code_point_1: 232
+  semicolon_required: true
+}
+entities: {
+  name: "egs"
+  code_point_1: 10902
+  semicolon_required: true
+}
+entities: {
+  name: "egsdot"
+  code_point_1: 10904
+  semicolon_required: true
+}
+entities: {
+  name: "el"
+  code_point_1: 10905
+  semicolon_required: true
+}
+entities: {
+  name: "elinters"
+  code_point_1: 9191
+  semicolon_required: true
+}
+entities: {
+  name: "ell"
+  code_point_1: 8467
+  semicolon_required: true
+}
+entities: {
+  name: "els"
+  code_point_1: 10901
+  semicolon_required: true
+}
+entities: {
+  name: "elsdot"
+  code_point_1: 10903
+  semicolon_required: true
+}
+entities: {
+  name: "emacr"
+  code_point_1: 275
+  semicolon_required: true
+}
+entities: {
+  name: "empty"
+  code_point_1: 8709
+  semicolon_required: true
+}
+entities: {
+  name: "emptyset"
+  code_point_1: 8709
+  semicolon_required: true
+}
+entities: {
+  name: "emptyv"
+  code_point_1: 8709
+  semicolon_required: true
+}
+entities: {
+  name: "emsp"
+  code_point_1: 8195
+  semicolon_required: true
+}
+entities: {
+  name: "emsp13"
+  code_point_1: 8196
+  semicolon_required: true
+}
+entities: {
+  name: "emsp14"
+  code_point_1: 8197
+  semicolon_required: true
+}
+entities: {
+  name: "eng"
+  code_point_1: 331
+  semicolon_required: true
+}
+entities: {
+  name: "ensp"
+  code_point_1: 8194
+  semicolon_required: true
+}
+entities: {
+  name: "eogon"
+  code_point_1: 281
+  semicolon_required: true
+}
+entities: {
+  name: "eopf"
+  code_point_1: 120150
+  semicolon_required: true
+}
+entities: {
+  name: "epar"
+  code_point_1: 8917
+  semicolon_required: true
+}
+entities: {
+  name: "eparsl"
+  code_point_1: 10723
+  semicolon_required: true
+}
+entities: {
+  name: "eplus"
+  code_point_1: 10865
+  semicolon_required: true
+}
+entities: {
+  name: "epsi"
+  code_point_1: 949
+  semicolon_required: true
+}
+entities: {
+  name: "epsilon"
+  code_point_1: 949
+  semicolon_required: true
+}
+entities: {
+  name: "epsiv"
+  code_point_1: 1013
+  semicolon_required: true
+}
+entities: {
+  name: "eqcirc"
+  code_point_1: 8790
+  semicolon_required: true
+}
+entities: {
+  name: "eqcolon"
+  code_point_1: 8789
+  semicolon_required: true
+}
+entities: {
+  name: "eqsim"
+  code_point_1: 8770
+  semicolon_required: true
+}
+entities: {
+  name: "eqslantgtr"
+  code_point_1: 10902
+  semicolon_required: true
+}
+entities: {
+  name: "eqslantless"
+  code_point_1: 10901
+  semicolon_required: true
+}
+entities: {
+  name: "equals"
+  code_point_1: 61
+  semicolon_required: true
+}
+entities: {
+  name: "equest"
+  code_point_1: 8799
+  semicolon_required: true
+}
+entities: {
+  name: "equiv"
+  code_point_1: 8801
+  semicolon_required: true
+}
+entities: {
+  name: "equivDD"
+  code_point_1: 10872
+  semicolon_required: true
+}
+entities: {
+  name: "eqvparsl"
+  code_point_1: 10725
+  semicolon_required: true
+}
+entities: {
+  name: "erDot"
+  code_point_1: 8787
+  semicolon_required: true
+}
+entities: {
+  name: "erarr"
+  code_point_1: 10609
+  semicolon_required: true
+}
+entities: {
+  name: "escr"
+  code_point_1: 8495
+  semicolon_required: true
+}
+entities: {
+  name: "esdot"
+  code_point_1: 8784
+  semicolon_required: true
+}
+entities: {
+  name: "esim"
+  code_point_1: 8770
+  semicolon_required: true
+}
+entities: {
+  name: "eta"
+  code_point_1: 951
+  semicolon_required: true
+}
+entities: {
+  name: "eth"
+  code_point_1: 240
+  semicolon_required: true
+}
+entities: {
+  name: "euml"
+  code_point_1: 235
+  semicolon_required: true
+}
+entities: {
+  name: "euro"
+  code_point_1: 8364
+  semicolon_required: true
+}
+entities: {
+  name: "excl"
+  code_point_1: 33
+  semicolon_required: true
+}
+entities: {
+  name: "exist"
+  code_point_1: 8707
+  semicolon_required: true
+}
+entities: {
+  name: "expectation"
+  code_point_1: 8496
+  semicolon_required: true
+}
+entities: {
+  name: "exponentiale"
+  code_point_1: 8519
+  semicolon_required: true
+}
+entities: {
+  name: "fallingdotseq"
+  code_point_1: 8786
+  semicolon_required: true
+}
+entities: {
+  name: "fcy"
+  code_point_1: 1092
+  semicolon_required: true
+}
+entities: {
+  name: "female"
+  code_point_1: 9792
+  semicolon_required: true
+}
+entities: {
+  name: "ffilig"
+  code_point_1: 64259
+  semicolon_required: true
+}
+entities: {
+  name: "fflig"
+  code_point_1: 64256
+  semicolon_required: true
+}
+entities: {
+  name: "ffllig"
+  code_point_1: 64260
+  semicolon_required: true
+}
+entities: {
+  name: "ffr"
+  code_point_1: 120099
+  semicolon_required: true
+}
+entities: {
+  name: "filig"
+  code_point_1: 64257
+  semicolon_required: true
+}
+entities: {
+  name: "fjlig"
+  code_point_1: 102
+  code_point_2: 106
+  semicolon_required: true
+}
+entities: {
+  name: "flat"
+  code_point_1: 9837
+  semicolon_required: true
+}
+entities: {
+  name: "fllig"
+  code_point_1: 64258
+  semicolon_required: true
+}
+entities: {
+  name: "fltns"
+  code_point_1: 9649
+  semicolon_required: true
+}
+entities: {
+  name: "fnof"
+  code_point_1: 402
+  semicolon_required: true
+}
+entities: {
+  name: "fopf"
+  code_point_1: 120151
+  semicolon_required: true
+}
+entities: {
+  name: "forall"
+  code_point_1: 8704
+  semicolon_required: true
+}
+entities: {
+  name: "fork"
+  code_point_1: 8916
+  semicolon_required: true
+}
+entities: {
+  name: "forkv"
+  code_point_1: 10969
+  semicolon_required: true
+}
+entities: {
+  name: "fpartint"
+  code_point_1: 10765
+  semicolon_required: true
+}
+entities: {
+  name: "frac12"
+  code_point_1: 189
+  semicolon_required: true
+}
+entities: {
+  name: "frac13"
+  code_point_1: 8531
+  semicolon_required: true
+}
+entities: {
+  name: "frac14"
+  code_point_1: 188
+  semicolon_required: true
+}
+entities: {
+  name: "frac15"
+  code_point_1: 8533
+  semicolon_required: true
+}
+entities: {
+  name: "frac16"
+  code_point_1: 8537
+  semicolon_required: true
+}
+entities: {
+  name: "frac18"
+  code_point_1: 8539
+  semicolon_required: true
+}
+entities: {
+  name: "frac23"
+  code_point_1: 8532
+  semicolon_required: true
+}
+entities: {
+  name: "frac25"
+  code_point_1: 8534
+  semicolon_required: true
+}
+entities: {
+  name: "frac34"
+  code_point_1: 190
+  semicolon_required: true
+}
+entities: {
+  name: "frac35"
+  code_point_1: 8535
+  semicolon_required: true
+}
+entities: {
+  name: "frac38"
+  code_point_1: 8540
+  semicolon_required: true
+}
+entities: {
+  name: "frac45"
+  code_point_1: 8536
+  semicolon_required: true
+}
+entities: {
+  name: "frac56"
+  code_point_1: 8538
+  semicolon_required: true
+}
+entities: {
+  name: "frac58"
+  code_point_1: 8541
+  semicolon_required: true
+}
+entities: {
+  name: "frac78"
+  code_point_1: 8542
+  semicolon_required: true
+}
+entities: {
+  name: "frasl"
+  code_point_1: 8260
+  semicolon_required: true
+}
+entities: {
+  name: "frown"
+  code_point_1: 8994
+  semicolon_required: true
+}
+entities: {
+  name: "fscr"
+  code_point_1: 119995
+  semicolon_required: true
+}
+entities: {
+  name: "gE"
+  code_point_1: 8807
+  semicolon_required: true
+}
+entities: {
+  name: "gEl"
+  code_point_1: 10892
+  semicolon_required: true
+}
+entities: {
+  name: "gacute"
+  code_point_1: 501
+  semicolon_required: true
+}
+entities: {
+  name: "gamma"
+  code_point_1: 947
+  semicolon_required: true
+}
+entities: {
+  name: "gammad"
+  code_point_1: 989
+  semicolon_required: true
+}
+entities: {
+  name: "gap"
+  code_point_1: 10886
+  semicolon_required: true
+}
+entities: {
+  name: "gbreve"
+  code_point_1: 287
+  semicolon_required: true
+}
+entities: {
+  name: "gcirc"
+  code_point_1: 285
+  semicolon_required: true
+}
+entities: {
+  name: "gcy"
+  code_point_1: 1075
+  semicolon_required: true
+}
+entities: {
+  name: "gdot"
+  code_point_1: 289
+  semicolon_required: true
+}
+entities: {
+  name: "ge"
+  code_point_1: 8805
+  semicolon_required: true
+}
+entities: {
+  name: "gel"
+  code_point_1: 8923
+  semicolon_required: true
+}
+entities: {
+  name: "geq"
+  code_point_1: 8805
+  semicolon_required: true
+}
+entities: {
+  name: "geqq"
+  code_point_1: 8807
+  semicolon_required: true
+}
+entities: {
+  name: "geqslant"
+  code_point_1: 10878
+  semicolon_required: true
+}
+entities: {
+  name: "ges"
+  code_point_1: 10878
+  semicolon_required: true
+}
+entities: {
+  name: "gescc"
+  code_point_1: 10921
+  semicolon_required: true
+}
+entities: {
+  name: "gesdot"
+  code_point_1: 10880
+  semicolon_required: true
+}
+entities: {
+  name: "gesdoto"
+  code_point_1: 10882
+  semicolon_required: true
+}
+entities: {
+  name: "gesdotol"
+  code_point_1: 10884
+  semicolon_required: true
+}
+entities: {
+  name: "gesl"
+  code_point_1: 8923
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "gesles"
+  code_point_1: 10900
+  semicolon_required: true
+}
+entities: {
+  name: "gfr"
+  code_point_1: 120100
+  semicolon_required: true
+}
+entities: {
+  name: "gg"
+  code_point_1: 8811
+  semicolon_required: true
+}
+entities: {
+  name: "ggg"
+  code_point_1: 8921
+  semicolon_required: true
+}
+entities: {
+  name: "gimel"
+  code_point_1: 8503
+  semicolon_required: true
+}
+entities: {
+  name: "gjcy"
+  code_point_1: 1107
+  semicolon_required: true
+}
+entities: {
+  name: "gl"
+  code_point_1: 8823
+  semicolon_required: true
+}
+entities: {
+  name: "glE"
+  code_point_1: 10898
+  semicolon_required: true
+}
+entities: {
+  name: "gla"
+  code_point_1: 10917
+  semicolon_required: true
+}
+entities: {
+  name: "glj"
+  code_point_1: 10916
+  semicolon_required: true
+}
+entities: {
+  name: "gnE"
+  code_point_1: 8809
+  semicolon_required: true
+}
+entities: {
+  name: "gnap"
+  code_point_1: 10890
+  semicolon_required: true
+}
+entities: {
+  name: "gnapprox"
+  code_point_1: 10890
+  semicolon_required: true
+}
+entities: {
+  name: "gne"
+  code_point_1: 10888
+  semicolon_required: true
+}
+entities: {
+  name: "gneq"
+  code_point_1: 10888
+  semicolon_required: true
+}
+entities: {
+  name: "gneqq"
+  code_point_1: 8809
+  semicolon_required: true
+}
+entities: {
+  name: "gnsim"
+  code_point_1: 8935
+  semicolon_required: true
+}
+entities: {
+  name: "gopf"
+  code_point_1: 120152
+  semicolon_required: true
+}
+entities: {
+  name: "grave"
+  code_point_1: 96
+  semicolon_required: true
+}
+entities: {
+  name: "gscr"
+  code_point_1: 8458
+  semicolon_required: true
+}
+entities: {
+  name: "gsim"
+  code_point_1: 8819
+  semicolon_required: true
+}
+entities: {
+  name: "gsime"
+  code_point_1: 10894
+  semicolon_required: true
+}
+entities: {
+  name: "gsiml"
+  code_point_1: 10896
+  semicolon_required: true
+}
+entities: {
+  name: "gt"
+  code_point_1: 62
+  semicolon_required: true
+}
+entities: {
+  name: "gtcc"
+  code_point_1: 10919
+  semicolon_required: true
+}
+entities: {
+  name: "gtcir"
+  code_point_1: 10874
+  semicolon_required: true
+}
+entities: {
+  name: "gtdot"
+  code_point_1: 8919
+  semicolon_required: true
+}
+entities: {
+  name: "gtlPar"
+  code_point_1: 10645
+  semicolon_required: true
+}
+entities: {
+  name: "gtquest"
+  code_point_1: 10876
+  semicolon_required: true
+}
+entities: {
+  name: "gtrapprox"
+  code_point_1: 10886
+  semicolon_required: true
+}
+entities: {
+  name: "gtrarr"
+  code_point_1: 10616
+  semicolon_required: true
+}
+entities: {
+  name: "gtrdot"
+  code_point_1: 8919
+  semicolon_required: true
+}
+entities: {
+  name: "gtreqless"
+  code_point_1: 8923
+  semicolon_required: true
+}
+entities: {
+  name: "gtreqqless"
+  code_point_1: 10892
+  semicolon_required: true
+}
+entities: {
+  name: "gtrless"
+  code_point_1: 8823
+  semicolon_required: true
+}
+entities: {
+  name: "gtrsim"
+  code_point_1: 8819
+  semicolon_required: true
+}
+entities: {
+  name: "gvertneqq"
+  code_point_1: 8809
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "gvnE"
+  code_point_1: 8809
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "hArr"
+  code_point_1: 8660
+  semicolon_required: true
+}
+entities: {
+  name: "hairsp"
+  code_point_1: 8202
+  semicolon_required: true
+}
+entities: {
+  name: "half"
+  code_point_1: 189
+  semicolon_required: true
+}
+entities: {
+  name: "hamilt"
+  code_point_1: 8459
+  semicolon_required: true
+}
+entities: {
+  name: "hardcy"
+  code_point_1: 1098
+  semicolon_required: true
+}
+entities: {
+  name: "harr"
+  code_point_1: 8596
+  semicolon_required: true
+}
+entities: {
+  name: "harrcir"
+  code_point_1: 10568
+  semicolon_required: true
+}
+entities: {
+  name: "harrw"
+  code_point_1: 8621
+  semicolon_required: true
+}
+entities: {
+  name: "hbar"
+  code_point_1: 8463
+  semicolon_required: true
+}
+entities: {
+  name: "hcirc"
+  code_point_1: 293
+  semicolon_required: true
+}
+entities: {
+  name: "hearts"
+  code_point_1: 9829
+  semicolon_required: true
+}
+entities: {
+  name: "heartsuit"
+  code_point_1: 9829
+  semicolon_required: true
+}
+entities: {
+  name: "hellip"
+  code_point_1: 8230
+  semicolon_required: true
+}
+entities: {
+  name: "hercon"
+  code_point_1: 8889
+  semicolon_required: true
+}
+entities: {
+  name: "hfr"
+  code_point_1: 120101
+  semicolon_required: true
+}
+entities: {
+  name: "hksearow"
+  code_point_1: 10533
+  semicolon_required: true
+}
+entities: {
+  name: "hkswarow"
+  code_point_1: 10534
+  semicolon_required: true
+}
+entities: {
+  name: "hoarr"
+  code_point_1: 8703
+  semicolon_required: true
+}
+entities: {
+  name: "homtht"
+  code_point_1: 8763
+  semicolon_required: true
+}
+entities: {
+  name: "hookleftarrow"
+  code_point_1: 8617
+  semicolon_required: true
+}
+entities: {
+  name: "hookrightarrow"
+  code_point_1: 8618
+  semicolon_required: true
+}
+entities: {
+  name: "hopf"
+  code_point_1: 120153
+  semicolon_required: true
+}
+entities: {
+  name: "horbar"
+  code_point_1: 8213
+  semicolon_required: true
+}
+entities: {
+  name: "hscr"
+  code_point_1: 119997
+  semicolon_required: true
+}
+entities: {
+  name: "hslash"
+  code_point_1: 8463
+  semicolon_required: true
+}
+entities: {
+  name: "hstrok"
+  code_point_1: 295
+  semicolon_required: true
+}
+entities: {
+  name: "hybull"
+  code_point_1: 8259
+  semicolon_required: true
+}
+entities: {
+  name: "hyphen"
+  code_point_1: 8208
+  semicolon_required: true
+}
+entities: {
+  name: "iacute"
+  code_point_1: 237
+  semicolon_required: true
+}
+entities: {
+  name: "ic"
+  code_point_1: 8291
+  semicolon_required: true
+}
+entities: {
+  name: "icirc"
+  code_point_1: 238
+  semicolon_required: true
+}
+entities: {
+  name: "icy"
+  code_point_1: 1080
+  semicolon_required: true
+}
+entities: {
+  name: "iecy"
+  code_point_1: 1077
+  semicolon_required: true
+}
+entities: {
+  name: "iexcl"
+  code_point_1: 161
+  semicolon_required: true
+}
+entities: {
+  name: "iff"
+  code_point_1: 8660
+  semicolon_required: true
+}
+entities: {
+  name: "ifr"
+  code_point_1: 120102
+  semicolon_required: true
+}
+entities: {
+  name: "igrave"
+  code_point_1: 236
+  semicolon_required: true
+}
+entities: {
+  name: "ii"
+  code_point_1: 8520
+  semicolon_required: true
+}
+entities: {
+  name: "iiiint"
+  code_point_1: 10764
+  semicolon_required: true
+}
+entities: {
+  name: "iiint"
+  code_point_1: 8749
+  semicolon_required: true
+}
+entities: {
+  name: "iinfin"
+  code_point_1: 10716
+  semicolon_required: true
+}
+entities: {
+  name: "iiota"
+  code_point_1: 8489
+  semicolon_required: true
+}
+entities: {
+  name: "ijlig"
+  code_point_1: 307
+  semicolon_required: true
+}
+entities: {
+  name: "imacr"
+  code_point_1: 299
+  semicolon_required: true
+}
+entities: {
+  name: "image"
+  code_point_1: 8465
+  semicolon_required: true
+}
+entities: {
+  name: "imagline"
+  code_point_1: 8464
+  semicolon_required: true
+}
+entities: {
+  name: "imagpart"
+  code_point_1: 8465
+  semicolon_required: true
+}
+entities: {
+  name: "imath"
+  code_point_1: 305
+  semicolon_required: true
+}
+entities: {
+  name: "imof"
+  code_point_1: 8887
+  semicolon_required: true
+}
+entities: {
+  name: "imped"
+  code_point_1: 437
+  semicolon_required: true
+}
+entities: {
+  name: "in"
+  code_point_1: 8712
+  semicolon_required: true
+}
+entities: {
+  name: "incare"
+  code_point_1: 8453
+  semicolon_required: true
+}
+entities: {
+  name: "infin"
+  code_point_1: 8734
+  semicolon_required: true
+}
+entities: {
+  name: "infintie"
+  code_point_1: 10717
+  semicolon_required: true
+}
+entities: {
+  name: "inodot"
+  code_point_1: 305
+  semicolon_required: true
+}
+entities: {
+  name: "int"
+  code_point_1: 8747
+  semicolon_required: true
+}
+entities: {
+  name: "intcal"
+  code_point_1: 8890
+  semicolon_required: true
+}
+entities: {
+  name: "integers"
+  code_point_1: 8484
+  semicolon_required: true
+}
+entities: {
+  name: "intercal"
+  code_point_1: 8890
+  semicolon_required: true
+}
+entities: {
+  name: "intlarhk"
+  code_point_1: 10775
+  semicolon_required: true
+}
+entities: {
+  name: "intprod"
+  code_point_1: 10812
+  semicolon_required: true
+}
+entities: {
+  name: "iocy"
+  code_point_1: 1105
+  semicolon_required: true
+}
+entities: {
+  name: "iogon"
+  code_point_1: 303
+  semicolon_required: true
+}
+entities: {
+  name: "iopf"
+  code_point_1: 120154
+  semicolon_required: true
+}
+entities: {
+  name: "iota"
+  code_point_1: 953
+  semicolon_required: true
+}
+entities: {
+  name: "iprod"
+  code_point_1: 10812
+  semicolon_required: true
+}
+entities: {
+  name: "iquest"
+  code_point_1: 191
+  semicolon_required: true
+}
+entities: {
+  name: "iscr"
+  code_point_1: 119998
+  semicolon_required: true
+}
+entities: {
+  name: "isin"
+  code_point_1: 8712
+  semicolon_required: true
+}
+entities: {
+  name: "isinE"
+  code_point_1: 8953
+  semicolon_required: true
+}
+entities: {
+  name: "isindot"
+  code_point_1: 8949
+  semicolon_required: true
+}
+entities: {
+  name: "isins"
+  code_point_1: 8948
+  semicolon_required: true
+}
+entities: {
+  name: "isinsv"
+  code_point_1: 8947
+  semicolon_required: true
+}
+entities: {
+  name: "isinv"
+  code_point_1: 8712
+  semicolon_required: true
+}
+entities: {
+  name: "it"
+  code_point_1: 8290
+  semicolon_required: true
+}
+entities: {
+  name: "itilde"
+  code_point_1: 297
+  semicolon_required: true
+}
+entities: {
+  name: "iukcy"
+  code_point_1: 1110
+  semicolon_required: true
+}
+entities: {
+  name: "iuml"
+  code_point_1: 239
+  semicolon_required: true
+}
+entities: {
+  name: "jcirc"
+  code_point_1: 309
+  semicolon_required: true
+}
+entities: {
+  name: "jcy"
+  code_point_1: 1081
+  semicolon_required: true
+}
+entities: {
+  name: "jfr"
+  code_point_1: 120103
+  semicolon_required: true
+}
+entities: {
+  name: "jmath"
+  code_point_1: 567
+  semicolon_required: true
+}
+entities: {
+  name: "jopf"
+  code_point_1: 120155
+  semicolon_required: true
+}
+entities: {
+  name: "jscr"
+  code_point_1: 119999
+  semicolon_required: true
+}
+entities: {
+  name: "jsercy"
+  code_point_1: 1112
+  semicolon_required: true
+}
+entities: {
+  name: "jukcy"
+  code_point_1: 1108
+  semicolon_required: true
+}
+entities: {
+  name: "kappa"
+  code_point_1: 954
+  semicolon_required: true
+}
+entities: {
+  name: "kappav"
+  code_point_1: 1008
+  semicolon_required: true
+}
+entities: {
+  name: "kcedil"
+  code_point_1: 311
+  semicolon_required: true
+}
+entities: {
+  name: "kcy"
+  code_point_1: 1082
+  semicolon_required: true
+}
+entities: {
+  name: "kfr"
+  code_point_1: 120104
+  semicolon_required: true
+}
+entities: {
+  name: "kgreen"
+  code_point_1: 312
+  semicolon_required: true
+}
+entities: {
+  name: "khcy"
+  code_point_1: 1093
+  semicolon_required: true
+}
+entities: {
+  name: "kjcy"
+  code_point_1: 1116
+  semicolon_required: true
+}
+entities: {
+  name: "kopf"
+  code_point_1: 120156
+  semicolon_required: true
+}
+entities: {
+  name: "kscr"
+  code_point_1: 120000
+  semicolon_required: true
+}
+entities: {
+  name: "lAarr"
+  code_point_1: 8666
+  semicolon_required: true
+}
+entities: {
+  name: "lArr"
+  code_point_1: 8656
+  semicolon_required: true
+}
+entities: {
+  name: "lAtail"
+  code_point_1: 10523
+  semicolon_required: true
+}
+entities: {
+  name: "lBarr"
+  code_point_1: 10510
+  semicolon_required: true
+}
+entities: {
+  name: "lE"
+  code_point_1: 8806
+  semicolon_required: true
+}
+entities: {
+  name: "lEg"
+  code_point_1: 10891
+  semicolon_required: true
+}
+entities: {
+  name: "lHar"
+  code_point_1: 10594
+  semicolon_required: true
+}
+entities: {
+  name: "lacute"
+  code_point_1: 314
+  semicolon_required: true
+}
+entities: {
+  name: "laemptyv"
+  code_point_1: 10676
+  semicolon_required: true
+}
+entities: {
+  name: "lagran"
+  code_point_1: 8466
+  semicolon_required: true
+}
+entities: {
+  name: "lambda"
+  code_point_1: 955
+  semicolon_required: true
+}
+entities: {
+  name: "lang"
+  code_point_1: 10216
+  semicolon_required: true
+}
+entities: {
+  name: "langd"
+  code_point_1: 10641
+  semicolon_required: true
+}
+entities: {
+  name: "langle"
+  code_point_1: 10216
+  semicolon_required: true
+}
+entities: {
+  name: "lap"
+  code_point_1: 10885
+  semicolon_required: true
+}
+entities: {
+  name: "laquo"
+  code_point_1: 171
+  semicolon_required: true
+}
+entities: {
+  name: "larr"
+  code_point_1: 8592
+  semicolon_required: true
+}
+entities: {
+  name: "larrb"
+  code_point_1: 8676
+  semicolon_required: true
+}
+entities: {
+  name: "larrbfs"
+  code_point_1: 10527
+  semicolon_required: true
+}
+entities: {
+  name: "larrfs"
+  code_point_1: 10525
+  semicolon_required: true
+}
+entities: {
+  name: "larrhk"
+  code_point_1: 8617
+  semicolon_required: true
+}
+entities: {
+  name: "larrlp"
+  code_point_1: 8619
+  semicolon_required: true
+}
+entities: {
+  name: "larrpl"
+  code_point_1: 10553
+  semicolon_required: true
+}
+entities: {
+  name: "larrsim"
+  code_point_1: 10611
+  semicolon_required: true
+}
+entities: {
+  name: "larrtl"
+  code_point_1: 8610
+  semicolon_required: true
+}
+entities: {
+  name: "lat"
+  code_point_1: 10923
+  semicolon_required: true
+}
+entities: {
+  name: "latail"
+  code_point_1: 10521
+  semicolon_required: true
+}
+entities: {
+  name: "late"
+  code_point_1: 10925
+  semicolon_required: true
+}
+entities: {
+  name: "lates"
+  code_point_1: 10925
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "lbarr"
+  code_point_1: 10508
+  semicolon_required: true
+}
+entities: {
+  name: "lbbrk"
+  code_point_1: 10098
+  semicolon_required: true
+}
+entities: {
+  name: "lbrace"
+  code_point_1: 123
+  semicolon_required: true
+}
+entities: {
+  name: "lbrack"
+  code_point_1: 91
+  semicolon_required: true
+}
+entities: {
+  name: "lbrke"
+  code_point_1: 10635
+  semicolon_required: true
+}
+entities: {
+  name: "lbrksld"
+  code_point_1: 10639
+  semicolon_required: true
+}
+entities: {
+  name: "lbrkslu"
+  code_point_1: 10637
+  semicolon_required: true
+}
+entities: {
+  name: "lcaron"
+  code_point_1: 318
+  semicolon_required: true
+}
+entities: {
+  name: "lcedil"
+  code_point_1: 316
+  semicolon_required: true
+}
+entities: {
+  name: "lceil"
+  code_point_1: 8968
+  semicolon_required: true
+}
+entities: {
+  name: "lcub"
+  code_point_1: 123
+  semicolon_required: true
+}
+entities: {
+  name: "lcy"
+  code_point_1: 1083
+  semicolon_required: true
+}
+entities: {
+  name: "ldca"
+  code_point_1: 10550
+  semicolon_required: true
+}
+entities: {
+  name: "ldquo"
+  code_point_1: 8220
+  semicolon_required: true
+}
+entities: {
+  name: "ldquor"
+  code_point_1: 8222
+  semicolon_required: true
+}
+entities: {
+  name: "ldrdhar"
+  code_point_1: 10599
+  semicolon_required: true
+}
+entities: {
+  name: "ldrushar"
+  code_point_1: 10571
+  semicolon_required: true
+}
+entities: {
+  name: "ldsh"
+  code_point_1: 8626
+  semicolon_required: true
+}
+entities: {
+  name: "le"
+  code_point_1: 8804
+  semicolon_required: true
+}
+entities: {
+  name: "leftarrow"
+  code_point_1: 8592
+  semicolon_required: true
+}
+entities: {
+  name: "leftarrowtail"
+  code_point_1: 8610
+  semicolon_required: true
+}
+entities: {
+  name: "leftharpoondown"
+  code_point_1: 8637
+  semicolon_required: true
+}
+entities: {
+  name: "leftharpoonup"
+  code_point_1: 8636
+  semicolon_required: true
+}
+entities: {
+  name: "leftleftarrows"
+  code_point_1: 8647
+  semicolon_required: true
+}
+entities: {
+  name: "leftrightarrow"
+  code_point_1: 8596
+  semicolon_required: true
+}
+entities: {
+  name: "leftrightarrows"
+  code_point_1: 8646
+  semicolon_required: true
+}
+entities: {
+  name: "leftrightharpoons"
+  code_point_1: 8651
+  semicolon_required: true
+}
+entities: {
+  name: "leftrightsquigarrow"
+  code_point_1: 8621
+  semicolon_required: true
+}
+entities: {
+  name: "leftthreetimes"
+  code_point_1: 8907
+  semicolon_required: true
+}
+entities: {
+  name: "leg"
+  code_point_1: 8922
+  semicolon_required: true
+}
+entities: {
+  name: "leq"
+  code_point_1: 8804
+  semicolon_required: true
+}
+entities: {
+  name: "leqq"
+  code_point_1: 8806
+  semicolon_required: true
+}
+entities: {
+  name: "leqslant"
+  code_point_1: 10877
+  semicolon_required: true
+}
+entities: {
+  name: "les"
+  code_point_1: 10877
+  semicolon_required: true
+}
+entities: {
+  name: "lescc"
+  code_point_1: 10920
+  semicolon_required: true
+}
+entities: {
+  name: "lesdot"
+  code_point_1: 10879
+  semicolon_required: true
+}
+entities: {
+  name: "lesdoto"
+  code_point_1: 10881
+  semicolon_required: true
+}
+entities: {
+  name: "lesdotor"
+  code_point_1: 10883
+  semicolon_required: true
+}
+entities: {
+  name: "lesg"
+  code_point_1: 8922
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "lesges"
+  code_point_1: 10899
+  semicolon_required: true
+}
+entities: {
+  name: "lessapprox"
+  code_point_1: 10885
+  semicolon_required: true
+}
+entities: {
+  name: "lessdot"
+  code_point_1: 8918
+  semicolon_required: true
+}
+entities: {
+  name: "lesseqgtr"
+  code_point_1: 8922
+  semicolon_required: true
+}
+entities: {
+  name: "lesseqqgtr"
+  code_point_1: 10891
+  semicolon_required: true
+}
+entities: {
+  name: "lessgtr"
+  code_point_1: 8822
+  semicolon_required: true
+}
+entities: {
+  name: "lesssim"
+  code_point_1: 8818
+  semicolon_required: true
+}
+entities: {
+  name: "lfisht"
+  code_point_1: 10620
+  semicolon_required: true
+}
+entities: {
+  name: "lfloor"
+  code_point_1: 8970
+  semicolon_required: true
+}
+entities: {
+  name: "lfr"
+  code_point_1: 120105
+  semicolon_required: true
+}
+entities: {
+  name: "lg"
+  code_point_1: 8822
+  semicolon_required: true
+}
+entities: {
+  name: "lgE"
+  code_point_1: 10897
+  semicolon_required: true
+}
+entities: {
+  name: "lhard"
+  code_point_1: 8637
+  semicolon_required: true
+}
+entities: {
+  name: "lharu"
+  code_point_1: 8636
+  semicolon_required: true
+}
+entities: {
+  name: "lharul"
+  code_point_1: 10602
+  semicolon_required: true
+}
+entities: {
+  name: "lhblk"
+  code_point_1: 9604
+  semicolon_required: true
+}
+entities: {
+  name: "ljcy"
+  code_point_1: 1113
+  semicolon_required: true
+}
+entities: {
+  name: "ll"
+  code_point_1: 8810
+  semicolon_required: true
+}
+entities: {
+  name: "llarr"
+  code_point_1: 8647
+  semicolon_required: true
+}
+entities: {
+  name: "llcorner"
+  code_point_1: 8990
+  semicolon_required: true
+}
+entities: {
+  name: "llhard"
+  code_point_1: 10603
+  semicolon_required: true
+}
+entities: {
+  name: "lltri"
+  code_point_1: 9722
+  semicolon_required: true
+}
+entities: {
+  name: "lmidot"
+  code_point_1: 320
+  semicolon_required: true
+}
+entities: {
+  name: "lmoust"
+  code_point_1: 9136
+  semicolon_required: true
+}
+entities: {
+  name: "lmoustache"
+  code_point_1: 9136
+  semicolon_required: true
+}
+entities: {
+  name: "lnE"
+  code_point_1: 8808
+  semicolon_required: true
+}
+entities: {
+  name: "lnap"
+  code_point_1: 10889
+  semicolon_required: true
+}
+entities: {
+  name: "lnapprox"
+  code_point_1: 10889
+  semicolon_required: true
+}
+entities: {
+  name: "lne"
+  code_point_1: 10887
+  semicolon_required: true
+}
+entities: {
+  name: "lneq"
+  code_point_1: 10887
+  semicolon_required: true
+}
+entities: {
+  name: "lneqq"
+  code_point_1: 8808
+  semicolon_required: true
+}
+entities: {
+  name: "lnsim"
+  code_point_1: 8934
+  semicolon_required: true
+}
+entities: {
+  name: "loang"
+  code_point_1: 10220
+  semicolon_required: true
+}
+entities: {
+  name: "loarr"
+  code_point_1: 8701
+  semicolon_required: true
+}
+entities: {
+  name: "lobrk"
+  code_point_1: 10214
+  semicolon_required: true
+}
+entities: {
+  name: "longleftarrow"
+  code_point_1: 10229
+  semicolon_required: true
+}
+entities: {
+  name: "longleftrightarrow"
+  code_point_1: 10231
+  semicolon_required: true
+}
+entities: {
+  name: "longmapsto"
+  code_point_1: 10236
+  semicolon_required: true
+}
+entities: {
+  name: "longrightarrow"
+  code_point_1: 10230
+  semicolon_required: true
+}
+entities: {
+  name: "looparrowleft"
+  code_point_1: 8619
+  semicolon_required: true
+}
+entities: {
+  name: "looparrowright"
+  code_point_1: 8620
+  semicolon_required: true
+}
+entities: {
+  name: "lopar"
+  code_point_1: 10629
+  semicolon_required: true
+}
+entities: {
+  name: "lopf"
+  code_point_1: 120157
+  semicolon_required: true
+}
+entities: {
+  name: "loplus"
+  code_point_1: 10797
+  semicolon_required: true
+}
+entities: {
+  name: "lotimes"
+  code_point_1: 10804
+  semicolon_required: true
+}
+entities: {
+  name: "lowast"
+  code_point_1: 8727
+  semicolon_required: true
+}
+entities: {
+  name: "lowbar"
+  code_point_1: 95
+  semicolon_required: true
+}
+entities: {
+  name: "loz"
+  code_point_1: 9674
+  semicolon_required: true
+}
+entities: {
+  name: "lozenge"
+  code_point_1: 9674
+  semicolon_required: true
+}
+entities: {
+  name: "lozf"
+  code_point_1: 10731
+  semicolon_required: true
+}
+entities: {
+  name: "lpar"
+  code_point_1: 40
+  semicolon_required: true
+}
+entities: {
+  name: "lparlt"
+  code_point_1: 10643
+  semicolon_required: true
+}
+entities: {
+  name: "lrarr"
+  code_point_1: 8646
+  semicolon_required: true
+}
+entities: {
+  name: "lrcorner"
+  code_point_1: 8991
+  semicolon_required: true
+}
+entities: {
+  name: "lrhar"
+  code_point_1: 8651
+  semicolon_required: true
+}
+entities: {
+  name: "lrhard"
+  code_point_1: 10605
+  semicolon_required: true
+}
+entities: {
+  name: "lrm"
+  code_point_1: 8206
+  semicolon_required: true
+}
+entities: {
+  name: "lrtri"
+  code_point_1: 8895
+  semicolon_required: true
+}
+entities: {
+  name: "lsaquo"
+  code_point_1: 8249
+  semicolon_required: true
+}
+entities: {
+  name: "lscr"
+  code_point_1: 120001
+  semicolon_required: true
+}
+entities: {
+  name: "lsh"
+  code_point_1: 8624
+  semicolon_required: true
+}
+entities: {
+  name: "lsim"
+  code_point_1: 8818
+  semicolon_required: true
+}
+entities: {
+  name: "lsime"
+  code_point_1: 10893
+  semicolon_required: true
+}
+entities: {
+  name: "lsimg"
+  code_point_1: 10895
+  semicolon_required: true
+}
+entities: {
+  name: "lsqb"
+  code_point_1: 91
+  semicolon_required: true
+}
+entities: {
+  name: "lsquo"
+  code_point_1: 8216
+  semicolon_required: true
+}
+entities: {
+  name: "lsquor"
+  code_point_1: 8218
+  semicolon_required: true
+}
+entities: {
+  name: "lstrok"
+  code_point_1: 322
+  semicolon_required: true
+}
+entities: {
+  name: "lt"
+  code_point_1: 60
+  semicolon_required: true
+}
+entities: {
+  name: "ltcc"
+  code_point_1: 10918
+  semicolon_required: true
+}
+entities: {
+  name: "ltcir"
+  code_point_1: 10873
+  semicolon_required: true
+}
+entities: {
+  name: "ltdot"
+  code_point_1: 8918
+  semicolon_required: true
+}
+entities: {
+  name: "lthree"
+  code_point_1: 8907
+  semicolon_required: true
+}
+entities: {
+  name: "ltimes"
+  code_point_1: 8905
+  semicolon_required: true
+}
+entities: {
+  name: "ltlarr"
+  code_point_1: 10614
+  semicolon_required: true
+}
+entities: {
+  name: "ltquest"
+  code_point_1: 10875
+  semicolon_required: true
+}
+entities: {
+  name: "ltrPar"
+  code_point_1: 10646
+  semicolon_required: true
+}
+entities: {
+  name: "ltri"
+  code_point_1: 9667
+  semicolon_required: true
+}
+entities: {
+  name: "ltrie"
+  code_point_1: 8884
+  semicolon_required: true
+}
+entities: {
+  name: "ltrif"
+  code_point_1: 9666
+  semicolon_required: true
+}
+entities: {
+  name: "lurdshar"
+  code_point_1: 10570
+  semicolon_required: true
+}
+entities: {
+  name: "luruhar"
+  code_point_1: 10598
+  semicolon_required: true
+}
+entities: {
+  name: "lvertneqq"
+  code_point_1: 8808
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "lvnE"
+  code_point_1: 8808
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "mDDot"
+  code_point_1: 8762
+  semicolon_required: true
+}
+entities: {
+  name: "macr"
+  code_point_1: 175
+  semicolon_required: true
+}
+entities: {
+  name: "male"
+  code_point_1: 9794
+  semicolon_required: true
+}
+entities: {
+  name: "malt"
+  code_point_1: 10016
+  semicolon_required: true
+}
+entities: {
+  name: "maltese"
+  code_point_1: 10016
+  semicolon_required: true
+}
+entities: {
+  name: "map"
+  code_point_1: 8614
+  semicolon_required: true
+}
+entities: {
+  name: "mapsto"
+  code_point_1: 8614
+  semicolon_required: true
+}
+entities: {
+  name: "mapstodown"
+  code_point_1: 8615
+  semicolon_required: true
+}
+entities: {
+  name: "mapstoleft"
+  code_point_1: 8612
+  semicolon_required: true
+}
+entities: {
+  name: "mapstoup"
+  code_point_1: 8613
+  semicolon_required: true
+}
+entities: {
+  name: "marker"
+  code_point_1: 9646
+  semicolon_required: true
+}
+entities: {
+  name: "mcomma"
+  code_point_1: 10793
+  semicolon_required: true
+}
+entities: {
+  name: "mcy"
+  code_point_1: 1084
+  semicolon_required: true
+}
+entities: {
+  name: "mdash"
+  code_point_1: 8212
+  semicolon_required: true
+}
+entities: {
+  name: "measuredangle"
+  code_point_1: 8737
+  semicolon_required: true
+}
+entities: {
+  name: "mfr"
+  code_point_1: 120106
+  semicolon_required: true
+}
+entities: {
+  name: "mho"
+  code_point_1: 8487
+  semicolon_required: true
+}
+entities: {
+  name: "micro"
+  code_point_1: 181
+  semicolon_required: true
+}
+entities: {
+  name: "mid"
+  code_point_1: 8739
+  semicolon_required: true
+}
+entities: {
+  name: "midast"
+  code_point_1: 42
+  semicolon_required: true
+}
+entities: {
+  name: "midcir"
+  code_point_1: 10992
+  semicolon_required: true
+}
+entities: {
+  name: "middot"
+  code_point_1: 183
+  semicolon_required: true
+}
+entities: {
+  name: "minus"
+  code_point_1: 8722
+  semicolon_required: true
+}
+entities: {
+  name: "minusb"
+  code_point_1: 8863
+  semicolon_required: true
+}
+entities: {
+  name: "minusd"
+  code_point_1: 8760
+  semicolon_required: true
+}
+entities: {
+  name: "minusdu"
+  code_point_1: 10794
+  semicolon_required: true
+}
+entities: {
+  name: "mlcp"
+  code_point_1: 10971
+  semicolon_required: true
+}
+entities: {
+  name: "mldr"
+  code_point_1: 8230
+  semicolon_required: true
+}
+entities: {
+  name: "mnplus"
+  code_point_1: 8723
+  semicolon_required: true
+}
+entities: {
+  name: "models"
+  code_point_1: 8871
+  semicolon_required: true
+}
+entities: {
+  name: "mopf"
+  code_point_1: 120158
+  semicolon_required: true
+}
+entities: {
+  name: "mp"
+  code_point_1: 8723
+  semicolon_required: true
+}
+entities: {
+  name: "mscr"
+  code_point_1: 120002
+  semicolon_required: true
+}
+entities: {
+  name: "mstpos"
+  code_point_1: 8766
+  semicolon_required: true
+}
+entities: {
+  name: "mu"
+  code_point_1: 956
+  semicolon_required: true
+}
+entities: {
+  name: "multimap"
+  code_point_1: 8888
+  semicolon_required: true
+}
+entities: {
+  name: "mumap"
+  code_point_1: 8888
+  semicolon_required: true
+}
+entities: {
+  name: "nGg"
+  code_point_1: 8921
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nGt"
+  code_point_1: 8811
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nGtv"
+  code_point_1: 8811
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nLeftarrow"
+  code_point_1: 8653
+  semicolon_required: true
+}
+entities: {
+  name: "nLeftrightarrow"
+  code_point_1: 8654
+  semicolon_required: true
+}
+entities: {
+  name: "nLl"
+  code_point_1: 8920
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nLt"
+  code_point_1: 8810
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nLtv"
+  code_point_1: 8810
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nRightarrow"
+  code_point_1: 8655
+  semicolon_required: true
+}
+entities: {
+  name: "nVDash"
+  code_point_1: 8879
+  semicolon_required: true
+}
+entities: {
+  name: "nVdash"
+  code_point_1: 8878
+  semicolon_required: true
+}
+entities: {
+  name: "nabla"
+  code_point_1: 8711
+  semicolon_required: true
+}
+entities: {
+  name: "nacute"
+  code_point_1: 324
+  semicolon_required: true
+}
+entities: {
+  name: "nang"
+  code_point_1: 8736
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nap"
+  code_point_1: 8777
+  semicolon_required: true
+}
+entities: {
+  name: "napE"
+  code_point_1: 10864
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "napid"
+  code_point_1: 8779
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "napos"
+  code_point_1: 329
+  semicolon_required: true
+}
+entities: {
+  name: "napprox"
+  code_point_1: 8777
+  semicolon_required: true
+}
+entities: {
+  name: "natur"
+  code_point_1: 9838
+  semicolon_required: true
+}
+entities: {
+  name: "natural"
+  code_point_1: 9838
+  semicolon_required: true
+}
+entities: {
+  name: "naturals"
+  code_point_1: 8469
+  semicolon_required: true
+}
+entities: {
+  name: "nbsp"
+  code_point_1: 160
+  semicolon_required: true
+}
+entities: {
+  name: "nbump"
+  code_point_1: 8782
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nbumpe"
+  code_point_1: 8783
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "ncap"
+  code_point_1: 10819
+  semicolon_required: true
+}
+entities: {
+  name: "ncaron"
+  code_point_1: 328
+  semicolon_required: true
+}
+entities: {
+  name: "ncedil"
+  code_point_1: 326
+  semicolon_required: true
+}
+entities: {
+  name: "ncong"
+  code_point_1: 8775
+  semicolon_required: true
+}
+entities: {
+  name: "ncongdot"
+  code_point_1: 10861
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "ncup"
+  code_point_1: 10818
+  semicolon_required: true
+}
+entities: {
+  name: "ncy"
+  code_point_1: 1085
+  semicolon_required: true
+}
+entities: {
+  name: "ndash"
+  code_point_1: 8211
+  semicolon_required: true
+}
+entities: {
+  name: "ne"
+  code_point_1: 8800
+  semicolon_required: true
+}
+entities: {
+  name: "neArr"
+  code_point_1: 8663
+  semicolon_required: true
+}
+entities: {
+  name: "nearhk"
+  code_point_1: 10532
+  semicolon_required: true
+}
+entities: {
+  name: "nearr"
+  code_point_1: 8599
+  semicolon_required: true
+}
+entities: {
+  name: "nearrow"
+  code_point_1: 8599
+  semicolon_required: true
+}
+entities: {
+  name: "nedot"
+  code_point_1: 8784
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nequiv"
+  code_point_1: 8802
+  semicolon_required: true
+}
+entities: {
+  name: "nesear"
+  code_point_1: 10536
+  semicolon_required: true
+}
+entities: {
+  name: "nesim"
+  code_point_1: 8770
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nexist"
+  code_point_1: 8708
+  semicolon_required: true
+}
+entities: {
+  name: "nexists"
+  code_point_1: 8708
+  semicolon_required: true
+}
+entities: {
+  name: "nfr"
+  code_point_1: 120107
+  semicolon_required: true
+}
+entities: {
+  name: "ngE"
+  code_point_1: 8807
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nge"
+  code_point_1: 8817
+  semicolon_required: true
+}
+entities: {
+  name: "ngeq"
+  code_point_1: 8817
+  semicolon_required: true
+}
+entities: {
+  name: "ngeqq"
+  code_point_1: 8807
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "ngeqslant"
+  code_point_1: 10878
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nges"
+  code_point_1: 10878
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "ngsim"
+  code_point_1: 8821
+  semicolon_required: true
+}
+entities: {
+  name: "ngt"
+  code_point_1: 8815
+  semicolon_required: true
+}
+entities: {
+  name: "ngtr"
+  code_point_1: 8815
+  semicolon_required: true
+}
+entities: {
+  name: "nhArr"
+  code_point_1: 8654
+  semicolon_required: true
+}
+entities: {
+  name: "nharr"
+  code_point_1: 8622
+  semicolon_required: true
+}
+entities: {
+  name: "nhpar"
+  code_point_1: 10994
+  semicolon_required: true
+}
+entities: {
+  name: "ni"
+  code_point_1: 8715
+  semicolon_required: true
+}
+entities: {
+  name: "nis"
+  code_point_1: 8956
+  semicolon_required: true
+}
+entities: {
+  name: "nisd"
+  code_point_1: 8954
+  semicolon_required: true
+}
+entities: {
+  name: "niv"
+  code_point_1: 8715
+  semicolon_required: true
+}
+entities: {
+  name: "njcy"
+  code_point_1: 1114
+  semicolon_required: true
+}
+entities: {
+  name: "nlArr"
+  code_point_1: 8653
+  semicolon_required: true
+}
+entities: {
+  name: "nlE"
+  code_point_1: 8806
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nlarr"
+  code_point_1: 8602
+  semicolon_required: true
+}
+entities: {
+  name: "nldr"
+  code_point_1: 8229
+  semicolon_required: true
+}
+entities: {
+  name: "nle"
+  code_point_1: 8816
+  semicolon_required: true
+}
+entities: {
+  name: "nleftarrow"
+  code_point_1: 8602
+  semicolon_required: true
+}
+entities: {
+  name: "nleftrightarrow"
+  code_point_1: 8622
+  semicolon_required: true
+}
+entities: {
+  name: "nleq"
+  code_point_1: 8816
+  semicolon_required: true
+}
+entities: {
+  name: "nleqq"
+  code_point_1: 8806
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nleqslant"
+  code_point_1: 10877
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nles"
+  code_point_1: 10877
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nless"
+  code_point_1: 8814
+  semicolon_required: true
+}
+entities: {
+  name: "nlsim"
+  code_point_1: 8820
+  semicolon_required: true
+}
+entities: {
+  name: "nlt"
+  code_point_1: 8814
+  semicolon_required: true
+}
+entities: {
+  name: "nltri"
+  code_point_1: 8938
+  semicolon_required: true
+}
+entities: {
+  name: "nltrie"
+  code_point_1: 8940
+  semicolon_required: true
+}
+entities: {
+  name: "nmid"
+  code_point_1: 8740
+  semicolon_required: true
+}
+entities: {
+  name: "nopf"
+  code_point_1: 120159
+  semicolon_required: true
+}
+entities: {
+  name: "not"
+  code_point_1: 172
+  semicolon_required: true
+}
+entities: {
+  name: "notin"
+  code_point_1: 8713
+  semicolon_required: true
+}
+entities: {
+  name: "notinE"
+  code_point_1: 8953
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "notindot"
+  code_point_1: 8949
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "notinva"
+  code_point_1: 8713
+  semicolon_required: true
+}
+entities: {
+  name: "notinvb"
+  code_point_1: 8951
+  semicolon_required: true
+}
+entities: {
+  name: "notinvc"
+  code_point_1: 8950
+  semicolon_required: true
+}
+entities: {
+  name: "notni"
+  code_point_1: 8716
+  semicolon_required: true
+}
+entities: {
+  name: "notniva"
+  code_point_1: 8716
+  semicolon_required: true
+}
+entities: {
+  name: "notnivb"
+  code_point_1: 8958
+  semicolon_required: true
+}
+entities: {
+  name: "notnivc"
+  code_point_1: 8957
+  semicolon_required: true
+}
+entities: {
+  name: "npar"
+  code_point_1: 8742
+  semicolon_required: true
+}
+entities: {
+  name: "nparallel"
+  code_point_1: 8742
+  semicolon_required: true
+}
+entities: {
+  name: "nparsl"
+  code_point_1: 11005
+  code_point_2: 8421
+  semicolon_required: true
+}
+entities: {
+  name: "npart"
+  code_point_1: 8706
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "npolint"
+  code_point_1: 10772
+  semicolon_required: true
+}
+entities: {
+  name: "npr"
+  code_point_1: 8832
+  semicolon_required: true
+}
+entities: {
+  name: "nprcue"
+  code_point_1: 8928
+  semicolon_required: true
+}
+entities: {
+  name: "npre"
+  code_point_1: 10927
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nprec"
+  code_point_1: 8832
+  semicolon_required: true
+}
+entities: {
+  name: "npreceq"
+  code_point_1: 10927
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nrArr"
+  code_point_1: 8655
+  semicolon_required: true
+}
+entities: {
+  name: "nrarr"
+  code_point_1: 8603
+  semicolon_required: true
+}
+entities: {
+  name: "nrarrc"
+  code_point_1: 10547
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nrarrw"
+  code_point_1: 8605
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nrightarrow"
+  code_point_1: 8603
+  semicolon_required: true
+}
+entities: {
+  name: "nrtri"
+  code_point_1: 8939
+  semicolon_required: true
+}
+entities: {
+  name: "nrtrie"
+  code_point_1: 8941
+  semicolon_required: true
+}
+entities: {
+  name: "nsc"
+  code_point_1: 8833
+  semicolon_required: true
+}
+entities: {
+  name: "nsccue"
+  code_point_1: 8929
+  semicolon_required: true
+}
+entities: {
+  name: "nsce"
+  code_point_1: 10928
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nscr"
+  code_point_1: 120003
+  semicolon_required: true
+}
+entities: {
+  name: "nshortmid"
+  code_point_1: 8740
+  semicolon_required: true
+}
+entities: {
+  name: "nshortparallel"
+  code_point_1: 8742
+  semicolon_required: true
+}
+entities: {
+  name: "nsim"
+  code_point_1: 8769
+  semicolon_required: true
+}
+entities: {
+  name: "nsime"
+  code_point_1: 8772
+  semicolon_required: true
+}
+entities: {
+  name: "nsimeq"
+  code_point_1: 8772
+  semicolon_required: true
+}
+entities: {
+  name: "nsmid"
+  code_point_1: 8740
+  semicolon_required: true
+}
+entities: {
+  name: "nspar"
+  code_point_1: 8742
+  semicolon_required: true
+}
+entities: {
+  name: "nsqsube"
+  code_point_1: 8930
+  semicolon_required: true
+}
+entities: {
+  name: "nsqsupe"
+  code_point_1: 8931
+  semicolon_required: true
+}
+entities: {
+  name: "nsub"
+  code_point_1: 8836
+  semicolon_required: true
+}
+entities: {
+  name: "nsubE"
+  code_point_1: 10949
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nsube"
+  code_point_1: 8840
+  semicolon_required: true
+}
+entities: {
+  name: "nsubset"
+  code_point_1: 8834
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nsubseteq"
+  code_point_1: 8840
+  semicolon_required: true
+}
+entities: {
+  name: "nsubseteqq"
+  code_point_1: 10949
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nsucc"
+  code_point_1: 8833
+  semicolon_required: true
+}
+entities: {
+  name: "nsucceq"
+  code_point_1: 10928
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nsup"
+  code_point_1: 8837
+  semicolon_required: true
+}
+entities: {
+  name: "nsupE"
+  code_point_1: 10950
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "nsupe"
+  code_point_1: 8841
+  semicolon_required: true
+}
+entities: {
+  name: "nsupset"
+  code_point_1: 8835
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nsupseteq"
+  code_point_1: 8841
+  semicolon_required: true
+}
+entities: {
+  name: "nsupseteqq"
+  code_point_1: 10950
+  code_point_2: 824
+  semicolon_required: true
+}
+entities: {
+  name: "ntgl"
+  code_point_1: 8825
+  semicolon_required: true
+}
+entities: {
+  name: "ntilde"
+  code_point_1: 241
+  semicolon_required: true
+}
+entities: {
+  name: "ntlg"
+  code_point_1: 8824
+  semicolon_required: true
+}
+entities: {
+  name: "ntriangleleft"
+  code_point_1: 8938
+  semicolon_required: true
+}
+entities: {
+  name: "ntrianglelefteq"
+  code_point_1: 8940
+  semicolon_required: true
+}
+entities: {
+  name: "ntriangleright"
+  code_point_1: 8939
+  semicolon_required: true
+}
+entities: {
+  name: "ntrianglerighteq"
+  code_point_1: 8941
+  semicolon_required: true
+}
+entities: {
+  name: "nu"
+  code_point_1: 957
+  semicolon_required: true
+}
+entities: {
+  name: "num"
+  code_point_1: 35
+  semicolon_required: true
+}
+entities: {
+  name: "numero"
+  code_point_1: 8470
+  semicolon_required: true
+}
+entities: {
+  name: "numsp"
+  code_point_1: 8199
+  semicolon_required: true
+}
+entities: {
+  name: "nvDash"
+  code_point_1: 8877
+  semicolon_required: true
+}
+entities: {
+  name: "nvHarr"
+  code_point_1: 10500
+  semicolon_required: true
+}
+entities: {
+  name: "nvap"
+  code_point_1: 8781
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvdash"
+  code_point_1: 8876
+  semicolon_required: true
+}
+entities: {
+  name: "nvge"
+  code_point_1: 8805
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvgt"
+  code_point_1: 62
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvinfin"
+  code_point_1: 10718
+  semicolon_required: true
+}
+entities: {
+  name: "nvlArr"
+  code_point_1: 10498
+  semicolon_required: true
+}
+entities: {
+  name: "nvle"
+  code_point_1: 8804
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvlt"
+  code_point_1: 60
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvltrie"
+  code_point_1: 8884
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvrArr"
+  code_point_1: 10499
+  semicolon_required: true
+}
+entities: {
+  name: "nvrtrie"
+  code_point_1: 8885
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nvsim"
+  code_point_1: 8764
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "nwArr"
+  code_point_1: 8662
+  semicolon_required: true
+}
+entities: {
+  name: "nwarhk"
+  code_point_1: 10531
+  semicolon_required: true
+}
+entities: {
+  name: "nwarr"
+  code_point_1: 8598
+  semicolon_required: true
+}
+entities: {
+  name: "nwarrow"
+  code_point_1: 8598
+  semicolon_required: true
+}
+entities: {
+  name: "nwnear"
+  code_point_1: 10535
+  semicolon_required: true
+}
+entities: {
+  name: "oS"
+  code_point_1: 9416
+  semicolon_required: true
+}
+entities: {
+  name: "oacute"
+  code_point_1: 243
+  semicolon_required: true
+}
+entities: {
+  name: "oast"
+  code_point_1: 8859
+  semicolon_required: true
+}
+entities: {
+  name: "ocir"
+  code_point_1: 8858
+  semicolon_required: true
+}
+entities: {
+  name: "ocirc"
+  code_point_1: 244
+  semicolon_required: true
+}
+entities: {
+  name: "ocy"
+  code_point_1: 1086
+  semicolon_required: true
+}
+entities: {
+  name: "odash"
+  code_point_1: 8861
+  semicolon_required: true
+}
+entities: {
+  name: "odblac"
+  code_point_1: 337
+  semicolon_required: true
+}
+entities: {
+  name: "odiv"
+  code_point_1: 10808
+  semicolon_required: true
+}
+entities: {
+  name: "odot"
+  code_point_1: 8857
+  semicolon_required: true
+}
+entities: {
+  name: "odsold"
+  code_point_1: 10684
+  semicolon_required: true
+}
+entities: {
+  name: "oelig"
+  code_point_1: 339
+  semicolon_required: true
+}
+entities: {
+  name: "ofcir"
+  code_point_1: 10687
+  semicolon_required: true
+}
+entities: {
+  name: "ofr"
+  code_point_1: 120108
+  semicolon_required: true
+}
+entities: {
+  name: "ogon"
+  code_point_1: 731
+  semicolon_required: true
+}
+entities: {
+  name: "ograve"
+  code_point_1: 242
+  semicolon_required: true
+}
+entities: {
+  name: "ogt"
+  code_point_1: 10689
+  semicolon_required: true
+}
+entities: {
+  name: "ohbar"
+  code_point_1: 10677
+  semicolon_required: true
+}
+entities: {
+  name: "ohm"
+  code_point_1: 937
+  semicolon_required: true
+}
+entities: {
+  name: "oint"
+  code_point_1: 8750
+  semicolon_required: true
+}
+entities: {
+  name: "olarr"
+  code_point_1: 8634
+  semicolon_required: true
+}
+entities: {
+  name: "olcir"
+  code_point_1: 10686
+  semicolon_required: true
+}
+entities: {
+  name: "olcross"
+  code_point_1: 10683
+  semicolon_required: true
+}
+entities: {
+  name: "oline"
+  code_point_1: 8254
+  semicolon_required: true
+}
+entities: {
+  name: "olt"
+  code_point_1: 10688
+  semicolon_required: true
+}
+entities: {
+  name: "omacr"
+  code_point_1: 333
+  semicolon_required: true
+}
+entities: {
+  name: "omega"
+  code_point_1: 969
+  semicolon_required: true
+}
+entities: {
+  name: "omicron"
+  code_point_1: 959
+  semicolon_required: true
+}
+entities: {
+  name: "omid"
+  code_point_1: 10678
+  semicolon_required: true
+}
+entities: {
+  name: "ominus"
+  code_point_1: 8854
+  semicolon_required: true
+}
+entities: {
+  name: "oopf"
+  code_point_1: 120160
+  semicolon_required: true
+}
+entities: {
+  name: "opar"
+  code_point_1: 10679
+  semicolon_required: true
+}
+entities: {
+  name: "operp"
+  code_point_1: 10681
+  semicolon_required: true
+}
+entities: {
+  name: "oplus"
+  code_point_1: 8853
+  semicolon_required: true
+}
+entities: {
+  name: "or"
+  code_point_1: 8744
+  semicolon_required: true
+}
+entities: {
+  name: "orarr"
+  code_point_1: 8635
+  semicolon_required: true
+}
+entities: {
+  name: "ord"
+  code_point_1: 10845
+  semicolon_required: true
+}
+entities: {
+  name: "order"
+  code_point_1: 8500
+  semicolon_required: true
+}
+entities: {
+  name: "orderof"
+  code_point_1: 8500
+  semicolon_required: true
+}
+entities: {
+  name: "ordf"
+  code_point_1: 170
+  semicolon_required: true
+}
+entities: {
+  name: "ordm"
+  code_point_1: 186
+  semicolon_required: true
+}
+entities: {
+  name: "origof"
+  code_point_1: 8886
+  semicolon_required: true
+}
+entities: {
+  name: "oror"
+  code_point_1: 10838
+  semicolon_required: true
+}
+entities: {
+  name: "orslope"
+  code_point_1: 10839
+  semicolon_required: true
+}
+entities: {
+  name: "orv"
+  code_point_1: 10843
+  semicolon_required: true
+}
+entities: {
+  name: "oscr"
+  code_point_1: 8500
+  semicolon_required: true
+}
+entities: {
+  name: "oslash"
+  code_point_1: 248
+  semicolon_required: true
+}
+entities: {
+  name: "osol"
+  code_point_1: 8856
+  semicolon_required: true
+}
+entities: {
+  name: "otilde"
+  code_point_1: 245
+  semicolon_required: true
+}
+entities: {
+  name: "otimes"
+  code_point_1: 8855
+  semicolon_required: true
+}
+entities: {
+  name: "otimesas"
+  code_point_1: 10806
+  semicolon_required: true
+}
+entities: {
+  name: "ouml"
+  code_point_1: 246
+  semicolon_required: true
+}
+entities: {
+  name: "ovbar"
+  code_point_1: 9021
+  semicolon_required: true
+}
+entities: {
+  name: "par"
+  code_point_1: 8741
+  semicolon_required: true
+}
+entities: {
+  name: "para"
+  code_point_1: 182
+  semicolon_required: true
+}
+entities: {
+  name: "parallel"
+  code_point_1: 8741
+  semicolon_required: true
+}
+entities: {
+  name: "parsim"
+  code_point_1: 10995
+  semicolon_required: true
+}
+entities: {
+  name: "parsl"
+  code_point_1: 11005
+  semicolon_required: true
+}
+entities: {
+  name: "part"
+  code_point_1: 8706
+  semicolon_required: true
+}
+entities: {
+  name: "pcy"
+  code_point_1: 1087
+  semicolon_required: true
+}
+entities: {
+  name: "percnt"
+  code_point_1: 37
+  semicolon_required: true
+}
+entities: {
+  name: "period"
+  code_point_1: 46
+  semicolon_required: true
+}
+entities: {
+  name: "permil"
+  code_point_1: 8240
+  semicolon_required: true
+}
+entities: {
+  name: "perp"
+  code_point_1: 8869
+  semicolon_required: true
+}
+entities: {
+  name: "pertenk"
+  code_point_1: 8241
+  semicolon_required: true
+}
+entities: {
+  name: "pfr"
+  code_point_1: 120109
+  semicolon_required: true
+}
+entities: {
+  name: "phi"
+  code_point_1: 966
+  semicolon_required: true
+}
+entities: {
+  name: "phiv"
+  code_point_1: 981
+  semicolon_required: true
+}
+entities: {
+  name: "phmmat"
+  code_point_1: 8499
+  semicolon_required: true
+}
+entities: {
+  name: "phone"
+  code_point_1: 9742
+  semicolon_required: true
+}
+entities: {
+  name: "pi"
+  code_point_1: 960
+  semicolon_required: true
+}
+entities: {
+  name: "pitchfork"
+  code_point_1: 8916
+  semicolon_required: true
+}
+entities: {
+  name: "piv"
+  code_point_1: 982
+  semicolon_required: true
+}
+entities: {
+  name: "planck"
+  code_point_1: 8463
+  semicolon_required: true
+}
+entities: {
+  name: "planckh"
+  code_point_1: 8462
+  semicolon_required: true
+}
+entities: {
+  name: "plankv"
+  code_point_1: 8463
+  semicolon_required: true
+}
+entities: {
+  name: "plus"
+  code_point_1: 43
+  semicolon_required: true
+}
+entities: {
+  name: "plusacir"
+  code_point_1: 10787
+  semicolon_required: true
+}
+entities: {
+  name: "plusb"
+  code_point_1: 8862
+  semicolon_required: true
+}
+entities: {
+  name: "pluscir"
+  code_point_1: 10786
+  semicolon_required: true
+}
+entities: {
+  name: "plusdo"
+  code_point_1: 8724
+  semicolon_required: true
+}
+entities: {
+  name: "plusdu"
+  code_point_1: 10789
+  semicolon_required: true
+}
+entities: {
+  name: "pluse"
+  code_point_1: 10866
+  semicolon_required: true
+}
+entities: {
+  name: "plusmn"
+  code_point_1: 177
+  semicolon_required: true
+}
+entities: {
+  name: "plussim"
+  code_point_1: 10790
+  semicolon_required: true
+}
+entities: {
+  name: "plustwo"
+  code_point_1: 10791
+  semicolon_required: true
+}
+entities: {
+  name: "pm"
+  code_point_1: 177
+  semicolon_required: true
+}
+entities: {
+  name: "pointint"
+  code_point_1: 10773
+  semicolon_required: true
+}
+entities: {
+  name: "popf"
+  code_point_1: 120161
+  semicolon_required: true
+}
+entities: {
+  name: "pound"
+  code_point_1: 163
+  semicolon_required: true
+}
+entities: {
+  name: "pr"
+  code_point_1: 8826
+  semicolon_required: true
+}
+entities: {
+  name: "prE"
+  code_point_1: 10931
+  semicolon_required: true
+}
+entities: {
+  name: "prap"
+  code_point_1: 10935
+  semicolon_required: true
+}
+entities: {
+  name: "prcue"
+  code_point_1: 8828
+  semicolon_required: true
+}
+entities: {
+  name: "pre"
+  code_point_1: 10927
+  semicolon_required: true
+}
+entities: {
+  name: "prec"
+  code_point_1: 8826
+  semicolon_required: true
+}
+entities: {
+  name: "precapprox"
+  code_point_1: 10935
+  semicolon_required: true
+}
+entities: {
+  name: "preccurlyeq"
+  code_point_1: 8828
+  semicolon_required: true
+}
+entities: {
+  name: "preceq"
+  code_point_1: 10927
+  semicolon_required: true
+}
+entities: {
+  name: "precnapprox"
+  code_point_1: 10937
+  semicolon_required: true
+}
+entities: {
+  name: "precneqq"
+  code_point_1: 10933
+  semicolon_required: true
+}
+entities: {
+  name: "precnsim"
+  code_point_1: 8936
+  semicolon_required: true
+}
+entities: {
+  name: "precsim"
+  code_point_1: 8830
+  semicolon_required: true
+}
+entities: {
+  name: "prime"
+  code_point_1: 8242
+  semicolon_required: true
+}
+entities: {
+  name: "primes"
+  code_point_1: 8473
+  semicolon_required: true
+}
+entities: {
+  name: "prnE"
+  code_point_1: 10933
+  semicolon_required: true
+}
+entities: {
+  name: "prnap"
+  code_point_1: 10937
+  semicolon_required: true
+}
+entities: {
+  name: "prnsim"
+  code_point_1: 8936
+  semicolon_required: true
+}
+entities: {
+  name: "prod"
+  code_point_1: 8719
+  semicolon_required: true
+}
+entities: {
+  name: "profalar"
+  code_point_1: 9006
+  semicolon_required: true
+}
+entities: {
+  name: "profline"
+  code_point_1: 8978
+  semicolon_required: true
+}
+entities: {
+  name: "profsurf"
+  code_point_1: 8979
+  semicolon_required: true
+}
+entities: {
+  name: "prop"
+  code_point_1: 8733
+  semicolon_required: true
+}
+entities: {
+  name: "propto"
+  code_point_1: 8733
+  semicolon_required: true
+}
+entities: {
+  name: "prsim"
+  code_point_1: 8830
+  semicolon_required: true
+}
+entities: {
+  name: "prurel"
+  code_point_1: 8880
+  semicolon_required: true
+}
+entities: {
+  name: "pscr"
+  code_point_1: 120005
+  semicolon_required: true
+}
+entities: {
+  name: "psi"
+  code_point_1: 968
+  semicolon_required: true
+}
+entities: {
+  name: "puncsp"
+  code_point_1: 8200
+  semicolon_required: true
+}
+entities: {
+  name: "qfr"
+  code_point_1: 120110
+  semicolon_required: true
+}
+entities: {
+  name: "qint"
+  code_point_1: 10764
+  semicolon_required: true
+}
+entities: {
+  name: "qopf"
+  code_point_1: 120162
+  semicolon_required: true
+}
+entities: {
+  name: "qprime"
+  code_point_1: 8279
+  semicolon_required: true
+}
+entities: {
+  name: "qscr"
+  code_point_1: 120006
+  semicolon_required: true
+}
+entities: {
+  name: "quaternions"
+  code_point_1: 8461
+  semicolon_required: true
+}
+entities: {
+  name: "quatint"
+  code_point_1: 10774
+  semicolon_required: true
+}
+entities: {
+  name: "quest"
+  code_point_1: 63
+  semicolon_required: true
+}
+entities: {
+  name: "questeq"
+  code_point_1: 8799
+  semicolon_required: true
+}
+entities: {
+  name: "quot"
+  code_point_1: 34
+  semicolon_required: true
+}
+entities: {
+  name: "rAarr"
+  code_point_1: 8667
+  semicolon_required: true
+}
+entities: {
+  name: "rArr"
+  code_point_1: 8658
+  semicolon_required: true
+}
+entities: {
+  name: "rAtail"
+  code_point_1: 10524
+  semicolon_required: true
+}
+entities: {
+  name: "rBarr"
+  code_point_1: 10511
+  semicolon_required: true
+}
+entities: {
+  name: "rHar"
+  code_point_1: 10596
+  semicolon_required: true
+}
+entities: {
+  name: "race"
+  code_point_1: 8765
+  code_point_2: 817
+  semicolon_required: true
+}
+entities: {
+  name: "racute"
+  code_point_1: 341
+  semicolon_required: true
+}
+entities: {
+  name: "radic"
+  code_point_1: 8730
+  semicolon_required: true
+}
+entities: {
+  name: "raemptyv"
+  code_point_1: 10675
+  semicolon_required: true
+}
+entities: {
+  name: "rang"
+  code_point_1: 10217
+  semicolon_required: true
+}
+entities: {
+  name: "rangd"
+  code_point_1: 10642
+  semicolon_required: true
+}
+entities: {
+  name: "range"
+  code_point_1: 10661
+  semicolon_required: true
+}
+entities: {
+  name: "rangle"
+  code_point_1: 10217
+  semicolon_required: true
+}
+entities: {
+  name: "raquo"
+  code_point_1: 187
+  semicolon_required: true
+}
+entities: {
+  name: "rarr"
+  code_point_1: 8594
+  semicolon_required: true
+}
+entities: {
+  name: "rarrap"
+  code_point_1: 10613
+  semicolon_required: true
+}
+entities: {
+  name: "rarrb"
+  code_point_1: 8677
+  semicolon_required: true
+}
+entities: {
+  name: "rarrbfs"
+  code_point_1: 10528
+  semicolon_required: true
+}
+entities: {
+  name: "rarrc"
+  code_point_1: 10547
+  semicolon_required: true
+}
+entities: {
+  name: "rarrfs"
+  code_point_1: 10526
+  semicolon_required: true
+}
+entities: {
+  name: "rarrhk"
+  code_point_1: 8618
+  semicolon_required: true
+}
+entities: {
+  name: "rarrlp"
+  code_point_1: 8620
+  semicolon_required: true
+}
+entities: {
+  name: "rarrpl"
+  code_point_1: 10565
+  semicolon_required: true
+}
+entities: {
+  name: "rarrsim"
+  code_point_1: 10612
+  semicolon_required: true
+}
+entities: {
+  name: "rarrtl"
+  code_point_1: 8611
+  semicolon_required: true
+}
+entities: {
+  name: "rarrw"
+  code_point_1: 8605
+  semicolon_required: true
+}
+entities: {
+  name: "ratail"
+  code_point_1: 10522
+  semicolon_required: true
+}
+entities: {
+  name: "ratio"
+  code_point_1: 8758
+  semicolon_required: true
+}
+entities: {
+  name: "rationals"
+  code_point_1: 8474
+  semicolon_required: true
+}
+entities: {
+  name: "rbarr"
+  code_point_1: 10509
+  semicolon_required: true
+}
+entities: {
+  name: "rbbrk"
+  code_point_1: 10099
+  semicolon_required: true
+}
+entities: {
+  name: "rbrace"
+  code_point_1: 125
+  semicolon_required: true
+}
+entities: {
+  name: "rbrack"
+  code_point_1: 93
+  semicolon_required: true
+}
+entities: {
+  name: "rbrke"
+  code_point_1: 10636
+  semicolon_required: true
+}
+entities: {
+  name: "rbrksld"
+  code_point_1: 10638
+  semicolon_required: true
+}
+entities: {
+  name: "rbrkslu"
+  code_point_1: 10640
+  semicolon_required: true
+}
+entities: {
+  name: "rcaron"
+  code_point_1: 345
+  semicolon_required: true
+}
+entities: {
+  name: "rcedil"
+  code_point_1: 343
+  semicolon_required: true
+}
+entities: {
+  name: "rceil"
+  code_point_1: 8969
+  semicolon_required: true
+}
+entities: {
+  name: "rcub"
+  code_point_1: 125
+  semicolon_required: true
+}
+entities: {
+  name: "rcy"
+  code_point_1: 1088
+  semicolon_required: true
+}
+entities: {
+  name: "rdca"
+  code_point_1: 10551
+  semicolon_required: true
+}
+entities: {
+  name: "rdldhar"
+  code_point_1: 10601
+  semicolon_required: true
+}
+entities: {
+  name: "rdquo"
+  code_point_1: 8221
+  semicolon_required: true
+}
+entities: {
+  name: "rdquor"
+  code_point_1: 8221
+  semicolon_required: true
+}
+entities: {
+  name: "rdsh"
+  code_point_1: 8627
+  semicolon_required: true
+}
+entities: {
+  name: "real"
+  code_point_1: 8476
+  semicolon_required: true
+}
+entities: {
+  name: "realine"
+  code_point_1: 8475
+  semicolon_required: true
+}
+entities: {
+  name: "realpart"
+  code_point_1: 8476
+  semicolon_required: true
+}
+entities: {
+  name: "reals"
+  code_point_1: 8477
+  semicolon_required: true
+}
+entities: {
+  name: "rect"
+  code_point_1: 9645
+  semicolon_required: true
+}
+entities: {
+  name: "reg"
+  code_point_1: 174
+  semicolon_required: true
+}
+entities: {
+  name: "rfisht"
+  code_point_1: 10621
+  semicolon_required: true
+}
+entities: {
+  name: "rfloor"
+  code_point_1: 8971
+  semicolon_required: true
+}
+entities: {
+  name: "rfr"
+  code_point_1: 120111
+  semicolon_required: true
+}
+entities: {
+  name: "rhard"
+  code_point_1: 8641
+  semicolon_required: true
+}
+entities: {
+  name: "rharu"
+  code_point_1: 8640
+  semicolon_required: true
+}
+entities: {
+  name: "rharul"
+  code_point_1: 10604
+  semicolon_required: true
+}
+entities: {
+  name: "rho"
+  code_point_1: 961
+  semicolon_required: true
+}
+entities: {
+  name: "rhov"
+  code_point_1: 1009
+  semicolon_required: true
+}
+entities: {
+  name: "rightarrow"
+  code_point_1: 8594
+  semicolon_required: true
+}
+entities: {
+  name: "rightarrowtail"
+  code_point_1: 8611
+  semicolon_required: true
+}
+entities: {
+  name: "rightharpoondown"
+  code_point_1: 8641
+  semicolon_required: true
+}
+entities: {
+  name: "rightharpoonup"
+  code_point_1: 8640
+  semicolon_required: true
+}
+entities: {
+  name: "rightleftarrows"
+  code_point_1: 8644
+  semicolon_required: true
+}
+entities: {
+  name: "rightleftharpoons"
+  code_point_1: 8652
+  semicolon_required: true
+}
+entities: {
+  name: "rightrightarrows"
+  code_point_1: 8649
+  semicolon_required: true
+}
+entities: {
+  name: "rightsquigarrow"
+  code_point_1: 8605
+  semicolon_required: true
+}
+entities: {
+  name: "rightthreetimes"
+  code_point_1: 8908
+  semicolon_required: true
+}
+entities: {
+  name: "ring"
+  code_point_1: 730
+  semicolon_required: true
+}
+entities: {
+  name: "risingdotseq"
+  code_point_1: 8787
+  semicolon_required: true
+}
+entities: {
+  name: "rlarr"
+  code_point_1: 8644
+  semicolon_required: true
+}
+entities: {
+  name: "rlhar"
+  code_point_1: 8652
+  semicolon_required: true
+}
+entities: {
+  name: "rlm"
+  code_point_1: 8207
+  semicolon_required: true
+}
+entities: {
+  name: "rmoust"
+  code_point_1: 9137
+  semicolon_required: true
+}
+entities: {
+  name: "rmoustache"
+  code_point_1: 9137
+  semicolon_required: true
+}
+entities: {
+  name: "rnmid"
+  code_point_1: 10990
+  semicolon_required: true
+}
+entities: {
+  name: "roang"
+  code_point_1: 10221
+  semicolon_required: true
+}
+entities: {
+  name: "roarr"
+  code_point_1: 8702
+  semicolon_required: true
+}
+entities: {
+  name: "robrk"
+  code_point_1: 10215
+  semicolon_required: true
+}
+entities: {
+  name: "ropar"
+  code_point_1: 10630
+  semicolon_required: true
+}
+entities: {
+  name: "ropf"
+  code_point_1: 120163
+  semicolon_required: true
+}
+entities: {
+  name: "roplus"
+  code_point_1: 10798
+  semicolon_required: true
+}
+entities: {
+  name: "rotimes"
+  code_point_1: 10805
+  semicolon_required: true
+}
+entities: {
+  name: "rpar"
+  code_point_1: 41
+  semicolon_required: true
+}
+entities: {
+  name: "rpargt"
+  code_point_1: 10644
+  semicolon_required: true
+}
+entities: {
+  name: "rppolint"
+  code_point_1: 10770
+  semicolon_required: true
+}
+entities: {
+  name: "rrarr"
+  code_point_1: 8649
+  semicolon_required: true
+}
+entities: {
+  name: "rsaquo"
+  code_point_1: 8250
+  semicolon_required: true
+}
+entities: {
+  name: "rscr"
+  code_point_1: 120007
+  semicolon_required: true
+}
+entities: {
+  name: "rsh"
+  code_point_1: 8625
+  semicolon_required: true
+}
+entities: {
+  name: "rsqb"
+  code_point_1: 93
+  semicolon_required: true
+}
+entities: {
+  name: "rsquo"
+  code_point_1: 8217
+  semicolon_required: true
+}
+entities: {
+  name: "rsquor"
+  code_point_1: 8217
+  semicolon_required: true
+}
+entities: {
+  name: "rthree"
+  code_point_1: 8908
+  semicolon_required: true
+}
+entities: {
+  name: "rtimes"
+  code_point_1: 8906
+  semicolon_required: true
+}
+entities: {
+  name: "rtri"
+  code_point_1: 9657
+  semicolon_required: true
+}
+entities: {
+  name: "rtrie"
+  code_point_1: 8885
+  semicolon_required: true
+}
+entities: {
+  name: "rtrif"
+  code_point_1: 9656
+  semicolon_required: true
+}
+entities: {
+  name: "rtriltri"
+  code_point_1: 10702
+  semicolon_required: true
+}
+entities: {
+  name: "ruluhar"
+  code_point_1: 10600
+  semicolon_required: true
+}
+entities: {
+  name: "rx"
+  code_point_1: 8478
+  semicolon_required: true
+}
+entities: {
+  name: "sacute"
+  code_point_1: 347
+  semicolon_required: true
+}
+entities: {
+  name: "sbquo"
+  code_point_1: 8218
+  semicolon_required: true
+}
+entities: {
+  name: "sc"
+  code_point_1: 8827
+  semicolon_required: true
+}
+entities: {
+  name: "scE"
+  code_point_1: 10932
+  semicolon_required: true
+}
+entities: {
+  name: "scap"
+  code_point_1: 10936
+  semicolon_required: true
+}
+entities: {
+  name: "scaron"
+  code_point_1: 353
+  semicolon_required: true
+}
+entities: {
+  name: "sccue"
+  code_point_1: 8829
+  semicolon_required: true
+}
+entities: {
+  name: "sce"
+  code_point_1: 10928
+  semicolon_required: true
+}
+entities: {
+  name: "scedil"
+  code_point_1: 351
+  semicolon_required: true
+}
+entities: {
+  name: "scirc"
+  code_point_1: 349
+  semicolon_required: true
+}
+entities: {
+  name: "scnE"
+  code_point_1: 10934
+  semicolon_required: true
+}
+entities: {
+  name: "scnap"
+  code_point_1: 10938
+  semicolon_required: true
+}
+entities: {
+  name: "scnsim"
+  code_point_1: 8937
+  semicolon_required: true
+}
+entities: {
+  name: "scpolint"
+  code_point_1: 10771
+  semicolon_required: true
+}
+entities: {
+  name: "scsim"
+  code_point_1: 8831
+  semicolon_required: true
+}
+entities: {
+  name: "scy"
+  code_point_1: 1089
+  semicolon_required: true
+}
+entities: {
+  name: "sdot"
+  code_point_1: 8901
+  semicolon_required: true
+}
+entities: {
+  name: "sdotb"
+  code_point_1: 8865
+  semicolon_required: true
+}
+entities: {
+  name: "sdote"
+  code_point_1: 10854
+  semicolon_required: true
+}
+entities: {
+  name: "seArr"
+  code_point_1: 8664
+  semicolon_required: true
+}
+entities: {
+  name: "searhk"
+  code_point_1: 10533
+  semicolon_required: true
+}
+entities: {
+  name: "searr"
+  code_point_1: 8600
+  semicolon_required: true
+}
+entities: {
+  name: "searrow"
+  code_point_1: 8600
+  semicolon_required: true
+}
+entities: {
+  name: "sect"
+  code_point_1: 167
+  semicolon_required: true
+}
+entities: {
+  name: "semi"
+  code_point_1: 59
+  semicolon_required: true
+}
+entities: {
+  name: "seswar"
+  code_point_1: 10537
+  semicolon_required: true
+}
+entities: {
+  name: "setminus"
+  code_point_1: 8726
+  semicolon_required: true
+}
+entities: {
+  name: "setmn"
+  code_point_1: 8726
+  semicolon_required: true
+}
+entities: {
+  name: "sext"
+  code_point_1: 10038
+  semicolon_required: true
+}
+entities: {
+  name: "sfr"
+  code_point_1: 120112
+  semicolon_required: true
+}
+entities: {
+  name: "sfrown"
+  code_point_1: 8994
+  semicolon_required: true
+}
+entities: {
+  name: "sharp"
+  code_point_1: 9839
+  semicolon_required: true
+}
+entities: {
+  name: "shchcy"
+  code_point_1: 1097
+  semicolon_required: true
+}
+entities: {
+  name: "shcy"
+  code_point_1: 1096
+  semicolon_required: true
+}
+entities: {
+  name: "shortmid"
+  code_point_1: 8739
+  semicolon_required: true
+}
+entities: {
+  name: "shortparallel"
+  code_point_1: 8741
+  semicolon_required: true
+}
+entities: {
+  name: "shy"
+  code_point_1: 173
+  semicolon_required: true
+}
+entities: {
+  name: "sigma"
+  code_point_1: 963
+  semicolon_required: true
+}
+entities: {
+  name: "sigmaf"
+  code_point_1: 962
+  semicolon_required: true
+}
+entities: {
+  name: "sigmav"
+  code_point_1: 962
+  semicolon_required: true
+}
+entities: {
+  name: "sim"
+  code_point_1: 8764
+  semicolon_required: true
+}
+entities: {
+  name: "simdot"
+  code_point_1: 10858
+  semicolon_required: true
+}
+entities: {
+  name: "sime"
+  code_point_1: 8771
+  semicolon_required: true
+}
+entities: {
+  name: "simeq"
+  code_point_1: 8771
+  semicolon_required: true
+}
+entities: {
+  name: "simg"
+  code_point_1: 10910
+  semicolon_required: true
+}
+entities: {
+  name: "simgE"
+  code_point_1: 10912
+  semicolon_required: true
+}
+entities: {
+  name: "siml"
+  code_point_1: 10909
+  semicolon_required: true
+}
+entities: {
+  name: "simlE"
+  code_point_1: 10911
+  semicolon_required: true
+}
+entities: {
+  name: "simne"
+  code_point_1: 8774
+  semicolon_required: true
+}
+entities: {
+  name: "simplus"
+  code_point_1: 10788
+  semicolon_required: true
+}
+entities: {
+  name: "simrarr"
+  code_point_1: 10610
+  semicolon_required: true
+}
+entities: {
+  name: "slarr"
+  code_point_1: 8592
+  semicolon_required: true
+}
+entities: {
+  name: "smallsetminus"
+  code_point_1: 8726
+  semicolon_required: true
+}
+entities: {
+  name: "smashp"
+  code_point_1: 10803
+  semicolon_required: true
+}
+entities: {
+  name: "smeparsl"
+  code_point_1: 10724
+  semicolon_required: true
+}
+entities: {
+  name: "smid"
+  code_point_1: 8739
+  semicolon_required: true
+}
+entities: {
+  name: "smile"
+  code_point_1: 8995
+  semicolon_required: true
+}
+entities: {
+  name: "smt"
+  code_point_1: 10922
+  semicolon_required: true
+}
+entities: {
+  name: "smte"
+  code_point_1: 10924
+  semicolon_required: true
+}
+entities: {
+  name: "smtes"
+  code_point_1: 10924
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "softcy"
+  code_point_1: 1100
+  semicolon_required: true
+}
+entities: {
+  name: "sol"
+  code_point_1: 47
+  semicolon_required: true
+}
+entities: {
+  name: "solb"
+  code_point_1: 10692
+  semicolon_required: true
+}
+entities: {
+  name: "solbar"
+  code_point_1: 9023
+  semicolon_required: true
+}
+entities: {
+  name: "sopf"
+  code_point_1: 120164
+  semicolon_required: true
+}
+entities: {
+  name: "spades"
+  code_point_1: 9824
+  semicolon_required: true
+}
+entities: {
+  name: "spadesuit"
+  code_point_1: 9824
+  semicolon_required: true
+}
+entities: {
+  name: "spar"
+  code_point_1: 8741
+  semicolon_required: true
+}
+entities: {
+  name: "sqcap"
+  code_point_1: 8851
+  semicolon_required: true
+}
+entities: {
+  name: "sqcaps"
+  code_point_1: 8851
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "sqcup"
+  code_point_1: 8852
+  semicolon_required: true
+}
+entities: {
+  name: "sqcups"
+  code_point_1: 8852
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "sqsub"
+  code_point_1: 8847
+  semicolon_required: true
+}
+entities: {
+  name: "sqsube"
+  code_point_1: 8849
+  semicolon_required: true
+}
+entities: {
+  name: "sqsubset"
+  code_point_1: 8847
+  semicolon_required: true
+}
+entities: {
+  name: "sqsubseteq"
+  code_point_1: 8849
+  semicolon_required: true
+}
+entities: {
+  name: "sqsup"
+  code_point_1: 8848
+  semicolon_required: true
+}
+entities: {
+  name: "sqsupe"
+  code_point_1: 8850
+  semicolon_required: true
+}
+entities: {
+  name: "sqsupset"
+  code_point_1: 8848
+  semicolon_required: true
+}
+entities: {
+  name: "sqsupseteq"
+  code_point_1: 8850
+  semicolon_required: true
+}
+entities: {
+  name: "squ"
+  code_point_1: 9633
+  semicolon_required: true
+}
+entities: {
+  name: "square"
+  code_point_1: 9633
+  semicolon_required: true
+}
+entities: {
+  name: "squarf"
+  code_point_1: 9642
+  semicolon_required: true
+}
+entities: {
+  name: "squf"
+  code_point_1: 9642
+  semicolon_required: true
+}
+entities: {
+  name: "srarr"
+  code_point_1: 8594
+  semicolon_required: true
+}
+entities: {
+  name: "sscr"
+  code_point_1: 120008
+  semicolon_required: true
+}
+entities: {
+  name: "ssetmn"
+  code_point_1: 8726
+  semicolon_required: true
+}
+entities: {
+  name: "ssmile"
+  code_point_1: 8995
+  semicolon_required: true
+}
+entities: {
+  name: "sstarf"
+  code_point_1: 8902
+  semicolon_required: true
+}
+entities: {
+  name: "star"
+  code_point_1: 9734
+  semicolon_required: true
+}
+entities: {
+  name: "starf"
+  code_point_1: 9733
+  semicolon_required: true
+}
+entities: {
+  name: "straightepsilon"
+  code_point_1: 1013
+  semicolon_required: true
+}
+entities: {
+  name: "straightphi"
+  code_point_1: 981
+  semicolon_required: true
+}
+entities: {
+  name: "strns"
+  code_point_1: 175
+  semicolon_required: true
+}
+entities: {
+  name: "sub"
+  code_point_1: 8834
+  semicolon_required: true
+}
+entities: {
+  name: "subE"
+  code_point_1: 10949
+  semicolon_required: true
+}
+entities: {
+  name: "subdot"
+  code_point_1: 10941
+  semicolon_required: true
+}
+entities: {
+  name: "sube"
+  code_point_1: 8838
+  semicolon_required: true
+}
+entities: {
+  name: "subedot"
+  code_point_1: 10947
+  semicolon_required: true
+}
+entities: {
+  name: "submult"
+  code_point_1: 10945
+  semicolon_required: true
+}
+entities: {
+  name: "subnE"
+  code_point_1: 10955
+  semicolon_required: true
+}
+entities: {
+  name: "subne"
+  code_point_1: 8842
+  semicolon_required: true
+}
+entities: {
+  name: "subplus"
+  code_point_1: 10943
+  semicolon_required: true
+}
+entities: {
+  name: "subrarr"
+  code_point_1: 10617
+  semicolon_required: true
+}
+entities: {
+  name: "subset"
+  code_point_1: 8834
+  semicolon_required: true
+}
+entities: {
+  name: "subseteq"
+  code_point_1: 8838
+  semicolon_required: true
+}
+entities: {
+  name: "subseteqq"
+  code_point_1: 10949
+  semicolon_required: true
+}
+entities: {
+  name: "subsetneq"
+  code_point_1: 8842
+  semicolon_required: true
+}
+entities: {
+  name: "subsetneqq"
+  code_point_1: 10955
+  semicolon_required: true
+}
+entities: {
+  name: "subsim"
+  code_point_1: 10951
+  semicolon_required: true
+}
+entities: {
+  name: "subsub"
+  code_point_1: 10965
+  semicolon_required: true
+}
+entities: {
+  name: "subsup"
+  code_point_1: 10963
+  semicolon_required: true
+}
+entities: {
+  name: "succ"
+  code_point_1: 8827
+  semicolon_required: true
+}
+entities: {
+  name: "succapprox"
+  code_point_1: 10936
+  semicolon_required: true
+}
+entities: {
+  name: "succcurlyeq"
+  code_point_1: 8829
+  semicolon_required: true
+}
+entities: {
+  name: "succeq"
+  code_point_1: 10928
+  semicolon_required: true
+}
+entities: {
+  name: "succnapprox"
+  code_point_1: 10938
+  semicolon_required: true
+}
+entities: {
+  name: "succneqq"
+  code_point_1: 10934
+  semicolon_required: true
+}
+entities: {
+  name: "succnsim"
+  code_point_1: 8937
+  semicolon_required: true
+}
+entities: {
+  name: "succsim"
+  code_point_1: 8831
+  semicolon_required: true
+}
+entities: {
+  name: "sum"
+  code_point_1: 8721
+  semicolon_required: true
+}
+entities: {
+  name: "sung"
+  code_point_1: 9834
+  semicolon_required: true
+}
+entities: {
+  name: "sup"
+  code_point_1: 8835
+  semicolon_required: true
+}
+entities: {
+  name: "sup1"
+  code_point_1: 185
+  semicolon_required: true
+}
+entities: {
+  name: "sup2"
+  code_point_1: 178
+  semicolon_required: true
+}
+entities: {
+  name: "sup3"
+  code_point_1: 179
+  semicolon_required: true
+}
+entities: {
+  name: "supE"
+  code_point_1: 10950
+  semicolon_required: true
+}
+entities: {
+  name: "supdot"
+  code_point_1: 10942
+  semicolon_required: true
+}
+entities: {
+  name: "supdsub"
+  code_point_1: 10968
+  semicolon_required: true
+}
+entities: {
+  name: "supe"
+  code_point_1: 8839
+  semicolon_required: true
+}
+entities: {
+  name: "supedot"
+  code_point_1: 10948
+  semicolon_required: true
+}
+entities: {
+  name: "suphsol"
+  code_point_1: 10185
+  semicolon_required: true
+}
+entities: {
+  name: "suphsub"
+  code_point_1: 10967
+  semicolon_required: true
+}
+entities: {
+  name: "suplarr"
+  code_point_1: 10619
+  semicolon_required: true
+}
+entities: {
+  name: "supmult"
+  code_point_1: 10946
+  semicolon_required: true
+}
+entities: {
+  name: "supnE"
+  code_point_1: 10956
+  semicolon_required: true
+}
+entities: {
+  name: "supne"
+  code_point_1: 8843
+  semicolon_required: true
+}
+entities: {
+  name: "supplus"
+  code_point_1: 10944
+  semicolon_required: true
+}
+entities: {
+  name: "supset"
+  code_point_1: 8835
+  semicolon_required: true
+}
+entities: {
+  name: "supseteq"
+  code_point_1: 8839
+  semicolon_required: true
+}
+entities: {
+  name: "supseteqq"
+  code_point_1: 10950
+  semicolon_required: true
+}
+entities: {
+  name: "supsetneq"
+  code_point_1: 8843
+  semicolon_required: true
+}
+entities: {
+  name: "supsetneqq"
+  code_point_1: 10956
+  semicolon_required: true
+}
+entities: {
+  name: "supsim"
+  code_point_1: 10952
+  semicolon_required: true
+}
+entities: {
+  name: "supsub"
+  code_point_1: 10964
+  semicolon_required: true
+}
+entities: {
+  name: "supsup"
+  code_point_1: 10966
+  semicolon_required: true
+}
+entities: {
+  name: "swArr"
+  code_point_1: 8665
+  semicolon_required: true
+}
+entities: {
+  name: "swarhk"
+  code_point_1: 10534
+  semicolon_required: true
+}
+entities: {
+  name: "swarr"
+  code_point_1: 8601
+  semicolon_required: true
+}
+entities: {
+  name: "swarrow"
+  code_point_1: 8601
+  semicolon_required: true
+}
+entities: {
+  name: "swnwar"
+  code_point_1: 10538
+  semicolon_required: true
+}
+entities: {
+  name: "szlig"
+  code_point_1: 223
+  semicolon_required: true
+}
+entities: {
+  name: "target"
+  code_point_1: 8982
+  semicolon_required: true
+}
+entities: {
+  name: "tau"
+  code_point_1: 964
+  semicolon_required: true
+}
+entities: {
+  name: "tbrk"
+  code_point_1: 9140
+  semicolon_required: true
+}
+entities: {
+  name: "tcaron"
+  code_point_1: 357
+  semicolon_required: true
+}
+entities: {
+  name: "tcedil"
+  code_point_1: 355
+  semicolon_required: true
+}
+entities: {
+  name: "tcy"
+  code_point_1: 1090
+  semicolon_required: true
+}
+entities: {
+  name: "tdot"
+  code_point_1: 8411
+  semicolon_required: true
+}
+entities: {
+  name: "telrec"
+  code_point_1: 8981
+  semicolon_required: true
+}
+entities: {
+  name: "tfr"
+  code_point_1: 120113
+  semicolon_required: true
+}
+entities: {
+  name: "there4"
+  code_point_1: 8756
+  semicolon_required: true
+}
+entities: {
+  name: "therefore"
+  code_point_1: 8756
+  semicolon_required: true
+}
+entities: {
+  name: "theta"
+  code_point_1: 952
+  semicolon_required: true
+}
+entities: {
+  name: "thetasym"
+  code_point_1: 977
+  semicolon_required: true
+}
+entities: {
+  name: "thetav"
+  code_point_1: 977
+  semicolon_required: true
+}
+entities: {
+  name: "thickapprox"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "thicksim"
+  code_point_1: 8764
+  semicolon_required: true
+}
+entities: {
+  name: "thinsp"
+  code_point_1: 8201
+  semicolon_required: true
+}
+entities: {
+  name: "thkap"
+  code_point_1: 8776
+  semicolon_required: true
+}
+entities: {
+  name: "thksim"
+  code_point_1: 8764
+  semicolon_required: true
+}
+entities: {
+  name: "thorn"
+  code_point_1: 254
+  semicolon_required: true
+}
+entities: {
+  name: "tilde"
+  code_point_1: 732
+  semicolon_required: true
+}
+entities: {
+  name: "times"
+  code_point_1: 215
+  semicolon_required: true
+}
+entities: {
+  name: "timesb"
+  code_point_1: 8864
+  semicolon_required: true
+}
+entities: {
+  name: "timesbar"
+  code_point_1: 10801
+  semicolon_required: true
+}
+entities: {
+  name: "timesd"
+  code_point_1: 10800
+  semicolon_required: true
+}
+entities: {
+  name: "tint"
+  code_point_1: 8749
+  semicolon_required: true
+}
+entities: {
+  name: "toea"
+  code_point_1: 10536
+  semicolon_required: true
+}
+entities: {
+  name: "top"
+  code_point_1: 8868
+  semicolon_required: true
+}
+entities: {
+  name: "topbot"
+  code_point_1: 9014
+  semicolon_required: true
+}
+entities: {
+  name: "topcir"
+  code_point_1: 10993
+  semicolon_required: true
+}
+entities: {
+  name: "topf"
+  code_point_1: 120165
+  semicolon_required: true
+}
+entities: {
+  name: "topfork"
+  code_point_1: 10970
+  semicolon_required: true
+}
+entities: {
+  name: "tosa"
+  code_point_1: 10537
+  semicolon_required: true
+}
+entities: {
+  name: "tprime"
+  code_point_1: 8244
+  semicolon_required: true
+}
+entities: {
+  name: "trade"
+  code_point_1: 8482
+  semicolon_required: true
+}
+entities: {
+  name: "triangle"
+  code_point_1: 9653
+  semicolon_required: true
+}
+entities: {
+  name: "triangledown"
+  code_point_1: 9663
+  semicolon_required: true
+}
+entities: {
+  name: "triangleleft"
+  code_point_1: 9667
+  semicolon_required: true
+}
+entities: {
+  name: "trianglelefteq"
+  code_point_1: 8884
+  semicolon_required: true
+}
+entities: {
+  name: "triangleq"
+  code_point_1: 8796
+  semicolon_required: true
+}
+entities: {
+  name: "triangleright"
+  code_point_1: 9657
+  semicolon_required: true
+}
+entities: {
+  name: "trianglerighteq"
+  code_point_1: 8885
+  semicolon_required: true
+}
+entities: {
+  name: "tridot"
+  code_point_1: 9708
+  semicolon_required: true
+}
+entities: {
+  name: "trie"
+  code_point_1: 8796
+  semicolon_required: true
+}
+entities: {
+  name: "triminus"
+  code_point_1: 10810
+  semicolon_required: true
+}
+entities: {
+  name: "triplus"
+  code_point_1: 10809
+  semicolon_required: true
+}
+entities: {
+  name: "trisb"
+  code_point_1: 10701
+  semicolon_required: true
+}
+entities: {
+  name: "tritime"
+  code_point_1: 10811
+  semicolon_required: true
+}
+entities: {
+  name: "trpezium"
+  code_point_1: 9186
+  semicolon_required: true
+}
+entities: {
+  name: "tscr"
+  code_point_1: 120009
+  semicolon_required: true
+}
+entities: {
+  name: "tscy"
+  code_point_1: 1094
+  semicolon_required: true
+}
+entities: {
+  name: "tshcy"
+  code_point_1: 1115
+  semicolon_required: true
+}
+entities: {
+  name: "tstrok"
+  code_point_1: 359
+  semicolon_required: true
+}
+entities: {
+  name: "twixt"
+  code_point_1: 8812
+  semicolon_required: true
+}
+entities: {
+  name: "twoheadleftarrow"
+  code_point_1: 8606
+  semicolon_required: true
+}
+entities: {
+  name: "twoheadrightarrow"
+  code_point_1: 8608
+  semicolon_required: true
+}
+entities: {
+  name: "uArr"
+  code_point_1: 8657
+  semicolon_required: true
+}
+entities: {
+  name: "uHar"
+  code_point_1: 10595
+  semicolon_required: true
+}
+entities: {
+  name: "uacute"
+  code_point_1: 250
+  semicolon_required: true
+}
+entities: {
+  name: "uarr"
+  code_point_1: 8593
+  semicolon_required: true
+}
+entities: {
+  name: "ubrcy"
+  code_point_1: 1118
+  semicolon_required: true
+}
+entities: {
+  name: "ubreve"
+  code_point_1: 365
+  semicolon_required: true
+}
+entities: {
+  name: "ucirc"
+  code_point_1: 251
+  semicolon_required: true
+}
+entities: {
+  name: "ucy"
+  code_point_1: 1091
+  semicolon_required: true
+}
+entities: {
+  name: "udarr"
+  code_point_1: 8645
+  semicolon_required: true
+}
+entities: {
+  name: "udblac"
+  code_point_1: 369
+  semicolon_required: true
+}
+entities: {
+  name: "udhar"
+  code_point_1: 10606
+  semicolon_required: true
+}
+entities: {
+  name: "ufisht"
+  code_point_1: 10622
+  semicolon_required: true
+}
+entities: {
+  name: "ufr"
+  code_point_1: 120114
+  semicolon_required: true
+}
+entities: {
+  name: "ugrave"
+  code_point_1: 249
+  semicolon_required: true
+}
+entities: {
+  name: "uharl"
+  code_point_1: 8639
+  semicolon_required: true
+}
+entities: {
+  name: "uharr"
+  code_point_1: 8638
+  semicolon_required: true
+}
+entities: {
+  name: "uhblk"
+  code_point_1: 9600
+  semicolon_required: true
+}
+entities: {
+  name: "ulcorn"
+  code_point_1: 8988
+  semicolon_required: true
+}
+entities: {
+  name: "ulcorner"
+  code_point_1: 8988
+  semicolon_required: true
+}
+entities: {
+  name: "ulcrop"
+  code_point_1: 8975
+  semicolon_required: true
+}
+entities: {
+  name: "ultri"
+  code_point_1: 9720
+  semicolon_required: true
+}
+entities: {
+  name: "umacr"
+  code_point_1: 363
+  semicolon_required: true
+}
+entities: {
+  name: "uml"
+  code_point_1: 168
+  semicolon_required: true
+}
+entities: {
+  name: "uogon"
+  code_point_1: 371
+  semicolon_required: true
+}
+entities: {
+  name: "uopf"
+  code_point_1: 120166
+  semicolon_required: true
+}
+entities: {
+  name: "uparrow"
+  code_point_1: 8593
+  semicolon_required: true
+}
+entities: {
+  name: "updownarrow"
+  code_point_1: 8597
+  semicolon_required: true
+}
+entities: {
+  name: "upharpoonleft"
+  code_point_1: 8639
+  semicolon_required: true
+}
+entities: {
+  name: "upharpoonright"
+  code_point_1: 8638
+  semicolon_required: true
+}
+entities: {
+  name: "uplus"
+  code_point_1: 8846
+  semicolon_required: true
+}
+entities: {
+  name: "upsi"
+  code_point_1: 965
+  semicolon_required: true
+}
+entities: {
+  name: "upsih"
+  code_point_1: 978
+  semicolon_required: true
+}
+entities: {
+  name: "upsilon"
+  code_point_1: 965
+  semicolon_required: true
+}
+entities: {
+  name: "upuparrows"
+  code_point_1: 8648
+  semicolon_required: true
+}
+entities: {
+  name: "urcorn"
+  code_point_1: 8989
+  semicolon_required: true
+}
+entities: {
+  name: "urcorner"
+  code_point_1: 8989
+  semicolon_required: true
+}
+entities: {
+  name: "urcrop"
+  code_point_1: 8974
+  semicolon_required: true
+}
+entities: {
+  name: "uring"
+  code_point_1: 367
+  semicolon_required: true
+}
+entities: {
+  name: "urtri"
+  code_point_1: 9721
+  semicolon_required: true
+}
+entities: {
+  name: "uscr"
+  code_point_1: 120010
+  semicolon_required: true
+}
+entities: {
+  name: "utdot"
+  code_point_1: 8944
+  semicolon_required: true
+}
+entities: {
+  name: "utilde"
+  code_point_1: 361
+  semicolon_required: true
+}
+entities: {
+  name: "utri"
+  code_point_1: 9653
+  semicolon_required: true
+}
+entities: {
+  name: "utrif"
+  code_point_1: 9652
+  semicolon_required: true
+}
+entities: {
+  name: "uuarr"
+  code_point_1: 8648
+  semicolon_required: true
+}
+entities: {
+  name: "uuml"
+  code_point_1: 252
+  semicolon_required: true
+}
+entities: {
+  name: "uwangle"
+  code_point_1: 10663
+  semicolon_required: true
+}
+entities: {
+  name: "vArr"
+  code_point_1: 8661
+  semicolon_required: true
+}
+entities: {
+  name: "vBar"
+  code_point_1: 10984
+  semicolon_required: true
+}
+entities: {
+  name: "vBarv"
+  code_point_1: 10985
+  semicolon_required: true
+}
+entities: {
+  name: "vDash"
+  code_point_1: 8872
+  semicolon_required: true
+}
+entities: {
+  name: "vangrt"
+  code_point_1: 10652
+  semicolon_required: true
+}
+entities: {
+  name: "varepsilon"
+  code_point_1: 1013
+  semicolon_required: true
+}
+entities: {
+  name: "varkappa"
+  code_point_1: 1008
+  semicolon_required: true
+}
+entities: {
+  name: "varnothing"
+  code_point_1: 8709
+  semicolon_required: true
+}
+entities: {
+  name: "varphi"
+  code_point_1: 981
+  semicolon_required: true
+}
+entities: {
+  name: "varpi"
+  code_point_1: 982
+  semicolon_required: true
+}
+entities: {
+  name: "varpropto"
+  code_point_1: 8733
+  semicolon_required: true
+}
+entities: {
+  name: "varr"
+  code_point_1: 8597
+  semicolon_required: true
+}
+entities: {
+  name: "varrho"
+  code_point_1: 1009
+  semicolon_required: true
+}
+entities: {
+  name: "varsigma"
+  code_point_1: 962
+  semicolon_required: true
+}
+entities: {
+  name: "varsubsetneq"
+  code_point_1: 8842
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "varsubsetneqq"
+  code_point_1: 10955
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "varsupsetneq"
+  code_point_1: 8843
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "varsupsetneqq"
+  code_point_1: 10956
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "vartheta"
+  code_point_1: 977
+  semicolon_required: true
+}
+entities: {
+  name: "vartriangleleft"
+  code_point_1: 8882
+  semicolon_required: true
+}
+entities: {
+  name: "vartriangleright"
+  code_point_1: 8883
+  semicolon_required: true
+}
+entities: {
+  name: "vcy"
+  code_point_1: 1074
+  semicolon_required: true
+}
+entities: {
+  name: "vdash"
+  code_point_1: 8866
+  semicolon_required: true
+}
+entities: {
+  name: "vee"
+  code_point_1: 8744
+  semicolon_required: true
+}
+entities: {
+  name: "veebar"
+  code_point_1: 8891
+  semicolon_required: true
+}
+entities: {
+  name: "veeeq"
+  code_point_1: 8794
+  semicolon_required: true
+}
+entities: {
+  name: "vellip"
+  code_point_1: 8942
+  semicolon_required: true
+}
+entities: {
+  name: "verbar"
+  code_point_1: 124
+  semicolon_required: true
+}
+entities: {
+  name: "vert"
+  code_point_1: 124
+  semicolon_required: true
+}
+entities: {
+  name: "vfr"
+  code_point_1: 120115
+  semicolon_required: true
+}
+entities: {
+  name: "vltri"
+  code_point_1: 8882
+  semicolon_required: true
+}
+entities: {
+  name: "vnsub"
+  code_point_1: 8834
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "vnsup"
+  code_point_1: 8835
+  code_point_2: 8402
+  semicolon_required: true
+}
+entities: {
+  name: "vopf"
+  code_point_1: 120167
+  semicolon_required: true
+}
+entities: {
+  name: "vprop"
+  code_point_1: 8733
+  semicolon_required: true
+}
+entities: {
+  name: "vrtri"
+  code_point_1: 8883
+  semicolon_required: true
+}
+entities: {
+  name: "vscr"
+  code_point_1: 120011
+  semicolon_required: true
+}
+entities: {
+  name: "vsubnE"
+  code_point_1: 10955
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "vsubne"
+  code_point_1: 8842
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "vsupnE"
+  code_point_1: 10956
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "vsupne"
+  code_point_1: 8843
+  code_point_2: 65024
+  semicolon_required: true
+}
+entities: {
+  name: "vzigzag"
+  code_point_1: 10650
+  semicolon_required: true
+}
+entities: {
+  name: "wcirc"
+  code_point_1: 373
+  semicolon_required: true
+}
+entities: {
+  name: "wedbar"
+  code_point_1: 10847
+  semicolon_required: true
+}
+entities: {
+  name: "wedge"
+  code_point_1: 8743
+  semicolon_required: true
+}
+entities: {
+  name: "wedgeq"
+  code_point_1: 8793
+  semicolon_required: true
+}
+entities: {
+  name: "weierp"
+  code_point_1: 8472
+  semicolon_required: true
+}
+entities: {
+  name: "wfr"
+  code_point_1: 120116
+  semicolon_required: true
+}
+entities: {
+  name: "wopf"
+  code_point_1: 120168
+  semicolon_required: true
+}
+entities: {
+  name: "wp"
+  code_point_1: 8472
+  semicolon_required: true
+}
+entities: {
+  name: "wr"
+  code_point_1: 8768
+  semicolon_required: true
+}
+entities: {
+  name: "wreath"
+  code_point_1: 8768
+  semicolon_required: true
+}
+entities: {
+  name: "wscr"
+  code_point_1: 120012
+  semicolon_required: true
+}
+entities: {
+  name: "xcap"
+  code_point_1: 8898
+  semicolon_required: true
+}
+entities: {
+  name: "xcirc"
+  code_point_1: 9711
+  semicolon_required: true
+}
+entities: {
+  name: "xcup"
+  code_point_1: 8899
+  semicolon_required: true
+}
+entities: {
+  name: "xdtri"
+  code_point_1: 9661
+  semicolon_required: true
+}
+entities: {
+  name: "xfr"
+  code_point_1: 120117
+  semicolon_required: true
+}
+entities: {
+  name: "xhArr"
+  code_point_1: 10234
+  semicolon_required: true
+}
+entities: {
+  name: "xharr"
+  code_point_1: 10231
+  semicolon_required: true
+}
+entities: {
+  name: "xi"
+  code_point_1: 958
+  semicolon_required: true
+}
+entities: {
+  name: "xlArr"
+  code_point_1: 10232
+  semicolon_required: true
+}
+entities: {
+  name: "xlarr"
+  code_point_1: 10229
+  semicolon_required: true
+}
+entities: {
+  name: "xmap"
+  code_point_1: 10236
+  semicolon_required: true
+}
+entities: {
+  name: "xnis"
+  code_point_1: 8955
+  semicolon_required: true
+}
+entities: {
+  name: "xodot"
+  code_point_1: 10752
+  semicolon_required: true
+}
+entities: {
+  name: "xopf"
+  code_point_1: 120169
+  semicolon_required: true
+}
+entities: {
+  name: "xoplus"
+  code_point_1: 10753
+  semicolon_required: true
+}
+entities: {
+  name: "xotime"
+  code_point_1: 10754
+  semicolon_required: true
+}
+entities: {
+  name: "xrArr"
+  code_point_1: 10233
+  semicolon_required: true
+}
+entities: {
+  name: "xrarr"
+  code_point_1: 10230
+  semicolon_required: true
+}
+entities: {
+  name: "xscr"
+  code_point_1: 120013
+  semicolon_required: true
+}
+entities: {
+  name: "xsqcup"
+  code_point_1: 10758
+  semicolon_required: true
+}
+entities: {
+  name: "xuplus"
+  code_point_1: 10756
+  semicolon_required: true
+}
+entities: {
+  name: "xutri"
+  code_point_1: 9651
+  semicolon_required: true
+}
+entities: {
+  name: "xvee"
+  code_point_1: 8897
+  semicolon_required: true
+}
+entities: {
+  name: "xwedge"
+  code_point_1: 8896
+  semicolon_required: true
+}
+entities: {
+  name: "yacute"
+  code_point_1: 253
+  semicolon_required: true
+}
+entities: {
+  name: "yacy"
+  code_point_1: 1103
+  semicolon_required: true
+}
+entities: {
+  name: "ycirc"
+  code_point_1: 375
+  semicolon_required: true
+}
+entities: {
+  name: "ycy"
+  code_point_1: 1099
+  semicolon_required: true
+}
+entities: {
+  name: "yen"
+  code_point_1: 165
+  semicolon_required: true
+}
+entities: {
+  name: "yfr"
+  code_point_1: 120118
+  semicolon_required: true
+}
+entities: {
+  name: "yicy"
+  code_point_1: 1111
+  semicolon_required: true
+}
+entities: {
+  name: "yopf"
+  code_point_1: 120170
+  semicolon_required: true
+}
+entities: {
+  name: "yscr"
+  code_point_1: 120014
+  semicolon_required: true
+}
+entities: {
+  name: "yucy"
+  code_point_1: 1102
+  semicolon_required: true
+}
+entities: {
+  name: "yuml"
+  code_point_1: 255
+  semicolon_required: true
+}
+entities: {
+  name: "zacute"
+  code_point_1: 378
+  semicolon_required: true
+}
+entities: {
+  name: "zcaron"
+  code_point_1: 382
+  semicolon_required: true
+}
+entities: {
+  name: "zcy"
+  code_point_1: 1079
+  semicolon_required: true
+}
+entities: {
+  name: "zdot"
+  code_point_1: 380
+  semicolon_required: true
+}
+entities: {
+  name: "zeetrf"
+  code_point_1: 8488
+  semicolon_required: true
+}
+entities: {
+  name: "zeta"
+  code_point_1: 950
+  semicolon_required: true
+}
+entities: {
+  name: "zfr"
+  code_point_1: 120119
+  semicolon_required: true
+}
+entities: {
+  name: "zhcy"
+  code_point_1: 1078
+  semicolon_required: true
+}
+entities: {
+  name: "zigrarr"
+  code_point_1: 8669
+  semicolon_required: true
+}
+entities: {
+  name: "zopf"
+  code_point_1: 120171
+  semicolon_required: true
+}
+entities: {
+  name: "zscr"
+  code_point_1: 120015
+  semicolon_required: true
+}
+entities: {
+  name: "zwj"
+  code_point_1: 8205
+  semicolon_required: true
+}
+entities: {
+  name: "zwnj"
+  code_point_1: 8204
+  semicolon_required: true
+}
+total_entities: 2125
+

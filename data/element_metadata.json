@@ -1,0 +1,25 @@
+{
+  "escapable_raw_text_elements": [
+    "textarea",
+    "title"
+  ],
+  "raw_text_elements": [
+    "script",
+    "style"
+  ],
+  "void_elements": [
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "source",
+    "track",
+    "wbr"
+  ]
+}
