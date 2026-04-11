@@ -198,8 +198,8 @@ fn verify_signature(
             let _hash = hasher.finalize();
 
             // Verify ECDSA P-256 signature using edgerun-crypto
-            use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
-            use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
+            use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
+            use edgerun_crypto::Verifier;
             use edgerun_crypto::p256::EncodedPoint;
 
             if let Ok(point) = EncodedPoint::from_bytes(public_key.as_slice()) {
