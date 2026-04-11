@@ -137,11 +137,6 @@ pub struct TreeBuilder {
     insertion_mode: InsertionMode,
     /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
     pending_tokenizer_mode: TokenizerMode,
-    /// Whether <frameset> is allowed (set false by certain rules).
-    frameset_ok: bool,
-    /// Self-closing flag — set by acknowledge_self_closing.
-    current_token_is_self_closing: bool,
-    done: bool,
     parse_errors: usize,
 }
 
@@ -152,9 +147,6 @@ impl TreeBuilder {
             completed: Vec::new(),
             insertion_mode: InsertionMode::Initial,
             pending_tokenizer_mode: TokenizerMode::None,
-            frameset_ok: true,
-            current_token_is_self_closing: false,
-            done: false,
             parse_errors: 0,
         }
     }
@@ -279,7 +271,7 @@ impl TreeBuilder {
     ///
     /// When content appears where it is not allowed (e.g., text directly
     /// inside <table>), insert it outside the table element instead.
-    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
 
@@ -732,15 +724,15 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_RESET_INSERTION_MODE:
 		return "self.reset_insertion_mode();"
 	case html.TreeAction_TREE_ACTION_INSERT_FOSTER:
-		return "self.insert_foster(name, attrs, *self_closing);"
+		return "self.insert_foster(name, attrs);"
 	case html.TreeAction_TREE_ACTION_ACKNOWLEDGE_SELF_CLOSING:
-		return "self.acknowledge_self_closing();"
+		return "" // self-closing flag is not tracked
 	case html.TreeAction_TREE_ACTION_APPEND_COMMENT:
-		return "self.append_comment(text);"
+		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Comment(text.clone())); }`
 	case html.TreeAction_TREE_ACTION_APPEND_DOCTYPE:
 		return "// DOCTYPE handled in Initial mode"
 	case html.TreeAction_TREE_ACTION_SET_FRAMESET_NOT_OK:
-		return "self.frameset_ok = false;"
+		return "" // frameset_ok flag is not tracked
 	case html.TreeAction_TREE_ACTION_POP_ALL:
 		return "while self.open_elements.pop().is_some() {}"
 	default:
