@@ -197,6 +197,7 @@ pub struct ContainerConfig {
     pub rlimits: Vec<crate::json::OciRlimit>,
     pub oom_score_adj: i64,
     pub apparmor_profile: Option<String>,
+    pub selinux_label: Option<String>,
     pub umask: Option<u32>,
     pub root: OciRoot,
     pub mounts: Option<Vec<crate::json::OciMount>>,
@@ -261,6 +262,7 @@ impl ContainerConfig {
             rlimits: process.rlimits.clone().unwrap_or_default(),
             oom_score_adj: process.oom_score_adj.unwrap_or(0),
             apparmor_profile: process.apparmor_profile,
+            selinux_label: process.selinux_label,
             umask: user.umask,
             root,
             mounts: spec.mounts.clone(),
@@ -406,12 +408,17 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         let _ = fs::write("/proc/self/attr/apparmor/exec", format!("exec {}", profile));
     }
 
-    // 11. Umask
+    // 11. SELinux label
+    if let Some(ref label) = cfg.selinux_label {
+        let _ = fs::write("/proc/self/attr/exec", label.as_bytes());
+    }
+
+    // 12. Umask
     if let Some(mask) = cfg.umask {
         do_umask(mask);
     }
 
-    // 12. Rootfs
+    // 13. Rootfs
     let devices = deserialize_devices(&cfg.devices_json);
     let mount_label = cfg.mount_label.as_deref();
     setup_rootfs(
@@ -423,18 +430,18 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         mount_label,
     )?;
 
-    // 13. Rootfs propagation
+    // 14. Rootfs propagation
     set_rootfs_propagation(cfg.rootfs_propagation.as_deref())?;
 
-    // 14. Sysctl
+    // 15. Sysctl
     apply_sysctl(cfg.sysctl.as_ref())?;
 
-    // 15. Supplementary groups
+    // 16. Supplementary groups
     if !cfg.additional_gids.is_empty() {
         set_supplementary_gids(&cfg.additional_gids);
     }
 
-    // 16. Drop GID then UID
+    // 17. Drop GID then UID
     do_setgid(cfg.gid)?;
     do_setuid(cfg.uid)?;
 
