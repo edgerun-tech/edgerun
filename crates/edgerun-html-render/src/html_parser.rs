@@ -1,6 +1,5 @@
 //! HTML Parser — generated from html_elements.proto + html_attributes.proto.
 //! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
-#![no_std]
 extern crate alloc;
 use alloc::format;
 

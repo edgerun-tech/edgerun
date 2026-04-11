@@ -1309,6 +1309,8 @@ dependencies = [
 name = "edgerun-html-render"
 version = "0.1.0"
 dependencies = [
+ "edgerun-color",
+ "edgerun-css-value-parser",
  "edgerun-layout",
  "edgerun-rasterizer",
 ]
@@ -1317,6 +1319,7 @@ dependencies = [
 name = "edgerun-http"
 version = "0.1.0"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-tls",
  "hpack-patched",
  "serde",

@@ -3,12 +3,12 @@
 //! This bridges the gap between `css_parser::Declarations` (BTreeMap<String, String>)
 //! and `edgerun_layout::render_object::ComputedStyle` by using the value parser.
 
-#![no_std]
 extern crate alloc;
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 
+use edgerun_color::NamedColor;
 use edgerun_css_value_parser::{parse_css_value, CssValue, LengthUnit};
 use edgerun_layout::render_object::{
     Color, ComputedStyle, FontSelection, FormattingContext, PositionType,
@@ -205,7 +205,6 @@ fn named_color_to_rgba(name: &NamedColor) -> Color {
         NamedColor::Blue => (0.0, 0.0, 1.0),
         NamedColor::Black => (0.0, 0.0, 0.0),
         NamedColor::White => (1.0, 1.0, 1.0),
-        NamedColor::Transparent => (0.0, 0.0, 0.0),
         NamedColor::Orange => (1.0, 0.65, 0.0),
         NamedColor::Yellow => (1.0, 1.0, 0.0),
         NamedColor::Purple => (0.5, 0.0, 0.5),
@@ -242,7 +241,7 @@ fn named_color_to_rgba(name: &NamedColor) -> Color {
         _ => (0.5, 0.5, 0.5), // fallback gray
     };
 
-    let alpha = if *name == NamedColor::Transparent { 0.0 } else { 1.0 };
+    let alpha = 1.0;
 
     Color { r, g, b, a: alpha }
 }

@@ -5,7 +5,6 @@
 
 use std::fs;
 use std::io;
-use std::os::raw::c_int;
 
 use crate::state::load_state;
 use crate::json::parse_oci_spec;

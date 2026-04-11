@@ -5,7 +5,6 @@
 //! - CSS value type definitions (edgerun.v0.css.value_types)
 //!
 //! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
-#![no_std]
 extern crate alloc;
 
 use alloc::string::{String, ToString};

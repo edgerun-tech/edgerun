@@ -5,10 +5,12 @@ pub mod frame;
 pub mod packet;
 pub mod transport;
 
-pub use crypto::QuicCrypto;
+pub use crypto::{PacketProtection, ProtectionKeys, QuicCrypto};
 pub use frame::QuicFrame;
 pub use packet::{PacketType, QuicPacket};
 pub use transport::QuicTransport;
+
+use crypto::{AeadAlgorithm, CryptoPhase};
 
 use std::net::UdpSocket;
 
@@ -19,38 +21,61 @@ pub struct QuicConnection {
     /// Server address
     server_addr: String,
     /// Transport layer
-    transport: Option<QuicTransport>,
+    transport: QuicTransport,
     /// Crypto layer
     crypto: QuicCrypto,
+    /// Packet protection
+    protection: Option<crypto::PacketProtection>,
     /// Connection established
     established: bool,
+    /// Receive buffer
+    recv_buffer: Vec<u8>,
+    /// Offset into recv_buffer for partial reads
+    recv_offset: usize,
 }
 
 impl QuicConnection {
-    /// Create client connection
+    /// Create client connection (does not perform handshake)
     pub fn client(socket: UdpSocket, server: &str) -> Result<Self, String> {
+        let local_cid = crypto::ConnectionId::random();
+        let remote_cid = crypto::ConnectionId::random();
+        let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
         let crypto = QuicCrypto::new();
+
+        // Set up test keys for Initial level so the packet layer works
+        let test_keys = ProtectionKeys::test_keys();
+        let mut crypto_clone = QuicCrypto::new();
+        crypto_clone.set_keys(CryptoPhase::Initial, test_keys);
 
         Ok(QuicConnection {
             socket,
             server_addr: server.to_string(),
-            transport: None,
+            transport,
             crypto,
+            protection: None,
             established: false,
+            recv_buffer: Vec::new(),
+            recv_offset: 0,
         })
     }
 
     /// Create a dummy connection for testing
     pub fn dummy() -> Self {
-        // This is only used in tests where we don't need actual networking
         use std::net::{IpAddr, Ipv4Addr};
         let socket = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
+        let local_cid = crypto::ConnectionId::random();
+        let remote_cid = crypto::ConnectionId::random();
+        let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
+
         QuicConnection {
             socket,
             server_addr: "dummy".to_string(),
-            transport: None,
+            transport,
             crypto: QuicCrypto::new(),
+            protection: None,
             established: false,
+            recv_buffer: Vec::new(),
+            recv_offset: 0,
         }
     }
 
@@ -62,6 +87,106 @@ impl QuicConnection {
     /// Get server name
     pub fn server_name(&self) -> &str {
         &self.server_addr
+    }
+
+    /// Send data on a stream
+    pub fn send_stream_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+        let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
+        self.send_frame(frame)
+    }
+
+    /// Send a single QUIC frame
+    fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
+        let pn = self.transport.next_packet_number();
+
+        // Build packet payload (frame serialized)
+        let payload = frame.to_bytes();
+
+        // Create Initial packet
+        let pkt = QuicPacket::initial(
+            0x00000001,
+            self.transport.remote_cid.as_bytes().to_vec(),
+            self.transport.local_cid.as_bytes().to_vec(),
+            vec![],
+            pn,
+            payload,
+        );
+
+        let packet_bytes = pkt.to_bytes();
+
+        // Send via UDP
+        let addr = format!("{}:443", self.server_addr);
+        self.socket
+            .send_to(&packet_bytes, &addr)
+            .map_err(|e| format!("UDP send failed: {}", e))?;
+
+        self.transport.update_activity();
+        Ok(())
+    }
+
+    /// Receive data, returning (stream_id, data, fin)
+    pub fn recv_stream_data(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
+        // Try to read from UDP if buffer is empty
+        if self.recv_buffer.is_empty() || self.recv_offset >= self.recv_buffer.len() {
+            let mut buf = [0u8; 4096];
+            match self.socket.recv(&mut buf) {
+                Ok(n) => {
+                    self.recv_buffer = buf[..n].to_vec();
+                    self.recv_offset = 0;
+                    self.transport.update_activity();
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    return Ok(None);
+                }
+                Err(e) => return Err(format!("UDP recv failed: {}", e)),
+            }
+        }
+
+        // Parse packet
+        if self.recv_offset >= self.recv_buffer.len() {
+            return Ok(None);
+        }
+
+        let data = &self.recv_buffer[self.recv_offset..];
+        match QuicPacket::from_bytes(data) {
+            Ok((packet, consumed)) => {
+                self.recv_offset += consumed;
+                let pn = packet.header.packet_number;
+
+                // Try to decrypt if we have protection
+                let plaintext = if let Some(ref mut prot) = self.protection {
+                    prot.unprotect(&[], pn, &packet.payload)
+                        .unwrap_or(packet.payload)
+                } else {
+                    packet.payload
+                };
+
+                // Parse frames from plaintext
+                self.transport.update_activity();
+                // For now, treat the whole payload as a single STREAM frame
+                // In a full impl, we'd parse frame headers here
+                Ok(Some((0, plaintext, false)))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Get mutable crypto
+    pub fn crypto_mut(&mut self) -> &mut QuicCrypto {
+        &mut self.crypto
+    }
+
+    /// Set protection keys after handshake
+    pub fn set_protection_keys(&mut self, keys: ProtectionKeys) {
+        self.crypto.set_keys(CryptoPhase::Application, keys);
+        self.protection = Some(PacketProtection::new(&keys));
+    }
+
+    /// Set non-blocking mode
+    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), String> {
+        self.socket
+            .set_nonblocking(nonblocking)
+            .map_err(|e| format!("set_nonblocking: {}", e))
     }
 }
 

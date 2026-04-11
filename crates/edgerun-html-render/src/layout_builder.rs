@@ -1,16 +1,14 @@
 //! Layout builder — converts DOM + CSS → edgerun-layout RenderObject tree.
 //! DO NOT EDIT. Regenerate with: scripts/generate_html_parser.py
-#![no_std]
 extern crate alloc;
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
-use alloc::format;
 
-use crate::html_parser::{Node, Element, BLOCK_ELEMENTS, INLINE_ELEMENTS, VOID_ELEMENTS};
+use crate::html_parser::{Node, Element, BLOCK_ELEMENTS, VOID_ELEMENTS};
 use crate::css_parser::Stylesheet;
 use crate::computed_style::{compute_style, default_style};
-use edgerun_layout::render_object::{RenderObject, ComputedStyle, FormattingContext, LayoutAlgorithm, PositionType, FontSelection, Color};
+use edgerun_layout::render_object::{RenderObject, ComputedStyle, LayoutAlgorithm};
 use edgerun_layout::layout_context::{determine_formatting_context, determine_layout_algorithm};
 
 pub fn build_layout(node: &Node, stylesheet: &Stylesheet, _viewport_width: u32) -> RenderObject {

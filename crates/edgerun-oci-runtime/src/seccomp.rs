@@ -572,6 +572,7 @@ pub fn seccomp_bpf_prog() -> Vec<u8> {
 // ===========================================================================
 
 #[cfg(target_arch = "x86_64")]
+#[allow(dead_code)] // Complete syscall reference table — not all are in allow-list
 mod nr {
     pub const READ: u32 = 0;
     pub const WRITE: u32 = 1;
@@ -746,6 +747,7 @@ mod nr {
 // ===========================================================================
 
 #[cfg(target_arch = "aarch64")]
+#[allow(dead_code)] // Complete syscall reference table — not all are in allow-list
 mod nr {
     pub const READ: u32 = 63;
     pub const WRITE: u32 = 64;
