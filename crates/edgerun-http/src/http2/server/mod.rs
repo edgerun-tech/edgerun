@@ -59,14 +59,14 @@ pub use response::{respond_with_200, rst_stream, send_goaway, send_ping_ack, sen
 use std::collections::HashMap;
 
 use super::flow_control::FlowController;
-use super::frame::{
+use crate::http2::frame::{
     DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, PriorityFrame,
     RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use super::headers::{validate_header_name_case, validate_request_headers};
 use super::hpack::{Decoder, Encoder};
 use super::settings::Settings;
-use super::stream::{StreamManager, StreamState};
+use crate::http2::stream::{StreamManager, StreamState};
 use super::ErrorCode;
 
 /// The action the server should take after processing an incoming frame.

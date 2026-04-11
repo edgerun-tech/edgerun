@@ -1,11 +1,11 @@
 //! Response helper methods for the HTTP/2 server.
 
-use super::frame::{
+use crate::http2::frame::{
     GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
-use super::hpack::Encoder;
-use super::stream::StreamManager;
-use super::ErrorCode;
+use crate::http2::hpack::Encoder;
+use crate::http2::stream::StreamManager;
+use crate::http2::ErrorCode;
 use super::FrameAction;
 
 /// Send a 200 OK response.

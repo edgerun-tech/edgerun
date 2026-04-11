@@ -26,6 +26,27 @@ impl Response {
         }
     }
 
+    /// Create a response from parts.
+    pub fn from_parts(status: StatusCode, headers: HeaderMap, body: Vec<u8>) -> Self {
+        Response {
+            status,
+            headers,
+            body,
+            trailers: HeaderMap::new(),
+        }
+    }
+
+    /// Set the body and return self (builder-style).
+    pub fn with_body(mut self, body: Vec<u8>) -> Self {
+        self.body = body;
+        self
+    }
+
+    /// Get mutable access to the headers.
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
     /// Parse an HTTP/1.1 response from raw bytes.
     ///
     /// The `is_head` parameter should be `true` if the corresponding request

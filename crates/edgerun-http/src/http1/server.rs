@@ -5,6 +5,32 @@
 //! - Per-connection task spawning via [`edgerun_rt::spawn`]
 //! - Keep-alive timeout
 //! - Graceful connection handling
+//!
+//! # TLS (HTTPS)
+//!
+//! Use [`TlsServer`] for TLS 1.3 connections. Requires the `tls` feature.
+//!
+//! ```no_run
+//! use edgerun_http::http1::{TlsServer, into_handler, Request, Response};
+//! use edgerun_tls::generate_self_signed;
+//! use edgerun_rt::Runtime;
+//!
+//! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+//! rt.block_on(async {
+//!     let cert = generate_self_signed(&["127.0.0.1", "localhost"]);
+//!     let handler = into_handler(|_req: Request| {
+//!         Response::new(edgerun_http::StatusCode::new(200).unwrap())
+//!     });
+//!
+//!     TlsServer::new(handler, cert)
+//!         .bind("127.0.0.1:8443")
+//!         .await
+//!         .unwrap()
+//!         .serve()
+//!         .await
+//!         .unwrap();
+//! });
+//! ```
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -15,6 +41,28 @@ use edgerun_rt::{
     AsyncTcpListener, AsyncTcpStream,
     spawn,
 };
+
+#[cfg(feature = "tls")]
+use edgerun_tls::async_tls::AsyncTlsServerStream;
+#[cfg(feature = "tls")]
+use edgerun_tls::CertificateAndKey;
+
+/// Cloneable certificate reference for async TLS server tasks.
+#[cfg(feature = "tls")]
+struct CertRef {
+    cert_der: Vec<u8>,
+    signing_key: std::sync::Arc<edgerun_crypto::p256::ecdsa::SigningKey>,
+}
+
+#[cfg(feature = "tls")]
+impl CertRef {
+    fn as_cert_and_key(&self) -> CertificateAndKey {
+        CertificateAndKey {
+            cert_der: self.cert_der.clone(),
+            signing_key: (*self.signing_key).clone(),
+        }
+    }
+}
 
 use crate::http1::body::AsyncBodyReader;
 use crate::http1::buf_reader::BufReader;
@@ -144,18 +192,177 @@ impl BoundServer {
     }
 }
 
+// ---------------------------------------------------------------------------
+// TLS server
+// ---------------------------------------------------------------------------
+
+/// An HTTP/1.1 server with TLS 1.3.
+///
+/// Requires the `tls` feature. Uses `edgerun-tls` for the TLS handshake
+/// and then delegates to the same HTTP/1.1 request handling as [`Server`].
+#[cfg(feature = "tls")]
+pub struct TlsServer {
+    handler: Arc<dyn Handler>,
+    cert: CertificateAndKey,
+    keep_alive_timeout: Option<Duration>,
+    max_request_size: usize,
+}
+
+#[cfg(feature = "tls")]
+impl TlsServer {
+    /// Create a new TLS server with the given handler and certificate.
+    pub fn new<H: Handler>(handler: H, cert: CertificateAndKey) -> Self {
+        TlsServer {
+            handler: Arc::new(handler),
+            cert,
+            keep_alive_timeout: Some(Duration::from_secs(5)),
+            max_request_size: 10 * 1024 * 1024,
+        }
+    }
+
+    /// Set the keep-alive timeout.
+    pub fn keep_alive_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.keep_alive_timeout = timeout;
+        self
+    }
+
+    /// Set the maximum request size.
+    pub fn max_request_size(mut self, size: usize) -> Self {
+        self.max_request_size = size;
+        self
+    }
+
+    /// Bind and return a running TLS server.
+    pub async fn bind(self, addr: impl std::net::ToSocketAddrs) -> std::io::Result<TlsBoundServer> {
+        let listener = AsyncTcpListener::bind(addr)?;
+        let local_addr = listener.local_addr()?;
+        Ok(TlsBoundServer {
+            listener,
+            handler: self.handler,
+            cert: self.cert,
+            keep_alive_timeout: self.keep_alive_timeout,
+            max_request_size: self.max_request_size,
+            local_addr,
+        })
+    }
+}
+
+/// A TLS server bound to a listening socket.
+#[cfg(feature = "tls")]
+pub struct TlsBoundServer {
+    listener: AsyncTcpListener,
+    handler: Arc<dyn Handler>,
+    cert: CertificateAndKey,
+    keep_alive_timeout: Option<Duration>,
+    max_request_size: usize,
+    local_addr: SocketAddr,
+}
+
+#[cfg(feature = "tls")]
+impl TlsBoundServer {
+    /// Get the local address.
+    pub fn local_addr(&self) -> SocketAddr {
+        self.local_addr
+    }
+
+    /// Start accepting TLS connections.
+    pub async fn serve(&self) -> std::io::Result<()> {
+        edgerun_log::info!("HTTPS server listening on {}", self.local_addr);
+
+        // Wrap cert in Arc for sharing across tasks.
+        // CertificateAndKey is not Clone (SigningKey isn't), so we Arc it.
+        let cert = Arc::new(CertRef {
+            cert_der: self.cert.cert_der.clone(),
+            signing_key: Arc::new(self.cert.signing_key.clone()),
+        });
+
+        loop {
+            match self.listener.accept().await {
+                Ok((stream, peer_addr)) => {
+                    let handler = Arc::clone(&self.handler);
+                    let cert = Arc::clone(&cert);
+                    let keep_alive = self.keep_alive_timeout;
+                    let max_size = self.max_request_size;
+
+                    spawn(async move {
+                        if let Err(e) = handle_tls_connection(
+                            stream,
+                            peer_addr,
+                            handler,
+                            &cert,
+                            keep_alive,
+                            max_size,
+                        ).await {
+                            edgerun_log::warn!("TLS connection error from {}: {}", peer_addr, e);
+                        }
+                    });
+                }
+                Err(e) => {
+                    edgerun_log::error!("Accept error: {}", e);
+                    edgerun_rt::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+
+    /// Accept and handle a single TLS connection.
+    pub async fn accept_one(&self) -> std::io::Result<()> {
+        let (stream, peer_addr) = self.listener.accept().await?;
+        let handler = Arc::clone(&self.handler);
+        let keep_alive = self.keep_alive_timeout;
+        let max_size = self.max_request_size;
+        let cert = CertRef {
+            cert_der: self.cert.cert_der.clone(),
+            signing_key: std::sync::Arc::new(self.cert.signing_key.clone()),
+        };
+
+        handle_tls_connection(
+            stream,
+            peer_addr,
+            handler,
+            &cert,
+            keep_alive,
+            max_size,
+        ).await
+    }
+}
+
+/// Handle a single TLS connection.
+#[cfg(feature = "tls")]
+async fn handle_tls_connection(
+    stream: Arc<AsyncTcpStream>,
+    peer_addr: SocketAddr,
+    handler: Arc<dyn Handler>,
+    cert: &CertRef,
+    keep_alive_timeout: Option<Duration>,
+    max_request_size: usize,
+) -> std::io::Result<()> {
+    let cert_and_key = cert.as_cert_and_key();
+    let tls_stream = match AsyncTlsServerStream::accept(stream, &cert_and_key) {
+        Ok(s) => s,
+        Err(e) => {
+            edgerun_log::debug!("TLS handshake failed from {}: {}", peer_addr, e);
+            return Ok(());
+        }
+    };
+
+    handle_connection(tls_stream, peer_addr, handler, keep_alive_timeout, max_request_size).await
+}
+
 /// Handle a single connection. Processes multiple requests over the same
 /// connection (HTTP/1.1 keep-alive) until the client closes, timeout fires,
 /// or a parse error occurs.
-async fn handle_connection(
-    stream: Arc<AsyncTcpStream>,
+async fn handle_connection<S>(
+    stream: S,
     peer_addr: SocketAddr,
     handler: Arc<dyn Handler>,
     keep_alive_timeout: Option<Duration>,
     max_request_size: usize,
-) -> std::io::Result<()> {
-    let (read_half, mut write_half) = stream.split();
-    let mut buf_reader = BufReader::new(read_half);
+) -> std::io::Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut buf_reader = BufReader::new(stream);
 
     loop {
         // Read request headers with optional timeout
@@ -177,7 +384,7 @@ async fn handle_connection(
             Err(e) => {
                 edgerun_log::debug!("Request parse error from {}: {}", peer_addr, e);
                 let resp = Response::new(StatusCode::BAD_REQUEST);
-                write_response(&mut write_half, &resp, false).await?;
+                write_response(&mut buf_reader, &resp, false).await?;
                 return Ok(());
             }
         };
@@ -185,30 +392,120 @@ async fn handle_connection(
         let method = request.method().clone();
         let is_head = method == Method::HEAD;
 
-        // Drain request body if present
-        let content_length = request.headers().get("content-length")
-            .and_then(|v| v.as_str().parse::<u64>().ok());
-        let is_chunked = request.headers().get("transfer-encoding")
-            .map(|v| v.as_str().to_lowercase())
-            .map_or(false, |v| v.contains("chunked"));
-
-        let inner = buf_reader.into_inner();
-        let body_reader = if is_chunked {
-            AsyncBodyReader::chunked(inner)
-        } else if let Some(len) = content_length {
-            AsyncBodyReader::with_length(inner, len)
-        } else {
-            AsyncBodyReader::until_eof(inner)
-        };
-
-        // Drain the body (discard it)
-        let _ = body_reader.collect().await;
+        // Drain request body (discard it) through the BufReader
+        drain_body(&mut buf_reader, &request).await?;
 
         // Call handler
         let response = handler.handle(request).await;
 
         // Write response
-        write_response(&mut write_half, &response, is_head).await?;
+        write_response(&mut buf_reader, &response, is_head).await?;
+    }
+}
+
+/// Drain and discard the request body through the buffered reader.
+async fn drain_body<R: AsyncRead + AsyncWrite + Unpin>(
+    buf_reader: &mut BufReader<R>,
+    request: &Request,
+) -> std::io::Result<()> {
+    let content_length = request.headers().get("content-length")
+        .and_then(|v| v.as_str().parse::<u64>().ok());
+    let is_chunked = request.headers().get("transfer-encoding")
+        .map(|v| v.as_str().to_lowercase())
+        .map_or(false, |v| v.contains("chunked"));
+
+    if is_chunked {
+        // Drain chunked body: read chunk-size lines and data until 0-length chunk
+        drain_chunked_body(buf_reader).await
+    } else if let Some(len) = content_length {
+        // Drain exactly `len` bytes
+        drain_exact(buf_reader, len).await
+    } else {
+        // No body indicator — nothing to drain
+        Ok(())
+    }
+}
+
+/// Drain exactly `n` bytes from the buffered reader.
+async fn drain_exact<R: AsyncRead + Unpin>(
+    buf_reader: &mut BufReader<R>,
+    mut remaining: u64,
+) -> std::io::Result<()> {
+    let mut buf = [0u8; 8192];
+    while remaining > 0 {
+        let to_read = (remaining as usize).min(buf.len());
+        let n = buf_reader.read(&mut buf[..to_read]).await?;
+        if n == 0 { break; }
+        remaining -= n as u64;
+    }
+    Ok(())
+}
+
+/// Drain a chunked transfer-encoded body.
+async fn drain_chunked_body<R: AsyncRead + Unpin>(
+    buf_reader: &mut BufReader<R>,
+) -> std::io::Result<()> {
+    let mut line_buf = Vec::with_capacity(32);
+    loop {
+        // Read chunk-size line
+        line_buf.clear();
+        loop {
+            let mut byte = [0u8; 1];
+            let n = buf_reader.read(&mut byte).await?;
+            if n == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "unexpected EOF reading chunk size",
+                ));
+            }
+            if byte[0] == b'\n' { break; }
+            line_buf.push(byte[0]);
+        }
+        // Remove trailing \r
+        if line_buf.last() == Some(&b'\r') { line_buf.pop(); }
+
+        let size_hex = std::str::from_utf8(&line_buf)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size"))?;
+        let size_str = size_hex.split(';').next().unwrap_or(size_hex).trim();
+        let chunk_size = usize::from_str_radix(size_str, 16)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "invalid chunk size"))?;
+
+        if chunk_size == 0 {
+            // Last chunk — drain trailer headers until blank line
+            return drain_trailers(buf_reader).await;
+        }
+
+        // Drain chunk data
+        drain_exact(buf_reader, chunk_size as u64).await?;
+
+        // Skip trailing \r\n
+        let mut crlf = [0u8; 2];
+        let n = buf_reader.read(&mut crlf).await?;
+        if n == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "unexpected EOF after chunk data",
+            ));
+        }
+    }
+}
+
+/// Drain trailer headers (until blank line).
+async fn drain_trailers<R: AsyncRead + Unpin>(
+    buf_reader: &mut BufReader<R>,
+) -> std::io::Result<()> {
+    let mut buf = [0u8; 8192];
+    // Read until we find \r\n\r\n (or connection closes)
+    let mut saw_cr = false;
+    loop {
+        let n = buf_reader.read(&mut buf[..1]).await?;
+        if n == 0 { return Ok(()); }
+        match buf[0] {
+            b'\r' => saw_cr = true,
+            b'\n' if saw_cr => return Ok(()),
+            b'\n' => saw_cr = true,
+            _ => saw_cr = false,
+        }
     }
 }
 

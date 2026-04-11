@@ -446,23 +446,23 @@ impl<R: AsyncRead + Unpin> ReadBodyFut<'_, '_, R> {
                     loop {
                         let mut byte = [0u8; 1];
                         let n = {
-                            let pinned = Pin::new(&mut this.reader.reader);
+                            let pinned = Pin::new(&mut self.reader.reader);
                             match pinned.poll_read(cx, &mut byte) {
                                 Poll::Ready(Ok(n)) => n,
                                 Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
                                 Poll::Pending => {
-                                    this.reader.state = ChunkState::Done;
+                                    self.reader.state = ChunkState::Done;
                                     return Poll::Ready(Ok(0));
                                 }
                             }
                         };
                         if n == 0 {
-                            this.reader.state = ChunkState::Done;
+                            self.reader.state = ChunkState::Done;
                             return Poll::Ready(Ok(0));
                         }
                         match byte[0] {
                             b'\n' if empty_line => {
-                                this.reader.state = ChunkState::Done;
+                                self.reader.state = ChunkState::Done;
                                 return Poll::Ready(Ok(0));
                             }
                             b'\n' => { empty_line = true; }

@@ -217,11 +217,23 @@ fn verify_signature(
         }
         // ED25519 (RFC 8080)
         15 => {
-            // ed25519 not re-exported by edgerun-crypto yet
             if signature.len() != 64 || public_key.len() != 32 {
                 return DnssecResult::BadSignature;
             }
-            DnssecResult::Insecure
+            use edgerun_crypto::Ed25519VerifyingKey;
+            use edgerun_crypto::Ed25519Signature;
+            use edgerun_crypto::Verifier;
+
+            if let Ok(vk) = Ed25519VerifyingKey::try_from(public_key.as_slice()) {
+                if let Ok(sig) = Ed25519Signature::from_slice(signature) {
+                    return if vk.verify(signed_data, &sig).is_ok() {
+                        DnssecResult::Valid
+                    } else {
+                        DnssecResult::BadSignature
+                    };
+                }
+            }
+            DnssecResult::BadSignature
         }
         // ED448 (RFC 8080)
         16 => {

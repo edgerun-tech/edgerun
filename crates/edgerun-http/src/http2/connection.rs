@@ -1,5 +1,6 @@
 //! HTTP/2 connection management
 
+use super::Http2Error;
 use super::flow_control::FlowControlManager;
 use super::frame::{
     ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,

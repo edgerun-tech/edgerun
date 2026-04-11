@@ -1,5 +1,6 @@
 //! HTTP/3 connection over QUIC
 
+use super::Http3Error;
 use std::collections::HashMap;
 use std::net::UdpSocket;
 

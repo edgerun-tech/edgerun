@@ -44,6 +44,7 @@ pub use ff;
 pub use group;
 pub use rfc6979;
 pub use x25519_dalek;
+pub use ed25519_dalek;
 pub use curve25519_dalek;
 pub use chacha20poly1305;
 
@@ -104,6 +105,9 @@ pub use aes_gcm::{
 // Signature traits
 pub use signature::{Signer, Verifier};
 pub use p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+
+// ED25519 (RFC 8080 DNSSEC algorithm 15)
+pub use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey, Signature as Ed25519Signature};
 
 // DER
 pub use der::Tag;

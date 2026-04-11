@@ -1,12 +1,12 @@
 //! HEADERS and CONTINUATION frame handlers for the HTTP/2 server.
 
-use super::frame::{Frame, HeadersFrame, RstStreamFrame};
-use super::headers::{validate_header_name_case, validate_request_headers};
-use super::hpack::{Decoder, Encoder};
-use super::server::continuation::ContinuationState;
-use super::server::response;
-use super::stream::StreamState;
-use super::ErrorCode;
+use crate::http2::frame::{Frame, HeadersFrame, RstStreamFrame};
+use crate::http2::headers::{validate_header_name_case, validate_request_headers};
+use crate::http2::hpack::{Decoder, Encoder};
+use super::continuation::ContinuationState;
+use super::response;
+use crate::http2::stream::StreamState;
+use crate::http2::ErrorCode;
 use super::FrameAction;
 use super::Http2Server;
 
@@ -104,7 +104,7 @@ impl Http2Server {
             }
         }
 
-        let end_headers = frame.flags & super::frame::flags::HEADERS_END_HEADERS != 0;
+        let end_headers = frame.flags & crate::http2::frame::flags::HEADERS_END_HEADERS != 0;
 
         if hf.exclusive && hf.stream_dependency == stream_id {
             return response::rst_stream(
@@ -203,7 +203,7 @@ impl Http2Server {
 
         cont.header_block_buf.extend_from_slice(&frame.payload);
 
-        let end_headers = frame.flags & super::frame::flags::HEADERS_END_HEADERS != 0;
+        let end_headers = frame.flags & crate::http2::frame::flags::HEADERS_END_HEADERS != 0;
 
         if end_headers {
             let sid = cont.stream_id;

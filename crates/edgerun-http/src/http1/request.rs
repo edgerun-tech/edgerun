@@ -202,11 +202,16 @@ impl Request {
 
     /// Format the request as an HTTP string
     pub fn to_http_string(&self) -> String {
+        String::from_utf8_lossy(&self.to_http_bytes()).into_owned()
+    }
+
+    /// Format the request as HTTP/1.1 bytes (binary-safe).
+    pub fn to_http_bytes(&self) -> Vec<u8> {
         let mut request = format!(
             "{} {} HTTP/1.1\r\n",
             self.method.as_str(),
             self.uri.request_target()
-        );
+        ).into_bytes();
 
         // Add Host header if not present
         if !self.headers.contains_key("Host") {
@@ -214,9 +219,9 @@ impl Request {
                 if let Some(port) = self.uri.port() {
                     let default_port = if self.uri.is_https() { 443 } else { 80 };
                     if port != default_port {
-                        request.push_str(&format!("Host: {}:{}\r\n", host, port));
+                        let _ = std::io::Write::write_fmt(&mut request, format_args!("Host: {}:{}\r\n", host, port));
                     } else {
-                        request.push_str(&format!("Host: {}\r\n", host));
+                        let _ = std::io::Write::write_fmt(&mut request, format_args!("Host: {}\r\n", host));
                     }
                 }
             }
@@ -225,20 +230,20 @@ impl Request {
         // Add Content-Length if body present and not set
         if self.body.is_some() && !self.headers.contains_key("Content-Length") {
             let len = self.body.as_ref().map(|b| b.len()).unwrap_or(0);
-            request.push_str(&format!("Content-Length: {}\r\n", len));
+            let _ = std::io::Write::write_fmt(&mut request, format_args!("Content-Length: {}\r\n", len));
         }
 
         // Add Connection header if not present
         if !self.headers.contains_key("Connection") {
-            request.push_str("Connection: close\r\n");
+            request.extend_from_slice(b"Connection: keep-alive\r\n");
         }
 
-        request.push_str(&self.headers.to_http_string());
-        request.push_str("\r\n");
+        request.extend_from_slice(self.headers.to_http_string().as_bytes());
+        request.extend_from_slice(b"\r\n");
 
         // Add body
         if let Some(body) = &self.body {
-            request.push_str(&String::from_utf8_lossy(body));
+            request.extend_from_slice(body);
         }
 
         request

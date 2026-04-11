@@ -1,9 +1,9 @@
 //! DATA frame handler for the HTTP/2 server.
 
-use super::frame::{DataFrame, Frame};
-use super::hpack::Encoder;
-use super::server::response;
-use super::ErrorCode;
+use crate::http2::frame::{DataFrame, Frame};
+use crate::http2::hpack::Encoder;
+use super::response;
+use crate::http2::ErrorCode;
 use super::FrameAction;
 use super::Http2Server;
 
@@ -26,8 +26,8 @@ impl Http2Server {
         self.update_last_stream(sid);
 
         let state_before = self.stream_manager.get_stream(sid).map(|s| s.state);
-        match state_before.unwrap_or(super::stream::StreamState::Idle) {
-            super::stream::StreamState::Idle | super::stream::StreamState::ReservedRemote => {
+        match state_before.unwrap_or(crate::http2::stream::StreamState::Idle) {
+            crate::http2::stream::StreamState::Idle | crate::http2::stream::StreamState::ReservedRemote => {
                 self.goaway_sent = true;
                 return response::send_goaway(
                     self.last_processed_stream_id,
@@ -35,14 +35,14 @@ impl Http2Server {
                     b"DATA on idle stream",
                 );
             }
-            super::stream::StreamState::HalfClosedRemote | super::stream::StreamState::Closed => {
+            crate::http2::stream::StreamState::HalfClosedRemote | crate::http2::stream::StreamState::Closed => {
                 return response::rst_stream(
                     sid,
                     ErrorCode::STREAM_CLOSED.to_u32(),
                     &mut self.stream_manager,
                 );
             }
-            super::stream::StreamState::HalfClosedLocal => {}
+            crate::http2::stream::StreamState::HalfClosedLocal => {}
             _ => {}
         }
 
@@ -56,7 +56,7 @@ impl Http2Server {
         }
 
         if let Some(s) = self.stream_manager.get_stream_mut(sid) {
-            if s.state == super::stream::StreamState::Idle {
+            if s.state == crate::http2::stream::StreamState::Idle {
                 let _ = s.open();
             }
         }

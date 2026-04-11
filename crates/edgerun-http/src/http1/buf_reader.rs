@@ -8,7 +8,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use edgerun_rt::AsyncRead;
+use edgerun_rt::{AsyncRead, AsyncWrite};
 
 const DEFAULT_BUF_SIZE: usize = 8192;
 
@@ -241,6 +241,31 @@ impl<R: AsyncRead + Unpin> Future for ReadFromBufFut<'_, '_, R> {
         };
 
         Poll::Ready(Ok(n))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AsyncWrite impl — forwards to inner writer
+// ---------------------------------------------------------------------------
+
+impl<R: AsyncRead + AsyncWrite + Unpin> AsyncWrite for BufReader<R> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.inner).poll_shutdown(cx)
     }
 }
 
