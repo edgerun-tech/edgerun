@@ -212,7 +212,10 @@ impl TreeBuilder {
                 "head" => {
                     self.pop_until("head");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -303,7 +306,10 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                     // ignore token
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -362,7 +368,10 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                     // ignore token
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -895,7 +904,10 @@ impl TreeBuilder {
                 "title" => {
                     self.pop_until("title");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1026,7 +1038,10 @@ impl TreeBuilder {
                     self.parse_errors += 1;
                     // ignore token
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1057,18 +1072,25 @@ impl TreeBuilder {
             Token::StartTag { name, attrs, self_closing } => {
                 match &name[..] {
                 _ => {
-                    // parse error (no specific action)
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
                 }
                 }
             }
             Token::EndTag { name } => {
                 match &name[..] {
                 "table" => {
+                    self.parse_errors += 1;
                     self.insertion_mode = InsertionMode::InTable;
                     self.handle_token(token);
                     return;
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1157,7 +1179,10 @@ impl TreeBuilder {
                 "thead" => {
                     self.pop_until("thead");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1251,7 +1276,10 @@ impl TreeBuilder {
                 "tr" => {
                     self.pop_until("tr");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1321,7 +1349,10 @@ impl TreeBuilder {
                 "th" => {
                     self.pop_until("th");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1386,7 +1417,10 @@ impl TreeBuilder {
                 "caption" => {
                     self.pop_until("caption");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1430,7 +1464,10 @@ impl TreeBuilder {
                 "colgroup" => {
                     self.pop_until("colgroup");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1503,7 +1540,10 @@ impl TreeBuilder {
                 "frameset" => {
                     self.pop_until("frameset");
                 }
-                _ => { self.pop_until(name); }
+                _ => {
+                    if self.has_in_scope(name) { self.pop_until(name); }
+                    // otherwise: parse error, ignore
+                }
                 }
             }
             Token::Character(text) => {
@@ -1727,7 +1767,7 @@ impl TreeBuilder {
     ///
     /// When content appears where it is not allowed (e.g., text directly
     /// inside <table>), insert it outside the table element instead.
-    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
 
@@ -1742,7 +1782,12 @@ impl TreeBuilder {
                 }
             }
             if ti == 0 {
-                self.open_elements[0].children.push(Node::Element(elem));
+                // Table is root — insert into html element (foster parent outside table)
+                if let Some(html_idx) = self.open_elements.iter().position(|e| e.tag == "html") {
+                    self.open_elements[html_idx].children.push(Node::Element(elem));
+                } else {
+                    self.open_elements[0].children.push(Node::Element(elem));
+                }
             } else {
                 let parent = &mut self.open_elements[ti - 1];
                 parent.children.push(Node::Element(elem));
@@ -1814,8 +1859,12 @@ impl TreeBuilder {
     fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
-        // Void elements are not pushed to the open elements stack
-        if !VOID_ELEMENTS.contains(&name) {
+        if VOID_ELEMENTS.contains(&name) {
+            // Void elements: attach to parent but don't push to stack
+            if let Some(parent) = self.open_elements.last_mut() {
+                parent.children.push(Node::Element(elem));
+            }
+        } else {
             self.open_elements.push(elem);
         }
     }

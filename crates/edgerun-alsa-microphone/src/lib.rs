@@ -104,7 +104,7 @@ const SNDRV_PCM_HW_PARAMS_SIZE: usize = std::mem::size_of::<SndPcmHwParams>();
 
 impl SndPcmHwParams {
     fn any() -> Self {
-        let mut params = Self {
+        let params = Self {
             flags: 0,
             masks: [SndMask {
                 bits: [u32::MAX; SNDRV_MASK_WORDS],

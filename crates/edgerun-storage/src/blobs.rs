@@ -118,7 +118,7 @@ impl BlobStore {
 
         // Generate random nonce
         let mut nonce_bytes = [0u8; 12];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce_bytes);
+        edgerun_crypto::getrandom::fill(&mut nonce_bytes).expect("getrandom failed");
         let nonce = &nonce_bytes;
 
         // Encrypt
@@ -267,7 +267,7 @@ fn load_or_create_sealed_key(
     } else {
         // Generate new key, seal it, store on disk
         let mut key = [0u8; 32];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key);
+        edgerun_crypto::getrandom::fill(&mut key).expect("getrandom failed");
 
         let sealed = seal_fn(&key)?;
         let mut file = File::create(&sealed_path)?;

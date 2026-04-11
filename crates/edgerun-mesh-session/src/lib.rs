@@ -111,7 +111,7 @@ impl MeshSession {
     /// Creates a session from a derived AES-256-GCM key.
     fn new(peer: NodeID, key: [u8; 32]) -> Self {
         let mut nonce_prefix = [0u8; 4];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut nonce_prefix);
+        edgerun_crypto::getrandom::fill(&mut nonce_prefix).expect("getrandom failed");
 
         Self {
             peer,
@@ -302,10 +302,9 @@ impl SessionManager {
         self.our_node_id
     }
 
-    /// Generate a random EphemeralSecret using /dev/urandom.
+    /// Generate a random EphemeralSecret using OS randomness.
     pub fn random_ephemeral_secret() -> EphemeralSecret {
-        let mut rng = edgerun_crypto::rand_core::OsRng;
-        EphemeralSecret::random(&mut rng)
+        EphemeralSecret::random(&mut edgerun_crypto::OsRng)
     }
 
     // -----------------------------------------------------------------------

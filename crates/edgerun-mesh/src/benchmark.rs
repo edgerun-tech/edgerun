@@ -71,7 +71,7 @@ pub fn benchmark_frame_sign_verify() -> u64 {
 
     // Generate a real signing key using getrandom
     let mut key_bytes = [0u8; 32];
-    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key_bytes);
+    edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
     let signing_key = SigningKey::from_bytes((&key_bytes).into())
         .expect("invalid key bytes");
     let src_id = node_id_from_signing_key(&signing_key);

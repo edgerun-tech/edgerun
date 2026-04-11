@@ -660,7 +660,7 @@ fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
     #[cfg(unix)]
     {
-        edgerun_crypto::OsRng.fill_bytes(&mut buf);
+        edgerun_crypto::getrandom::fill(&mut buf).expect("getrandom failed");
     }
     #[cfg(not(unix))]
     {

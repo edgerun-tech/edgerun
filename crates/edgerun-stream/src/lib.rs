@@ -320,7 +320,7 @@ mod tests {
 
     fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
         let mut bytes = [0u8; 32];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::getrandom::fill(&mut bytes).expect("getrandom failed");
         edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
     }
 
@@ -800,7 +800,7 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         sign_event(&mut genesis, &signer).unwrap();
         // Replace with random bytes
         let mut rng_bytes = [0u8; 64];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut rng_bytes);
+        edgerun_crypto::getrandom::fill(&mut rng_bytes).expect("getrandom failed");
         genesis.signature.as_mut().unwrap().value = rng_bytes.to_vec();
         let err = verify_event(&genesis, &signer.node_id()).unwrap_err();
         // Should fail either as InvalidSignatureFormat or SignatureVerification

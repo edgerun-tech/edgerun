@@ -659,12 +659,12 @@ impl Shell {
         let margin_r = margin_right as i32;
         let margin_b = margin_bottom as i32;
         let margin_l = margin_left as i32;
-        let mut w = if desired_width > 0 { desired_width }
+        let w = if desired_width > 0 { desired_width }
             else if anchor & crate::protocol::layer_shell::anchor::LEFT != 0
                 && anchor & crate::protocol::layer_shell::anchor::RIGHT != 0
             { (output_w as i32 - margin_l - margin_r).max(0) as u32 }
             else { output_w };
-        let mut h = if desired_height > 0 { desired_height }
+        let h = if desired_height > 0 { desired_height }
             else if anchor & crate::protocol::layer_shell::anchor::TOP != 0
                 && anchor & crate::protocol::layer_shell::anchor::BOTTOM != 0
             { (output_h as i32 - margin_t - margin_b).max(0) as u32 }

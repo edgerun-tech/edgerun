@@ -258,50 +258,50 @@ pub type GbmDevice = c_void;
 pub type GbmSurface = c_void;
 pub type GbmBo = c_void;
 
-pub type PFNGBM_CREATE_DEVICE = unsafe extern "system" fn(fd: c_int) -> *mut GbmDevice;
-pub type PFNGBM_DEVICE_DESTROY = unsafe extern "system" fn(gbm: *mut GbmDevice);
-pub type PFNGBM_DEVICE_GET_FD = unsafe extern "system" fn(gbm: *mut GbmDevice) -> c_int;
-pub type PFNGBM_CREATE_SURFACE = unsafe extern "system" fn(
+pub type PfngbmCreateDevice = unsafe extern "system" fn(fd: c_int) -> *mut GbmDevice;
+pub type PfngbmDeviceDestroy = unsafe extern "system" fn(gbm: *mut GbmDevice);
+pub type PfngbmDeviceGetFd = unsafe extern "system" fn(gbm: *mut GbmDevice) -> c_int;
+pub type PfngbmCreateSurface = unsafe extern "system" fn(
     gbm: *mut GbmDevice, width: u32, height: u32, format: u32, flags: u32,
 ) -> *mut GbmSurface;
-pub type PFNGBM_SURFACE_DESTROY = unsafe extern "system" fn(gs: *mut GbmSurface);
-pub type PFNGBM_SURFACE_LOCK_FRONT_BUFFER = unsafe extern "system" fn(
+pub type PfngbmSurfaceDestroy = unsafe extern "system" fn(gs: *mut GbmSurface);
+pub type PfngbmSurfaceLockFrontBuffer = unsafe extern "system" fn(
     gs: *mut GbmSurface,
 ) -> *mut GbmBo;
-pub type PFNGBM_BO_GET_HANDLE = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
-pub type PFNGBM_BO_GET_STRIDE = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
-pub type PFNGBM_BO_GET_FORMAT = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
-pub type PFNGBM_BO_GET_WIDTH = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
-pub type PFNGBM_BO_GET_HEIGHT = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
-pub type PFNGBM_BO_UNMAP = unsafe extern "system" fn(bo: *mut GbmBo);
-pub type PFNGBM_BO_MAP = unsafe extern "system" fn(
+pub type PfngbmBoGetHandle = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PfngbmBoGetStride = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PfngbmBoGetFormat = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PfngbmBoGetWidth = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PfngbmBoGetHeight = unsafe extern "system" fn(bo: *mut GbmBo) -> u32;
+pub type PfngbmBoUnmap = unsafe extern "system" fn(bo: *mut GbmBo);
+pub type PfngbmBoMap = unsafe extern "system" fn(
     bo: *mut GbmBo, offset: u32, width: u32, height: u32,
     flags: i32, stride: *mut u32, map_data: *mut *mut c_void,
 ) -> *mut c_void;
-pub type PFNGBM_BO_RELEASE = unsafe extern "system" fn(bo: *mut GbmBo);
-pub type PFNGBM_SURFACE_RELEASE_BUFFER = unsafe extern "system" fn(
+pub type PfngbmBoRelease = unsafe extern "system" fn(bo: *mut GbmBo);
+pub type PfngbmSurfaceReleaseBuffer = unsafe extern "system" fn(
     gs: *mut GbmSurface, bo: *mut GbmBo,
 );
-pub type PFNGBM_DEVICE_IS_FORMAT_SUPPORTED = unsafe extern "system" fn(
+pub type PfngbmDeviceIsFormatSupported = unsafe extern "system" fn(
     gbm: *mut GbmDevice, format: u32, width: u32, height: u32,
 ) -> i32;
 
 pub struct Gbm {
     pub lib: *mut c_void,
-    pub gbm_create_device: PFNGBM_CREATE_DEVICE,
-    pub gbm_device_destroy: PFNGBM_DEVICE_DESTROY,
-    pub gbm_device_get_fd: PFNGBM_DEVICE_GET_FD,
-    pub gbm_create_surface: PFNGBM_CREATE_SURFACE,
-    pub gbm_surface_destroy: PFNGBM_SURFACE_DESTROY,
-    pub gbm_bo_get_handle: PFNGBM_BO_GET_HANDLE,
-    pub gbm_bo_get_stride: PFNGBM_BO_GET_STRIDE,
-    pub gbm_bo_get_format: PFNGBM_BO_GET_FORMAT,
-    pub gbm_bo_get_width: PFNGBM_BO_GET_WIDTH,
-    pub gbm_bo_get_height: PFNGBM_BO_GET_HEIGHT,
-    pub gbm_bo_map: PFNGBM_BO_MAP,
-    pub gbm_bo_unmap: PFNGBM_BO_UNMAP,
-    pub gbm_bo_release: PFNGBM_BO_RELEASE,
-    pub gbm_surface_release_buffer: PFNGBM_SURFACE_RELEASE_BUFFER,
+    pub gbm_create_device: PfngbmCreateDevice,
+    pub gbm_device_destroy: PfngbmDeviceDestroy,
+    pub gbm_device_get_fd: PfngbmDeviceGetFd,
+    pub gbm_create_surface: PfngbmCreateSurface,
+    pub gbm_surface_destroy: PfngbmSurfaceDestroy,
+    pub gbm_bo_get_handle: PfngbmBoGetHandle,
+    pub gbm_bo_get_stride: PfngbmBoGetStride,
+    pub gbm_bo_get_format: PfngbmBoGetFormat,
+    pub gbm_bo_get_width: PfngbmBoGetWidth,
+    pub gbm_bo_get_height: PfngbmBoGetHeight,
+    pub gbm_bo_map: PfngbmBoMap,
+    pub gbm_bo_unmap: PfngbmBoUnmap,
+    pub gbm_bo_release: PfngbmBoRelease,
+    pub gbm_surface_release_buffer: PfngbmSurfaceReleaseBuffer,
 }
 
 unsafe impl Send for Gbm {}

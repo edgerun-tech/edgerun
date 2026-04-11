@@ -378,7 +378,7 @@ impl QuicPacket {
                 u16::from_be_bytes(bytes) as u64
             }
             4 => {
-                let mut bytes = [first & 0x3F, data[1], data[2], data[3]];
+                let bytes = [first & 0x3F, data[1], data[2], data[3]];
                 u32::from_be_bytes(bytes) as u64
             }
             8 => {

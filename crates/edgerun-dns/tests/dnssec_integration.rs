@@ -63,7 +63,7 @@ fn test_key_tag_consistency() {
 fn test_ed25519_key_generation() {
     use edgerun_crypto::Ed25519SigningKey;
 
-    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key_bytes = verifying_key.to_bytes().to_vec();
     assert_eq!(public_key_bytes.len(), 32);
@@ -73,7 +73,7 @@ fn test_ed25519_key_generation() {
 fn test_ed25519_wrong_signature_rejected() {
     use edgerun_crypto::Ed25519SigningKey;
 
-    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key_bytes = verifying_key.to_bytes().to_vec();
 
@@ -103,7 +103,7 @@ fn test_ed25519_wrong_signature_rejected() {
 fn test_ed25519_expired_signature() {
     use edgerun_crypto::Ed25519SigningKey;
 
-    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key_bytes = verifying_key.to_bytes().to_vec();
 
@@ -136,7 +136,7 @@ fn test_ed25519_expired_signature() {
 fn test_ed25519_not_yet_valid() {
     use edgerun_crypto::Ed25519SigningKey;
 
-    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = Ed25519SigningKey::generate(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let public_key_bytes = verifying_key.to_bytes().to_vec();
 
@@ -174,7 +174,7 @@ fn test_ecdsap256_key_generation() {
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 
-    let signing_key = SigningKey::random(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(false);
     let public_key_bytes = encoded.as_bytes().to_vec();
@@ -186,7 +186,7 @@ fn test_ecdsap256_wrong_signature_rejected() {
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 
-    let signing_key = SigningKey::random(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(false);
     let public_key_bytes = encoded.as_bytes().to_vec();
@@ -223,7 +223,7 @@ fn test_chain_of_trust_valid_sha256() {
     use edgerun_crypto::p256::ecdsa::SigningKey;
     use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 
-    let signing_key = SigningKey::random(&mut edgerun_crypto::rand_core::OsRng);
+    let signing_key = SigningKey::random(&mut edgerun_crypto::OsRng);
     let verifying_key = signing_key.verifying_key();
     let encoded = verifying_key.to_encoded_point(false);
     let public_key_bytes = encoded.as_bytes().to_vec();

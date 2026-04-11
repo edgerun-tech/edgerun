@@ -275,7 +275,7 @@ impl TreeBuilder {
     ///
     /// When content appears where it is not allowed (e.g., text directly
     /// inside <table>), insert it outside the table element instead.
-    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
 
@@ -290,7 +290,12 @@ impl TreeBuilder {
                 }
             }
             if ti == 0 {
-                self.open_elements[0].children.push(Node::Element(elem));
+                // Table is root — insert into html element (foster parent outside table)
+                if let Some(html_idx) = self.open_elements.iter().position(|e| e.tag == "html") {
+                    self.open_elements[html_idx].children.push(Node::Element(elem));
+                } else {
+                    self.open_elements[0].children.push(Node::Element(elem));
+                }
             } else {
                 let parent = &mut self.open_elements[ti - 1];
                 parent.children.push(Node::Element(elem));
@@ -362,8 +367,12 @@ impl TreeBuilder {
     fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
-        // Void elements are not pushed to the open elements stack
-        if !VOID_ELEMENTS.contains(&name) {
+        if VOID_ELEMENTS.contains(&name) {
+            // Void elements: attach to parent but don't push to stack
+            if let Some(parent) = self.open_elements.last_mut() {
+                parent.children.push(Node::Element(elem));
+            }
+        } else {
             self.open_elements.push(elem);
         }
     }
@@ -529,7 +538,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 	for _, r := range startTags { if r.isAny { hasStartCatchAll = true; break } }
 	for _, r := range endTags { if r.isAny { hasEndCatchAll = true; break } }
 	if !hasStartCatchAll { startDispatch += "\n                _ => { self.insert(name, attrs, *self_closing); }" }
-	if !hasEndCatchAll { endDispatch += "\n                _ => { self.pop_until(name); }" }
+	if !hasEndCatchAll { endDispatch += "\n                _ => {\n                    if self.has_in_scope(name) { self.pop_until(name); }\n                    // otherwise: parse error, ignore\n                }" }
 
 	// Character handling
 	var charCode string
@@ -661,14 +670,15 @@ func tbActionsToRustWithMode(actions []html.TreeAction, popUntil string, isOther
 			parts = append(parts, rust)
 		}
 	}
+	// Reprocess takes priority — set mode, re-dispatch, return
+	if hasReprocess && nextMode != 0 {
+		return fmt.Sprintf("self.parse_errors += 1;\n                    self.insertion_mode = InsertionMode::%s;\n                    self.handle_token(token);\n                    return;", insertionModeToRust(nextMode))
+	}
 	if isOtherwise {
 		// For "otherwise" rules: do actions, set mode, reprocess
 		if len(parts) == 0 {
 			parts = append(parts, "// parse error (no specific action)")
 		}
-	} else if hasReprocess && nextMode != 0 {
-		// REPROCESS — set mode and re-dispatch
-		return fmt.Sprintf("self.insertion_mode = InsertionMode::%s;\n                    self.handle_token(token);\n                    return;", insertionModeToRust(nextMode))
 	} else if len(parts) == 0 {
 		parts = append(parts, "self.insert(name, attrs, *self_closing);")
 	}

@@ -997,7 +997,7 @@ use edgerun_crypto::p256::ecdsa::SigningKey;
     /// Creates a real P-256 keypair and returns (NodeID, signing_key).
     fn make_real_keypair() -> (NodeID, SigningKey) {
         let mut bytes = [0u8; 32];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut bytes);
+        edgerun_crypto::getrandom::fill(&mut bytes).expect("getrandom failed");
         let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
         let encoded = signing_key.verifying_key().to_encoded_point(false);
         let b = encoded.as_bytes();

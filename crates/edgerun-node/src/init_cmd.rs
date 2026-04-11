@@ -26,7 +26,7 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         eprintln!("This is for development/testing only. NEVER use in production.");
         eprintln!();
         let mut key_bytes = [0u8; 32];
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut key_bytes);
+        edgerun_crypto::getrandom::fill(&mut key_bytes).expect("getrandom failed");
         let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&key_bytes.into()).unwrap_or_else(|e| {
             eprintln!("error: failed to create signing key: {}", e);
             std::process::exit(1);

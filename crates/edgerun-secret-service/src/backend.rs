@@ -251,7 +251,7 @@ impl Backend {
         for event in events {
             match event {
                 SecretEvent::Put(payload) => {
-                    let mut attrs: Vec<(String, String)> = payload.attributes.iter()
+                    let attrs: Vec<(String, String)> = payload.attributes.iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
                     let meta = CredentialMeta {

@@ -4,6 +4,7 @@
 
 use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
+use edgerun_crypto::getrandom;
 use edgerun_crypto::OsRng;
 use edgerun_crypto::x25519_dalek::{StaticSecret as X25519Secret, PublicKey as X25519PublicKey};
 
@@ -73,7 +74,7 @@ impl EcdhKeyPair {
             }
             KeyExchangeGroup::X25519 => {
                 let mut secret_bytes = [0u8; 32];
-                OsRng.fill_bytes(&mut secret_bytes);
+                getrandom::fill(&mut secret_bytes).expect("getrandom failed");
                 let secret = X25519Secret::from(secret_bytes);
                 let public: X25519PublicKey = (&secret).into();
                 Ok(EcdhKeyPair::X25519 {

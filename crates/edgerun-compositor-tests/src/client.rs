@@ -34,7 +34,7 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn cursor(&self) -> EventCursor {
+    pub fn cursor(&self) -> EventCursor<'_> {
         EventCursor(ArgCursor::from_args(&self.args, &self.fds))
     }
 }
@@ -400,7 +400,7 @@ impl WlClient {
         args.extend_from_slice(&[0u8; 4]); // fd placeholder
         args.extend_from_slice(&(size as i32).to_le_bytes());
 
-        let mut msg = Message {
+        let msg = Message {
             sender_id: shm_id,
             opcode: wl_shm::shm_request::CREATE_POOL,
             size: (8 + args.len()) as u16,

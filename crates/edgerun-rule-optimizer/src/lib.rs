@@ -93,7 +93,7 @@ pub fn optimize(
 ) -> OptimizationReport {
     let mut optimizations = Vec::new();
     let mut optimized_rules: Vec<OptimizableRule> = rules.to_vec();
-    let mut original_bytes = rules.iter().map(|r| rule_byte_size(r)).sum::<usize>();
+    let original_bytes = rules.iter().map(|r| rule_byte_size(r)).sum::<usize>();
 
     // ── Phase 1: Remove dead rules ──
     let mut live_rules = Vec::new();

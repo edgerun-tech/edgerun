@@ -41,7 +41,7 @@ fn main() {
     let mut matched = 0;
     let mut mismatched = 0;
     let mut errors = 0;
-    let mut start = Instant::now();
+    let start = Instant::now();
 
     for (i, path) in fuzz_files.iter().enumerate() {
         if i % 100 == 0 && i > 0 {

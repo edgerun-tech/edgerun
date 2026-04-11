@@ -1189,7 +1189,7 @@ pub fn nl80211_get_wiphy_info(ifindex: i32) -> Result<(String, u64, Option<u32>)
     let mut wiphy_name: Option<String> = None;
     let mut max_scan_ssids: Option<u32> = None;
     // Supported interface types bitmask
-    let mut supported_iftypes: u64 = (1 << NL80211_IFTYPE_STATION) | (1 << NL80211_IFTYPE_AP);
+    let supported_iftypes: u64 = (1 << NL80211_IFTYPE_STATION) | (1 << NL80211_IFTYPE_AP);
 
     let mut offset = genl_start;
     while offset + mem::size_of::<NlAttr>() <= msg_end {

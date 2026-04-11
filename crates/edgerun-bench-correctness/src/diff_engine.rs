@@ -135,7 +135,7 @@ pub fn load_png(path: &str) -> Option<(Vec<u8>, u32, u32)> {
     let info = reader.info();
     let width = info.width;
     let height = info.height;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let mut buf = vec![0u8; reader.output_buffer_size()?];
     let frame = reader.next_frame(&mut buf).ok()?;
     let len = frame.buffer_size();
     Some((buf[..len].to_vec(), width, height))

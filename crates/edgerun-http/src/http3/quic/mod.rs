@@ -219,7 +219,7 @@ impl ConnectionId {
     /// Generate random connection ID using CSPRNG
     pub fn random() -> Self {
         let mut data = [0u8; 8];
-        edgerun_crypto::getrandom::getrandom(&mut data)
+        edgerun_crypto::getrandom::fill(&mut data)
             .expect("CSPRNG failure");
         ConnectionId { data: data.to_vec() }
     }

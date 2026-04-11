@@ -57,7 +57,7 @@ pub fn quic_decode_varint(data: &[u8]) -> Result<(u64, usize), String> {
         1 => (first & 0x3F) as u64,
         2 => u16::from_be_bytes([first & 0x3F, data[1]]) as u64,
         4 => {
-            let mut b = [first & 0x3F, data[1], data[2], data[3]];
+            let b = [first & 0x3F, data[1], data[2], data[3]];
             u32::from_be_bytes(b) as u64
         }
         8 => {

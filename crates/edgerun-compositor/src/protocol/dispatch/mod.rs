@@ -291,7 +291,7 @@ fn send_delete_id(server: &mut WaylandServer, client_id: u32, obj_id: u32) {
 impl DispatchContext<'_> {
     /// Create an ArgCursor for the current message.
     #[inline]
-    pub fn cursor(&self) -> ArgCursor {
+    pub fn cursor(&self) -> ArgCursor<'_> {
         ArgCursor::from_message(&self.msg)
     }
 

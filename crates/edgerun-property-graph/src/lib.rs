@@ -53,7 +53,7 @@ impl PropertyGraph {
         Self { properties, shorthand_map, reverse_deps, stats }
     }
 
-    pub fn query(&self) -> PropertyQuery { PropertyQuery::new(self) }
+    pub fn query(&self) -> PropertyQuery<'_> { PropertyQuery::new(self) }
     pub fn get(&self, name: &str) -> Option<&CssProperty> { self.properties.get(name) }
     pub fn property_names(&self) -> Vec<&str> { self.properties.keys().map(|s| s.as_str()).collect() }
 
