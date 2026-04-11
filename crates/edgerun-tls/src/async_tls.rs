@@ -271,16 +271,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                     match async_read_record_fragment_poll(&mut self.stream, length, cx) {
                         Poll::Ready(Ok(fragment)) => {
                             if content_type == 23 {
+                                // application_data
                                 match self.read_cipher.decrypt(&fragment) {
                                     Ok((inner_type, plaintext)) => {
                                         if inner_type == 23 {
                                             return Poll::Ready(Ok(plaintext));
                                         }
-                Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-                Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                    Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
-                }
-                Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))),
+                                        // Post-handshake message (e.g., NewSessionTicket) — ignore
+                                    }
+                                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
+                                }
+                            } else if content_type == 21 {
+                                // alert
                                 if fragment.len() >= 2 {
                                     let level = AlertLevel::from_wire(fragment[0])
                                         .map_err(|e| TlsError::Protocol(e))?;
@@ -291,11 +293,15 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsStream<S> {
                                     }
                                 }
                             }
-                        Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-                        Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                            Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
+                            // content_type 22 (handshake post-handshake) or unknown — skip
                         }
-                        Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))),
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                        Poll::Pending => return Poll::Pending,
+                    }
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                Poll::Pending => return Poll::Pending,
+            }
         }
     }
 }
@@ -536,33 +542,41 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
                     match async_read_record_fragment_poll(&mut self.stream, length, cx) {
                         Poll::Ready(Ok(fragment)) => {
                             if content_type == 23 {
+                                // application_data
                                 match self.read_cipher.decrypt(&fragment) {
                                     Ok((inner_type, plaintext)) => {
                                         if inner_type == 23 {
                                             return Poll::Ready(Ok(plaintext));
                                         }
+                                        // Post-handshake message — ignore
                                     }
-                                    Err(e) => return Poll::Ready(Err(e)),
+                                    Err(e) => return Poll::Ready(Err(TlsError::Cipher(e))),
                                 }
-                Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-                Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                    Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
-                }
-                Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))),
+                            } else if content_type == 21 {
+                                // alert
+                                if fragment.len() >= 2 {
+                                    let level = AlertLevel::from_wire(fragment[0])
+                                        .map_err(|e| TlsError::Protocol(e))?;
+                                    let alert = Alert::from_wire(fragment[1])
                                         .map_err(|e| TlsError::Protocol(e))?;
                                     if level == AlertLevel::Fatal {
                                         return Poll::Ready(Err(TlsError::Alert(level, alert)));
                                     }
                                 }
                             }
+                            // content_type 22 (handshake) or unknown — skip
                         }
-                        Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                        Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
                         Poll::Pending => return Poll::Pending,
-                        Poll::Ready(Err(TlsError::Io(e))) => Poll::Ready(Err(e)),
-                        Poll::Ready(Err(TlsError::Alert(_, _))) => {
-                            Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::ConnectionReset, "TLS alert")))
-                        }
-                        Poll::Ready(Err(e)) => Poll::Ready(Err(std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e)))),
+                    }
+                }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(TlsError::Io(e))),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Async I/O helpers — thin async wrappers of the sync record reading
 // ---------------------------------------------------------------------------
@@ -579,15 +593,8 @@ async fn async_read_exact<S: AsyncRead + Unpin>(stream: &mut S, buf: &mut [u8]) 
             ));
         }
         pos += n;
-fn noop_waker() -> std::task::Waker {
-    const VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(
-        |data| { std::task::RawWaker::new(data, &VTABLE) },
-        |_| {},
-        |_| {},
-        |_| {},
-    );
-    let raw = std::task::RawWaker::new(std::ptr::null(), &VTABLE);
-    unsafe { std::task::Waker::from_raw(raw) }
+    }
+    Ok(())
 }
 
 /// Future for a single async read.
@@ -598,6 +605,10 @@ impl<'a, S: AsyncRead + Unpin> Future for ReadOnceFut<'a, S> {
         let this = unsafe { self.get_unchecked_mut() };
         Pin::new(&mut *this.stream).poll_read(cx, this.buf)
     }
+}
+
+fn async_read_once<'a, S: AsyncRead + Unpin>(stream: &'a mut S, buf: &'a mut [u8]) -> ReadOnceFut<'a, S> {
+    ReadOnceFut { stream, buf }
 }
 
 async fn async_read_record_header<S: AsyncRead + Unpin>(stream: &mut S) -> std::io::Result<(u8, u16, usize)> {
@@ -666,6 +677,14 @@ fn async_read_record_fragment_poll<S: AsyncRead + Unpin>(
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to read record fragment",
             )));
+        }
+        pos += n;
+        if pos == length {
+            return Poll::Ready(Ok(buf));
+        }
+    }
+}
+
 /// Async write — writes all bytes or errors.
 async fn async_write_all<S: AsyncWrite + Unpin>(stream: &mut S, buf: &[u8]) -> std::io::Result<()> {
     let mut pos = 0;
@@ -696,6 +715,28 @@ impl<'a, S: AsyncWrite + Unpin> Future for WriteOnceFut<'a, S> {
     }
 }
 
+fn async_write_all_poll<S: AsyncWrite + Unpin>(
+    stream: &mut S, buf: &[u8], cx: &mut Context<'_>,
+) -> Poll<std::io::Result<()>> {
+    let mut pos = 0;
+    while pos < buf.len() {
+        match Pin::new(&mut *stream).poll_write(cx, &buf[pos..]) {
+            Poll::Ready(Ok(n)) => {
+                if n == 0 {
+                    return Poll::Ready(Err(std::io::Error::new(
+                        std::io::ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    )));
+                }
+                pos += n;
+            }
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
+        }
+    }
+    Poll::Ready(Ok(()))
+}
+
 /// Single poll_flush call wrapped in a Future.
 fn async_flush_once<'a, S: AsyncWrite + Unpin>(stream: &'a mut S) -> FlushOnceFut<'a, S> {
     FlushOnceFut { stream }
@@ -712,9 +753,6 @@ impl<'a, S: AsyncWrite + Unpin> Future for FlushOnceFut<'a, S> {
 
 async fn async_flush<S: AsyncWrite + Unpin>(stream: &mut S) -> std::io::Result<()> {
     async_flush_once(stream).await
-}
-async fn async_flush<S: AsyncWrite + Unpin>(stream: &mut S) -> std::io::Result<()> {
-    async_flush_poll(stream, &mut std::task::Context::from_waker(noop_waker())).await
 }
 
 fn async_flush_poll<S: AsyncWrite + Unpin>(
@@ -953,17 +991,6 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     let mut diff = 0u8;
     for (x, y) in a.iter().zip(b.iter()) { diff |= x ^ y; }
     diff == 0
-}
-
-fn noop_waker() -> std::task::Waker {
-    const VTABLE: std::task::RawWakerVTable = std::task::RawWakerVTable::new(
-        |data| { std::task::RawWaker::new(data, &VTABLE) },
-        |_| {},
-        |_| {},
-        |_| {},
-    );
-    let raw = std::task::RawWaker::new(std::ptr::null(), &VTABLE);
-    unsafe { std::task::Waker::from_raw(raw) }
 }
 
 // ---------------------------------------------------------------------------
