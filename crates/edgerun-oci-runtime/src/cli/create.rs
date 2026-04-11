@@ -9,6 +9,18 @@ use std::path::Path;
 use crate::cli::GlobalOpts;
 use crate::json::{OciSpec, parse_oci_spec};
 use crate::lifecycle::{run_prestart_hooks, run_create_runtime_hooks, fork_container_child, save_created_state};
+use crate::process::validate_spec;
+
+fn host_os() -> &'static str {
+    if cfg!(target_os = "linux") { "linux" }
+    else { "unknown" }
+}
+
+fn host_arch() -> &'static str {
+    if cfg!(target_arch = "x86_64") { "amd64" }
+    else if cfg!(target_arch = "aarch64") { "arm64" }
+    else { "unknown" }
+}
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
@@ -30,6 +42,20 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("cannot read config: {}", e)))?;
     let spec: OciSpec = parse_oci_spec(&config_data)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("invalid OCI config: {}", e)))?;
+
+    // Validate platform compatibility
+    if let Some(ref platform) = spec.platform {
+        if !platform.matches_host() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                format!("platform mismatch: spec targets {}/{} but host is {}/{}",
+                    platform.os.as_deref().unwrap_or("unknown"),
+                    platform.arch.as_deref().unwrap_or("unknown"),
+                    host_os(), host_arch())));
+        }
+    }
+
+    // Validate spec properties (reject invalid values early)
+    validate_spec(&spec)?;
 
     // Step 1: prestart hooks (runtime namespace)
     run_prestart_hooks(&spec, id)?;

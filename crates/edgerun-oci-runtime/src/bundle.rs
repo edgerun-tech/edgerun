@@ -12,6 +12,7 @@ use crate::json::{
 use crate::default_namespaces;
 
 /// Create a minimal OCI bundle from a rootfs directory and command.
+/// Create a minimal OCI bundle from a rootfs directory and command.
 pub fn create_bundle(
     rootfs_path: &str,
     args: Vec<String>,
@@ -20,7 +21,14 @@ pub fn create_bundle(
 ) -> OciSpec {
     OciSpec {
         version: "1.0.2".into(),
-        platform: None,
+        platform: Some(crate::json::OciPlatform {
+            os: Some(if cfg!(target_os = "linux") { "linux".into() } else { "unknown".into() }),
+            arch: Some(if cfg!(target_arch = "x86_64") { "amd64".into() }
+                     else if cfg!(target_arch = "aarch64") { "arm64".into() }
+                     else { "unknown".into() }),
+            os_version: None,
+            os_features: None,
+        }),
         process: Some(OciProcess {
             args: Some(args),
             env,
