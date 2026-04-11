@@ -38,10 +38,12 @@ use std::time::Duration;
 
 use edgerun_rt::{
     AsyncRead, AsyncWrite, AsyncWriteExt,
-    AsyncTcpListener, AsyncTcpStream,
+    AsyncTcpListener,
     spawn,
 };
 
+#[cfg(feature = "tls")]
+use edgerun_rt::AsyncTcpStream;
 #[cfg(feature = "tls")]
 use edgerun_tls::async_tls::AsyncTlsServerStream;
 #[cfg(feature = "tls")]
@@ -64,7 +66,6 @@ impl CertRef {
     }
 }
 
-use crate::http1::body::AsyncBodyReader;
 use crate::http1::buf_reader::BufReader;
 use crate::http1::connection::{determine_connection, ConnectionState};
 use crate::http1::handler::Handler;

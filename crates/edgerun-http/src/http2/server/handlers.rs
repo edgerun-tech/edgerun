@@ -4,15 +4,11 @@
 
 use crate::http2::flow_control::FlowController;
 use crate::http2::frame::{
-    DataFrame, Frame, GoawayFrame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame,
+    Frame, PingFrame, PriorityFrame, RstStreamFrame,
     SettingsFrame, WindowUpdateFrame,
 };
-use crate::http2::headers::{validate_header_name_case, validate_request_headers};
-use crate::http2::hpack::{Decoder, Encoder};
-use super::continuation::ContinuationState;
 use super::response;
 use crate::http2::settings::Settings;
-use crate::http2::stream::StreamState;
 use crate::http2::ErrorCode;
 use super::FrameAction;
 use super::Http2Server;

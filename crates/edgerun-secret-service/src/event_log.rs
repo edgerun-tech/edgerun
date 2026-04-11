@@ -10,7 +10,6 @@
 //! message type. The event log is immutable — deletion is recorded
 //! by appending a `SecretDeletePayload` event.
 
-use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};

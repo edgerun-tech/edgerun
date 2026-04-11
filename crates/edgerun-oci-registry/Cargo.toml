@@ -13,5 +13,6 @@ edgerun-json = { path = "../edgerun-json", features = ["serde"] }
 edgerun-secret-service = { path = "../edgerun-secret-service" }
 edgerun-tls = { path = "../edgerun-tls" }
 flate2 = "1"
+serde = { version = "1", features = ["derive"] }
 tar = "0.4"
 zstd = "0.13"

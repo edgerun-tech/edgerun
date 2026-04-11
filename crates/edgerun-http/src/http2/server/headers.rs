@@ -1,6 +1,6 @@
 //! HEADERS and CONTINUATION frame handlers for the HTTP/2 server.
 
-use crate::http2::frame::{Frame, HeadersFrame, RstStreamFrame};
+use crate::http2::frame::{Frame, HeadersFrame};
 use crate::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http2::hpack::{Decoder, Encoder};
 use super::continuation::ContinuationState;

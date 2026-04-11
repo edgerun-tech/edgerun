@@ -25,8 +25,7 @@ fn require_hardware() {
 /// cycle so sessions always succeed.
 pub(crate) mod test_policy {
     use edgerun_capabilities::{
-        CapabilityAccessClass, CapabilityError, CapabilityGrant, CapabilityInvocation,
-        CapabilityOperation, CapabilityRequest, CapabilityRevocation,
+        CapabilityError, CapabilityInvocation,
     };
     use edgerun_proto::edgerun::v0::capability_runtime::{
         CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,

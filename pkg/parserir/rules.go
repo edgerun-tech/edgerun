@@ -1224,6 +1224,300 @@ func TreeRules() []*html.TreeRule {
 		SpecParagraph: "13.2.6.4.8",
 	})
 
+	// ── IN_HEAD_NOSCRIPT mode (§13.2.6.4.5) ──
+	// DOCTYPE → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_DOCTYPE}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.5",
+	})
+	// </noscript> → pop, switch to InHead
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_EndTag{EndTag: "noscript"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_POP},
+		NextMode: inHead,
+		SpecParagraph: "13.2.6.4.5",
+	})
+	// noscript in body mode → treat as raw text
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: "noscript"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.5",
+	})
+	// "a", "b", "big", "code", "em", "font", "i", "s", "small", "strike", "strong", "tt", "u" → insert
+	for _, tag := range []string{"a", "b", "big", "code", "em", "font", "i", "s", "small", "strike", "strong", "tt", "u"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inHeadNoscript,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR},
+			NextMode: inHead,
+			Otherwise: true,
+			SpecParagraph: "13.2.6.4.5",
+		})
+	}
+	// EOF → handled by generic EOF
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_EOF}},
+		NextMode: afterAfterBody,
+		SpecParagraph: "13.2.6.4.5",
+	})
+	// Anything else → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyStartTag{AnyStartTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.5",
+	})
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyEndTag{AnyEndTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.5",
+	})
+	rules = append(rules, &html.TreeRule{
+		Mode:    inHeadNoscript,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_CharacterToken{CharacterToken: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.5",
+	})
+
+	// ── IN_SELECT mode (§13.2.6.4.17) ──
+	// EOF → afterAfterBody
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_EOF}},
+		NextMode: afterAfterBody,
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// </select> → pop until select, if stack had select switch to appropriate mode
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_EndTag{EndTag: "select"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_POP_UNTIL},
+		PopUntilTag: "select",
+		NextMode: afterBody,
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// "noscript" start tag → parse error, ignore (if scripting enabled)
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: "noscript"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// </noscript> → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_EndTag{EndTag: "noscript"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// "template" → switch to inTemplate
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: "template"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_INSERT},
+		NextMode: inTemplate,
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// Any other start tag → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyStartTag{AnyStartTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// Any other end tag → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyEndTag{AnyEndTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// Character → append text
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_CharacterToken{CharacterToken: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_APPEND_CHARACTER},
+		NextMode: inSelect,
+		SpecParagraph: "13.2.6.4.17",
+	})
+	// Comment → append
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelect,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_COMMENT}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_APPEND_COMMENT},
+		NextMode: inSelect,
+		SpecParagraph: "13.2.6.4.17",
+	})
+
+	// ── IN_SELECT_IN_TABLE mode (§13.2.6.4.18) ──
+	// EOF → afterAfterBody
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelectInTable,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_EOF}},
+		NextMode: afterAfterBody,
+		SpecParagraph: "13.2.6.4.18",
+	})
+	// "caption", "table", "tbody", "tfoot", "thead", "tr", "td", "th" → parse error, clear select, reprocess in inTable
+	for _, tag := range []string{"caption", "table", "tbody", "tfoot", "thead", "tr", "td", "th"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inSelectInTable,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR},
+			NextMode: inTable,
+			Otherwise: true,
+			SpecParagraph: "13.2.6.4.18",
+		})
+	}
+	// </caption>, </table>, etc → parse error, ignore
+	for _, tag := range []string{"caption", "table", "tbody", "tfoot", "thead", "tr", "td", "th"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inSelectInTable,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_EndTag{EndTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+			SpecParagraph: "13.2.6.4.18",
+		})
+	}
+	// Anything else → reprocess in inSelect
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelectInTable,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyStartTag{AnyStartTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inSelect,
+		SpecParagraph: "13.2.6.4.18",
+	})
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelectInTable,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyEndTag{AnyEndTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inSelect,
+		SpecParagraph: "13.2.6.4.18",
+	})
+	rules = append(rules, &html.TreeRule{
+		Mode:    inSelectInTable,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_CharacterToken{CharacterToken: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inSelect,
+		SpecParagraph: "13.2.6.4.18",
+	})
+
+	// ── IN_TEMPLATE mode (§13.2.6.4.19) ──
+	// </template> → pop, reset insertion mode
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_EndTag{EndTag: "template"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_POP, html.TreeAction_TREE_ACTION_RESET_INSERTION_MODE},
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// "base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title" → inHead
+	for _, tag := range []string{"base", "basefont", "bgsound", "link", "meta", "noframes", "script", "style", "template", "title"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inTemplate,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+			NextMode: inHead,
+			SpecParagraph: "13.2.6.4.19",
+		})
+	}
+	// "caption", "colgroup", "tbody", "tfoot", "thead" → inTable
+	for _, tag := range []string{"caption", "colgroup", "tbody", "tfoot", "thead"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inTemplate,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+			NextMode: inTable,
+			SpecParagraph: "13.2.6.4.19",
+		})
+	}
+	// "col" → inColumnGroup
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: "col"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inColumnGroup,
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// "tr" → inTableBody
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: "tr"}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inTableBody,
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// "td", "th", "caption" → inRow
+	for _, tag := range []string{"td", "th", "caption"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inTemplate,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+			NextMode: inRow,
+			SpecParagraph: "13.2.6.4.19",
+		})
+	}
+	// "body", "frameset", "html" → inBody
+	for _, tag := range []string{"body", "frameset", "html"} {
+		rules = append(rules, &html.TreeRule{
+			Mode:    inTemplate,
+			Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_StartTag{StartTag: tag}},
+			Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+			NextMode: inBody,
+			SpecParagraph: "13.2.6.4.19",
+		})
+	}
+	// Any other start tag → inBody
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyStartTag{AnyStartTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_REPROCESS},
+		NextMode: inBody,
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// Any end tag → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_AnyEndTag{AnyEndTag: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// Character → append
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_CharacterToken{CharacterToken: true}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_APPEND_CHARACTER},
+		NextMode: inTemplate,
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// Comment → append
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_COMMENT}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_APPEND_COMMENT},
+		NextMode: inTemplate,
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// DOCTYPE → parse error, ignore
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_DOCTYPE}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_PARSE_ERROR, html.TreeAction_TREE_ACTION_IGNORE},
+		SpecParagraph: "13.2.6.4.19",
+	})
+	// EOF → pop until template popped, clear stack, switch to afterAfterBody
+	rules = append(rules, &html.TreeRule{
+		Mode:    inTemplate,
+		Trigger: &html.TokenTrigger{Trigger: &html.TokenTrigger_TokenType{TokenType: html.TokenType_TOKEN_TYPE_EOF}},
+		Actions: []html.TreeAction{html.TreeAction_TREE_ACTION_POP_UNTIL},
+		PopUntilTag: "template",
+		NextMode: afterAfterBody,
+		SpecParagraph: "13.2.6.4.19",
+	})
+
 	return rules
 }
 

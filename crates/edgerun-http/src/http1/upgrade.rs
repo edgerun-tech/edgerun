@@ -9,7 +9,6 @@
 //! 3. Server sends `101 Switching Protocols` response
 //! 4. Connection transitions to the new protocol
 
-use crate::http1::connection::ConnectionState;
 use crate::HeaderMap;
 use std::fmt;
 

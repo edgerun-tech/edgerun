@@ -13,8 +13,8 @@ use std::time::Duration;
 
 use edgerun_dns::DnsClient;
 use edgerun_rt::{
-    AsyncRead, AsyncWrite, AsyncWriteExt,
-    AsyncTcpStream, AsyncReadHalf, AsyncWriteHalf,
+    AsyncRead, AsyncWriteExt,
+    AsyncTcpStream, AsyncReadHalf,
     ConnectFuture,
 };
 

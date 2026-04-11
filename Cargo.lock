@@ -1861,6 +1861,7 @@ dependencies = [
  "edgerun-secret-service",
  "edgerun-tls",
  "flate2",
+ "serde",
  "tar",
  "zstd",
 ]

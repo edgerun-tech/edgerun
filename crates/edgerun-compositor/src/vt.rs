@@ -123,11 +123,11 @@ impl VtManager {
         }
 
         // Install signal handlers for VT release/acquire using the simpler signal() API
-        let prev = unsafe { libc::signal(libc::SIGUSR1, vt_release_signal as libc::sighandler_t) };
+        let prev = unsafe { libc::signal(libc::SIGUSR1, vt_release_signal as *const () as libc::sighandler_t) };
         if prev == libc::SIG_ERR {
             eprintln!("[vt] Failed to install SIGUSR1 handler");
         }
-        let prev = unsafe { libc::signal(libc::SIGUSR2, vt_acquire_signal as libc::sighandler_t) };
+        let prev = unsafe { libc::signal(libc::SIGUSR2, vt_acquire_signal as *const () as libc::sighandler_t) };
         if prev == libc::SIG_ERR {
             eprintln!("[vt] Failed to install SIGUSR2 handler");
         }

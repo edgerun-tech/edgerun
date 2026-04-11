@@ -5,7 +5,6 @@ use crate::http2::frame::{
 };
 use crate::http2::hpack::Encoder;
 use crate::http2::stream::StreamManager;
-use crate::http2::ErrorCode;
 use super::FrameAction;
 
 /// Send a 200 OK response.
