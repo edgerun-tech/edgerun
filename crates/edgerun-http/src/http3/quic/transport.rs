@@ -1,7 +1,6 @@
 //! QUIC transport layer (loss recovery, congestion control, flow control)
 
 use super::frame::QuicFrame;
-use super::packet::QuicPacket;
 use super::{ConnectionId, TransportParameters};
 
 /// QUIC transport connection state

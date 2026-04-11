@@ -1,6 +1,6 @@
 //! QPACK decoder (RFC 9204)
 
-use super::static_table::{self, STATIC_TABLE};
+use super::static_table;
 use super::{QpackError, QpackResult, DEFAULT_MAX_TABLE_CAPACITY};
 
 /// Dynamic table entry

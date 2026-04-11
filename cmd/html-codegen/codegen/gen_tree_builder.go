@@ -27,6 +27,7 @@ func GenerateTreeBuilderRust(ruleSet *html.TreeBuilderRuleSet, voidElements []st
 		html.InsertionMode_BEFORE_HTML_MODE,
 		html.InsertionMode_BEFORE_HEAD_MODE,
 		html.InsertionMode_IN_HEAD_MODE,
+		html.InsertionMode_IN_HEAD_NOSCRIPT_MODE,
 		html.InsertionMode_AFTER_HEAD_MODE,
 		html.InsertionMode_IN_BODY_MODE,
 		html.InsertionMode_TEXT_MODE,
@@ -42,6 +43,9 @@ func GenerateTreeBuilderRust(ruleSet *html.TreeBuilderRuleSet, voidElements []st
 		html.InsertionMode_AFTER_FRAMESET_MODE,
 		html.InsertionMode_AFTER_AFTER_BODY_MODE,
 		html.InsertionMode_AFTER_AFTER_FRAMESET_MODE,
+		html.InsertionMode_IN_SELECT_MODE,
+		html.InsertionMode_IN_SELECT_IN_TABLE_MODE,
+		html.InsertionMode_IN_TEMPLATE_MODE,
 	}
 
 	// Generate mode handlers

@@ -52,7 +52,7 @@ pub enum TokenizerMode {
 
 /// WHATWG §13.2.6 HTML tree builder — rule-driven DOM construction.
 ///
-/// Generated from proto IR with 352 tree rules across 24 insertion modes.
+/// Generated from proto IR with 431 tree rules across 24 insertion modes.
 ///
 /// The tree builder consumes tokens from the tokenizer and produces a DOM tree
 /// by applying insertion mode rules from the WHATWG spec.
@@ -92,6 +92,7 @@ impl TreeBuilder {
             InsertionMode::BeforeHtml => self.handle_before_html(token),
             InsertionMode::BeforeHead => self.handle_before_head(token),
             InsertionMode::InHead => self.handle_in_head(token),
+            InsertionMode::InHeadNoscript => self.handle_in_head_noscript(token),
             InsertionMode::AfterHead => self.handle_after_head(token),
             InsertionMode::InBody => self.handle_in_body(token),
             InsertionMode::Text => self.handle_text(token),
@@ -107,6 +108,9 @@ impl TreeBuilder {
             InsertionMode::AfterFrameset => self.handle_after_frameset(token),
             InsertionMode::AfterAfterBody => self.handle_after_after_body(token),
             InsertionMode::AfterAfterFrameset => self.handle_after_after_frameset(token),
+            InsertionMode::InSelect => self.handle_in_select(token),
+            InsertionMode::InSelectInTable => self.handle_in_select_in_table(token),
+            InsertionMode::InTemplate => self.handle_in_template(token),
             _ => self.handle_fallback(token),
         }
     }
@@ -321,6 +325,87 @@ impl TreeBuilder {
                 } else if !self.completed.is_empty() {
                     // Append to last completed
                 }
+            }
+            Token::Doctype => {
+                // parse error, ignore DOCTYPE
+            }
+            Token::Eof => {
+                self.insertion_mode = InsertionMode::AfterAfterBody;
+            }
+        }
+    }
+
+    /// InHeadNoscript mode rules.
+    /// Generated from 20 rules.
+    fn handle_in_head_noscript(&mut self, token: &Token) {
+        match token {
+            Token::StartTag { name, attrs, self_closing } => {
+                match &name[..] {
+                "a" => {
+                    self.parse_errors += 1;
+                }
+                "b" => {
+                    self.parse_errors += 1;
+                }
+                "big" => {
+                    self.parse_errors += 1;
+                }
+                "code" => {
+                    self.parse_errors += 1;
+                }
+                "em" => {
+                    self.parse_errors += 1;
+                }
+                "font" => {
+                    self.parse_errors += 1;
+                }
+                "i" => {
+                    self.parse_errors += 1;
+                }
+                "noscript" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "s" => {
+                    self.parse_errors += 1;
+                }
+                "small" => {
+                    self.parse_errors += 1;
+                }
+                "strike" => {
+                    self.parse_errors += 1;
+                }
+                "strong" => {
+                    self.parse_errors += 1;
+                }
+                "tt" => {
+                    self.parse_errors += 1;
+                }
+                "u" => {
+                    self.parse_errors += 1;
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                }
+            }
+            Token::EndTag { name } => {
+                match &name[..] {
+                "noscript" => {
+                    if let Some(_) = self.open_elements.pop() {}
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                }
+            }
+            Token::Character(text) => {
+                // parse error, ignore character
+            }
+            Token::Comment(text) => {
+                // ignore comment
             }
             Token::Doctype => {
                 // parse error, ignore DOCTYPE
@@ -1651,6 +1736,334 @@ impl TreeBuilder {
             }
             Token::Eof => {
                 self.insertion_mode = InsertionMode::AfterAfterFrameset;
+            }
+        }
+    }
+
+    /// InSelect mode rules.
+    /// Generated from 9 rules.
+    fn handle_in_select(&mut self, token: &Token) {
+        match token {
+            Token::StartTag { name, attrs, self_closing } => {
+                match &name[..] {
+                "noscript" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "template" => {
+                    self.insert(name, attrs, *self_closing);
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                }
+            }
+            Token::EndTag { name } => {
+                match &name[..] {
+                "noscript" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "select" => {
+                    self.parse_errors += 1;
+                    self.pop_until("select");
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                }
+            }
+            Token::Character(text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            }
+            Token::Comment(text) => {
+                if let Some(parent) = self.open_elements.last_mut() {
+                    parent.children.push(Node::Comment(text.clone()));
+                } else if !self.completed.is_empty() {
+                    // Append to last completed
+                }
+            }
+            Token::Doctype => {
+                // ignore DOCTYPE
+            }
+            Token::Eof => {
+                self.insertion_mode = InsertionMode::AfterAfterBody;
+            }
+        }
+    }
+
+    /// InSelectInTable mode rules.
+    /// Generated from 20 rules.
+    fn handle_in_select_in_table(&mut self, token: &Token) {
+        match token {
+            Token::StartTag { name, attrs, self_closing } => {
+                match &name[..] {
+                "caption" => {
+                    self.parse_errors += 1;
+                }
+                "table" => {
+                    self.parse_errors += 1;
+                }
+                "tbody" => {
+                    self.parse_errors += 1;
+                }
+                "td" => {
+                    self.parse_errors += 1;
+                }
+                "tfoot" => {
+                    self.parse_errors += 1;
+                }
+                "th" => {
+                    self.parse_errors += 1;
+                }
+                "thead" => {
+                    self.parse_errors += 1;
+                }
+                "tr" => {
+                    self.parse_errors += 1;
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InSelect;
+                    self.handle_token(token);
+                    return;
+                }
+                }
+            }
+            Token::EndTag { name } => {
+                match &name[..] {
+                "caption" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "table" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "tbody" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "td" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "tfoot" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "th" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "thead" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                "tr" => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InSelect;
+                    self.handle_token(token);
+                    return;
+                }
+                }
+            }
+            Token::Character(text) => {
+                // Reprocess character in next mode
+                self.insertion_mode = InsertionMode::InSelect;
+                self.handle_token(token);
+            }
+            Token::Comment(text) => {
+                // ignore comment
+            }
+            Token::Doctype => {
+                // ignore DOCTYPE
+            }
+            Token::Eof => {
+                self.insertion_mode = InsertionMode::AfterAfterBody;
+            }
+        }
+    }
+
+    /// InTemplate mode rules.
+    /// Generated from 30 rules.
+    fn handle_in_template(&mut self, token: &Token) {
+        match token {
+            Token::StartTag { name, attrs, self_closing } => {
+                match &name[..] {
+                "base" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "basefont" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "bgsound" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "body" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InBody;
+                    self.handle_token(token);
+                    return;
+                }
+                "caption" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
+                }
+                "col" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InColumnGroup;
+                    self.handle_token(token);
+                    return;
+                }
+                "colgroup" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
+                }
+                "frameset" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InBody;
+                    self.handle_token(token);
+                    return;
+                }
+                "html" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InBody;
+                    self.handle_token(token);
+                    return;
+                }
+                "link" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "meta" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "noframes" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "script" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "style" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "tbody" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
+                }
+                "td" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InRow;
+                    self.handle_token(token);
+                    return;
+                }
+                "template" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "tfoot" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
+                }
+                "th" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InRow;
+                    self.handle_token(token);
+                    return;
+                }
+                "thead" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
+                }
+                "title" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InHead;
+                    self.handle_token(token);
+                    return;
+                }
+                "tr" => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InTableBody;
+                    self.handle_token(token);
+                    return;
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    self.insertion_mode = InsertionMode::InBody;
+                    self.handle_token(token);
+                    return;
+                }
+                }
+            }
+            Token::EndTag { name } => {
+                match &name[..] {
+                "template" => {
+                    if let Some(_) = self.open_elements.pop() {}
+                    self.reset_insertion_mode();
+                }
+                _ => {
+                    self.parse_errors += 1;
+                    // ignore token
+                }
+                }
+            }
+            Token::Character(text) => {
+                if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
+            }
+            Token::Comment(text) => {
+                if let Some(parent) = self.open_elements.last_mut() {
+                    parent.children.push(Node::Comment(text.clone()));
+                } else if !self.completed.is_empty() {
+                    // Append to last completed
+                }
+            }
+            Token::Doctype => {
+                // parse error, ignore DOCTYPE
+            }
+            Token::Eof => {
+                self.insertion_mode = InsertionMode::AfterAfterBody;
             }
         }
     }

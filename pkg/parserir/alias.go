@@ -140,6 +140,10 @@ const (
 	afterFrameset   = html.InsertionMode_AFTER_FRAMESET_MODE
 	afterAfterBody  = html.InsertionMode_AFTER_AFTER_BODY_MODE
 	afterAfterFS    = html.InsertionMode_AFTER_AFTER_FRAMESET_MODE
+	inHeadNoscript  = html.InsertionMode_IN_HEAD_NOSCRIPT_MODE
+	inSelect        = html.InsertionMode_IN_SELECT_MODE
+	inSelectInTable = html.InsertionMode_IN_SELECT_IN_TABLE_MODE
+	inTemplate      = html.InsertionMode_IN_TEMPLATE_MODE
 )
 
 var (

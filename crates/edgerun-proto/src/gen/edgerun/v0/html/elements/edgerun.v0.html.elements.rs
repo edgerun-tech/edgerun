@@ -57,7 +57,7 @@ const NAME: &'static str = "ElementCatalog";
 const PACKAGE: &'static str = "edgerun.v0.html.elements";
 fn full_name() -> ::prost::alloc::string::String { "edgerun.v0.html.elements.ElementCatalog".into() }fn type_url() -> ::prost::alloc::string::String { "/edgerun.v0.html.elements.ElementCatalog".into() }}
 // / HTML Element Definitions — generated from the WHATWG HTML Living Standard.
-// / DO NOT EDIT. Regenerate with: scripts/generate_html_proto.py
+// / DO NOT EDIT. Regenerate with: go run ./cmd/html-codegen
 
 /// / All HTML elements defined in the WHATWG HTML Living Standard.
 /// / Total: 108 elements.
