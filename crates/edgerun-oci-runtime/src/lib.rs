@@ -23,6 +23,8 @@ pub mod rootfs;
 pub mod fifo;
 pub mod error;
 pub mod config_builder;
+pub mod ebpf_devices;
+pub mod ebpf_netcls;
 mod bundle;
 pub mod process;
 mod handle;

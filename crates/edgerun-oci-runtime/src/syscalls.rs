@@ -320,3 +320,248 @@ pub fn rlimit_name_to_int(name: &str) -> Option<u32> {
         _ => None,
     }
 }
+
+// ===========================================================================
+// eBPF program constants and syscalls
+// ===========================================================================
+
+/// eBPF instruction encoding constants (kernel include/uapi/linux/bpf.h).
+pub mod ebpf_insn {
+    // eBPF instruction classes
+    pub const BPF_LD: u8 = 0x00;
+    pub const BPF_LDX: u8 = 0x01;
+    pub const BPF_ST: u8 = 0x02;
+    pub const BPF_STX: u8 = 0x03;
+    pub const BPF_ALU: u8 = 0x04;
+    pub const BPF_JMP: u8 = 0x05;
+    pub const BPF_RET: u8 = 0x06;
+    pub const BPF_ALU64: u8 = 0x07;
+
+    // eBPF source/destination modifiers
+    pub const BPF_K: u8 = 0x00; // immediate
+    pub const BPF_X: u8 = 0x08; // register
+
+    // eBPF size modifiers (for LD/STX/LDX)
+    pub const BPF_W: u8 = 0x00; // 32-bit word
+    pub const BPF_H: u8 = 0x08; // 16-bit half-word
+    pub const BPF_B: u8 = 0x10; // 8-bit byte
+    pub const BPF_DW: u8 = 0x18; // 64-bit double-word
+
+    // eBPF mode modifiers (for LD/ST)
+    pub const BPF_IMM: u8 = 0x00;
+    pub const BPF_MEM: u8 = 0x60;
+
+    // eBPF ALU/ALU64 opcodes
+    pub const BPF_MOV: u8 = 0xb0; // BPF_ALU64 | BPF_MOV | BPF_K
+
+    // eBPF JMP opcodes
+    pub const BPF_JEQ: u8 = 0x10;
+    pub const BPF_JNE: u8 = 0x50;
+    pub const BPF_JGT: u8 = 0x20;
+    pub const BPF_JGE: u8 = 0x30;
+    pub const BPF_JSGT: u8 = 0x60;
+    pub const BPF_JSGE: u8 = 0x70;
+    pub const BPF_EXIT: u8 = 0x90;
+}
+
+/// eBPF JMP instruction constants (alias for compatibility).
+pub mod bpf_jmp {
+    pub use crate::syscalls::ebpf_insn::BPF_JEQ as BPF_JEQ;
+    pub use crate::syscalls::ebpf_insn::BPF_JNE as BPF_JNE;
+    pub use crate::syscalls::ebpf_insn::BPF_JGT as BPF_JGT;
+    pub use crate::syscalls::ebpf_insn::BPF_JGE as BPF_JGE;
+    pub use crate::syscalls::ebpf_insn::BPF_EXIT as BPF_EXIT;
+}
+
+/// eBPF size constants (alias for compatibility).
+pub mod bpf_size {
+    pub use crate::syscalls::ebpf_insn::BPF_W as BPF_W;
+    pub use crate::syscalls::ebpf_insn::BPF_H as BPF_H;
+    pub use crate::syscalls::ebpf_insn::BPF_B as BPF_B;
+    pub use crate::syscalls::ebpf_insn::BPF_DW as BPF_DW;
+}
+
+/// eBPF program types (kernel include/uapi/linux/bpf.h).
+pub mod bpf_prog_type {
+    pub const BPF_PROG_TYPE_UNSPEC: u32 = 0;
+    pub const BPF_PROG_TYPE_SOCKET_FILTER: u32 = 1;
+    pub const BPF_PROG_TYPE_KPROBE: u32 = 2;
+    pub const BPF_PROG_TYPE_SCHED_CLS: u32 = 3;
+    pub const BPF_PROG_TYPE_SCHED_ACT: u32 = 4;
+    pub const BPF_PROG_TYPE_CGROUP_SKB: u32 = 8;
+    pub const BPF_PROG_TYPE_CGROUP_SOCK: u32 = 9;
+    pub const BPF_PROG_TYPE_CGROUP_DEVICE: u32 = 15;
+}
+
+/// eBPF attach types (kernel include/uapi/linux/bpf.h).
+pub mod bpf_attach_type {
+    pub const BPF_CGROUP_INET_INGRESS: u32 = 0;
+    pub const BPF_CGROUP_INET_EGRESS: u32 = 1;
+    pub const BPF_CGROUP_DEVICE: u32 = 14;
+}
+
+/// eBPF return value for cgroup device programs (allow device access).
+pub const BPF_CGROUP_DEV_ALLOW: i32 = 0;
+
+/// Build an eBPF instruction (8 bytes, kernel bpf_insn format).
+///
+/// Layout:
+///   code: u8  — opcode
+///   dst_reg: u4, src_reg: u4 — packed in byte 1
+///   off: i16 — little-endian bytes 2-3
+///   imm: i32 — little-endian bytes 4-7
+pub fn ebpf_insn(code: u8, dst: u8, src: u8, off: i16, imm: i32) -> [u8; 8] {
+    let mut buf = [0u8; 8];
+    buf[0] = code;
+    buf[1] = (dst & 0x0f) | ((src & 0x0f) << 4);
+    buf[2..4].copy_from_slice(&off.to_le_bytes());
+    buf[4..8].copy_from_slice(&imm.to_le_bytes());
+    buf
+}
+
+/// eBPF syscall numbers.
+#[cfg(target_arch = "x86_64")]
+const SYS_BPF: i64 = 321;
+#[cfg(target_arch = "aarch64")]
+const SYS_BPF: i64 = 280;
+
+/// Attributes for BPF_PROG_LOAD.
+#[repr(C)]
+struct BpfProgLoadAttr {
+    prog_type: u32,
+    insn_cnt: u32,
+    insns: u64,
+    license: u64,
+    log_level: u32,
+    log_size: u32,
+    log_buf: u64,
+    kern_version: u32,
+    prog_flags: u32,
+    _padding: [u32; 4],
+}
+
+/// Load an eBPF program into the kernel.
+///
+/// Convenience wrapper: takes a slice of 8-byte instructions and a license string.
+pub fn bpf_prog_load(
+    prog_type: u32,
+    insns: &[[u8; 8]],
+    license: &str,
+    _attach_type: u32,
+) -> std::io::Result<i32> {
+    let insn_cnt = insns.len() as u32;
+    let license_c = std::ffi::CString::new(license).unwrap();
+
+    let attr = BpfProgLoadAttr {
+        prog_type,
+        insn_cnt,
+        insns: insns.as_ptr() as u64,
+        license: license_c.as_ptr() as u64,
+        log_level: 0,
+        log_size: 0,
+        log_buf: 0,
+        kern_version: 0,
+        prog_flags: 0,
+        _padding: [0; 4],
+    };
+
+    let ret = unsafe { libc::syscall(SYS_BPF, 5i64 /* BPF_PROG_LOAD */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgLoadAttr>()) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(ret as i32)
+    }
+}
+
+/// Attach an eBPF program to a cgroup.
+pub fn bpf_prog_attach(cgroup_fd: i32, prog_fd: i32, attach_type: u32) -> std::io::Result<()> {
+    #[repr(C)]
+    struct BpfProgAttachAttr {
+        target_fd: i32,
+        attach_bpf_fd: i32,
+        attach_type: u32,
+        attach_flags: u32,
+    }
+
+    let attr = BpfProgAttachAttr {
+        target_fd: cgroup_fd,
+        attach_bpf_fd: prog_fd,
+        attach_type,
+        attach_flags: 0,
+    };
+
+    let ret = unsafe { libc::syscall(SYS_BPF, 8i64 /* BPF_PROG_ATTACH */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgAttachAttr>()) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Detach an eBPF program from a cgroup.
+pub fn bpf_prog_detach(cgroup_fd: i32, prog_fd: i32, attach_type: u32) -> std::io::Result<()> {
+    #[repr(C)]
+    struct BpfProgDetachAttr {
+        target_fd: i32,
+        attach_bpf_fd: i32,
+        attach_type: u32,
+    }
+
+    let attr = BpfProgDetachAttr {
+        target_fd: cgroup_fd,
+        attach_bpf_fd: prog_fd,
+        attach_type,
+    };
+
+    let ret = unsafe { libc::syscall(SYS_BPF, 15i64 /* BPF_PROG_DETACH */, &attr as *const _ as libc::c_ulong, std::mem::size_of::<BpfProgDetachAttr>()) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+// eBPF register helpers used by ebpf_devices/ebpf_netcls
+
+/// BPF_STX | BPF_MEM | size: *(size *)(dst + off) = src
+pub fn st_imm(size: u8, dst: u8, src: u8, off: i16) -> [u8; 8] {
+    ebpf_insn(0x03 | size | 0x60, dst, src, off, 0)
+}
+
+/// BPF_LDX | BPF_MEM | size: dst = *(size *)(src + off)
+pub fn ld_imm(size: u8, dst: u8, src: u8, off: i16) -> [u8; 8] {
+    ebpf_insn(0x01 | size | 0x60, dst, src, off, 0)
+}
+
+/// BPF_ALU64 | BPF_MOV | BPF_K: dst = imm
+pub fn mov_imm(dst: u8, imm: i32) -> [u8; 8] {
+    ebpf_insn(0xb7, dst, 0, 0, imm)
+}
+
+/// BPF_ALU64 | BPF_MOV | BPF_X: dst = src
+pub fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
+    ebpf_insn(0xbf, dst, src, 0, 0)
+}
+
+/// BPF_JMP | BPF_JNE | BPF_K: if dst != imm then jt else jf
+pub fn jmp_imm(jmp: u8, dst: u8, imm: i32, jt: u8) -> [u8; 8] {
+    ebpf_insn(0x05 | jmp, dst, 0, 0, imm)
+        .into_iter().enumerate()
+        .fold([0u8; 8], |mut arr, (i, b)| { arr[i] = b; arr })
+}
+
+/// BPF_JMP | BPF_EXIT: return
+pub fn exit() -> [u8; 8] {
+    ebpf_insn(0x95, 0, 0, 0, 0)
+}
+
+/// R6 register number.
+pub const R0: u8 = 0;
+/// R6 register number (callee-saved).
+pub const R6: u8 = 6;
+/// R7 register number (callee-saved).
+pub const R7: u8 = 7;
+/// R1 register number (first argument / context pointer).
+pub const R1: u8 = 1;
+/// R2 register number (second argument / temp).
+pub const R2: u8 = 2;
