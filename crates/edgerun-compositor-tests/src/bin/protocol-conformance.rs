@@ -2,7 +2,6 @@
 
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
 
 const OVERLAY_FILE: &str = "/tmp/edgerun-test-results.txt";
 
@@ -78,7 +77,7 @@ fn run_tests() -> Vec<(String, bool, String)> {
 
     if failed > 0 {
         write_result("[conformance] FAILURES:");
-        for (name, _, msg) in &results {
+        for (name, _, _msg) in &results {
             if !results.iter().find(|(n, p, _)| n == name && *p).map(|_| true).unwrap_or(false) {
                 // This is a failure
             }
@@ -106,7 +105,7 @@ pub fn main() {
 
     if failed > 0 {
         eprintln!("[conformance] FAILURES:");
-        for (name, _, msg) in &results {
+        for (name, _, _msg) in &results {
             if !results.iter().find(|(n, p, _)| n == name && *p).map(|_| true).unwrap_or(false) {
                 // skip
             }

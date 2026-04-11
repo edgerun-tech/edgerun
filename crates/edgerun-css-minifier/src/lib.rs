@@ -15,8 +15,6 @@
 //! let bytes = encoder.finish(); // ~8 bytes vs ~60 bytes for string form
 //! ```
 
-use std::collections::BTreeMap;
-
 /// CSS property IDs — unique discriminants for minification.
 /// These are NOT proto enum indices (some protos share indices).
 /// They're compact IDs optimized for varint encoding.

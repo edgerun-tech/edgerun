@@ -368,7 +368,7 @@ pub fn submit_signal(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Re
 }
 
 /// Wait for a command to complete using syncobj.
-fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), CapabilityError> {
+fn wait_cmd(_fd: RawFd, _syncobj_handle: u32, timeout_ms: u32) -> Result<(), CapabilityError> {
     // For now, use a simple sleep-based wait
     // Real impl would use syncobj wait ioctl (DRM_IOCTL_SYNCOBJ_WAIT)
     std::thread::sleep(std::time::Duration::from_millis(timeout_ms as u64));

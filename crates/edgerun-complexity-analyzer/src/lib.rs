@@ -129,7 +129,7 @@ pub fn analyze(
         }
     }
     let mut duplicates = 0;
-    for ((selector, prop), values) in &all_declarations {
+    for ((_selector, _prop), values) in &all_declarations {
         if values.len() > 1 {
             // Check if they're actually different values
             let unique: HashSet<_> = values.iter().collect();

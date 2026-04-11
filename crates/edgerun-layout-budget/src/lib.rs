@@ -5,7 +5,6 @@
 //! is buried in C++ heuristics. Ours is a mathematical function
 //! over structured data.
 
-use std::collections::BTreeMap;
 use edgerun_property_graph::PropertyGraph;
 use edgerun_incremental_layout::DomNodeRef;
 
@@ -36,11 +35,11 @@ impl LayoutBudget {
         declarations: &[(usize, String, String)], // (node_idx, property_name, value)
     ) -> Self {
         // Phase 1: Identify which properties trigger layout
-        let layout_props: Vec<_> = graph.query()
+        let _layout_props: Vec<_> = graph.query()
             .affects_layout(true)
             .names();
 
-        let paint_props: Vec<_> = graph.query()
+        let _paint_props: Vec<_> = graph.query()
             .affects_paint(true)
             .names();
 

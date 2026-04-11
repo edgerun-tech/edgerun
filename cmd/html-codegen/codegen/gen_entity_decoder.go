@@ -59,7 +59,8 @@ const ENTITY_TABLE: &[(&str, u32, u32)] = &[
 ];
 
 /// Look up an entity by name (binary search).
-fn lookup_entity(name: &str) -> Option<(u32, u32)> {
+#[allow(dead_code)]
+pub fn lookup_entity(name: &str) -> Option<(u32, u32)> {
     let idx = ENTITY_TABLE.binary_search_by_key(&name, |e| e.0).ok()?;
     Some((ENTITY_TABLE[idx].1, ENTITY_TABLE[idx].2))
 }

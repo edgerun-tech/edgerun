@@ -27,7 +27,6 @@ use edgerun_proto::edgerun::v0::capability::{
     CapabilityRevocation,
 };
 use edgerun_proto::edgerun::v0::common::{signature, Signature};
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
 use prost::Message;
 

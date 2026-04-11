@@ -2,7 +2,7 @@
 //! HTML Tree Builder Insertion Modes — WHATWG §13.2.6.
 //! DO NOT EDIT. Regenerate with: scripts/generate_browser.py
 extern crate alloc;
-use alloc::{string::String, vec::Vec};
+use alloc::vec::Vec;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

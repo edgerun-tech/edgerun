@@ -141,7 +141,7 @@ pub fn process_input_for_device(
                     cursor.x = seat.pointer_x as i32;
                     cursor.y = seat.pointer_y as i32;
                 }
-                let serial = seat.next_serial();
+                let _serial = seat.next_serial();
                 for (&client_id, &ptr_id) in client_pointer_ids {
                     if let Some(client) = server.client_mut(client_id) {
                         if is_locked {
@@ -221,7 +221,7 @@ pub fn process_input_for_device(
                         if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
                             touch_slot.x = event.value as f64 / 32767.0;
                             if touch_slot.active {
-                                let serial = seat.next_serial();
+                                let _serial = seat.next_serial();
                                 for (&cid, &touch_obj_id) in client_touch_ids.iter() {
                                     if let Some(client) = server.client_mut(cid) {
                                         client.send_message(wl_seat::touch_motion_event(touch_obj_id, event.timestamp_sec as u32, slot, touch_slot.x, touch_slot.y));
@@ -237,7 +237,7 @@ pub fn process_input_for_device(
                         if let Some(touch_slot) = touch_state.slots.get_mut(&slot) {
                             touch_slot.y = event.value as f64 / 32767.0;
                             if touch_slot.active {
-                                let serial = seat.next_serial();
+                                let _serial = seat.next_serial();
                                 for (&cid, &touch_obj_id) in client_touch_ids.iter() {
                                     if let Some(client) = server.client_mut(cid) {
                                         client.send_message(wl_seat::touch_motion_event(touch_obj_id, event.timestamp_sec as u32, slot, touch_slot.x, touch_slot.y));
@@ -257,7 +257,7 @@ pub fn process_input_for_device(
                         });
                         if event.code == ABS_X { touch_slot.x = event.value as f64 / 32767.0; }
                         else { touch_slot.y = event.value as f64 / 32767.0; }
-                        let serial = seat.next_serial();
+                        let _serial = seat.next_serial();
                         for (&cid, &touch_obj_id) in client_touch_ids.iter() {
                             if let Some(client) = server.client_mut(cid) {
                                 client.send_message(wl_seat::touch_motion_event(touch_obj_id, event.timestamp_sec as u32, slot, touch_slot.x, touch_slot.y));

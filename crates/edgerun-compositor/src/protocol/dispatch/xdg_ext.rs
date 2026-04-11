@@ -77,7 +77,7 @@ pub fn handle_activation(ctx: &mut DispatchContext) {
                 ctx.shell.activate(tl_id);
                 let serial = *ctx.config_serial;
                 *ctx.config_serial += 1;
-                if let Some(surface) = ctx.surfaces.get_mut(surface_id) {
+                if let Some(_surface) = ctx.surfaces.get_mut(surface_id) {
                     if ctx.seat.keyboard_focus() != Some(surface_id) {
                         if let Some(old_sid) = ctx.seat.keyboard_focus() {
                             for (&cid, &kb_id) in ctx.client_keyboard_ids.iter() {
@@ -100,7 +100,7 @@ pub fn handle_activation(ctx: &mut DispatchContext) {
                         }
                         let output_w = ctx.shell.output_width;
                         let output_h = ctx.shell.output_height;
-                        let cfg_serial = ctx.shell.configure_toplevel_with_state(tl_id, output_w, output_h);
+                        let _cfg_serial = ctx.shell.configure_toplevel_with_state(tl_id, output_w, output_h);
                         if let Some(client) = ctx.server.client_mut(ctx.client_id) {
                             let state = ctx.shell.toplevel_state_bytes(tl_id).to_vec();
                             client.send_message(xdg_shell::xdg_toplevel_configure_event(

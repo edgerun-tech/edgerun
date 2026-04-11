@@ -10,7 +10,7 @@
 //! + Conformance Dashboard (#8). No other browser can do this — their
 //! style data is scattered across C++ internals.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use edgerun_property_graph::PropertyGraph;
 
 /// A single CSS rule for optimization analysis.

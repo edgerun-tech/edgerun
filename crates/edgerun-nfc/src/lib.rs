@@ -217,7 +217,7 @@ impl NdefMessage {
             pos += 1;
 
             let tnf = NdefTnf::from_u8(flags);
-            let is_first = (flags & 0x80) != 0;
+            let _is_first = (flags & 0x80) != 0;
             message_end = (flags & 0x40) != 0;
             let is_short = (flags & 0x10) != 0;
             let has_id = (flags & 0x08) != 0;

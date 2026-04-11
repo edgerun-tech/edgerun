@@ -40,10 +40,9 @@ use edgerun_microphone::{
     AudioCaptureRequest, MicrophoneDevice, MicrophoneSampleFormat,
 };
 use edgerun_speaker::{
-    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
-    SpeakerSampleFormat,
+    AudioPlaybackRequest, SpeakerDevice, SpeakerSampleFormat,
 };
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, UNIX_EPOCH};
 
 // ===========================================================================
 // Audio Challenge Types
@@ -387,7 +386,7 @@ impl Default for VoiceActivityDetector {
 // ===========================================================================
 
 /// Analyze PCM audio for spectral characteristics.
-pub fn analyze_spectral(pcm: &[u8], sample_rate_hz: u32) -> SpectralAnalysis {
+pub fn analyze_spectral(pcm: &[u8], _sample_rate_hz: u32) -> SpectralAnalysis {
     if pcm.is_empty() {
         return SpectralAnalysis {
             rms_dbfs: f32::MIN,
@@ -563,7 +562,7 @@ impl AudioChallengeExecutor {
 
     fn analyze_clap_response(
         &self,
-        challenge: &AudioChallenge,
+        _challenge: &AudioChallenge,
         capture: &edgerun_microphone::AudioCapture,
         capture_latency_ms: u32,
     ) -> Result<AudioChallengeResult, CapabilityError> {
@@ -609,7 +608,7 @@ impl AudioChallengeExecutor {
 
     fn analyze_voice_activity(
         &self,
-        challenge: &AudioChallenge,
+        _challenge: &AudioChallenge,
         capture: &edgerun_microphone::AudioCapture,
         capture_latency_ms: u32,
     ) -> Result<AudioChallengeResult, CapabilityError> {
@@ -896,9 +895,9 @@ impl FormantSynth {
     fn formant_filter(state: &mut f64, input: f64, freq: f64, bw: f64, sr: f64) -> f64 {
         let r = (-std::f64::consts::PI * bw / sr).exp();
         let angle = 2.0 * std::f64::consts::PI * freq / sr;
-        let output = input + 2.0 * r * angle.cos() * *state - r * r * input;
+        let _output = input + 2.0 * r * angle.cos() * *state - r * r * input;
         // Actually a proper 2nd order resonator:
-        let b0 = (1.0 - r) * (1.0 + r * r - 2.0 * r * angle.cos()).sqrt();
+        let _b0 = (1.0 - r) * (1.0 + r * r - 2.0 * r * angle.cos()).sqrt();
         *state = *state * r * angle.cos() * 2.0 - r * r * *state + input;
         // Simplified: just use a leaky integrator tuned to the formant
         let alpha = 1.0 - r;
@@ -1315,7 +1314,7 @@ fn dtw_distance(seq_a: &[f32], seq_b: &[f32]) -> f32 {
 }
 
 /// Create a biometric state for audio verification.
-fn audio_biometric_state(passed: bool, high_confidence: bool) -> BiometricState {
+fn audio_biometric_state(passed: bool, _high_confidence: bool) -> BiometricState {
     BiometricState {
         modality: if passed {
             Some(BiometricModality::Voice)

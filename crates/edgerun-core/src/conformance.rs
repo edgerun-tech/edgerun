@@ -228,7 +228,7 @@ impl FixtureVerifier for TestVerifier {
     fn verify_signed_fixture(
         &self,
         payload: &BTreeMap<String, Value>,
-        expected_fixture: &str,
+        _expected_fixture: &str,
     ) -> Option<bool> {
         // Extract signature
         if let Some(Value::Map(sig_map)) = payload.get("signature") {

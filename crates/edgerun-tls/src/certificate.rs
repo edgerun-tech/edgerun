@@ -155,8 +155,10 @@ impl Certificate {
 
     /// Extract Common Name from an x509_cert Name
     fn extract_cn(name: &edgerun_crypto::x509_cert::name::Name) -> Option<String> {
-        use edgerun_crypto::const_oid::db::rfc4519::COMMON_NAME;
         use edgerun_crypto::x509_cert::der::asn1::{Ia5StringRef, PrintableStringRef, Utf8StringRef};
+        // Use x509-cert's der crate OIDs (const-oid 0.9.x)
+        const COMMON_NAME: edgerun_crypto::x509_cert::der::oid::ObjectIdentifier =
+            edgerun_crypto::x509_cert::der::oid::db::rfc4519::CN;
         for rdn in name.0.iter() {
             for atv in rdn.0.iter() {
                 if atv.oid == COMMON_NAME {
@@ -184,7 +186,7 @@ impl Certificate {
 
         let mut sans = Vec::new();
         for ext in exts.iter() {
-            if ext.extn_id == edgerun_crypto::const_oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME {
+            if ext.extn_id == edgerun_crypto::x509_cert::der::oid::db::rfc5280::ID_CE_SUBJECT_ALT_NAME {
                 if let Ok(san) = SubjectAltName::from_der(ext.extn_value.as_bytes()) {
                     for name in san.0.iter() {
                         if let GeneralName::DnsName(dns) = name {

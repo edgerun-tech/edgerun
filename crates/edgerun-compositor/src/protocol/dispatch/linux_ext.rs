@@ -205,7 +205,7 @@ pub fn handle_syncobj_timeline(ctx: &mut DispatchContext) {
         }
         linux_drm_syncobj::timeline_request::IMPORT_SYNC_FILE => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
-            let point = cursor_obj.uint().unwrap_or(0) as u64;
+            let _point = cursor_obj.uint().unwrap_or(0) as u64;
             // FD is passed via SCM_RIGHTS
             let sync_file_fd = if !ctx.msg.fds.is_empty() { ctx.msg.fds[0] } else { -1 };
             if let Some(timeline) = ctx.shell.syncobj_state.timelines.get(&ctx.msg.sender_id) {

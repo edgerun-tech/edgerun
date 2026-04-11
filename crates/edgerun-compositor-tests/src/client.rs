@@ -10,8 +10,8 @@ use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
 
 use edgerun_compositor::wire::{
-    ArgType, ArgCursor, Message, parse_message,
-    encode, encode_string, encode_array,
+    ArgCursor, Message, parse_message,
+    encode, encode_string,
 };
 use edgerun_compositor::protocol::wl_core;
 use edgerun_compositor::protocol::wl_compositor;
@@ -381,7 +381,6 @@ impl WlClient {
                                               wl_shm::WL_SHM, shm_global.version)?;
 
         // Create an anonymous file for SHM
-        use std::os::unix::ffi::OsStrExt;
         let name = std::ffi::CString::new("edgerun-test-shm").unwrap();
         let fd = unsafe { libc::memfd_create(name.as_ptr(), 0) };
         if fd < 0 {

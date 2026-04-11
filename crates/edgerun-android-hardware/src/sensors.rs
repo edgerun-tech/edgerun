@@ -1,7 +1,7 @@
 //! Android sensors via `libsensor.so` (NDK `ASensorManager`).
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality,
     CapabilityOperation, CapabilityRole, CapabilityProvider,
 };
 

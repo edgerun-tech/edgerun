@@ -63,7 +63,10 @@ pub struct TreeBuilder {
     insertion_mode: InsertionMode,
     /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
     pending_tokenizer_mode: TokenizerMode,
-    #[allow(dead_code)]
+    /// Whether <frameset> is allowed (set false by certain rules).
+    frameset_ok: bool,
+    /// Self-closing flag — set by acknowledge_self_closing.
+    current_token_is_self_closing: bool,
     done: bool,
     parse_errors: usize,
 }
@@ -75,6 +78,8 @@ impl TreeBuilder {
             completed: Vec::new(),
             insertion_mode: InsertionMode::Initial,
             pending_tokenizer_mode: TokenizerMode::None,
+            frameset_ok: true,
+            current_token_is_self_closing: false,
             done: false,
             parse_errors: 0,
         }
@@ -110,7 +115,7 @@ impl TreeBuilder {
     /// Generated from 5 rules.
     fn handle_initial(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs: _, self_closing: _ } => {
+            Token::StartTag { name, attrs, self_closing } => {
                 match &name[..] {
                 _ => {
                     self.parse_errors += 1;
@@ -123,7 +128,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -163,7 +168,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -210,7 +215,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -301,7 +306,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -896,7 +901,7 @@ impl TreeBuilder {
             Token::Character(text) => {
                 if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }
             }
-            Token::Comment(_text) => {
+            Token::Comment(text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -949,23 +954,23 @@ impl TreeBuilder {
                     self.insert(name, attrs, *self_closing);
                 }
                 "td" => {
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 "tfoot" => {
                     self.insert(name, attrs, *self_closing);
                 }
                 "th" => {
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 "thead" => {
                     self.insert(name, attrs, *self_closing);
                 }
                 "tr" => {
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 _ => {
                     self.parse_errors += 1;
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 }
                 // Reprocess in next mode (otherwise rule)
@@ -1024,7 +1029,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1049,27 +1054,29 @@ impl TreeBuilder {
     /// Generated from 6 rules.
     fn handle_in_table_text(&mut self, token: &Token) {
         match token {
-            Token::StartTag { name, attrs: _, self_closing: _ } => {
+            Token::StartTag { name, attrs, self_closing } => {
                 match &name[..] {
                 _ => {
-                    // reprocess token (TODO)
+                    // parse error (no specific action)
                 }
                 }
             }
             Token::EndTag { name } => {
                 match &name[..] {
                 "table" => {
-                    // reprocess token (TODO)
+                    self.insertion_mode = InsertionMode::InTable;
+                    self.handle_token(token);
+                    return;
                 }
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
             }
-            Token::Comment(_text) => {
+            Token::Comment(text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1119,7 +1126,7 @@ impl TreeBuilder {
                 }
                 "td" => {
                     self.parse_errors += 1;
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 "tfoot" => {
                     self.parse_errors += 1;
@@ -1127,14 +1134,14 @@ impl TreeBuilder {
                 }
                 "th" => {
                     self.parse_errors += 1;
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 "thead" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "tr" => {
-                    // TODO: TREE_ACTION_INSERT_FOSTER
+                    self.insert_foster(name, attrs, *self_closing);
                 }
                 _ => { self.insert(name, attrs, *self_closing); }
                 }
@@ -1153,7 +1160,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1247,7 +1254,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InTableText;
                 self.handle_token(token);
@@ -1426,7 +1433,7 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // parse error, ignore character
             }
             Token::Comment(text) => {
@@ -1455,7 +1462,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
@@ -1499,10 +1506,10 @@ impl TreeBuilder {
                 _ => { self.pop_until(name); }
                 }
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // no character rule defined
             }
-            Token::Comment(_text) => {
+            Token::Comment(text) => {
                 // ignore comment
             }
             Token::Doctype => {
@@ -1524,7 +1531,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -1558,7 +1565,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // Reprocess character in next mode
                 self.insertion_mode = InsertionMode::InBody;
                 self.handle_token(token);
@@ -1589,7 +1596,7 @@ impl TreeBuilder {
             Token::EndTag { name } => {
                 self.pop_until(name);
             }
-            Token::Character(_text) => {
+            Token::Character(text) => {
                 // no character rule defined
             }
             Token::Comment(text) => {
@@ -1625,15 +1632,6 @@ impl TreeBuilder {
                 }
             }
             Token::Comment(_) | Token::Eof | Token::Doctype => {}
-        }
-    }
-
-    /// Action: INSERT — create element and push to stack.
-    fn insert(&mut self, name: &str, _attrs: &BTreeMap<String, String>, _self_closing: bool) {
-        let elem = Element::new(name);
-        // Void elements are not pushed to the open elements stack
-        if !_self_closing && !VOID_ELEMENTS.contains(&name) {
-            self.open_elements.push(elem);
         }
     }
 
@@ -1722,6 +1720,103 @@ impl TreeBuilder {
         match m {
             TokenizerMode::None => None,
             _ => Some(m),
+        }
+    }
+
+    /// WHATWG §13.2.6.4.1 — Foster parent insertion.
+    ///
+    /// When content appears where it is not allowed (e.g., text directly
+    /// inside <table>), insert it outside the table element instead.
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+        let mut elem = Element::new(name);
+        for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
+
+        let table_idx = self.open_elements.iter().rposition(|e| e.tag == "table");
+        let template_idx = self.open_elements.iter().rposition(|e| e.tag == "template");
+
+        if let Some(ti) = table_idx {
+            if let Some(templ_idx) = template_idx {
+                if templ_idx < ti {
+                    self.open_elements[templ_idx].children.push(Node::Element(elem));
+                    return;
+                }
+            }
+            if ti == 0 {
+                self.open_elements[0].children.push(Node::Element(elem));
+            } else {
+                let parent = &mut self.open_elements[ti - 1];
+                parent.children.push(Node::Element(elem));
+            }
+        } else if let Some(templ_idx) = template_idx {
+            self.open_elements[templ_idx].children.push(Node::Element(elem));
+        } else if let Some(html_idx) = self.open_elements.iter().rposition(|e| e.tag == "html") {
+            self.open_elements[html_idx].children.push(Node::Element(elem));
+        } else if let Some(parent) = self.open_elements.last_mut() {
+            parent.children.push(Node::Element(elem));
+        }
+    }
+
+    /// Acknowledge the self-closing flag.
+    fn acknowledge_self_closing(&mut self) {
+        self.current_token_is_self_closing = false;
+    }
+
+    /// Append a comment to the current node.
+    fn append_comment(&mut self, text: &str) {
+        if let Some(parent) = self.open_elements.last_mut() {
+            parent.children.push(Node::Comment(text.to_string()));
+        } else if let Some(Node::Element(elem)) = self.completed.last_mut() {
+            elem.children.push(Node::Comment(text.to_string()));
+        }
+    }
+
+    /// WHATWG §13.2.6.4.10 — Reset insertion mode appropriately.
+    fn reset_insertion_mode(&mut self) {
+        let last = self.open_elements.len().saturating_sub(1);
+        for i in (0..=last).rev() {
+            match self.open_elements[i].tag.as_str() {
+                "select" => {
+                    for j in (0..i).rev() {
+                        if self.open_elements[j].tag == "table" {
+                            self.insertion_mode = InsertionMode::InSelectInTable;
+                            return;
+                        }
+                        if j == 0 { break; }
+                    }
+                    self.insertion_mode = InsertionMode::InSelect;
+                    return;
+                }
+                "td" | "th" => { self.insertion_mode = InsertionMode::InCell; return; }
+                "tr" => { self.insertion_mode = InsertionMode::InRow; return; }
+                "tbody" | "thead" | "tfoot" => { self.insertion_mode = InsertionMode::InTableBody; return; }
+                "caption" => { self.insertion_mode = InsertionMode::InCaption; return; }
+                "colgroup" => { self.insertion_mode = InsertionMode::InColumnGroup; return; }
+                "table" => { self.insertion_mode = InsertionMode::InTable; return; }
+                "template" => { return; }
+                "head" => { self.insertion_mode = InsertionMode::InHead; return; }
+                "body" => { self.insertion_mode = InsertionMode::InBody; return; }
+                "frameset" => { self.insertion_mode = InsertionMode::InFrameset; return; }
+                "html" => {
+                    if self.open_elements.iter().any(|e| e.tag == "head") {
+                        self.insertion_mode = InsertionMode::AfterHead;
+                    } else {
+                        self.insertion_mode = InsertionMode::BeforeHead;
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+        self.insertion_mode = InsertionMode::InBody;
+    }
+
+    /// Action: INSERT — create element and push to stack.
+    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+        let mut elem = Element::new(name);
+        for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
+        // Void elements are not pushed to the open elements stack
+        if !VOID_ELEMENTS.contains(&name) {
+            self.open_elements.push(elem);
         }
     }
 }

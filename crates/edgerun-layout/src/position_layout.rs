@@ -122,7 +122,7 @@ fn measure_node(node: &RenderObject, avail: f64, out: &mut Vec<f64>) {
                 out.push(font.size * 1.25 * lines);
             }
         }
-        RenderObject::Image { intrinsic_size, style, .. } => {
+        RenderObject::Image { intrinsic_size, style: _style, .. } => {
             let h = intrinsic_size.1.unwrap_or(100.0) + 4.0;
             out.push(h);
         }

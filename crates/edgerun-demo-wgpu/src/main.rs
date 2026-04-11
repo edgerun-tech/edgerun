@@ -170,9 +170,9 @@ fn flatten_node_recursive(
     nodes: &mut Vec<GpuDomNode>,
     text_data: &mut Vec<u8>,
     parent_idx: u32,
-    tag: Option<&str>,
-    class: Option<&str>,
-    id: Option<&str>,
+    _tag: Option<&str>,
+    _class: Option<&str>,
+    _id: Option<&str>,
 ) {
     let node_idx = nodes.len() as u32;
 
@@ -212,7 +212,7 @@ fn flatten_node_recursive(
 }
 
 /// Flatten CSS cascade rules to GPU rules.
-fn flatten_css_rules(sheet: &CascadeStylesheet) -> Vec<GpuCssRule> {
+fn flatten_css_rules(_sheet: &CascadeStylesheet) -> Vec<GpuCssRule> {
     // Simplified: parse known CSS properties from the cascade rules
     // This mirrors what the CPU demo does in resolve_styles
     let mut rules = Vec::new();

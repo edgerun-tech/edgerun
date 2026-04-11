@@ -1,6 +1,5 @@
 //! DHCPv4 server — handles DISCOVER/REQUEST and responds with OFFER/ACK/NAK.
 
-use std::collections::HashMap;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 use std::time::Duration;

@@ -16,8 +16,8 @@ use edgerun_wifi::{
 use std::fs;
 use std::io;
 use std::mem;
-use std::os::raw::{c_char, c_ulong, c_void};
-use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::os::raw::{c_char, c_ulong};
+use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -232,7 +232,7 @@ impl Nl80211Socket {
     }
 
     /// Send a netlink message and wait for the ACK/response.
-    fn request(&mut self, cmd: u8, ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
+    fn request(&mut self, cmd: u8, _ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
         self.seq += 1;
 
         // Build netlink header
@@ -289,7 +289,7 @@ impl Nl80211Socket {
     }
 
     /// Send a dump request (returns multiple messages).
-    fn request_dump(&mut self, cmd: u8, ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
+    fn request_dump(&mut self, cmd: u8, _ifindex: i32, attrs: &[u8]) -> Result<Vec<u8>, CapabilityError> {
         self.seq += 1;
 
         let mut msg = Vec::new();
@@ -1858,10 +1858,10 @@ impl WifiScanner for LinuxWifiBackend {
                     }
                     return Ok(WifiScanResult { observations });
                 }
-                Err(e) => {
+                Err(_e) => {
                     // nl80211 scan failed (likely requires CAP_NET_ADMIN),
                     // fall back to WEXT current network observation
-                    edgerun_log::warn!("nl80211 scan failed: {e}");
+                    edgerun_log::warn!("nl80211 scan failed");
                 }
             }
         }

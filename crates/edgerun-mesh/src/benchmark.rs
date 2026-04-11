@@ -68,7 +68,6 @@ pub fn benchmark_frame_encode_decode() -> u64 {
 
 pub fn benchmark_frame_sign_verify() -> u64 {
     use edgerun_crypto::p256::ecdsa::SigningKey;
-    use edgerun_crypto::rand_core::RngCore;
 
     // Generate a real signing key using getrandom
     let mut key_bytes = [0u8; 32];

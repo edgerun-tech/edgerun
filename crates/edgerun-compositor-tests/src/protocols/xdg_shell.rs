@@ -6,11 +6,7 @@
 //! - configure → ack → commit lifecycle
 //! - wm_capabilities event
 
-use edgerun_compositor::protocol::wl_compositor;
 use edgerun_compositor::protocol::xdg_shell;
-use edgerun_compositor::wire::encode::encode_array;
-
-use crate::client::WlClient;
 use crate::harness::CompositorHarness;
 
 /// Test: Full xdg-shell lifecycle — create toplevel, receive configure, ack, commit.
@@ -136,7 +132,7 @@ pub fn test_wm_capabilities() -> Result<(), String> {
     let (_, surface_id) = client.create_surface(reg_id)
         .map_err(|e| format!("Failed to create surface: {}", e))?;
 
-    let (wm_base_id, xdg_surface_id, toplevel_id) = client.create_xdg_toplevel(reg_id, surface_id)
+    let (_wm_base_id, _xdg_surface_id, toplevel_id) = client.create_xdg_toplevel(reg_id, surface_id)
         .map_err(|e| format!("Failed to create xdg_toplevel: {}", e))?;
 
     client.surface_commit(surface_id)

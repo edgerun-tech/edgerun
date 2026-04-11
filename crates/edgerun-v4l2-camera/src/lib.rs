@@ -1041,7 +1041,7 @@ impl CameraBiometricReader for V4l2CameraBiometricReader {
 
             if matched {
                 // Update last_verified timestamp
-                if let Some(ref tid) = best_template_id {
+                if let Some(ref _tid) = best_template_id {
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()

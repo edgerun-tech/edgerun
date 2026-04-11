@@ -3,7 +3,7 @@
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{boxed::Box, string::String};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {

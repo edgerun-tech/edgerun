@@ -75,10 +75,16 @@ pub use crypto_bigint;
 pub use crypto_common;
 pub use block_buffer;
 pub use rand_core;
+pub use getrandom;
+
+/// Compatibility alias: `OsRng` from rand_core 0.6 (used by elliptic-curve,
+/// ed25519-dalek, x25519-dalek, rsa, etc.).
+pub use rand_core_06::OsRng;
+/// Re-export RngCore trait for use with OsRng.fill_bytes()
+pub use rand_core_06::RngCore;
 pub use subtle;
 pub use zeroize;
 pub use typenum;
-pub use getrandom;
 
 // ---------------------------------------------------------------------------
 // Convenience re-exports for most-used types

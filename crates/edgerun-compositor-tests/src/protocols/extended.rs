@@ -1,8 +1,6 @@
 //! Extended protocol conformance tests — touch, constraints, clipboard, etc.
 
-use std::io::{self, Read, Write};
-
-use edgerun_compositor::wire::{Message, encode, encode_string};
+use edgerun_compositor::wire::{Message, encode_string};
 use edgerun_compositor::protocol::wl_core;
 use edgerun_compositor::protocol::wl_seat;
 use edgerun_compositor::protocol::zwp_pointer_constraints;
@@ -13,7 +11,6 @@ use edgerun_compositor::protocol::tearing_control;
 use edgerun_compositor::protocol::single_pixel_buffer;
 use edgerun_compositor::protocol::primary_selection;
 
-use crate::client::WlClient;
 use crate::harness::CompositorHarness;
 
 // ─── Touch Tests ─────────────────────────────────────────────

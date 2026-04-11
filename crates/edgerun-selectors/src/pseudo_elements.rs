@@ -1,7 +1,6 @@
 //! Pseudo-element selectors — generated from Selectors Level 4.
 //! DO NOT EDIT. Regenerate with: scripts/generate_selector_dom.py
 extern crate alloc;
-use alloc::{string::String, vec::Vec};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PseudoElement {

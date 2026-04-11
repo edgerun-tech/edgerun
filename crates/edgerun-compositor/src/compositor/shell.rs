@@ -758,7 +758,7 @@ impl Shell {
 
     /// Destroy a layer surface.
     pub fn destroy_layer_surface(&mut self, layer_surface_id: u32) {
-        if let Some(ls) = self.layer_surfaces.remove(&layer_surface_id) {
+        if let Some(_ls) = self.layer_surfaces.remove(&layer_surface_id) {
             // Send keyboard focus away if this surface had it
         }
     }

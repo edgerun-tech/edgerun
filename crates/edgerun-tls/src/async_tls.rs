@@ -26,7 +26,6 @@ use crate::certificate::Certificate;
 use crate::certificate_gen::CertificateAndKey;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{ClientHelloBuilder, ServerHello};
-use crate::handshake::{read_record_header, read_record_fragment};
 use crate::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::prf::{
     Hasher, Tls13KeySchedule,
@@ -339,7 +338,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
     /// Accept an async TLS 1.3 handshake from a connected stream.
     pub async fn accept(mut stream: S, cert_and_key: &CertificateAndKey) -> Result<Self> {
         let _cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
-        let _server_random = generate_random();
+        let server_random = generate_random();
         let _write_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
         let _read_cipher = RecordCipher::new(&[0u8; 16], &[0u8; 12]).unwrap();
 
@@ -993,7 +992,7 @@ async fn async_server_read_client_finished<S: AsyncRead + AsyncWrite + Unpin>(
 
 fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
-    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut buf);
+    edgerun_crypto::getrandom::fill(&mut buf).expect("getrandom failed");
     buf
 }
 

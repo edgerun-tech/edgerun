@@ -8,16 +8,15 @@
 //! - wl_shm buffer creation
 //! - wl_surface lifecycle
 
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 
-use edgerun_compositor::wire::{Message, parse_message, encode, ArgCursor};
+use edgerun_compositor::wire::Message;
 use edgerun_compositor::protocol::wl_core;
 use edgerun_compositor::protocol::wl_compositor;
 use edgerun_compositor::protocol::wl_shm;
 use edgerun_compositor::protocol::wl_seat;
 use edgerun_compositor::protocol::wl_output;
 
-use crate::client::WlClient;
 use crate::harness::CompositorHarness;
 
 // ─── Raw socket tests ────────────────────────────────────────

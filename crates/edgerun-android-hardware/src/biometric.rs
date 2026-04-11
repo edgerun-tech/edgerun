@@ -11,7 +11,7 @@ use edgerun_capabilities::{
     capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
     CapabilityOperation, CapabilityRole, CapabilityProvider,
 };
-use edgerun_biometrics::{BiometricModality, BiometricState, BiometricAssuranceStrength};
+use edgerun_biometrics::{BiometricState, BiometricAssuranceStrength};
 
 #[cfg(feature = "android-real")]
 mod real {

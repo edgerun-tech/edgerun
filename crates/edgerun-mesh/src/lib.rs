@@ -12,9 +12,8 @@ pub mod router_benchmark;
 use edgerun_hardware_signing::{
     MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID,
 };
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::p256::ecdsa::Signature;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use edgerun_crypto::p256::ecdsa::VerifyingKey;
 
 // ---------------------------------------------------------------------------

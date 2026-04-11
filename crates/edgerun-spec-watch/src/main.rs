@@ -9,7 +9,7 @@
 //!   cargo run -p edgerun-spec-watch -- --baseline # Save current state as baseline
 //!   cargo run -p edgerun-spec-watch -- --report   # Generate change report
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 

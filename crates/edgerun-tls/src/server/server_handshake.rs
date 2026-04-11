@@ -458,9 +458,8 @@ impl ServerHandshake {
 }
 
 fn generate_random() -> [u8; 32] {
-    use edgerun_crypto::rand_core::RngCore;
     let mut buf = [0u8; 32];
-    edgerun_crypto::rand_core::OsRng.fill_bytes(&mut buf);
+    edgerun_crypto::OsRng.fill_bytes(&mut buf);
     buf
 }
 

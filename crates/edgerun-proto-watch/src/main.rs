@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
-use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -87,7 +87,7 @@ fn main() {
             .paths
             .iter()
             .filter(|p| p.extension().map_or(false, |e| e == "proto"))
-            .filter(|p| matches!(event.kind, EventKind::Modify(_)))
+            .filter(|_p| matches!(event.kind, EventKind::Modify(_)))
             .collect();
 
         if proto_files.is_empty() {

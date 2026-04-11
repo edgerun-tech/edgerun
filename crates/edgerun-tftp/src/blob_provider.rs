@@ -14,7 +14,7 @@
 //! The blob store decrypts on-the-fly and serves chunks via TFTP.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use super::server::FileProvider;
 
@@ -185,7 +185,7 @@ impl FileProvider for BlobTftpProvider {
         // Check registry
         match self.registry.get(filename)? {
             BlobEntry::Plaintext { data } => Some(data.len() as u64),
-            BlobEntry::Encrypted { ciphertext, nonce, .. } => {
+            BlobEntry::Encrypted { ciphertext, nonce: _nonce, .. } => {
                 // For encrypted blobs, we don't know plaintext size without decrypting.
                 // Best estimate: ciphertext length (slightly larger due to GCM tag).
                 // The actual size will be reported in OACK after warm_cache.

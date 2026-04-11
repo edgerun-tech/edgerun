@@ -5,7 +5,7 @@ use std::io;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
 
-use super::message::{TftpError, TftpMessage, TftpOptions, TFTP_PORT};
+use super::message::{TftpError, TftpMessage, TftpOptions};
 
 // ---------------------------------------------------------------------------
 // FileProvider trait
@@ -218,7 +218,7 @@ impl TftpServer {
             timeout: client_options.timeout,
         };
 
-        let blksize = negotiated.blksize as usize;
+        let _blksize = negotiated.blksize as usize;
 
         // Create transfer state
         let key = (client_addr, filename.clone());

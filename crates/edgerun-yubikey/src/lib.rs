@@ -275,7 +275,7 @@ impl LinuxUsbYubiKey {
             .map_err(|e| YubiKeyError::Provider(format!("read /dev/bus/usb: {e}")))?
         {
             let bus_entry = bus_entry.map_err(|e| YubiKeyError::Provider(format!("read bus dir: {e}")))?;
-            let bus_name = bus_entry.file_name();
+            let _bus_name = bus_entry.file_name();
             let bus_path = bus_entry.path();
             if !bus_path.is_dir() {
                 continue;

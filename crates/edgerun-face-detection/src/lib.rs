@@ -18,9 +18,8 @@
 //! When XCLBIN overlay models are loaded on the NPU, the integral image
 //! computation can be offloaded, reducing to ~5-15ms.
 
-use edgerun_biometrics::BiometricModality;
 use edgerun_camera_biometrics::{
-    CameraBiometricError, CameraCaptureQuality, CameraFrame, CameraPixelFormat,
+    CameraCaptureQuality, CameraFrame, CameraPixelFormat,
     FaceBounds,
 };
 

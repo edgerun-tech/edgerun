@@ -133,6 +133,10 @@ pub struct TreeBuilder {
     insertion_mode: InsertionMode,
     /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
     pending_tokenizer_mode: TokenizerMode,
+    /// Whether <frameset> is allowed (set false by certain rules).
+    frameset_ok: bool,
+    /// Self-closing flag — set by acknowledge_self_closing.
+    current_token_is_self_closing: bool,
     done: bool,
     parse_errors: usize,
 }
@@ -144,6 +148,8 @@ impl TreeBuilder {
             completed: Vec::new(),
             insertion_mode: InsertionMode::Initial,
             pending_tokenizer_mode: TokenizerMode::None,
+            frameset_ok: true,
+            current_token_is_self_closing: false,
             done: false,
             parse_errors: 0,
         }
@@ -174,15 +180,6 @@ impl TreeBuilder {
                 }
             }
             Token::Comment(_) | Token::Eof | Token::Doctype => {}
-        }
-    }
-
-    /// Action: INSERT — create element and push to stack.
-    fn insert(&mut self, name: &str, _attrs: &BTreeMap<String, String>, _self_closing: bool) {
-        let mut elem = Element::new(name);
-        // Void elements are not pushed to the open elements stack
-        if !_self_closing && !VOID_ELEMENTS.contains(&name) {
-            self.open_elements.push(elem);
         }
     }
 
@@ -271,6 +268,103 @@ impl TreeBuilder {
         match m {
             TokenizerMode::None => None,
             _ => Some(m),
+        }
+    }
+
+    /// WHATWG §13.2.6.4.1 — Foster parent insertion.
+    ///
+    /// When content appears where it is not allowed (e.g., text directly
+    /// inside <table>), insert it outside the table element instead.
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+        let mut elem = Element::new(name);
+        for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
+
+        let table_idx = self.open_elements.iter().rposition(|e| e.tag == "table");
+        let template_idx = self.open_elements.iter().rposition(|e| e.tag == "template");
+
+        if let Some(ti) = table_idx {
+            if let Some(templ_idx) = template_idx {
+                if templ_idx < ti {
+                    self.open_elements[templ_idx].children.push(Node::Element(elem));
+                    return;
+                }
+            }
+            if ti == 0 {
+                self.open_elements[0].children.push(Node::Element(elem));
+            } else {
+                let parent = &mut self.open_elements[ti - 1];
+                parent.children.push(Node::Element(elem));
+            }
+        } else if let Some(templ_idx) = template_idx {
+            self.open_elements[templ_idx].children.push(Node::Element(elem));
+        } else if let Some(html_idx) = self.open_elements.iter().rposition(|e| e.tag == "html") {
+            self.open_elements[html_idx].children.push(Node::Element(elem));
+        } else if let Some(parent) = self.open_elements.last_mut() {
+            parent.children.push(Node::Element(elem));
+        }
+    }
+
+    /// Acknowledge the self-closing flag.
+    fn acknowledge_self_closing(&mut self) {
+        self.current_token_is_self_closing = false;
+    }
+
+    /// Append a comment to the current node.
+    fn append_comment(&mut self, text: &str) {
+        if let Some(parent) = self.open_elements.last_mut() {
+            parent.children.push(Node::Comment(text.to_string()));
+        } else if let Some(Node::Element(elem)) = self.completed.last_mut() {
+            elem.children.push(Node::Comment(text.to_string()));
+        }
+    }
+
+    /// WHATWG §13.2.6.4.10 — Reset insertion mode appropriately.
+    fn reset_insertion_mode(&mut self) {
+        let last = self.open_elements.len().saturating_sub(1);
+        for i in (0..=last).rev() {
+            match self.open_elements[i].tag.as_str() {
+                "select" => {
+                    for j in (0..i).rev() {
+                        if self.open_elements[j].tag == "table" {
+                            self.insertion_mode = InsertionMode::InSelectInTable;
+                            return;
+                        }
+                        if j == 0 { break; }
+                    }
+                    self.insertion_mode = InsertionMode::InSelect;
+                    return;
+                }
+                "td" | "th" => { self.insertion_mode = InsertionMode::InCell; return; }
+                "tr" => { self.insertion_mode = InsertionMode::InRow; return; }
+                "tbody" | "thead" | "tfoot" => { self.insertion_mode = InsertionMode::InTableBody; return; }
+                "caption" => { self.insertion_mode = InsertionMode::InCaption; return; }
+                "colgroup" => { self.insertion_mode = InsertionMode::InColumnGroup; return; }
+                "table" => { self.insertion_mode = InsertionMode::InTable; return; }
+                "template" => { return; }
+                "head" => { self.insertion_mode = InsertionMode::InHead; return; }
+                "body" => { self.insertion_mode = InsertionMode::InBody; return; }
+                "frameset" => { self.insertion_mode = InsertionMode::InFrameset; return; }
+                "html" => {
+                    if self.open_elements.iter().any(|e| e.tag == "head") {
+                        self.insertion_mode = InsertionMode::AfterHead;
+                    } else {
+                        self.insertion_mode = InsertionMode::BeforeHead;
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
+        self.insertion_mode = InsertionMode::InBody;
+    }
+
+    /// Action: INSERT — create element and push to stack.
+    fn insert(&mut self, name: &str, attrs: &BTreeMap<String, String>, self_closing: bool) {
+        let mut elem = Element::new(name);
+        for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
+        // Void elements are not pushed to the open elements stack
+        if !VOID_ELEMENTS.contains(&name) {
+            self.open_elements.push(elem);
         }
     }
 }
@@ -393,7 +487,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 		}
 		seenTags[r.tag] = true
 
-		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny)
+		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny, r.nextMode)
 
 		// Add scope check prefix if condition exists
 		// For conditional rules: check scope → if true, do pop_until → then always do the rest
@@ -418,7 +512,7 @@ func generateModeHandler(modeName string, rules []*html.TreeRule) string {
 		if seenEndTags[r.tag] { continue }
 		seenEndTags[r.tag] = true
 
-		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny)
+		rustActions := tbActionsToRustWithMode(r.actions, r.popUntil, r.isAny, r.nextMode)
 		if r.isAny {
 			endArms = append(endArms, fmt.Sprintf("                _ => {\n                    %s\n                }", rustActions))
 		} else {
@@ -558,8 +652,9 @@ func hasAction(actions []html.TreeAction, target html.TreeAction) bool {
 	return false
 }
 
-func tbActionsToRustWithMode(actions []html.TreeAction, popUntil string, isOtherwise bool) string {
+func tbActionsToRustWithMode(actions []html.TreeAction, popUntil string, isOtherwise bool, nextMode html.InsertionMode) string {
 	var parts []string
+	hasReprocess := hasAction(actions, html.TreeAction_TREE_ACTION_REPROCESS)
 	for _, a := range actions {
 		rust := treeActionToRust(a, popUntil)
 		if rust != "" {
@@ -571,6 +666,9 @@ func tbActionsToRustWithMode(actions []html.TreeAction, popUntil string, isOther
 		if len(parts) == 0 {
 			parts = append(parts, "// parse error (no specific action)")
 		}
+	} else if hasReprocess && nextMode != 0 {
+		// REPROCESS — set mode and re-dispatch
+		return fmt.Sprintf("self.insertion_mode = InsertionMode::%s;\n                    self.handle_token(token);\n                    return;", insertionModeToRust(nextMode))
 	} else if len(parts) == 0 {
 		parts = append(parts, "self.insert(name, attrs, *self_closing);")
 	}
@@ -608,7 +706,7 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_PARSE_ERROR:
 		return "self.parse_errors += 1;"
 	case html.TreeAction_TREE_ACTION_REPROCESS:
-		return "// reprocess token (TODO)"
+		return "" // handled by codegen via next_mode + loop
 	case html.TreeAction_TREE_ACTION_APPEND_CHARACTER:
 		return `if let Some(parent) = self.open_elements.last_mut() { parent.children.push(Node::Text(text.clone())); }`
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_RCDATA:
@@ -618,17 +716,17 @@ func treeActionToRust(a html.TreeAction, popUntil string) string {
 	case html.TreeAction_TREE_ACTION_SWITCH_TO_SCRIPT_DATA:
 		return "self.switch_to_script_data();"
 	case html.TreeAction_TREE_ACTION_RESET_INSERTION_MODE:
-		return "// TODO: TREE_ACTION_RESET_INSERTION_MODE"
+		return "self.reset_insertion_mode();"
 	case html.TreeAction_TREE_ACTION_INSERT_FOSTER:
-		return "// TODO: TREE_ACTION_INSERT_FOSTER"
+		return "self.insert_foster(name, attrs, *self_closing);"
 	case html.TreeAction_TREE_ACTION_ACKNOWLEDGE_SELF_CLOSING:
-		return "// TODO: TREE_ACTION_ACKNOWLEDGE_SELF_CLOSING"
+		return "self.acknowledge_self_closing();"
 	case html.TreeAction_TREE_ACTION_APPEND_COMMENT:
-		return "// TODO: TREE_ACTION_APPEND_COMMENT"
+		return "self.append_comment(text);"
 	case html.TreeAction_TREE_ACTION_APPEND_DOCTYPE:
-		return "// TODO: TREE_ACTION_APPEND_DOCTYPE"
+		return "// DOCTYPE handled in Initial mode"
 	case html.TreeAction_TREE_ACTION_SET_FRAMESET_NOT_OK:
-		return "// TODO: TREE_ACTION_SET_FRAMESET_NOT_OK"
+		return "self.frameset_ok = false;"
 	case html.TreeAction_TREE_ACTION_POP_ALL:
 		return "while self.open_elements.pop().is_some() {}"
 	default:

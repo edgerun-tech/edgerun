@@ -91,7 +91,7 @@ struct CssRule {
     declarations: BTreeMap<String, String>,
 }
 
-fn simple_parse_html(html: &str) -> Vec<DomNode> {
+fn simple_parse_html(_html: &str) -> Vec<DomNode> {
     let mut nodes = Vec::new();
 
     // Simplified: hardcode the DOM structure from our demo HTML
@@ -222,7 +222,7 @@ fn show_cascade(node: &DomNode, all_nodes: &[DomNode], rules: &[CssRule]) {
 
     for rule in &matching {
         for (prop, val) in &rule.declarations {
-            let dominated = if let Some((existing_rule, existing_val)) = resolved.get(prop) {
+            let dominated = if let Some((existing_rule, _existing_val)) = resolved.get(prop) {
                 // Does new rule win?
                 let new_wins = compare_cascade(rule, existing_rule);
                 !new_wins

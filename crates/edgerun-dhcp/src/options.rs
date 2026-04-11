@@ -6,9 +6,8 @@ use super::message::{
 };
 use super::message::{
     OPT_SUBNET_MASK, OPT_ROUTER, OPT_DNS_SERVER, OPT_LEASE_TIME,
-    OPT_RENEWAL_TIME, OPT_REBIND_TIME, OPT_REQUESTED_IP,
+    OPT_RENEWAL_TIME, OPT_REBIND_TIME,
 };
-use super::DhcpMessageType;
 
 /// Builder for constructing DHCP option sets.
 pub struct OptionsBuilder {

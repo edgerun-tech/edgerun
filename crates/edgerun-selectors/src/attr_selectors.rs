@@ -1,7 +1,7 @@
 //! Attribute selector operators — from Selectors Level 4.
 //! DO NOT EDIT. Regenerate with: scripts/generate_selector_dom.py
 extern crate alloc;
-use alloc::{string::String, vec::Vec};
+use alloc::string::String;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttrMatchOp {

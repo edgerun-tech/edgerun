@@ -26,7 +26,7 @@ use edgerun_compositor::protocol::text_input_v3;
 use edgerun_compositor::protocol::input_method_v2;
 use edgerun_compositor::protocol::wp_presentation_time;
 use edgerun_compositor::protocol::wp_presentation_time::PresentationFeedbackTracker;
-use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device, PointerConstraint, ConstraintType, RegionRegistry};
+use edgerun_compositor::protocol::dispatch::{self, DataSource, process_input_for_device, RegionRegistry};
 use edgerun_compositor::render::cursor::Cursor;
 use edgerun_compositor::render::shm::ShmManager;
 use edgerun_compositor::render::server::{render_and_flip, DamageAccumulator};

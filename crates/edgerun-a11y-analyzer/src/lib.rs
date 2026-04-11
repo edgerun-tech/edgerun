@@ -5,8 +5,6 @@
 //! with computed values. Other browsers resolve styles at render time
 //! — too late for static analysis.
 
-use std::collections::BTreeMap;
-
 /// WCAG 2.2 conformance level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd)]
 pub enum ConformanceLevel { A, AA, AAA }

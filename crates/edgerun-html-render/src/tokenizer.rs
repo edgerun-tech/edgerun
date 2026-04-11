@@ -132,6 +132,8 @@ pub struct Tokenizer {
     raw_text_state: State,
     /// State to return to after character reference decoding.
     return_state: State,
+    /// DOCTYPE force-quirks flag — set when the DOCTYPE is malformed.
+    doctype_force_quirks: bool,
 }
 
 impl Tokenizer {
@@ -154,6 +156,7 @@ impl Tokenizer {
             raw_text_end_tag: String::new(),
             raw_text_state: State::Data,
             return_state: State::Data,
+            doctype_force_quirks: false,
         }
     }
 
@@ -1494,19 +1497,19 @@ impl Tokenizer {
                     self.state = State::ScriptDataDoubleEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 '/' => {
                     self.state = State::ScriptDataDoubleEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 '>' => {
                     self.state = State::ScriptDataDoubleEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 _ => {
                     self.state = State::ScriptDataEscaped;
@@ -1794,19 +1797,19 @@ impl Tokenizer {
                     self.state = State::ScriptDataEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 '/' => {
                     self.state = State::ScriptDataEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 '>' => {
                     self.state = State::ScriptDataEscaped;
                     self.emit_char();
                     self.temp_buffer.push(c);
-                    // check_temp_buffer_is_script (TODO)
+                    self.check_temp_buffer_is_script(State::ScriptDataDoubleEscaped);
                 }
                 _ => {
                     self.state = State::ScriptDataDoubleEscaped;
@@ -2748,11 +2751,11 @@ impl Tokenizer {
                 '-' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ';' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '=' => {
                     self.state = State::AmbiguousAmpersand;
@@ -2761,12 +2764,12 @@ impl Tokenizer {
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\0' => {
                     self.state = State::AmbiguousAmpersand;
@@ -2775,47 +2778,47 @@ impl Tokenizer {
                 '"' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\'' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '/' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '<' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '?' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '!' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ']' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '%' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 _ => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -2836,63 +2839,63 @@ impl Tokenizer {
                 }
                 '-' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ';' => {
                     self.state = State::AmbiguousAmpersand;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '>' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '"' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\'' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '/' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '<' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '=' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '?' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '!' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ']' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '%' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\0' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 _ => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -2914,7 +2917,7 @@ impl Tokenizer {
                 _ => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -2936,7 +2939,7 @@ impl Tokenizer {
                 '-' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ';' => {
                     self.state = State::NumericCharacterReferenceEnd;
@@ -2945,67 +2948,67 @@ impl Tokenizer {
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '"' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\'' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '/' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '<' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '=' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '?' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '!' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ']' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '%' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\0' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 _ => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -3015,12 +3018,12 @@ impl Tokenizer {
                 'a'..='z' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 'A'..='Z' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '0'..='9' => {
                     self.state = State::DecimalCharacterReference;
@@ -3029,7 +3032,7 @@ impl Tokenizer {
                 '-' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ';' => {
                     self.state = State::NumericCharacterReferenceEnd;
@@ -3038,67 +3041,67 @@ impl Tokenizer {
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '"' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\'' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '/' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '<' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '=' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '?' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '!' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ']' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '%' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\0' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 _ => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -3107,77 +3110,77 @@ impl Tokenizer {
                 match c {
                 'a'..='z' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 'A'..='Z' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '0'..='9' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '-' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\0' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
                     self.emit_replacement();
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '"' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '\'' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '/' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '<' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '>' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '=' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '?' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ';' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '!' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 ']' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 '%' => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 _ => {
                     self.state = State::Data;
-                    // flush_char_ref (TODO)
+                    self.flush_char_ref();
                 }
                 }
             }
@@ -3201,7 +3204,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 '\0' => {
@@ -3244,7 +3247,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 _ => {
@@ -3301,12 +3304,12 @@ impl Tokenizer {
                 '0'..='9' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '-' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::AfterDoctypeName;
@@ -3319,67 +3322,67 @@ impl Tokenizer {
                 '"' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '\'' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '/' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '&' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '<' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '=' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '?' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 ';' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '!' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 ']' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '%' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '\0' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 _ => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 }
             }
@@ -3389,33 +3392,33 @@ impl Tokenizer {
                 'a'..='z' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 'A'..='Z' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 '\0' => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 _ => {
                     self.state = State::BogusDoctype;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                 }
                 }
             }
@@ -3433,7 +3436,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3464,7 +3467,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3495,7 +3498,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3526,7 +3529,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3557,7 +3560,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3588,7 +3591,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3619,7 +3622,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3650,7 +3653,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -3681,7 +3684,7 @@ impl Tokenizer {
                 '>' => {
                     self.state = State::Data;
                     self.parse_errors += 1;
-                    // set_doctype_force_quirks (TODO)
+                    self.doctype_force_quirks = true;
                     self.emit_token(TokenType::StartTag);
                 }
                 ' ' | '\t' | '\n' | '\r' | '\x0C' => {
@@ -4395,7 +4398,6 @@ impl Tokenizer {
         self.current_attr_map.clear();
     }
 
-    #[allow(dead_code)]
     fn emit_null(&mut self) {
         self.text_buffer.push('\u{0000}');
     }
@@ -4465,9 +4467,69 @@ impl Tokenizer {
             self.pos -= 1;  // reconsume current character
         }
     }
+
+    /// WHATWG §13.2.5.69 — Flush character reference.
+    ///
+    /// After a character reference has been accumulated in the text_buffer,
+    /// look it up in the entity table and emit the decoded code point(s).
+    /// If not found, emit the literal characters as-is.
+    fn flush_char_ref(&mut self) {
+        let entity_name = self.text_buffer.clone();
+        self.text_buffer.clear();
+
+        if let Some((cp1, cp2)) = crate::entity_decoder::lookup_entity(&entity_name) {
+            // Entity found — emit decoded code point(s)
+            if let Some(ch) = char::from_u32(cp1) {
+                self.text_buffer.push(ch);
+            }
+            if cp2 != 0 {
+                if let Some(ch) = char::from_u32(cp2) {
+                    self.text_buffer.push(ch);
+                }
+            }
+        } else if entity_name.starts_with('#') {
+            // Numeric character reference: &#NNNN; or &#xHHHH;
+            if let Some(cp) = Self::parse_numeric_char_ref(&entity_name) {
+                if let Some(ch) = char::from_u32(cp) {
+                    self.text_buffer.push(ch);
+                } else {
+                    self.text_buffer.push('\u{FFFD}');
+                }
+            } else {
+                self.text_buffer.push('\u{FFFD}');
+            }
+        } else {
+            // Unknown named entity — emit original characters literally
+            self.text_buffer.push('&');
+            self.text_buffer.push_str(&entity_name);
+        }
+    }
+
+    /// Parse a numeric character reference from the text_buffer content.
+    /// Input is like "#x3C", "#60", "x3c", etc. (without the leading '&').
+    fn parse_numeric_char_ref(s: &str) -> Option<u32> {
+        let s = s.trim_start_matches('#');
+        let (is_hex, digits) = if let Some(rest) = s.strip_prefix(['x', 'X']) {
+            (true, rest)
+        } else {
+            (false, s)
+        };
+        u32::from_str_radix(digits, if is_hex { 16 } else { 10 }).ok()
+    }
+
+    /// WHATWG §13.2.5.46 — Check if temp buffer is "script".
+    ///
+    /// After </ in script data double escape start, the temp buffer contains
+    /// the tag name. If it is "script", enter double-escaped mode.
+    fn check_temp_buffer_is_script(&mut self, double_escaped_state: State) {
+        if self.temp_buffer.eq_ignore_ascii_case("script") {
+            self.state = double_escaped_state;
+        } else {
+            self.state = State::ScriptDataEscaped;
+        }
+    }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum TokenType {
     StartTag,

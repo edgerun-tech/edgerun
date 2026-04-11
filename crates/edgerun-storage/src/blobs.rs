@@ -24,11 +24,6 @@
 //!
 //! Recipient metadata is stored in SQLite via the parent storage layer.
 
-use edgerun_crypto::rand_core::RngCore;
-use edgerun_crypto::aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Key, Nonce,
-};
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};

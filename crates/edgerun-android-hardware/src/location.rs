@@ -2,7 +2,7 @@
 //! Reads GPS data from sysfs (available on all Android devices via Linux kernel).
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality,
     CapabilityOperation, CapabilityRole, CapabilityProvider,
 };
 

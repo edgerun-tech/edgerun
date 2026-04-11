@@ -3,7 +3,6 @@
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
-use alloc::{string::String, vec::Vec};
 
 pub mod pseudo_classes;
 pub mod pseudo_elements;

@@ -1,7 +1,7 @@
 //! Android display capability via `ANativeWindow` (NDK `libnative_window.so`).
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality,
     CapabilityOperation, CapabilityRole, CapabilityProvider,
 };
 

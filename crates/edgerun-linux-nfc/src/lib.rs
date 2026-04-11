@@ -48,7 +48,7 @@ pub fn discover_nfc_adapters_in(root: &Path) -> Result<Vec<LinuxNfcAdapter>, Cap
             _ => NfcPowerState::Unknown,
         };
         let protocols = read_trimmed(&path.join("protocols"));
-        let supported_technologies = parse_supported_technologies(&protocols);
+        let _supported_technologies = parse_supported_technologies(&protocols);
         out.push(LinuxNfcAdapter {
             name,
             sysfs_path: path.clone(),
@@ -93,7 +93,7 @@ impl NfcDevice for LinuxNfcBackend {
         Ok(self.adapter.power_state)
     }
 
-    fn set_power_state(&self, state: NfcPowerState) -> Result<NfcPowerState, CapabilityError> {
+    fn set_power_state(&self, _state: NfcPowerState) -> Result<NfcPowerState, CapabilityError> {
         // Linux kernel NFC subsystem doesn't expose a standard sysfs power toggle.
         // Power management is handled by the kernel driver or rfkill.
         Err(CapabilityError::Unsupported(

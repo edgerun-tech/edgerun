@@ -1,10 +1,9 @@
 //! Android Input capability via NDK `libinput.so`.
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityModality,
+    capability_descriptor, CapabilityDescriptor, CapabilityModality,
     CapabilityOperation, CapabilityRole, CapabilityProvider,
 };
-use edgerun_input::InputEventRecord;
 
 #[cfg(feature = "android-real")]
 mod real {

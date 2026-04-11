@@ -49,7 +49,6 @@ pub use async_tls::{AsyncTlsStream, AsyncTlsServerStream};
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 
-use edgerun_crypto::rand_core::RngCore;
 use crate::certificate::Certificate;
 use crate::cipher::{CipherSuite, NamedGroup};
 use crate::handshake::{ClientHelloBuilder, ServerHello};
@@ -661,7 +660,7 @@ fn generate_random() -> [u8; 32] {
     let mut buf = [0u8; 32];
     #[cfg(unix)]
     {
-        edgerun_crypto::rand_core::OsRng.fill_bytes(&mut buf);
+        edgerun_crypto::OsRng.fill_bytes(&mut buf);
     }
     #[cfg(not(unix))]
     {
