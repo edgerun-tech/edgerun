@@ -54,58 +54,87 @@ pub fn build_server_hello(
     msg
 }
 
-/// Build an EncryptedExtensions handshake message.
+/// Build an EncryptedExtensions handshake message (RFC 8446 §4.3.1).
+///
+/// Wire format: type(1) + length(3) + extensions_length(2) + extensions(0)
+/// Even with no extensions, the extensions_length field (2 bytes) is required.
 pub fn build_encrypted_extensions() -> Vec<u8> {
     let mut msg = Vec::new();
-    msg.push(8);
-    msg.extend_from_slice(&[0u8; 3]);
+    msg.push(8); // EncryptedExtensions type
     msg.extend_from_slice(&[0u8; 2]);
+    msg.push(2u8); // body length = 2 (just the extensions_length field)
+    msg.extend_from_slice(&[0u8; 2]); // extensions_length = 0
     msg
 }
 
-/// Build a Certificate message (TLS 1.3 format).
+/// Build a Certificate message (TLS 1.3 format, RFC 8446 §4.4.2).
+///
+/// Wire format:
+///   handshake_type(1) = 11
+///   length(3)
+///   certificate_request_context_length(1) = 0  (server doesn't request certs)
+///   certificate_list_length(3)
+///     CertificateEntry:
+///       cert_data_length(3)
+///       cert_data (= DER certificate)
+///       extensions_length(2) = 0
+///       extensions (empty)
 pub fn build_certificate_message(cert_der: &[u8]) -> Vec<u8> {
     let mut msg = Vec::new();
-    msg.push(11);
+    msg.push(11); // Certificate handshake type
 
-    let cert_list_len = 3 + cert_der.len();
-    let total_len = 1 + 3 + cert_list_len;
+    // Each CertificateEntry: cert_data_length(3) + cert_data + extensions_length(2) + extensions(0)
+    let cert_entry_len = 3 + cert_der.len() + 2;
+    // Full message after type+length: context_len(1) + cert_list_len(3) + cert_entry
+    let msg_body_len = 1 + 3 + cert_entry_len;
 
-    msg.extend_from_slice(&(total_len as u32).to_be_bytes()[1..]);
-    msg.push(0);
-    msg.extend_from_slice(&(cert_list_len as u32).to_be_bytes()[1..]);
+    msg.extend_from_slice(&(msg_body_len as u32).to_be_bytes()[1..]); // 3-byte message length
+    msg.push(0); // certificate_request_context length = 0
+    msg.extend_from_slice(&(cert_entry_len as u32).to_be_bytes()[1..]); // 3-byte certificate_list length
+
+    // CertificateEntry
+    msg.extend_from_slice(&(cert_der.len() as u32).to_be_bytes()[1..]); // 3-byte cert_data length
     msg.extend_from_slice(cert_der);
-    msg.extend_from_slice(&[0u8; 2]);
+    msg.extend_from_slice(&[0u8; 2]); // extensions length = 0
 
     msg
 }
 
 /// Build a CertificateVerify message (RFC 8446 §4.4.3).
+///
+/// The signature is computed over:
+///   0x20 * 64 || context_string || 0x00 || Hash(transcript)
+/// where `transcript` is the concatenation of all prior handshake messages.
 pub fn build_certificate_verify(
     transcript: &[u8],
     signing_key: &SigningKey,
     hasher: &Hasher,
 ) -> Result<Vec<u8>> {
     let context = b"TLS 1.3, server CertificateVerify";
+
+    // Per RFC 8446 §4.4.3, the signed input is:
+    //   0x20 * 64 || context_string || 0x00 || Hash(transcript)
+    // The ecdsa::SigningKey::sign method hashes its input internally,
+    // so we pass the raw padded data, NOT a pre-computed hash.
+    let transcript_hash = hasher.hash(transcript);
+
     let mut padded = vec![0x20u8; 64];
     padded.extend_from_slice(context);
     padded.push(0x00);
-    padded.extend_from_slice(transcript);
-
-    let digest = match hasher {
-        Hasher::Sha256 => Sha256::digest(&padded).to_vec(),
-        Hasher::Sha384 => Sha384::digest(&padded).to_vec(),
-    };
+    padded.extend_from_slice(&transcript_hash);
 
     let mut signer = signing_key.clone();
-    let signature: Signature = <SigningKey as SignerMut<Signature>>::sign(&mut signer, &digest);
-    let sig_der_bytes = signature.to_bytes().to_vec();
+    let signature: Signature = <SigningKey as SignerMut<Signature>>::sign(&mut signer, &padded);
+    // RFC 8446 §4.4.3 requires DER-encoded signatures
+    // `to_bytes()` returns raw r||s (64 bytes), but CertificateVerify needs DER encoding
+    let sig_der_bytes = signature.to_der().as_ref().to_vec();
 
     let mut msg = Vec::new();
     msg.push(15);
 
-    let inner_len = 2 + 2 + sig_der_bytes.len();
-    msg.extend_from_slice(&((4 + inner_len) as u32).to_be_bytes()[1..]);
+    // Handshake message length is body size only (RFC 8446 §4)
+    let inner_len = 2 + 2 + sig_der_bytes.len(); // algorithm(2) + sig_len(2) + signature
+    msg.extend_from_slice(&(inner_len as u32).to_be_bytes()[1..]); // 3-byte body length
 
     msg.extend_from_slice(&0x0403u16.to_be_bytes());
     msg.extend_from_slice(&(sig_der_bytes.len() as u16).to_be_bytes());

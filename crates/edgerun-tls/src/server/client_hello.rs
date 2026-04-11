@@ -26,6 +26,8 @@ pub struct ClientHello {
     pub client_key_share: Option<Vec<u8>>,
     /// The named group for the client's key_share
     pub client_key_share_group: Option<NamedGroup>,
+    /// All client key shares (group -> key bytes)
+    pub all_key_shares: Vec<(NamedGroup, Vec<u8>)>,
     /// Supported versions extension (ext 43)
     pub supported_versions: Vec<u16>,
     /// Supported groups (ext 10)
@@ -126,6 +128,7 @@ impl ClientHello {
         let mut server_name = None;
         let mut client_key_share = None;
         let mut client_key_share_group = None;
+        let mut all_key_shares = Vec::new();
         let mut supported_versions = Vec::new();
         let mut supported_groups = Vec::new();
         let mut signature_algorithms = Vec::new();
@@ -215,8 +218,9 @@ impl ClientHello {
                                 let ke_len = u16::from_be_bytes([ext_data[kpos + 2], ext_data[kpos + 3]]) as usize;
                                 kpos += 4;
                                 if kpos + ke_len <= ext_data.len() {
-                                    if client_key_share.is_none() {
-                                        if let Ok(g) = NamedGroup::from_wire(group) {
+                                    if let Ok(g) = NamedGroup::from_wire(group) {
+                                        all_key_shares.push((g, ext_data[kpos..kpos + ke_len].to_vec()));
+                                        if client_key_share.is_none() {
                                             client_key_share_group = Some(g);
                                             client_key_share = Some(ext_data[kpos..kpos + ke_len].to_vec());
                                         }
@@ -242,6 +246,7 @@ impl ClientHello {
             server_name,
             client_key_share,
             client_key_share_group,
+            all_key_shares,
             supported_versions,
             supported_groups,
             signature_algorithms,

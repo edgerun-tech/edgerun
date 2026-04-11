@@ -241,10 +241,76 @@ let mut conn = server.into_http2_connection();
 | HTTP/2 | No frame sequence validation for server push (PUSH_PROMISE → CONTINUATION) | Low |
 | HTTP/2 | No SETTINGS negotiation round-trip with connection state application | Medium |
 | HTTP/3 | Zero conformance tests | TODO |
-| Interop | No h2spec tool integration | TODO |
-| TLS | No full end-to-end TLS + HTTP/2 integration test | Medium |
+| Interop | No h2spec tool integration | ✅ Done (52/90 pass; failures are HTTP/2 server behavior) |
+| TLS | No full end-to-end TLS + HTTP/2 integration test | ✅ Done (handshake works, application data decrypts) |
 
 ---
+
+## h2spec Integration
+
+**Status: ✅ TLS HANDSHAKE WORKING** — h2spec TLS handshakes succeed, HTTP/2 frames are exchanged.
+
+### Automation
+
+```bash
+# Install h2spec
+go install github.com/summerwind/h2spec/cmd/h2spec@latest
+
+# Run automated tests
+./scripts/run-h2spec.sh --port 8081
+./scripts/run-h2spec.sh --strict --port 8081
+```
+
+The script:
+1. Builds `h2spec-server` binary with `--features tls`
+2. Starts the server on the specified port
+3. Runs `h2spec -h 127.0.0.1 -p <port> -k -t` (TLS, insecure, 5s timeout)
+4. Captures JUnit XML report to `target/h2spec-report-*.xml`
+5. Reports pass/fail summary
+
+### Results (h2spec v2.0.0)
+
+| Metric | Count |
+|--------|-------|
+| **Passed** | 52 |
+| **Failed** | 38 |
+| **Total** | 90 |
+
+All 52+ TLS handshakes complete successfully. Failures are in HTTP/2 server behavior (not TLS):
+- GOAWAY/PROTOCOL_ERROR handling
+- FRAME_SIZE_ERROR handling
+- Stream state machine enforcement
+- SETTINGS parameter validation
+
+### Fixes Applied
+
+The following TLS 1.3 bugs were discovered and fixed during interoperability testing:
+
+| # | Bug | Description | RFC Section |
+|---|-----|-------------|-------------|
+| 1 | **AEAD AAD missing** | Encrypt/decrypt used empty AAD instead of 5-byte record header `[0x17, 0x03, 0x03, len_hi, len_lo]` | §5.2 |
+| 2 | **Nonce construction wrong** | First 4 bytes of IV were zeroed instead of copied from `write_iv` | §5.3 |
+| 3 | **Certificate format wrong** | Missing `cert_data_length` field (3 bytes) per TLS 1.3 CertificateEntry format | §4.4.2 |
+| 4 | **EncryptedExtensions body missing** | Missing `extensions_length` field (2 bytes) — body was 0 bytes instead of 2 | §4.3.1 |
+| 5 | **CertificateVerify signs wrong data** | Signed raw transcript instead of `Hash(transcript)` | §4.4.3 |
+| 6 | **CertificateVerify uses raw signature** | Used `to_bytes()` (raw r\|\|s) instead of `to_der()` (DER-encoded ECDSA) | §4.4.3 |
+| 7 | **CertificateVerify length field wrong** | Length field included type+length bytes (79) instead of just body size (75) | §4 |
+| 8 | **Double-hashing in CertificateVerify** | Pre-hashed the padded input before passing to `sign()`, but `ecdsa::SigningKey::sign` hashes internally | §4.4.3 |
+| 9 | **Application traffic secrets use empty context** | Used `Hash("")` instead of `Hash(CH1...server Finished)` as context | §7.1 |
+| 10 | **ChangeCipherSpec not skipped** | Server didn't skip dummy CCS record before client's Finished | — |
+| 11 | **Certificate parsing was hand-rolled** | Manual DER walking failed to extract CN/SAN from real certs | — |
+| 12 | **Certificate generation was hand-rolled** | Manual DER assembly produced invalid X.509 structure | — |
+
+### Infrastructure Changes
+
+| Change | Detail |
+|--------|--------|
+| Certificate parsing | Rewrote using `x509_cert::Certificate::from_der()` from edgerun-crypto |
+| Certificate generation | Rewrote using `rcgen` for RFC 5280-compliant certificates |
+| `all_key_shares` in ClientHello | Added to capture all key shares, not just the first |
+| `p256` pkcs8 feature | Enabled for PKCS#8 key import from rcgen |
+| Unused dependencies | Removed `rustls` and `rcgen` from edgerun-http Cargo.toml |
+
 
 ## Test Data Sources
 

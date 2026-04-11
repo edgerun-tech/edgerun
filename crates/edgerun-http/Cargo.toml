@@ -17,8 +17,6 @@ tls = ["edgerun-tls"]
 [dependencies]
 edgerun-tls = { path = "../edgerun-tls", optional = true }
 hpack-patched = "0.3"
-rustls = "0.23"
-rcgen = "0.13"
 
 [[bin]]
 name = "h2spec-server"

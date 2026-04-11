@@ -131,13 +131,15 @@ impl Tls13KeySchedule {
     }
 
     /// Derive client application traffic secret
-    pub fn client_app_traffic_secret(&self) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "c ap traffic", &[], self.hash.len())
+    /// Per RFC 8446 §7.1: HKDF-Expand-Label(master_secret, "c ap traffic", Hash(CH1..SH-Finished), 32)
+    pub fn client_app_traffic_secret(&self, transcript_hash: &[u8]) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "c ap traffic", transcript_hash, self.hash.len())
     }
 
     /// Derive server application traffic secret
-    pub fn server_app_traffic_secret(&self) -> Vec<u8> {
-        self.hash.expand_label(&self.secret, "s ap traffic", &[], self.hash.len())
+    /// Per RFC 8446 §7.1: HKDF-Expand-Label(master_secret, "s ap traffic", Hash(CH1..SH-Finished), 32)
+    pub fn server_app_traffic_secret(&self, transcript_hash: &[u8]) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "s ap traffic", transcript_hash, self.hash.len())
     }
 
     /// Derive resumption master secret
@@ -247,8 +249,9 @@ mod tests {
         let _server_hs = ks.server_handshake_traffic_secret(&[1u8; 32]);
 
         ks.advance_to_master();
-        let _client_app = ks.client_app_traffic_secret();
-        let _server_app = ks.server_app_traffic_secret();
+        let dummy_hash = vec![0u8; 32];
+        let _client_app = ks.client_app_traffic_secret(&dummy_hash);
+        let _server_app = ks.server_app_traffic_secret(&dummy_hash);
     }
 
     /// Verify key derivation against RFC 8446 test vectors

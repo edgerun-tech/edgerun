@@ -238,8 +238,9 @@ fn test_key_schedule_full_derivation() {
     assert_eq!(server_hs.len(), 32);
 
     ks.advance_to_master();
-    let server_app = ks.server_app_traffic_secret();
-    let client_app = ks.client_app_traffic_secret();
+    let dummy_hash = vec![0u8; 32];
+    let server_app = ks.server_app_traffic_secret(&dummy_hash);
+    let client_app = ks.client_app_traffic_secret(&dummy_hash);
     assert_ne!(server_app, client_app);
     assert_ne!(server_app, server_hs);
     assert_eq!(server_app.len(), 32);

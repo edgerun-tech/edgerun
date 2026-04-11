@@ -247,11 +247,14 @@ impl ServerHandshake {
         let handshake_transcript_hash = transcript_hash;
 
         self.send_encrypted_handshake(&mut write_cipher, &mut ks, &handshake_transcript_hash)?;
+        // Save transcript hash after server's Finished — this is used for app traffic secrets
+        // Per RFC 8446 §7.1: app traffic secrets use Hash(CH1...server Finished)
+        let app_transcript_hash = self.hasher().hash(&self.transcript);
         self.read_client_finished(&mut read_cipher, &ks, &handshake_transcript_hash)?;
 
         ks.advance_to_master();
-        let server_app = ks.server_app_traffic_secret();
-        let client_app = ks.client_app_traffic_secret();
+        let server_app = ks.server_app_traffic_secret(&app_transcript_hash);
+        let client_app = ks.client_app_traffic_secret(&app_transcript_hash);
 
         let server_app_keys = server_app_write_keys(&server_app, self.cipher_suite.key_len(), 12, &hash);
         let client_app_keys = client_app_write_keys(&client_app, self.cipher_suite.key_len(), 12, &hash);
@@ -289,18 +292,25 @@ impl ServerHandshake {
 
         self.client_random = ch.random;
 
-        if let Some(group) = ch.client_key_share_group {
-            self.selected_group = match group {
+        // Select key exchange group: prefer client's first key_share, fall back to X25519
+        let (selected_group, client_key_share) = if let Some((group, key)) = ch.all_key_shares.first() {
+            let keg = match group {
                 crate::cipher::NamedGroup::X25519 => KeyExchangeGroup::X25519,
                 _ => KeyExchangeGroup::SECP256R1,
             };
-        }
-
-        if let Some(ks) = ch.client_key_share {
-            self.client_key_share = ks;
+            (keg, key.clone())
+        } else if let Some(ks) = ch.client_key_share {
+            let keg = match ch.client_key_share_group {
+                Some(crate::cipher::NamedGroup::X25519) => KeyExchangeGroup::X25519,
+                _ => KeyExchangeGroup::SECP256R1,
+            };
+            (keg, ks)
         } else {
             return Err(TlsError::HandshakeFailure("No key_share in ClientHello".into()));
-        }
+        };
+
+        self.selected_group = selected_group;
+        self.client_key_share = client_key_share.clone();
 
         self.client_session_id = ch.session_id;
         self.ch_msg = fragment.clone();
@@ -385,32 +395,42 @@ impl ServerHandshake {
         ks: &Tls13KeySchedule,
         handshake_transcript_hash: &[u8],
     ) -> Result<()> {
-        let (ct, _ver, len) = read_record_header(&mut self.stream)?;
-        if ct != 23 {
-            return Err(TlsError::HandshakeFailure(format!("Expected encrypted record for client Finished, got content_type={ct}")));
+        // TLS 1.3 clients may send a dummy ChangeCipherSpec record (content_type=20)
+        // before the Finished. Skip any ChangeCipherSpec records.
+        loop {
+            let (ct, _ver, len) = read_record_header(&mut self.stream)?;
+            if ct == 20 {
+                // ChangeCipherSpec — skip in TLS 1.3
+                let _fragment = read_record_fragment(&mut self.stream, len)?;
+                continue;
+            }
+            if ct != 23 {
+                return Err(TlsError::HandshakeFailure(format!("Expected encrypted record for client Finished, got content_type={ct}")));
+            }
+            let fragment = read_record_fragment(&mut self.stream, len)?;
+            let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
+
+            let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
+            if hs_type != 20 {
+                return Err(TlsError::HandshakeFailure(format!("Expected Finished (type 20), got {}", hs_type)));
+            }
+
+            let transcript_hash = self.hasher().hash(&self.transcript);
+            let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
+            let expected_verify = compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, &self.hasher());
+
+            if plaintext.len() < 4 + expected_verify.len() {
+                return Err(TlsError::Protocol("Client Finished verification data too short".into()));
+            }
+            let client_verify_data = &plaintext[4..4 + expected_verify.len()];
+
+            if !constant_time_eq(client_verify_data, &expected_verify) {
+                return Err(TlsError::Protocol("Client Finished verification failed".into()));
+            }
+
+            self.transcript.extend_from_slice(&plaintext);
+            break;
         }
-        let fragment = read_record_fragment(&mut self.stream, len)?;
-        let (inner_type, plaintext) = read_cipher.decrypt(&fragment)?;
-
-        let hs_type = if !plaintext.is_empty() { plaintext[0] } else { inner_type };
-        if hs_type != 20 {
-            return Err(TlsError::HandshakeFailure(format!("Expected Finished (type 20), got {}", hs_type)));
-        }
-
-        let transcript_hash = self.hasher().hash(&self.transcript);
-        let client_hs_secret = ks.client_handshake_traffic_secret(handshake_transcript_hash);
-        let expected_verify = compute_client_finished_verify_data(&client_hs_secret, &transcript_hash, &self.hasher());
-
-        if plaintext.len() < 4 + expected_verify.len() {
-            return Err(TlsError::Protocol("Client Finished verification data too short".into()));
-        }
-        let client_verify_data = &plaintext[4..4 + expected_verify.len()];
-
-        if !constant_time_eq(client_verify_data, &expected_verify) {
-            return Err(TlsError::Protocol("Client Finished verification failed".into()));
-        }
-
-        self.transcript.extend_from_slice(&plaintext);
         Ok(())
     }
 
@@ -622,8 +642,8 @@ mod tests {
             "Client and server transcript hashes must match before Finished");
 
         ks.advance_to_master();
-        let server_app = ks.server_app_traffic_secret();
-        let client_app = ks.client_app_traffic_secret();
+        let server_app = ks.server_app_traffic_secret(&client_transcript_hash);
+        let client_app = ks.client_app_traffic_secret(&client_transcript_hash);
         assert_ne!(server_app, client_app);
     }
 }

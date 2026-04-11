@@ -19,6 +19,8 @@ pub struct RecordCipher {
     iv: [u8; 12],
     /// Sequence number for record ordering
     seq: u64,
+    /// AEAD tag length in bytes
+    tag_len: usize,
 }
 
 enum CipherImpl {
@@ -45,26 +47,56 @@ impl RecordCipher {
             _ => return Err(format!("Unsupported key length: {} bytes", key.len())),
         };
 
-        Ok(RecordCipher { inner, iv: iv_arr, seq: 0 })
+        Ok(RecordCipher {
+            inner,
+            iv: iv_arr,
+            seq: 0,
+            tag_len: 16, // AES-GCM tag length
+        })
     }
 
-    /// Encrypt a TLS 1.3 application data record.
+    /// Build the TLS 1.3 record header for use as AEAD AAD (RFC 8446 §5.2).
     ///
-    /// The plaintext is first appended with the content_type byte (23 = application_data),
-    /// then encrypted with AES-GCM. The resulting ciphertext is the AEAD ciphertext + tag.
+    /// The AAD is the 5-byte TLSPlaintext header:
+    ///   content_type(1) || legacy_record_version(2) || length(2)
+    ///
+    /// Where `length` is the length of the encrypted payload
+    /// (plaintext + content_type byte + tag).
+    fn build_aad(content_type: u8, plaintext_len: usize) -> [u8; 5] {
+        let length = plaintext_len + 1 /* content_type byte */ + Self::TAG_LEN;
+        [
+            content_type,
+            0x03, 0x03, // TLS 1.2 version (middlebox compat)
+            (length >> 8) as u8,
+            length as u8,
+        ]
+    }
+
+    /// AEAD tag length for this cipher
+    const TAG_LEN: usize = 16;
+
+    /// Encrypt a TLS 1.3 record.
+    ///
+    /// Per RFC 8446 §5.2, the AAD is the 5-byte TLSPlaintext header.
+    /// The plaintext is first appended with the content_type byte,
+    /// then encrypted with AES-GCM using the AAD.
+    /// The resulting output is: ciphertext + tag.
     pub fn encrypt(&mut self, content_type: u8, plaintext: &[u8]) -> Vec<u8> {
         // TLS 1.3: plaintext = opaque_content + ContentType byte
-        let mut buffer = Vec::with_capacity(plaintext.len() + 1 + 16);
+        let mut buffer = Vec::with_capacity(plaintext.len() + 1 + Self::TAG_LEN);
         buffer.extend_from_slice(plaintext);
         buffer.push(content_type);
+
+        // AAD is the 5-byte record header that will wrap the ciphertext
+        let aad = Self::build_aad(0x17, plaintext.len()); // 0x17 = application_data
 
         let nonce = self.make_nonce();
         let tag = match &self.inner {
             CipherImpl::Aes128(cipher) => cipher
-                .encrypt_in_place_detached(&nonce, &[], &mut buffer)
+                .encrypt_in_place_detached(&nonce, &aad, &mut buffer)
                 .expect("AEAD encryption failed"),
             CipherImpl::Aes256(cipher) => cipher
-                .encrypt_in_place_detached(&nonce, &[], &mut buffer)
+                .encrypt_in_place_detached(&nonce, &aad, &mut buffer)
                 .expect("AEAD encryption failed"),
         };
 
@@ -74,24 +106,34 @@ impl RecordCipher {
     }
 
     /// Decrypt a TLS 1.3 record.
+    ///
+    /// Per RFC 8446 §5.2, the AAD is the 5-byte record header
+    /// (content_type=0x17, version=0x0303, length=ciphertext+tag).
     /// Returns (content_type, plaintext).
     pub fn decrypt(&mut self, ciphertext: &[u8]) -> Result<(u8, Vec<u8>), String> {
-        if ciphertext.len() < 16 {
+        if ciphertext.len() < Self::TAG_LEN {
             return Err("Ciphertext too short for AEAD tag".into());
         }
 
         let nonce = self.make_nonce();
+
+        // AAD is the 5-byte record header
+        // content_type is always 0x17 (application_data) for TLS 1.3 encrypted records
+        // ciphertext = original_plaintext + 1(content_type) + 16(tag)
+        // build_aad expects the original plaintext length
+        let aad = Self::build_aad(0x17, ciphertext.len() - Self::TAG_LEN - 1);
+
         let mut buffer = ciphertext.to_vec();
-        let tag_offset = buffer.len() - 16;
+        let tag_offset = buffer.len() - Self::TAG_LEN;
         let tag: edgerun_crypto::aes_gcm::Tag = edgerun_crypto::aes_gcm::Tag::clone_from_slice(&buffer[tag_offset..]);
         buffer.truncate(tag_offset);
 
         match &self.inner {
             CipherImpl::Aes128(cipher) => cipher
-                .decrypt_in_place_detached(&nonce, &[], &mut buffer, &tag)
+                .decrypt_in_place_detached(&nonce, &aad, &mut buffer, &tag)
                 .map_err(|e| format!("AEAD decryption failed: {:?}", e))?,
             CipherImpl::Aes256(cipher) => cipher
-                .decrypt_in_place_detached(&nonce, &[], &mut buffer, &tag)
+                .decrypt_in_place_detached(&nonce, &aad, &mut buffer, &tag)
                 .map_err(|e| format!("AEAD decryption failed: {:?}", e))?,
         };
 
@@ -106,12 +148,20 @@ impl RecordCipher {
         Ok((content_type, data))
     }
 
-    /// Derive the per-record nonce: write_iv XOR sequence_number
+    /// Derive the per-record nonce: write_iv XOR sequence_number.
+    ///
+    /// Per RFC 8446 §5.3, the nonce is computed as:
+    ///   nonce = iv XOR (0x00...00 || seq_number)
+    ///
+    /// Where the sequence number is zero-padded on the left to 12 bytes.
+    /// This is equivalent to: nonce[0..4] = iv[0..4], nonce[4..12] = iv[4..12] XOR seq.
     fn make_nonce(&self) -> Nonce<edgerun_crypto::aes_gcm::aead::consts::U12> {
         let mut nonce = [0u8; 12];
         let seq_bytes = self.seq.to_be_bytes();
+        // Copy the full IV, then XOR the sequence number into the last 8 bytes
+        nonce.copy_from_slice(&self.iv);
         for i in 0..8 {
-            nonce[4 + i] = self.iv[4 + i] ^ seq_bytes[i];
+            nonce[4 + i] ^= seq_bytes[i];
         }
         Nonce::from(nonce)
     }

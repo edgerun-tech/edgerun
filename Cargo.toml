@@ -9,6 +9,7 @@ members = [
   "crates/edgerun-android-keystore",
   "crates/edgerun-audio-calibration",
   "crates/edgerun-audio-liveliness",
+  "crates/edgerun-bench-correctness",
   "crates/edgerun-bench",
   "crates/edgerun-biometrics",
   "crates/edgerun-bluetooth",
@@ -75,6 +76,7 @@ members = [
   "crates/edgerun-layout",
   "crates/edgerun-rasterizer",
   "crates/edgerun-demo",
+  "crates/edgerun-demo-wgpu",
   "crates/edgerun-html-render",
   "crates/edgerun-linux-cec",
   "crates/edgerun-linux-gpu",
@@ -117,6 +119,7 @@ members = [
   "crates/edgerun-usb",
   "crates/edgerun-v4l2-camera",
   "crates/edgerun-virtual-disk",
+  "crates/edgerun-wgpu",
   "crates/edgerun-wifi",
   "crates/edgerun-yubikey",
 ]
