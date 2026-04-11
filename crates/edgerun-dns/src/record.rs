@@ -40,6 +40,16 @@ pub enum DnsRecordType {
     HTTPS = 65,
     /// SVCB service binding (RFC 9460)
     SVCB = 64,
+    /// Delegation Signer (RFC 4034)
+    DS = 43,
+    /// RRset Signature (RFC 4034)
+    RRSIG = 46,
+    /// Next Secure record (RFC 4034)
+    NSEC = 47,
+    /// DNS Public Key (RFC 4034)
+    DNSKEY = 48,
+    /// Next SECure record v3 (RFC 5155)
+    NSEC3 = 50,
     /// Any record (AXFR/IXFR)
     AXFR = 252,
     /// Any record (wildcard query)
@@ -65,6 +75,11 @@ impl DnsRecordType {
             52 => Some(Self::TLSA),
             64 => Some(Self::SVCB),
             65 => Some(Self::HTTPS),
+            43 => Some(Self::DS),
+            46 => Some(Self::RRSIG),
+            47 => Some(Self::NSEC),
+            48 => Some(Self::DNSKEY),
+            50 => Some(Self::NSEC3),
             252 => Some(Self::AXFR),
             255 => Some(Self::ANY),
             257 => Some(Self::CAA),
@@ -97,6 +112,11 @@ impl DnsRecordType {
             Self::AXFR => "AXFR",
             Self::ANY => "ANY",
             Self::CAA => "CAA",
+            Self::DS => "DS",
+            Self::RRSIG => "RRSIG",
+            Self::NSEC => "NSEC",
+            Self::DNSKEY => "DNSKEY",
+            Self::NSEC3 => "NSEC3",
             Self::OPT => "OPT",
         }
     }
@@ -209,6 +229,76 @@ pub enum DnsRecordData {
         target: String,
         /// SVCB parameters (encoded wire format: key + length + value).
         params: Vec<u8>,
+    },
+    /// DS — Delegation Signer (RFC 4034).
+    /// Links parent zone's DS to child zone's DNSKEY for chain of trust.
+    DS {
+        /// Key tag of the child's DNSKEY.
+        key_tag: u16,
+        /// Algorithm of the child's DNSKEY (RSA/ECDSA/etc).
+        algorithm: u8,
+        /// Digest type (1=SHA-1, 2=SHA-256, 4=SHA-384).
+        digest_type: u8,
+        /// Digest of the child's DNSKEY RDATA.
+        digest: Vec<u8>,
+    },
+    /// DNSKEY — DNS Public Key (RFC 4034).
+    /// Contains the public key used to verify RRSIG signatures.
+    DNSKEY {
+        /// Protocol (always 3 for DNSSEC).
+        protocol: u8,
+        /// Key flags: 256=ZSK, 257=KSK.
+        flags: u16,
+        /// Algorithm (5=RSASHA1, 8=RSASHA256, 13=ECDSAP256, 14=ECDSAP384, 15=ED25519, 16=ED448).
+        algorithm: u8,
+        /// Public key data.
+        public_key: Vec<u8>,
+    },
+    /// RRSIG — RRset Signature (RFC 4034).
+    /// Cryptographic signature over an RRset.
+    RRSIG {
+        /// Type covered (the record type this signature covers).
+        type_covered: u16,
+        /// Algorithm used for signing.
+        algorithm: u8,
+        /// Number of labels in the original RRset owner name.
+        labels: u8,
+        /// Original TTL of the signed RRset.
+        original_ttl: u32,
+        /// Signature expiration (seconds since epoch).
+        expiration: u32,
+        /// Signature inception (seconds since epoch).
+        inception: u32,
+        /// Key tag of the signing DNSKEY.
+        key_tag: u16,
+        /// Signer's name (domain that owns the signing key).
+        signer_name: String,
+        /// The cryptographic signature.
+        signature: Vec<u8>,
+    },
+    /// NSEC — Next Secure record (RFC 4034).
+    /// Proves non-existence of a name/type by pointing to the next name.
+    NSEC {
+        /// Next owner name (the next name in canonical order).
+        next_owner: String,
+        /// Type bit map of types that exist at this name.
+        type_bits: Vec<u8>,
+    },
+    /// NSEC3 — Next SECure record v3 (RFC 5155).
+    /// Hashed version of NSEC to prevent zone enumeration.
+    NSEC3 {
+        /// Hash algorithm (1=SHA-1).
+        hash_algorithm: u8,
+        /// Flags (1=opt-out).
+        flags: u8,
+        /// Number of iterations for hash computation.
+        iterations: u16,
+        /// Salt for hash computation.
+        salt: Vec<u8>,
+        /// Hashed next owner name.
+        next_hashed_owner: Vec<u8>,
+        /// Type bit map of types that exist at this name.
+        type_bits: Vec<u8>,
     },
     /// Unknown or uninterpreted raw record data.
     Raw(Vec<u8>),
@@ -331,6 +421,63 @@ impl DnsRecordData {
                 buf.extend_from_slice(&priority.to_be_bytes());
                 buf.extend_from_slice(&encode_domain_name(target));
                 buf.extend_from_slice(params);
+                buf
+            }
+            (DnsRecordType::DS, DnsRecordData::DS {
+                key_tag, algorithm, digest_type, digest,
+            }) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&key_tag.to_be_bytes());
+                buf.push(*algorithm);
+                buf.push(*digest_type);
+                buf.extend_from_slice(digest);
+                buf
+            }
+            (DnsRecordType::DNSKEY, DnsRecordData::DNSKEY {
+                protocol, flags, algorithm, public_key,
+            }) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&flags.to_be_bytes());
+                buf.push(*protocol);
+                buf.push(*algorithm);
+                buf.extend_from_slice(public_key);
+                buf
+            }
+            (DnsRecordType::RRSIG, DnsRecordData::RRSIG {
+                type_covered, algorithm, labels, original_ttl,
+                expiration, inception, key_tag, signer_name, signature,
+            }) => {
+                let mut buf = Vec::new();
+                buf.extend_from_slice(&type_covered.to_be_bytes());
+                buf.push(*algorithm);
+                buf.push(*labels);
+                buf.extend_from_slice(&original_ttl.to_be_bytes());
+                buf.extend_from_slice(&expiration.to_be_bytes());
+                buf.extend_from_slice(&inception.to_be_bytes());
+                buf.extend_from_slice(&key_tag.to_be_bytes());
+                buf.extend_from_slice(&encode_domain_name(signer_name));
+                buf.extend_from_slice(signature);
+                buf
+            }
+            (DnsRecordType::NSEC, DnsRecordData::NSEC { next_owner, type_bits }) => {
+                let mut buf = encode_domain_name(next_owner);
+                buf.extend_from_slice(type_bits);
+                buf
+            }
+            (DnsRecordType::NSEC3, DnsRecordData::NSEC3 {
+                hash_algorithm, flags, iterations, salt,
+                next_hashed_owner, type_bits,
+            }) => {
+                let mut buf = Vec::new();
+                buf.push(*hash_algorithm);
+                buf.push(*flags);
+                buf.extend_from_slice(&iterations.to_be_bytes());
+                buf.push(salt.len() as u8);
+                buf.extend_from_slice(salt);
+                let hash_len = next_hashed_owner.len();
+                buf.push(hash_len as u8);
+                buf.extend_from_slice(next_hashed_owner);
+                buf.extend_from_slice(type_bits);
                 buf
             }
             (_, DnsRecordData::Raw(data)) => data.clone(),
@@ -490,6 +637,89 @@ impl DnsRecordData {
                 let target_len = domain_name_wire_len(data, 2);
                 let params = data[2 + target_len..].to_vec();
                 Ok(Self::SVCB { priority, target, params })
+            }
+            DnsRecordType::DS => {
+                if data.len() < 4 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let key_tag = u16::from_be_bytes([data[0], data[1]]);
+                let algorithm = data[2];
+                let digest_type = data[3];
+                Ok(Self::DS {
+                    key_tag, algorithm, digest_type,
+                    digest: data[4..].to_vec(),
+                })
+            }
+            DnsRecordType::DNSKEY => {
+                if data.len() < 4 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let flags = u16::from_be_bytes([data[0], data[1]]);
+                let protocol = data[2];
+                let algorithm = data[3];
+                Ok(Self::DNSKEY {
+                    protocol, flags, algorithm,
+                    public_key: data[4..].to_vec(),
+                })
+            }
+            DnsRecordType::RRSIG => {
+                if data.len() < 18 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let type_covered = u16::from_be_bytes([data[0], data[1]]);
+                let algorithm = data[2];
+                let labels = data[3];
+                let original_ttl = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
+                let expiration = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
+                let inception = u32::from_be_bytes([data[12], data[13], data[14], data[15]]);
+                let key_tag = u16::from_be_bytes([data[16], data[17]]);
+                // Signer name starts at offset 18, followed by signature
+                let signer_name = decode_domain_name(data, 18, offset_map)?;
+                let signer_len = domain_name_wire_len(data, 18);
+                let sig_start = 18 + signer_len;
+                Ok(Self::RRSIG {
+                    type_covered, algorithm, labels, original_ttl,
+                    expiration, inception, key_tag, signer_name,
+                    signature: data[sig_start..].to_vec(),
+                })
+            }
+            DnsRecordType::NSEC => {
+                if data.is_empty() {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let next_owner = decode_domain_name(data, 0, offset_map)?;
+                let next_len = domain_name_wire_len(data, 0);
+                Ok(Self::NSEC {
+                    next_owner,
+                    type_bits: data[next_len..].to_vec(),
+                })
+            }
+            DnsRecordType::NSEC3 => {
+                if data.len() < 6 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let hash_algorithm = data[0];
+                let flags = data[1];
+                let iterations = u16::from_be_bytes([data[2], data[3]]);
+                let salt_len = data[4] as usize;
+                let salt_start = 5;
+                let salt_end = salt_start + salt_len;
+                if salt_end + 1 > data.len() {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let salt = data[salt_start..salt_end].to_vec();
+                let hash_len = data[salt_end] as usize;
+                let hash_start = salt_end + 1;
+                let hash_end = hash_start + hash_len;
+                if hash_end > data.len() {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let next_hashed_owner = data[hash_start..hash_end].to_vec();
+                let type_bits = data[hash_end..].to_vec();
+                Ok(Self::NSEC3 {
+                    hash_algorithm, flags, iterations, salt,
+                    next_hashed_owner, type_bits,
+                })
             }
             DnsRecordType::OPT => {
                 if data.len() < 4 {
@@ -784,10 +1014,83 @@ mod tests {
         assert_eq!(DnsRecordType::from_u16(52), Some(DnsRecordType::TLSA));
         assert_eq!(DnsRecordType::from_u16(65), Some(DnsRecordType::HTTPS));
         assert_eq!(DnsRecordType::from_u16(64), Some(DnsRecordType::SVCB));
+        assert_eq!(DnsRecordType::from_u16(43), Some(DnsRecordType::DS));
+        assert_eq!(DnsRecordType::from_u16(46), Some(DnsRecordType::RRSIG));
+        assert_eq!(DnsRecordType::from_u16(47), Some(DnsRecordType::NSEC));
+        assert_eq!(DnsRecordType::from_u16(48), Some(DnsRecordType::DNSKEY));
+        assert_eq!(DnsRecordType::from_u16(50), Some(DnsRecordType::NSEC3));
         assert_eq!(DnsRecordType::NAPTR.as_str(), "NAPTR");
         assert_eq!(DnsRecordType::CAA.as_str(), "CAA");
         assert_eq!(DnsRecordType::TLSA.as_str(), "TLSA");
         assert_eq!(DnsRecordType::HTTPS.as_str(), "HTTPS");
         assert_eq!(DnsRecordType::SVCB.as_str(), "SVCB");
+        assert_eq!(DnsRecordType::DS.as_str(), "DS");
+        assert_eq!(DnsRecordType::RRSIG.as_str(), "RRSIG");
+        assert_eq!(DnsRecordType::NSEC.as_str(), "NSEC");
+        assert_eq!(DnsRecordType::DNSKEY.as_str(), "DNSKEY");
+        assert_eq!(DnsRecordType::NSEC3.as_str(), "NSEC3");
+    }
+
+    #[test]
+    fn test_ds_wire() {
+        let data = DnsRecordData::DS {
+            key_tag: 12345,
+            algorithm: 13, // ECDSAP256SHA256
+            digest_type: 2, // SHA-256
+            digest: vec![0xAB, 0xCD],
+        };
+        let wire = data.to_wire(DnsRecordType::DS);
+        assert_eq!(wire[0..2], [48, 57]); // key_tag 12345
+        assert_eq!(wire[2], 13); // algorithm
+        assert_eq!(wire[3], 2);  // digest type
+        assert_eq!(&wire[4..], &[0xAB, 0xCD]);
+    }
+
+    #[test]
+    fn test_dnskey_wire() {
+        let data = DnsRecordData::DNSKEY {
+            protocol: 3,
+            flags: 257, // KSK
+            algorithm: 13, // ECDSAP256SHA256
+            public_key: vec![0x04, 0xAB, 0xCD],
+        };
+        let wire = data.to_wire(DnsRecordType::DNSKEY);
+        assert_eq!(wire[0..2], [1, 1]); // flags 257
+        assert_eq!(wire[2], 3);    // protocol
+        assert_eq!(wire[3], 13);   // algorithm
+        assert_eq!(&wire[4..], &[0x04, 0xAB, 0xCD]);
+    }
+
+    #[test]
+    fn test_nsec_wire() {
+        let data = DnsRecordData::NSEC {
+            next_owner: "next.example.com".to_string(),
+            type_bits: vec![0x40, 0x01, 0x00, 0x01], // bitmap for A, RRSIG
+        };
+        let wire = data.to_wire(DnsRecordType::NSEC);
+        // Next owner is domain-name encoded
+        assert!(wire.len() > 16); // at least the domain name
+        assert_eq!(&wire[wire.len()-4..], &[0x40, 0x01, 0x00, 0x01]);
+    }
+
+    #[test]
+    fn test_nsec3_wire() {
+        let data = DnsRecordData::NSEC3 {
+            hash_algorithm: 1, // SHA-1
+            flags: 0,
+            iterations: 5,
+            salt: vec![0xDE, 0xAD],
+            next_hashed_owner: vec![0xAB, 0xCD, 0xEF],
+            type_bits: vec![0x40],
+        };
+        let wire = data.to_wire(DnsRecordType::NSEC3);
+        assert_eq!(wire[0], 1);   // hash algorithm
+        assert_eq!(wire[1], 0);   // flags
+        assert_eq!(wire[2..4], [0, 5]); // iterations
+        assert_eq!(wire[4], 2);   // salt length
+        assert_eq!(&wire[5..7], &[0xDE, 0xAD]);
+        assert_eq!(wire[7], 3);   // hash length
+        assert_eq!(&wire[8..11], &[0xAB, 0xCD, 0xEF]);
+        assert_eq!(wire[11], 0x40); // type bits
     }
 }

@@ -165,6 +165,48 @@ impl DnsZone {
         self.add_record(rr);
     }
 
+    /// Add a DS record (RFC 4034 — Delegation Signer).
+    pub fn add_ds(&mut self, name: &str, key_tag: u16, algorithm: u8, digest_type: u8,
+                  digest: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::ds(full_name, key_tag, algorithm, digest_type, digest, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add a DNSKEY record (RFC 4034 — DNS Public Key).
+    pub fn add_dnskey(&mut self, name: &str, flags: u16, protocol: u8, algorithm: u8,
+                      public_key: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::dnskey(full_name, flags, protocol, algorithm, public_key, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an RRSIG record (RFC 4034 — RRset Signature).
+    pub fn add_rrsig(&mut self, name: &str, type_covered: u16, algorithm: u8, labels: u8,
+                     original_ttl: u32, expiration: u32, inception: u32, key_tag: u16,
+                     signer_name: &str, signature: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::rrsig(full_name, type_covered, algorithm, labels, original_ttl,
+                                  expiration, inception, key_tag, signer_name.to_string(), signature, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an NSEC record (RFC 4034 — Next Secure).
+    pub fn add_nsec(&mut self, name: &str, next_owner: &str, type_bits: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::nsec(full_name, next_owner.to_string(), type_bits, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an NSEC3 record (RFC 5155 — Next SECure v3).
+    pub fn add_nsec3(&mut self, name: &str, hash_algorithm: u8, flags: u8, iterations: u16,
+                     salt: Vec<u8>, next_hashed_owner: Vec<u8>, type_bits: Vec<u8>, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::nsec3(full_name, hash_algorithm, flags, iterations, salt,
+                                  next_hashed_owner, type_bits, ttl);
+        self.add_record(rr);
+    }
+
     /// Add a raw record directly.
     pub fn add_record(&mut self, rr: DnsRecord) {
         let name = rr.name.to_lowercase();

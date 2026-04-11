@@ -469,6 +469,72 @@ impl DnsRecord {
         }
     }
 
+    /// Create a DS record (RFC 4034 — Delegation Signer).
+    pub fn ds(name: String, key_tag: u16, algorithm: u8, digest_type: u8,
+              digest: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::DS,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::DS { key_tag, algorithm, digest_type, digest },
+        }
+    }
+
+    /// Create a DNSKEY record (RFC 4034 — DNS Public Key).
+    pub fn dnskey(name: String, flags: u16, protocol: u8, algorithm: u8,
+                  public_key: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::DNSKEY,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::DNSKEY { protocol, flags, algorithm, public_key },
+        }
+    }
+
+    /// Create an RRSIG record (RFC 4034 — RRset Signature).
+    pub fn rrsig(name: String, type_covered: u16, algorithm: u8, labels: u8,
+                 original_ttl: u32, expiration: u32, inception: u32, key_tag: u16,
+                 signer_name: String, signature: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::RRSIG,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::RRSIG {
+                type_covered, algorithm, labels, original_ttl,
+                expiration, inception, key_tag, signer_name, signature,
+            },
+        }
+    }
+
+    /// Create an NSEC record (RFC 4034 — Next Secure).
+    pub fn nsec(name: String, next_owner: String, type_bits: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::NSEC,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::NSEC { next_owner, type_bits },
+        }
+    }
+
+    /// Create an NSEC3 record (RFC 5155 — Next SECure v3).
+    pub fn nsec3(name: String, hash_algorithm: u8, flags: u8, iterations: u16,
+                 salt: Vec<u8>, next_hashed_owner: Vec<u8>, type_bits: Vec<u8>, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::NSEC3,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::NSEC3 {
+                hash_algorithm, flags, iterations, salt,
+                next_hashed_owner, type_bits,
+            },
+        }
+    }
+
     /// Create an EDNS0 OPT pseudo-record (RFC 6891).
     ///
     /// The `rclass` field holds the UDP payload size, and `ttl` encodes
