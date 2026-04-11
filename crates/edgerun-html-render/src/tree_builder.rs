@@ -63,11 +63,6 @@ pub struct TreeBuilder {
     insertion_mode: InsertionMode,
     /// Pending tokenizer state override (set by switch_to_rawtext/rcdata/script_data).
     pending_tokenizer_mode: TokenizerMode,
-    /// Whether <frameset> is allowed (set false by certain rules).
-    frameset_ok: bool,
-    /// Self-closing flag — set by acknowledge_self_closing.
-    current_token_is_self_closing: bool,
-    done: bool,
     parse_errors: usize,
 }
 
@@ -78,9 +73,6 @@ impl TreeBuilder {
             completed: Vec::new(),
             insertion_mode: InsertionMode::Initial,
             pending_tokenizer_mode: TokenizerMode::None,
-            frameset_ok: true,
-            current_token_is_self_closing: false,
-            done: false,
             parse_errors: 0,
         }
     }
@@ -1051,23 +1043,23 @@ impl TreeBuilder {
                     self.insert(name, attrs, *self_closing);
                 }
                 "td" => {
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 "tfoot" => {
                     self.insert(name, attrs, *self_closing);
                 }
                 "th" => {
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 "thead" => {
                     self.insert(name, attrs, *self_closing);
                 }
                 "tr" => {
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 _ => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 }
                 // Reprocess in next mode (otherwise rule)
@@ -1233,7 +1225,7 @@ impl TreeBuilder {
                 }
                 "td" => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 "tfoot" => {
                     self.parse_errors += 1;
@@ -1241,14 +1233,14 @@ impl TreeBuilder {
                 }
                 "th" => {
                     self.parse_errors += 1;
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 "thead" => {
                     self.parse_errors += 1;
                     // ignore token
                 }
                 "tr" => {
-                    self.insert_foster(name, attrs, *self_closing);
+                    self.insert_foster(name, attrs);
                 }
                 _ => { self.insert(name, attrs, *self_closing); }
                 }
@@ -2180,7 +2172,7 @@ impl TreeBuilder {
     ///
     /// When content appears where it is not allowed (e.g., text directly
     /// inside <table>), insert it outside the table element instead.
-    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>, _self_closing: bool) {
+    fn insert_foster(&mut self, name: &str, attrs: &BTreeMap<String, String>) {
         let mut elem = Element::new(name);
         for (k, v) in attrs { elem.attrs.insert(k.clone(), v.clone()); }
 
@@ -2211,20 +2203,6 @@ impl TreeBuilder {
             self.open_elements[html_idx].children.push(Node::Element(elem));
         } else if let Some(parent) = self.open_elements.last_mut() {
             parent.children.push(Node::Element(elem));
-        }
-    }
-
-    /// Acknowledge the self-closing flag.
-    fn acknowledge_self_closing(&mut self) {
-        self.current_token_is_self_closing = false;
-    }
-
-    /// Append a comment to the current node.
-    fn append_comment(&mut self, text: &str) {
-        if let Some(parent) = self.open_elements.last_mut() {
-            parent.children.push(Node::Comment(text.to_string()));
-        } else if let Some(Node::Element(elem)) = self.completed.last_mut() {
-            elem.children.push(Node::Comment(text.to_string()));
         }
     }
 

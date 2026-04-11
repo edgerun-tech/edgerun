@@ -1,0 +1,263 @@
+// Spec catalog messages — intermediate format for code generation.
+// Produced by `edgerun spec extract <domain>` commands.
+// Consumed by `edgerun gen <target>` commands.
+//
+// All extractors output proto binary to stdout. All generators read proto binary.
+
+syntax = "proto3";
+package edgerun.v0.spec;
+
+option go_package = "github.com/edgerun/edgerun/proto/go/spec";
+
+// Top-level catalog containing all spec domains.
+message Catalog {
+  string spec_name = 1;
+  string spec_date = 2;
+  repeated CssProperty css_properties = 3;
+  repeated CssValueType css_value_types = 4;
+  repeated CssAtRule css_at_rules = 5;
+  repeated DomInterface dom_interfaces = 6;
+  repeated DomEvent dom_events = 7;
+  repeated HtmlElement html_elements = 8;
+  repeated PseudoClassDef pseudo_classes = 9;
+  repeated PseudoElementDef pseudo_elements = 10;
+  repeated CombinatorDef combinators = 11;
+  repeated AttrMatchOpDef attr_match_ops = 12;
+  repeated JsBuiltInObjectDef js_builtins = 13;
+  repeated JsAbstractOpDef js_abstract_ops = 14;
+  repeated string js_well_known_symbols = 15;
+  repeated string js_well_known_intrinsics = 16;
+  repeated EncodingDef encodings = 17;
+  repeated BomEntry bom_table = 18;
+  repeated FetchEnumDef fetch_enums = 19;
+  repeated UrlParserStateDef url_states = 20;
+  repeated KeyEventDef key_events = 21;
+  repeated WebIdlType webidl_types = 22;
+  repeated FlexPropertyDef flexbox_properties = 23;
+  repeated GridPropertyDef grid_properties = 24;
+  repeated ColorDef color_defs = 25;
+  repeated MediaPropertyDef media_properties = 26;
+  repeated SyntaxDef syntax_defs = 27;
+}
+
+// -- CSS --
+
+message CssProperty {
+  string name = 1;
+  string value = 2;
+  string initial = 3;
+  string applies_to = 4;
+  bool inherited = 5;
+  string percentages = 6;
+  string computed_value = 7;
+  string animation_type = 8;
+  string canonical_order = 9;
+  string source_file = 10;
+}
+
+message CssValueType {
+  string name = 1;
+  string kind = 2; // "value" or "type"
+}
+
+message CssAtRule {
+  string name = 1;
+}
+
+// -- DOM --
+
+message DomInterface {
+  string name = 1;
+  string parent = 2;
+  repeated DomAttribute attributes = 3;
+  repeated DomMethod methods = 4;
+}
+
+message DomAttribute {
+  string name = 1;
+  string type = 2;
+  bool readonly = 3;
+}
+
+message DomMethod {
+  string name = 1;
+  string return_type = 2;
+  repeated DomParameter parameters = 3;
+}
+
+message DomParameter {
+  string type = 1;
+  string name = 2;
+}
+
+message DomEvent {
+  string name = 1;
+}
+
+// -- HTML --
+
+message HtmlElement {
+  string tag_name = 1;
+  repeated string categories = 2;
+  repeated string contexts = 3;
+  string content_model = 4;
+  string tag_omission = 5;
+  bool has_global_attributes = 6;
+  repeated HtmlAttrDef element_attrs = 7;
+  string dom_interface = 8;
+  string idl = 9;
+  string represents = 10;
+}
+
+message HtmlAttrDef {
+  string name = 1;
+  string description = 2;
+}
+
+// -- Selectors --
+
+message PseudoClassDef {
+  string name = 1;
+  string arguments = 2;
+  string description = 3;
+}
+
+message PseudoElementDef {
+  string name = 1;
+}
+
+message CombinatorDef {
+  string name = 1;
+  string syntax = 2;
+  string char = 3;
+  string description = 4;
+}
+
+message AttrMatchOpDef {
+  string name = 1;
+  string description = 2;
+  string operator = 3;
+}
+
+// -- ECMAScript --
+
+message JsBuiltInObjectDef {
+  string name = 1;
+  repeated JsMethodDef static_methods = 2;
+  repeated JsMethodDef prototype_methods = 3;
+  repeated string static_properties = 4;
+  repeated string prototype_properties = 5;
+  string constructor_signature = 6;
+}
+
+message JsMethodDef {
+  string name = 1;
+  string return_type = 2;
+  repeated string parameters = 3;
+}
+
+message JsAbstractOpDef {
+  string name = 1;
+  repeated string parameters = 2;
+  string section = 3;
+}
+
+// -- Encoding --
+
+message EncodingDef {
+  string name = 1;
+  repeated string labels = 2;
+  EncodingType type = 3;
+  string endianness = 4;
+}
+
+enum EncodingType {
+  ENCODING_TYPE_UNSPECIFIED = 0;
+  ENCODING_TYPE_UTF8 = 1;
+  ENCODING_TYPE_UTF16 = 2;
+  ENCODING_TYPE_LEGACY = 3;
+  ENCODING_TYPE_REPLACEMENT = 4;
+}
+
+message BomEntry {
+  string encoding = 1;
+  bytes bytes = 2;
+}
+
+// -- Fetch --
+
+message FetchEnumDef {
+  string name = 1;
+  repeated string variants = 2;
+}
+
+// -- URL --
+
+message UrlParserStateDef {
+  string name = 1;
+}
+
+// -- UI Events --
+
+message KeyEventDef {
+  string key = 1;
+  string kind = 2; // "keyboard", "mouse", "modifier"
+}
+
+// -- Web IDL --
+
+message WebIdlType {
+  string name = 1;
+  WebIdlTypeKind kind = 2;
+}
+
+enum WebIdlTypeKind {
+  WEBIDL_TYPE_UNSPECIFIED = 0;
+  WEBIDL_TYPE_PRIMITIVE = 1;
+  WEBIDL_TYPE_STRING = 2;
+  WEBIDL_TYPE_OBJECT = 3;
+  WEBIDL_TYPE_SPECIAL = 4;
+  WEBIDL_TYPE_EXTENDED_ATTR = 5;
+}
+
+// -- Flexbox --
+
+message FlexPropertyDef {
+  string name = 1;
+  repeated string values = 2;
+  string description = 3;
+  string category = 4; // "container" or "child"
+}
+
+// -- Grid --
+
+message GridPropertyDef {
+  string name = 1;
+  repeated string values = 2;
+  string description = 3;
+}
+
+// -- Color --
+
+message ColorDef {
+  string name = 1;
+  string color_space = 2;
+  repeated double components = 3;
+  string alpha = 4;
+}
+
+// -- Media --
+
+message MediaPropertyDef {
+  string name = 1;
+  string value = 2;
+  string description = 3;
+}
+
+// -- CSS Syntax --
+
+message SyntaxDef {
+  string name = 1;
+  string kind = 2; // "token" or "state"
+  repeated string variants = 3;
+}

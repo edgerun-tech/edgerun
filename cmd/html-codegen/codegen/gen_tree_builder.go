@@ -305,20 +305,6 @@ impl TreeBuilder {
         }
     }
 
-    /// Acknowledge the self-closing flag.
-    fn acknowledge_self_closing(&mut self) {
-        self.current_token_is_self_closing = false;
-    }
-
-    /// Append a comment to the current node.
-    fn append_comment(&mut self, text: &str) {
-        if let Some(parent) = self.open_elements.last_mut() {
-            parent.children.push(Node::Comment(text.to_string()));
-        } else if let Some(Node::Element(elem)) = self.completed.last_mut() {
-            elem.children.push(Node::Comment(text.to_string()));
-        }
-    }
-
     /// WHATWG §13.2.6.4.10 — Reset insertion mode appropriately.
     fn reset_insertion_mode(&mut self) {
         let last = self.open_elements.len().saturating_sub(1);
