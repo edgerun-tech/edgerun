@@ -136,7 +136,20 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
             Err(_) => break,
         };
 
-        // Handle unknown frame types (RFC 7540 §4.1: MUST ignore)
+        // During a CONTINUATION sequence, unknown frame types are a connection error.
+        // RFC 7540 §6.2: "Any other frame appearing in the middle of a header block
+        // MUST be treated as a connection error of type PROTOCOL_ERROR."
+        if expecting_continuation && raw_type_byte >= 0xA {
+            write_goaway(
+                &mut tls_stream,
+                server.last_processed_stream_id,
+                ErrorCode::PROTOCOL_ERROR.to_u32(),
+                b"Unknown frame type during CONTINUATION sequence",
+            );
+            break;
+        }
+
+        // Handle unknown frame types (RFC 7540 §4.1: MUST ignore outside CONTINUATION)
         if raw_type_byte >= 0xA {
             eprintln!("Ignoring unknown frame type: {raw_type_byte:#x}");
             continue;

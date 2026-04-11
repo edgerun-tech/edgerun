@@ -585,8 +585,12 @@ impl Http2Server {
                     b"DATA on idle stream",
                 );
             }
-            StreamState::HalfClosedRemote | StreamState::HalfClosedLocal | StreamState::Closed => {
+            StreamState::HalfClosedRemote | StreamState::Closed => {
                 return self.rst_stream(sid, ErrorCode::STREAM_CLOSED.to_u32());
+            }
+            StreamState::HalfClosedLocal => {
+                // Server already sent END_STREAM, client is finishing its request.
+                // Accept the data — when END_STREAM arrives, stream goes Closed.
             }
             _ => {}
         }

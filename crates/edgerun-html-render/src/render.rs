@@ -22,7 +22,7 @@ use crate::layout_builder::build_layout;
 pub fn render(html: &str, css: &str, width: u32, height: u32) -> Vec<u8> {
     // Parse → build layout tree with typed ComputedStyle
     let dom = parse_html(html);
-    let sheet = Stylesheet::new();
+    let sheet = crate::css_parser::parse_css(css);
     let root = build_layout(&dom, &sheet, width);
 
     // Position (two-pass block layout: measure heights, assign y positions)
@@ -110,16 +110,43 @@ mod tests {
 
     #[test]
     fn test_render_background() {
+        // Step 1: Check CSS parsing
+        let sheet = crate::css_parser::parse_css("div { background-color: red; color: white; }");
+        assert_eq!(sheet.rules.len(), 1, "expected 1 CSS rule");
+        assert_eq!(sheet.rules[0].selector, "div");
+        assert_eq!(sheet.rules[0].declarations.get("background-color"), Some(&"red".to_string()));
+
+        // Step 2: Check HTML parsing
+        let dom = crate::html_parser::parse_html("<div>Test</div>");
+        let count = count_nodes(&dom);
+        assert_eq!(count, 2, "expected 2 nodes (div + text)");
+
+        // Step 3: Check layout building
+        let root = build_layout(&dom, &sheet, 200);
+
+        // Step 4: Check CSS value parser handles "red"
+        let cv = edgerun_css_value_parser::parse_css_value("red");
+        assert!(matches!(cv, Some(edgerun_css_value_parser::CssValue::Color(_))),
+            "parse_css_value(\"red\") should return Color, got {:?}", cv);
+
+        // Step 5: Check compute_style
+        let decls = sheet.rules[0].declarations.clone();
+        let style = crate::computed_style::compute_style(&decls, &crate::computed_style::default_style());
+        assert!(style.background_color.is_some(), "background_color should be Some, got None. style.font.size={}", style.font.size);
+
+        // Step 6: Full render
         let pixels = render(
             "<div>Test</div>",
             "div { background-color: red; color: white; }",
             200, 50,
         );
-        // Should have red background (r=255, g=0, b=0)
+        assert_eq!(pixels.len(), 200 * 50 * 4);
+
+        // Check pixel output
         let red_count = pixels.chunks(4)
             .filter(|chunk| chunk.len() == 4 && chunk[0] > 200 && chunk[1] < 50 && chunk[2] < 50 && chunk[3] > 200)
             .count();
-        assert!(red_count > 0, "expected red background pixels");
+        assert!(red_count > 0, "expected red background pixels, got 0 red pixels out of {} total pixels", pixels.len() / 4);
     }
 
     #[test]

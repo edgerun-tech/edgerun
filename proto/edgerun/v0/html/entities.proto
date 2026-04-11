@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package edgerun.v0.html.entities;
+
+/// HTML Named Character References — generated from WHATWG HTML Living Standard §13.1.4.22.
+/// DO NOT EDIT. Regenerate with: scripts/generate_parser_ir.py
+
+// ---------------------------------------------------------------------------
+/// A single named character reference.
+///
+/// Most entities map to a single code point (e.g. `&amp;` → U+0026).
+/// A small number map to two code points (e.g. `&notindot;` → U+22F5 U+0338).
+///
+/// The WHATWG spec defines 2,231 named character references.
+message NamedEntity {
+  /// Entity name without leading & and trailing ;.
+  /// e.g. "amp" for &amp;, "nbsp" for &nbsp;, "notindot" for &notindot;
+  string name = 1;
+
+  /// Primary code point (always present).
+  uint32 code_point_1 = 2;
+
+  /// Secondary code point (0 if single-char entity).
+  uint32 code_point_2 = 3;
+
+  /// Whether the semicolon is required for this entity.
+  /// false for legacy entities that work without semicolon in attributes.
+  bool semicolon_required = 4;
+}
+
+// ---------------------------------------------------------------------------
+/// Complete entity catalog.
+message EntityCatalog {
+  string spec_section = 1;       // "13.1.4.22"
+  string spec_date = 2;
+  repeated NamedEntity entities = 3;
+  int32 total_entities = 4;
+
+  // Trie structure for O(1) lookup.
+  // The generator computes a perfect hash at build time.
+  // Each entry maps a prefix string to an entity index.
+  repeated TrieNode trie = 5;
+}
+
+// ---------------------------------------------------------------------------
+/// A node in the entity lookup trie.
+message TrieNode {
+  /// The character at this trie level (empty for root).
+  string key_char = 1;
+  /// Child nodes.
+  repeated TrieNode children = 2;
+  /// If non-zero, this node is a complete entity.
+  int32 entity_index = 3;
+}

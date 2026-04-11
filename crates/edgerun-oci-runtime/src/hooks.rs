@@ -25,21 +25,17 @@ use std::time::{Duration, Instant};
 use crate::json::OciHook;
 
 /// Container state passed to hooks via stdin.
-/// Per OCI runtime spec: the state of the container MUST be passed to hooks
-/// over stdin so that they may do work appropriate to the current state.
 #[derive(Debug, Clone)]
 pub struct ContainerState {
     pub version: String,
     pub id: String,
-    pub status: String, // "creating", "created", "running", "stopped"
+    pub status: String,
     pub pid: u32,
     pub bundle: String,
     pub annotations: HashMap<String, String>,
 }
 
 impl ContainerState {
-    /// Serialize to JSON for hook stdin.
-    /// Format matches OCI runtime spec state schema.
     pub fn to_json(&self) -> String {
         let mut json = String::from("{\n");
         json.push_str(&format!("  \"ociVersion\": \"{}\",\n", self.version));
@@ -75,190 +71,68 @@ impl std::fmt::Display for HookError {
     }
 }
 
-/// Execute a list of hooks with container state on stdin.
-///
-/// Hooks are executed in order. If any hook fails (non-zero exit or timeout),
-/// execution stops and an error is returned.
-///
-/// This is the generic hook executor used for runtime-namespace hooks.
+/// Execute hooks in runtime namespace context.
 pub fn execute_hooks(
     hooks: Option<&[OciHook]>,
     state: &ContainerState,
 ) -> Result<(), HookError> {
-    let Some(hooks) = hooks else { return Ok(()) };
-
-    let state_json = state.to_json();
-
-    for hook in hooks {
-        let timeout_secs = hook.timeout.unwrap_or(0);
-
-        let start = Instant::now();
-        let result = run_hook(hook, &state_json, timeout_secs);
-
-        match result {
-            Ok(exit_status) => {
-                if !exit_status.success() {
-                    return Err(HookError {
-                        hook_path: hook.path.clone(),
-                        error: io::Error::new(
-                            io::ErrorKind::Other,
-                            format!(
-                                "hook exited with code {:?} (took {:?})",
-                                exit_status.code(),
-                                start.elapsed(),
-                            ),
-                        ),
-                    });
-                }
-            }
-            Err(e) => {
-                return Err(HookError {
-                    hook_path: hook.path.clone(),
-                    error: e,
-                });
-            }
-        }
-    }
-
-    Ok(())
+    run_hook_chain(hooks, state, true)
 }
 
-/// Execute a single hook with container state on stdin.
-fn run_hook(hook: &OciHook, state_json: &str, timeout_secs: u64) -> io::Result<std::process::ExitStatus> {
-    let path = Path::new(&hook.path);
-    if !path.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("hook not found: {}", hook.path),
-        ));
-    }
-
-    let args = hook.args.as_deref().unwrap_or(&[]);
-    let env = hook.env.as_deref().unwrap_or(&[]);
-
-    let mut cmd = Command::new(path);
-    cmd.args(args);
-    cmd.stdin(Stdio::piped());
-    cmd.stdout(Stdio::null());
-    cmd.stderr(Stdio::piped());
-
-    // Inherit current environment, then override with hook env
-    for e in env {
-        if let Some((k, v)) = e.split_once('=') {
-            cmd.env(k, v);
-        }
-    }
-
-    let mut child = cmd.spawn()?;
-
-    // Write state to hook's stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(state_json.as_bytes());
-        // Drop stdin to signal EOF to the hook process
-    }
-
-    // Wait for hook to complete with optional timeout
-    let exit_status = if timeout_secs > 0 {
-        let timeout = Duration::from_secs(timeout_secs);
-        let start = Instant::now();
-        loop {
-            if let Some(status) = child.try_wait()? {
-                break status;
-            }
-            if start.elapsed() > timeout {
-                // Kill the hook on timeout
-                let _ = child.kill();
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    format!("hook {:?} timed out after {}s", hook.path, timeout_secs),
-                ));
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    } else {
-        child.wait()?
-    };
-
-    Ok(exit_status)
-}
-
-/// Execute hooks that run in the container namespace (inside pre_exec).
-///
-/// This is used for createContainer and startContainer hooks that must run
-/// inside the container's namespace context. The hook executable path is
-/// resolved from the runtime namespace, but execution happens inside the
-/// container namespace.
-///
-/// Since this runs in pre_exec, it uses a synchronous blocking approach.
+/// Execute hooks in container namespace context (inside pre_exec).
 pub fn execute_hooks_in_context(
     hooks: Option<&[OciHook]>,
     state: &ContainerState,
 ) -> io::Result<()> {
-    let Some(hooks) = hooks else { return Ok(()) };
+    run_hook_chain(hooks, state, false).map_err(|e| e.error)
+}
 
+/// Shared hook chain executor.
+fn run_hook_chain(
+    hooks: Option<&[OciHook]>,
+    state: &ContainerState,
+    capture_stderr: bool,
+) -> Result<(), HookError> {
+    let Some(hooks) = hooks else { return Ok(()) };
     let state_json = state.to_json();
 
     for hook in hooks {
-        let path = Path::new(&hook.path);
-        if !path.exists() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("hook not found: {}", hook.path),
-            ));
+        if !Path::new(&hook.path).exists() {
+            return Err(HookError { hook_path: hook.path.clone(),
+                error: io::Error::new(io::ErrorKind::NotFound, format!("hook not found: {}", hook.path)) });
         }
 
         let args = hook.args.as_deref().unwrap_or(&[]);
         let env = hook.env.as_deref().unwrap_or(&[]);
 
-        let mut cmd = Command::new(path);
+        let mut cmd = Command::new(&hook.path);
         cmd.args(args);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::null());
-        cmd.stderr(Stdio::null());
+        if capture_stderr { cmd.stderr(Stdio::piped()); } else { cmd.stderr(Stdio::null()); }
+        for e in env { if let Some((k, v)) = e.split_once('=') { cmd.env(k, v); } }
 
-        // Inherit current environment, then override with hook env
-        for e in env {
-            if let Some((k, v)) = e.split_once('=') {
-                cmd.env(k, v);
-            }
-        }
-
-        let mut child = cmd.spawn()?;
-
-        // Write state to hook's stdin
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(state_json.as_bytes());
-        }
+        let mut child = cmd.spawn().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })?;
+        if let Some(mut stdin) = child.stdin.take() { let _ = stdin.write_all(state_json.as_bytes()); }
 
         let timeout_secs = hook.timeout.unwrap_or(0);
+        let start = Instant::now();
         let status = if timeout_secs > 0 {
             let timeout = Duration::from_secs(timeout_secs);
-            let start = Instant::now();
             loop {
-                if let Some(s) = child.try_wait()? {
-                    break s;
-                }
-                if start.elapsed() > timeout {
-                    let _ = child.kill();
-                    return Err(io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        format!("hook {:?} timed out after {}s", hook.path, timeout_secs),
-                    ));
-                }
+                if let Some(s) = child.try_wait().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })? { break s; }
+                if start.elapsed() > timeout { let _ = child.kill(); return Err(HookError {
+                    hook_path: hook.path.clone(),
+                    error: io::Error::new(io::ErrorKind::TimedOut, format!("hook {:?} timed out after {}s", hook.path, timeout_secs)) }); }
                 std::thread::sleep(Duration::from_millis(50));
             }
-        } else {
-            child.wait()?
-        };
+        } else { child.wait().map_err(|e| HookError { hook_path: hook.path.clone(), error: e })? };
 
         if !status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                format!("hook {:?} failed with exit code {:?}", hook.path, status.code()),
-            ));
+            return Err(HookError { hook_path: hook.path.clone(),
+                error: io::Error::new(io::ErrorKind::Other, format!("hook exited with code {:?} (took {:?})", status.code(), start.elapsed())) });
         }
     }
-
     Ok(())
 }
 
@@ -266,101 +140,55 @@ pub fn execute_hooks_in_context(
 // Lifecycle-specific hook execution helpers
 // ===========================================================================
 
-/// Execute prestart hooks (deprecated, but still supported).
-/// Called during create, after runtime env created, before pivot_root.
-/// Runs in runtime namespace.
-pub fn execute_prestart_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> Result<(), HookError> {
+pub fn execute_prestart_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
-/// Execute createRuntime hooks.
-/// Called during create, after runtime env created, before pivot_root.
-/// Runs in runtime namespace.
-pub fn execute_create_runtime_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> Result<(), HookError> {
+pub fn execute_create_runtime_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
-/// Execute createContainer hooks.
-/// Called during create, after runtime env created, before pivot_root.
-/// Runs in container namespace (must be called from inside pre_exec).
-pub fn execute_create_container_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> io::Result<()> {
+pub fn execute_create_container_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> io::Result<()> {
     execute_hooks_in_context(hooks, state)
 }
 
-/// Execute startContainer hooks.
-/// Called during start, before user process exec.
-/// Runs in container namespace (must be called from inside pre_exec).
-pub fn execute_start_container_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> io::Result<()> {
+pub fn execute_start_container_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> io::Result<()> {
     execute_hooks_in_context(hooks, state)
 }
 
-/// Execute poststart hooks.
-/// Called after user process started, before start returns.
-/// Runs in runtime namespace.
-pub fn execute_poststart_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) -> Result<(), HookError> {
+pub fn execute_poststart_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) -> Result<(), HookError> {
     execute_hooks(hooks, state)
 }
 
-/// Execute poststop hooks.
-/// Called after container deleted, before delete returns.
-/// Runs in runtime namespace.
-/// Per OCI spec: if poststop hook fails, log warning but continue.
-pub fn execute_poststop_hooks(
-    hooks: Option<&[OciHook]>,
-    state: &ContainerState,
-) {
+pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState) {
     let Some(hooks) = hooks else { return };
-
     let state_json = state.to_json();
-
     for hook in hooks {
         let timeout_secs = hook.timeout.unwrap_or(0);
-        let result = run_hook(hook, &state_json, timeout_secs);
-
-        match result {
-            Ok(exit_status) => {
-                if !exit_status.success() {
-                    // Per OCI spec: log warning, but continue
-                    let _ = fs::write(
-                        "/dev/kmsg",
-                        format!(
-                            "edgerun: poststop hook {:?} exited with code {:?} (warning only)",
-                            hook.path,
-                            exit_status.code(),
-                        ),
-                    );
-                }
+        let path = Path::new(&hook.path);
+        if !path.exists() { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} not found (warning only)", hook.path)); continue; }
+        let args = hook.args.as_deref().unwrap_or(&[]);
+        let env = hook.env.as_deref().unwrap_or(&[]);
+        let mut cmd = Command::new(path);
+        cmd.args(args); cmd.stdin(Stdio::piped()); cmd.stdout(Stdio::null()); cmd.stderr(Stdio::piped());
+        for e in env { if let Some((k, v)) = e.split_once('=') { cmd.env(k, v); } }
+        match cmd.spawn() {
+            Ok(mut child) => {
+                if let Some(mut stdin) = child.stdin.take() { let _ = stdin.write_all(state_json.as_bytes()); }
+                let timeout = Duration::from_secs(timeout_secs);
+                let start = Instant::now();
+                let ok = if timeout_secs > 0 {
+                    loop { if let Some(s) = child.try_wait().ok().flatten() { break s.success(); }
+                        if start.elapsed() > timeout { let _ = child.kill(); break false; }
+                        std::thread::sleep(Duration::from_millis(50)); }
+                } else { child.wait().map_or(false, |s| s.success()) };
+                if !ok { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed (warning only)", hook.path)); }
             }
-            Err(e) => {
-                // Per OCI spec: log warning, but continue
-                let _ = fs::write(
-                    "/dev/kmsg",
-                    format!("edgerun: poststop hook {:?} failed: {} (warning only)", hook.path, e),
-                );
-            }
+            Err(e) => { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed: {} (warning only)", hook.path, e)); }
         }
     }
 }
-
 // ===========================================================================
-// Tests
-// ===========================================================================
-
 #[cfg(test)]
 mod tests {
     use super::*;

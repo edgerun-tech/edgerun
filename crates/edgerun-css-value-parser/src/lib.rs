@@ -118,7 +118,8 @@ pub fn parse_css_value(input: &str) -> Option<CssValue> {
         return Some(CssValue::Number(num));
     }
 
-    // 9. Colors
+    // 9. Colors — check BEFORE keywords since named colors (red, blue, etc.)
+    // are also keywords but must resolve to CssColor, not CssKeyword
     if let Some(color) = parse_color(input) {
         return Some(CssValue::Color(color));
     }

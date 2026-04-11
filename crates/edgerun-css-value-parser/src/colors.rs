@@ -27,6 +27,10 @@ pub struct HexColor {
 /// - hwb(): `hwb(0 0% 0%)`
 /// - Special: `currentColor`, `transparent`
 /// - Color functions: `oklch()`, `oklab()`, `lab()`, `lch()`, `color()`
+///
+/// Also handles the case where a named color was parsed as a keyword
+/// (e.g. "red" → `CssKeyword::Red`), by converting known keyword colors
+/// to their `CssColor::Named` equivalents.
 pub fn parse_color(input: &str) -> Option<CssColor> {
     let input = input.trim();
 
