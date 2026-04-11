@@ -1,0 +1,135 @@
+//! TCP accept loop and connection handler — length-prefixed DNS over TCP.
+
+use std::future::poll_fn;
+use std::io;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use edgerun_rt::AsyncRead;
+use edgerun_rt::AsyncTcpListener;
+use edgerun_rt::AsyncTcpStream;
+use edgerun_rt::AsyncWrite;
+
+use crate::message::{DnsMessage, DnsResponseCode};
+use super::query::{handle_query, ParseError, ServerState};
+
+/// Run the TCP accept loop — spawns a handler for each connection.
+pub async fn tcp_accept_loop(
+    listener: Arc<AsyncTcpListener>,
+    state: ServerState,
+) -> ! {
+    loop {
+        match listener.accept().await {
+            Ok((stream, peer)) => {
+                let state = state.clone();
+                edgerun_rt::spawn(async move {
+                    if let Err(e) = handle_tcp_connection(stream, peer, &state).await {
+                        edgerun_log::warn!("edgerun-dns: TCP error from {}: {}", peer, e);
+                    }
+                });
+            }
+            Err(e) => {
+                edgerun_log::warn!("edgerun-dns: TCP accept error: {}", e);
+                edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }
+    }
+}
+
+/// Handle a single TCP connection with length-prefixed DNS messages.
+async fn handle_tcp_connection(
+    stream: Arc<AsyncTcpStream>,
+    peer: SocketAddr,
+    state: &ServerState,
+) -> Result<(), io::Error> {
+    edgerun_log::debug!("edgerun-dns: TCP connection from {}", peer);
+
+    let stream_mutex = Arc::new(std::sync::Mutex::new(stream));
+
+    loop {
+        // Read 2-byte length prefix.
+        let mut len_buf = [0u8; 2];
+        match tcp_read_exact(&stream_mutex, &mut len_buf).await {
+            Ok(0) => return Ok(()),
+            Ok(2) => {}
+            Ok(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "incomplete TCP length")),
+            Err(e) => return Err(e),
+        }
+        let msg_len = u16::from_be_bytes(len_buf) as usize;
+        if msg_len == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "zero TCP message length"));
+        }
+
+        let mut query_buf = vec![0u8; msg_len];
+        tcp_read_exact(&stream_mutex, &mut query_buf).await?;
+
+        match handle_query(&query_buf, state).await {
+            Ok((response_wire, _tcp_needed)) => {
+                tcp_write_length_prefixed(&stream_mutex, &response_wire).await?;
+            }
+            Err(ParseError) => {
+                let response = DnsMessage::response(0, DnsResponseCode::FormErr, Vec::new());
+                tcp_write_length_prefixed(&stream_mutex, &response.to_wire()).await?;
+            }
+        }
+    }
+}
+
+/// Read exactly `n` bytes from a TCP stream behind a Mutex<Arc>.
+async fn tcp_read_exact(
+    stream_mutex: &Arc<std::sync::Mutex<Arc<AsyncTcpStream>>>,
+    buf: &mut [u8],
+) -> io::Result<usize> {
+    let mut total = 0;
+    let n = buf.len();
+    while total < n {
+        let read = poll_fn(|cx| {
+            let guard = stream_mutex.lock().unwrap();
+            let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
+            let stream_mut = unsafe { &mut *stream_ptr };
+            Pin::new(stream_mut).poll_read(cx, &mut buf[total..n])
+        }).await?;
+
+        if read == 0 {
+            return if total == 0 { Ok(0) } else {
+                Err(io::Error::new(io::ErrorKind::UnexpectedEof, "incomplete TCP read"))
+            };
+        }
+        total += read;
+    }
+    Ok(total)
+}
+
+/// Write a length-prefixed DNS response over TCP.
+async fn tcp_write_length_prefixed(
+    stream_mutex: &Arc<std::sync::Mutex<Arc<AsyncTcpStream>>>,
+    data: &[u8],
+) -> io::Result<()> {
+    let len_bytes = (data.len() as u16).to_be_bytes();
+
+    // Write length prefix.
+    poll_fn(|cx| {
+        let guard = stream_mutex.lock().unwrap();
+        let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
+        let stream_mut = unsafe { &mut *stream_ptr };
+        Pin::new(stream_mut).poll_write(cx, &len_bytes)
+    }).await?;
+
+    // Write message body.
+    let mut written = 0;
+    while written < data.len() {
+        let n = poll_fn(|cx| {
+            let guard = stream_mutex.lock().unwrap();
+            let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
+            let stream_mut = unsafe { &mut *stream_ptr };
+            Pin::new(stream_mut).poll_write(cx, &data[written..])
+        }).await?;
+        if n == 0 {
+            return Err(io::Error::new(io::ErrorKind::WriteZero, "TCP write zero"));
+        }
+        written += n;
+    }
+
+    Ok(())
+}

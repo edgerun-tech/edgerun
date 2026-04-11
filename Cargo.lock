@@ -1312,7 +1312,6 @@ version = "0.1.0"
 dependencies = [
  "edgerun-log",
  "edgerun-rt",
- "edgerun-tls",
 ]
 
 [[package]]

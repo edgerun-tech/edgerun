@@ -55,6 +55,7 @@ pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
 pub use client::DnsClient;
 pub use server::{DnsServer, DnsServerConfig};
+pub use server::query::{ServerState, handle_query, MAX_UDP_RESPONSE};
 pub use zone::DnsZone;
 pub use record::{DnsRecordType, DnsRecordData};
 pub use name::{validate_name, normalize_name, NameError};

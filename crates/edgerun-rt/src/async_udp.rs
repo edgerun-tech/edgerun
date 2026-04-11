@@ -324,3 +324,84 @@ fn sockaddr_to_addr(
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Async convenience methods (syscall + reactor registration)
+// ---------------------------------------------------------------------------
+
+impl AsyncUdpSocket {
+    /// Async send-to. Registers with the epoll reactor on WouldBlock.
+    pub async fn send_to(&self, buf: &[u8], target: SocketAddr) -> std::io::Result<usize> {
+        struct FdWaiter { fd: libc::c_int }
+        impl std::future::Future for FdWaiter {
+            type Output = ();
+            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+                crate::register_fd_write(self.fd, cx.waker().clone());
+                std::task::Poll::Pending
+            }
+        }
+
+        loop {
+            let addr = socket_addr_to_sockaddr(&target);
+            let addrlen = sockaddr_len(&target);
+            let n = unsafe {
+                libc::sendto(
+                    self.fd,
+                    buf.as_ptr() as *const libc::c_void,
+                    buf.len(),
+                    0,
+                    &addr as *const _ as *const libc::sockaddr,
+                    addrlen,
+                )
+            };
+            if n >= 0 {
+                return Ok(n as usize);
+            }
+            let e = std::io::Error::last_os_error();
+            if e.kind() == std::io::ErrorKind::WouldBlock {
+                FdWaiter { fd: self.fd }.await;
+                continue;
+            }
+            return Err(e);
+        }
+    }
+
+    /// Async recv-from. Registers with the epoll reactor on WouldBlock.
+    pub async fn recv_from(&self, buf: &mut [u8]) -> std::io::Result<(usize, SocketAddr)> {
+        struct FdWaiter { fd: libc::c_int }
+        impl std::future::Future for FdWaiter {
+            type Output = ();
+            fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<()> {
+                crate::register_fd_read(self.fd, cx.waker().clone());
+                std::task::Poll::Pending
+            }
+        }
+
+        loop {
+            let mut storage: std::mem::MaybeUninit<libc::sockaddr_storage> =
+                std::mem::MaybeUninit::zeroed();
+            let mut addrlen = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+            let n = unsafe {
+                libc::recvfrom(
+                    self.fd,
+                    buf.as_mut_ptr() as *mut libc::c_void,
+                    buf.len(),
+                    0,
+                    storage.as_mut_ptr() as *mut libc::sockaddr,
+                    &mut addrlen,
+                )
+            };
+            if n >= 0 {
+                let storage = unsafe { storage.assume_init() };
+                let addr = sockaddr_to_addr(&storage, addrlen);
+                return Ok((n as usize, addr));
+            }
+            let e = std::io::Error::last_os_error();
+            if e.kind() == std::io::ErrorKind::WouldBlock {
+                FdWaiter { fd: self.fd }.await;
+                continue;
+            }
+            return Err(e);
+        }
+    }
+}

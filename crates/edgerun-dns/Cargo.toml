@@ -9,4 +9,4 @@ description = "Async DNS server and client using edgerun-rt"
 [dependencies]
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
-edgerun-tls = { path = "../edgerun-tls" }
+# edgerun-tls = { path = "../edgerun-tls" }  # TODO: re-enable when edgerun-tls compiles
