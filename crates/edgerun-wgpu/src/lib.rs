@@ -7,3 +7,4 @@ pub mod pipeline;
 pub mod uniforms;
 pub mod render;
 pub mod layout_compute;
+pub mod font_atlas;

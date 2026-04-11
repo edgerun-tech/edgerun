@@ -5,11 +5,39 @@ use wgpu::{
     Buffer, BufferDescriptor, BufferUsages, Device, Extent3d,
     MapMode, Origin3d, Queue, Texture, TextureAspect, TextureDescriptor, TextureDimension,
     TextureFormat, TextureUsages, TexelCopyTextureInfo, TexelCopyBufferInfo,
-    TexelCopyBufferLayout, PollType,
+    TexelCopyBufferLayout, PollType, Sampler, SamplerDescriptor,
 };
 
 use crate::pipeline::{create_bind_group, create_pipeline, render_pass, RenderPipelineState};
 use crate::uniforms::{GpuRectStyle, GpuUniforms, GpuRectBuffer, GpuTextBuffer, GpuTextCommand};
+use crate::font_atlas::{FontAtlas, GlyphEntry};
+
+/// Glyph info entry for GPU — matches WGSL GlyphInfo struct.
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GpuGlyphInfo {
+    pub atlas_x: f32,
+    pub atlas_y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub bearing_x: f32,
+    pub bearing_y: f32,
+    pub advance: f32,
+    pub _pad: f32,
+}
+
+impl GpuGlyphInfo {
+    pub const SIZE: usize = 32;
+
+    pub fn zeroed() -> Self {
+        Self {
+            atlas_x: 0.0, atlas_y: 0.0,
+            width: 0.0, height: 0.0,
+            bearing_x: 0.0, bearing_y: 0.0,
+            advance: 0.0, _pad: 0.0,
+        }
+    }
+}
 
 /// A complete GPU renderer that holds the pipeline and temporary resources.
 pub struct GpuRenderer {
@@ -19,6 +47,9 @@ pub struct GpuRenderer {
     pub uniform_buffer: Buffer,
     pub rect_storage: Buffer,
     pub text_storage: Buffer,
+    pub glyph_info_buffer: Buffer,
+    pub font_atlas: FontAtlas,
+    pub font_sampler: Sampler,
     pub readback_buffer: Buffer,
     pub texture: Texture,
     pub texture_view: wgpu::TextureView,
@@ -28,8 +59,57 @@ pub struct GpuRenderer {
 
 impl GpuRenderer {
     /// Create a new renderer for the given framebuffer dimensions.
-    pub fn new(device: Device, queue: Queue, width: u32, height: u32) -> Self {
+    pub fn new(
+        device: Device,
+        queue: Queue,
+        width: u32,
+        height: u32,
+        font_data: &[u8],
+        font_size: f32,
+        text: &str,
+    ) -> Self {
         let pipeline_state = create_pipeline(&device);
+
+        // Build font atlas from TTF data
+        let font_atlas = FontAtlas::new(&device, font_data, font_size, text);
+        font_atlas.upload(&queue);
+
+        // Create a linear sampler for the font atlas
+        let font_sampler = device.create_sampler(&SamplerDescriptor {
+            label: Some("font-atlas-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            ..Default::default()
+        });
+
+        // Build glyph info buffer
+        let mut glyph_entries: Vec<GpuGlyphInfo> = vec![GpuGlyphInfo::zeroed(); 4096];
+        for (ch, entry) in &font_atlas.glyphs {
+            let idx = *ch as usize;
+            if idx < 4096 {
+                glyph_entries[idx] = GpuGlyphInfo {
+                    atlas_x: entry.atlas_x as f32,
+                    atlas_y: entry.atlas_y as f32,
+                    width: entry.width as f32,
+                    height: entry.height as f32,
+                    bearing_x: entry.bearing_x,
+                    bearing_y: entry.bearing_y,
+                    advance: entry.advance,
+                    _pad: 0.0,
+                };
+            }
+        }
+        let glyph_info_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("glyph-info-buffer"),
+            size: (glyph_entries.len() * GpuGlyphInfo::SIZE) as u64,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        queue.write_buffer(&glyph_info_buffer, 0, bytemuck::cast_slice(&glyph_entries));
 
         // Uniform buffer (small: just frame info)
         let uniform_buffer = device.create_buffer(&BufferDescriptor {
@@ -92,6 +172,9 @@ impl GpuRenderer {
             uniform_buffer,
             rect_storage,
             text_storage,
+            glyph_info_buffer,
+            font_atlas,
+            font_sampler,
             readback_buffer,
             texture,
             texture_view,
@@ -123,8 +206,8 @@ impl GpuRenderer {
         self.queue
             .write_buffer(&self.text_storage, 0, &text_buf.buffer_data);
 
-        // Create bind group with explicit buffer sizes
-        let bind_group = create_bind_group(
+        // Create bind group with explicit buffer sizes + font atlas
+        let bind_group = create_bind_group_with_atlas(
             &self.device,
             &self.pipeline_state.bind_group_layout,
             &self.uniform_buffer,
@@ -132,6 +215,9 @@ impl GpuRenderer {
             rect_buf.buffer_data.len() as u64,
             &self.text_storage,
             text_buf.buffer_data.len() as u64,
+            &self.font_atlas.view,
+            &self.font_sampler,
+            &self.glyph_info_buffer,
         );
 
         // Encode render commands
@@ -208,6 +294,59 @@ fn align_to(value: u32, alignment: u32) -> u32 {
     (value + alignment - 1) & !(alignment - 1)
 }
 
+/// Create bind group with font atlas texture and glyph info buffer.
+fn create_bind_group_with_atlas(
+    device: &Device,
+    layout: &wgpu::BindGroupLayout,
+    uniform_buf: &Buffer,
+    rect_buf: &Buffer,
+    rect_buf_size: u64,
+    text_buf: &Buffer,
+    text_buf_size: u64,
+    atlas_view: &wgpu::TextureView,
+    sampler: &Sampler,
+    glyph_info_buf: &Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("render-bind-group"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: rect_buf,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(rect_buf_size),
+                }),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: text_buf,
+                    offset: 0,
+                    size: std::num::NonZeroU64::new(text_buf_size),
+                }),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(atlas_view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: glyph_info_buf.as_entire_binding(),
+            },
+        ],
+    })
+}
+
 /// Convenience function: create a headless renderer, render, and return pixels.
 ///
 /// This is the simplest entry point for the demo.
@@ -216,6 +355,9 @@ pub fn render_to_pixels(
     height: u32,
     rects: &[GpuRectStyle],
     text_cmds: &[GpuTextCommand],
+    font_data: &[u8],
+    font_size: f32,
+    text: &str,
 ) -> Vec<u8> {
     // Initialize WGPU
     let instance = wgpu::Instance::default();
@@ -239,6 +381,6 @@ pub fn render_to_pixels(
     .expect("Failed to create WGPU device");
 
     // Create renderer and render
-    let mut renderer = GpuRenderer::new(device, queue, width, height);
+    let mut renderer = GpuRenderer::new(device, queue, width, height, font_data, font_size, text);
     renderer.render_and_readback(rects, text_cmds)
 }

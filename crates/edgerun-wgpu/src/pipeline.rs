@@ -6,7 +6,8 @@ use wgpu::{
     ColorWrites, Device, FragmentState, LoadOp, MultisampleState,
     PipelineCompilationOptions, PipelineLayoutDescriptor, PrimitiveState, PrimitiveTopology,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    ShaderSource, StoreOp, TextureFormat, Operations,
+    Sampler, ShaderSource, StoreOp, TextureFormat, TextureView, Operations,
+    SamplerBindingType, TextureSampleType, TextureViewDimension,
 };
 
 /// The generated WGSL shader source.
@@ -25,10 +26,11 @@ pub fn create_pipeline(device: &Device) -> RenderPipelineState {
         source: ShaderSource::Wgsl(SHADER_SRC.into()),
     });
 
-    // Bind group layout: one uniform buffer + two storage buffers (rects + text)
+    // Bind group layout: uniform + storage buffers + font atlas texture
     let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: Some("uniforms-layout"),
         entries: &[
+            // 0: Uniforms
             BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::FRAGMENT,
@@ -39,6 +41,7 @@ pub fn create_pipeline(device: &Device) -> RenderPipelineState {
                 },
                 count: None,
             },
+            // 1: Rects storage buffer
             BindGroupLayoutEntry {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
@@ -49,8 +52,38 @@ pub fn create_pipeline(device: &Device) -> RenderPipelineState {
                 },
                 count: None,
             },
+            // 2: Text commands storage buffer
             BindGroupLayoutEntry {
                 binding: 2,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+            // 3: Font atlas texture
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            // 4: Font sampler
+            BindGroupLayoutEntry {
+                binding: 4,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
+            // 5: Glyph info storage buffer
+            BindGroupLayoutEntry {
+                binding: 5,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: BindingType::Buffer {
                     ty: BufferBindingType::Storage { read_only: true },

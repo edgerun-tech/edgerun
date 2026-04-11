@@ -408,6 +408,7 @@ impl GpuUniforms {
 
 /// A text command for GPU rendering.
 /// Matches WGSL `TextCommand` struct (128 × 4 + 28 = 540 bytes, padded to 544).
+/// `glyphs` stores indices into the `glyph_info` buffer (char code points).
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 pub struct GpuTextCommand {
@@ -424,11 +425,14 @@ pub struct GpuTextCommand {
 impl GpuTextCommand {
     pub const SIZE: usize = 544; // 7×4 + 128×4 = 540, padded to 16 = 544
 
+    /// Create a text command.
+    /// `glyphs` are char code points that index into the `glyph_info` buffer.
     pub fn new(x: f32, y: f32, r: u8, g: u8, b: u8, text: &str) -> Self {
         let mut glyphs = [0u32; 128];
-        let count = text.len().min(128);
-        for (i, &byte) in text.as_bytes().iter().take(count).enumerate() {
-            glyphs[i] = byte as u32;
+        let chars: Vec<char> = text.chars().take(128).collect();
+        let count = chars.len();
+        for (i, ch) in chars.iter().enumerate() {
+            glyphs[i] = *ch as u32; // char code point = glyph_info index
         }
         Self {
             x, y,

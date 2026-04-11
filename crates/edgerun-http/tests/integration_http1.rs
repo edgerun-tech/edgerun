@@ -5,7 +5,7 @@
 //! request parsing, response serialization, and keep-alive.
 
 use std::future::poll_fn;
-use std::io;
+use std::io::{self, Read};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -14,7 +14,6 @@ use std::time::Duration;
 use edgerun_http::http1::{Server, Client, into_handler, into_handler_async, Request, Response, HttpVersion, ConnectionState, determine_connection};
 use edgerun_http::{Method, StatusCode};
 use edgerun_rt::{Runtime, AsyncRead, AsyncReadExt, AsyncWriteExt, ConnectFuture};
-use tokio::io::ReadBuf;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,13 +27,13 @@ fn next_port() -> u16 {
 
 fn run<F, Fut>(name: &str, f: F)
 where
-    F: FnOnce(u16) -> Fut,
-    Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>,
+    F: FnOnce(u16) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>> + Send + 'static,
 {
     eprintln!("[integration] {}", name);
     let port = next_port();
     let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
-    rt.block_on(async { f(port).await })
+    rt.block_on(async move { f(port).await })
         .unwrap_or_else(|e| panic!("[{}] test failed: {}", name, e));
 }
 

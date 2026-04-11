@@ -136,8 +136,29 @@ fn main() {
 
     all_rects.extend(rects);
 
+    // Collect all text for the font atlas
+    let mut all_text = String::new();
+    for tc in &text_cmds {
+        for &cp in &tc.glyphs[..tc.glyph_count as usize] {
+            if let Some(ch) = char::from_u32(cp) {
+                all_text.push(ch);
+            }
+        }
+    }
+    println!("Font atlas text: {} chars ({} unique)", all_text.len(), all_text.chars().count());
+
+    // Load a system font
+    let font_path = "/usr/share/fonts/TTF/DejaVuSans.ttf";
+    let font_data = std::fs::read(font_path)
+        .unwrap_or_else(|e| panic!("Failed to load font {}: {}", font_path, e));
+    println!("Loaded font: {} ({} bytes)", font_path, font_data.len());
+    let font_size = 16.0;
+
     // GPU Raster
-    let pixels = edgerun_wgpu::render::render_to_pixels(width, height, &all_rects, &text_cmds);
+    let pixels = edgerun_wgpu::render::render_to_pixels(
+        width, height, &all_rects, &text_cmds,
+        &font_data, font_size, &all_text,
+    );
 
     // Save PNG
     save_png("edgerun_wgpu.png", &pixels, width, height);

@@ -20,6 +20,7 @@ pub use remote::{
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     // Tests for re-exported types from the image module
 

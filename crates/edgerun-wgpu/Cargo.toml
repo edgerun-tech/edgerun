@@ -9,6 +9,8 @@ publish.workspace = true
 wgpu = "29"
 bytemuck = { version = "1", features = ["derive"] }
 pollster = "0.4"
+fontdue = "0.9"
+png = "0.18"
 
 [lints]
 workspace = true
