@@ -11,13 +11,19 @@ use crate::cli::{parse_delete_args, is_process_alive};
 use crate::json::parse_oci_spec;
 use crate::lifecycle::run_poststop_and_cleanup;
 
-pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+pub fn cmd_delete(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+    if let Some(ref root) = opts.root {
+        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+        })?);
+    }
+
     let (force, id) = parse_delete_args(args);
     let id = id.ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidInput, "container ID required")
     })?;
 
-    let state = load_state(&id).ok();
+    let state = load_state(id).ok();
     let (pid, bundle, _cgroup_path) = if let Some(ref s) = state {
         let p = s.pid.unwrap_or(0);
         let b = s.bundle.clone();
@@ -37,12 +43,11 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
         }
 
         // Kill if alive (force or non-stopped)
-        if p > 0 && is_process_alive(p) {
-            if force || st != "stopped" {
+        if p > 0 && is_process_alive(p)
+            && (force || st != "stopped") {
                 unsafe { libc::kill(p as c_int, libc::SIGKILL) };
                 unsafe { libc::usleep(50000) };
             }
-        }
 
         (p, b, String::new())
     } else {
@@ -61,14 +66,14 @@ pub fn cmd_delete(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result
     if let Some(ref spec) = spec {
         let linux = spec.linux.clone().unwrap_or_default();
         let cgroup = linux.cgroups_path.clone().unwrap_or_else(|| "/edgerun".into());
-        run_poststop_and_cleanup(&id, pid, &bundle, &cgroup, spec);
+        run_poststop_and_cleanup(id, pid, &bundle, &cgroup, spec);
     }
 
     // Clean up state dir
-    delete_state(&id);
+    delete_state(id);
 
     // Clean up FIFO
-    let _ = fs::remove_file(fifo_path(&id));
+    let _ = fs::remove_file(fifo_path(id));
 
     Ok(())
 }

@@ -3,9 +3,10 @@
 //! Runs real containers via the edgerun-oci CLI binary and validates results.
 //! No external test frameworks, no Go dependencies.
 //!
-//! Requires root to run (needs root for namespace creation).
+//! These tests require root privileges (for namespace creation).
+//! When run as non-root, the test harness automatically uses `sudo -n`.
 //!
-//! Run with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --ignored --test-threads=1`
+//! Run with: `sudo cargo test -p edgerun-oci-runtime --test conformance -- --test-threads=1`
 
 #[path = "support/runner.rs"]
 mod runner;
@@ -21,7 +22,6 @@ use std::path::Path;
 // ===========================================================================
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_default() {
     let mut runner = runner::Runner::new("default");
     runner.bundle(bundle::minimal());
@@ -29,7 +29,6 @@ fn conformance_default() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_hostname() {
     let mut runner = runner::Runner::new("hostname");
     runner.bundle(bundle::minimal().hostname("conformance-hostname"));
@@ -37,15 +36,13 @@ fn conformance_hostname() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_process_args() {
     let mut runner = runner::Runner::new("process-args");
-    runner.bundle(bundle::minimal().args(["/bin/true"]));
+    runner.bundle(bundle::minimal().args(["/bin/sleep", "1"]));
     runner.run().expect("process args container failed");
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_mounts() {
     let mut runner = runner::Runner::new("mounts");
     runner.bundle(bundle::minimal().mount(proc_mount()));
@@ -53,7 +50,6 @@ fn conformance_mounts() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_masked_paths() {
     let mut runner = runner::Runner::new("masked-paths");
     runner.bundle(bundle::minimal().masked_paths(["/proc/kcore"]));
@@ -61,7 +57,6 @@ fn conformance_masked_paths() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_readonly_paths() {
     let mut runner = runner::Runner::new("readonly-paths");
     runner.bundle(bundle::minimal().readonly_paths(["/proc/sys"]));
@@ -69,35 +64,41 @@ fn conformance_readonly_paths() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_lifecycle_state() {
     let mut runner = runner::Runner::new("lifecycle");
-    runner.bundle(bundle::minimal().args(["/bin/sleep", "0.1"]));
+    runner.bundle(bundle::minimal().args(["/bin/sleep", "0.5"]));
 
     runner.create().expect("lifecycle create failed");
     runner.assert_state("created");
 
     runner.start().expect("lifecycle start failed");
-    runner.assert_state("stopped"); // /bin/sleep 0.1 exits quickly
+    // Immediately after start, container should be "running" (sleep 0.5 still executing)
+    runner.assert_state("running");
+
+    // Wait for sleep to exit, then verify stopped
+    std::thread::sleep(std::time::Duration::from_millis(1000));
+    runner.assert_state("stopped");
 
     runner.delete().expect("lifecycle delete failed");
     runner.assert_state_deleted();
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_duplicate_id() {
     let mut runner = runner::Runner::new("dup");
-    runner.bundle(bundle::minimal().args(["/bin/sleep", "0.1"]));
+    runner.bundle(bundle::minimal().args(["/bin/sleep", "5"]));
 
     runner.create().expect("first create failed");
-    let result = runner.create();
-    assert!(result.is_err(), "duplicate create should have failed");
+
+    // Second create with same ID should fail — call the CLI directly
+    let out = runner::cli_create(runner.id(), runner.bundle_path());
+    assert!(!out.status.success(), "duplicate create should have failed, got: {}",
+        String::from_utf8_lossy(&out.stdout));
+
     runner.delete_force().ok();
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_cgroup_memory() {
     let mut runner = runner::Runner::new("cg-mem");
     runner.bundle(
@@ -113,7 +114,6 @@ fn conformance_cgroup_memory() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_cgroup_pids() {
     let mut runner = runner::Runner::new("cg-pids");
     runner.bundle(
@@ -128,7 +128,6 @@ fn conformance_cgroup_pids() {
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_cgroup_cpu() {
     let mut runner = runner::Runner::new("cg-cpu");
     runner.bundle(
@@ -141,12 +140,11 @@ fn conformance_cgroup_cpu() {
     let content = std::fs::read_to_string("/sys/fs/cgroup/edgerun-test-cpu/cpu.weight")
         .expect("cgroup v2 cpu.weight not readable");
     let weight: u64 = content.trim().parse().expect("cpu.weight not a number");
-    assert!(weight >= 1 && weight <= 10000, "cpu.weight out of range: {weight}");
+    assert!((1..=10000).contains(&weight), "cpu.weight out of range: {weight}");
     let _ = std::fs::remove_dir_all("/sys/fs/cgroup/edgerun-test-cpu");
 }
 
 #[test]
-#[ignore = "requires root"]
 fn conformance_cgroup_cleanup() {
     let cgroup_path = "/sys/fs/cgroup/edgerun-test-cleanup";
     let mut runner = runner::Runner::new("cg-cleanup");
@@ -288,22 +286,23 @@ mod unit {
         std::fs::create_dir_all(&tmp).unwrap();
         bundle::copy_runtime_libs(&tmp).expect("copy_runtime_libs failed");
 
-        // /bin/true should exist
+        // /bin/sleep should exist
         assert!(
-            tmp.join("bin/true").exists(),
-            "bin/true should be copied"
+            tmp.join("bin/sleep").exists(),
+            "bin/sleep should be copied"
         );
 
-        // Dynamic linker should exist at one of the expected paths
-        let has_linker = tmp.join("lib64/ld-linux-x86-64.so.2").exists()
-            || tmp.join("usr/lib64/ld-linux-x86-64.so.2").exists();
-        assert!(has_linker, "dynamic linker should be copied");
+        // Dynamic linker should exist at /lib64/
+        assert!(
+            tmp.join("lib64/ld-linux-x86-64.so.2").exists(),
+            "lib64/ld-linux-x86-64.so.2 should be copied"
+        );
 
         // libc should exist
-        let has_libc = tmp.join("usr/lib/libc.so.6").exists()
-            || tmp.join("lib/x86_64-linux-gnu/libc.so.6").exists()
-            || tmp.join("usr/lib/x86_64-linux-gnu/libc.so.6").exists();
-        assert!(has_libc, "libc should be copied");
+        assert!(
+            tmp.join("usr/lib/libc.so.6").exists(),
+            "usr/lib/libc.so.6 should be copied"
+        );
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

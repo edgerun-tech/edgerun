@@ -116,6 +116,41 @@ pub struct OciProcess {
     pub apparmor_profile: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "selinuxLabel")]
     pub selinux_label: Option<String>,
+    /// Real-time scheduling policy and parameters (OCI 1.0.2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduler: Option<OciScheduler>,
+}
+
+/// Real-time scheduling configuration.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciScheduler {
+    /// Scheduling policy: "SCHED_OTHER", "SCHED_FIFO", "SCHED_RR", "SCHED_BATCH", "SCHED_IDLE", "SCHED_DEADLINE"
+    pub policy: String,
+    /// Nice value (only for SCHED_OTHER and SCHED_BATCH).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nice: Option<i32>,
+    /// Scheduling priority (for SCHED_FIFO and SCHED_RR, range 1-99).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub priority: Option<i32>,
+    /// SCHED_DEADLINE parameters.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deadline: Option<OciSchedDeadline>,
+}
+
+/// SCHED_DEADLINE scheduling parameters.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciSchedDeadline {
+    /// Runtime in nanoseconds.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "runtime")]
+    pub runtime_ns: Option<u64>,
+    /// Period in nanoseconds.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "period")]
+    pub period_ns: Option<u64>,
+    /// Deadline in nanoseconds.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "deadline")]
+    pub deadline_ns: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -191,6 +226,9 @@ pub struct OciLinux {
     pub hooks: Option<OciHooks>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seccomp: Option<OciLinuxSeccomp>,
+    /// Intel RDT (Resource Director Technology) configuration.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "intelRdt")]
+    pub intel_rdt: Option<OciLinuxIntelRdt>,
 }
 
 // ===========================================================================
@@ -351,6 +389,22 @@ pub struct OciLinuxNetworkPriority {
     pub priority: u32,
 }
 
+/// Intel RDT (Resource Director Technology) configuration.
+/// Controls cache and memory bandwidth allocation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OciLinuxIntelRdt {
+    /// Cache Bitmask (CBM) for L3 cache. E.g., "L3:0=fff"
+    #[serde(skip_serializing_if = "Option::is_none", rename = "l3CacheSchema")]
+    pub l3_cache_schema: Option<String>,
+    /// Memory bandwidth schema. E.g., "MB:0=70"
+    #[serde(skip_serializing_if = "Option::is_none", rename = "memBwSchema")]
+    pub mem_bw_schema: Option<String>,
+    /// Class of Service ID
+    #[serde(skip_serializing_if = "Option::is_none", rename = "closID")]
+    pub clos_id: Option<String>,
+}
+
 // ===========================================================================
 // Seccomp types
 // ===========================================================================
@@ -373,7 +427,7 @@ pub struct OciLinuxSeccomp {
     pub syscalls: Option<Vec<OciSeccompSyscallEntry>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE", try_from = "String", into = "String")]
 pub enum OciSeccompAction {
     Kill,

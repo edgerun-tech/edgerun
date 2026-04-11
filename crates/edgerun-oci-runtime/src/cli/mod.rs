@@ -7,6 +7,12 @@ mod kill;
 mod delete;
 mod exec;
 mod update;
+mod pause;
+mod resume;
+mod features;
+mod spec;
+mod ps;
+mod events;
 
 pub use create::cmd_create;
 pub use start::cmd_start;
@@ -15,12 +21,19 @@ pub use kill::cmd_kill;
 pub use delete::cmd_delete;
 pub use exec::cmd_exec;
 pub use update::cmd_update;
+pub use pause::cmd_pause;
+pub use resume::cmd_resume;
+pub use features::cmd_features;
+pub use spec::cmd_spec;
+pub use ps::cmd_ps;
+pub use events::cmd_events;
 
 /// Global options parsed from the CLI.
 #[derive(Debug, Default)]
 pub struct GlobalOpts {
     pub bundle: Option<std::path::PathBuf>,
     pub pid_file: Option<std::path::PathBuf>,
+    pub root: Option<std::path::PathBuf>,
 }
 
 /// Parse global options and identify the command from raw arguments.
@@ -65,6 +78,19 @@ pub fn parse_args(args: &[String]) -> Option<(GlobalOpts, String, Vec<String>)> 
             }
             s if s.starts_with("--pid-file=") => {
                 opts.pid_file = Some(std::path::PathBuf::from(&s["--pid-file=".len()..]));
+                i += 1;
+            }
+            "--root" => {
+                if i + 1 < args.len() {
+                    opts.root = Some(std::path::PathBuf::from(&args[i + 1]));
+                    i += 2;
+                    continue;
+                } else {
+                    i += 1;
+                }
+            }
+            s if s.starts_with("--root=") => {
+                opts.root = Some(std::path::PathBuf::from(&s["--root=".len()..]));
                 i += 1;
             }
             "--help" | "-h" => {
@@ -117,17 +143,24 @@ pub fn print_usage() {
     eprintln!("Usage: edgerun-oci [global-options] <command> [command-options]");
     eprintln!();
     eprintln!("Commands:");
-    eprintln!("  create <container-id>  Create a container");
-    eprintln!("  start <container-id>   Start a created container");
-    eprintln!("  state <container-id>   Output state of a container");
-    eprintln!("  kill <container-id>    Send signal to container");
-    eprintln!("  delete <container-id>  Delete container resources");
-    eprintln!("  exec <container-id>    Run additional process in container");
-    eprintln!("  update <container-id>  Update container resource limits");
+    eprintln!("  create <container-id>     Create a container");
+    eprintln!("  start <container-id>      Start a created container");
+    eprintln!("  state <container-id>      Output state of a container");
+    eprintln!("  kill <container-id>       Send signal to container");
+    eprintln!("  delete <container-id>     Delete container resources");
+    eprintln!("  exec <container-id>       Run additional process in container");
+    eprintln!("  update <container-id>     Update container resource limits");
+    eprintln!("  pause <container-id>      Pause the container (cgroup freeze)");
+    eprintln!("  resume <container-id>     Resume the container (cgroup unfreeze)");
+    eprintln!("  events <container-id>     Stream cgroup stats");
+    eprintln!("  ps <container-id>         List processes in the container");
+    eprintln!("  features                  Output supported features");
+    eprintln!("  spec                      Generate a default config.json");
     eprintln!();
     eprintln!("Global options:");
-    eprintln!("  --bundle <path>    Path to bundle directory");
-    eprintln!("  --pid-file <path>  Path to write container PID");
+    eprintln!("  --bundle <path>           Path to bundle directory");
+    eprintln!("  --pid-file <path>         Path to write container PID");
+    eprintln!("  --root <path>             Root directory for state files (default: /run/edgerun-oci)");
 }
 
 /// Extract the first positional argument (container ID) from command args.

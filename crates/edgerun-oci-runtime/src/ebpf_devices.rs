@@ -88,7 +88,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                 _ => 0,
             };
             // r7 = *(u32*)(r6 + OFF_DEVICE_TYPE)
-            sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W as u8, R7, R6, OFF_DEVICE_TYPE)));
+            sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_DEVICE_TYPE)));
             // if r7 != dev_type → goto skip_label
             sym.push(SymInsn::JmpNe {
                 dst: R7,
@@ -100,7 +100,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
         // --- Major check ---
         if let Some(major) = rule.major {
             if major >= 0 {
-                sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W as u8, R7, R6, OFF_MAJOR)));
+                sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_MAJOR)));
                 sym.push(SymInsn::JmpNe {
                     dst: R7,
                     imm: major as i32,
@@ -112,7 +112,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
         // --- Minor check ---
         if let Some(minor) = rule.minor {
             if minor >= 0 {
-                sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W as u8, R7, R6, OFF_MINOR)));
+                sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_MINOR)));
                 sym.push(SymInsn::JmpNe {
                     dst: R7,
                     imm: minor as i32,
@@ -131,7 +131,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
                         'm' => b'm' as i32,
                         _ => continue,
                     };
-                    sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W as u8, R7, R6, OFF_ACCESS_TYPE)));
+                    sym.push(SymInsn::Raw(ld_imm(bpf_size::BPF_W, R7, R6, OFF_ACCESS_TYPE)));
                     sym.push(SymInsn::JmpNe {
                         dst: R7,
                         imm: access_val,
@@ -179,7 +179,7 @@ pub fn build_device_bpf_prog(rules: &[OciLinuxDeviceCgroup]) -> Vec<[u8; 8]> {
             SymInsn::JmpNe { dst, imm, target } => {
                 // We'll fix up the offset after we know all positions
                 // For now, push a placeholder (off = 0)
-                insns.push(jmp_imm(bpf_jmp::BPF_JNE as u8, *dst, *imm, 0));
+                insns.push(jmp_imm(bpf_jmp::BPF_JNE, *dst, *imm, 0));
                 // We need to track which instruction index this is and its target
                 fwd_refs.push((insns.len() - 1, target.clone()));
             }
@@ -223,17 +223,17 @@ pub fn setup_device_cgroup_ebpf(cgroup_path: &Path, rules: &[OciLinuxDeviceCgrou
 
     // Load the program into the kernel
     let prog_fd = bpf_prog_load(
-        bpf_prog_type::BPF_PROG_TYPE_CGROUP_DEVICE as u32,
+        bpf_prog_type::BPF_PROG_TYPE_CGROUP_DEVICE,
         &insns,
         "GPL",
-        bpf_attach_type::BPF_CGROUP_DEVICE as u32,
+        bpf_attach_type::BPF_CGROUP_DEVICE,
     )?;
 
     // Open the cgroup directory and attach the program
     let cgroup_dir = fs::File::open(cgroup_path)?;
     let cgroup_fd = cgroup_dir.as_raw_fd();
 
-    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_DEVICE as u32)?;
+    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_DEVICE)?;
 
     // Note: prog_fd is intentionally not closed — the kernel holds a reference.
     // When the cgroup is deleted, the program is automatically detached.
@@ -252,7 +252,7 @@ pub fn teardown_device_cgroup_ebpf(cgroup_path: &Path, prog_fd: i32) -> io::Resu
     let cgroup_dir = fs::File::open(cgroup_path)?;
     let cgroup_fd = cgroup_dir.as_raw_fd();
 
-    bpf_prog_detach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_DEVICE as u32)?;
+    bpf_prog_detach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_DEVICE)?;
 
     Ok(())
 }
@@ -335,7 +335,7 @@ mod tests {
 
     #[test]
     fn ld_imm_encoding() {
-        let insn = ld_imm(bpf_size::BPF_W as u8, R7, R6, OFF_MAJOR);
+        let insn = ld_imm(bpf_size::BPF_W, R7, R6, OFF_MAJOR);
         assert_eq!(insn.len(), 8);
         // BPF_LDX | BPF_W | BPF_MEM = 0x01 | 0x00 | 0x60 = 0x61
         assert_eq!(insn[0], 0x61);

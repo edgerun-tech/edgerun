@@ -40,6 +40,12 @@ fn get_hooks(spec: &OciSpec) -> crate::json::OciHooks {
         .unwrap_or_default()
 }
 
+/// Write a diagnostic message to the kernel log (dmesg).
+/// Used in the child process where stdio is unavailable after pivot_root.
+fn kmsg(msg: &str) {
+    let _ = fs::write("/dev/kmsg", format!("edgerun-oci: {msg}"));
+}
+
 // ===========================================================================
 // Step 1: prestart hooks
 // ===========================================================================
@@ -93,6 +99,24 @@ pub fn run_create_runtime_hooks(spec: &OciSpec, container_id: &str) -> io::Resul
 ///
 /// Returns the child PID and a reference to the spec-derived config.
 pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<ForkedChild> {
+    // Validate platform compatibility before creating the container.
+    // Per OCI spec: the runtime MUST reject bundles whose platform does not
+    // match the host platform (unless no platform is specified).
+    if let Some(ref platform) = spec.platform {
+        if !platform.matches_host() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "container platform mismatch: bundle targets {:?}/{:?}, host is {}/{}",
+                    platform.os.as_deref().unwrap_or("unknown"),
+                    platform.arch.as_deref().unwrap_or("unknown"),
+                    crate::process::host_os(),
+                    crate::process::host_arch(),
+                ),
+            ));
+        }
+    }
+
     let mut cfg = ContainerConfig::from_spec(spec)?;
     let bundle_path = cfg.root.path.clone();
 
@@ -150,14 +174,26 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
     if child_pid == 0 {
         // Child process
 
+        // Close stdin/stdout/stderr BEFORE opening the FIFO.
+        // When the runtime is launched via `Command::output()` (e.g. from tests),
+        // stdio fds are pipes. The forked child inherits them, and if we don't
+        // close them, the parent's `Command::output()` will never see EOF because
+        // the grandchild (after the second fork in PID namespace mode) still holds
+        // the write end. This causes the test harness to hang forever.
+        unsafe { libc::close(libc::STDIN_FILENO) };
+        unsafe { libc::close(libc::STDOUT_FILENO) };
+        unsafe { libc::close(libc::STDERR_FILENO) };
+
         // Open FIFO for reading BEFORE pivot_root (path becomes invalid after pivot_root)
         let fifo_fd = unsafe { libc::open(fifo_cstr_child.as_ptr(), libc::O_RDONLY) };
         if fifo_fd < 0 {
+            kmsg(&format!("child: failed to open start FIFO: {}", io::Error::last_os_error()));
             unsafe { libc::_exit(1) };
         }
 
         // 1. Standard container setup (mount ns, pivot_root, etc.)
-        if let Err(_e) = setup_container_child(&cfg) {
+        if let Err(e) = setup_container_child(&cfg) {
+            kmsg(&format!("child: setup_container_child failed: {}", e));
             unsafe { libc::_exit(1) };
         }
 
@@ -172,8 +208,8 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         };
         if let Some(ref hk) = create_container_hooks {
             if !hk.is_empty() {
-                if let Err(_e) = execute_create_container_hooks(Some(hk), &cc_state) {
-                    // hook failed
+                if let Err(e) = execute_create_container_hooks(Some(hk), &cc_state) {
+                    kmsg(&format!("child: createContainer hook failed: {}", e));
                     unsafe { libc::_exit(1) };
                 }
             }
@@ -184,7 +220,7 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         let n = unsafe { libc::read(fifo_fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
         unsafe { libc::close(fifo_fd) };
         if n <= 0 {
-            // fifo closed
+            kmsg("child: FIFO closed before start signal received");
             unsafe { libc::_exit(1) };
         }
 
@@ -199,8 +235,8 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         };
         if let Some(ref hk) = start_container_hooks {
             if !hk.is_empty() {
-                if let Err(_e) = execute_start_container_hooks(Some(hk), &sc_state) {
-                    // hook failed
+                if let Err(e) = execute_start_container_hooks(Some(hk), &sc_state) {
+                    kmsg(&format!("child: startContainer hook failed: {}", e));
                     unsafe { libc::_exit(1) };
                 }
             }
@@ -208,26 +244,17 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
 
         // 5. If PID namespace: fork so parent becomes PID 1 init, child exec's workload
         if use_pid1_init {
-            if let Err(_e) = crate::init::fork_and_init() {
-                // init failed
+            if let Err(e) = crate::init::fork_and_init() {
+                kmsg(&format!("child: fork_and_init failed: {}", e));
                 unsafe { libc::_exit(1) };
             }
         }
 
         // 6. Exec the workload
 
-        // Set environment
-        for e in &env {
-            if let Some((k, v)) = e.split_once('=') {
-                let k_c = CString::new(k.as_bytes()).unwrap();
-                let v_c = CString::new(v.as_bytes()).unwrap();
-                unsafe { libc::setenv(k_c.as_ptr(), v_c.as_ptr(), 1) };
-            }
-        }
-
-        // Clear the environment first
+        // Clear the environment
         unsafe { libc::clearenv() };
-        // Re-set environment
+        // Set environment from spec
         for e in &env {
             if let Some((k, v)) = e.split_once('=') {
                 let k_c = CString::new(k.as_bytes()).unwrap();
@@ -261,7 +288,7 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
         };
 
         // execvp — variables are used by execvp which is noreturn
-        #[allow(unused_variables, unused_assignments)]
+        #[allow(unused_assignments)]
         {
             let exe_cstr = CString::new(exe_path.as_bytes()).unwrap();
             let c_args: Vec<CString> = workload_args.iter()
@@ -271,9 +298,10 @@ pub fn fork_container_child(spec: &OciSpec, container_id: &str) -> io::Result<Fo
                 .map(|s| s.as_ptr())
                 .chain(std::iter::once(std::ptr::null()))
                 .collect();
-            unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr() as *const *const libc::c_char) };
+            unsafe { libc::execvp(exe_cstr.as_ptr(), c_ptrs.as_ptr()) };
         }
-        // exec failed
+        // exec failed — write diagnostic before exiting
+        kmsg(&format!("child: execvp({}) failed: {}", exe_path, io::Error::last_os_error()));
         unsafe { libc::_exit(127) };
     }
 
@@ -313,13 +341,13 @@ impl ForkedChild {
 // ===========================================================================
 
 /// Save the container state as "created".
-pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32) -> io::Result<()> {
+pub fn save_created_state(spec: &OciSpec, container_id: &str, pid: u32, bundle_path: &str) -> io::Result<()> {
     let state = StateContainerState {
         oci_version: spec.version.clone(),
         id: container_id.to_string(),
         status: "created".to_string(),
         pid: Some(pid),
-        bundle: spec.root.as_ref().map(|r| r.path.clone()).unwrap_or_default(),
+        bundle: bundle_path.to_string(),
         annotations: spec.annotations.clone(),
     };
     save_state(&state, container_id)
@@ -419,8 +447,7 @@ pub fn into_running_container(child: ForkedChild) -> RunningContainer {
 pub fn run_poststop_and_cleanup(container_id: &str, pid: u32, bundle_path: &str, cgroup_path: &str, spec: &OciSpec) {
     // Poststop hooks
     let hooks = spec.linux.as_ref()
-        .and_then(|l| l.hooks.as_ref())
-        .map(|h| h.clone())
+        .and_then(|l| l.hooks.as_ref()).cloned()
         .unwrap_or_default();
 
     let state = ContainerState {
@@ -542,9 +569,10 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
     let resources = child.resources.clone();
 
     // Step 4: save created state
-    save_created_state(spec, container_id, pid)?;
+    save_created_state(spec, container_id, pid, child.bundle_path())?;
 
-    // Step 5: setup cgroups
+    // Step 5: setup cgroups BEFORE signal_start
+    // Cgroup limits MUST be in place before the workload begins executing.
     if let Some(ref res) = resources {
         if let Some(ref linux) = spec.linux {
             let cgroup_path = linux.cgroups_path.as_deref().unwrap_or("/edgerun");
@@ -552,7 +580,7 @@ pub fn start_spec_with_id(spec: &OciSpec, container_id: &str) -> io::Result<Runn
         }
     }
 
-    // Step 6: signal start
+    // Step 6: signal start (unblocks child)
     signal_start(container_id)?;
 
     // Step 7: poststart hooks

@@ -1,13 +1,44 @@
 //! Container state management — persistence, loading, and FIFO helpers.
 //!
-//! Handles the JSON state files stored in `/run/edgerun-oci/<id>/`.
+//! Handles the JSON state files stored in the state directory
+//! (default: `/run/edgerun-oci/<id>/`, overrideable via `set_state_dir`).
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicPtr, Ordering};
 
 /// Base directory for container state.
 pub const STATE_DIR: &str = "/run/edgerun-oci";
+
+/// Custom state directory override (set via `set_state_dir`).
+static CUSTOM_STATE_DIR: AtomicPtr<std::ffi::c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Override the state directory path.
+///
+/// This must be called before any container operations.
+/// The provided string is leaked intentionally — it's used for the lifetime
+/// of the process.
+pub fn set_state_dir(dir: &str) {
+    let boxed = Box::new(dir.to_string());
+    let ptr = Box::into_raw(boxed) as *mut std::ffi::c_void;
+    // Free the old one if any
+    let old = CUSTOM_STATE_DIR.swap(ptr, Ordering::Relaxed);
+    if !old.is_null() {
+        drop(unsafe { Box::from_raw(old as *mut String) });
+    }
+}
+
+/// Resolve the state directory for a container.
+fn state_dir_base() -> std::borrow::Cow<'static, str> {
+    let ptr = CUSTOM_STATE_DIR.load(Ordering::Relaxed);
+    if !ptr.is_null() {
+        let s = unsafe { &*(ptr as *const String) };
+        std::borrow::Cow::Borrowed(s.as_str())
+    } else {
+        std::borrow::Cow::Borrowed(STATE_DIR)
+    }
+}
 
 /// Container state matching the OCI runtime spec JSON format.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -25,7 +56,7 @@ pub struct ContainerState {
 
 /// Return the state directory for a container.
 pub fn container_state_dir(id: &str) -> PathBuf {
-    Path::new(STATE_DIR).join(id)
+    Path::new(state_dir_base().as_ref()).join(id)
 }
 
 /// Return the path to the state JSON file.

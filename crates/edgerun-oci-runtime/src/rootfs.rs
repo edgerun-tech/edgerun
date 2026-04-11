@@ -27,11 +27,15 @@ fn mount_flags_from_opts(opts: Option<&[String]>) -> c_ulong {
     if let Some(opts) = opts {
         for opt in opts {
             match opt.as_str() {
-                "ro"          => flags |= ms::RDONLY,
-                "nosuid"      => flags |= ms::NOSUID,
-                "nodev"       => flags |= ms::NODEV,
-                "noexec"      => flags |= ms::NOEXEC,
-                "strictatime" => flags |= ms::STRICTATIME,
+                "ro"           => flags |= ms::RDONLY,
+                "nosuid"       => flags |= ms::NOSUID,
+                "nodev"        => flags |= ms::NODEV,
+                "noexec"       => flags |= ms::NOEXEC,
+                "strictatime"  => flags |= ms::STRICTATIME,
+                "shared"       => flags |= ms::SHARED,
+                "slave"        => flags |= ms::SLAVE,
+                "private"      => flags |= ms::PRIVATE,
+                "unbindable"   => flags |= ms::UNBINDABLE,
                 _ => {}
             }
         }
@@ -103,6 +107,14 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
         fs::create_dir_all(dest)?;
         do_mount(source, &mount.destination, fstype, flags, &data)?;
     }
+
+    // Apply mount propagation separately (must be a distinct mount call).
+    // Propagation flags: shared, slave, private, unbindable.
+    let prop_flags = flags & (ms::SHARED | ms::SLAVE | ms::PRIVATE | ms::UNBINDABLE);
+    if prop_flags != 0 {
+        do_mount("none", &mount.destination, "", ms::REC | prop_flags, "")?;
+    }
+
     Ok(())
 }
 
@@ -431,8 +443,7 @@ pub fn setup_rootfs(
     if let Some(paths) = masked {
         for p in paths {
             do_mount("/dev/null", p, "", ms::BIND, "").map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
+                io::Error::other(
                     format!("failed to mask path {}: {}", p, e),
                 )
             })?;
@@ -443,8 +454,7 @@ pub fn setup_rootfs(
     if let Some(paths) = readonly {
         for p in paths {
             do_mount(p, p, "", ms::BIND | ms::REC, "").map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
+                io::Error::other(
                     format!("failed to bind readonly path {}: {}", p, e),
                 )
             })?;
@@ -453,8 +463,7 @@ pub fn setup_rootfs(
                 ms::BIND | ms::REMOUNT | ms::RDONLY | ms::NOSUID | ms::NODEV | ms::NOEXEC,
                 "",
             ).map_err(|e| {
-                io::Error::new(
-                    io::ErrorKind::Other,
+                io::Error::other(
                     format!("failed to remount readonly path {}: {}", p, e),
                 )
             })?;

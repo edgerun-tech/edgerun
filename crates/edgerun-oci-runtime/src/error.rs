@@ -362,7 +362,7 @@ mod tests {
     fn hook_error_display() {
         let e = crate::hooks::HookError {
             hook_path: "/usr/bin/hook".into(),
-            error: std::io::Error::new(std::io::ErrorKind::Other, "exit code 1"),
+            error: std::io::Error::other("exit code 1"),
         };
         let s = format!("{}", e);
         assert!(s.contains("/usr/bin/hook"));
@@ -422,7 +422,7 @@ mod tests {
             OciError::Rootfs(RootfsError::NotFound("y".into())),
             OciError::Seccomp(SeccompError::InvalidSyscall("z".into())),
             OciError::Cgroup(CgroupError::NotFound("a".into())),
-            OciError::Hook(crate::hooks::HookError { hook_path: "b".into(), error: std::io::Error::new(std::io::ErrorKind::Other, "c") }),
+            OciError::Hook(crate::hooks::HookError { hook_path: "b".into(), error: std::io::Error::other("c") }),
             OciError::Capability(CapabilityError::UnknownCapability("d".into())),
             OciError::Namespace(NamespaceError::UnknownType("e".into())),
             OciError::Config(ConfigError::MissingField("f".into())),

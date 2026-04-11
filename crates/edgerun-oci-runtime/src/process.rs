@@ -105,7 +105,7 @@ pub fn validate_spec(spec: &OciSpec) -> io::Result<()> {
             ("inheritable", caps.inheritable.as_ref()),
             ("ambient", caps.ambient.as_ref()),
         ];
-        for (name, cap_set) in &cap_sets {
+        for (_name, cap_set) in &cap_sets {
             if let Some(caps_list) = cap_set {
                 for cap in caps_list.iter() {
                     if !KNOWN_CAPABILITIES.contains(&cap.as_str()) {
@@ -211,6 +211,9 @@ pub struct ContainerConfig {
     pub gid: u32,
     pub seccomp: Option<crate::json::OciLinuxSeccomp>,
     pub mount_label: Option<String>,
+    pub scheduler: Option<crate::json::OciScheduler>,
+    pub intel_rdt: Option<crate::json::OciLinuxIntelRdt>,
+    pub terminal: bool,
 }
 
 impl ContainerConfig {
@@ -276,6 +279,9 @@ impl ContainerConfig {
             gid: user.gid.unwrap_or(0),
             seccomp: linux.seccomp,
             mount_label: linux.mount_label.clone(),
+            scheduler: process.scheduler.clone(),
+            intel_rdt: linux.intel_rdt.clone(),
+            terminal: process.terminal.unwrap_or(false),
         })
     }
 
@@ -341,6 +347,77 @@ pub fn ns_type_to_flag(ns_type: &str) -> Option<i32> {
 }
 
 // ===========================================================================
+// Terminal / PTY support
+// ===========================================================================
+
+/// Allocate a pseudo-terminal and connect it to stdin/stdout/stderr.
+///
+/// Opens `/dev/ptmx`, grants/unlocks the slave, then dups it to fds 0, 1, 2.
+/// The master fd is left open (it will be inherited by the exec'd workload).
+pub fn setup_terminal() -> io::Result<i32> {
+    use std::os::raw::c_char;
+    use std::os::raw::c_int;
+
+    extern "C" {
+        fn posix_openpt(flags: c_int) -> c_int;
+        fn grantpt(fd: c_int) -> c_int;
+        fn unlockpt(fd: c_int) -> c_int;
+        fn ptsname(fd: c_int) -> *const c_char;
+    }
+
+    // Open master PTY
+    let master_fd = unsafe { posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
+    if master_fd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+
+    // Grant access to slave
+    if unsafe { grantpt(master_fd) } != 0 {
+        let err = io::Error::last_os_error();
+        unsafe { libc::close(master_fd) };
+        return Err(err);
+    }
+
+    // Unlock slave
+    if unsafe { unlockpt(master_fd) } != 0 {
+        let err = io::Error::last_os_error();
+        unsafe { libc::close(master_fd) };
+        return Err(err);
+    }
+
+    // Get slave path and open it
+    let slave_path = unsafe { ptsname(master_fd) };
+    if slave_path.is_null() {
+        let err = io::Error::last_os_error();
+        unsafe { libc::close(master_fd) };
+        return Err(err);
+    }
+
+    // Open slave PTY
+    let slave_fd = unsafe { libc::open(slave_path, libc::O_RDWR) };
+    if slave_fd < 0 {
+        let err = io::Error::last_os_error();
+        unsafe { libc::close(master_fd) };
+        return Err(err);
+    }
+
+    // Set controlling terminal
+    unsafe { libc::ioctl(slave_fd, libc::TIOCSCTTY as _, 0) };
+
+    // Dup slave to stdin/stdout/stderr
+    unsafe { libc::dup2(slave_fd, libc::STDIN_FILENO) };
+    unsafe { libc::dup2(slave_fd, libc::STDOUT_FILENO) };
+    unsafe { libc::dup2(slave_fd, libc::STDERR_FILENO) };
+
+    // Close original slave fd (stdin/stdout/stderr are now the slave)
+    if slave_fd > 2 {
+        unsafe { libc::close(slave_fd) };
+    }
+
+    Ok(master_fd)
+}
+
+// ===========================================================================
 // pre_exec closure — the actual container setup
 // =========================================================================///
 
@@ -378,13 +455,9 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // 6. Security: no_new_privs + non-dumpable (after caps, before seccomp)
     apply_security_hardening(cfg.no_new_privs)?;
 
-    // 7. Seccomp (requires no_new_privs set; works without CAP_SYS_ADMIN)
-    apply_seccomp_from_spec(cfg.seccomp.as_ref()).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
-        )
-    })?;
+    // Seccomp is applied AFTER rootfs setup (step 13) because rootfs needs
+    // mount/umount2/pivot_root syscalls that are NOT in the workload allow-list.
+    // It will be applied just before exec, after privilege drop.
 
     // 8. Resource limits
     for rl in &cfg.rlimits {
@@ -398,10 +471,13 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
         }
     }
 
-    // 9. OOM score
-    if cfg.oom_score_adj != 0 {
-        let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
+    // 8b. Scheduler configuration (OCI 1.0.2 process.scheduler)
+    if let Some(ref sched) = cfg.scheduler {
+        apply_scheduler(sched)?;
     }
+
+    // 9. OOM score — always write, even for 0 (spec requires it)
+    let _ = fs::write("/proc/self/oom_score_adj", format!("{}", cfg.oom_score_adj));
 
     // 10. AppArmor
     if let Some(ref profile) = cfg.apparmor_profile {
@@ -436,6 +512,12 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     // 15. Sysctl
     apply_sysctl(cfg.sysctl.as_ref())?;
 
+    // 15b. Terminal / PTY allocation (must happen after /dev is mounted and
+    // before privilege drop — posix_openpt and grantpt need root access)
+    if cfg.terminal {
+        setup_terminal()?;
+    }
+
     // 16. Supplementary groups
     if !cfg.additional_gids.is_empty() {
         set_supplementary_gids(&cfg.additional_gids);
@@ -445,12 +527,136 @@ pub fn setup_container_child(cfg: &ContainerConfig) -> io::Result<()> {
     do_setgid(cfg.gid)?;
     do_setuid(cfg.uid)?;
 
+    // 18. Seccomp — applied AFTER rootfs and privilege drop.
+    // Rootfs setup needs mount/umount2/pivot_root syscalls that are NOT in the
+    // workload allow-list. Seccomp requires no_new_privs (set at step 6).
+    // Returns Option<listener_fd> when NOTIFY action is used.
+    let _listener_fd = apply_seccomp_from_spec(cfg.seccomp.as_ref()).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("seccomp filter failed to apply: {}. Container startup aborted for security.", e),
+        )
+    })?;
+    // If NOTIFY is used, listener_fd is returned. The runtime doesn't handle
+    // seccomp user notifications — the fd is inherited by the workload.
+
+    // 19. Intel RDT (Resource Director Technology)
+    if let Some(ref rdt) = cfg.intel_rdt {
+        let _ = setup_intel_rdt(rdt);
+    }
+
     Ok(())
 }
 
 // ===========================================================================
 // Individual setup helpers
 // ===========================================================================
+
+/// Apply real-time scheduling policy via sched_setattr syscall.
+fn apply_scheduler(sched: &crate::json::OciScheduler) -> io::Result<()> {
+    // Use sched_setattr syscall (x86_64=314, aarch64=274)
+    // sched_attr struct layout:
+    //   size: u32
+    //   sched_policy: u32
+    //   sched_flags: u64
+    //   sched_nice: s32
+    //   sched_priority: u32
+    //   sched_runtime: u64
+    //   sched_deadline: u64
+    //   sched_period: u64
+
+    const SCHED_OTHER: u32 = 0;
+    const SCHED_FIFO: u32 = 1;
+    const SCHED_RR: u32 = 2;
+    const SCHED_BATCH: u32 = 3;
+    const SCHED_IDLE: u32 = 5;
+    const SCHED_DEADLINE: u32 = 6;
+
+    let policy = match sched.policy.as_str() {
+        "SCHED_OTHER" => SCHED_OTHER,
+        "SCHED_FIFO" => SCHED_FIFO,
+        "SCHED_RR" => SCHED_RR,
+        "SCHED_BATCH" => SCHED_BATCH,
+        "SCHED_IDLE" => SCHED_IDLE,
+        "SCHED_DEADLINE" => SCHED_DEADLINE,
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            format!("unknown scheduler policy: {}", sched.policy))),
+    };
+
+    let nice = sched.nice.unwrap_or(0);
+    let priority = sched.priority.unwrap_or(0) as u32;
+    let runtime = sched.deadline.as_ref().and_then(|d| d.runtime_ns).unwrap_or(0);
+    let deadline = sched.deadline.as_ref().and_then(|d| d.deadline_ns).unwrap_or(0);
+    let period = sched.deadline.as_ref().and_then(|d| d.period_ns).unwrap_or(0);
+
+    // Build sched_attr struct (48 bytes)
+    let mut data = [0u8; 48];
+    // size (u32)
+    data[0..4].copy_from_slice(&48u32.to_le_bytes());
+    // sched_policy (u32)
+    data[4..8].copy_from_slice(&policy.to_le_bytes());
+    // sched_flags (u64)
+    data[8..16].copy_from_slice(&0u64.to_le_bytes());
+    // sched_nice (s32)
+    data[16..20].copy_from_slice(&nice.to_le_bytes());
+    // sched_priority (u32)
+    data[20..24].copy_from_slice(&priority.to_le_bytes());
+    // sched_runtime (u64)
+    data[24..32].copy_from_slice(&runtime.to_le_bytes());
+    // sched_deadline (u64)
+    data[32..40].copy_from_slice(&deadline.to_le_bytes());
+    // sched_period (u64)
+    data[40..48].copy_from_slice(&period.to_le_bytes());
+
+    #[cfg(target_arch = "x86_64")]
+    let ret = unsafe { libc::syscall(314, 0i32 /* self */, &data as *const _ as *const u8, 0u64 /* flags */) as i32 };
+    #[cfg(target_arch = "aarch64")]
+    let ret = unsafe { libc::syscall(274, 0i32 /* self */, &data as *const _ as *const u8, 0u64 /* flags */) as i32 };
+
+    if ret != 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Apply Intel RDT configuration via resctrl filesystem.
+fn setup_intel_rdt(rdt: &crate::json::OciLinuxIntelRdt) -> io::Result<()> {
+    // The resctrl filesystem is mounted at /sys/fs/resctrl
+    let resctrl = std::path::Path::new("/sys/fs/resctrl");
+    if !resctrl.exists() {
+        // Try to mount it
+        let _ = std::fs::create_dir_all(resctrl);
+        let _ = crate::syscalls::do_mount("resctrl", "/sys/fs/resctrl", "resctrl", 0, "");
+    }
+
+    let clos_id = rdt.clos_id.as_deref().unwrap_or("edgerun");
+    let clos_path = resctrl.join(clos_id);
+
+    // Create the clos directory
+    std::fs::create_dir_all(&clos_path)?;
+
+    // Write L3 cache schema
+    if let Some(ref l3) = rdt.l3_cache_schema {
+        // Format: "L3:<cache_id>=<cbm>" -> write to schemata
+        std::fs::write(clos_path.join("schemata"), l3)?;
+    }
+
+    // Write memory bandwidth schema
+    if let Some(ref mb) = rdt.mem_bw_schema {
+        let mut existing = std::fs::read_to_string(clos_path.join("schemata"))?;
+        if !existing.ends_with('\n') {
+            existing.push('\n');
+        }
+        existing.push_str(mb);
+        std::fs::write(clos_path.join("schemata"), &existing)?;
+    }
+
+    // Move current process to this clos
+    std::fs::write(clos_path.join("tasks"), format!("{}", std::process::id()))?;
+
+    Ok(())
+}
 
 fn join_explicit_namespaces(ns_paths: &str) -> io::Result<()> {
     if ns_paths.is_empty() { return Ok(()); }
@@ -631,5 +837,75 @@ mod tests {
     fn host_arch_is_known() {
         let arch = host_arch();
         assert!(matches!(arch, "amd64" | "arm64" | "riscv64" | "arm" | "unknown"));
+    }
+
+    #[test]
+    fn platform_matches_host_linux_amd64() {
+        use crate::json::OciPlatform;
+        let platform = OciPlatform {
+            os: Some("linux".into()),
+            arch: Some(if cfg!(target_arch = "x86_64") { "amd64".into() }
+                     else if cfg!(target_arch = "aarch64") { "arm64".into() }
+                     else { "unknown".into() }),
+            os_version: None,
+            os_features: None,
+        };
+        assert!(platform.matches_host());
+    }
+
+    #[test]
+    fn platform_rejects_windows() {
+        use crate::json::OciPlatform;
+        let platform = OciPlatform {
+            os: Some("windows".into()),
+            arch: Some("amd64".into()),
+            os_version: None,
+            os_features: None,
+        };
+        assert!(!platform.matches_host());
+    }
+
+    #[test]
+    fn platform_rejects_wrong_arch() {
+        use crate::json::OciPlatform;
+        let platform = OciPlatform {
+            os: Some("linux".into()),
+            arch: Some("riscv64".into()),
+            os_version: None,
+            os_features: None,
+        };
+        // Only matches on actual riscv64 hardware
+        if cfg!(target_arch = "riscv64") {
+            assert!(platform.matches_host());
+        } else {
+            assert!(!platform.matches_host());
+        }
+    }
+
+    #[test]
+    fn platform_none_matches_host() {
+        // When no platform is specified, it should not block creation
+        // (the runtime allows None = no platform constraint)
+        use crate::json::OciPlatform;
+        let platform = OciPlatform {
+            os: None,
+            arch: None,
+            os_version: None,
+            os_features: None,
+        };
+        assert!(platform.matches_host());
+    }
+
+    #[test]
+    fn default_namespaces_includes_cgroup() {
+        let namespaces = crate::default_namespaces();
+        let has_cgroup = namespaces.iter().any(|ns| ns.ns_type == "cgroup");
+        assert!(has_cgroup, "default namespaces should include cgroup");
+    }
+
+    #[test]
+    fn container_config_has_terminal_field() {
+        let cfg = ContainerConfig::from_spec(&minimal_spec()).unwrap();
+        assert!(!cfg.terminal, "terminal should default to false");
     }
 }

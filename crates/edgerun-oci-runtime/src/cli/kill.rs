@@ -11,7 +11,13 @@ use std::os::raw::c_int;
 use crate::state::load_state;
 use crate::cli::{parse_kill_args, is_process_alive};
 
-pub fn cmd_kill(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+pub fn cmd_kill(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+    if let Some(ref root) = opts.root {
+        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+        })?);
+    }
+
     let (sig_str, id) = parse_kill_args(args);
     let id = if id.is_empty() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "container ID required"));

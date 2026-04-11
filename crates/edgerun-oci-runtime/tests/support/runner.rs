@@ -7,7 +7,6 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const RUNTIME: &str = env!("CARGO_BIN_EXE_edgerun-oci");
 const STATE_DIR: &str = "/run/edgerun-oci";
 
 /// Runs a container through its lifecycle.
@@ -36,6 +35,9 @@ impl Runner {
         self
     }
 
+    /// The container ID.
+    pub fn id(&self) -> &str { &self.id }
+
     /// The bundle path on disk.
     pub fn bundle_path(&self) -> &Path {
         &self.bundle_path
@@ -53,7 +55,7 @@ impl Runner {
         let bundle_str = self
             .bundle_path
             .to_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid bundle path"))?;
+            .ok_or_else(|| io::Error::other("invalid bundle path"))?;
         cli(&["create", "--bundle", bundle_str, &self.id])
     }
 
@@ -81,12 +83,12 @@ impl Runner {
         cli(&["state", &self.id])
     }
 
-    /// Run the full create→start→delete lifecycle.
+/// Run the full create→start→wait→delete lifecycle.
+    /// Waits for the container process to exit before deleting.
     pub fn run(&self) -> io::Result<String> {
         let out = self.create()?;
         if !out.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!(
                     "create failed: {}",
                     String::from_utf8_lossy(&out.stderr)
@@ -96,17 +98,28 @@ impl Runner {
 
         let out = self.start()?;
         if !out.status.success() {
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(io::Error::other(
                 format!("start failed: {}", String::from_utf8_lossy(&out.stderr)),
             ));
         }
 
-        let state_out = self.state()?;
-        let state = String::from_utf8_lossy(&state_out.stdout).to_string();
+        // Wait for the container to exit (poll state until it says "stopped")
+        for _ in 0..100 {
+            let state_out = self.state()?;
+            let json = String::from_utf8_lossy(&state_out.stdout);
+            if json.contains("\"stopped\"") {
+                let _ = self.delete();
+                return Ok(json.to_string());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
 
-        let _ = self.delete();
-        Ok(state)
+        // Force delete if container hasn't stopped
+        let _ = self.delete_force();
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "container did not stop within 10 seconds",
+        ))
     }
 
     /// Assert the container state matches the expected status.
@@ -156,9 +169,29 @@ fn cleanup(id: &str) {
 
 /// Run the edgerun-oci CLI binary.
 fn cli(args: &[&str]) -> io::Result<Output> {
+    let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
     if unsafe { libc::getuid() } == 0 {
-        Command::new(RUNTIME).args(args).output()
+        Command::new(runtime).args(args).output()
     } else {
-        Command::new("sudo").arg("-n").arg(RUNTIME).args(args).output()
+        Command::new("sudo").arg("-n").arg(runtime).args(args).output()
+    }
+}
+
+/// Helper for tests that need to call `create` directly with a specific ID and bundle.
+/// Used by the duplicate ID test.
+pub fn cli_create(id: &str, bundle_path: &Path) -> Output {
+    let runtime = env!("CARGO_BIN_EXE_edgerun-oci");
+    let bundle_str = bundle_path.to_str().expect("invalid bundle path");
+    if unsafe { libc::getuid() } == 0 {
+        Command::new(runtime)
+            .arg("--bundle").arg(bundle_str)
+            .arg("create").arg(id)
+            .output().expect("create command failed")
+    } else {
+        Command::new("sudo").arg("-n")
+            .arg(runtime)
+            .arg("--bundle").arg(bundle_str)
+            .arg("create").arg(id)
+            .output().expect("create command failed")
     }
 }

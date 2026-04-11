@@ -105,7 +105,7 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         if let Some(weight) = blkio.weight {
             if weight > 0 {
                 // cgroup v2 weight is 1-10000, blkio weight is 10-1000
-                let v2_weight = (weight as u64).saturating_mul(100).min(10000).max(1);
+                let v2_weight = (weight as u64).saturating_mul(100).clamp(1, 10000);
                 cgroup_write(&cgroup_root, "io.bfq.weight", &format!("{}", v2_weight));
                 // Also try io.weight (depends on IO scheduler)
                 cgroup_write(&cgroup_root, "io.weight", &format!("{}", v2_weight));
@@ -125,10 +125,29 @@ pub fn setup_cgroups(pid: u32, resources: &OciLinuxResources, cgroup_path: &str)
         }
     }
 
-    // Note: Network class ID and device cgroup rules are not implemented via
-    // cgroup v2 file writes. Use the eBPF-based controllers instead:
-    // - `ebpf_netcls` for network priority/class ID
-    // - `ebpf_devices` for device access control
+    // Note: Network class ID and device cgroup rules are now handled via eBPF
+    // programs attached to the cgroup (see below).
+
+    // Network class ID and priority via eBPF
+    if let Some(ref net) = resources.network {
+        if let Some(class_id) = net.class_id {
+            if class_id > 0 {
+                let _ = crate::ebpf_netcls::setup_netcls_cgroup_ebpf(&cgroup_root, class_id);
+            }
+        }
+        if let Some(ref priorities) = net.priorities {
+            if !priorities.is_empty() {
+                let _ = crate::ebpf_netcls::setup_netprio_cgroup_ebpf(&cgroup_root, priorities);
+            }
+        }
+    }
+
+    // Device cgroup rules via eBPF
+    if let Some(ref devices) = resources.devices {
+        if !devices.is_empty() {
+            let _ = crate::ebpf_devices::setup_device_cgroup_ebpf(&cgroup_root, devices);
+        }
+    }
 
     Ok(())
 }
@@ -161,5 +180,5 @@ pub fn shares_to_weight(shares: u64) -> u64 {
     if shares <= 2 { return 1; }
     // Use saturating_mul to prevent overflow: (shares - 2) * 9999
     let w = 1 + (shares - 2).saturating_mul(9999) / 262142;
-    w.min(10000).max(1)
+    w.clamp(1, 10000)
 }

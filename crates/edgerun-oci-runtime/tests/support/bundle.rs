@@ -13,11 +13,12 @@ pub struct Bundle {
 }
 
 /// Create a minimal bundle for conformance testing.
-/// Uses /bin/true as the default workload with only a mount namespace.
+/// Uses /bin/sleep 5 as the default workload so the container stays running long
+/// enough to test state transitions, kill, pause, etc.
 pub fn minimal() -> Bundle {
     let mut spec = edgerun_oci_runtime::create_bundle(
         "rootfs",
-        vec!["/bin/true".into()],
+        vec!["/bin/sleep".into(), "5".into()],
         None,
         None,
     );
@@ -121,16 +122,16 @@ impl Bundle {
 /// Copy host binaries and their dynamic libraries into the rootfs.
 ///
 /// On this system:
-/// - `/bin/true` is dynamically linked via `/lib64/ld-linux-x86-64.so.2`
+/// - `/bin/true` and `/bin/sleep` are dynamically linked via `/lib64/ld-linux-x86-64.so.2`
 /// - `libc` is at `/usr/lib/libc.so.6`
-/// - The actual linker binary is at `/usr/lib64/ld-linux-x86-64.so.2`
+/// - The actual linker binary is at `/usr/lib64/ld-linux-x86-64.so.2` (symlinked from /lib64)
 pub fn copy_runtime_libs(rootfs: &Path) -> io::Result<()> {
     // Known file copies: (host_path, rootfs_relative_path)
     let copies: &[(&str, &str)] = &[
         ("/bin/true", "bin/true"),
+        ("/bin/sleep", "bin/sleep"),
         ("/bin/false", "bin/false"),
-        ("/usr/lib64/ld-linux-x86-64.so.2", "lib64/ld-linux-x86-64.so.2"),
-        ("/usr/lib64/ld-linux-x86-64.so.2", "usr/lib64/ld-linux-x86-64.so.2"),
+        ("/lib64/ld-linux-x86-64.so.2", "lib64/ld-linux-x86-64.so.2"),
         ("/usr/lib/libc.so.6", "usr/lib/libc.so.6"),
     ];
 

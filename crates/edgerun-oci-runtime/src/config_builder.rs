@@ -84,6 +84,8 @@ pub struct ContainerProcessConfig {
     pub sysctl: HashMap<String, String>,
     /// SELinux mount label.
     pub mount_label: Option<String>,
+    /// Whether to allocate a pseudo-terminal (PTY).
+    pub terminal: bool,
 }
 
 impl ContainerProcessConfig {
@@ -139,6 +141,7 @@ pub struct ContainerConfigBuilder {
     rootfs_propagation: Option<String>,
     sysctl: HashMap<String, String>,
     mount_label: Option<String>,
+    terminal: bool,
 }
 
 impl ContainerConfigBuilder {
@@ -172,6 +175,7 @@ impl ContainerConfigBuilder {
             rootfs_propagation: Some("private".into()),
             sysctl: HashMap::new(),
             mount_label: None,
+            terminal: false,
         }
     }
 
@@ -222,6 +226,7 @@ impl ContainerConfigBuilder {
             rootfs_propagation: linux.rootfs_propagation.or(Some("private".into())),
             sysctl: linux.sysctl.unwrap_or_default(),
             mount_label: linux.mount_label,
+            terminal: process.terminal.unwrap_or(false),
         })
     }
 
@@ -410,7 +415,14 @@ impl ContainerConfigBuilder {
             rootfs_propagation: self.rootfs_propagation,
             sysctl: self.sysctl,
             mount_label: self.mount_label,
+            terminal: self.terminal,
         }
+    }
+
+    /// Request a pseudo-terminal (PTY) allocation for the container.
+    pub fn terminal(mut self) -> Self {
+        self.terminal = true;
+        self
     }
 }
 

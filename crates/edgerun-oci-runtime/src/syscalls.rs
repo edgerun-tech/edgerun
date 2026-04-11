@@ -59,6 +59,9 @@ pub mod ms {
     pub const RDONLY: c_ulong      = 1;
     pub const REMOUNT: c_ulong     = 1 << 14;
     pub const STRICTATIME: c_ulong = 1 << 24;
+    pub const SHARED: c_ulong      = 1 << 20;
+    pub const SLAVE: c_ulong       = 1 << 19;
+    pub const UNBINDABLE: c_ulong  = 1 << 21;
 }
 
 pub const MNT_DETACH: c_int = 2;
@@ -107,6 +110,7 @@ pub fn do_umask(mask: u32) -> u32 {
 /// seccomp operations.
 pub const SECCOMP_SET_MODE_FILTER: c_uint = 1;
 pub const SECCOMP_FILTER_FLAG_TSYNC: c_uint = 1;
+pub const SECCOMP_FILTER_FLAG_NEW_LISTENER: c_uint = 8;
 
 // ===========================================================================
 // Syscall wrappers
@@ -544,7 +548,7 @@ pub fn mov_reg(dst: u8, src: u8) -> [u8; 8] {
 }
 
 /// BPF_JMP | BPF_JNE | BPF_K: if dst != imm then jt else jf
-pub fn jmp_imm(jmp: u8, dst: u8, imm: i32, jt: u8) -> [u8; 8] {
+pub fn jmp_imm(jmp: u8, dst: u8, imm: i32, _jt: u8) -> [u8; 8] {
     ebpf_insn(0x05 | jmp, dst, 0, 0, imm)
         .into_iter().enumerate()
         .fold([0u8; 8], |mut arr, (i, b)| { arr[i] = b; arr })

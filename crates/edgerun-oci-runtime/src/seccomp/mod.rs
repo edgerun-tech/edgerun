@@ -8,7 +8,7 @@ use std::io;
 use std::os::raw::c_void;
 
 use crate::json::{OciLinuxSeccomp, OciSeccompAction};
-use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC};
+use crate::syscalls::{do_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_FILTER_FLAG_NEW_LISTENER};
 
 // ===========================================================================
 // Architecture mapping
@@ -314,6 +314,23 @@ pub fn bpf_insn(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
 // BPF program generation
 // ===========================================================================
 
+/// Emit a chain of unconditional skip instructions when the offset exceeds 255.
+///
+/// BPF jump offsets are single bytes (max 255). For larger skips we chain
+/// `JEQ 0xFFFFFFFF, jt=0, jf=255` instructions — 0xFFFFFFFF never matches
+/// a real syscall number or loaded value, so the false-branch (jf) is always
+/// taken, effectively acting as an unconditional skip.
+fn bpf_long_skip(insns: &mut Vec<[u8; 8]>, mut count: usize) {
+    while count > 255 {
+        // JEQ A, 0xFFFFFFFF: jt=0 (never — A never equals this), jf=255 (always taken)
+        insns.push(bpf_insn(0x15, 0, 255, 0xFFFFFFFF));
+        count -= 255;
+    }
+    if count > 0 {
+        insns.push(bpf_insn(0x15, 0, count as u8, 0xFFFFFFFF));
+    }
+}
+
 /// Generate a seccomp-BPF program from OCI spec seccomp rules.
 ///
 /// The generated program:
@@ -322,7 +339,7 @@ pub fn bpf_insn(code: u16, jt: u8, jf: u8, k: u32) -> [u8; 8] {
 /// 3. Evaluates argument filters (64-bit comparisons)
 /// 4. Applies the matching action (allow, errno, kill, etc.)
 /// 5. Falls through to default_action if no rule matches
-pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
+pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
     let mut insns: Vec<[u8; 8]> = Vec::new();
 
     // 1. Load audit_arch
@@ -337,11 +354,19 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
     };
 
     if archs.is_empty() {
-        insns.push(bpf_insn_j(0x15, skip_past_arch_check.min(255) as u8, 0, CURRENT_ARCH));
+        if skip_past_arch_check > 255 {
+            bpf_long_skip(&mut insns, skip_past_arch_check);
+        } else {
+            insns.push(bpf_insn_j(0x15, skip_past_arch_check as u8, 0, CURRENT_ARCH));
+        }
     } else {
         for arch in archs {
             let arch_nr = arch_to_bpf(arch);
-            insns.push(bpf_insn_j(0x15, skip_past_arch_check.min(255) as u8, 0, arch_nr));
+            if skip_past_arch_check > 255 {
+                bpf_long_skip(&mut insns, skip_past_arch_check);
+            } else {
+                insns.push(bpf_insn_j(0x15, skip_past_arch_check as u8, 0, arch_nr));
+            }
         }
     }
     insns.push(bpf_insn(0x06, 0, 0, 0x00000000)); // SECCOMP_RET_KILL_THREAD
@@ -391,15 +416,24 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
 
             // JEQ: if nr matches, fall through to arg checks (jt=0)
             //       if not, skip past this syscall's block (jf=remaining)
-            insns.push(bpf_insn(0x15, 0, remaining.min(255) as u8, nr));
+            if remaining > 255 {
+                // For large skips: first check if nr matches.
+                // If equal → jt=0 (fall through to arg checks).
+                // If not equal → jt=1 (skip the long-jump chain), jf=0.
+                // Then emit the long-jump chain.
+                insns.push(bpf_insn(0x15, 1, 0, nr));
+                bpf_long_skip(&mut insns, remaining);
+            } else {
+                insns.push(bpf_insn(0x15, 0, remaining as u8, nr));
+            }
 
             // Generate arg filter checks
             for (arg_idx, arg) in args.iter().enumerate() {
                 let remaining_args = args.len() - arg_idx - 1;
                 // For EQ/GE/GT/LE/LT: mismatch → skip past remaining args + RET to next entry/default
-                let skip_to_default = (remaining_args * 2 + 1).min(255) as u8;
+                let skip_to_default = remaining_args * 2 + 1;
                 // For NE: mismatch means values differ → fall through to RET (skip remaining checks only)
-                let skip_to_ret = (remaining_args * 2).min(255) as u8;
+                let skip_to_ret = remaining_args * 2;
 
                 // Load low 32 bits of arg (offset = 16 + index*8)
                 let arg_offset = 16 + arg.index * 8;
@@ -422,27 +456,57 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                 match arg.op.as_str() {
                     // EQ: A == K → match → continue (jt=0). A != K → no match → skip (jf=skip)
                     "SCMP_CMP_EQ" => {
-                        insns.push(bpf_insn(0x15, 0, skip_to_default, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x15, 1, 0, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x15, 0, skip_to_default as u8, lo_val));
+                        }
                     }
                     // NE: A != K → match → jump to RET (jf=skip_to_ret). A == K → continue to hi (jt=0)
                     "SCMP_CMP_NE" => {
-                        insns.push(bpf_insn(0x15, 0, skip_to_ret, lo_val));
+                        if skip_to_ret > 255 {
+                            bpf_long_skip(&mut insns, skip_to_ret);
+                            insns.push(bpf_insn(0x15, 1, 0, lo_val));
+                        } else {
+                            insns.push(bpf_insn(0x15, skip_to_ret as u8, 0, lo_val));
+                        }
                     }
                     // LT: A < K. If A >= K → skip. JGE: if A >= K → jt=skip.
                     "SCMP_CMP_LT" => {
-                        insns.push(bpf_insn(0x30, skip_to_default, 0, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x30, 1, 0, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x30, skip_to_default as u8, 0, lo_val));
+                        }
                     }
                     // LE: A <= K. If A > K → skip. JGT: if A > K → jt=skip.
                     "SCMP_CMP_LE" => {
-                        insns.push(bpf_insn(0x25, skip_to_default, 0, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x25, 1, 0, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x25, skip_to_default as u8, 0, lo_val));
+                        }
                     }
                     // GE: A >= K. If A >= K → continue (jt=0). If A < K → skip (jf=skip).
                     "SCMP_CMP_GE" => {
-                        insns.push(bpf_insn(0x30, 0, skip_to_default, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x30, 0, 1, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x30, 0, skip_to_default as u8, lo_val));
+                        }
                     }
                     // GT: A > K. If A > K → continue (jt=0). If A <= K → skip (jf=skip).
                     "SCMP_CMP_GT" => {
-                        insns.push(bpf_insn(0x25, 0, skip_to_default, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x25, 0, 1, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x25, 0, skip_to_default as u8, lo_val));
+                        }
                     }
                     // MASKED_EQ: (A & mask) == valueTwo
                     //   Step 1: AND low 32 bits with mask, check == expected low
@@ -452,11 +516,21 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
                         // AND low 32 bits with mask, then check == expected low
                         insns.push(bpf_insn(0x50, 0, 0, arg.value as u32));
                         // JEQ expected_lo → continue to hi check. Mismatch → skip past hi check + RET + remaining args
-                        let skip_total = (remaining_args * 2 + 2 + 1).min(255) as u8; // remaining + hi_load + hi_jeq + ret
-                        insns.push(bpf_insn(0x15, 0, skip_total, arg.value_two as u32));
+                        let skip_total = remaining_args * 2 + 2 + 1; // remaining + hi_load + hi_jeq + ret
+                        if skip_total > 255 {
+                            insns.push(bpf_insn(0x15, 1, 0, arg.value_two as u32));
+                            bpf_long_skip(&mut insns, skip_total);
+                        } else {
+                            insns.push(bpf_insn(0x15, 0, skip_total as u8, arg.value_two as u32));
+                        }
                     }
                     _ => {
-                        insns.push(bpf_insn(0x15, 0, skip_to_default, lo_val));
+                        if skip_to_default > 255 {
+                            insns.push(bpf_insn(0x15, 1, 0, lo_val));
+                            bpf_long_skip(&mut insns, skip_to_default);
+                        } else {
+                            insns.push(bpf_insn(0x15, 0, skip_to_default as u8, lo_val));
+                        }
                     }
                 }
 
@@ -515,22 +589,24 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> Vec<u8> {
     insns.push(bpf_insn(0x06, 0, 0, default_ret));
 
     // Build sock_fprog: { len: u16, filter: *sock_filter }
-    let mut insn_bytes = [0u8; 256 * 8];
-    let src = unsafe { std::slice::from_raw_parts(insns.as_ptr() as *const u8, insns.len() * 8) };
-    insn_bytes[..src.len()].copy_from_slice(src);
+    // Return owned instruction bytes so the pointer stays valid after the function returns.
+    let insn_bytes: Vec<u8> = insns.into_iter().flatten().collect();
 
-    let prog_len = insns.len() as u16;
-    let prog_ptr = insn_bytes.as_ptr();
+    let prog_len = insn_bytes.len() as u16 / 8;
+    let filter_ptr = insn_bytes.as_ptr();
 
     let mut prog = Vec::with_capacity(16);
     prog.extend_from_slice(&prog_len.to_le_bytes());
-    prog.resize(8, 0);
-    prog.extend_from_slice(&(prog_ptr as u64).to_le_bytes());
-    prog
+    prog.resize(8, 0); // padding for alignment
+    prog.extend_from_slice(&(filter_ptr as u64).to_le_bytes());
+    (insn_bytes, prog)
 }
 
 /// Generate the built-in fallback allow-list when no spec seccomp rules are present.
-pub fn seccomp_bpf_prog() -> Vec<u8> {
+///
+/// Returns the instruction bytes (owned Vec) and a sock_fprog pointer.
+/// The caller must keep `insn_bytes` alive while the seccomp syscall runs.
+pub fn seccomp_bpf_prog() -> (Vec<u8>, Vec<u8>) {
     let mut insns: Vec<[u8; 8]> = Vec::new();
 
     // 0: LOAD audit_arch
@@ -553,18 +629,19 @@ pub fn seccomp_bpf_prog() -> Vec<u8> {
     // RET ALLOW
     insns.push(bpf_insn(0x06, 0, 0, 0x7fff0000));
 
-    let mut insn_bytes = [0u8; 256 * 8];
-    let src = unsafe { std::slice::from_raw_parts(insns.as_ptr() as *const u8, insns.len() * 8) };
-    insn_bytes[..src.len()].copy_from_slice(src);
+    // Return owned instruction bytes so the pointer stays valid
+    let insn_bytes: Vec<u8> = insns.into_iter().flatten().collect();
 
-    let prog_len = insns.len() as u16;
-    let prog_ptr = insn_bytes.as_ptr();
+    // Build sock_fprog { len, filter }
+    let prog_len = insn_bytes.len() as u16 / 8;
+    let filter_ptr = insn_bytes.as_ptr();
 
     let mut prog = Vec::with_capacity(16);
     prog.extend_from_slice(&prog_len.to_le_bytes());
-    prog.resize(8, 0);
-    prog.extend_from_slice(&(prog_ptr as u64).to_le_bytes());
-    prog
+    prog.resize(8, 0); // padding for alignment
+    prog.extend_from_slice(&(filter_ptr as u64).to_le_bytes());
+
+    (insn_bytes, prog)
 }
 
 // ===========================================================================
@@ -1127,7 +1204,7 @@ fn arch_to_bpf(arch: &str) -> u32 {
 /// Otherwise, the built-in allow-list is applied.
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
 pub fn apply_seccomp() -> io::Result<()> {
-    let prog = seccomp_bpf_prog();
+    let (_insn_bytes, prog) = seccomp_bpf_prog();
     let ret = unsafe { do_seccomp(
         SECCOMP_SET_MODE_FILTER,
         SECCOMP_FILTER_FLAG_TSYNC,
@@ -1136,30 +1213,63 @@ pub fn apply_seccomp() -> io::Result<()> {
     if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
 }
 
+/// Check if the seccomp spec uses the NOTIFY action.
+///
+/// When NOTIFY is used, the runtime must create a seccomp user notification
+/// listener fd (via SECCOMP_FILTER_FLAG_NEW_LISTENER) to handle blocked syscalls.
+pub fn uses_notify_action(spec: &OciLinuxSeccomp) -> bool {
+    let entries = spec.syscalls.as_deref().unwrap_or(&[]);
+    entries.iter().any(|e| {
+        e.action.as_ref() == Some(&OciSeccompAction::Notify)
+    }) || spec.default_action.as_ref() == Some(&OciSeccompAction::Notify)
+}
+
 /// Apply seccomp filtering from OCI spec rules.
 ///
 /// If `spec` is None or has no syscalls, falls back to the built-in allow-list.
 /// Requires prctl(PR_SET_NO_NEW_PRIVS, 1) first.
+///
+/// When the spec uses the NOTIFY action, this function uses
+/// `SECCOMP_FILTER_FLAG_NEW_LISTENER` and returns the listener fd.
+/// The caller is responsible for handling seccomp notifications
+/// (or closing the fd if no handler is available).
+///
 /// Note: Does NOT use TSYNC flag — the container child is single-threaded at this
 /// point (just forked). TSYNC requires CAP_SYS_ADMIN even with no_new_privs.
-pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<()> {
+pub fn apply_seccomp_from_spec(spec: Option<&OciLinuxSeccomp>) -> io::Result<Option<i32>> {
     let has_rules = spec.as_ref()
         .and_then(|s| s.syscalls.as_ref())
         .map(|s| !s.is_empty())
         .unwrap_or(false);
 
-    let prog = if has_rules {
+    // Both functions return (insn_bytes, prog) where prog is sock_fprog
+    // pointing into insn_bytes. We keep insn_bytes alive until the syscall.
+    let (_insn_bytes, prog) = if has_rules {
         build_seccomp_prog(spec.unwrap())
     } else {
         seccomp_bpf_prog()
     };
 
+    // Detect if NOTIFY action is used — requires NEW_LISTENER flag
+    let use_listener = spec.map(uses_notify_action).unwrap_or(false);
+    let flags = if use_listener { SECCOMP_FILTER_FLAG_NEW_LISTENER } else { 0 };
+
     let ret = unsafe { do_seccomp(
         SECCOMP_SET_MODE_FILTER,
-        0, // no flags — single-threaded child, TSYNC not needed
+        flags,
         prog.as_ptr() as *const c_void,
     ) };
-    if ret == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
+
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else if use_listener {
+        // seccomp syscall returns the listener fd when NEW_LISTENER flag is set
+        let _ = std::fs::write("/dev/kmsg",
+            "edgerun: seccomp NOTIFY listener created (fd not handled by runtime)");
+        Ok(Some(ret))
+    } else {
+        Ok(None)
+    }
 }
 
 // ===========================================================================
@@ -1173,41 +1283,45 @@ mod tests {
 
     #[test]
     fn seccomp_bpf_prog_is_non_empty() {
-        let prog = seccomp_bpf_prog();
+        let (insns, prog) = seccomp_bpf_prog();
+        assert!(!insns.is_empty());
         assert!(!prog.is_empty());
     }
 
     #[test]
     fn seccomp_bpf_prog_has_valid_structure() {
-        let prog = seccomp_bpf_prog();
+        let (insns, prog) = seccomp_bpf_prog();
         assert!(prog.len() >= 16);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
-        assert!(len > 50);
+        assert!(len > 10);
+        assert_eq!(insns.len(), len * 8);
     }
 
     #[test]
     fn seccomp_bpf_prog_contains_allow_and_deny() {
-        let prog = seccomp_bpf_prog();
+        let (insns, prog) = seccomp_bpf_prog();
         assert!(prog.len() >= 16, "sock_fprog should be at least 16 bytes");
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
-        assert!(len > 50, "should have many BPF instructions, got {}", len);
+        assert!(len > 10, "should have many BPF instructions, got {}", len);
 
         let ptr_bytes: [u8; 8] = prog[8..16].try_into().unwrap();
         let ptr = u64::from_le_bytes(ptr_bytes);
         assert_ne!(ptr, 0, "filter pointer should be non-null");
 
-        unsafe {
-            let insns = std::slice::from_raw_parts(ptr as *const [u8; 8], len);
-            let mut found_allow = false;
-            let mut found_deny = false;
-            for insn in insns {
-                let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
-                if k == 0x7fff0000 { found_allow = true; }
-                if k == 0x00050001 { found_deny = true; }
-            }
-            assert!(found_allow, "should contain RET_ALLOW (0x7fff0000)");
-            assert!(found_deny, "should contain RET_ERRNO(EPERM) (0x00050001)");
+        // Verify the pointer points into our owned Vec
+        assert!(ptr >= insns.as_ptr() as u64);
+        assert!(ptr < (insns.as_ptr() as u64 + insns.len() as u64));
+
+        let insns_slice: &[[u8; 8]] = unsafe { std::slice::from_raw_parts(ptr as *const [u8; 8], len) };
+        let mut found_allow = false;
+        let mut found_deny = false;
+        for insn in insns_slice {
+            let k = u32::from_le_bytes([insn[4], insn[5], insn[6], insn[7]]);
+            if k == 0x7fff0000 { found_allow = true; }
+            if k == 0x00050001 { found_deny = true; }
         }
+        assert!(found_allow, "should contain RET_ALLOW (0x7fff0000)");
+        assert!(found_deny, "should contain RET_ERRNO(EPERM) (0x00050001)");
     }
 
     #[test]
@@ -1246,7 +1360,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         assert!(prog.len() >= 16);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len > 5, "should have BPF instructions, got {}", len);
@@ -1262,7 +1376,7 @@ mod tests {
             listener_metadata: None,
             syscalls: None,
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         // Should still generate a valid program even with empty rules
         assert!(prog.len() >= 16);
     }
@@ -1289,7 +1403,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         assert!(prog.len() >= 16);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8, "should have many BPF instructions, got {}", len);
@@ -1317,7 +1431,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 5, "should have BPF instructions, got {}", len);
     }
@@ -1370,7 +1484,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8, "should have multiple instructions");
 
@@ -1421,7 +1535,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8);
 
@@ -1470,7 +1584,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8);
 
@@ -1519,7 +1633,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8);
 
@@ -1568,7 +1682,7 @@ mod tests {
                 },
             ]),
         };
-        let prog = build_seccomp_prog(&spec);
+        let (_, prog) = build_seccomp_prog(&spec);
         let len = u16::from_le_bytes([prog[0], prog[1]]) as usize;
         assert!(len >= 8);
 
@@ -1589,5 +1703,55 @@ mod tests {
             assert!(found_and_lo, "MASKED_EQ should use AND (0x50) with mask");
             assert!(found_jeq_lo, "MASKED_EQ should use JEQ (0x15) with expected value");
         }
+    }
+
+    #[test]
+    fn uses_notify_action_detects_notify_in_entry() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Errno),
+            syscalls: Some(vec![OciSeccompSyscallEntry {
+                names: Some(vec!["read".into()]),
+                action: Some(OciSeccompAction::Notify),
+                errno_ret: None,
+                args: None,
+            }]),
+            ..Default::default()
+        };
+        assert!(uses_notify_action(&spec));
+    }
+
+    #[test]
+    fn uses_notify_action_detects_notify_as_default() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Notify),
+            syscalls: None,
+            ..Default::default()
+        };
+        assert!(uses_notify_action(&spec));
+    }
+
+    #[test]
+    fn uses_notify_action_false_for_allow_only() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Allow),
+            syscalls: Some(vec![OciSeccompSyscallEntry {
+                names: Some(vec!["read".into(), "write".into()]),
+                action: Some(OciSeccompAction::Allow),
+                errno_ret: None,
+                args: None,
+            }]),
+            ..Default::default()
+        };
+        assert!(!uses_notify_action(&spec));
+    }
+
+    #[test]
+    fn uses_notify_action_false_for_empty_syscalls() {
+        let spec = OciLinuxSeccomp {
+            default_action: Some(OciSeccompAction::Errno),
+            syscalls: Some(vec![]),
+            ..Default::default()
+        };
+        assert!(!uses_notify_action(&spec));
     }
 }

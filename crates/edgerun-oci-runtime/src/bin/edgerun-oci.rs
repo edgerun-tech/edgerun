@@ -29,6 +29,12 @@ fn main() {
         "delete" => cli::cmd_delete(&opts, &cmd_args),
         "exec" => cli::cmd_exec(&opts, &cmd_args),
         "update" => cli::cmd_update(&opts, &cmd_args),
+        "pause" => cli::cmd_pause(&opts, &cmd_args),
+        "resume" => cli::cmd_resume(&opts, &cmd_args),
+        "events" => cli::cmd_events(&opts, &cmd_args),
+        "ps" => cli::cmd_ps(&opts, &cmd_args),
+        "features" => cli::cmd_features(&opts, &cmd_args),
+        "spec" => cli::cmd_spec(&opts, &cmd_args),
         _ => {
             eprintln!("Unknown command: {}", command);
             print_usage();

@@ -26,6 +26,13 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     let bundle = opts.bundle.as_deref().unwrap_or(Path::new("."));
     let id = crate::cli::require_container_id(args)?;
 
+    // Set state directory if --root is provided
+    if let Some(ref root) = opts.root {
+        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+        })?);
+    }
+
     // Chdir to bundle so relative root.path resolves correctly
     std::env::set_current_dir(bundle).map_err(|e| {
         io::Error::new(io::ErrorKind::InvalidInput, format!("cannot chdir to bundle: {}", e))
@@ -72,7 +79,12 @@ pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     std::mem::forget(forked);
 
     // Step 4: save state as "created"
-    save_created_state(&spec, id, child_pid)?;
+    let bundle_abs = bundle.canonicalize().map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidInput, format!("cannot resolve bundle path: {}", e))
+    })?;
+    save_created_state(&spec, id, child_pid, bundle_abs.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "bundle path is not valid UTF-8")
+    })?)?;
 
     // Write PID to pid-file if requested
     if let Some(ref pid_file) = opts.pid_file {

@@ -31,22 +31,14 @@ const BPF_ALLOW: i32 = 1; // For cgroup skb, returning 1 means "pass"
 /// This program is attached to BPF_CGROUP_INET_EGRESS.
 /// It sets the packet priority (which maps to net_cls.classid on cgroup v1).
 pub fn build_netcls_bpf_prog(class_id: u32) -> Vec<[u8; 8]> {
-    let mut insns: Vec<[u8; 8]> = Vec::new();
-
-    // Save context (r1 → r6)
-    insns.push(mov_reg(R6, R1));
-
-    // Set skb->priority = class_id
-    // r2 = class_id
-    insns.push(mov_imm(R2, class_id as i32));
-
-    // *(u32*)(r6 + SKB_PRIORITY_OFF) = r2
-    insns.push(st_imm(bpf_size::BPF_W as u8, R6, R2, SKB_PRIORITY_OFF));
-
-    // Return BPF_OK (allow packet to pass)
-    insns.push(mov_imm(R0, BPF_ALLOW));
-    insns.push(exit());
-
+    // Save context (r1 → r6), set skb->priority, return
+    let insns: Vec<[u8; 8]> = vec![
+        mov_reg(R6, R1),
+        mov_imm(R2, class_id as i32),
+        st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF),
+        mov_imm(R0, BPF_ALLOW),
+        exit(),
+    ];
     insns
 }
 
@@ -55,16 +47,16 @@ pub fn setup_netcls_cgroup_ebpf(cgroup_path: &Path, class_id: u32) -> io::Result
     let insns = build_netcls_bpf_prog(class_id);
 
     let prog_fd = bpf_prog_load(
-        bpf_prog_type::BPF_PROG_TYPE_CGROUP_SKB as u32,
+        bpf_prog_type::BPF_PROG_TYPE_CGROUP_SKB,
         &insns,
         "GPL",
-        bpf_attach_type::BPF_CGROUP_INET_EGRESS as u32,
+        bpf_attach_type::BPF_CGROUP_INET_EGRESS,
     )?;
 
     let cgroup_dir = fs::File::open(cgroup_path)?;
     let cgroup_fd = cgroup_dir.as_raw_fd();
 
-    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_INET_EGRESS as u32)?;
+    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_INET_EGRESS)?;
 
     let _ = prog_fd;
 
@@ -101,7 +93,7 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
     // We use the `priority` field as the priority value and encode the ifindex
     // in the `name` field as a numeric string.
 
-    for (_i, p) in priorities.iter().enumerate() {
+    for p in priorities {
         // Parse ifindex from the name field (expected to be a number)
         let ifindex: u32 = p.name.parse().unwrap_or(0);
         if ifindex == 0 {
@@ -109,18 +101,18 @@ pub fn build_netprio_bpf_prog(priorities: &[OciLinuxNetworkPriority]) -> Vec<[u8
         }
 
         // Load skb->ifindex
-        insns.push(ld_imm(bpf_size::BPF_W as u8, R2, R6, SKB_IFINDEX_OFF));
+        insns.push(ld_imm(bpf_size::BPF_W, R2, R6, SKB_IFINDEX_OFF));
 
         // Compare with expected ifindex
         // if r2 != ifindex → skip to next rule
         // We'll fix up the offset later
-        insns.push(jmp_imm(bpf_jmp::BPF_JNE as u8, R2, ifindex as i32, 0));
+        insns.push(jmp_imm(bpf_jmp::BPF_JNE, R2, ifindex as i32, 0));
         // Track this forward reference
         // We'll handle this with a simpler approach: generate all checks inline
 
         // Set skb->priority = p.priority
         insns.push(mov_imm(R2, p.priority as i32));
-        insns.push(st_imm(bpf_size::BPF_W as u8, R6, R2, SKB_PRIORITY_OFF));
+        insns.push(st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF));
         insns.push(mov_imm(R0, BPF_ALLOW));
         insns.push(exit());
     }
@@ -144,16 +136,16 @@ pub fn setup_netprio_cgroup_ebpf(cgroup_path: &Path, priorities: &[OciLinuxNetwo
     }
 
     let prog_fd = bpf_prog_load(
-        bpf_prog_type::BPF_PROG_TYPE_CGROUP_SKB as u32,
+        bpf_prog_type::BPF_PROG_TYPE_CGROUP_SKB,
         &insns,
         "GPL",
-        bpf_attach_type::BPF_CGROUP_INET_EGRESS as u32,
+        bpf_attach_type::BPF_CGROUP_INET_EGRESS,
     )?;
 
     let cgroup_dir = fs::File::open(cgroup_path)?;
     let cgroup_fd = cgroup_dir.as_raw_fd();
 
-    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_INET_EGRESS as u32)?;
+    bpf_prog_attach(cgroup_fd, prog_fd, bpf_attach_type::BPF_CGROUP_INET_EGRESS)?;
 
     let _ = prog_fd;
 
@@ -206,7 +198,7 @@ mod tests {
 
     #[test]
     fn st_imm_encoding() {
-        let insn = st_imm(bpf_size::BPF_W as u8, R6, R2, SKB_PRIORITY_OFF);
+        let insn = st_imm(bpf_size::BPF_W, R6, R2, SKB_PRIORITY_OFF);
         assert_eq!(insn.len(), 8);
         // BPF_STX | BPF_W | BPF_MEM = 0x03 | 0x00 | 0x60 = 0x63
         assert_eq!(insn[0], 0x63);

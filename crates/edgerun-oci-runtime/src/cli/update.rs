@@ -36,7 +36,13 @@ struct UpdateOpts {
     blkio_weight: Option<u64>,
 }
 
-pub fn cmd_update(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+pub fn cmd_update(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
+    if let Some(ref root) = opts.root {
+        crate::state::set_state_dir(root.to_str().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::InvalidInput, "--root path is not valid UTF-8")
+        })?);
+    }
+
     if args.is_empty() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "container ID required"));
     }
@@ -136,7 +142,7 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
     // Block I/O
     if let Some(weight) = opts.blkio_weight {
         if weight > 0 {
-            let v2_weight = weight.saturating_mul(100).min(10000).max(1);
+            let v2_weight = weight.saturating_mul(100).clamp(1, 10000);
             crate::cgroups::setup_container_cgroups_from_file(cgroup_root, "io.weight", &v2_weight.to_string());
         }
     }

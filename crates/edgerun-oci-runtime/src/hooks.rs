@@ -130,7 +130,7 @@ fn run_hook_chain(
 
         if !status.success() {
             return Err(HookError { hook_path: hook.path.clone(),
-                error: io::Error::new(io::ErrorKind::Other, format!("hook exited with code {:?} (took {:?})", status.code(), start.elapsed())) });
+                error: io::Error::other(format!("hook exited with code {:?} (took {:?})", status.code(), start.elapsed())) });
         }
     }
     Ok(())
@@ -181,7 +181,7 @@ pub fn execute_poststop_hooks(hooks: Option<&[OciHook]>, state: &ContainerState)
                     loop { if let Some(s) = child.try_wait().ok().flatten() { break s.success(); }
                         if start.elapsed() > timeout { let _ = child.kill(); break false; }
                         std::thread::sleep(Duration::from_millis(50)); }
-                } else { child.wait().map_or(false, |s| s.success()) };
+                } else { child.wait().is_ok_and(|s| s.success()) };
                 if !ok { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed (warning only)", hook.path)); }
             }
             Err(e) => { let _ = fs::write("/dev/kmsg", format!("edgerun: poststop hook {:?} failed: {} (warning only)", hook.path, e)); }
