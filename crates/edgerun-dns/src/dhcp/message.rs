@@ -120,6 +120,8 @@ pub struct DhcpMessage {
     pub sname: [u8; 64],
     pub file: [u8; 128],
     pub options: DhcpOptions,
+    /// True if this is a BOOTP message (no DHCP magic cookie).
+    pub is_bootp: bool,
 }
 
 /// Parsed DHCP options.
@@ -314,21 +316,22 @@ impl DhcpMessage {
         buf.extend_from_slice(&self.sname);
         buf.extend_from_slice(&self.file);
 
-        // Magic cookie
-        buf.extend_from_slice(&DHCP_COOKIE);
-
-        // Options
-        self.options.serialize(&mut buf);
+        // Magic cookie and options (omit for BOOTP)
+        if !self.is_bootp {
+            buf.extend_from_slice(&DHCP_COOKIE);
+            self.options.serialize(&mut buf);
+        }
 
         buf
     }
 
     /// Parse a DHCP message from wire format.
     pub fn from_wire(data: &[u8]) -> Result<Self, io::Error> {
-        if data.len() < Self::HEADER_SIZE {
+        // Minimum: 236 bytes for BOOTP (no magic cookie), 240 for DHCP
+        if data.len() < 236 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("DHCP message too short: {} bytes (min {})", data.len(), Self::HEADER_SIZE),
+                format!("DHCP/BOOTP message too short: {} bytes (min 236)", data.len()),
             ));
         }
 
@@ -363,17 +366,19 @@ impl DhcpMessage {
         sname.copy_from_slice(&data[44..108]);
 
         let mut file = [0u8; 128];
-        file.copy_from_slice(&data[108..236]);
-
-        // Verify magic cookie
-        if data[236..240] != DHCP_COOKIE {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Invalid DHCP magic cookie",
-            ));
+        if data.len() >= 236 {
+            file.copy_from_slice(&data[108..236]);
         }
 
-        let options = DhcpOptions::parse(&data[240..])?;
+        // Check for DHCP magic cookie — if absent or message too short, this is BOOTP (RFC 951)
+        let is_bootp = data.len() < 240 || data[236..240] != DHCP_COOKIE;
+
+        let options = if is_bootp {
+            // BOOTP: no options, use sname/file fields
+            DhcpOptions::default()
+        } else {
+            DhcpOptions::parse(&data[240..])?
+        };
 
         Ok(Self {
             op,
@@ -391,6 +396,7 @@ impl DhcpMessage {
             sname,
             file,
             options,
+            is_bootp,
         })
     }
 
@@ -411,6 +417,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Discover),
                 param_request_list: vec![
@@ -443,6 +450,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Request),
                 requested_ip: Some(requested_ip),
@@ -477,6 +485,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Release),
                 server_id: Some(server_id),
@@ -513,6 +522,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Offer),
                 subnet_mask: Some(subnet_mask),
@@ -557,6 +567,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Ack),
                 subnet_mask: Some(subnet_mask),
@@ -591,6 +602,7 @@ impl DhcpMessage {
             chaddr: mac_to_chaddr(client_mac),
             sname: [0; 64],
             file: [0; 128],
+            is_bootp: false,
             options: DhcpOptions {
                 message_type: Some(DhcpMessageType::Nak),
                 server_id: Some(server_id),
@@ -1160,12 +1172,13 @@ mod tests {
 
     #[test]
     fn test_invalid_wire_format() {
-        // Too short
+        // Too short (less than 236 bytes — minimum for BOOTP header)
         assert!(DhcpMessage::from_wire(&[0u8; 100]).is_err());
-        // Bad magic cookie
-        let mut buf = vec![0u8; 240];
+        // Valid BOOTP message (no magic cookie, 236 bytes) — should succeed
+        let mut buf = vec![0u8; 236];
         buf[0] = BOOTREQUEST;
-        assert!(DhcpMessage::from_wire(&buf).is_err());
+        let msg = DhcpMessage::from_wire(&buf).unwrap();
+        assert!(msg.is_bootp);
     }
 
     #[test]
@@ -1180,5 +1193,62 @@ mod tests {
     #[test]
     fn test_min_message_size() {
         assert_eq!(DhcpMessage::HEADER_SIZE, 240);
+    }
+
+    #[test]
+    fn test_bootp_message() {
+        // Construct a BOOTP message (no DHCP magic cookie)
+        let mut buf = vec![0u8; 240]; // minimum BOOTP size
+        buf[0] = BOOTREQUEST; // op = BOOTREQUEST
+        buf[1] = 1; // htype = Ethernet
+        buf[2] = 6; // hlen = 6
+        buf[3] = 0; // hops
+        buf[4..8].copy_from_slice(&0x12345678u32.to_be_bytes()); // xid
+        // sname is 64 bytes at offset 44
+        let sname_bytes = b"bootserver";
+        buf[44..44+sname_bytes.len()].copy_from_slice(sname_bytes);
+        // file is 128 bytes at offset 108
+        let file_bytes = b"pxelinux.0";
+        buf[108..108+file_bytes.len()].copy_from_slice(file_bytes);
+
+        let msg = DhcpMessage::from_wire(&buf).unwrap();
+        assert!(msg.is_bootp);
+        assert_eq!(msg.op, DhcpOp::Request);
+        assert_eq!(msg.xid, 0x12345678);
+        // sname should have data
+        assert!(msg.sname.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn test_bootp_response_serialization() {
+        let mut msg = DhcpMessage::offer(
+            0x12345678,
+            [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff],
+            Ipv4Addr::new(192, 168, 1, 100),
+            Ipv4Addr::new(192, 168, 1, 1),
+            Ipv4Addr::new(255, 255, 255, 0),
+            Ipv4Addr::new(192, 168, 1, 1),
+            vec![],
+            86400,
+            Some("192.168.1.1".to_string()),
+            Some("pxelinux.0".to_string()),
+        );
+
+        // Convert to BOOTP response
+        msg.is_bootp = true;
+        msg.siaddr = Ipv4Addr::new(192, 168, 1, 1);
+        let bootfile = b"pxelinux.0";
+        msg.file[..bootfile.len()].copy_from_slice(bootfile);
+
+        let wire = msg.to_wire();
+        // BOOTP response should be 236 bytes (240 header minus 4 magic cookie, no options)
+        assert_eq!(wire.len(), 236);
+        // BOOTP should NOT have the DHCP magic cookie at bytes 232-235
+        assert_ne!(&wire[232..236], &[99, 130, 83, 99]);
+
+        // Parse it back
+        let parsed = DhcpMessage::from_wire(&wire).unwrap();
+        assert!(parsed.is_bootp);
+        assert_eq!(parsed.siaddr, Ipv4Addr::new(192, 168, 1, 1));
     }
 }

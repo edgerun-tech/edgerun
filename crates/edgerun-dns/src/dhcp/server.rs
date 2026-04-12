@@ -186,9 +186,10 @@ impl DhcpServer {
     fn handle_discover(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         eprintln!(
-            "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x})",
+            "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x}) bootp={}",
             format_mac(mac),
-            msg.xid
+            msg.xid,
+            msg.is_bootp
         );
 
         // Try to allocate an IP
@@ -213,7 +214,7 @@ impl DhcpServer {
 
         let (tftp, bootfile) = self.pxe_boot_params(msg);
 
-        let offer = DhcpMessage::offer(
+        let mut offer = DhcpMessage::offer(
             msg.xid,
             mac,
             ip,
@@ -222,9 +223,24 @@ impl DhcpServer {
             self.config.router,
             self.config.dns_servers.clone(),
             self.config.lease_time,
-            tftp,
-            bootfile,
+            tftp.clone(),
+            bootfile.clone(),
         );
+
+        // BOOTP compatibility: populate sname/file/siaddr fields (RFC 951 §4)
+        if msg.is_bootp {
+            offer.is_bootp = true;
+            // siaddr = TFTP server IP
+            if let Some(tftp_ip) = self.config.tftp_server {
+                offer.siaddr = tftp_ip;
+            }
+            // sname = server hostname
+            if let Some(ref bootfile) = bootfile {
+                // Put bootfile name in the file field (RFC 951)
+                let file_bytes = bootfile.as_bytes();
+                offer.file[..file_bytes.len().min(128)].copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
+            }
+        }
 
         self.send_reply(&offer, msg)
     }
@@ -380,7 +396,7 @@ impl DhcpServer {
     fn send_ack(&mut self, msg: &DhcpMessage, ip: Ipv4Addr) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         let (tftp, bootfile) = self.pxe_boot_params(msg);
-        let ack = DhcpMessage::ack(
+        let mut ack = DhcpMessage::ack(
             msg.xid,
             mac,
             ip,
@@ -389,9 +405,22 @@ impl DhcpServer {
             self.config.router,
             self.config.dns_servers.clone(),
             self.config.lease_time,
-            tftp,
-            bootfile,
+            tftp.clone(),
+            bootfile.clone(),
         );
+
+        // BOOTP compatibility
+        if msg.is_bootp {
+            ack.is_bootp = true;
+            if let Some(tftp_ip) = self.config.tftp_server {
+                ack.siaddr = tftp_ip;
+            }
+            if let Some(ref bf) = bootfile {
+                let file_bytes = bf.as_bytes();
+                ack.file[..file_bytes.len().min(128)].copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
+            }
+        }
+
         self.send_reply(&ack, msg)
     }
 
