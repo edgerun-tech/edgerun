@@ -319,7 +319,7 @@ impl Http2Server {
         action
     }
 
-    fn half_close_remote(&mut self, stream_id: u32) {
+    pub(crate) fn half_close_remote(&mut self, stream_id: u32) {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
             // If this closes the stream, record it

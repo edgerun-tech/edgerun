@@ -1900,6 +1900,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-oauth"
+version = "0.1.0"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-rt",
+]
+
+[[package]]
 name = "edgerun-oci-registry"
 version = "0.1.0"
 dependencies = [

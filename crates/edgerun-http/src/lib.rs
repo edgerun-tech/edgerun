@@ -102,7 +102,7 @@ pub mod client;
 pub use handler::{Handler, into_handler, into_handler_async, SyncHandler, AsyncHandler};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
-pub use server::{HttpServer, BoundHttpServer};
+pub use server::{HttpServer, BoundHttpServer, TlsCertificate};
 pub use client::{HttpClient, HttpVersion};
 
 // ---------------------------------------------------------------------------

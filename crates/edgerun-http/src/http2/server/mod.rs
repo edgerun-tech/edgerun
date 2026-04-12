@@ -171,7 +171,7 @@ impl Http2Server {
 
     // ── Internal helpers ──
 
-    fn update_last_stream(&mut self, stream_id: u32) {
+    pub(crate) fn update_last_stream(&mut self, stream_id: u32) {
         if stream_id > self.last_processed_stream_id {
             self.last_processed_stream_id = stream_id;
         }
