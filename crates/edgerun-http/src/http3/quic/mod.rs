@@ -508,6 +508,25 @@ impl QuicConnection {
         self.send_frame(frame)
     }
 
+    /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
+    pub fn send_reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+        let frame = QuicFrame::ResetStream {
+            stream_id,
+            error_code,
+            final_size: 0,
+        };
+        self.send_frame(frame)
+    }
+
+    /// Send STOP_SENDING to tell peer to stop sending (RFC 9000 §4.6).
+    pub fn send_stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+        let frame = QuicFrame::StopSending {
+            stream_id,
+            error_code,
+        };
+        self.send_frame(frame)
+    }
+
     /// Send a single QUIC frame
     ///
     /// Builds the appropriate packet header based on connection state:

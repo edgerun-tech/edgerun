@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::net::UdpSocket;
 use std::str::FromStr;
 
-use super::http3::frame::Http3Frame;
+use super::http3::frame::{Http3Frame, Http3FrameType};
 use super::http3::settings::Http3Settings;
 use super::http3::stream::{Http3Stream, Http3StreamType};
 use super::http3::stream_types;
@@ -55,6 +55,24 @@ pub struct Http3Connection {
     /// Connection migration state (RFC 9000 §9)
     /// The current active path (source and destination addresses)
     active_path: Option<(std::net::SocketAddr, std::net::SocketAddr)>,
+    /// GOAWAY: the highest stream ID the peer will accept (RFC 9114 §5.2)
+    /// None = no GOAWAY received, Some(id) = no new streams > id
+    going_away: Option<u64>,
+    /// GOAWAY: the highest stream ID we will accept (sent to peer)
+    sent_goaway_id: u64,
+    /// QPACK encoder stream ID (unidirectional, type 0x02)
+    qpack_encoder_stream_id: Option<u64>,
+    /// QPACK decoder stream ID (unidirectional, type 0x03)
+    qpack_decoder_stream_id: Option<u64>,
+    /// Known unidirectional stream types (for dispatching incoming uni streams)
+    /// Key = stream_id, Value = stream type varint
+    known_uni_stream_types: HashMap<u64, u64>,
+    /// Max push ID received from peer (client-side: server's push limit)
+    max_push_id_received: u64,
+    /// Max bidirectional streams allowed by peer (from QUIC transport params)
+    max_bidi_streams: u64,
+    /// Max unidirectional streams allowed by peer (from QUIC transport params)
+    max_uni_streams: u64,
 }
 
 impl Http3Connection {
@@ -79,6 +97,14 @@ impl Http3Connection {
             stream_headers_received: HashMap::new(),
             stream_priorities: HashMap::new(),
             active_path: None,
+            going_away: None,
+            sent_goaway_id: u64::MAX,
+            qpack_encoder_stream_id: None,
+            qpack_decoder_stream_id: None,
+            known_uni_stream_types: HashMap::new(),
+            max_push_id_received: 0,
+            max_bidi_streams: 100,
+            max_uni_streams: 100,
         };
 
         // Send connection preface: create control stream and send SETTINGS
@@ -108,6 +134,14 @@ impl Http3Connection {
             stream_headers_received: HashMap::new(),
             stream_priorities: HashMap::new(),
             active_path: None,
+            going_away: None,
+            sent_goaway_id: u64::MAX,
+            qpack_encoder_stream_id: None,
+            qpack_decoder_stream_id: None,
+            known_uni_stream_types: HashMap::new(),
+            max_push_id_received: 0,
+            max_bidi_streams: 100,
+            max_uni_streams: 100,
         };
 
         // Send server connection preface:
@@ -141,6 +175,14 @@ impl Http3Connection {
             stream_headers_received: HashMap::new(),
             stream_priorities: HashMap::new(),
             active_path: None,
+            going_away: None,
+            sent_goaway_id: u64::MAX,
+            qpack_encoder_stream_id: None,
+            qpack_decoder_stream_id: None,
+            known_uni_stream_types: HashMap::new(),
+            max_push_id_received: 0,
+            max_bidi_streams: 100,
+            max_uni_streams: 100,
         }
     }
 
@@ -228,9 +270,44 @@ impl Http3Connection {
 
         // Send on QUIC unidirectional stream
         self.quic.send_stream_data(control_stream_id, &stream_data, false)
-            .map_err(|e| format!("Failed to send control stream: {}", e))?;
+            .map_err(|e| Http3Error::QuicError(e))?;
 
         self.control_stream_id = Some(control_stream_id);
+
+        // Create QPACK encoder stream (unidirectional, type 0x02)
+        let encoder_stream_id = self.next_uni_stream_id;
+        self.next_uni_stream_id += 4;
+        let mut encoder_data = Vec::new();
+        Self::encode_varint(stream_types::QPACK_ENCODER, &mut encoder_data);
+        // Set Max Table Capacity (if dynamic table enabled)
+        if self.qpack_encoder.insert_count() == 0 && self.local_settings.max_table_capacity > 0 {
+            // Send Set Max Table Capacity: 0x20 | (capacity & 0x1F), then remaining if > 31
+            let cap = self.local_settings.max_table_capacity as usize;
+            if cap <= 31 {
+                encoder_data.push((0x20 | (cap & 0x1F)) as u8);
+            } else {
+                encoder_data.push((0x20 | (cap & 0x1F)) as u8);
+                let mut remaining = cap >> 5;
+                while remaining > 127 {
+                    encoder_data.push((remaining & 0x7F | 0x80) as u8);
+                    remaining >>= 7;
+                }
+                encoder_data.push(remaining as u8);
+            }
+        }
+        self.quic.send_stream_data(encoder_stream_id, &encoder_data, false)
+            .map_err(|e| Http3Error::QuicError(e))?;
+        self.qpack_encoder_stream_id = Some(encoder_stream_id);
+
+        // Create QPACK decoder stream (unidirectional, type 0x03)
+        let decoder_stream_id = self.next_uni_stream_id;
+        self.next_uni_stream_id += 4;
+        let mut decoder_data = Vec::new();
+        Self::encode_varint(stream_types::QPACK_DECODER, &mut decoder_data);
+        // Decoder stream starts empty — instructions sent as needed
+        self.quic.send_stream_data(decoder_stream_id, &decoder_data, false)
+            .map_err(|e| Http3Error::QuicError(e))?;
+        self.qpack_decoder_stream_id = Some(decoder_stream_id);
 
         Ok(())
     }
@@ -741,6 +818,24 @@ impl Http3Connection {
         header_block: Vec<u8>,
         body: Option<Vec<u8>>,
     ) -> Result<u64> {
+        // Check GOAWAY — reject new streams beyond goaway ID
+        if let Some(max_id) = self.going_away {
+            if self.next_bidi_stream_id > max_id {
+                return Err(Http3Error::FrameUnexpected(format!(
+                    "GOAWAY received: cannot create stream {} (max allowed: {})",
+                    self.next_bidi_stream_id, max_id
+                )));
+            }
+        }
+
+        // Check stream creation limits
+        if !self.can_create_bidi_stream() {
+            return Err(Http3Error::ProtocolViolation(format!(
+                "Bidirectional stream limit reached ({}/{})",
+                self.next_bidi_stream_id / 4, self.max_bidi_streams
+            )));
+        }
+
         let stream_id = self.next_bidi_stream_id;
         self.next_bidi_stream_id += 4;
 
@@ -902,6 +997,7 @@ impl Http3Connection {
 
     /// Send GOAWAY
     pub fn goaway(&mut self, stream_id: u64) -> Result<()> {
+        self.sent_goaway_id = stream_id;
         let frame = Http3Frame::Goaway { stream_id };
         let frame_data = frame.to_bytes();
 
@@ -910,7 +1006,7 @@ impl Http3Connection {
 
         self.quic
             .send_stream_data(control_id, &frame_data, false)
-            .map_err(|e| format!("Failed to send GOAWAY: {}", e))?;
+            .map_err(|e| Http3Error::QuicError(e))?;
 
         Ok(())
     }
@@ -1106,6 +1202,206 @@ impl Http3Connection {
 
         streams.into_iter().map(|(id, _, _)| id).collect()
     }
+
+    // ------------------------------------------------------------------
+    // GOAWAY Receive Processing (RFC 9114 §5.2)
+    // ------------------------------------------------------------------
+
+    /// Process an incoming GOAWAY frame (RFC 9114 §5.2).
+    ///
+    /// After receiving GOAWAY, the connection rejects new bidirectional
+    /// streams with IDs greater than the goaway stream ID.
+    pub fn process_goaway(&mut self, stream_id: u64) {
+        self.going_away = Some(stream_id);
+    }
+
+    /// Check if the peer has sent GOAWAY and we should stop creating new streams.
+    pub fn is_going_away(&self) -> bool {
+        self.going_away.is_some()
+    }
+
+    /// Check if a given bidirectional stream ID is allowed after GOAWAY.
+    pub fn is_stream_id_allowed(&self, stream_id: u64) -> bool {
+        match self.going_away {
+            Some(max_id) => stream_id <= max_id,
+            None => true,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Stream Creation Limits (RFC 9000 §4.6-4.7)
+    // ------------------------------------------------------------------
+
+    /// Check if we can create a new bidirectional stream.
+    pub fn can_create_bidi_stream(&self) -> bool {
+        let streams_created = self.next_bidi_stream_id / 4;
+        let max_allowed = self.max_bidi_streams;
+        streams_created < max_allowed
+    }
+
+    /// Check if we can create a new unidirectional stream.
+    pub fn can_create_uni_stream(&self) -> bool {
+        let streams_created = self.next_uni_stream_id / 4;
+        let max_allowed = self.max_uni_streams;
+        streams_created < max_allowed
+    }
+
+    // ------------------------------------------------------------------
+    // Control Stream Validation (RFC 9114 §6.2.1)
+    // ------------------------------------------------------------------
+
+    /// Validate that a frame is legal on the control stream.
+    ///
+    /// Control stream only allows: SETTINGS (0x04), GOAWAY (0x07),
+    /// MAX_PUSH_ID (0x05), CANCEL_PUSH (0x03).
+    /// DATA, HEADERS, and other frame types are protocol errors.
+    pub fn validate_control_stream_frame(frame_type: Http3FrameType) -> Result<()> {
+        match frame_type {
+            Http3FrameType::Settings
+            | Http3FrameType::Goaway
+            | Http3FrameType::MaxPushId
+            | Http3FrameType::CancelPush => Ok(()),
+            _ => Err(Http3Error::FrameUnexpected(format!(
+                "Frame {:?} not allowed on control stream",
+                frame_type
+            ))),
+        }
+    }
+
+    /// Validate that a frame is legal for the given stream type.
+    ///
+    /// - Control stream: only SETTINGS, GOAWAY, MAX_PUSH_ID, CANCEL_PUSH
+    /// - Push stream: only DATA, HEADERS (after push_id varint)
+    /// - QPACK encoder stream: only QPACK encoder instructions
+    /// - QPACK decoder stream: only QPACK decoder instructions
+    /// - Request/response streams: DATA, HEADERS
+    pub fn validate_frame_on_stream_type(
+        stream_id: u64,
+        frame_type: Http3FrameType,
+        stream_type: StreamType,
+    ) -> Result<()> {
+        match stream_type {
+            StreamType::Control => Self::validate_control_stream_frame(frame_type),
+            StreamType::Push => {
+                match frame_type {
+                    Http3FrameType::Data | Http3FrameType::Headers => Ok(()),
+                    _ => Err(Http3Error::FrameUnexpected(format!(
+                        "Frame {:?} not allowed on push stream {}",
+                        frame_type, stream_id
+                    ))),
+                }
+            }
+            StreamType::QpackEncoder | StreamType::QpackDecoder => {
+                // QPACK streams use their own instruction format, not HTTP/3 frames
+                Err(Http3Error::FrameUnexpected(format!(
+                    "HTTP/3 frames not expected on QPACK stream {}",
+                    stream_id
+                )))
+            }
+            StreamType::Request => {
+                match frame_type {
+                    Http3FrameType::Data | Http3FrameType::Headers => Ok(()),
+                    _ => Err(Http3Error::FrameUnexpected(format!(
+                        "Frame {:?} not allowed on request stream {}",
+                        frame_type, stream_id
+                    ))),
+                }
+            }
+        }
+    }
+
+    /// Determine the stream type from a stream ID.
+    fn stream_type_for_id(stream_id: u64) -> StreamType {
+        // Unidirectional streams: stream_id % 4 == 2 or 3
+        match stream_id % 4 {
+            0 | 1 => StreamType::Request, // Bidirectional
+            2 => StreamType::Control, // First uni stream (usually control)
+            3 => StreamType::Push, // Server-initiated (could be push, QPACK, etc.)
+            _ => StreamType::Request,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Stream Closure Handling
+    // ------------------------------------------------------------------
+
+    /// Called when a stream is closed (FIN received or reset).
+    ///
+    /// Cleans up stream state and detects critical stream closure.
+    pub fn on_stream_closed(&mut self, stream_id: u64) {
+        // Remove from active streams
+        self.streams.remove(&stream_id);
+
+        // Remove from receive buffers
+        self.recv_buffers.remove(&stream_id);
+
+        // Remove from headers received tracking
+        self.stream_headers_received.remove(&stream_id);
+
+        // Remove from priorities
+        self.stream_priorities.remove(&stream_id);
+
+        // Check if this was the control stream — critical!
+        if self.control_stream_id == Some(stream_id) {
+            // Control stream closed — connection is dead per RFC 9114 §6.2.1
+            self.control_stream_id = None;
+        }
+
+        // QPACK stream closure — fatal per RFC 9114 §6.2.2/6.2.3
+        if self.qpack_encoder_stream_id == Some(stream_id) {
+            self.qpack_encoder_stream_id = None;
+        }
+        if self.qpack_decoder_stream_id == Some(stream_id) {
+            self.qpack_decoder_stream_id = None;
+        }
+    }
+
+    /// Check if a critical stream (control, QPACK) has been closed.
+    pub fn is_critical_stream_closed(&self) -> bool {
+        // Control stream was never created or was closed
+        (self.control_stream_id.is_none() && self.quic.is_established())
+            || self.qpack_encoder_stream_id.is_none()
+            || self.qpack_decoder_stream_id.is_none()
+    }
+
+    // ------------------------------------------------------------------
+    // RESET_STREAM / STOP_SENDING (RFC 9000 §4.5-4.6)
+    // ------------------------------------------------------------------
+
+    /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
+    ///
+    /// Tells the peer to stop sending on this stream and discard pending data.
+    pub fn reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
+        self.quic
+            .send_reset_stream(stream_id, error_code)
+            .map_err(|e| Http3Error::QuicError(e))?;
+        self.on_stream_closed(stream_id);
+        Ok(())
+    }
+
+    /// Send STOP_SENDING to tell peer to stop sending on a stream (RFC 9000 §4.6).
+    ///
+    /// We don't want to receive more data on this stream.
+    pub fn stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
+        self.quic
+            .send_stop_sending(stream_id, error_code)
+            .map_err(|e| Http3Error::QuicError(e))
+    }
+}
+
+/// Stream type identifiers for HTTP/3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamType {
+    /// Control stream (SETTINGS, GOAWAY, etc.)
+    Control,
+    /// Push stream (server-pushed response)
+    Push,
+    /// QPACK encoder stream
+    QpackEncoder,
+    /// QPACK decoder stream
+    QpackDecoder,
+    /// Request/response bidirectional stream
+    Request,
 }
 
 #[cfg(test)]
@@ -1131,6 +1427,14 @@ mod tests {
             stream_headers_received: HashMap::new(),
             stream_priorities: HashMap::new(),
             active_path: None,
+            going_away: None,
+            sent_goaway_id: u64::MAX,
+            qpack_encoder_stream_id: None,
+            qpack_decoder_stream_id: None,
+            known_uni_stream_types: HashMap::new(),
+            max_push_id_received: 0,
+            max_bidi_streams: 100,
+            max_uni_streams: 100,
         };
 
         assert_eq!(conn.next_bidi_stream_id, 0);

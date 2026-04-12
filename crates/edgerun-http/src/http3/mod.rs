@@ -23,6 +23,8 @@ pub enum Http3Error {
     QpackError(String),
     /// HTTP/3 protocol violation
     ProtocolViolation(String),
+    /// Frame was unexpected for this stream type (RFC 9114 §7)
+    FrameUnexpected(String),
     /// Stream error
     StreamError { stream_id: u64, error_code: u64 },
     /// Connection error
@@ -41,6 +43,9 @@ impl std::fmt::Display for Http3Error {
             Http3Error::QpackError(msg) => write!(f, "QPACK error: {}", msg),
             Http3Error::ProtocolViolation(msg) => {
                 write!(f, "Protocol violation: {}", msg)
+            }
+            Http3Error::FrameUnexpected(msg) => {
+                write!(f, "Frame unexpected: {}", msg)
             }
             Http3Error::StreamError {
                 stream_id,
