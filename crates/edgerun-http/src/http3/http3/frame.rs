@@ -222,7 +222,7 @@ impl Http3Frame {
         }
     }
 
-    fn decode_varint(data: &[u8]) -> Result<(u64, usize), std::io::Error> {
+    pub(crate) fn decode_varint(data: &[u8]) -> Result<(u64, usize), std::io::Error> {
         if data.is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,

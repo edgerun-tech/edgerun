@@ -1053,8 +1053,11 @@ impl Http3Connection {
     ///
     /// The server pushes a response for a request stream by sending a
     /// PUSH_PROMISE with the push stream ID and the promised request headers.
+    /// Also creates the push stream and sends the stream type varint prefix.
     ///
     /// Returns the push stream ID that will carry the pushed response.
+    /// After calling this, use `quic.send_stream_data(push_stream_id, ...)`
+    /// to send HEADERS + DATA frames on the push stream.
     pub fn send_push_promise(
         &mut self,
         request_stream_id: u64,
@@ -1065,16 +1068,35 @@ impl Http3Connection {
         self.next_uni_stream_id += 4;
         self.max_push_id += 1;
 
+        // Check MAX_PUSH_ID limit
+        if push_id > self.max_push_id_received {
+            return Err(Http3Error::ProtocolViolation(format!(
+                "Push ID {} exceeds peer's MAX_PUSH_ID limit ({})",
+                push_id, self.max_push_id_received
+            )));
+        }
+
         // Send PUSH_PROMISE on the request stream
         let push_promise = Http3Frame::PushPromise {
             push_id,
-            header_block: promised_headers,
+            header_block: promised_headers.clone(),
         };
         let frame_data = push_promise.to_bytes();
 
         self.quic
             .send_stream_data(request_stream_id, &frame_data, false)
-            .map_err(|e| format!("Failed to send PUSH_PROMISE: {}", e))?;
+            .map_err(|e| Http3Error::QuicError(e))?;
+
+        // Create the push stream with type varint prefix (RFC 9114 §6.2.4)
+        let mut push_stream_data = Vec::new();
+        Self::encode_varint(stream_types::PUSH, &mut push_stream_data);
+
+        self.quic
+            .send_stream_data(push_stream_id, &push_stream_data, false)
+            .map_err(|e| Http3Error::QuicError(e))?;
+
+        // Track this push stream
+        self.known_uni_stream_types.insert(push_stream_id, stream_types::PUSH);
 
         Ok(push_stream_id)
     }
@@ -1115,21 +1137,43 @@ impl Http3Connection {
 
     /// Accept an incoming push stream from the server.
     ///
-    /// When the server opens a unidirectional stream with type 0x1 (push),
-    /// call this to begin reading the pushed response.
-    /// The push stream starts with a push ID (varint) followed by HTTP/3 frames.
+    /// When the server opens a unidirectional push stream (type 0x01),
+    /// this reads the push ID varint prefix and then the HEADERS frame.
+    ///
+    /// Returns (push_id, decoded_headers) if a complete push is available.
     pub fn accept_push_stream(
         &mut self,
-        stream_id: u64,
+        _expected_stream_id: u64,
     ) -> Result<Option<(u64, Vec<(String, String)>)>> {
-        // Push streams start with a varint push_id followed by HEADERS + DATA
-        // We read the raw bytes and parse the push ID manually
-        match self.poll_stream(stream_id)? {
-            Some(Http3Frame::Headers { header_block }) => {
+        // Push stream wire format: push_id (varint) + HEADERS frame + DATA frame(s)
+        // First, read the raw stream data (recv_stream_data returns stream_id, data, fin)
+        let result = match self.quic.recv_stream_data()? {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        let (_sid, data, _fin) = result;
+
+        if data.is_empty() {
+            return Ok(None);
+        }
+
+        // Decode push ID varint
+        let (push_id, varint_len) = Http3Frame::decode_varint(&data)
+            .map_err(|e| Http3Error::ProtocolViolation(format!(
+                "Invalid push ID varint: {}", e
+            )))?;
+
+        if data.len() < varint_len {
+            return Ok(None);
+        }
+
+        // Parse HEADERS frame after the push ID
+        let frame_data = &data[varint_len..];
+        match Http3Frame::from_bytes(frame_data)? {
+            (Http3Frame::Headers { header_block }, _consumed) => {
                 let headers = self.qpack_decoder.decode(&header_block)
                     .map_err(|e| Http3Error::QpackError(e.to_string()))?;
-                // Use stream_id as push_id proxy (in a full impl, read the varint prefix)
-                Ok(Some((stream_id, headers)))
+                Ok(Some((push_id, headers)))
             }
             _ => Ok(None),
         }
@@ -1151,9 +1195,8 @@ impl Http3Connection {
 
     /// Check if a unidirectional stream is a known push stream.
     pub fn is_push_stream(&self, stream_id: u64) -> bool {
-        // Push streams are unidirectional (stream_id % 4 == 3)
-        // and were advertised via PUSH_PROMISE
-        stream_id % 4 == 3
+        // Check if we've tracked this as a push stream
+        self.known_uni_stream_types.get(&stream_id) == Some(&stream_types::PUSH)
     }
 
     // ------------------------------------------------------------------
