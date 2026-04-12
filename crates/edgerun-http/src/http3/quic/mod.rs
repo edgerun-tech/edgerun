@@ -403,6 +403,30 @@ impl QuicConnection {
         self.established
     }
 
+    /// Create a QUIC connection for testing with a pre-bound socket.
+    ///
+    /// The connection is marked as `established` with no protection keys,
+    /// suitable for testing 1-RTT packet construction without encryption.
+    pub fn from_established_test(socket: UdpSocket, target: std::net::SocketAddr) -> Self {
+        let local_cid = ConnectionId::random();
+        let remote_cid = ConnectionId::random();
+        let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
+
+        QuicConnection {
+            socket,
+            server_addr: target.to_string(),
+            transport,
+            crypto: QuicCrypto::new(),
+            protection: None,
+            hs_protection: None,
+            initial_protection: None,
+            established: true,
+            recv_buffer: Vec::new(),
+            recv_offset: 0,
+            server_dcid: remote_cid,
+        }
+    }
+
     /// Create a server-side connection from an established handshake result.
     ///
     /// Called after the server-side TLS handshake completes successfully.
@@ -449,37 +473,61 @@ impl QuicConnection {
     }
 
     /// Send a single QUIC frame
+    ///
+    /// Builds the appropriate packet header based on connection state:
+    /// - Before handshake: long header (Initial) — used during handshake
+    /// - After handshake: short header (1-RTT) — used for application data
     fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let pn = self.transport.next_packet_number();
-
-        // Build packet payload (frame serialized)
         let payload = frame.to_bytes();
 
-        // Create Initial packet
-        let pkt = QuicPacket::initial(
-            0x00000001,
-            self.transport.remote_cid.as_bytes().to_vec(),
-            self.transport.local_cid.as_bytes().to_vec(),
-            vec![],
-            pn,
-            payload,
-        );
+        let packet_bytes = if self.established {
+            // 1-RTT: short header format (RFC 9000 §17.3)
+            QuicPacket::one_rtt(
+                self.transport.remote_cid.as_bytes().to_vec(),
+                pn,
+                payload,
+            )
+            .to_bytes()
+        } else {
+            // Pre-handshake: long header Initial format
+            QuicPacket::initial(
+                QUIC_VERSION_V1,
+                self.transport.remote_cid.as_bytes().to_vec(),
+                self.transport.local_cid.as_bytes().to_vec(),
+                vec![],
+                pn,
+                payload,
+            )
+            .to_bytes()
+        };
 
-        let packet_bytes = pkt.to_bytes();
-
-        // Encrypt if we have protection
+        // Encrypt if we have protection keys
         let send_bytes = if let Some(ref mut prot) = self.protection {
-            prot.protect(&packet_bytes[..9], &packet_bytes[9..])
-                .unwrap_or_else(|e| panic!("Packet protection failed: {}", e))
+            // For 1-RTT packets, protect payload starting after short header
+            let header_len = if self.established {
+                // Short header: 1 byte + 8-byte CID + 1-byte PN = 10 bytes
+                10
+            } else {
+                9
+            };
+            prot.protect(&packet_bytes[..header_len.min(packet_bytes.len())], &packet_bytes[header_len.min(packet_bytes.len())..])
+                .map_err(|e| format!("Packet protection failed: {}", e))?
         } else {
             packet_bytes
         };
 
-        // Send via UDP
-        let addr = format!("{}:443", self.server_addr);
-        self.socket
-            .send_to(&send_bytes, &addr)
-            .map_err(|e| format!("UDP send failed: {}", e))?;
+        // Send via UDP — use send() if socket is connected, send_to() otherwise
+        if self.server_addr.parse::<std::net::SocketAddr>().is_ok() {
+            // Already connected (for testing)
+            self.socket.send(&send_bytes)
+                .map_err(|e| format!("UDP send failed: {}", e))?;
+        } else {
+            let addr = format!("{}:443", self.server_addr);
+            self.socket
+                .send_to(&send_bytes, &addr)
+                .map_err(|e| format!("UDP send failed: {}", e))?;
+        }
 
         self.transport.update_activity();
         Ok(())
@@ -1036,5 +1084,53 @@ mod tests {
         assert_eq!(method, Method::GET);
         assert_eq!(uri.path(), "/");
         assert!(headers.is_empty());
+    }
+
+    /// Test server sending a 1-RTT response after handshake.
+    ///
+    /// Verifies that `send_frame()` produces a short-header (1-RTT) packet
+    /// when the connection is established, and that the packet can be sent
+    /// without errors.
+    #[test]
+    fn test_server_sends_1rtt_response() {
+        use crate::http3::http3::frame::Http3Frame;
+
+        // Build a response: HEADERS frame with :status: 200 (static table index 28)
+        let mut header_block = Vec::new();
+        header_block.push(0xC0 | 28); // :status: 200
+        let headers_frame = Http3Frame::Headers { header_block };
+        let frame_bytes = headers_frame.to_bytes();
+
+        // Build a QUIC STREAM frame for stream 1
+        let stream_frame = QuicFrame::Stream {
+            stream_id: 1,
+            offset: 0,
+            fin: true,
+            data: frame_bytes,
+        };
+        let stream_bytes = stream_frame.to_bytes();
+
+        // Create two connected UDP sockets for testing
+        let sender = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
+        let receiver = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+        sender.set_nonblocking(true).ok();
+        receiver.set_nonblocking(true).ok();
+        let recv_addr = receiver.local_addr().expect("get receiver addr");
+        sender.connect(recv_addr).expect("connect sender");
+
+        // Create a QUIC connection using the sender socket, targeting the receiver
+        let mut quic = QuicConnection::from_established_test(sender, recv_addr);
+        quic.protection = None; // No encryption for this test
+
+        // Send the frame
+        quic.send_stream_data(1, &stream_bytes, true)
+            .expect("send_stream_data failed");
+
+        // Receive on the other end and verify it's a 1-RTT packet
+        let mut buf = [0u8; 65536];
+        let n = receiver.recv(&mut buf).expect("receive failed");
+        let (packet, _) = QuicPacket::from_bytes(&buf[..n])
+            .expect("parse received packet");
+        assert_eq!(packet.header.packet_type, crate::http3::quic::packet::PacketType::OneRtt);
     }
 }
