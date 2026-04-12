@@ -7,7 +7,7 @@ publish.workspace = true
 
 [dependencies]
 edgerun-wgpu = { path = "../edgerun-wgpu" }
-edgerun-html-render = { path = "../edgerun-html-render" }
+edgerun-render = { path = "../edgerun-render" }
 edgerun-css-cascade = { path = "../edgerun-css-cascade" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 wgpu = "29"

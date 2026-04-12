@@ -1,7 +1,7 @@
 //! Computes typed `ComputedStyle` from raw CSS declarations.
 //!
 //! This bridges the gap between `css_parser::Declarations` (BTreeMap<String, String>)
-//! and `edgerun_layout::render_object::ComputedStyle` by using the value parser.
+//! and `crate::layout::render_object::ComputedStyle` by using the value parser.
 
 extern crate alloc;
 
@@ -10,11 +10,11 @@ use alloc::vec::Vec;
 
 use edgerun_color::NamedColor;
 use edgerun_css_value_parser::{parse_css_value, CssValue, LengthUnit};
-use edgerun_layout::render_object::{
+use crate::layout::render_object::{
     Color, ComputedStyle, FontSelection, FormattingContext, PositionType,
 };
 
-use crate::css_parser::Declarations;
+use super::css_parser::Declarations;
 
 /// Default ComputedStyle used when no CSS declarations apply.
 pub fn default_style() -> ComputedStyle {

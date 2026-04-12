@@ -8,9 +8,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
-pub use crate::tokenizer::{Tokenizer, Token, State, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
-pub use crate::tree_builder::{TreeBuilder, InsertionMode, TokenizerMode};
-pub use crate::entity_decoder::decode_entities_in_text;
+pub use super::tokenizer::{Tokenizer, Token, State, VOID_ELEMENTS, RAW_TEXT_ELEMENTS};
+pub use super::tree_builder::{TreeBuilder, InsertionMode, TokenizerMode};
+pub use super::entity_decoder::decode_entities_in_text;
 
 /// Block-level elements — used by layout for block vs inline distinction.
 pub const BLOCK_ELEMENTS: &[&str] = &[

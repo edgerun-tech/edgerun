@@ -1,6 +1,6 @@
-// Generate edgerun-layout crate (renderer/layout engine) from CSS/HTML proto data.
+// Generate edgerun-render layout module (renderer/layout engine) from CSS/HTML proto data.
 //
-// Usage: go run ./cmd/generate-renderer crates/edgerun-layout/
+// Usage: go run ./cmd/generate-renderer crates/edgerun-render/src/layout/
 package main
 
 import (

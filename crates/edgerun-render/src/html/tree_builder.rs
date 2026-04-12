@@ -7,8 +7,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
-use crate::html_parser::{Node, Element};
-use crate::tokenizer::Token;
+use super::html_parser::{Node, Element};
+use super::tokenizer::Token;
 
 /// Void element tags — never pushed to the open elements stack.
 const VOID_ELEMENTS: &[&str] = &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"];

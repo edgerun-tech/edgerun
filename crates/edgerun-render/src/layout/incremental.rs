@@ -1,4 +1,4 @@
-//! Layer 11: Incremental Layout Engine
+//! Incremental Layout Engine
 //!
 //! When one CSS property changes on one element, only recompute the affected
 //! subtree — not the entire page.
@@ -7,7 +7,8 @@
 //!   - Full relayout: O(N) GPU dispatches
 //!   - Incremental: O(affected_subtree) — typically 5-20 nodes
 
-use std::collections::BTreeSet;
+extern crate alloc;
+use alloc::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug)]
 pub struct DomNodeRef {

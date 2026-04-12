@@ -1311,8 +1311,8 @@ name = "edgerun-demo"
 version = "0.1.0"
 dependencies = [
  "edgerun-css-cascade",
- "edgerun-html-render",
  "edgerun-rasterizer",
+ "edgerun-render",
 ]
 
 [[package]]
@@ -1320,8 +1320,8 @@ name = "edgerun-demo-wgpu"
 version = "0.1.0"
 dependencies = [
  "edgerun-css-cascade",
- "edgerun-html-render",
  "edgerun-rasterizer",
+ "edgerun-render",
  "edgerun-wgpu",
  "png",
  "pollster",
@@ -1331,6 +1331,17 @@ dependencies = [
 [[package]]
 name = "edgerun-dhcp"
 version = "0.1.0"
+
+[[package]]
+name = "edgerun-dhcpv6"
+version = "0.1.0"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-log",
+ "log 0.4.29",
+ "serde",
+ "thiserror 1.0.69",
+]
 
 [[package]]
 name = "edgerun-display"
@@ -1526,16 +1537,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-html-render"
-version = "0.1.0"
-dependencies = [
- "edgerun-color",
- "edgerun-css-value-parser",
- "edgerun-layout",
- "edgerun-rasterizer",
-]
-
-[[package]]
 name = "edgerun-http"
 version = "0.1.0"
 dependencies = [
@@ -1559,13 +1560,6 @@ version = "0.1.0"
 dependencies = [
  "prost",
  "prost-types",
-]
-
-[[package]]
-name = "edgerun-incremental-layout"
-version = "0.1.0"
-dependencies = [
- "edgerun-rasterizer",
 ]
 
 [[package]]
@@ -1594,21 +1588,6 @@ dependencies = [
  "serde_json",
  "ts-rs",
  "walkdir",
-]
-
-[[package]]
-name = "edgerun-layout"
-version = "0.1.0"
-dependencies = [
- "libm",
-]
-
-[[package]]
-name = "edgerun-layout-budget"
-version = "0.1.0"
-dependencies = [
- "edgerun-incremental-layout",
- "edgerun-property-graph",
 ]
 
 [[package]]
@@ -1998,6 +1977,17 @@ dependencies = [
  "edgerun-speaker",
  "edgerun-wifi",
  "prost",
+]
+
+[[package]]
+name = "edgerun-render"
+version = "0.1.0"
+dependencies = [
+ "edgerun-color",
+ "edgerun-css-value-parser",
+ "edgerun-property-graph",
+ "edgerun-rasterizer",
+ "libm",
 ]
 
 [[package]]

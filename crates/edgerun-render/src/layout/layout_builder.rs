@@ -1,15 +1,20 @@
-//! Layout builder — converts DOM + CSS → edgerun-layout RenderObject tree.
+//! Layout builder — converts DOM + CSS → RenderObject tree.
+//!
+//! This bridges the HTML parsing layer (DOM tree) with the layout layer
+//! (RenderObject tree) by applying CSS styles and determining layout algorithms.
+
 extern crate alloc;
 
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::html_parser::{Node, Element, BLOCK_ELEMENTS, VOID_ELEMENTS};
-use crate::css_parser::Stylesheet;
-use crate::computed_style::{compute_style, default_style};
-use edgerun_layout::render_object::{RenderObject, ComputedStyle, LayoutAlgorithm};
-use edgerun_layout::layout_context::{determine_formatting_context, determine_layout_algorithm};
+use crate::html::{Node, Element, BLOCK_ELEMENTS, HTML_VOID_ELEMENTS as VOID_ELEMENTS};
+use crate::css::Stylesheet;
+use crate::css::{compute_style, default_style};
+use crate::layout::render_object::{RenderObject, ComputedStyle, LayoutAlgorithm};
+use crate::layout::layout_context::{determine_formatting_context, determine_layout_algorithm};
 
+/// Build a RenderObject tree from a DOM tree and stylesheet.
 pub fn build_layout(node: &Node, stylesheet: &Stylesheet, _viewport_width: u32) -> RenderObject {
     build_node(node, stylesheet, &default_style())
 }
@@ -39,7 +44,6 @@ fn build_element(elem: &Element, ss: &Stylesheet, parent_style: &ComputedStyle) 
     let style = compute_style(&decls, parent_style);
 
     let is_block = BLOCK_ELEMENTS.contains(&elem.tag.as_str());
-    let _is_void = VOID_ELEMENTS.contains(&elem.tag.as_str());
 
     let fc = determine_formatting_context(
         if is_block { 1 } else { 2 },

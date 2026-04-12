@@ -8,7 +8,7 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-use crate::render_object::{RenderObject, ComputedStyle, FontSelection};
+use super::render_object::{RenderObject, ComputedStyle, FontSelection};
 
 /// A positioned render object with computed geometry.
 #[derive(Debug, Clone)]
@@ -204,7 +204,7 @@ fn position_node(node: &RenderObject, ctx: &mut PositionCtx) -> Vec<PositionedNo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render_object::{Color, FormattingContext, PositionType};
+    use super::super::render_object::{Color, FormattingContext, PositionType};
 
     fn default_style() -> ComputedStyle {
         ComputedStyle {

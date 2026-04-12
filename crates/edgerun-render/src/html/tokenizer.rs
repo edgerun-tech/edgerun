@@ -4478,7 +4478,7 @@ impl Tokenizer {
         let entity_name = self.text_buffer.clone();
         self.text_buffer.clear();
 
-        if let Some((cp1, cp2)) = crate::entity_decoder::lookup_entity(&entity_name) {
+        if let Some((cp1, cp2)) = super::entity_decoder::lookup_entity(&entity_name) {
             // Entity found — emit decoded code point(s)
             if let Some(ch) = char::from_u32(cp1) {
                 self.text_buffer.push(ch);

@@ -1,15 +1,17 @@
 [package]
-name = "edgerun-html-render"
-version = "0.1.0"
+name = "edgerun-render"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+publish.workspace = true
+description = "Complete HTML/CSS rendering pipeline — parse, layout, paint, rasterize"
 
 [dependencies]
-edgerun-layout = { path = "../edgerun-layout" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 edgerun-css-value-parser = { path = "../edgerun-css-value-parser" }
 edgerun-color = { path = "../edgerun-color" }
+edgerun-property-graph = { path = "../edgerun-property-graph" }
+libm = "0.2"
 
 [lints]
 workspace = true

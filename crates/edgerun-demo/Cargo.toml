@@ -6,7 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-edgerun-html-render = { path = "../edgerun-html-render" }
+edgerun-render = { path = "../edgerun-render" }
 edgerun-rasterizer = { path = "../edgerun-rasterizer" }
 edgerun-css-cascade = { path = "../edgerun-css-cascade" }
 

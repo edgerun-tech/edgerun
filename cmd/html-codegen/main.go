@@ -9,11 +9,11 @@
 //   data-dir/element_metadata.json
 //
 // Writes:
-//   output-dir/crates/edgerun-html-render/src/tokenizer.rs
-//   output-dir/crates/edgerun-html-render/src/tree_builder.rs
-//   output-dir/crates/edgerun-html-render/src/entity_decoder/mod.rs
-//   output-dir/crates/edgerun-html-render/src/entity_decoder/table.inc
-//   output-dir/crates/edgerun-html-render/src/html_parser.rs
+//   output-dir/crates/edgerun-render/src/html/tokenizer.rs
+//   output-dir/crates/edgerun-render/src/html/tree_builder.rs
+//   output-dir/crates/edgerun-render/src/html/entity_decoder/mod.rs
+//   output-dir/crates/edgerun-render/src/html/entity_decoder/table.inc
+//   output-dir/crates/edgerun-render/src/html/html_parser.rs
 package main
 
 import (

@@ -1,6 +1,6 @@
 //! Layout context dispatch — generated from CSS Display proto.
 //! DO NOT EDIT. Regenerate with: scripts/generate_renderer.py
-use crate::render_object::{FormattingContext, LayoutAlgorithm};
+use super::render_object::{FormattingContext, LayoutAlgorithm};
 
 /// DisplayOuter × DisplayInner → FormattingContext
 pub fn determine_formatting_context(outer: u8, inner: u8) -> FormattingContext {

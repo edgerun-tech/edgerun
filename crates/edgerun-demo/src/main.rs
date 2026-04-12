@@ -2,7 +2,7 @@
 use std::io::Write;
 use std::collections::BTreeMap;
 
-use edgerun_html_render::html_parser::{parse_html, Node, BLOCK_ELEMENTS};
+use edgerun_render::html::{parse_html, Node, BLOCK_ELEMENTS};
 use edgerun_css_cascade::{
     CascadeStylesheet, Origin,
     parse_stylesheet as parse_css_cascade,

@@ -1,12 +1,16 @@
-//! Layer 14: Predictive Layout Budget Estimator
+//! Predictive Layout Budget Estimator
 //!
 //! Given a DOM tree + CSS rules, predict the rendering cost before
 //! any pixels are drawn. No browser can do this — their layout cost
 //! is buried in C++ heuristics. Ours is a mathematical function
 //! over structured data.
 
+extern crate alloc;
+
+use alloc::collections::BTreeSet;
+use alloc::string::String;
 use edgerun_property_graph::PropertyGraph;
-use edgerun_incremental_layout::DomNodeRef;
+use super::incremental::DomNodeRef;
 
 /// Estimated layout budget for a rendering session.
 #[derive(Debug)]
@@ -35,18 +39,18 @@ impl LayoutBudget {
         declarations: &[(usize, String, String)], // (node_idx, property_name, value)
     ) -> Self {
         // Phase 1: Identify which properties trigger layout
-        let _layout_props: Vec<_> = graph.query()
+        let _layout_props: alloc::vec::Vec<_> = graph.query()
             .affects_layout(true)
             .names();
 
-        let _paint_props: Vec<_> = graph.query()
+        let _paint_props: alloc::vec::Vec<_> = graph.query()
             .affects_paint(true)
             .names();
 
         // Phase 2: Mark dirty nodes based on declarations
-        let mut cascade_dirty_nodes = std::collections::BTreeSet::new();
-        let mut height_dirty_nodes = std::collections::BTreeSet::new();
-        let mut position_dirty_nodes = std::collections::BTreeSet::new();
+        let mut cascade_dirty_nodes = BTreeSet::new();
+        let mut height_dirty_nodes = BTreeSet::new();
+        let mut position_dirty_nodes = BTreeSet::new();
 
         for (node_idx, prop_name, _value) in declarations {
             // Cascade: the node itself + all descendants need resolution
@@ -104,26 +108,37 @@ impl LayoutBudget {
         self.affected_fraction() < 0.1
     }
 
-    /// Print a human-readable budget summary.
-    pub fn print_summary(&self) {
-        println!("┌─ Layout Budget ──────────────────────────────");
-        println!("│ Total nodes:     {}", self.total_nodes);
-        println!("│ Cascade dirty:   {} ({:.1}%)", self.cascade_dirty,
-                 self.cascade_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0);
-        println!("│ Height dirty:    {} ({:.1}%)", self.height_dirty,
-                 self.height_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0);
-        println!("│ Position dirty:  {} ({:.1}%)", self.position_dirty,
-                 self.position_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0);
-        println!("│");
-        println!("│ Estimated time:  {:.2}ms", self.estimated_ms);
-        println!("│   Cascade:       {:.2}ms", self.cascade_cost_ms);
-        println!("│   Height:        {:.2}ms", self.height_cost_ms);
-        println!("│   Position:      {:.2}ms", self.position_cost_ms);
-        println!("└──────────────────────────────────────────────");
+    /// Return a human-readable budget summary string.
+    pub fn print_summary(&self) -> alloc::string::String {
+        use alloc::format;
+        format!(
+            "┌─ Layout Budget ──────────────────────────────\n\
+             │ Total nodes:     {}\n\
+             │ Cascade dirty:   {} ({:.1}%)\n\
+             │ Height dirty:    {} ({:.1}%)\n\
+             │ Position dirty:  {} ({:.1}%)\n\
+             │\n\
+             │ Estimated time:  {:.2}ms\n\
+             │   Cascade:       {:.2}ms\n\
+             │   Height:        {:.2}ms\n\
+             │   Position:      {:.2}ms\n\
+             └──────────────────────────────────────────────",
+            self.total_nodes,
+            self.cascade_dirty,
+            self.cascade_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0,
+            self.height_dirty,
+            self.height_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0,
+            self.position_dirty,
+            self.position_dirty as f64 / self.total_nodes.max(1) as f64 * 100.0,
+            self.estimated_ms,
+            self.cascade_cost_ms,
+            self.height_cost_ms,
+            self.position_cost_ms,
+        )
     }
 }
 
-fn collect_ancestors(mut idx: usize, nodes: &[DomNodeRef], out: &mut std::collections::BTreeSet<usize>) {
+fn collect_ancestors(mut idx: usize, nodes: &[DomNodeRef], out: &mut BTreeSet<usize>) {
     loop {
         out.insert(idx);
         let parent = nodes[idx].parent_idx as usize;
@@ -132,7 +147,7 @@ fn collect_ancestors(mut idx: usize, nodes: &[DomNodeRef], out: &mut std::collec
     }
 }
 
-fn collect_descendants(root: usize, nodes: &[DomNodeRef], out: &mut std::collections::BTreeSet<usize>) {
+fn collect_descendants(root: usize, nodes: &[DomNodeRef], out: &mut BTreeSet<usize>) {
     if root >= nodes.len() { return; }
     let mut ci = nodes[root].first_child_idx as usize;
     while ci < nodes.len() && ci != usize::MAX {
@@ -142,7 +157,7 @@ fn collect_descendants(root: usize, nodes: &[DomNodeRef], out: &mut std::collect
     }
 }
 
-fn collect_following_siblings(node_idx: usize, nodes: &[DomNodeRef], out: &mut std::collections::BTreeSet<usize>) {
+fn collect_following_siblings(node_idx: usize, nodes: &[DomNodeRef], out: &mut BTreeSet<usize>) {
     if node_idx >= nodes.len() { return; }
     let mut next = nodes[node_idx].next_sibling_idx as usize;
     while next < nodes.len() && next != usize::MAX {
@@ -155,9 +170,10 @@ fn collect_following_siblings(node_idx: usize, nodes: &[DomNodeRef], out: &mut s
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec::Vec;
 
     fn make_nodes() -> Vec<DomNodeRef> {
-        vec![
+        alloc::vec![
             DomNodeRef { parent_idx: u32::MAX, first_child_idx: 1, next_sibling_idx: u32::MAX },
             DomNodeRef { parent_idx: 0, first_child_idx: 2, next_sibling_idx: u32::MAX },
             DomNodeRef { parent_idx: 1, first_child_idx: u32::MAX, next_sibling_idx: 3 },

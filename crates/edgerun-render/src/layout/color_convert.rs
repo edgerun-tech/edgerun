@@ -1,6 +1,6 @@
 //! Color space conversions — generated from CSS Colors spec data.
 //! DO NOT EDIT. Regenerate with: scripts/generate_renderer.py
-use crate::render_object::Color;
+use super::render_object::Color;
 use core::f64::consts::PI;
 use libm::{cos, sin, pow};
 

@@ -6,7 +6,7 @@
 use std::fs::File;
 use std::io::BufWriter;
 
-use edgerun_html_render::html_parser::{parse_html, Node};
+use edgerun_render::html::{parse_html, Node};
 use edgerun_css_cascade::{CascadeStylesheet, Origin, parse_stylesheet as parse_css_cascade};
 use edgerun_wgpu::uniforms::{GpuRectStyle, GpuTextCommand, GpuDomNode, GpuCssRule, GpuLayoutResult, tag_hash};
 use edgerun_wgpu::layout_compute::LayoutComputePipeline;
