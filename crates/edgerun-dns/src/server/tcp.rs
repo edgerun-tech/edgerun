@@ -37,7 +37,7 @@ pub async fn tcp_accept_loop_with_shutdown(
                 let state = state.clone();
                 let rate_limiter = rate_limiter.clone();
                 edgerun_rt::spawn(async move {
-                    if let Err(e) = handle_tcp_connection(stream, peer, &state, &rate_limiter).await {
+                    if let Err(e) = handle_tcp_connection_raw(stream, peer, &state, &rate_limiter).await {
                         edgerun_log::warn!("edgerun-dns: TCP error from {}: {}", peer, e);
                     }
                 });
@@ -58,7 +58,8 @@ pub async fn tcp_accept_loop(listener: Arc<AsyncTcpListener>, state: ServerState
 }
 
 /// Handle a single TCP connection with length-prefixed DNS messages.
-async fn handle_tcp_connection(
+/// Public raw version — used by both TCP and DoT servers.
+pub async fn handle_tcp_connection_raw(
     stream: Arc<AsyncTcpStream>,
     peer: SocketAddr,
     state: &ServerState,

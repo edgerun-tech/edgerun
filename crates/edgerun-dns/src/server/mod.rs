@@ -11,10 +11,11 @@ use edgerun_rt::AsyncTcpListener;
 use edgerun_rt::AsyncUdpSocket;
 
 pub mod query;
-mod udp;
-mod tcp;
+pub(crate) mod udp;
+pub(crate) mod tcp;
 
 pub use query::{ServerState, handle_query, MAX_UDP_RESPONSE};
+pub use tcp::handle_tcp_connection_raw;
 
 /// DNS server configuration.
 #[derive(Debug, Clone)]
@@ -51,7 +52,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    fn new(max_qps: u32) -> Self {
+    pub fn new(max_qps: u32) -> Self {
         Self {
             max_qps,
             state: Arc::new(std::sync::Mutex::new(HashMap::new())),
