@@ -23,6 +23,8 @@ pub struct DnsServerConfig {
     pub bind_addr: String,
     /// Default TTL for records.
     pub default_ttl: u32,
+    /// Maximum queries per second per source IP (0 = unlimited).
+    pub rate_limit_qps: u32,
 }
 
 impl Default for DnsServerConfig {
@@ -30,6 +32,43 @@ impl Default for DnsServerConfig {
         Self {
             bind_addr: "0.0.0.0:53".to_string(),
             default_ttl: 3600,
+            rate_limit_qps: 0,
+        }
+    }
+}
+
+/// Rate limiter for per-IP query throttling.
+#[derive(Clone)]
+pub struct RateLimiter {
+    /// Max queries per second per IP. 0 = unlimited.
+    max_qps: u32,
+    /// Per-IP state: (token_count, last_refill_time).
+    state: Arc<std::sync::Mutex<HashMap<std::net::IpAddr, (u32, std::time::Instant)>>>,
+}
+
+impl RateLimiter {
+    fn new(max_qps: u32) -> Self {
+        Self {
+            max_qps,
+            state: Arc::new(std::sync::Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Check if a query from `addr` is allowed.
+    fn allow(&self, addr: std::net::IpAddr) -> bool {
+        if self.max_qps == 0 { return true; }
+        let mut guard = self.state.lock().unwrap();
+        let now = std::time::Instant::now();
+        let (tokens, last) = guard.entry(addr).or_insert((self.max_qps, now));
+        let elapsed = now.duration_since(*last).as_secs_f64();
+        *tokens = (*tokens as f64 + elapsed * self.max_qps as f64)
+            .min(self.max_qps as f64) as u32;
+        *last = now;
+        if *tokens > 0 {
+            *tokens -= 1;
+            true
+        } else {
+            false
         }
     }
 }
@@ -38,6 +77,10 @@ impl Default for DnsServerConfig {
 ///
 /// Listens on both UDP and TCP. Each query is handled concurrently
 /// via `edgerun_rt::spawn`.
+///
+/// # Graceful Shutdown
+/// Call [`DnsServer::shutdown()`] to stop the server loops. The [`DnsServer::run()`]
+/// method will then return instead of running forever.
 ///
 /// # Example
 /// ```no_run
@@ -54,13 +97,16 @@ impl Default for DnsServerConfig {
 ///     let config = DnsServerConfig::default();
 ///     let server = DnsServer::new(config).unwrap();
 ///     server.add_zone(zone).await;
-///     // server.run().await; // runs forever
+///     // server.run().await; // runs until shutdown() is called
 /// });
 /// ```
 pub struct DnsServer {
     udp_socket: Arc<AsyncUdpSocket>,
     tcp_listener: Arc<AsyncTcpListener>,
     state: ServerState,
+    rate_limiter: RateLimiter,
+    /// Shutdown signal — when set to true, server loops exit.
+    shutdown_flag: Arc<edgerun_rt::RwLock<bool>>,
 }
 
 impl DnsServer {
@@ -83,6 +129,8 @@ impl DnsServer {
                 default_ttl: config.default_ttl,
                 forward_to: Arc::new(edgerun_rt::RwLock::new(None)),
             },
+            rate_limiter: RateLimiter::new(config.rate_limit_qps),
+            shutdown_flag: Arc::new(edgerun_rt::RwLock::new(false)),
         })
     }
 
@@ -102,10 +150,11 @@ impl DnsServer {
         *self.state.forward_to.write().await = addr;
     }
 
-    /// Run the server event loop (async, runs forever).
+    /// Run the server event loop (async).
     ///
-    /// Spawns concurrent loops for UDP and TCP. Never returns.
-    pub async fn run(&self) -> ! {
+    /// Spawns concurrent loops for UDP and TCP. Returns when [`DnsServer::shutdown()`]
+    /// is called or an unrecoverable error occurs.
+    pub async fn run(&self) -> io::Result<()> {
         let local = self.udp_socket.local_addr().unwrap();
         let zone_names: Vec<_> = self.state.zones.read().await.keys().cloned().collect();
         edgerun_log::info!("edgerun-dns: server listening on {} (UDP + TCP)", local);
@@ -115,11 +164,32 @@ impl DnsServer {
         {
             let listener = Arc::clone(&self.tcp_listener);
             let state = self.state.clone();
-            edgerun_rt::spawn(tcp::tcp_accept_loop(listener, state));
+            let rate_limiter = self.rate_limiter.clone();
+            let shutdown = Arc::clone(&self.shutdown_flag);
+            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(listener, state, rate_limiter, shutdown));
         }
 
-        // Run UDP receive loop in this task.
-        udp::udp_recv_loop(Arc::clone(&self.udp_socket), self.state.clone()).await
+        // Run UDP receive loop.
+        udp::udp_recv_loop_with_rate_limiting(
+            Arc::clone(&self.udp_socket),
+            self.state.clone(),
+            self.rate_limiter.clone(),
+            Arc::clone(&self.shutdown_flag),
+        ).await
+    }
+
+    /// Signal the server to shut down.
+    ///
+    /// Sets the shutdown flag, causing both UDP and TCP loops to exit.
+    /// This method returns immediately; [`DnsServer::run()`] will return shortly after.
+    pub async fn shutdown(&self) {
+        *self.shutdown_flag.write().await = true;
+        edgerun_log::info!("edgerun-dns: shutdown requested");
+    }
+
+    /// Check if shutdown has been requested.
+    pub async fn is_shutting_down(&self) -> bool {
+        *self.shutdown_flag.read().await
     }
 
     /// Get zone count.

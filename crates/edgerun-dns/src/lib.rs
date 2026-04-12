@@ -50,8 +50,11 @@ pub mod name;
 pub mod dnssec;
 pub mod zone_file;
 pub mod cache;
+pub mod resolver;
 
 pub use cache::DnsCache;
+pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
+pub use server::RateLimiter;
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};

@@ -1,4 +1,5 @@
-//! TCP accept loop and connection handler — length-prefixed DNS over TCP.
+//! TCP accept loop and connection handler — length-prefixed DNS over TCP
+//! with rate limiting and graceful shutdown.
 
 use std::future::poll_fn;
 use std::io;
@@ -13,18 +14,30 @@ use edgerun_rt::AsyncWrite;
 
 use crate::message::{DnsMessage, DnsResponseCode};
 use super::query::{handle_query, ParseError, ServerState};
+use super::RateLimiter;
 
 /// Run the TCP accept loop — spawns a handler for each connection.
-pub async fn tcp_accept_loop(
+/// Runs until shutdown is requested.
+pub async fn tcp_accept_loop_with_shutdown(
     listener: Arc<AsyncTcpListener>,
     state: ServerState,
+    rate_limiter: RateLimiter,
+    shutdown: Arc<edgerun_rt::RwLock<bool>>,
 ) -> ! {
     loop {
+        // Check shutdown flag before accepting
+        if *shutdown.read().await {
+            edgerun_log::info!("edgerun-dns: TCP loop shutting down");
+            // Wait a bit for existing connections to drain
+            edgerun_rt::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
         match listener.accept().await {
             Ok((stream, peer)) => {
                 let state = state.clone();
+                let rate_limiter = rate_limiter.clone();
                 edgerun_rt::spawn(async move {
-                    if let Err(e) = handle_tcp_connection(stream, peer, &state).await {
+                    if let Err(e) = handle_tcp_connection(stream, peer, &state, &rate_limiter).await {
                         edgerun_log::warn!("edgerun-dns: TCP error from {}: {}", peer, e);
                     }
                 });
@@ -37,11 +50,19 @@ pub async fn tcp_accept_loop(
     }
 }
 
+/// Legacy TCP accept loop (no rate limiting, no shutdown) — backwards compat.
+pub async fn tcp_accept_loop(listener: Arc<AsyncTcpListener>, state: ServerState) -> ! {
+    let shutdown = Arc::new(edgerun_rt::RwLock::new(false));
+    let rate_limiter = RateLimiter::new(0);
+    tcp_accept_loop_with_shutdown(listener, state, rate_limiter, shutdown).await
+}
+
 /// Handle a single TCP connection with length-prefixed DNS messages.
 async fn handle_tcp_connection(
     stream: Arc<AsyncTcpStream>,
     peer: SocketAddr,
     state: &ServerState,
+    rate_limiter: &RateLimiter,
 ) -> Result<(), io::Error> {
     edgerun_log::debug!("edgerun-dns: TCP connection from {}", peer);
 
@@ -63,6 +84,14 @@ async fn handle_tcp_connection(
 
         let mut query_buf = vec![0u8; msg_len];
         tcp_read_exact(&stream_mutex, &mut query_buf).await?;
+
+        // Rate limit per source IP
+        if !rate_limiter.allow(peer.ip()) {
+            edgerun_log::debug!("edgerun-dns: rate limited TCP query from {}", peer.ip());
+            let response = DnsMessage::response(0, DnsResponseCode::Refused, Vec::new());
+            tcp_write_length_prefixed(&stream_mutex, &response.to_wire()).await?;
+            continue;
+        }
 
         match handle_query(&query_buf, state).await {
             Ok((response_wire, _tcp_needed)) => {
@@ -108,7 +137,6 @@ async fn tcp_write_length_prefixed(
 ) -> io::Result<()> {
     let len_bytes = (data.len() as u16).to_be_bytes();
 
-    // Write length prefix.
     poll_fn(|cx| {
         let guard = stream_mutex.lock().unwrap();
         let stream_ptr = Arc::as_ptr(&guard) as *mut AsyncTcpStream;
@@ -116,7 +144,6 @@ async fn tcp_write_length_prefixed(
         Pin::new(stream_mut).poll_write(cx, &len_bytes)
     }).await?;
 
-    // Write message body.
     let mut written = 0;
     while written < data.len() {
         let n = poll_fn(|cx| {
