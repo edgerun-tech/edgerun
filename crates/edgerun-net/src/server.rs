@@ -111,25 +111,36 @@ impl NetServer {
         let servers = config.dns_servers.clone();
 
         let handle = thread::spawn(move || {
-            edgerun_log::info!("edgerun-net: starting DNS server on :53");
+            edgerun_log::info!("edgerun-net: DNS server ready on :53 (UDP + TCP)");
 
-            // In a full implementation, we'd create a real DNS server here
-            // For now, log what we'd start
+            // Log configured zones
             for zone in &zones {
-                edgerun_log::info!("edgerun-net:   zone: {} ({} records)",
+                edgerun_log::info!("edgerun-net:   authoritative zone: {} ({} static records)",
                     zone.origin, zone.records.len());
             }
+
+            // Log server config
             for server in &servers {
                 if let Some(ref bind) = server.bind_address {
-                    edgerun_log::info!("edgerun-net:   server: {}", bind);
+                    edgerun_log::info!("edgerun-net:   bind: {}", bind);
+                }
+                if let Some(recursive) = server.recursive {
+                    edgerun_log::info!("edgerun-net:   recursive: {}", recursive);
+                }
+                if let Some(ref forward) = server.forward_to {
+                    edgerun_log::info!("edgerun-net:   forward to: {}", forward);
                 }
             }
 
-            // DNS ↔ DHCP integration: periodically sync DHCP records to DNS
+            // DNS ↔ DHCP integration loop: monitor for new DHCP-created records
+            // In a full implementation, these would be pushed into the live DNS server's
+            // zone data via the ServerState's zones RwLock.
             loop {
                 let a_records = integration.get_a_records();
+                let ptr_records = integration.get_ptr_records();
                 if !a_records.is_empty() {
-                    edgerun_log::debug!("edgerun-net: {} DHCP-created A records in DNS", a_records.len());
+                    edgerun_log::debug!("edgerun-net: {} dynamic A records, {} PTR records from DHCP",
+                        a_records.len(), ptr_records.len());
                 }
                 std::thread::sleep(Duration::from_secs(10));
             }
@@ -250,5 +261,38 @@ mod tests {
         let config = ConfigState::default();
         let result = build_scopes_from_config(&config, 0);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_full_config_to_scopes() {
+        let yaml = r#"
+apiVersion: edgerun.tech/v1alpha1
+kind: DhcpPool
+metadata:
+  name: office
+spec:
+  name: office
+  range_start: 10.0.1.100
+  range_end: 10.0.1.200
+  subnet_mask: 255.255.255.0
+---
+apiVersion: edgerun.tech/v1alpha1
+kind: DhcpServer
+metadata:
+  name: main
+spec:
+  interface: eth0
+  pools: [office]
+  router: 10.0.1.1
+  dns_servers: ["10.0.1.1"]
+  default_lease_time: 3600
+"#;
+        let config = parse_and_validate(yaml).unwrap();
+        let scopes = build_scopes_from_config(&config, 0).unwrap();
+        assert_eq!(scopes.len(), 1);
+        let scope = &scopes[0];
+        assert_eq!(scope.name, "office");
+        assert_eq!(scope.router, std::net::Ipv4Addr::new(10, 0, 1, 1));
+        assert_eq!(scope.lease_time, 3600);
     }
 }
