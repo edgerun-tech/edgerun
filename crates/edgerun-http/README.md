@@ -38,6 +38,7 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 | Packet number expansion + deduplication | RFC 9000 App A.1 | ✅ |
 | Transport parameter encode/decode (TLV) | RFC 9000 §18.2 | ✅ |
 | ACK generation with ACK ranges | RFC 9000 §19.3 | ✅ |
+| ACK gap ranges properly handled | RFC 9000 §19.3 | ✅ |
 | RTT estimation (smoothed, variance, min, PTO) | RFC 9002 §9 | ✅ |
 | Sent packet tracking for loss detection | RFC 9002 §6 | ✅ |
 | Loss detection (time-based + ack-based) | RFC 9002 §6.1 | ✅ |
@@ -52,6 +53,7 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 | Critical stream closure detection | RFC 9114 §6.2.1 | ✅ |
 | Frame-per-stream type validation | RFC 9114 §7 | ✅ |
 | GOAWAY receive processing | RFC 9114 §5.2 | ✅ |
+| GOAWAY send + enforcement | RFC 9114 §5.2 | ✅ |
 | RESET_STREAM generation | RFC 9000 §4.5 | ✅ |
 | STOP_SENDING generation | RFC 9000 §4.6 | ✅ |
 | Stateless reset tokens (CSPRNG + verification) | RFC 9000 §10.3 | ✅ |
@@ -59,27 +61,35 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 | QUIC v1 + v2 support | RFC 9369 | ✅ |
 | Address validation / anti-amplification | RFC 9000 §8.1 | ✅ |
 | QPACK dynamic table support | RFC 9204 | ✅ |
-| 0-RTT / Early Data sending | RFC 9001 §4.6 | ✅ |
+| QPACK encoder/decoder streams created | RFC 9204 §4.2-4.3 | ✅ |
+| QPACK decoder dynamic table | RFC 9204 | ✅ |
+| 0-RTT / Early Data sending (client) | RFC 9001 §4.6 | ✅ |
+| 0-RTT key derivation (TLS key schedule) | RFC 8446 §7.1 | ✅ |
 | Connection migration (PATH_CHALLENGE/RESPONSE) | RFC 9000 §9 | ✅ |
 | Key update (AEAD rotation) | RFC 9001 §6 | ✅ |
 | Idle timeout enforcement | RFC 9000 §10.1 | ✅ |
 | Retry packet generation + detection | RFC 9000 §17.2.5 | ✅ |
 | HTTP/3 trailers (send + receive) | RFC 9114 §4.2 | ✅ |
-| Server push (PUSH_PROMISE, MAX_PUSH_ID, CANCEL_PUSH) | RFC 9114 §4.4, §7.5-7.6 | ✅ |
+| Server push (PUSH_PROMISE + push stream creation) | RFC 9114 §4.4 | ✅ |
+| Server push stream reading (push ID + HEADERS) | RFC 9114 §7.2 | ✅ |
+| Stream creation limits enforcement | RFC 9000 §4.6-4.7 | ✅ |
+| Stream closure handling + cleanup | RFC 9114 §6.1 | ✅ |
+| AEAD AAD authentication (RFC 9001 §5.2) | RFC 9001 §5.2 | ✅ |
+| ChaCha20-Poly1305 cipher suite variant | RFC 9001 | ✅ |
+| Certificate validation (chain + hostname) | RFC 8446 §4.4.2 | ✅ |
+| HTTP/3 Priority (RFC 9218) | RFC 9218 §4 | ✅ |
+| Path MTU Discovery | RFC 8899 | ✅ |
 
 ### Still TODO
 
 | Feature | Priority |
 |---------|----------|
-| 0-RTT / Early Data reception (server-side) | IMPORTANT |
-| Full connection migration implementation | NICE |
-| Path MTU Discovery | NICE |
+| 0-RTT / Early Data reception (server-side decrypt) | IMPORTANT |
+| Full connection migration (active path tracking) | NICE |
 | Key update (full TLS key schedule) | IMPORTANT |
-| HTTP/3 Priority (RFC 9218) | NICE |
-| Server push stream reading | IMPORTANT |
-| Certificate validation (chain + hostname) | IMPORTANT |
-| Multiple cipher suites (ChaCha20) | IMPORTANT |
-| HTTP/3 trailers (full roundtrip) | NICE |
+| Server push data sending on push stream | IMPORTANT |
+| HTTP/1 redirect handling | IMPORTANT |
+| HTTP/1 content-encoding decompression | NICE |
 | CONNECT method tunneling | NICE |
 
 ### All 22 QUIC Frame Types Implemented
@@ -93,39 +103,44 @@ CONNECTION_CLOSE, CONNECTION_CLOSE_APPLICATION, HANDSHAKE_DONE, PING, PADDING, N
 
 ```
 crates/edgerun-http/src/http3/
-├── mod.rs              # Error types, error codes, ALPN constants
+├── mod.rs              # Error types (incl. FrameUnexpected), error codes, ALPN constants
 ├── connection.rs       # Http3Connection — client/server, request/response, validation,
-│                       #                  trailers, server push, GOAWAY, RESET_STREAM
+│                       #                  GOAWAY, RESET_STREAM, STOP_SENDING, stream cleanup,
+│                       #                  trailers, server push, priority, stream limits
 ├── server.rs           # Http3Server — UDP bind, TLS handshake, accept(),
 │                       #               address validation / anti-amplification
 ├── varint.rs           # QUIC variable-length integer encode/decode
 ├── http3/
 │   ├── mod.rs          # Stream type identifiers, stream ID helpers
-│   ├── frame.rs        # HTTP/3 frame types (DATA, HEADERS, SETTINGS, etc.)
+│   ├── frame.rs        # HTTP/3 frame types (DATA, HEADERS, SETTINGS, PushPromise, etc.)
 │   ├── settings.rs     # HTTP/3 settings + MAX_STREAMS helpers
 │   └── stream.rs       # HTTP/3 stream state machine
 ├── qpack/
-│   ├── encoder.rs      # QPACK encoder with dynamic table support + static table lookup
-│   ├── decoder.rs      # QPACK decoder
+│   ├── encoder.rs      # QPACK encoder with full dynamic table (vendored edgerun-qpack)
+│   ├── decoder.rs      # QPACK decoder with dynamic table support
 │   ├── huffman.rs      # Huffman encode/decode
 │   ├── static_table.rs # 99-entry QPACK static table
 │   └── instructions.rs # QPACK instructions
 └── quic/
     ├── mod.rs          # QuicConnection — handshake, send/recv, reassembly,
-    │                   #                0-RTT, connection migration, idle timeout
+    │                   #                0-RTT, connection migration, idle timeout,
+    │                   #                RESET_STREAM, STOP_SENDING
     ├── frame/
     │   ├── mod.rs      # QuicFrame enum (all 22 types)
     │   ├── encode.rs   # Frame serialization (all 22 types)
     │   ├── decode.rs   # Frame deserialization (all 22 types)
     │   └── varint.rs   # QUIC varint helpers
-    ├── crypto.rs       # PacketProtection (AEAD AES-GCM), ProtectionKeys
+    ├── crypto.rs       # PacketProtection (AEAD AES-GCM with AAD), ProtectionKeys
     ├── packet.rs       # QuicPacket (Initial/Handshake/0-RTT/Retry/VN/1-RTT),
     │                   #           version_negotiation(), is_version_negotiation(),
-    │                   #           retry(), is_retry(), parse_supported_versions()
-    ├── transport.rs    # QuicTransport — ACK, RTT, congestion, flow control,
-    │                   #               loss detection, sent packet tracking
-    ├── handshake.rs    # Client-side QUIC-TLS handshake
-    └── server_handshake.rs # Server-side QUIC-TLS handshake
+    │                   #           retry(), is_retry(), header_to_bytes_aad()
+    ├── transport.rs    # QuicTransport — ACK (with gap ranges), RTT, congestion,
+    │                   #               flow control, loss detection, MTU discovery
+    ├── handshake.rs    # Client QUIC-TLS handshake, 0-RTT key derivation,
+    │                   # CertificateValidator (chain + hostname + signature)
+    └── server_handshake.rs # Server QUIC-TLS handshake, EarlyDataState
+
+crates/edgerun-qpack/     # Vendored qpack 0.1.0 (crates.io), all modules public
 ```
 
 ## Usage
