@@ -261,7 +261,6 @@ pub fn decode_stateless<T: Buf>(buf: &mut T, max_size: u64) -> Result<Decoded, D
     })
 }
 
-#[cfg(test)]
 impl From<DynamicTable> for Decoder {
     fn from(table: DynamicTable) -> Self {
         Self { table }
