@@ -221,6 +221,8 @@ pub struct QuicTlsHandshaker {
     client_hs_secret: Vec<u8>,
     /// Cached server handshake traffic secret (for Finished verification)
     server_hs_secret: Vec<u8>,
+    /// 0-RTT early traffic secret (derived before advancing to handshake)
+    early_traffic_secret: Vec<u8>,
     /// Negotiated cipher suite
     cipher_suite: CipherSuite,
     /// ClientHello raw bytes (for retransmission)
@@ -268,6 +270,7 @@ impl QuicTlsHandshaker {
             transcript: Vec::new(),
             client_hs_secret: Vec::new(),
             server_hs_secret: Vec::new(),
+            early_traffic_secret: Vec::new(),
             cipher_suite,
             client_hello_bytes,
             server_name: server_name.to_string(),
@@ -355,6 +358,12 @@ impl QuicTlsHandshaker {
         };
         self.transcript.extend_from_slice(&crypto_data[..sh_msg_len.min(crypto_data.len())]);
         self.received_server_hello = true;
+
+        // Derive 0-RTT early traffic keys BEFORE advancing key schedule.
+        // 0-RTT keys are derived from the early secret + ClientHello hash
+        // (RFC 8446 §7.1, "c e traffic" label).
+        let ch_hash = self.hasher.hash(&self.transcript);
+        self.early_traffic_secret = self.key_schedule.client_early_traffic_secret(&ch_hash);
 
         // Advance key schedule to handshake phase
         let shared_secret = self.key_pair.exchange(&self.server_key_share)?;
@@ -574,6 +583,28 @@ impl QuicTlsHandshaker {
     ///
     /// Must be called after Client Finished has been sent and the transcript
     /// includes the client Finished message.
+    /// Get 0-RTT early data protection keys (if derived).
+    ///
+    /// Returns `Some(keys)` if the client derived 0-RTT keys during
+    /// `process_initial_crypto()`. The keys can be used with
+    /// `QuicConnection::enable_early_data()` to send early data.
+    pub fn early_data_keys(&self) -> Option<ProtectionKeys> {
+        if self.early_traffic_secret.is_empty() {
+            return None;
+        }
+        let keys = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        // For 0-RTT, client sends so we use client's write keys.
+        // The server would use read keys from the same secret.
+        Some(ProtectionKeys::new(
+            AeadAlgorithm::Aes128Gcm,
+            keys.write_key.clone(),
+            keys.write_iv.clone(),
+            keys.write_key,  // Same keys for simplicity — client sends, server reads
+            keys.write_iv,
+        ))
+    }
+
+    /// Derive application traffic keys from the post-Client-Finished transcript hash.
     pub fn app_keys(&self, transcript_after_client_finished: &[u8]) -> ProtectionKeys {
         let app_transcript_hash = self.hasher.hash(transcript_after_client_finished);
 
@@ -614,6 +645,21 @@ impl QuicTlsHandshaker {
         let hs_keys = self.handshake_keys()?;
         let app_keys = self.app_keys(transcript_after_finished);
 
+        // Derive 0-RTT early data protection keys (if early traffic secret was derived)
+        let early_data_keys = if !self.early_traffic_secret.is_empty() {
+            let early_keys = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+            let early_read = quic_traffic_keys(&self.early_traffic_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+            Some(ProtectionKeys::new(
+                AeadAlgorithm::Aes128Gcm,
+                early_keys.write_key,
+                early_keys.write_iv,
+                early_read.write_key,
+                early_read.write_iv,
+            ))
+        } else {
+            None
+        };
+
         Ok(HandshakeResult {
             initial_keys: ProtectionKeys::new(
                 AeadAlgorithm::Aes128Gcm,
@@ -624,7 +670,7 @@ impl QuicTlsHandshaker {
             ),
             handshake_keys: hs_keys,
             app_keys,
-            early_data_keys: None, // 0-RTT keys derived separately from early secret
+            early_data_keys,
             cipher_suite: self.cipher_suite,
             server_random: self.server_random,
             transcript: self.transcript.clone(),

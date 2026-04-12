@@ -188,6 +188,11 @@ impl QuicConnection {
         handshaker.mark_complete();
         self.established = true;
 
+        // Enable 0-RTT early data if keys were derived
+        if let Some(early_keys) = handshaker.early_data_keys() {
+            self.enable_early_data(early_keys);
+        }
+
         Ok(())
     }
 
