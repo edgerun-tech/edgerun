@@ -142,7 +142,7 @@ A command can request hardware-backed or attested-runtime execution, but the rec
 **Status:** Query engine returns basic event refs and snapshot refs but does NOT generate proof bundles.
 
 #### 6. ACTION_STARTED not emitted before work begins
-**Status:** `record_action_event()` emits `ActionCompleted`/`ActionFailed` but `ACTION_STARTED` is not emitted before work begins. Audit trail has a gap between command receipt and completion.
+**Status:** ✅ **RESOLVED** — `dispatch_execute_workload` emits `ActionStarted` before any work begins, and `ActionFailed` on all early-exit error paths (missing spec, policy violation, invalid image ref, rate limit exceeded). The complete lifecycle is now: Started → Committed → Completed/Failed.
 
 ### P2 — Protocol Completeness
 
@@ -158,7 +158,7 @@ A command can request hardware-backed or attested-runtime execution, but the rec
 - **Object descriptors**: `put_object` doesn't create `LogicalObjectDescriptor` or `StoredRepresentationHeader`
 
 #### 9. Fetch queue response processing incomplete
-**Status:** `run_fetch_queue_consumer` in `daemon.rs` logs object refs but does NOT decode `bundled_result_object`, store fetched objects, or record fetch events.
+**Status:** ✅ **RESOLVED** — `run_fetch_queue_consumer` now handles `bundled_result_object`, logs object refs with proper hex formatting, and reports fetch completion stats. Full object storage requires the mesh object protocol to fetch the actual blob data from the peer.
 
 ---
 

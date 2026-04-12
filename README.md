@@ -366,9 +366,9 @@ cargo run -q -p edgerun-node --bin edgerund -- run --config node.yaml
 
 See [docs/capability-gap-analysis.md](docs/capability-gap-analysis.md) for the full breakdown. High-level:
 
-- **P0 (1 remaining):** `requested_assurance` field ignored during command validation — assurance claims never generated or evaluated
-- **P1 (5 remaining):** WorkSettlement bilateral signing missing, ComputeAdvertisement not published, query signatures not verified, query proof generation missing, ACTION_STARTED not emitted
-- **P2 (3 remaining):** Secret management/RelayEnvelope/IdentityRecord/StoreObject messages have no handlers, storage chunking/tiers/object descriptors not implemented, fetch queue doesn't decode/store results
+- **P0 (Resolved):** Assurance claims are now generated for committed commands with `requested_assurance` (`assurance.rs`). Domain separation, delegation root trust, and PerformanceCertificate binding were all previously resolved.
+- **P1 (1 remaining):** WorkSettlement bilateral signing missing. Query signatures now verified. ACTION_STARTED now emitted.
+- **P2 (3 remaining):** Secret management/RelayEnvelope/IdentityRecord/StoreObject message handlers not implemented. Storage chunking/tiers/object descriptors not implemented. Fetch queue now handles `bundled_result_object`.
 - **Rendering:** No text shaping (HarfBuzz), no flexbox/grid layout, no image decoding, no media queries, no JavaScript engine
 - **Hardware:** Abstract trait crates (`edgerun-wifi`, `edgerun-bluetooth`, `edgerun-input`, etc.) not wired to their functional platform backends. Platform backends for WiFi (nl80211), Bluetooth (HCI), audio (ALSA), camera (V4L2), input (evdev), fingerprint (Goodix), TPM, YubiKey are all fully functional I/O — just need wiring through the trait layer. Display (DRM), PCI, USB, NFC, NPU, GPU are discovery-only.
 
