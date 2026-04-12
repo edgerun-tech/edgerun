@@ -114,16 +114,20 @@ async fn handle_standard_query(
 
     edgerun_log::debug!("edgerun-dns: query {} {} (concurrent)", qtype.as_str(), qname);
 
-    let zones_guard = state.zones.read().await;
-    let answers = resolve(&qname, qtype, &zones_guard);
-
-    // Include SOA in authority section per RFC 2308
-    let authority = if answers.is_empty() {
-        find_matching_zone_soa(&qname, &zones_guard)
-    } else {
-        Vec::new()
+    // Resolve while holding the zones lock, then drop it before any
+    // other `.await` points. The borrow checker can't prove that
+    // `answers`/`authority` outlive the guard unless we scope it.
+    let (answers, authority) = {
+        let zones_guard = state.zones.read().await;
+        let answers = resolve(&qname, qtype, &zones_guard);
+        let authority = if answers.is_empty() {
+            find_matching_zone_soa(&qname, &zones_guard)
+        } else {
+            Vec::new()
+        };
+        (answers, authority)
     };
-    drop(zones_guard);
+    // zones_guard dropped here ^
 
     if answers.is_empty() {
         // Try forwarding if upstream is configured
