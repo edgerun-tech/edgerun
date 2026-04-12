@@ -48,3 +48,7 @@ harness = false
 [[test]]
 name = "barrier_test"
 harness = false
+
+[[test]]
+name = "udp_test"
+harness = false
