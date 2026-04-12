@@ -611,16 +611,22 @@ fn nl80211_scan(ifindex: i32, ssids: Option<&[&[u8]]>, flush: bool, frequencies:
     // Trigger the scan
     sock.request(NL80211_CMD_TRIGGER_SCAN, ifindex, &attrs)?;
 
-    // Wait a bit for scan to complete
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    // Poll for scan results with exponential backoff (max 2s)
+    let mut attempts = 0;
+    let max_attempts = 20;
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        attempts += 1;
 
-    // Get scan results via dump
-    let mut get_attrs = Vec::new();
-    put_nla_u32(&mut get_attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
+        let mut get_attrs = Vec::new();
+        put_nla_u32(&mut get_attrs, NL80211_ATTR_IFINDEX, ifindex as u32);
 
-    let response = sock.request_dump(NL80211_CMD_GET_SCAN, ifindex, &get_attrs)?;
-
-    parse_scan_results(&response)
+        match sock.request_dump(NL80211_CMD_GET_SCAN, ifindex, &get_attrs) {
+            Ok(response) => return parse_scan_results(&response),
+            Err(_) if attempts < max_attempts => continue,
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Parse nl80211 scan results from netlink response data.

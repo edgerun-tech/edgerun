@@ -309,9 +309,11 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
     /// the timeout expired with no events.
     pub fn run_once(&mut self, timeout: Duration) -> Result<bool, io::Error> {
         let fds = self.link.poll_fds();
+        // No fds to poll — nothing to wait for, return immediately.
+        // Caller controls the polling cadence.
         if fds.is_empty() {
-            std::thread::sleep(timeout);
             return Ok(false);
+        }
         }
 
         let mut poll_fds: Vec<pollfd> = fds
