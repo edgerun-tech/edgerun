@@ -23,6 +23,7 @@ mod rwlock;
 mod barrier;
 mod mutex;
 mod sleep_until;
+mod yield_now;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
@@ -54,6 +55,7 @@ pub use timers::{
     MissedTickBehavior, CtrlC,
 };
 pub use sleep_until::{sleep_until, timeout_at, SleepUntil, TimeoutAt};
+pub use yield_now::{yield_now, YieldNow};
 
 // Sync primitives.
 pub use notify::{Notify, Notified};

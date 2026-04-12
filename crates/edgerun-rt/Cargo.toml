@@ -68,3 +68,7 @@ harness = false
 [[test]]
 name = "sleep_until_test"
 harness = false
+
+[[test]]
+name = "yield_now_test"
+harness = false
