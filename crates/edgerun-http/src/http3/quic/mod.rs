@@ -378,6 +378,7 @@ impl QuicConnection {
     /// Create a dummy connection for testing
     pub fn dummy() -> Self {
         let socket = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
+        socket.set_nonblocking(true).expect("Cannot set non-blocking");
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -986,5 +987,54 @@ mod tests {
         // The important thing is both sides completed the handshake.
         assert!(!ciphertext.is_empty());
         assert!(ciphertext.len() > plaintext.len()); // AEAD adds tag
+    }
+
+    /// Test server-side `accept_request()` with static table headers.
+    #[test]
+    fn test_accept_request_static_headers() {
+        use crate::http3::connection::Http3Connection;
+        use crate::http3::http3::frame::Http3Frame;
+        use crate::method::Method;
+
+        // Manually craft HEADERS frame with static table request
+        let mut header_block = Vec::new();
+        header_block.push(0xC0 | 18); // :method: GET
+        header_block.push(0xC0 | 26); // :scheme: https
+        header_block.push(0xC0 | 2);  // :path: /
+
+        let headers_frame = Http3Frame::Headers { header_block };
+        let frame_bytes = headers_frame.to_bytes();
+
+        // Build a QUIC STREAM frame containing the HTTP/3 HEADERS frame
+        let stream_frame = QuicFrame::Stream {
+            stream_id: 0,
+            offset: 0,
+            fin: true,
+            data: frame_bytes,
+        };
+        let stream_bytes = stream_frame.to_bytes();
+
+        // Build a 1-RTT QUIC packet
+        let pkt = QuicPacket::one_rtt(
+            vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
+            0,
+            stream_bytes,
+        );
+        let packet_bytes = pkt.to_bytes();
+
+        // Create an HTTP/3 connection with a mock QUIC connection
+        let mut quic = QuicConnection::dummy();
+        quic.inject_packet(packet_bytes);
+        let mut conn = Http3Connection::from_mock(quic);
+
+        // Accept the request
+        let (stream_id, method, uri, headers) = conn.accept_request()
+            .expect("accept_request failed")
+            .expect("no request available");
+
+        assert_eq!(stream_id, 0);
+        assert_eq!(method, Method::GET);
+        assert_eq!(uri.path(), "/");
+        assert!(headers.is_empty());
     }
 }
