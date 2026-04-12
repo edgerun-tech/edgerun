@@ -28,6 +28,7 @@ mod join;
 mod select;
 mod cancellation;
 mod unix;
+pub mod fs;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;

@@ -88,3 +88,7 @@ harness = false
 [[test]]
 name = "unix_test"
 harness = false
+
+[[test]]
+name = "fs_test"
+harness = false
