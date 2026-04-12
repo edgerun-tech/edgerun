@@ -82,10 +82,7 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 | Feature | Priority | Detail |
 |---------|----------|--------|
-| Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
-| CONNECT method tunneling | NICE | HTTP/2/3 CONNECT support for WebSocket/proxy tunneling |
-| CertificateVerify RSA-PSS / ED25519 | NICE | ECDSA P-256 implemented; RSA-PSS and ED25519 accept with length check |
-| Missing test coverage | NICE | 362 tests passing; no integration tests for full HTTP/3 flow |
+| Missing integration test coverage | NICE | 366 unit tests passing; no end-to-end HTTP/3 flow tests over UDP |
 
 ### All 22 QUIC Frame Types Implemented
 
