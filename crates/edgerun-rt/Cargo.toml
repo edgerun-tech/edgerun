@@ -60,3 +60,7 @@ harness = false
 [[test]]
 name = "unbounded_test"
 harness = false
+
+[[test]]
+name = "mutex_test"
+harness = false

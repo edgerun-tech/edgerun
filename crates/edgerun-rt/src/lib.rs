@@ -21,6 +21,7 @@ mod notify;
 mod semaphore;
 mod rwlock;
 mod barrier;
+mod mutex;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
@@ -60,4 +61,5 @@ pub use semaphore::{
 };
 pub use rwlock::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use barrier::{Barrier, BarrierWaitResult};
+pub use mutex::{Mutex, MutexGuard, MutexLockFuture};
 pub use watch::{Sender as WatchSender, Receiver as WatchReceiver, ClosedError as WatchClosedError};
