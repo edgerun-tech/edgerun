@@ -48,6 +48,12 @@ const DEFAULT_DNS_SERVERS: &[&str] = &["8.8.8.8:53", "1.1.1.1:53"];
 pub struct Client {
     connect_timeout: Duration,
     dns_timeout: Duration,
+    /// Maximum redirects to follow (0 = no redirects)
+    max_redirects: u8,
+    /// Whether to follow redirects automatically
+    follow_redirects: bool,
+    /// Whether to send Accept-Encoding and decompress responses
+    auto_decompress: bool,
 }
 
 impl Client {
@@ -60,6 +66,9 @@ impl Client {
         Client {
             connect_timeout: Duration::from_secs(10),
             dns_timeout: Duration::from_secs(5),
+            max_redirects: 10,
+            follow_redirects: true,
+            auto_decompress: true,
         }
     }
 
@@ -72,6 +81,27 @@ impl Client {
     /// Set the DNS resolution timeout.
     pub fn with_dns_timeout(mut self, timeout: Duration) -> Self {
         self.dns_timeout = timeout;
+        self
+    }
+
+    /// Set the maximum number of redirects to follow.
+    /// Setting to 0 disables redirect following.
+    pub fn with_max_redirects(mut self, max: u8) -> Self {
+        self.max_redirects = max;
+        self.follow_redirects = max > 0;
+        self
+    }
+
+    /// Disable automatic redirect following.
+    pub fn no_redirects(mut self) -> Self {
+        self.follow_redirects = false;
+        self.max_redirects = 0;
+        self
+    }
+
+    /// Disable automatic response decompression.
+    pub fn no_decompress(mut self) -> Self {
+        self.auto_decompress = false;
         self
     }
 
@@ -146,22 +176,118 @@ impl Client {
     /// Resolves the hostname via [`edgerun_dns::DnsClient`], connects,
     /// sends the request, reads the full response (headers + body),
     /// and returns a [`Response`] with the body buffered in memory.
+    ///
+    /// If `follow_redirects` is true (default), 3xx responses with a
+    /// `Location` header are followed automatically (up to `max_redirects`).
+    ///
+    /// If `auto_decompress` is true (default), responses with
+    /// `Content-Encoding: gzip/deflate/br` are automatically decompressed.
     pub async fn execute(&self, request: &Request) -> Result<Response> {
-        let uri = request.uri();
-        let is_head = request.method() == &Method::HEAD;
+        use crate::http1::compression;
 
-        let host = uri.host()
-            .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-        let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
+        let mut current_uri = request.uri().to_string();
+        let mut current_method = request.method().clone();
+        let mut remaining = self.max_redirects;
 
-        let stream = self.resolve_and_connect(host, port).await?;
-        let (read_half, mut write_half) = stream.split();
+        loop {
+            let req = Request::builder()
+                .method(current_method.clone())
+                .uri(&current_uri)
+                .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
+                .build()?;
 
-        let request_bytes = request.to_http_bytes();
-        write_half.write_all(&request_bytes).await
-            .map_err(Error::Network)?;
+            let uri = req.uri();
+            let is_head = req.method() == &Method::HEAD;
 
-        Self::read_response_plain(read_half, is_head).await
+            let host = uri.host()
+                .ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
+            let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
+
+            let stream = self.resolve_and_connect(host, port).await?;
+            let (read_half, mut write_half) = stream.split();
+
+            // Add Accept-Encoding header if auto_decompress is enabled
+            let request_bytes = if self.auto_decompress {
+                let mut req_bytes = req.to_http_bytes();
+                let ae = format!("\r\nAccept-Encoding: {}", compression::accept_encoding_value());
+                // Insert before the final \r\n\r\n
+                if let Some(pos) = req_bytes.windows(4).rposition(|w| w == b"\r\n\r\n") {
+                    let mut new_bytes = Vec::with_capacity(req_bytes.len() + ae.len());
+                    new_bytes.extend_from_slice(&req_bytes[..pos]);
+                    new_bytes.extend_from_slice(ae.as_bytes());
+                    new_bytes.extend_from_slice(&req_bytes[pos..]);
+                    new_bytes
+                } else {
+                    req_bytes
+                }
+            } else {
+                req.to_http_bytes()
+            };
+
+            write_half.write_all(&request_bytes).await
+                .map_err(Error::Network)?;
+
+            let response = Self::read_response_plain(read_half, is_head).await?;
+
+            // Check for redirect (3xx with Location header)
+            if remaining > 0 && self.follow_redirects {
+                let status = response.status().as_u16();
+                if (300..400).contains(&status) {
+                    if let Some(location) = response.headers().get("location") {
+                        let loc = location.as_str();
+                        remaining -= 1;
+                        // Resolve relative URL
+                        current_uri = Self::resolve_redirect_url(&current_uri, loc);
+                        // For 303, use GET; for 307/308, preserve method; for 301/302, use GET for non-GET
+                        if status == 303 && current_method != Method::GET && current_method != Method::HEAD {
+                            current_method = Method::GET;
+                        }
+                        continue;
+                    }
+                }
+            }
+
+            // Decompress response body if auto_decompress is enabled
+            if self.auto_decompress {
+                let body = response.body();
+                if let Some(decompressed) = compression::decompress_body(body, response.headers()) {
+                    return Ok(Response::from_parts(
+                        response.status().clone(),
+                        response.headers().clone(),
+                        decompressed,
+                    ));
+                }
+            }
+
+            return Ok(response);
+        }
+    }
+
+    /// Resolve a redirect URL relative to the current URL.
+    fn resolve_redirect_url(current: &str, location: &str) -> String {
+        if location.starts_with("http://") || location.starts_with("https://") {
+            return location.to_string();
+        }
+
+        // Parse current URL
+        if let Some((scheme, rest)) = current.split_once("://") {
+            if let Some((host_port, path)) = rest.split_once('/') {
+                if location.starts_with('/') {
+                    return format!("{}://{}/{}", scheme, host_port, &location[1..]);
+                }
+                // Relative path
+                let base = path.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+                return format!("{}://{}{}/{}", scheme, host_port, base, location);
+            } else {
+                // No path — location is relative to host
+                if location.is_empty() {
+                    return format!("{}://{}/", scheme, rest);
+                }
+                return format!("{}://{}/{}", scheme, rest, location);
+            }
+        }
+
+        location.to_string()
     }
 
     /// Execute a request and return a streaming body reader (plain TCP).

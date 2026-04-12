@@ -82,7 +82,6 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 | Feature | Priority | Detail |
 |---------|----------|--------|
-| Key update (full TLS key schedule) | IMPORTANT | `initiate_key_update()` is a placeholder — no new key derivation |
 | Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
 | HTTP/1 redirect following | IMPORTANT | Code in client.rs uses plain TCP; redirect logic needs integration |
 | HTTP/1 content-encoding decompression | IMPORTANT | `decompress_body()` exists but not called in `execute()` |
