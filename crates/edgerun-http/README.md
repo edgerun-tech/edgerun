@@ -83,8 +83,6 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 | Feature | Priority | Detail |
 |---------|----------|--------|
 | Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
-| HTTP/1 redirect following | IMPORTANT | Code in client.rs uses plain TCP; redirect logic needs integration |
-| HTTP/1 content-encoding decompression | IMPORTANT | `decompress_body()` exists but not called in `execute()` |
 | CONNECT method tunneling | NICE | HTTP/2/3 CONNECT support for WebSocket/proxy tunneling |
 | CertificateVerify RSA/ED25519 | NICE | ECDSA P-256 implemented; RSA-PSS and ED25519 accept with length check |
 | Frame fragmentation for oversized payloads | NICE | Frames exceeding MTU sent as single packet → dropped |
