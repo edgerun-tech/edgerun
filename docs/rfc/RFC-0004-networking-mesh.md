@@ -62,11 +62,11 @@ Tie-breaking: highest score → preferred advertiser → preferred next-hop → 
 
 | Crate | Status | Purpose |
 |-------|--------|---------|
-| `edgerun-mesh` | ⚠️ Partial | Mesh networking protocol definition |
-| `edgerun-mesh-link` | ⚠️ Partial | Individual mesh link management |
-| `edgerun-mesh-capability` | ⚠️ Partial | Capability exchange over mesh |
-| `edgerun-mesh-daemon` | ⚠️ Partial | Mesh daemon process |
-| `edgerun-mesh-session` | ⚠️ Partial | Mesh session management |
+| `edgerun-mesh` | ✅ Functional (180 tests) | Mesh networking protocol definition, routing table, discovery, peer management |
+| `edgerun-mesh-link` | ✅ Functional (82 tests) | Raw Ethernet (AF_PACKET), multicast UDP, IP tunnel, UDP broadcast |
+| `edgerun-mesh-capability` | ✅ Functional (66 tests) | Capability exchange over mesh (transport, server, client, dispatcher, inbox) |
+| `edgerun-mesh-daemon` | ✅ Functional (34 tests) | Event loop: interface discovery, heartbeat, ECDH handshakes, session encryption, outbound queue |
+| `edgerun-mesh-session` | ✅ Functional (67 tests) | ECDH handshakes, AES-GCM session encryption, replay protection, rekey support |
 
 ### edgerun-dns / edgerun-dhcp / edgerun-dhcpv6
 

@@ -37,11 +37,11 @@ pub(crate) struct IpMreq {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub(crate) struct SockaddrIn {
-    pub(crate) sin_family: u16,
-    pub(crate) sin_port: u16,
-    pub(crate) sin_addr: u32,
-    pub(crate) sin_zero: [u8; 8],
+pub struct SockaddrIn {
+    pub sin_family: u16,
+    pub sin_port: u16,
+    pub sin_addr: u32,
+    pub sin_zero: [u8; 8],
 }
 
 /// A UDP socket joined to the mesh multicast group on a specific interface.

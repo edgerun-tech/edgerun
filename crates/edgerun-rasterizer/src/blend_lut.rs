@@ -1,5 +1,4 @@
 //! Blend mode lookup tables — generated from CSS Compositing Level 1 blend modes.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 use libm::sqrt;
 
 /// Blend a source channel over destination channel.

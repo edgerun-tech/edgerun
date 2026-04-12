@@ -9,7 +9,10 @@
 
 `edgerun-rasterizer` is a **scanline renderer generated from CSS proto data**. It implements solid fills, 3 gradient types, 9 border patterns, 16 blend modes, bitmap text, and tile-based multicore rendering — all in `no_std` with AVX2 SIMD support.
 
-**All files are auto-generated** from CSS proto data via `scripts/generate_rasterizer.py`.
+**All source files contain `// DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py` comments,**
+but this script **does not exist** in the repository. The LUTs (color_lut, border_lut, blend_lut,
+text_bitmap) and SIMD code are not regeneratable from the current codebase. They would need to be
+re-created as Go generators in `cmd/` or hand-maintained.
 
 ---
 
@@ -17,8 +20,8 @@
 
 ```
 CSS proto data (css_colors, css_images, css_box, css_text, etc.)
-    ↓ scripts/generate_rasterizer.py
-11 generated Rust modules
+    ↓ (scripts/generate_rasterizer.py MISSING — not regeneratable)
+11 Rust modules (LUTs + scanline + SIMD + tile)
     ↓
 RasterCommand enum → scanline::rasterize() → Framebuffer (XRGB8888)
 ```

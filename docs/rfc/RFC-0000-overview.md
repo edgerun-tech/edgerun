@@ -24,13 +24,13 @@ The unifying principle across both systems is **proto-as-single-source-of-truth*
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                     EDGERUN REFERENCE CORE                          │
-│                        136 Rust Crates                              │
+│                        137 Rust Crates                              │
 ├──────────────────────────┬──────────────────────────────────────────┤
 │   PROTOCOL FABRIC        │     RENDERING ENGINE                     │
-│   (~30 crates)           │     (~100 crates)                        │
+│   (~40 crates)           │     (~97 crates)                         │
 │                          │                                          │
 │  Spec: core-protocol-v0  │     Specs: W3C/WHATWG HTML/CSS/DOM/ECMA │
-│  3295 lines              │     40+ proto files                      │
+│  3295 lines              │     44 proto files                       │
 │  7 packages              │     Go codegen pipeline                  │
 │  27 message families     │     2 code generators (buf + html-codegen)│
 │                          │                                          │
@@ -55,15 +55,15 @@ Every behavioral component in the rendering engine is generated from spec data:
 
 | Spec Source | Proto Output | Generated Code |
 |-------------|-------------|----------------|
-| WHATWG HTML §13.2.5 | `tokenizer_states.proto` (86 states) | `tokenizer.rs` (4,550 lines, table-driven FSM) |
-| WHATWG HTML §13.2.6 | `tree_builder.proto` (23 modes) | `tree_builder.rs` (2,263 lines, insertion rules) |
+| WHATWG HTML §13.2.5 | `tokenizer_states.proto` (87 states) | `tokenizer.rs` (table-driven FSM) |
+| WHATWG HTML §13.2.6 | `tree_builder.proto` (24 modes) | `tree_builder.rs` (insertion rules) |
 | WHATWG §13.1.4.22 | `entities.proto` (2,231 entities) | `entity_decoder/` (binary search lookup) |
-| W3C CSS properties | `css_properties.proto` (255 props) | CSS cascade + computed style resolution |
+| W3C CSS properties | `css_properties.proto` (175 props) | CSS cascade + computed style resolution |
 | W3C CSS colors | `css_value_types.proto` | `color_convert.rs` (HSL/OKLCh → sRGB) |
 | W3C CSS box model | `css_box.proto` | `box_model.rs` (edge values, BFC detection) |
 | W3C CSS images | `css_images.proto` | Gradient math in CPU + WGSL |
 | Color/border/blend LUTs | Proto data tables | `color_lut.rs` (148 colors), `border_lut.rs` (9 patterns), `blend_lut.rs` (16 modes) |
-| CSS properties + box model | Combined proto data | `shaders/render.wgsl` (1,810 lines, fragment shader) |
+| CSS properties + box model | Combined proto data | `shaders/render.wgsl` (823 lines, fragment shader) |
 | CSS cascade + layout | `css_cascade.proto` + selectors | `shaders/layout.wgsl` (GPU compute pipeline) |
 
 Chrome's HTML parser is ~500,000 lines of hand-written C++. Ours is ~5,600 lines of generated Rust, compiled from spec data, with conformance tests mapped to every spec rule.
@@ -143,7 +143,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-json` | ✅ Functional | 100+ | JSON serialization (serde_json replacement) |
 | `edgerun-crypto` | ✅ Functional | — | Cryptographic boundary (single crate) |
 
-### Rendering Engine Crates (106)
+### Rendering Engine Crates (~97)
 
 #### HTML/CSS Core
 | Crate | Status | Tests | Description |
@@ -163,8 +163,8 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-contain` | ✅ Generated | — | Generated CSS containment types |
 | `edgerun-writing-modes` | ✅ Generated | — | Generated writing modes types |
 | `edgerun-media-queries` | ✅ Generated | — | Generated media query types |
-| `edgerun-property-graph` | ✅ Functional | — | CSS property knowledge graph (98 props) |
-| `edgerun-css-minifier` | ✅ Functional | 6 | Proto-indexed varint encoding (60-70% compression) |
+| `edgerun-property-graph` | ✅ Functional | 16 | CSS property knowledge graph (98 props) |
+| `edgerun-css-minifier` | ✅ Functional | 5 | Proto-indexed varint encoding (60-70% compression) |
 | `edgerun-selectors` | ✅ Generated | — | CSS selectors (pseudo-classes, combinators) |
 | `edgerun-dom` | ✅ Generated | — | DOM interfaces as Rust traits |
 | `edgerun-dom-events` | ✅ Generated | — | DOM event types |
@@ -175,7 +175,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 #### Layout
 | Crate | Status | Tests | Description |
 |-------|--------|-------|-------------|
-| `edgerun-render` | ✅ Functional | 17+ | Complete CPU HTML/CSS renderer (entry point) |
+| `edgerun-render` | ✅ Functional | 40+ | Complete CPU HTML/CSS renderer (entry point) |
 | `edgerun-layout` *(generated)* | ⚠️ Partial | — | Generated layout crate (superseded by edgerun-render/layout/) |
 | `edgerun-flexbox` | ✅ Generated | — | Generated flexbox types |
 | `edgerun-grid` | ✅ Generated | — | Generated grid types |
@@ -190,7 +190,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 | `edgerun-wgpu` | ✅ Functional | — | WebGPU renderer with GPU CSS cascade + layout compute |
 | `edgerun-compositor` | ⚠️ Partial | — | Compositor integration |
 | `edgerun-compositor-tests` | ⚠️ Partial | — | Compositor tests |
-| `edgerun-render-proof` | ✅ Functional | 5 | CPU vs GPU pixel equality verification |
+| `edgerun-render-proof` | ✅ Functional | 0 | CPU vs GPU pixel equality verification (tests pending) |
 | `edgerun-color` | ✅ Functional | — | Named colors, color type conversions |
 | `edgerun-images` | ✅ Generated | — | Generated image types |
 | `edgerun-fonts` | ✅ Generated | — | Generated font types |
@@ -223,7 +223,7 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 #### Analysis Tools
 | Crate | Status | Tests | Description |
 |-------|--------|-------|-------------|
-| `edgerun-cascade-debugger` | ✅ Functional | — | CLI cascade resolution debugger |
+| `edgerun-cascade-debugger` | ✅ Functional | 0 | CLI cascade resolution debugger |
 | `edgerun-complexity-analyzer` | ✅ Functional | 3 | CSS complexity scoring |
 | `edgerun-a11y-analyzer` | ✅ Functional | 6 | WCAG 2.2 accessibility conformance |
 | `edgerun-rule-optimizer` | ✅ Functional | 5 | CSS rule optimization suggestions |
@@ -306,11 +306,12 @@ CSS property names encoded as 1-byte varints (98 unique property IDs) instead of
 
 ## Current Coverage
 
-- **Conformance dashboard**: 2,888 spec items across 40 proto files — **7.7% tested** (212/2888)
-- **Total tests**: 197+ passing across all crates
+- **Conformance dashboard**: 2,888 spec items across 44 proto files — **7.7% tested**
+- **Total tests**: 227+ passing across all crates
 - **Total proto files**: 44 in `proto/edgerun/v0/`
-- **Total Go codegen tools**: 12 standalone extractors, 8 generators, 1 main CLI
-- **Total generated Rust code**: ~15,000+ lines across all generated crates
+- **Total Go codegen tools**: 29 (13 extractors, 11 generators, 5 CLI/misc)
+- **Corpus files**: 804
+- **Shader files**: 2 WGSL (`render.wgsl`: 823 lines, `layout.wgsl`)
 
 ---
 

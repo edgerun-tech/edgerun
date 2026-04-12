@@ -2,8 +2,6 @@
 //!
 //! Generated from: css_colors, css_images, css_text, css_box, css_ui, css_transforms,
 //! css_fonts, css_sizing, css_display, css_values, css_cascade, css_contain
-//!
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 #![no_std]
 
 extern crate alloc;

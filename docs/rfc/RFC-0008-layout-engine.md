@@ -132,11 +132,11 @@ These modules are **fully defined but never called** in the layout pipeline:
 
 | Module | Functions | Never Called Because |
 |--------|-----------|---------------------|
-| `box_model.rs` | `EdgeValues`, methods | Margin/border/padding not resolved from CSS |
-| `layout_context.rs` | `IntrinsicSizes`, `resolve_intrinsic_size`, `resolve_box_dimensions` | No intrinsic sizing keywords used |
-| `text_layout.rs` | `apply_text_transform`, `should_wrap`, `resolve_font_weight` | Text processing not wired into layout |
-| `color_convert.rs` | `hsl_to_rgba`, `oklch_to_rgba` | Color parsing falls to black for non-RGB |
-| `paint_command.rs` | `build_display_list` | Zero-sized rects; render.rs uses RasterCommand directly |
+| `box_model.rs` | `EdgeValues`, `establishes_bfc`, `clips_overflow` | Margin/border/padding not resolved from CSS; BFC detection not used in layout dispatch |
+| `layout_context.rs` | `IntrinsicSizes`, `resolve_intrinsic_size`, `resolve_box_dimensions` | No intrinsic sizing keywords (auto, min-content, fit-content) used in layout |
+| `text_layout.rs` | `apply_text_transform`, `should_wrap`, `resolve_font_weight` | Text processing not wired into layout pipeline |
+| `color_convert.rs` | `hsl_to_rgba`, `oklch_to_rgba` | Color parsing falls to black for non-RGB; converters not called |
+| `paint_command.rs` | `build_display_list` | Emits zero-sized rects; `render.rs` uses `RasterCommand` directly instead |
 
 ---
 

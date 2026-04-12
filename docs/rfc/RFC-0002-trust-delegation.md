@@ -25,7 +25,7 @@ See [RFC-0001](RFC-0001-protocol-core.md#edgerun-capabilities--capability-model-
 
 ### edgerun-capability-policy
 
-**Status:** ⚠️ Partial (policy evaluation, separate from capabilities crate)
+**Status:** ✅ Functional (100 tests, 1891 lines of tests, 806 lines of impl across 6 files)
 
 **Purpose:** Grant evaluation, constraint enforcement, access checking. The actual policy engine that `edgerun-capabilities` delegates to.
 

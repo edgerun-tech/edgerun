@@ -50,3 +50,7 @@ specs/http2-frame-test-case/
 docs/*_spec.html
 docs/*.pdf
 edgerun-cli
+
+# Node.js dependencies and prerender output
+node_modules/
+prerendered/

@@ -1,5 +1,4 @@
 //! Framebuffer — raw pixel buffer (XRGB8888, matching DRM dumb buffer layout).
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 
 /// XRGB8888 framebuffer. In little-endian memory: [B, G, R, X].
 pub struct Framebuffer<'a> {

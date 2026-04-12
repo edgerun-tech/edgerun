@@ -1,5 +1,4 @@
 //! Rectangle rendering — solid fill, border stroke with patterns.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 use crate::framebuffer::Framebuffer;
 use crate::border_lut;
 /// Draw a filled rectangle with optional alpha.

@@ -1,5 +1,4 @@
 //! CSS Gradient rasterization — linear, radial, conic.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 use libm::{atan2, sin, cos, sqrt};
 use core::f64::consts::PI;
 

@@ -1,5 +1,4 @@
 //! Named color lookup table — generated from css_colors.proto (148 named colors).
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 
 /// Named color index. From css_colors.proto NamedColor enum.
 pub const NAMED_COLOR_COUNT: usize = 148;

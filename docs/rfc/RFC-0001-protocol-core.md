@@ -182,7 +182,7 @@ NodeStore (facade)
 | Algorithm | Implementation |
 |---|---|
 | Hash: SHA-256 | `edgerun-crypto` / `edgerun-core::sha256` |
-| Signature: ECDSA P-256 with SHA-256 | `edgerun-crypto` / `edgerun-hardware-signing::MeshSigner` |
+| Signature: ECDSA P-256 with SHA-256 | `edgerun-tpm` (raw TPM commands via `/dev/tpmrm0`) / `edgerun-hardware-signing::MeshSigner` |
 | Protobuf: prost semantics | `prost` crate, deterministic encoding |
 
 ### Domain Separation Tags (Spec §17.9)

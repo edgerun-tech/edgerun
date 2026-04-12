@@ -124,7 +124,7 @@ Vec<GpuLayoutResult> → GpuRectStyle[] → Render pipeline
 - `struct FontAtlas` — 512×512 RGBA8 texture
 - `FontAtlas::new(device, font_data, font_size, text) -> Self`
 - `FontAtlas::upload(queue)` — Upload pixels to GPU texture
-- `glyphs: BTreeMap<char, GlyphEntry>` — Atlas coordinates per character
+- `glyphs: HashMap<char, GlyphEntry>` — Atlas coordinates per character
 
 **Implementation:** Uses `fontdue` crate to rasterize TTF glyphs into bitmap, then packs into 512×512 texture atlas.
 

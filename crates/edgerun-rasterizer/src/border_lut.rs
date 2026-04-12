@@ -1,5 +1,4 @@
 //! Border style lookup tables — generated from CSS Box proto border patterns.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 
 /// 8-bit dash patterns for each CSS border style.
 /// Each pattern is 8 bytes (pixels), repeating.

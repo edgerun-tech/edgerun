@@ -1,9 +1,6 @@
 use bytes::{Buf, BufMut};
 use std::{convert::TryInto, fmt, io::Cursor, num::TryFromIntError};
 
-#[cfg(feature = "tracing")]
-use tracing::trace;
-
 use super::{
     dynamic::{DynamicTable, DynamicTableDecoder, Error as DynamicTableError},
     field::HeaderField,
@@ -119,9 +116,6 @@ impl Decoder {
         let inserted_on_start = self.table.total_inserted();
 
         while let Some(instruction) = self.parse_instruction(read)? {
-            #[cfg(feature = "tracing")]
-            trace!("instruction {:?}", instruction);
-
             match instruction {
                 Instruction::Insert(field) => self.table.put(field)?,
                 Instruction::TableSizeUpdate(size) => {

@@ -147,13 +147,13 @@ fn send_fd(sock_fd: i32, fd: i32) -> io::Result<()> {
     msg.msg_iov = &iov as *const _ as *mut libc::iovec;
     msg.msg_iovlen = 1;
     msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space;
+    msg.msg_controllen = cmsg_space as _;
 
     let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
     unsafe {
         (*cmsg).cmsg_level = libc::SOL_SOCKET;
         (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as usize;
+        (*cmsg).cmsg_len = libc::CMSG_LEN(std::mem::size_of::<i32>() as u32) as _;
         std::ptr::copy_nonoverlapping(&fd as *const i32, libc::CMSG_DATA(cmsg) as *mut i32, 1);
     }
 
@@ -179,7 +179,7 @@ fn recv_fd(sock_fd: i32) -> io::Result<i32> {
     msg.msg_iov = &iov as *const _ as *mut libc::iovec;
     msg.msg_iovlen = 1;
     msg.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg.msg_controllen = cmsg_space;
+    msg.msg_controllen = cmsg_space as _;
 
     let ret = unsafe { libc::recvmsg(sock_fd, &mut msg, 0) };
     if ret < 0 {

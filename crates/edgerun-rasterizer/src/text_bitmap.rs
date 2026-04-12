@@ -1,5 +1,4 @@
 //! 8x8 bitmap font — minimal monospace font for text rendering.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 
 pub const FONT_8X8: [[u8; 8]; 128] = [
     [0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF], // 0 (?)

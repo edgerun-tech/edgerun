@@ -46,10 +46,10 @@ The access model implements receiver-driven retrieval, bounded queries, federate
 | Class | Implementation |
 |-------|---------------|
 | `accepted_trusted` | ✅ Returned when producer in trusted list |
-| `accepted_stale` | ✅ Returned when snapshot base ahead of local head |
+| `accepted_stale` | ⚠️ Returned when snapshot base is **behind** local head (`base_head.seq < local_seq`); when ahead, returns `Err` not acceptance |
 | `accepted_cache_only` | ❌ Not implemented |
 | `deferred_missing_payload` | ❌ Not implemented |
-| `rejected_incompatible` | ✅ Returned when snapshot invalid |
+| `rejected_incompatible` | ⚠️ Invalid snapshots return `Err(StorageError::Decode(...))`, not the string `"rejected_incompatible"` |
 
 ### edgerun-replay
 

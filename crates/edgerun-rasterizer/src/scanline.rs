@@ -1,5 +1,4 @@
 //! Scanline renderer with SIMD auto-dispatch.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 extern crate alloc;
 use alloc::vec::Vec;
 

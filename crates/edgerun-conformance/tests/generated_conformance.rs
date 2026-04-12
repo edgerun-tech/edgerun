@@ -112,12 +112,11 @@ fn color_lut_known_values() {
 #[test]
 fn color_lut_all_entries_valid() {
     use edgerun_rasterizer::color_lut::COLOR_LUT;
-    for (i, entry) in COLOR_LUT.iter().enumerate() {
-        assert!(entry[3] <= 0xFF, "color[{}]: alpha out of range", i);
-        assert!(entry[0] <= 0xFF, "color[{}]: red out of range", i);
-        assert!(entry[1] <= 0xFF, "color[{}]: green out of range", i);
-        assert!(entry[2] <= 0xFF, "color[{}]: blue out of range", i);
-    }
+    // All 148 entries are non-zero-length colors (at least one channel is non-zero,
+    // or alpha is 0 for transparent). The LUT is statically defined so values are
+    // guaranteed valid u8 — this test documents the invariant.
+    assert_eq!(COLOR_LUT[0], [0x00, 0x00, 0x00, 0xFF]); // black is entry 0
+    assert_eq!(COLOR_LUT.len(), 148);
 }
 
 #[test]
@@ -354,9 +353,9 @@ fn linear_gradient_endpoints() {
     }];
     rasterize(&mut fb, &cmds);
     // Left pixel should be closer to red
-    let left_r = pixels[0 * 4 + 2];
+    let left_r = pixels[2]; // pixel 0, R channel
     // Right pixel should be closer to blue
-    let right_b = pixels[7 * 4 + 0];
+    let right_b = pixels[7 * 4]; // pixel 7, B channel
     assert!(left_r > 0, "left pixel should have some red");
     assert!(right_b > 0, "right pixel should have some blue");
 }
@@ -382,7 +381,7 @@ fn fill_rect_solid() {
     assert_eq!(pixels[i + 1], 0x00); // G
     assert_eq!(pixels[i + 2], 0xFF); // R
     // Outside rect (should remain background)
-    let j = (0 * 8 * 4 + 0 * 4) as usize;
+    let j = 0; // pixel (0,0), outside the rect
     assert_eq!(pixels[j], 0x1a);   // B = bg
 }
 

@@ -229,7 +229,7 @@ Watch proto files for filesystem changes and trigger regeneration.
 | A11y analyzer | 6 | ✅ Pass |
 | Rule optimizer | 5 | ✅ Pass |
 | Replay engine | 5 | ✅ Pass |
-| CSS minifier | 6 | ✅ Pass |
+| CSS minifier | 5 | ✅ Pass |
 | Spec watch | 0 | ✅ Runs |
 | Proto watch | 0 | ✅ Runs |
-| **Total** | **25** | **All passing** |
+| **Total** | **24** | **All passing** |

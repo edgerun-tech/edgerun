@@ -8,8 +8,8 @@
 ## Abstract
 
 `edgerun-render` includes a **generated WHATWG-compliant HTML parser** consisting of:
-- An 83-state tokenizer (4,551 lines, table-driven FSM)
-- A 24-mode tree builder (2,264 lines, insertion rules)
+- An 87-state tokenizer (table-driven FSM)
+- A 24-mode tree builder (insertion rules)
 - A 2,231-entity decoder (binary search lookup)
 
 All three are auto-generated from proto IR data via the Go `html-codegen` tool. No browser generates its HTML parser from spec data.
@@ -18,7 +18,7 @@ All three are auto-generated from proto IR data via the Go `html-codegen` tool. 
 
 ## Components
 
-### Tokenizer (`html/tokenizer.rs` — 4,551 lines, GENERATED)
+### Tokenizer (`html/tokenizer.rs` — GENERATED)
 
 **Source:** `data/tokenizer.textproto` → `cmd/html-codegen` → `tokenizer.rs`
 
@@ -26,10 +26,9 @@ All three are auto-generated from proto IR data via the Go `html-codegen` tool. 
 
 | Metric | Value |
 |--------|-------|
-| States | 83 |
+| States | 87 (proto enum) |
 | Character classes | 24 |
 | Transitions | ~1,600 |
-| Lines of code | 4,551 |
 
 **Public API:**
 - `Tokenizer::new(input: &str) -> Self`
@@ -51,7 +50,7 @@ All three are auto-generated from proto IR data via the Go `html-codegen` tool. 
 - Numeric character reference parsing (decimal + hex)
 - Parse error tracking
 
-### Tree Builder (`html/tree_builder.rs` — 2,264 lines, GENERATED)
+### Tree Builder (`html/tree_builder.rs` — GENERATED)
 
 **Source:** `data/tree_builder.textproto` → `cmd/html-codegen` → `tree_builder.rs`
 
@@ -59,9 +58,8 @@ All three are auto-generated from proto IR data via the Go `html-codegen` tool. 
 
 | Metric | Value |
 |--------|-------|
-| Insertion modes | 24 |
+| Insertion modes | 24 (proto enum) |
 | Rules | ~3,000 mode × token combinations |
-| Lines of code | 2,264 |
 
 **Public API:**
 - `TreeBuilder::new() -> Self`

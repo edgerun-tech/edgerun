@@ -1,5 +1,4 @@
 //! SIMD alpha blending — auto-generated from CSS compositing spec.
-//! DO NOT EDIT. Regenerate with: scripts/generate_rasterizer.py
 #![cfg(target_arch = "x86_64")]
 
 use core::arch::x86_64::*;

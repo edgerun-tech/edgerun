@@ -124,7 +124,7 @@ Simple CSS parsing for the render pipeline. Not a full cascade — handles basic
 - Pseudo-elements (`::before`, `::after`)
 - `@media`, `@import`, `@keyframes`
 
-### Properties Resolved (~12 of 255)
+### Properties Resolved (~12 of 175)
 | Property | Resolution |
 |----------|-----------|
 | `display` | → `FormattingContext` enum |
@@ -150,7 +150,7 @@ Simple CSS parsing for the render pipeline. Not a full cascade — handles basic
 ## edgerun-property-graph (CSS Knowledge Graph)
 
 **Status:** ✅ Functional
-**Tests:** Part of edgerun-render budget tests
+**Tests:** 16 passing (standalone crate)
 
 ### Purpose
 

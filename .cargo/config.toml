@@ -26,8 +26,9 @@ linker = "ld.lld"
 rustflags = ["-C", "link-arg=-landroid", "-C", "link-arg=-llog"]
 
 [build]
-# Default to host target — override with --target for Android builds
+# Static musl builds — catches libc ABI incompatibilities at compile time
+target = "x86_64-unknown-linux-musl"
 
-# Android NDK toolchain configuration
+# Android cross-compilation — override with --target
 # Set ANDROID_NDK_ROOT to your NDK installation path
 # Example: export ANDROID_NDK_ROOT=$HOME/Android/Sdk/ndk/27.0.12077973
