@@ -442,8 +442,8 @@ fn encode_tsig_name(name: &str) -> Vec<u8> {
     buf
 }
 
-/// Decode base64.
-fn decode_base64(s: &str) -> Option<Vec<u8>> {
+/// Decode base64 (standard, with padding).
+pub(crate) fn decode_base64(s: &str) -> Option<Vec<u8>> {
     use edgerun_crypto::der::Decode;
     // Simple base64 decode using base64 from deps
     // Fallback: manual decode

@@ -54,6 +54,7 @@ pub mod resolver;
 pub mod tsig;
 pub mod axfr;
 pub mod dot;
+pub mod doh;
 
 pub use cache::DnsCache;
 pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
@@ -61,6 +62,7 @@ pub use server::RateLimiter;
 pub use tsig::{TsigKey, TsigSigner, TsigVerifier, TsigAlgorithm, TsigError};
 pub use axfr::{handle_axfr, handle_notify, handle_update};
 pub use dot::{DotServer, DotServerConfig};
+pub use doh::{DohServer, DohServerConfig};
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
