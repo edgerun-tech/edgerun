@@ -113,3 +113,20 @@ pub fn timeline_signal(fd: RawFd, syncobj_handle: u32, point: u64) -> io::Result
         Ok(())
     }
 }
+
+/// Import a DRM syncobj from a file descriptor (O_RDWR).
+/// Returns the DRM syncobj handle.
+pub fn syncobj_import(fd: RawFd, syncobj_fd: RawFd) -> io::Result<u32> {
+    let mut import = DrmSyncobjFdToHandle {
+        fd: syncobj_fd,
+        handle: 0,
+    };
+    let ret = unsafe {
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE, &mut import)
+    };
+    if ret < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(import.handle)
+    }
+}

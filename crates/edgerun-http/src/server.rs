@@ -105,7 +105,7 @@ impl HttpServer {
         self,
         addr: impl std::net::ToSocketAddrs,
     ) -> std::io::Result<BoundHttpServer> {
-        use edgerun_rt::net::AsyncTcpListener;
+        use edgerun_rt::AsyncTcpListener;
 
         let listener = AsyncTcpListener::bind(addr)?;
         let local_addr = listener.local_addr()?;
@@ -136,7 +136,7 @@ impl HttpServer {
 
 /// A bound HTTP server ready to accept connections.
 pub struct BoundHttpServer {
-    listener: edgerun_rt::net::AsyncTcpListener,
+    listener: edgerun_rt::AsyncTcpListener,
     http3_socket: Option<std::net::UdpSocket>,
     handler: Arc<dyn Handler>,
     http1_keep_alive: Option<std::time::Duration>,
@@ -219,7 +219,7 @@ async fn serve_http1_connection<S>(
     max_request_size: usize,
 ) -> std::io::Result<()>
 where
-    S: edgerun_rt::io::AsyncRead + edgerun_rt::io::AsyncWrite + Unpin + Send + 'static,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin + Send + 'static,
 {
     use edgerun_http::http1::BufReader;
     use crate::header::HeaderMap;
@@ -325,7 +325,7 @@ where
 
         if !skip_body && !response.body().is_empty() {
             let inner = reader.get_mut();
-            use edgerun_rt::io::AsyncWriteExt;
+            use edgerun_rt::AsyncWriteExt;
             inner.write_all(response.body()).await?;
         }
     }
@@ -340,9 +340,9 @@ async fn write_http1_response_head<S>(
     is_head: bool,
 ) -> std::io::Result<()>
 where
-    S: edgerun_rt::io::AsyncRead + edgerun_rt::io::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::io::AsyncWriteExt;
+    use edgerun_rt::AsyncWriteExt;
 
     let inner = reader.get_mut();
 
@@ -378,9 +378,9 @@ async fn write_http1_response<S>(
     response: Response,
 ) -> std::io::Result<()>
 where
-    S: edgerun_rt::io::AsyncRead + edgerun_rt::io::AsyncWrite + Unpin,
+    S: edgerun_rt::AsyncRead + edgerun_rt::AsyncWrite + Unpin,
 {
-    use edgerun_rt::io::AsyncWriteExt;
+    use edgerun_rt::AsyncWriteExt;
 
     let inner = reader.get_mut();
 

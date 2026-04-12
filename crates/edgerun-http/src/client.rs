@@ -239,7 +239,7 @@ impl HttpClient {
                 req.to_http_bytes()
             };
 
-            use edgerun_rt::io::AsyncWriteExt;
+            use edgerun_rt::AsyncWriteExt;
             write_half.write_all(&request_bytes).await?;
             write_half.flush().await?;
 
@@ -322,9 +322,9 @@ impl HttpClient {
         &self,
         host: &str,
         port: u16,
-    ) -> Result<edgerun_rt::net::AsyncTcpStream> {
-        use edgerun_rt::net::AsyncTcpStream;
-        use edgerun_rt::time::timeout;
+    ) -> Result<edgerun_rt::AsyncTcpStream> {
+        use edgerun_rt::AsyncTcpStream;
+        use edgerun_rt::timeout;
 
         // Check if host is already an IP address
         if let Ok(addr) = host.parse::<std::net::IpAddr>() {

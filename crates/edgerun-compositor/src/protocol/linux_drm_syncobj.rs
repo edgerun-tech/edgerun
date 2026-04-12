@@ -1,41 +1,54 @@
-//! linux-drm-syncobj-v1 protocol — DRM synchronization objects.
+//! linux-drm-syncobj-v1 protocol — explicit DRM synchronization objects.
 //!
-//! This is a stub implementation. We accept the requests but don't implement
-//! actual fence synchronization. This allows Chromium and other modern clients
-//! to proceed without failing on missing syncobj support.
+//! Allows clients to provide explicit synchronization via DRM syncobj timelines.
+//! The client creates syncobj timelines (via DRM ioctls) and imports them to the
+//! compositor via FD. The compositor waits on acquire points before scanning out
+//! and signals release points when done with buffers.
+//!
+//! Protocol: wp_linux_drm_syncobj_manager_v1 / surface_v1 / timeline_v1
+//! Spec: /usr/share/wayland-protocols/staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml
 
 use crate::wire::ArgType;
 
-pub const LINUX_DRM_SYNCOBJ_V1: &str = "linux_drm_syncobj_v1";
-pub const LINUX_DRM_SYNCOBJ_V1_VERSION: u32 = 1;
+// ─── wp_linux_drm_syncobj_manager_v1 ────────────────────────
 
-/// Surface protocol version.
-pub const SURFACE_V1: &str = "linux_drm_syncobj_surface_v1";
+pub const MANAGER_V1: &str = "wp_linux_drm_syncobj_manager_v1";
+pub const MANAGER_V1_VERSION: u32 = 1;
+
+/// Surface extension protocol version.
+pub const SURFACE_V1: &str = "wp_linux_drm_syncobj_surface_v1";
 pub const SURFACE_V1_VERSION: u32 = 1;
 
 /// Timeline protocol version.
-pub const TIMELINE_V1: &str = "linux_drm_syncobj_timeline_v1";
+pub const TIMELINE_V1: &str = "wp_linux_drm_syncobj_timeline_v1";
 pub const TIMELINE_V1_VERSION: u32 = 1;
 
-// ─── linux_drm_syncobj_v1 ───────────────────────────────────
+/// Protocol errors.
+pub mod error {
+    pub const SURFACE_EXISTS: u32 = 0;
+    pub const INVALID_TIMELINE: u32 = 1;
+}
 
-pub mod syncobj_request {
+// ─── Manager requests ───────────────────────────────────────
+
+pub mod manager_request {
     use super::*;
 
     pub const DESTROY: u16 = 0;
     pub const DESTROY_SIG: &[ArgType] = &[];
 
-    /// get_surface
+    /// get_surface — extend wl_surface for explicit synchronization.
+    /// id: new_id(wp_linux_drm_syncobj_surface_v1), surface: object(wl_surface)
     pub const GET_SURFACE: u16 = 1;
     pub const GET_SURFACE_SIG: &[ArgType] = &[ArgType::NewId, ArgType::Object];
-    // id: new_id, surface: object(wl_surface)
 
-    /// create_timeline
-    pub const CREATE_TIMELINE: u16 = 2;
-    pub const CREATE_TIMELINE_SIG: &[ArgType] = &[ArgType::NewId];
+    /// import_timeline — import a DRM syncobj timeline from client FD.
+    /// id: new_id(wp_linux_drm_syncobj_timeline_v1), fd: fd
+    pub const IMPORT_TIMELINE: u16 = 2;
+    pub const IMPORT_TIMELINE_SIG: &[ArgType] = &[ArgType::NewId, ArgType::Fd];
 }
 
-// ─── linux_drm_syncobj_surface_v1 ───────────────────────────
+// ─── wp_linux_drm_syncobj_surface_v1 requests ───────────────
 
 pub mod surface_request {
     use super::*;
@@ -43,33 +56,33 @@ pub mod surface_request {
     pub const DESTROY: u16 = 0;
     pub const DESTROY_SIG: &[ArgType] = &[];
 
-    /// set_acquire_point
+    /// set_acquire_point — timeline point before compositor may sample buffer.
+    /// timeline: object(wp_linux_drm_syncobj_timeline_v1), point_hi: uint, point_lo: uint
     pub const SET_ACQUIRE_POINT: u16 = 1;
     pub const SET_ACQUIRE_POINT_SIG: &[ArgType] = &[ArgType::Object, ArgType::Uint, ArgType::Uint];
-    // timeline: object, handle_lo: uint, handle_hi: uint
 
-    /// set_release_point
+    /// set_release_point — timeline point compositor signals when done with buffer.
+    /// timeline: object(wp_linux_drm_syncobj_timeline_v1), point_hi: uint, point_lo: uint
     pub const SET_RELEASE_POINT: u16 = 2;
     pub const SET_RELEASE_POINT_SIG: &[ArgType] = &[ArgType::Object, ArgType::Uint, ArgType::Uint];
 }
 
-// ─── linux_drm_syncobj_timeline_v1 ──────────────────────────
+// ─── Surface errors ─────────────────────────────────────────
+
+pub mod surface_error {
+    pub const NO_SURFACE: u32 = 1;
+    pub const UNSUPPORTED_BUFFER: u32 = 2;
+    pub const NO_BUFFER: u32 = 3;
+    pub const NO_ACQUIRE_POINT: u32 = 4;
+    pub const NO_RELEASE_POINT: u32 = 5;
+    pub const CONFLICTING_POINTS: u32 = 6;
+}
+
+// ─── wp_linux_drm_syncobj_timeline_v1 requests ──────────────
 
 pub mod timeline_request {
     use super::*;
 
     pub const DESTROY: u16 = 0;
     pub const DESTROY_SIG: &[ArgType] = &[];
-
-    /// import_sync_file
-    pub const IMPORT_SYNC_FILE: u16 = 1;
-    pub const IMPORT_SYNC_FILE_SIG: &[ArgType] = &[ArgType::Uint, ArgType::Uint, ArgType::String, ArgType::Fd];
-    // handle_lo: uint, handle_hi: uint, name: string, sync_file: fd
-
-    /// export_sync_file
-    pub const EXPORT_SYNC_FILE: u16 = 2;
-    pub const EXPORT_SYNC_FILE_SIG: &[ArgType] = &[ArgType::Uint, ArgType::Uint];
-    // handle_lo: uint, handle_hi: uint
 }
-
-// No events for this protocol — just request handling.

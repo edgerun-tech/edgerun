@@ -10,6 +10,14 @@ use crate::drm::syncobj as drm_syncobj;
 use crate::compositor::surface::ShmBufferInfo;
 use crate::wire::decode::ArgCursor;
 
+/// Send a protocol error to the client and mark them disconnected.
+fn client_error(ctx: &mut DispatchContext, code: u32, msg: &str) {
+    eprintln!("[edgerun-compositor] Protocol error (code={code}): {msg}");
+    if let Some(client) = ctx.server.client_mut(ctx.client_id) {
+        client.disconnected = true;
+    }
+}
+
 /// Per-surface syncobj state — tracks acquire/release fences.
 #[derive(Debug, Default)]
 pub struct SurfaceSyncobjState {
@@ -113,16 +121,22 @@ pub fn handle_dmabuf(ctx: &mut DispatchContext) {
 
 pub fn handle_syncobj(ctx: &mut DispatchContext) {
     match ctx.msg.opcode {
-        linux_drm_syncobj::syncobj_request::DESTROY => {
+        linux_drm_syncobj::manager_request::DESTROY => {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
         }
-        linux_drm_syncobj::syncobj_request::GET_SURFACE => {
+        linux_drm_syncobj::manager_request::GET_SURFACE => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let surface_obj_id = cursor_obj.new_id().unwrap_or(0);
             let wl_surface_id = cursor_obj.object().unwrap_or(0);
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
+                // Check if surface already has a syncobj surface — raise SURFACE_EXISTS
+                if ctx.shell.syncobj_surface_map.values().any(|&s| s == wl_surface_id) {
+                    client_error(ctx, linux_drm_syncobj::error::SURFACE_EXISTS,
+                        "surface already has a syncobj surface");
+                    return;
+                }
                 reg.register(surface_obj_id, linux_drm_syncobj::SURFACE_V1, 1, ctx.client_id);
             }
             // Initialize surface syncobj state
@@ -130,14 +144,20 @@ pub fn handle_syncobj(ctx: &mut DispatchContext) {
             // Store mapping from syncobj_surface object to wl_surface
             ctx.shell.syncobj_surface_map.insert(surface_obj_id, wl_surface_id);
         }
-        linux_drm_syncobj::syncobj_request::CREATE_TIMELINE => {
+        linux_drm_syncobj::manager_request::IMPORT_TIMELINE => {
             let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
             let timeline_id = cursor_obj.new_id().unwrap_or(0);
+            let syncobj_fd = if !ctx.msg.fds.is_empty() { ctx.msg.fds[0] } else { -1 };
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.register(timeline_id, linux_drm_syncobj::TIMELINE_V1, 1, ctx.client_id);
             }
-            // Create a real DRM syncobj
-            match drm_syncobj::syncobj_create(ctx.drm_fd, 0) {
+            if syncobj_fd < 0 {
+                client_error(ctx, linux_drm_syncobj::error::INVALID_TIMELINE,
+                    "import_timeline: no FD provided");
+                return;
+            }
+            // Import the DRM syncobj FD into a kernel handle
+            match drm_syncobj::syncobj_import(ctx.drm_fd, syncobj_fd) {
                 Ok(handle) => {
                     ctx.shell.syncobj_state.timelines.insert(timeline_id, SyncobjTimeline {
                         handle,
@@ -145,7 +165,9 @@ pub fn handle_syncobj(ctx: &mut DispatchContext) {
                     });
                 }
                 Err(e) => {
-                    eprintln!("[edgerun-compositor] Failed to create DRM syncobj: {}", e);
+                    eprintln!("[edgerun-compositor] Failed to import syncobj timeline: {}", e);
+                    client_error(ctx, linux_drm_syncobj::error::INVALID_TIMELINE,
+                        "failed to import syncobj FD");
                 }
             }
         }
@@ -198,30 +220,10 @@ pub fn handle_syncobj_timeline(ctx: &mut DispatchContext) {
             if let Some(reg) = ctx.client_registries.get_mut(&ctx.client_id) {
                 reg.destroy(ctx.msg.sender_id);
             }
-            // Destroy the DRM syncobj
+            // Destroy the DRM syncobj handle (FD was consumed during import)
             if let Some(timeline) = ctx.shell.syncobj_state.timelines.remove(&ctx.msg.sender_id) {
                 let _ = drm_syncobj::syncobj_destroy(ctx.drm_fd, timeline.handle);
             }
-        }
-        linux_drm_syncobj::timeline_request::IMPORT_SYNC_FILE => {
-            let mut cursor_obj = ArgCursor::from_message(&ctx.msg);
-            let _point = cursor_obj.uint().unwrap_or(0) as u64;
-            // FD is passed via SCM_RIGHTS
-            let sync_file_fd = if !ctx.msg.fds.is_empty() { ctx.msg.fds[0] } else { -1 };
-            if let Some(timeline) = ctx.shell.syncobj_state.timelines.get(&ctx.msg.sender_id) {
-                if sync_file_fd >= 0 {
-                    if let Err(e) = drm_syncobj::import_sync_file(ctx.drm_fd, timeline.handle, sync_file_fd) {
-                        eprintln!("[edgerun-compositor] Failed to import sync_file: {}", e);
-                    }
-                    // The sync_file FD is consumed by the kernel — don't close it
-                }
-            }
-        }
-        linux_drm_syncobj::timeline_request::EXPORT_SYNC_FILE => {
-            let _ = &ctx.msg;
-            // Client expects a sync_file FD to be returned.
-            // In a full implementation we'd send it via SCM_RIGHTS.
-            // For now, the client can signal via IMPORT and we handle the rest.
         }
         _ => {}
     }
