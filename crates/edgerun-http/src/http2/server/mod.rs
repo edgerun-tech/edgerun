@@ -66,6 +66,12 @@ use super::settings::Settings;
 use crate::http2::stream::StreamManager;
 use super::ErrorCode;
 
+/// A sync callback invoked when complete request headers arrive on a stream.
+/// Takes the decoded request headers and returns frames to write back.
+/// The handler is responsible for HPACK-encoding response headers via the
+/// provided encoder and may include DATA frames for the response body.
+pub type ResponseBuilder = Box<dyn FnMut(u32, &mut Vec<(Vec<u8>, Vec<u8>)>) -> FrameAction>;
+
 /// The action the server should take after processing an incoming frame.
 #[derive(Debug)]
 pub enum FrameAction {

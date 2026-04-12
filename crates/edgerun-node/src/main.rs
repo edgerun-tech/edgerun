@@ -20,6 +20,7 @@ use edgerun_log;
 mod capabilities;
 mod capacity;
 mod command_dispatch;
+mod assurance;
 mod ingress;
 mod metering;
 mod session;

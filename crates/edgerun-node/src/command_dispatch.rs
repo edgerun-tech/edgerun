@@ -445,10 +445,19 @@ fn dispatch_execute_workload(
     use edgerun_core::accounting::{WorkloadClass, WorkPriority, WorkStatus};
     use std::sync::Arc;
 
+    // === EMIT ACTION_STARTED BEFORE ANY WORK BEGINS ===
+    record_action_event(store, stream_id, signer, command,
+        1, // ACTION_STATUS_STARTED
+        EventType::ActionStarted);
+
     // Extract workload spec from command payload
     let workload_spec = match &command.payload {
         Some(edgerun_proto::edgerun::v0::stream::command_envelope::Payload::InlinePayload(bytes)) => bytes.clone(),
         _ => {
+            // Already emitted ActionStarted; emit ActionFailed before returning
+            record_action_event(store, stream_id, signer, command,
+                3, // ACTION_STATUS_FAILED
+                EventType::ActionFailed);
             return record_and_respond(command, store, stream_id, signer, controllers,
                 false, "missing_workload_spec", Vec::new(), None);
         }
@@ -461,6 +470,9 @@ fn dispatch_execute_workload(
     // === WORKLOAD POLICY CHECK: reject disallowed images ===
     if let Err(reason) = workload_policy.validate(&image_str) {
         edgerun_log::warn!("workload policy rejected: {} — {}", image_str, reason);
+        record_action_event(store, stream_id, signer, command,
+            3, // ACTION_STATUS_FAILED
+            EventType::ActionFailed);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, &format!("policy_violation: {}", reason), Vec::new(), None);
     }
@@ -468,6 +480,9 @@ fn dispatch_execute_workload(
     let image_ref: edgerun_oci_registry::ImageRef = match image_str.parse() {
         Ok(img) => img,
         Err(e) => {
+            record_action_event(store, stream_id, signer, command,
+                3, // ACTION_STATUS_FAILED
+                EventType::ActionFailed);
             return record_and_respond(command, store, stream_id, signer, controllers,
                 false, &format!("invalid_image_ref: {}", e), Vec::new(), None);
         }
@@ -477,6 +492,9 @@ fn dispatch_execute_workload(
     let requester_id = command.issuer.as_ref().map(|i| i.identity_id.clone()).unwrap_or_default();
     if !rate_limiter.check_and_record(&requester_id) {
         edgerun_log::warn!("rate limit exceeded for requester: {}", edgerun_core::util::bytes_to_hex(&requester_id));
+        record_action_event(store, stream_id, signer, command,
+            3, // ACTION_STATUS_FAILED
+            EventType::ActionFailed);
         return record_and_respond(command, store, stream_id, signer, controllers,
             false, "rate_limit_exceeded", Vec::new(), None);
     }
@@ -1529,6 +1547,7 @@ fn extract_identity_from_command(command: &CommandEnvelope) -> Vec<u8> {
 /// Records a command result event and returns the response.
 /// Emits the full action lifecycle: ActionStarted → CommandCommitted/Rejected → ActionCompleted/Failed.
 /// If `controller_change` is Some, records the controller change in the database.
+/// If the command has `requested_assurance` and is committed, generates an AssuranceClaim.
 fn record_and_respond(
     command: &CommandEnvelope,
     store: &mut NodeStore,
@@ -1595,6 +1614,17 @@ fn record_and_respond(
         record_action_event(store, stream_id, signer, command,
             2, // ACTION_STATUS_COMPLETED
             EventType::ActionCompleted);
+
+        // Generate assurance claim if the command requested one
+        if let Some(ref req) = command.requested_assurance {
+            if req.required_class > 0 {
+                if let Some(claim_ref) = super::assurance::generate_and_record_assurance_claim(
+                    store, stream_id, signer, command, req.required_class,
+                ) {
+                    edgerun_log::info!("assurance claim generated for committed command");
+                }
+            }
+        }
     } else {
         record_action_event(store, stream_id, signer, command,
             3, // ACTION_STATUS_FAILED

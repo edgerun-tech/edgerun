@@ -268,7 +268,7 @@ fn test_encrypted_extensions_roundtrip() {
     let server_keys_out = server_write_keys(&server_hs, cipher_suite.key_len(), 12, &hash);
     let mut write_cipher = RecordCipher::new(&server_keys_out.write_key, &server_keys_out.write_iv).unwrap();
 
-    let ee_bytes = build_encrypted_extensions();
+    let ee_bytes = build_encrypted_extensions(None);
     let encrypted = write_cipher.encrypt(22, &ee_bytes);
 
     // Decrypt with same keys
@@ -367,7 +367,7 @@ fn test_handshake_message_sequence() {
     );
 
     // 3. EncryptedExtensions
-    let ee_msg = build_encrypted_extensions();
+    let ee_msg = build_encrypted_extensions(None);
 
     // 4. Certificate
     let transcript_so_far = {

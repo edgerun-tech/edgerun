@@ -368,11 +368,49 @@ pub fn submit_signal(fd: RawFd, hwctx: u32, args_ptr: u64, arg_count: u32) -> Re
 }
 
 /// Wait for a command to complete using syncobj.
-fn wait_cmd(_fd: RawFd, _syncobj_handle: u32, timeout_ms: u32) -> Result<(), CapabilityError> {
-    // For now, use a simple sleep-based wait
-    // Real impl would use syncobj wait ioctl (DRM_IOCTL_SYNCOBJ_WAIT)
-    std::thread::sleep(std::time::Duration::from_millis(timeout_ms as u64));
-    Ok(())
+fn wait_cmd(fd: RawFd, syncobj_handle: u32, timeout_ms: u32) -> Result<(), CapabilityError> {
+    use std::os::raw::c_int;
+
+    // DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT — same as compositor's definition
+    const DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT: c_int = 0x40286457u32 as c_int;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct DrmSyncobjTimelineWait {
+        handles_ptr: *mut u32,
+        timelines_ptr: *mut u64,
+        timeout_nsec: u64,
+        flags: u32,
+        count_handles: u32,
+        pad: [u8; 8],
+    }
+
+    let point: u64 = 1; // Signal point 1 (command completion)
+    let timeout_nsec: u64 = (timeout_ms as u64) * 1_000_000;
+
+    let mut wait = DrmSyncobjTimelineWait {
+        handles_ptr: &syncobj_handle as *const u32 as *mut u32,
+        timelines_ptr: &point as *const u64 as *mut u64,
+        timeout_nsec,
+        flags: 0, // 0 = wait all, blocking
+        count_handles: 1,
+        pad: [0; 8],
+    };
+
+    let ret = unsafe {
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &mut wait)
+    };
+
+    if ret < 0 {
+        let err = std::io::Error::last_os_error();
+        if err.kind() == std::io::ErrorKind::TimedOut {
+            Err(CapabilityError::Provider(format!("syncobj wait timed out after {}ms", timeout_ms)))
+        } else {
+            Err(CapabilityError::Provider(format!("syncobj wait failed: {err}")))
+        }
+    } else {
+        Ok(())
+    }
 }
 
 // ===========================================================================

@@ -248,9 +248,58 @@ pub fn pem_decode(label: &str, pem_str: &str) -> Result<Vec<u8>, String> {
 ///
 /// Returns the PEM string including `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----`.
 pub fn p256_signing_key_to_pem(key: &p256::ecdsa::SigningKey) -> String {
-    use ecdsa::elliptic_curve::pkcs8::EncodePrivateKey;
-    let der = key.to_pkcs8_der().expect("P-256 key to PKCS#8 DER");
-    pem_encode("PRIVATE KEY", der.as_bytes())
+    // Construct PKCS#8 DER wrapper for a P-256 EC key.
+    // The PKCS#8 structure is:
+    //   version (INTEGER 0)
+    //   algorithm (SEQUENCE: id-ecPublicKey OID + namedCurve P-256 OID)
+    //   private_key (OCTET STRING containing RFC 5915 ECPrivateKey)
+    //
+    // id-ecPublicKey = 1.2.840.10045.2.1  →  06 07 2a 86 48 ce 3d 02 01
+    // prime256v1     = 1.2.840.10045.3.1.7 →  06 08 2a 86 48 ce 3d 03 01 07
+    //
+    // RFC 5915 ECPrivateKey:
+    //   version (INTEGER 1)
+    //   privateKey (OCTET STRING 32 bytes)
+    //   parameters [0] EXPLICIT OID prime256v1
+    //   publicKey  [1] EXPLICIT BIT STRING (uncompressed point, 65 bytes)
+
+    let scalar_bytes = key.to_bytes();
+    let verifying_point = key.verifying_key().to_encoded_point(false); // uncompressed
+    let public_key_bytes = verifying_point.as_bytes(); // 65 bytes (0x04 + 32 + 32)
+
+    // Build ECPrivateKey (RFC 5915)
+    let mut ec_private = Vec::with_capacity(2 + 34 + 13 + 69);
+    ec_private.push(0x02); ec_private.push(0x01); ec_private.push(0x01); // version = 1
+    ec_private.push(0x04); ec_private.push(0x20); // OCTET STRING, len 32
+    ec_private.extend_from_slice(&scalar_bytes);
+    // [0] EXPLICIT OID prime256v1
+    ec_private.push(0xa0); ec_private.push(0x0a);
+    ec_private.push(0x06); ec_private.push(0x08);
+    ec_private.extend_from_slice(&[0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07]);
+    // [1] EXPLICIT BIT STRING (uncompressed point)
+    ec_private.push(0xa1);
+    ec_private.push(0x44); // 68 = 0x44 (65 bytes + 1 unused bits byte)
+    ec_private.push(0x03); // BIT STRING
+    ec_private.push(0x42); // len 66 (65 bytes data + 1 byte unused bits = 0)
+    ec_private.push(0x00); // 0 unused bits
+    ec_private.extend_from_slice(public_key_bytes);
+
+    // Build AlgorithmIdentifier
+    let alg_id: &[u8] = &[
+        0x30, 0x13, // SEQUENCE, len 19
+        0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, // id-ecPublicKey
+        0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07, // prime256v1
+    ];
+
+    // Build PrivateKeyInfo
+    let mut pkcs8 = Vec::with_capacity(4 + alg_id.len() + ec_private.len() + 2);
+    pkcs8.push(0x02); pkcs8.push(0x01); pkcs8.push(0x00); // version = 0
+    pkcs8.extend_from_slice(alg_id);
+    pkcs8.push(0x04); // OCTET STRING wrapping ECPrivateKey
+    pkcs8.push(ec_private.len() as u8);
+    pkcs8.extend_from_slice(&ec_private);
+
+    pem_encode("PRIVATE KEY", &pkcs8)
 }
 
 /// Parse a P-256 ECDSA signing key from PEM-encoded PKCS#8.
@@ -307,6 +356,41 @@ pub fn load_cert_and_key_from_pem(
     let key = p256_signing_key_from_der(&key_der_bytes)?;
 
     Ok((cert, key))
+}
+
+/// Generate a self-signed certificate and key pair.
+///
+/// Uses ECDSA P-256 with a 1-year validity period.
+/// Returns `(cert_der, signing_key)`.
+pub fn generate_self_signed(hostnames: &[&str]) -> (Vec<u8>, p256::ecdsa::SigningKey) {
+    if hostnames.is_empty() {
+        panic!("generate_self_signed: at least one hostname required");
+    }
+
+    use rcgen::{generate_simple_self_signed, CertifiedKey, KeyPair};
+
+    let subject_alt_names: Vec<String> = hostnames.iter().map(|h| h.to_string()).collect();
+    let CertifiedKey { cert, signing_key: key_pair } =
+        generate_simple_self_signed(subject_alt_names)
+            .expect("rcgen: failed to generate self-signed certificate");
+
+    let cert_der = cert.der().to_vec();
+    let pkcs8_der = key_pair.serialize_der();
+    let signing_key = p256_signing_key_from_der(&pkcs8_der)
+        .expect("rcgen ECDSA P-256 key should be valid PKCS#8");
+
+    (cert_der, signing_key)
+}
+
+/// Generate a self-signed certificate and key pair, returned as PEM.
+///
+/// Uses ECDSA P-256 with a 1-year validity period.
+/// Returns `(cert_pem, key_pem)`.
+pub fn generate_self_signed_pem(hostnames: &[&str]) -> (String, String) {
+    let (cert_der, key) = generate_self_signed(hostnames);
+    let cert_pem = pem_encode("CERTIFICATE", &cert_der);
+    let key_pem = p256_signing_key_to_pem(&key);
+    (cert_pem, key_pem)
 }
 
 // ---------------------------------------------------------------------------

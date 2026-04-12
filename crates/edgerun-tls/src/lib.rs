@@ -56,7 +56,14 @@ use crate::prf::{Hasher, Tls13KeySchedule, client_write_keys, server_write_keys,
 use crate::record::{RecordCipher, TlsRecord};
 
 pub use alert::{Alert, AlertLevel};
-pub use certificate_gen::{CertificateAndKey, generate_self_signed};
+pub use certificate_gen::{
+    CertificateAndKey,
+    generate_self_signed,
+    generate_self_signed_pem,
+    cert_from_pem,
+    signing_key_from_pem,
+    signing_key_to_pem,
+};
 pub use server::{TlsServerStream, ClientHello};
 
 /// TLS error types

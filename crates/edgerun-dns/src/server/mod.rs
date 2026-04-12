@@ -60,7 +60,7 @@ impl RateLimiter {
     }
 
     /// Check if a query from `addr` is allowed.
-    fn allow(&self, addr: std::net::IpAddr) -> bool {
+    pub fn allow(&self, addr: std::net::IpAddr) -> bool {
         if self.max_qps == 0 { return true; }
         let mut guard = self.state.lock().unwrap();
         let now = std::time::Instant::now();

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_storage::NodeStore;
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 
 use crate::capacity;
 use crate::command_dispatch;
@@ -154,7 +155,15 @@ pub fn run_store_task(
                 );
                 let _ = reply_tx.send(StoreResponse::Ok(result.response_bytes));
             }
-            StoreRequest::Query { query, reply_tx, .. } => {
+            StoreRequest::Query { query, raw_bytes, reply_tx, peer_id } => {
+                // Verify query signature if present
+                if let Some(ref sig) = query.signature {
+                    if let Err(reason) = verify_query_signature(&query, sig) {
+                        edgerun_log::warn!("query signature verification failed: {}", reason);
+                        let _ = reply_tx.send(StoreResponse::Rejected(ingress::IngressResult::RateLimited));
+                        continue;
+                    }
+                }
                 let result = execute_query(&query, &mut store, stream_id, &responder_node_id, &*signer);
                 let _ = reply_tx.send(StoreResponse::Ok(result));
             }
@@ -250,4 +259,59 @@ pub fn run_store_task(
 /// The node's own identity is always the initial controller.
 fn config_controllers_from_signer(signer: &dyn MeshSigner) -> Vec<Vec<u8>> {
     vec![signer.node_id().0.to_vec()]
+}
+
+/// Verifies the ECDSA P-256 signature on a QueryRequest.
+/// Returns `Ok(())` if the signature is valid, or `Err(reason)` if not.
+fn verify_query_signature(
+    query: &edgerun_proto::edgerun::v0::access::QueryRequest,
+    sig: &edgerun_proto::edgerun::v0::common::Signature,
+) -> Result<(), &'static str> {
+    if sig.algorithm != 1 {
+        return Err("bad_algorithm");
+    }
+    if sig.value.len() != 64 {
+        return Err("bad_signature_length");
+    }
+    let Some(requester) = &query.requester else {
+        return Err("no_requester");
+    };
+    let Some(key_hint) = &requester.key_hint else {
+        return Err("no_key_hint");
+    };
+    if key_hint.len() != 64 {
+        return Err("bad_key_hint");
+    }
+
+    // Reconstruct the public key from key_hint
+    let mut vk_sec1 = [0u8; 65];
+    vk_sec1[0] = 0x04;
+    vk_sec1[1..].copy_from_slice(key_hint);
+    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+        Ok(v) => v,
+        Err(_) => return Err("bad_public_key"),
+    };
+
+    // Canonical signable: clone query, clear signature, encode
+    let mut signable = query.clone();
+    signable.signature = None;
+    let mut canonical = Vec::new();
+    prost::Message::encode(&signable, &mut canonical).map_err(|_| "encode_failed")?;
+    let digest = edgerun_core::crypto::sha256(&canonical);
+
+    // Verify the ECDSA signature
+    let mut sig_bytes = [0u8; 64];
+    sig_bytes.copy_from_slice(&sig.value);
+    let r = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[..32]);
+    let s = edgerun_crypto::p256::FieldBytes::from_slice(&sig_bytes[32..]);
+    let ecdsa_sig = match edgerun_crypto::p256::ecdsa::Signature::from_scalars(*r, *s) {
+        Ok(sig) => sig,
+        Err(_) => return Err("invalid_signature"),
+    };
+
+    if vk.verify_prehash(digest.as_slice(), &ecdsa_sig).is_err() {
+        return Err("invalid_signature");
+    }
+
+    Ok(())
 }
