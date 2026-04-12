@@ -6,7 +6,9 @@
 //! embedded in the frame header.
 
 pub mod benchmark;
+pub mod discovery;
 pub mod router;
+pub mod router_tests;
 pub mod router_benchmark;
 
 mod frame_types;
@@ -29,4 +31,5 @@ mod tests;
 // code that previously depended on the `edgerun-mesh-router` crate.
 // ---------------------------------------------------------------------------
 
-pub use router::{DiscoveryPacket, MeshRouter};
+pub use discovery::DiscoveryPacket;
+pub use router::MeshRouter;
