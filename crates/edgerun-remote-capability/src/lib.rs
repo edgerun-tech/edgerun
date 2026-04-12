@@ -11,7 +11,6 @@ pub mod protocol;
 pub mod transport;
 pub mod policy;
 pub mod adapters;
-pub mod adapters_new;
 pub mod capability_signature;
 
 // Re-export the core public API.
