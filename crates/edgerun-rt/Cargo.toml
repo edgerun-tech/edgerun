@@ -36,3 +36,7 @@ harness = false
 [[test]]
 name = "mpsc_test"
 harness = false
+
+[[test]]
+name = "timers_test"
+harness = false
