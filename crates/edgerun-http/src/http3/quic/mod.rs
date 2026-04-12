@@ -56,6 +56,8 @@ pub struct QuicConnection {
     server_app_traffic_secret: Vec<u8>,
     /// Hash algorithm matching the cipher suite (for HKDF-Expand-Label)
     cipher_suite_hash: edgerun_tls::prf::Hasher,
+    /// Next send offset per stream (for STREAM frame fragmentation)
+    stream_send_offset: std::collections::HashMap<u64, u64>,
     /// Pending migration path challenges (data → deadline)
     pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
 }
@@ -99,6 +101,7 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            stream_send_offset: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -437,6 +440,7 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            stream_send_offset: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -474,6 +478,7 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            stream_send_offset: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -510,6 +515,7 @@ impl QuicConnection {
             client_app_traffic_secret: Vec::new(),
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
+            stream_send_offset: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -525,10 +531,47 @@ impl QuicConnection {
         &self.server_addr
     }
 
-    /// Send data on a stream
+    /// Send data on a stream with automatic fragmentation.
+    ///
+    /// If `data` exceeds the MTU, it is split into multiple STREAM frames
+    /// with proper offsets. Only the final chunk (or the only chunk) sets
+    /// the `fin` bit. Each chunk is sent in a separate QUIC packet.
+    ///
+    /// The stream offset is tracked per stream across calls.
     pub fn send_stream_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
-        let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
-        self.send_frame(frame)
+        if data.is_empty() && !fin {
+            return Ok(());
+        }
+
+        // MTU minus QUIC header (~20 bytes) and STREAM frame overhead (~10 bytes)
+        // gives us a safe max of ~1170 bytes per STREAM frame payload
+        const MAX_STREAM_PAYLOAD: usize = 1170;
+
+        // Get current offset for this stream
+        let mut offset = self.stream_send_offset.get(&stream_id).copied().unwrap_or(0);
+
+        let total_len = data.len();
+        let mut chunks_sent = 0;
+        while chunks_sent * MAX_STREAM_PAYLOAD < total_len {
+            let start = chunks_sent * MAX_STREAM_PAYLOAD;
+            let end = (start + MAX_STREAM_PAYLOAD).min(total_len);
+            let chunk = &data[start..end];
+            let is_last = end == total_len && fin;
+
+            let frame = QuicFrame::Stream {
+                stream_id,
+                offset,
+                fin: is_last,
+                data: chunk.to_vec(),
+            };
+            self.send_frame(frame)?;
+
+            offset += chunk.len() as u64;
+            chunks_sent += 1;
+        }
+
+        self.stream_send_offset.insert(stream_id, offset);
+        Ok(())
     }
 
     /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
@@ -1181,7 +1224,7 @@ mod tests {
 
         // ── Client side: encode a request ──────────────────────────────
         let mut encoder = QpackEncoder::new();
-        let header_block = encoder.encode(&[
+        let (header_block, _) = encoder.encode(&[
             (":method", "GET"),
             (":scheme", "https"),
             (":path", "/"),
@@ -1333,7 +1376,7 @@ mod tests {
         use crate::method::Method;
 
         let mut encoder = QpackEncoder::new();
-        let header_block = encoder.encode(&[
+        let (header_block, _) = encoder.encode(&[
             (":method", "GET"),
             (":scheme", "https"),
             (":path", "/"),
@@ -1386,7 +1429,7 @@ mod tests {
         use crate::http3::qpack::QpackEncoder;
 
         let mut encoder = QpackEncoder::new();
-        let header_block = encoder.encode(&[(":status", "200")]).unwrap();
+        let (header_block, _) = encoder.encode(&[(":status", "200")]).unwrap();
 
         let headers_frame = Http3Frame::Headers { header_block };
         let frame_bytes = headers_frame.to_bytes();

@@ -1722,7 +1722,7 @@ mod tests {
     fn test_qpack_decode_static_response() {
         // Encode :status: 200 via encoder, then decode
         let mut encoder = QpackEncoder::new();
-        let encoded = encoder.encode(&[(":status", "200")]).unwrap();
+        let (encoded, _) = encoder.encode(&[(":status", "200")]).unwrap();
 
         let mut decoder = QpackDecoder::new();
         let (status, _headers) =
@@ -1735,7 +1735,7 @@ mod tests {
     fn test_qpack_decode_static_request() {
         // Encode minimal request headers via encoder, then decode
         let mut encoder = QpackEncoder::new();
-        let encoded = encoder.encode(&[
+        let (encoded, _) = encoder.encode(&[
             (":method", "GET"),
             (":scheme", "https"),
             (":path", "/"),
@@ -1746,5 +1746,137 @@ mod tests {
             Http3Connection::decode_request(&encoded, &mut decoder).unwrap();
 
         assert_eq!(method, Method::GET);
+    }
+
+    #[test]
+    fn test_validate_control_stream_frame_data_rejected() {
+        // DATA frames are NOT allowed on control stream
+        let result = Http3Connection::validate_control_stream_frame(
+            crate::http3::http3::frame::Http3FrameType::Data
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_control_stream_frame_settings_allowed() {
+        // SETTINGS is the first frame on control stream
+        let result = Http3Connection::validate_control_stream_frame(
+            crate::http3::http3::frame::Http3FrameType::Settings
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_control_stream_frame_goaway_allowed() {
+        // GOAWAY is allowed on control stream
+        let result = Http3Connection::validate_control_stream_frame(
+            crate::http3::http3::frame::Http3FrameType::Goaway
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_process_goaway_sets_going_away() {
+        let mut conn = Http3Connection::from_mock(QuicConn::dummy());
+        assert!(conn.going_away.is_none());
+
+        // Process GOAWAY with stream ID 4
+        conn.process_goaway(4);
+
+        assert_eq!(conn.going_away, Some(4));
+    }
+
+    #[test]
+    fn test_can_create_bidi_stream_within_limits() {
+        let conn = Http3Connection::from_mock(QuicConn::dummy());
+        // Default max_bidi_streams is 100, so first streams should be allowed
+        assert!(conn.can_create_bidi_stream());
+    }
+
+    #[test]
+    fn test_goaway_sets_going_away() {
+        let mut conn = Http3Connection::from_mock(QuicConn::dummy());
+        assert!(conn.going_away.is_none());
+
+        // Process GOAWAY with stream ID 4
+        conn.process_goaway(4);
+
+        assert_eq!(conn.going_away, Some(4));
+    }
+
+    #[test]
+    fn test_is_push_stream() {
+        let mut conn = Http3Connection::from_mock(QuicConn::dummy());
+
+        // No push stream tracked yet
+        assert!(!conn.is_push_stream(7));
+
+        // After send_push_promise creates a push stream at ID 7
+        // We can't easily test full flow without QUIC, but we can check the map logic
+        conn.known_uni_stream_types.insert(7, super::super::http3::stream_types::PUSH);
+        assert!(conn.is_push_stream(7));
+
+        // Non-push uni streams
+        conn.known_uni_stream_types.insert(6, super::super::http3::stream_types::CONTROL);
+        assert!(!conn.is_push_stream(6));
+    }
+
+    #[test]
+    fn test_varint_encode_decode_roundtrip() {
+        let values = [0u64, 1, 63, 64, 16383, 16384, 1073741823, 1073741824, u64::MAX / 4];
+        for value in values {
+            let mut encoded = Vec::new();
+            Http3Connection::encode_varint(value, &mut encoded);
+
+            let (decoded, len) = Http3Frame::decode_varint(&encoded).unwrap();
+            assert_eq!(decoded, value);
+            assert_eq!(len, encoded.len());
+        }
+    }
+
+    #[test]
+    fn test_frame_to_bytes_and_back() {
+        // SETTINGS frame roundtrip
+        let original = Http3Frame::Settings {
+            entries: vec![(0x06, 100), (0x07, 128)],
+        };
+        let bytes = original.to_bytes();
+        let (parsed, consumed) = Http3Frame::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+
+        if let Http3Frame::Settings { entries } = parsed {
+            assert_eq!(entries.len(), 2);
+            assert_eq!(entries[0], (0x06, 100));
+            assert_eq!(entries[1], (0x07, 128));
+        } else {
+            panic!("Expected SETTINGS frame");
+        }
+    }
+
+    #[test]
+    fn test_frame_push_promise_roundtrip() {
+        let original = Http3Frame::PushPromise {
+            push_id: 42,
+            header_block: vec![0x00, 0x01, 0x02],
+        };
+        let bytes = original.to_bytes();
+        let (parsed, consumed) = Http3Frame::from_bytes(&bytes).unwrap();
+        assert_eq!(consumed, bytes.len());
+
+        if let Http3Frame::PushPromise { push_id, header_block } = parsed {
+            assert_eq!(push_id, 42);
+            assert_eq!(header_block, vec![0x00, 0x01, 0x02]);
+        } else {
+            panic!("Expected PushPromise frame");
+        }
+    }
+
+    #[test]
+    fn test_is_push_stream_returns_false_for_bidi_streams() {
+        let conn = Http3Connection::from_mock(QuicConn::dummy());
+        // Bidirectional streams are 0, 4, 8... (stream_id % 4 == 0)
+        assert!(!conn.is_push_stream(0));
+        assert!(!conn.is_push_stream(4));
+        // Even without explicit tracking, bidi streams should not be push streams
     }
 }

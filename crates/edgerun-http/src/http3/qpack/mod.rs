@@ -58,7 +58,7 @@ mod tests {
         let mut encoder = QpackEncoder::new();
         let mut decoder = QpackDecoder::new();
 
-        let encoded = encoder
+        let (encoded, _) = encoder
             .encode(&headers)
             .expect("encode failed");
 
@@ -88,7 +88,7 @@ mod tests {
         let mut encoder = QpackEncoder::new();
         let mut decoder = QpackDecoder::new();
 
-        let encoded = encoder
+        let (encoded, _) = encoder
             .encode(&headers)
             .expect("encode failed");
 
