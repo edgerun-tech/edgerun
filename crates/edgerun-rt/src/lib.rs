@@ -27,6 +27,7 @@ mod yield_now;
 mod join;
 mod select;
 mod cancellation;
+mod unix;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
@@ -48,6 +49,9 @@ pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt};
 pub use tcp::{
     AsyncTcpStream, AsyncTcpListener, ConnectFuture, AsyncReadHalf, AsyncWriteHalf,
 };
+
+// Unix domain sockets.
+pub use unix::{UnixStream, UnixListener, UnixReadHalf, UnixWriteHalf};
 
 // UDP.
 pub use udp::AsyncUdpSocket;

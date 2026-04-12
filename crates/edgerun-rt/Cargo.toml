@@ -84,3 +84,7 @@ harness = false
 [[test]]
 name = "cancellation_test"
 harness = false
+
+[[test]]
+name = "unix_test"
+harness = false
