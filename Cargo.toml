@@ -115,6 +115,7 @@ members = [
   "crates/edgerun-nfc",
   "crates/edgerun-node",
   "crates/edgerun-npu",
+  "crates/edgerun-oauth",
   "crates/edgerun-oci-registry",
   "crates/edgerun-oci-runtime",
   "crates/edgerun-pci",

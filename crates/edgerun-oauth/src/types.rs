@@ -1,0 +1,410 @@
+//! OAuth 2.0 / OIDC type definitions.
+
+use edgerun_json::{JsonValue, from_str, to_string};
+
+// ---------------------------------------------------------------------------
+// Scope
+// ---------------------------------------------------------------------------
+
+/// An OAuth 2.0 / OIDC scope string.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Scope(pub String);
+
+impl Scope {
+    pub fn openid() -> Self { Scope("openid".into()) }
+    pub fn email() -> Self { Scope("email".into()) }
+    pub fn profile() -> Self { Scope("profile".into()) }
+    pub fn offline_access() -> Self { Scope("offline_access".into()) }
+
+    /// Parse a space-separated scope string into a list of scopes.
+    pub fn parse_list(s: &str) -> Vec<Self> {
+        s.split_whitespace().map(|s| Scope(s.to_string())).collect()
+    }
+
+    /// Format scopes as a space-separated string (for use in URL params).
+    pub fn format_list(scopes: &[Self]) -> String {
+        scopes.iter().map(|s| s.0.as_str()).collect::<Vec<_>>().join(" ")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Grant types
+// ---------------------------------------------------------------------------
+
+/// OAuth 2.0 grant type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GrantType {
+    /// Device Authorization Grant (RFC 8628)
+    DeviceCode,
+    /// Authorization Code Flow with PKCE
+    AuthorizationCode { code: String, redirect_uri: String },
+    /// Refresh Token
+    RefreshToken { refresh_token: String },
+    /// Client Credentials
+    ClientCredentials,
+}
+
+impl GrantType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GrantType::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code",
+            GrantType::AuthorizationCode { .. } => "authorization_code",
+            GrantType::RefreshToken { .. } => "refresh_token",
+            GrantType::ClientCredentials => "client_credentials",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Client configuration
+// ---------------------------------------------------------------------------
+
+/// OAuth 2.0 client configuration for the device flow.
+#[derive(Debug, Clone)]
+pub struct ClientConfig {
+    /// Base URL of the OAuth provider (e.g., `https://auth.example.com`).
+    pub base_url: String,
+    /// OAuth 2.0 client ID.
+    pub client_id: String,
+    /// Optional client secret (not needed for public clients with PKCE).
+    pub client_secret: Option<String>,
+    /// Requested scopes.
+    pub scopes: Vec<Scope>,
+    /// Device authorization endpoint path (default: `/oauth2/device/code`).
+    pub device_code_path: String,
+    /// Token endpoint path (default: `/oauth2/token`).
+    pub token_path: String,
+    /// Authz code endpoint path (default: `/oauth2/authorize`).
+    pub authorize_path: String,
+    /// Timeout in seconds for device flow polling (default: 300).
+    pub device_flow_timeout_secs: u64,
+}
+
+impl ClientConfig {
+    /// Create a device-flow config with sensible defaults.
+    pub fn device_flow(base_url: &str, client_id: &str) -> Self {
+        Self {
+            base_url: base_url.rstrip('/').to_string(),
+            client_id: client_id.to_string(),
+            client_secret: None,
+            scopes: vec![Scope::openid(), Scope::profile(), Scope::email()],
+            device_code_path: "/oauth2/device/code".into(),
+            token_path: "/oauth2/token".into(),
+            authorize_path: "/oauth2/authorize".into(),
+            device_flow_timeout_secs: 300,
+        }
+    }
+
+    /// Create an authorization-code-flow config with sensible defaults.
+    pub fn authorization_code(base_url: &str, client_id: &str, redirect_uri: &str) -> Self {
+        Self {
+            base_url: base_url.rstrip('/').to_string(),
+            client_id: client_id.to_string(),
+            client_secret: None,
+            scopes: vec![Scope::openid(), Scope::profile(), Scope::email()],
+            device_code_path: "/oauth2/device/code".into(),
+            token_path: "/oauth2/token".into(),
+            authorize_path: "/oauth2/authorize".into(),
+            device_flow_timeout_secs: 300,
+        }
+    }
+
+    /// Full URL for the device code endpoint.
+    pub fn device_code_url(&self) -> String {
+        format!("{}{}", self.base_url, self.device_code_path)
+    }
+
+    /// Full URL for the token endpoint.
+    pub fn token_url(&self) -> String {
+        format!("{}{}", self.base_url, self.token_path)
+    }
+
+    /// Full URL for the authorization endpoint.
+    pub fn authorize_url(&self) -> String {
+        format!("{}{}", self.base_url, self.authorize_path)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Credentials
+// ---------------------------------------------------------------------------
+
+/// OAuth 2.0 / OIDC credentials returned from the token endpoint.
+#[derive(Debug, Clone)]
+pub struct Credentials {
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
+    pub id_token: Option<String>,
+    pub token_type: Option<String>,
+    /// Unix timestamp (seconds since epoch) when the access token expires.
+    pub expiry_date: Option<u64>,
+    /// Optional scope string returned by the server.
+    pub scope: Option<String>,
+}
+
+impl Credentials {
+    /// Check if the access token is present and not expired.
+    pub fn is_valid(&self) -> bool {
+        self.access_token.is_some() && !self.is_expired(0)
+    }
+
+    /// Check if the access token is expired (with grace period in seconds).
+    pub fn is_expired(&self, grace_secs: u64) -> bool {
+        match self.expiry_date {
+            Some(expiry) => {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                now + grace_secs >= expiry
+            }
+            None => true,
+        }
+    }
+
+    /// Get the bearer token.
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.access_token.as_deref()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Token request / response
+// ---------------------------------------------------------------------------
+
+/// A token request to the OAuth server.
+pub struct TokenRequest {
+    pub grant_type: String,
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    pub device_code: Option<String>,
+    pub code: Option<String>,
+    pub redirect_uri: Option<String>,
+    pub code_verifier: Option<String>,
+    pub refresh_token: Option<String>,
+    pub scope: Option<String>,
+}
+
+impl TokenRequest {
+    /// Encode as `application/x-www-form-urlencoded` body.
+    pub fn to_form_body(&self) -> String {
+        let mut parts = Vec::new();
+        parts.push(url_encode("grant_type", &self.grant_type));
+        parts.push(url_encode("client_id", &self.client_id));
+        if let Some(ref secret) = self.client_secret {
+            parts.push(url_encode("client_secret", secret));
+        }
+        if let Some(ref dc) = self.device_code {
+            parts.push(url_encode("device_code", dc));
+        }
+        if let Some(ref code) = self.code {
+            parts.push(url_encode("code", code));
+        }
+        if let Some(ref uri) = self.redirect_uri {
+            parts.push(url_encode("redirect_uri", uri));
+        }
+        if let Some(ref cv) = self.code_verifier {
+            parts.push(url_encode("code_verifier", cv));
+        }
+        if let Some(ref rt) = self.refresh_token {
+            parts.push(url_encode("refresh_token", rt));
+        }
+        if let Some(ref scope) = self.scope {
+            parts.push(url_encode("scope", scope));
+        }
+        parts.join("&")
+    }
+}
+
+/// A token response from the OAuth server.
+pub struct TokenResponse {
+    pub access_token: Option<String>,
+    pub token_type: Option<String>,
+    pub expires_in: Option<u64>,
+    pub refresh_token: Option<String>,
+    pub id_token: Option<String>,
+    pub scope: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
+}
+
+impl TokenResponse {
+    /// Parse from a JSON string.
+    pub fn from_json(json_str: &str) -> Result<Self, String> {
+        let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        Ok(Self {
+            access_token: value.get("access_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            token_type: value.get("token_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            expires_in: value.get("expires_in").and_then(|v| v.as_u64()),
+            refresh_token: value.get("refresh_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            id_token: value.get("id_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            scope: value.get("scope").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            error: value.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            error_description: value.get("error_description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        })
+    }
+
+    /// Serialize to JSON.
+    pub fn to_json(&self) -> String {
+        let mut obj = Vec::new();
+        if let Some(ref v) = self.access_token {
+            obj.push(("access_token".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(ref v) = self.token_type {
+            obj.push(("token_type".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(v) = self.expires_in {
+            obj.push(("expires_in".into(), JsonValue::Number(v.into())));
+        }
+        if let Some(ref v) = self.refresh_token {
+            obj.push(("refresh_token".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(ref v) = self.id_token {
+            obj.push(("id_token".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(ref v) = self.scope {
+            obj.push(("scope".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(ref v) = self.error {
+            obj.push(("error".into(), JsonValue::String(v.clone())));
+        }
+        if let Some(ref v) = self.error_description {
+            obj.push(("error_description".into(), JsonValue::String(v.clone())));
+        }
+        let val = JsonValue::Object(edgerun_json::Map::from_iter(obj));
+        to_string(&val).unwrap_or_else(|_| "{}".into())
+    }
+
+    /// Convert to `Credentials`.
+    pub fn into_credentials(self) -> Credentials {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        Credentials {
+            access_token: self.access_token,
+            refresh_token: self.refresh_token,
+            id_token: self.id_token,
+            token_type: self.token_type,
+            expiry_date: self.expires_in.map(|e| now + e),
+            scope: self.scope,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Device flow types
+// ---------------------------------------------------------------------------
+
+/// Device authorization request parameters.
+pub struct DeviceAuthorizationRequest {
+    pub client_id: String,
+    pub scope: String,
+    pub code_challenge: String,
+    pub code_challenge_method: String,
+}
+
+impl DeviceAuthorizationRequest {
+    /// Encode as `application/x-www-form-urlencoded` body.
+    pub fn to_form_body(&self) -> String {
+        let mut parts = Vec::new();
+        parts.push(url_encode("client_id", &self.client_id));
+        parts.push(url_encode("scope", &self.scope));
+        parts.push(url_encode("code_challenge", &self.code_challenge));
+        parts.push(url_encode("code_challenge_method", &self.code_challenge_method));
+        parts.join("&")
+    }
+}
+
+/// Device authorization response from the server.
+pub struct DeviceAuthorizationResponse {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub verification_uri_complete: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
+impl DeviceAuthorizationResponse {
+    /// Parse from JSON string.
+    pub fn from_json(json_str: &str) -> Result<Self, String> {
+        let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        let device_code = value.get("device_code").and_then(|v| v.as_str()).ok_or("Missing 'device_code'")?.to_string();
+        let user_code = value.get("user_code").and_then(|v| v.as_str()).ok_or("Missing 'user_code'")?.to_string();
+        let verification_uri = value.get("verification_uri").and_then(|v| v.as_str()).ok_or("Missing 'verification_uri'")?.to_string();
+        let verification_uri_complete = value.get("verification_uri_complete").and_then(|v| v.as_str()).ok_or("Missing 'verification_uri_complete'")?.to_string();
+        let expires_in = value.get("expires_in").and_then(|v| v.as_u64()).unwrap_or(600);
+        let interval = value.get("interval").and_then(|v| v.as_u64()).unwrap_or(5);
+        Ok(Self {
+            device_code,
+            user_code,
+            verification_uri,
+            verification_uri_complete,
+            expires_in,
+            interval,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auth code flow types
+// ---------------------------------------------------------------------------
+
+/// An authorization code callback.
+pub trait OAuthCallback: Send + Sync {
+    /// Called with the authorization URL the user should visit.
+    fn display_authorization_url(&self, url: &str);
+}
+
+/// An OAuth request (generic).
+pub struct OAuthRequest {
+    pub client_id: String,
+    pub redirect_uri: String,
+    pub scope: String,
+    pub state: String,
+    pub code_challenge: String,
+}
+
+impl OAuthRequest {
+    pub fn to_authorization_url(&self, authorize_endpoint: &str) -> String {
+        let mut parts = Vec::new();
+        parts.push(url_encode("response_type", "code"));
+        parts.push(url_encode("client_id", &self.client_id));
+        parts.push(url_encode("redirect_uri", &self.redirect_uri));
+        parts.push(url_encode("scope", &self.scope));
+        parts.push(url_encode("state", &self.state));
+        parts.push(url_encode("code_challenge", &self.code_challenge));
+        parts.push(url_encode("code_challenge_method", "S256"));
+        format!("{authorize_endpoint}?{}", parts.join("&"))
+    }
+}
+
+/// An OAuth response from the redirect.
+pub struct OAuthResponse {
+    pub code: String,
+    pub state: String,
+}
+
+// ---------------------------------------------------------------------------
+// URL encoding helper
+// ---------------------------------------------------------------------------
+
+fn url_encode(key: &str, value: &str) -> String {
+    format!("{}={}", percent_encode(key), percent_encode(value))
+}
+
+fn percent_encode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 3);
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                result.push(byte as char);
+            }
+            _ => {
+                result.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    result
+}
