@@ -5,12 +5,14 @@
 //! - **DHCP server** — offers, acks, tracks leases, configurable pools
 //! - **Raw UDP sockets** — ports 67 (server) / 68 (client)
 //! - **PXE boot support** — option 66/67/93/94/97 for network boot
+//! - **Multiple scopes/subnets** — serve multiple subnets from one server
 
 pub mod message;
 pub mod client;
 pub mod server;
 pub mod options;
 pub mod lease;
+pub mod scope;
 
 pub use message::{DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, PxeClientArch};
 pub use message::{
@@ -20,3 +22,4 @@ pub use message::{
 pub use client::DhcpClient;
 pub use server::DhcpServer;
 pub use lease::Lease;
+pub use scope::{DhcpScope, DhcpMultiServer};
