@@ -72,3 +72,7 @@ harness = false
 [[test]]
 name = "yield_now_test"
 harness = false
+
+[[test]]
+name = "join_test"
+harness = false

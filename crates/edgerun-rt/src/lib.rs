@@ -24,6 +24,7 @@ mod barrier;
 mod mutex;
 mod sleep_until;
 mod yield_now;
+mod join;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
