@@ -7,7 +7,7 @@ mod manager;
 mod error;
 
 pub use session::MeshSession;
-pub use handshake::{HandshakeInit, HandshakeAccept};
+pub use handshake::{HandshakeInit, HandshakeAccept, EphemeralSecret};
 pub use manager::SessionManager;
 pub use error::SessionError;
 

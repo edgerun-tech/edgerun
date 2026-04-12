@@ -314,7 +314,6 @@ impl<P: RemoteCapabilityProvider> MeshDaemon<P> {
         if fds.is_empty() {
             return Ok(false);
         }
-        }
 
         let mut poll_fds: Vec<pollfd> = fds
             .iter()
