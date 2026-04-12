@@ -308,10 +308,9 @@ impl QuicConnection {
     /// Decrypt an Initial-level packet payload.
     fn decrypt_packet_initial(&mut self, pkt: &QuicPacket) -> Result<Vec<u8>, String> {
         if let Some(ref mut prot) = self.initial_protection {
-            // Need a separate protection instance for reading (different keys)
-            // For now, the handshaker-derived read keys should be used.
-            // This is simplified — in a full impl, we'd have separate read/write protections.
-            prot.unprotect(&[], pkt.header.packet_number, &pkt.payload)
+            // AAD = unprotected packet header (RFC 9001 §5.2)
+            let aad = pkt.header_to_bytes_aad();
+            prot.unprotect(&aad, pkt.header.packet_number, &pkt.payload)
                 .map_err(|e| format!("Initial decrypt failed: {}", e))
         } else {
             Err("No Initial protection keys for decryption".into())
@@ -321,7 +320,9 @@ impl QuicConnection {
     /// Decrypt a Handshake-level packet payload.
     fn decrypt_packet_handshake(&mut self, pkt: &QuicPacket) -> Result<Vec<u8>, String> {
         if let Some(ref mut prot) = self.hs_protection {
-            prot.unprotect(&[], pkt.header.packet_number, &pkt.payload)
+            // AAD = unprotected packet header (RFC 9001 §5.2)
+            let aad = pkt.header_to_bytes_aad();
+            prot.unprotect(&aad, pkt.header.packet_number, &pkt.payload)
                 .map_err(|e| format!("Handshake decrypt failed: {}", e))
         } else {
             Err("No Handshake protection keys for decryption".into())
@@ -632,7 +633,9 @@ impl QuicConnection {
 
                     // Decrypt the packet payload
                     let plaintext = if let Some(ref mut prot) = self.protection {
-                        prot.unprotect(&[], packet.header.packet_number, &packet.payload)
+                        // AAD = unprotected packet header (RFC 9001 §5.2)
+                        let aad = packet.header_to_bytes_aad();
+                        prot.unprotect(&aad, packet.header.packet_number, &packet.payload)
                             .map_err(|e| format!("Packet decryption failed: {}", e))?
                     } else {
                         // No protection — use raw payload (for testing)
@@ -724,9 +727,9 @@ impl QuicConnection {
         let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
-        // Build 0-RTT packet (long header, type 0x10)
+        // Build 0-RTT packet (long header, type 0x1)
         let mut output = Vec::new();
-        output.push(0x0C | 0x10); // Long header, 0-RTT type, fixed bits
+        output.push(0xD0); // Long header (0x80) + fixed bit (0x40) + type 01 (0x10) + reserved (0x00)
         output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
         output.push(self.transport.remote_cid.len() as u8);
         output.extend_from_slice(self.transport.remote_cid.as_bytes());

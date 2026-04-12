@@ -156,52 +156,52 @@ impl QuicPacket {
 
     /// Serialize packet to bytes
     pub fn to_bytes(&self) -> Vec<u8> {
+        let mut output = self.header_to_bytes_aad();
+        // Append payload
+        output.extend_from_slice(&self.payload);
+        output
+    }
+
+    /// Serialize the packet header for use as AEAD AAD (RFC 9001 §5.2).
+    ///
+    /// The AAD is the unprotected packet header — everything before the
+    /// encrypted payload. For long-header packets, this includes the
+    /// packet number (since we don't implement header protection yet).
+    pub fn header_to_bytes_aad(&self) -> Vec<u8> {
         let mut output = Vec::new();
 
         match self.header.packet_type {
             PacketType::Initial | PacketType::ZeroRtt | PacketType::Handshake => {
-                // Long header format
-                let first_byte = self.header.packet_type.to_byte() | 0x0C; // Fixed bits
+                let first_byte = self.header.packet_type.to_byte() | 0x0C;
                 output.push(first_byte);
-
-                // Version
                 output.extend_from_slice(&self.header.version.to_be_bytes());
-
-                // Destination CID length + data
                 output.push(self.header.dst_cid.len() as u8);
                 output.extend_from_slice(&self.header.dst_cid);
-
-                // Source CID length + data
                 output.push(self.header.src_cid.len() as u8);
                 output.extend_from_slice(&self.header.src_cid);
 
-                // Token length + data (Initial only)
                 if self.header.packet_type == PacketType::Initial {
-                    output.extend_from_slice(&(self.header.token.len() as u64).to_be_bytes());
+                    // Token length as varint
+                    self.encode_varint(self.header.token.len() as u64, &mut output);
                     output.extend_from_slice(&self.header.token);
                 }
 
-                // Payload length (variable-length integer)
+                // Payload length as varint
                 self.encode_varint(self.header.payload_length as u64, &mut output);
 
-                // Packet number
-                output.extend_from_slice(&self.header.packet_number.to_be_bytes()[4..]);
+                // Packet number (2 bytes, truncated)
+                let pn_bytes = self.header.packet_number.to_be_bytes();
+                output.extend_from_slice(&pn_bytes[6..]);
             }
             PacketType::OneRtt => {
-                // Short header format
                 let first_byte = 0x40 | (self.header.pn_length as u8 - 1);
                 output.push(first_byte);
-
-                // Destination CID
                 output.extend_from_slice(&self.header.dst_cid);
-
-                // Packet number (truncated)
                 let pn_bytes = self.header.packet_number.to_be_bytes();
                 output.extend_from_slice(&pn_bytes[8 - self.header.pn_length..]);
             }
             PacketType::Retry => {
-                let first_byte = 0xF0 | (self.header.version != 0) as u8;
-                output.push(first_byte);
+                output.push(0xF1);
                 output.extend_from_slice(&self.header.version.to_be_bytes());
                 output.push(self.header.dst_cid.len() as u8);
                 output.extend_from_slice(&self.header.dst_cid);
@@ -210,9 +210,6 @@ impl QuicPacket {
                 output.extend_from_slice(&self.header.token);
             }
         }
-
-        // Payload
-        output.extend_from_slice(&self.payload);
 
         output
     }
