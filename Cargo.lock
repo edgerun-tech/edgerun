@@ -1549,8 +1549,10 @@ dependencies = [
  "flate2",
  "hpack-patched",
  "httlib-huffman",
+ "num-bigint",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]

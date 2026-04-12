@@ -77,6 +77,30 @@ pub struct Http3Connection {
 }
 
 impl Http3Connection {
+    /// Get mutable access to the underlying QUIC connection (for testing).
+    pub(crate) fn quic_mut(&mut self) -> &mut QuicConn {
+        &mut self.quic
+    }
+
+    /// Get mutable access to known_uni_stream_types (for testing).
+    pub(crate) fn known_uni_stream_types_mut(&mut self) -> &mut std::collections::HashMap<u64, u64> {
+        &mut self.known_uni_stream_types
+    }
+
+    /// Get sent GOAWAY ID (for testing).
+    pub(crate) fn sent_goaway_id(&self) -> Option<u64> {
+        if self.sent_goaway_id == u64::MAX {
+            None
+        } else {
+            Some(self.sent_goaway_id)
+        }
+    }
+
+    /// Get received GOAWAY ID (for testing).
+    pub(crate) fn received_goaway_id(&self) -> Option<u64> {
+        self.going_away
+    }
+
     /// Create a new HTTP/3 client connection
     pub fn connect(socket: UdpSocket, server_name: &str) -> Result<Self> {
         let quic = QuicConn::client(socket, server_name)?;

@@ -69,7 +69,6 @@ members = [
   "crates/edgerun-grid",
   "crates/edgerun-url",
   "crates/edgerun-encoding",
-  "crates/edgerun-dns",
   "crates/edgerun-dhcpv6",
   "crates/edgerun-config",
   "crates/edgerun-drm-display",
