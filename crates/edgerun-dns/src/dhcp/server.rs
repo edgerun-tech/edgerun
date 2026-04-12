@@ -189,7 +189,7 @@ impl DhcpServer {
             Some(ip) => ip,
             None => {
                 eprintln!("edgerun-dhcp: pool exhausted, sending NAK");
-                return self.send_nak(msg.xid);
+                return self.send_nak(msg.xid, mac);
             }
         };
 
@@ -245,7 +245,7 @@ impl DhcpServer {
                 }
             }
             eprintln!("edgerun-dhcp: renewal denied for {}", msg.ciaddr);
-            return self.send_nak(msg.xid);
+            return self.send_nak(msg.xid, mac);
         }
 
         // New request — check server_id matches us
@@ -265,7 +265,7 @@ impl DhcpServer {
             Some(ip) => ip,
             None => {
                 eprintln!("edgerun-dhcp: REQUEST missing requested_ip");
-                return self.send_nak(msg.xid);
+                return self.send_nak(msg.xid, mac);
             }
         };
 
@@ -281,10 +281,10 @@ impl DhcpServer {
                     }
                     Some(_) => {
                         // Got a different IP — shouldn't happen after release
-                        return self.send_nak(msg.xid);
+                        return self.send_nak(msg.xid, mac);
                     }
                     None => {
-                        return self.send_nak(msg.xid);
+                        return self.send_nak(msg.xid, mac);
                     }
                 }
             }
@@ -295,7 +295,7 @@ impl DhcpServer {
                 "edgerun-dhcp: REQUEST for {} not in our pool — NAK",
                 ip
             );
-            return self.send_nak(msg.xid);
+            return self.send_nak(msg.xid, mac);
         }
 
         eprintln!(
@@ -399,8 +399,8 @@ impl DhcpServer {
         (tftp, bootfile)
     }
 
-    fn send_nak(&mut self, xid: u32) -> Result<(), io::Error> {
-        let nak = DhcpMessage::nak(xid, self.config.server_ip);
+    fn send_nak(&mut self, xid: u32, client_mac: [u8; 6]) -> Result<(), io::Error> {
+        let nak = DhcpMessage::nak(xid, self.config.server_ip, client_mac);
         let wire = nak.to_wire();
         let broadcast = SocketAddr::new(
             std::net::IpAddr::V4(Ipv4Addr::BROADCAST),

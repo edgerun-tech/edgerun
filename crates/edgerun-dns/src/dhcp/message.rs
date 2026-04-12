@@ -43,6 +43,26 @@ pub const OPT_CLIENT_ARCH: u8 = 93;
 pub const OPT_CLIENT_NDI: u8 = 94;
 /// Client Machine Identifier / UUID-GUID (PXE)
 pub const OPT_CLIENT_MACHINE_ID: u8 = 97;
+/// Domain Name (DNS domain, e.g. "example.com")
+pub const OPT_DOMAIN_NAME: u8 = 15;
+/// Broadcast Address
+pub const OPT_BROADCAST_ADDR: u8 = 28;
+/// Interface MTU
+pub const OPT_INTERFACE_MTU: u8 = 26;
+/// NTP Servers
+pub const OPT_NTP_SERVERS: u8 = 42;
+/// Maximum DHCP Message Size
+pub const OPT_MAX_MSG_SIZE: u8 = 57;
+/// Option Overload (sname/file fields carry options)
+pub const OPT_OPTION_OVERLOAD: u8 = 52;
+/// Classless Static Routes (RFC 3442)
+pub const OPT_CLASSLESS_STATIC_ROUTES: u8 = 121;
+/// Domain Search (RFC 3397)
+pub const OPT_DOMAIN_SEARCH: u8 = 119;
+/// Client FQDN (RFC 4702)
+pub const OPT_CLIENT_FQDN: u8 = 81;
+/// Vendor Class Identifier
+pub const OPT_VENDOR_CLASS: u8 = 60;
 pub const OPT_END: u8 = 255;
 pub const OPT_PAD: u8 = 0;
 
@@ -116,6 +136,28 @@ pub struct DhcpOptions {
     pub rebind_time: Option<u32>,
     pub client_id: Option<Vec<u8>>,
     pub param_request_list: Vec<u8>,
+    // --- Common options ---
+    /// DNS domain name (e.g. "example.com") — option 15.
+    pub domain_name: Option<String>,
+    /// Broadcast address — option 28.
+    pub broadcast_addr: Option<Ipv4Addr>,
+    /// Interface MTU — option 26.
+    pub interface_mtu: Option<u16>,
+    /// NTP servers — option 42.
+    pub ntp_servers: Vec<Ipv4Addr>,
+    /// Maximum DHCP message size — option 57.
+    pub max_msg_size: Option<u16>,
+    /// Option overload — option 52 (1=sname, 2=file, 3=both).
+    pub option_overload: Option<u8>,
+    /// Classless static routes — option 121 (RFC 3442).
+    /// Each entry: (prefix_len, prefix_bytes, gateway).
+    pub classless_routes: Vec<(u8, Vec<u8>, Ipv4Addr)>,
+    /// DNS domain search list — option 119 (RFC 3397, compressed DNS format).
+    pub domain_search: Option<Vec<u8>>,
+    /// Client FQDN — option 81 (RFC 4702).
+    pub client_fqdn: Option<Vec<u8>>,
+    /// Vendor class identifier — option 60.
+    pub vendor_class: Option<String>,
     // --- PXE Boot options ---
     /// TFTP server hostname or IP (option 66).
     pub tftp_server_name: Option<String>,
@@ -530,7 +572,8 @@ impl DhcpMessage {
     }
 
     /// Create a DHCP NAK (server → client).
-    pub fn nak(xid: u32, server_id: Ipv4Addr) -> Self {
+    /// Per RFC 2131 §4.3.2, NAK MUST be broadcast and include the client's chaddr.
+    pub fn nak(xid: u32, server_id: Ipv4Addr, client_mac: [u8; 6]) -> Self {
         Self {
             op: DhcpOp::Reply,
             htype: HTYPE_ETHER,
@@ -538,12 +581,12 @@ impl DhcpMessage {
             hops: 0,
             xid,
             secs: 0,
-            broadcast: false,
+            broadcast: true,
             ciaddr: Ipv4Addr::UNSPECIFIED,
             yiaddr: Ipv4Addr::UNSPECIFIED,
             siaddr: Ipv4Addr::UNSPECIFIED,
             giaddr: Ipv4Addr::UNSPECIFIED,
-            chaddr: [0; 16],
+            chaddr: mac_to_chaddr(client_mac),
             sname: [0; 64],
             file: [0; 128],
             options: DhcpOptions {
@@ -695,6 +738,60 @@ impl DhcpOptions {
                 OPT_HOST_NAME => {
                     opts.host_name = Some(String::from_utf8_lossy(value).to_string());
                 }
+                OPT_DOMAIN_NAME => {
+                    opts.domain_name = Some(String::from_utf8_lossy(value).to_string());
+                }
+                OPT_BROADCAST_ADDR => {
+                    if value.len() == 4 {
+                        opts.broadcast_addr = Some(Ipv4Addr::new(value[0], value[1], value[2], value[3]));
+                    }
+                }
+                OPT_INTERFACE_MTU => {
+                    if value.len() == 2 {
+                        opts.interface_mtu = Some(u16::from_be_bytes([value[0], value[1]]));
+                    }
+                }
+                OPT_NTP_SERVERS => {
+                    for chunk in value.chunks(4) {
+                        if chunk.len() == 4 {
+                            opts.ntp_servers.push(Ipv4Addr::new(chunk[0], chunk[1], chunk[2], chunk[3]));
+                        }
+                    }
+                }
+                OPT_MAX_MSG_SIZE => {
+                    if value.len() == 2 {
+                        opts.max_msg_size = Some(u16::from_be_bytes([value[0], value[1]]));
+                    }
+                }
+                OPT_OPTION_OVERLOAD => {
+                    if !value.is_empty() {
+                        opts.option_overload = Some(value[0]);
+                    }
+                }
+                OPT_CLASSLESS_STATIC_ROUTES => {
+                    // RFC 3442: dest-len(1) | dest-prefix(n) | gateway(4)
+                    let mut j = 0;
+                    while j + 5 <= value.len() {
+                        let prefix_len = value[j];
+                        let prefix_bytes = (prefix_len + 7) / 8; // ceiling division
+                        j += 1;
+                        if j + prefix_bytes as usize + 4 > value.len() { break; }
+                        let prefix = value[j..j + prefix_bytes as usize].to_vec();
+                        j += prefix_bytes as usize;
+                        let gateway = Ipv4Addr::new(value[j], value[j+1], value[j+2], value[j+3]);
+                        j += 4;
+                        opts.classless_routes.push((prefix_len, prefix, gateway));
+                    }
+                }
+                OPT_DOMAIN_SEARCH => {
+                    opts.domain_search = Some(value.to_vec());
+                }
+                OPT_CLIENT_FQDN => {
+                    opts.client_fqdn = Some(value.to_vec());
+                }
+                OPT_VENDOR_CLASS => {
+                    opts.vendor_class = Some(String::from_utf8_lossy(value).to_string());
+                }
                 _ => {
                     opts.raw.push((code, value.to_vec()));
                 }
@@ -733,10 +830,84 @@ impl DhcpOptions {
         }
 
         if !self.dns_servers.is_empty() {
+            let dns_len = self.dns_servers.len() * 4;
             buf.push(OPT_DNS_SERVER);
-            buf.push((self.dns_servers.len() * 4) as u8);
-            for s in &self.dns_servers {
+            buf.push(dns_len.min(255) as u8);
+            for s in &self.dns_servers[..self.dns_servers.len().min(63)] {
                 buf.extend_from_slice(&s.octets());
+            }
+        }
+
+        if let Some(name) = &self.domain_name {
+            let bytes = name.as_bytes();
+            buf.push(OPT_DOMAIN_NAME);
+            buf.push(bytes.len().min(255) as u8);
+            buf.extend_from_slice(&bytes[..bytes.len().min(255)]);
+        }
+
+        if let Some(ip) = self.broadcast_addr {
+            buf.push(OPT_BROADCAST_ADDR);
+            buf.push(4);
+            buf.extend_from_slice(&ip.octets());
+        }
+
+        if let Some(mtu) = self.interface_mtu {
+            buf.push(OPT_INTERFACE_MTU);
+            buf.push(2);
+            buf.extend_from_slice(&mtu.to_be_bytes());
+        }
+
+        if !self.ntp_servers.is_empty() {
+            let ntp_len = (self.ntp_servers.len() * 4).min(255);
+            buf.push(OPT_NTP_SERVERS);
+            buf.push(ntp_len as u8);
+            for s in &self.ntp_servers[..self.ntp_servers.len().min(63)] {
+                buf.extend_from_slice(&s.octets());
+            }
+        }
+
+        if let Some(size) = self.max_msg_size {
+            buf.push(OPT_MAX_MSG_SIZE);
+            buf.push(2);
+            buf.extend_from_slice(&size.to_be_bytes());
+        }
+
+        if !self.classless_routes.is_empty() {
+            let mut route_buf = Vec::new();
+            for (prefix_len, prefix, gateway) in &self.classless_routes {
+                route_buf.push(*prefix_len);
+                route_buf.extend_from_slice(prefix);
+                route_buf.extend_from_slice(&gateway.octets());
+            }
+            if route_buf.len() <= 255 {
+                buf.push(OPT_CLASSLESS_STATIC_ROUTES);
+                buf.push(route_buf.len() as u8);
+                buf.extend_from_slice(&route_buf);
+            }
+        }
+
+        if let Some(search) = &self.domain_search {
+            if search.len() <= 255 {
+                buf.push(OPT_DOMAIN_SEARCH);
+                buf.push(search.len() as u8);
+                buf.extend_from_slice(search);
+            }
+        }
+
+        if let Some(fqdn) = &self.client_fqdn {
+            if fqdn.len() <= 255 {
+                buf.push(OPT_CLIENT_FQDN);
+                buf.push(fqdn.len() as u8);
+                buf.extend_from_slice(fqdn);
+            }
+        }
+
+        if let Some(vc) = &self.vendor_class {
+            let bytes = vc.as_bytes();
+            if bytes.len() <= 255 {
+                buf.push(OPT_VENDOR_CLASS);
+                buf.push(bytes.len() as u8);
+                buf.extend_from_slice(bytes);
             }
         }
 
@@ -930,7 +1101,7 @@ mod tests {
 
     #[test]
     fn test_nak_roundtrip() {
-        let msg = DhcpMessage::nak(0xdeadbeef, Ipv4Addr::new(192, 168, 1, 1));
+        let msg = DhcpMessage::nak(0xdeadbeef, Ipv4Addr::new(192, 168, 1, 1), [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
         let wire = msg.to_wire();
         let parsed = DhcpMessage::from_wire(&wire).unwrap();
 
