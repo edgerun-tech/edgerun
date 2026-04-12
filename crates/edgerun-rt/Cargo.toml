@@ -40,3 +40,7 @@ harness = false
 [[test]]
 name = "timers_test"
 harness = false
+
+[[test]]
+name = "tcp_test"
+harness = false
