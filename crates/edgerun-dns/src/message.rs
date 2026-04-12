@@ -524,6 +524,18 @@ impl DnsRecord {
         }
     }
 
+    /// Create an SOA record (Start of Authority).
+    pub fn soa(name: String, mname: String, rname: String, serial: u32,
+               refresh: u32, retry: u32, expire: u32, minimum: u32, ttl: u32) -> Self {
+        Self {
+            name,
+            rtype: DnsRecordType::SOA,
+            rclass: 1,
+            ttl,
+            data: DnsRecordData::SOA { mname, rname, serial, refresh, retry, expire, minimum },
+        }
+    }
+
     /// Create an NSEC3 record (RFC 5155 — Next SECure v3).
     pub fn nsec3(name: String, hash_algorithm: u8, flags: u8, iterations: u16,
                  salt: Vec<u8>, next_hashed_owner: Vec<u8>, type_bits: Vec<u8>, ttl: u32) -> Self {

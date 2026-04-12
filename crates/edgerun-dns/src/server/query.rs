@@ -36,13 +36,32 @@ pub async fn handle_query(
 ) -> Result<(Vec<u8>, bool), ParseError> {
     let query = DnsMessage::from_wire(wire).map_err(|_| ParseError)?;
 
-    if query.header.is_response || query.header.opcode != DnsOpcode::Query {
+    if query.header.is_response {
         return Ok((
-            DnsMessage::response(query.header.id, DnsResponseCode::NotImp, Vec::new()).to_wire(),
+            DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
             false,
         ));
     }
 
+    // Dispatch by opcode
+    match query.header.opcode {
+        DnsOpcode::Query => handle_standard_query(&query, wire, state).await,
+        DnsOpcode::Notify => handle_notify_query(&query).await,
+        DnsOpcode::Update => handle_update_query(&query, state).await,
+        DnsOpcode::IQuery | DnsOpcode::Status => Ok((
+            DnsMessage::response(query.header.id, DnsResponseCode::NotImp, Vec::new()).to_wire(),
+            false,
+        )),
+    }
+}
+
+/// Handle a standard DNS query.
+async fn handle_standard_query(
+    query: &DnsMessage,
+    wire: &[u8],
+    state: &ServerState,
+) -> Result<(Vec<u8>, bool), ParseError> {
+    // Handle AXFR queries (zone transfer — must be over TCP, but we handle it here)
     let question = match query.questions.first() {
         Some(q) => q,
         None => {
@@ -52,6 +71,35 @@ pub async fn handle_query(
             ));
         }
     };
+
+    if question.qtype == DnsRecordType::AXFR {
+        let zones_guard = state.zones.read().await;
+        let qname = question.name.to_lowercase();
+        let zone = zones_guard.get(&qname).cloned();
+        drop(zones_guard);
+
+        if let Some(zone) = zone {
+            match crate::axfr::handle_axfr(query, &zone) {
+                Ok(messages) => {
+                    // Return the first message (SOA envelope); remaining messages
+                    // are handled by the TCP handler for multi-message responses.
+                    let wire = messages[0].to_wire();
+                    return Ok((wire, true)); // needs TCP for full transfer
+                }
+                Err(rcode) => {
+                    return Ok((
+                        DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
+                        false,
+                    ));
+                }
+            }
+        } else {
+            return Ok((
+                DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new()).to_wire(),
+                false,
+            ));
+        }
+    }
 
     let qname = question.name.to_lowercase();
     let qtype = question.qtype;
@@ -195,4 +243,53 @@ pub fn resolve(
     }
 
     Vec::new()
+}
+
+/// Handle a NOTIFY query (RFC 1996).
+async fn handle_notify_query(query: &DnsMessage) -> Result<(Vec<u8>, bool), ParseError> {
+    match crate::axfr::handle_notify(query) {
+        Ok(response) => Ok((response.to_wire(), false)),
+        Err(rcode) => Ok((
+            DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
+            false,
+        )),
+    }
+}
+
+/// Handle a DNS Update query (RFC 2136).
+async fn handle_update_query(
+    query: &DnsMessage,
+    state: &ServerState,
+) -> Result<(Vec<u8>, bool), ParseError> {
+    let zone_question = match query.questions.first() {
+        Some(q) => q,
+        None => return Ok((
+            DnsMessage::response(query.header.id, DnsResponseCode::FormErr, Vec::new()).to_wire(),
+            false,
+        )),
+    };
+
+    let zone_name = zone_question.name.to_lowercase();
+
+    // We need to hold the write lock to modify the zone
+    // Since we can't hold it across the axfr::handle_update call easily,
+    // we do the update inline here.
+    let mut zones_guard = state.zones.write().await;
+    let zone = zones_guard.get_mut(&zone_name);
+
+    match zone {
+        Some(zone) => {
+            match crate::axfr::handle_update(query, zone, None) {
+                Ok(response) => Ok((response.to_wire(), false)),
+                Err(rcode) => Ok((
+                    DnsMessage::response(query.header.id, rcode, Vec::new()).to_wire(),
+                    false,
+                )),
+            }
+        }
+        None => Ok((
+            DnsMessage::response(query.header.id, DnsResponseCode::NotAuth, Vec::new()).to_wire(),
+            false,
+        )),
+    }
 }

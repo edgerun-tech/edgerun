@@ -20,7 +20,7 @@ use super::message::DnsRecord;
 /// zone.add_a("www", Ipv4Addr::new(192, 168, 1, 2), 3600);
 /// zone.add_cname("blog", "www.example.com", 3600);
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DnsZone {
     /// Origin (e.g. "example.com").
     pub origin: String,
