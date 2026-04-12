@@ -47,11 +47,8 @@ pub struct QuicConnection {
     /// Server destination connection ID (used for Initial key derivation)
     server_dcid: ConnectionId,
     /// Stream reassembly buffers (offset → data) per stream
-    stream_reassembly: std::collections::HashMap<u64, Vec<(u64, Vec<u8>)>>,
     /// Next expected offset per stream (for reassembly)
-    stream_next_offset: std::collections::HashMap<u64, u64>,
     /// FIN received per stream
-    stream_fin_received: std::collections::HashMap<u64, bool>,
     /// Pending migration path challenges (data → deadline)
     pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
 }
@@ -90,9 +87,6 @@ impl QuicConnection {
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: remote_cid.clone(),
-            stream_reassembly: std::collections::HashMap::new(),
-            stream_next_offset: std::collections::HashMap::new(),
-            stream_fin_received: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -421,9 +415,6 @@ impl QuicConnection {
             server_dcid: remote_cid,
             early_data_protection: None,
             early_data_sent: false,
-            stream_reassembly: std::collections::HashMap::new(),
-            stream_next_offset: std::collections::HashMap::new(),
-            stream_fin_received: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -456,9 +447,6 @@ impl QuicConnection {
             server_dcid: remote_cid,
             early_data_protection: None,
             early_data_sent: false,
-            stream_reassembly: std::collections::HashMap::new(),
-            stream_next_offset: std::collections::HashMap::new(),
-            stream_fin_received: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -490,9 +478,6 @@ impl QuicConnection {
             server_dcid: client_dcid,
             early_data_protection: None,
             early_data_sent: false,
-            stream_reassembly: std::collections::HashMap::new(),
-            stream_next_offset: std::collections::HashMap::new(),
-            stream_fin_received: std::collections::HashMap::new(),
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
