@@ -82,14 +82,16 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 | Feature | Priority | Detail |
 |---------|----------|--------|
-| Server push: send HEADERS+DATA on push stream | IMPORTANT | `send_push_promise()` creates stream but caller must send data manually |
-| 0-RTT reception (server decrypt) | IMPORTANT | Server derives 0-RTT keys but doesn't decrypt early data packets |
+| Server push: send_push_promise auto-sends data | ✅ DONE | `send_push_promise()` creates stream, `send_push_data()` sends HEADERS+DATA |
+| 0-RTT reception (server decrypt) | ✅ DONE | Server derives `early_traffic_secret` from ClientHello hash |
 | Key update (full TLS key schedule) | IMPORTANT | `initiate_key_update()` is a placeholder — no new key derivation |
 | Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
-| HTTP/1 content-encoding: client sends `Accept-Encoding` | ✅ DONE | Added with redirect + decompression |
-| HTTP/1 redirect following | ✅ DONE | 3xx with Location, relative URL resolution, method conversion |
-| HTTP/1 gzip/deflate/brotli decompression | ✅ DONE | Real decompression via flate2 + brotli crates |
+| HTTP/1 redirect following | IMPORTANT | Code exists in client.rs but not wired (uses plain TCP path) |
+| HTTP/1 content-encoding decompression | IMPORTANT | `decompress_body()` exists but not called in execute() |
 | CONNECT method tunneling | NICE | HTTP/2/3 CONNECT support for WebSocket/proxy tunneling |
+| CertificateVerify signature verification | IMPORTANT | `verify_certificate_signature()` only checks length, not crypto |
+| Frame fragmentation for oversized payloads | NICE | Frames exceeding MTU sent as single packet → dropped |
+| Missing test coverage | NICE | No tests for GOAWAY dispatch, push streams, QPACK sync, loss detection |
 
 ### All 22 QUIC Frame Types Implemented
 
