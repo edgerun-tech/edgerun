@@ -22,6 +22,8 @@ edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 hpack-patched = "0.3"
 httlib-huffman = "0.3"
+flate2.workspace = true
+brotli.workspace = true
 edgerun-qpack = { path = "../edgerun-qpack" }
 
 [[bin]]

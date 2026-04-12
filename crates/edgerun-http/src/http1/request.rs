@@ -198,6 +198,11 @@ impl Request {
         &self.headers
     }
 
+    /// Get mutable access to headers (for adding/modifying).
+    pub fn headers_mut(&mut self) -> &mut HeaderMap {
+        &mut self.headers
+    }
+
     /// Get the body
     pub fn body(&self) -> Option<&[u8]> {
         self.body.as_deref()

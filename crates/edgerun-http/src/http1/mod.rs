@@ -32,7 +32,7 @@ pub use upgrade::{
     UpgradeProtocol, UpgradeHandler, parse_upgrade_request, is_websocket_upgrade,
     build_upgrade_response, build_websocket_accept_headers,
 };
-pub use compression::{ContentEncoding, negotiate_encoding, decompress_body, compress_body, is_encoding_supported, get_content_encoding};
+pub use compression::{ContentEncoding, negotiate_encoding, decompress_body, compress_body, get_content_encoding};
 pub use multipart::{MultipartField, parse_multipart, extract_boundary, is_multipart};
 pub use range::{
     RangeSpecifier, ByteRange, ContentRange, parse_range_header, resolve_byte_range,

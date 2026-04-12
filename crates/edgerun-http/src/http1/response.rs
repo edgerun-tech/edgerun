@@ -44,6 +44,23 @@ impl Response {
         }
     }
 
+    /// Create a response from parts after decompression.
+    ///
+    /// Removes the `Content-Encoding` header and updates `Content-Length`
+    /// to reflect the decompressed body size.
+    pub fn from_parts_decompressed(status: StatusCode, mut headers: HeaderMap, body: Vec<u8>) -> Self {
+        // Remove Content-Encoding — body is now decoded
+        headers.remove("content-encoding");
+        // Update Content-Length to actual decompressed size
+        headers.insert("content-length", &body.len().to_string());
+        Response {
+            status,
+            headers,
+            body,
+            trailers: HeaderMap::new(),
+        }
+    }
+
     /// Set the body and return self (builder-style).
     pub fn with_body(mut self, body: Vec<u8>) -> Self {
         self.body = body;
