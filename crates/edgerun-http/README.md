@@ -82,14 +82,12 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 | Feature | Priority | Detail |
 |---------|----------|--------|
-| Server push: send_push_promise auto-sends data | ✅ DONE | `send_push_promise()` creates stream, `send_push_data()` sends HEADERS+DATA |
-| 0-RTT reception (server decrypt) | ✅ DONE | Server derives `early_traffic_secret` from ClientHello hash |
 | Key update (full TLS key schedule) | IMPORTANT | `initiate_key_update()` is a placeholder — no new key derivation |
 | Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
-| HTTP/1 redirect following | IMPORTANT | Code exists in client.rs but not wired (uses plain TCP path) |
-| HTTP/1 content-encoding decompression | IMPORTANT | `decompress_body()` exists but not called in execute() |
+| HTTP/1 redirect following | IMPORTANT | Code in client.rs uses plain TCP; redirect logic needs integration |
+| HTTP/1 content-encoding decompression | IMPORTANT | `decompress_body()` exists but not called in `execute()` |
 | CONNECT method tunneling | NICE | HTTP/2/3 CONNECT support for WebSocket/proxy tunneling |
-| CertificateVerify signature verification | IMPORTANT | `verify_certificate_signature()` only checks length, not crypto |
+| CertificateVerify RSA/ED25519 | NICE | ECDSA P-256 implemented; RSA-PSS and ED25519 accept with length check |
 | Frame fragmentation for oversized payloads | NICE | Frames exceeding MTU sent as single packet → dropped |
 | Missing test coverage | NICE | No tests for GOAWAY dispatch, push streams, QPACK sync, loss detection |
 
