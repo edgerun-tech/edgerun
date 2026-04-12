@@ -1118,9 +1118,9 @@ pub fn validate_bin_file(data: &[u8], filename: &str) -> bool {
         "revocations.bin" => validate_revocations(&mut r, data_len),
         "credentials.bin" => validate_credentials(&mut r, data_len),
         "object_presence.bin" => validate_object_presence(&mut r, data_len),
-        "controller_changes.bin" => validate_append_only(&mut r, data_len),
-        "fetch_queue.bin" => validate_append_only(&mut r, data_len),
-        "work_accounting.bin" => validate_append_only(&mut r, data_len),
+        "controller_changes.bin" => validate_controller_changes(&mut r, data_len),
+        "fetch_queue.bin" => validate_fetch_queue(&mut r, data_len),
+        "work_accounting.bin" => validate_work_accounting(&mut r, data_len),
         _ => false,
     }
 }
@@ -1146,10 +1146,8 @@ fn validate_stream_heads(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool 
 
 fn validate_events_log(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
     while r.position() < data_len {
-        if read_str(r).is_err() { return false; } // stream_id
-        if read_str(r).is_err() { return false; } // event_id
-        if read_u64(r).is_err() { return false; } // seq
-        if read_u64(r).is_err() { return false; } // offset
+        if read_str(r).is_err() { return false; }  // stream_id
+        if read_u64(r).is_err() { return false; }  // seq
         let hash_len = match read_u64(r) {
             Ok(v) => v as usize,
             Err(_) => return false,
@@ -1157,6 +1155,8 @@ fn validate_events_log(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if hash_len > 1024 { return false; }
         let mut buf = vec![0u8; hash_len];
         if r.read_exact(&mut buf).is_err() { return false; }
+        if read_u64(r).is_err() { return false; }  // offset
+        if read_u64(r).is_err() { return false; }  // envelope_version
     }
     true
 }
@@ -1165,7 +1165,8 @@ fn validate_replay_cache(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool 
     while r.position() < data_len {
         if read_str(r).is_err() { return false; } // target_node
         if read_str(r).is_err() { return false; } // command_hash
-        if read_str(r).is_err() { return false; } // entry data
+        if read_str(r).is_err() { return false; } // command_id
+        if read_u64(r).is_err() { return false; } // decision_event_seq
     }
     true
 }
@@ -1252,6 +1253,47 @@ fn validate_object_presence(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bo
 fn validate_append_only(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
     while r.position() < data_len {
         if read_str(r).is_err() { return false; }
+    }
+    true
+}
+
+fn validate_controller_changes(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_str(r).is_err() { return false; }  // controller_hex
+        if read_str(r).is_err() { return false; }  // change_type
+        if read_u64(r).is_err() { return false; }  // event_seq
+    }
+    true
+}
+
+fn validate_fetch_queue(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        if read_u64(r).is_err() { return false; }  // id
+        if read_str(r).is_err() { return false; }   // target_type
+        if read_str(r).is_err() { return false; }   // target_id
+        if read_u64(r).is_err() { return false; }   // priority
+        if read_u64(r).is_err() { return false; }   // created_at
+        if read_str(r).is_err() { return false; }   // status
+    }
+    true
+}
+
+fn validate_work_accounting(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
+    while r.position() < data_len {
+        let data_len_val = match read_u64(r) {
+            Ok(v) => v as usize,
+            Err(_) => return false,
+        };
+        if data_len_val > data_len as usize { return false; }
+        let mut buf = vec![0u8; data_len_val];
+        if r.read_exact(&mut buf).is_err() { return false; }
+        if read_str(r).is_err() { return false; }   // record_hash
+        if read_str(r).is_err() { return false; }   // requester_hex
+        if read_str(r).is_err() { return false; }   // provider_hex
+        if read_str(r).is_err() { return false; }   // workload_class
+        if read_str(r).is_err() { return false; }   // status
+        if read_u64(r).is_err() { return false; }   // started_at_us
+        if read_u64(r).is_err() { return false; }   // billable_rc_us
     }
     true
 }

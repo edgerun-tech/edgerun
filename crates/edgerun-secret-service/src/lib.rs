@@ -12,12 +12,22 @@
 //!
 //! ## Using the Backend
 //!
-//! ```ignore
+//! ```
+//! use std::path::PathBuf;
 //! use edgerun_secret_service::Backend;
 //!
-//! let mut backend = Backend::new(data_root)?;
-//! backend.put(coll_path, key, b"secret-value", "Label", &[])?;
-//! let (secret, meta) = backend.get(coll_path, key)?;
+//! # fn main() -> std::io::Result<()> {
+//! let tmp = std::env::temp_dir().join("ss_doc_test");
+//! let _ = std::fs::remove_dir_all(&tmp);
+//! let mut backend = Backend::new(tmp.clone())?;
+//! let coll = "/org/freedesktop/secrets/collections/default";
+//! backend.put(coll, "doc-key", b"secret-value", "Doc Label", &[])?;
+//! let (secret, meta) = backend.get(coll, "doc-key")?.unwrap();
+//! assert_eq!(secret, b"secret-value");
+//! assert_eq!(meta.label, "Doc Label");
+//! # let _ = std::fs::remove_dir_all(&tmp);
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod backend;

@@ -101,6 +101,10 @@ pub struct Http2Server {
     pub pending_headers: HashMap<u32, Vec<(Vec<u8>, Vec<u8>)>>,
     /// Whether we've sent a GOAWAY.
     pub goaway_sent: bool,
+    /// Track closed stream IDs to handle post-closure frames gracefully.
+    /// Stores stream IDs that were recently closed, so we can accept
+    /// WINDOW_UPDATE/PRIORITY/RST_STREAM on them without connection errors.
+    closed_stream_ids: std::collections::HashSet<u32>,
 }
 
 impl Http2Server {
@@ -116,6 +120,7 @@ impl Http2Server {
             last_processed_stream_id: 0,
             goaway_sent: false,
             pending_headers: HashMap::new(),
+            closed_stream_ids: std::collections::HashSet::new(),
         }
     }
 
@@ -129,10 +134,17 @@ impl Http2Server {
 
         match Settings::from_entries(&settings_frame.entries) {
             Ok(s) => {
+                let old_initial_window = self.client_settings.initial_window_size;
                 self.client_settings = s;
                 self.max_frame_size = self.client_settings.max_frame_size;
                 if let Some(max) = self.client_settings.max_concurrent_streams {
                     self.stream_manager.set_max_concurrent_streams(max);
+                }
+                // RFC 7540 §6.9.2: When INITIAL_WINDOW_SIZE changes, adjust all active streams
+                if self.client_settings.initial_window_size != old_initial_window {
+                    self.stream_manager.update_initial_window_size(
+                        self.client_settings.initial_window_size,
+                    );
                 }
             }
             Err(_) => {
@@ -159,11 +171,23 @@ impl Http2Server {
         }
     }
 
+    /// Check if a stream ID was recently closed (so we can accept frames on it).
+    fn is_closed_stream(&self, stream_id: u32) -> bool {
+        self.closed_stream_ids.contains(&stream_id)
+    }
+
+    /// Record a stream as closed for post-closure frame handling.
+    fn record_closed_stream(&mut self, stream_id: u32) {
+        self.closed_stream_ids.insert(stream_id);
+    }
+
     /// Periodically clean up closed streams.
     /// Should be called every N frames (e.g. every 100 frames) to prevent
     /// memory growth from streams that have been closed but not removed.
     pub fn cleanup_closed_streams(&mut self) {
         self.stream_manager.cleanup_closed();
+        // Also clear the closed_stream_ids tracking set
+        self.closed_stream_ids.clear();
     }
 }
 

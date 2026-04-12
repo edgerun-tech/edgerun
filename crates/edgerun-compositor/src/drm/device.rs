@@ -52,7 +52,7 @@ impl DrmDevice {
             desc: std::ptr::null_mut(),
             _pad: [0; 8],
         };
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_VERSION as libc::c_ulong, &mut ver) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_VERSION, &mut ver) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -61,7 +61,7 @@ impl DrmDevice {
 
     /// Set DRM master (required for mode setting on card nodes).
     pub fn set_master(&self) -> io::Result<()> {
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_SET_MASTER as libc::c_ulong) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_SET_MASTER) };
         if ret < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -71,7 +71,7 @@ impl DrmDevice {
 
     /// Drop DRM master.
     pub fn drop_master(&self) -> io::Result<()> {
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_DROP_MASTER as libc::c_ulong) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_DROP_MASTER) };
         if ret < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -82,7 +82,7 @@ impl DrmDevice {
     /// Set client capability (e.g., universal planes, atomic).
     pub fn set_client_cap(&self, cap: u64, value: u64) -> io::Result<()> {
         let mut cc = DrmSetClientCap { capability: cap, value };
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_SET_CLIENT_CAP as libc::c_ulong, &mut cc) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_SET_CLIENT_CAP, &mut cc) };
         if ret < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -108,7 +108,7 @@ impl DrmDevice {
             max_height: 0,
         };
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETRESOURCES as libc::c_ulong, &mut res) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETRESOURCES, &mut res) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -124,7 +124,7 @@ impl DrmDevice {
         res.encoder_id_ptr = encoders.as_mut_ptr();
         res.fb_id_ptr = fbs.as_mut_ptr();
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETRESOURCES as libc::c_ulong, &mut res) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETRESOURCES, &mut res) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -167,7 +167,7 @@ impl DrmDevice {
             pad: 0,
         };
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCONNECTOR as libc::c_ulong, &mut conn) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCONNECTOR, &mut conn) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -189,7 +189,7 @@ impl DrmDevice {
         conn.props_ptr = prop_ids.as_mut_ptr();
         conn.prop_values_ptr = prop_values.as_mut_ptr();
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCONNECTOR as libc::c_ulong, &mut conn) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCONNECTOR, &mut conn) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -223,7 +223,7 @@ impl DrmDevice {
             mode_valid: 0,
             mode: unsafe { std::mem::MaybeUninit::zeroed().assume_init() },
         };
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCRTC as libc::c_ulong, &mut crtc) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETCRTC, &mut crtc) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -248,7 +248,7 @@ impl DrmDevice {
             pad: 0,
         };
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETPLANES as libc::c_ulong, &mut res) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETPLANES, &mut res) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -256,7 +256,7 @@ impl DrmDevice {
         let mut planes = vec![0u32; res.count_planes as usize];
         res.plane_id_ptr = planes.as_mut_ptr();
 
-        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETPLANES as libc::c_ulong, &mut res) };
+        let ret = unsafe { libc::ioctl(self.file.as_raw_fd(), DRM_IOCTL_MODE_GETPLANES, &mut res) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }

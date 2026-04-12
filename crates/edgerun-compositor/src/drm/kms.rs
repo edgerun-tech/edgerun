@@ -40,7 +40,7 @@ pub fn set_crtc(
         mode: *mode,
     };
 
-    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_SETCRTC as libc::c_ulong, &mut set) };
+    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_SETCRTC, &mut set) };
     if ret < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -59,7 +59,7 @@ pub fn page_flip(fd: RawFd, crtc_id: u32, fb_id: u32, flags: u32, user_data: u64
         user_data,
     };
 
-    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_PAGE_FLIP as libc::c_ulong, &mut flip) };
+    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_PAGE_FLIP, &mut flip) };
     if ret < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -70,7 +70,7 @@ pub fn page_flip(fd: RawFd, crtc_id: u32, fb_id: u32, flags: u32, user_data: u64
 /// Remove a framebuffer.
 pub fn rmfb(fd: RawFd, fb_id: u32) -> io::Result<()> {
     let mut id = fb_id;
-    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_RMFB as libc::c_ulong, &mut id) };
+    let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_RMFB, &mut id) };
     if ret < 0 {
         Err(io::Error::last_os_error())
     } else {

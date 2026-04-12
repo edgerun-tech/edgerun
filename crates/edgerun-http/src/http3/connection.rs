@@ -493,7 +493,7 @@ impl Http3Connection {
                 let stream_type = if stream_id % 4 >= 2 {
                     self.known_uni_stream_types.get(&stream_id).copied()
                 } else {
-                    None // Bidirectional — always request/response
+                    None // Bidirectional — request/response stream
                 };
 
                 match stream_type {
@@ -517,11 +517,15 @@ impl Http3Connection {
                         // Push stream: parse as HTTP/3 frames
                         self.buffer_and_parse_frame(stream_id, data)
                     }
-                    _ => {
-                        // Unknown stream type — buffer and try to read type varint
-                        let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
-                        buf.extend_from_slice(&data);
-                        Ok(None)
+                    Some(_) => {
+                        // Known uni-directional stream type not matching control/qpack/push
+                        // Treat as unknown — buffer and parse frames
+                        self.buffer_and_parse_frame(stream_id, data)
+                    }
+                    None => {
+                        // Bidirectional stream or known request/response stream —
+                        // parse as HTTP/3 frames (HEADERS, DATA, etc.)
+                        self.buffer_and_parse_frame(stream_id, data)
                     }
                 }
             }

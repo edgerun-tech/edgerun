@@ -38,7 +38,7 @@ impl DumbBuffer {
             size: 0,
         };
 
-        let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB as libc::c_ulong, &mut create) };
+        let ret = unsafe { libc::ioctl(fd, DRM_IOCTL_MODE_CREATE_DUMB, &mut create) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -69,7 +69,7 @@ impl DumbBuffer {
             offset: 0,
         };
 
-        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_MAP_DUMB as libc::c_ulong, &mut map_req) };
+        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_MAP_DUMB, &mut map_req) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -110,7 +110,7 @@ impl DumbBuffer {
     pub fn destroy(mut self) -> io::Result<()> {
         self.unmap();
         let mut req = DrmModeDestroyDumb { handle: self.handle };
-        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_DESTROY_DUMB as libc::c_ulong, &mut req) };
+        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &mut req) };
         if ret < 0 {
             Err(io::Error::last_os_error())
         } else {
@@ -135,7 +135,7 @@ impl DumbBuffer {
             _pad: [0; 4],
         };
 
-        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_ADDFB2 as libc::c_ulong, &mut fb) };
+        let ret = unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_ADDFB2, &mut fb) };
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -148,6 +148,6 @@ impl Drop for DumbBuffer {
     fn drop(&mut self) {
         self.unmap();
         let mut req = DrmModeDestroyDumb { handle: self.handle };
-        unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_DESTROY_DUMB as libc::c_ulong, &mut req) };
+        unsafe { libc::ioctl(self.fd, DRM_IOCTL_MODE_DESTROY_DUMB, &mut req) };
     }
 }

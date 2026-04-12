@@ -15,7 +15,7 @@ use super::ioctl::*;
 pub fn syncobj_create(fd: RawFd, flags: u32) -> io::Result<u32> {
     let mut create = DrmSyncobjCreate { flags, handle: 0 };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE as libc::c_ulong, &mut create)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_CREATE, &mut create)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -28,7 +28,7 @@ pub fn syncobj_create(fd: RawFd, flags: u32) -> io::Result<u32> {
 pub fn syncobj_destroy(fd: RawFd, handle: u32) -> io::Result<()> {
     let mut destroy = DrmSyncobjDestroy { handle, pad: 0 };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_DESTROY as libc::c_ulong, &mut destroy)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_DESTROY, &mut destroy)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -44,7 +44,7 @@ pub fn import_sync_file(fd: RawFd, syncobj_handle: u32, sync_file_fd: c_int) -> 
         fd: sync_file_fd,
     };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_IMPORT_SYNC_FILE as libc::c_ulong, &mut import)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_IMPORT_SYNC_FILE, &mut import)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -60,7 +60,7 @@ pub fn export_sync_file(fd: RawFd, syncobj_handle: u32) -> io::Result<RawFd> {
         fd: -1,
     };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_EXPORT_SYNC_FILE as libc::c_ulong, &mut export)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_EXPORT_SYNC_FILE, &mut export)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -87,7 +87,7 @@ pub fn timeline_wait(
         pad: [0; 8],
     };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT as libc::c_ulong, &mut wait)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT, &mut wait)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())
@@ -105,7 +105,7 @@ pub fn timeline_signal(fd: RawFd, syncobj_handle: u32, point: u64) -> io::Result
         flags: 0,
     };
     let ret = unsafe {
-        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL as libc::c_ulong, &mut signal)
+        libc::ioctl(fd, DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL, &mut signal)
     };
     if ret < 0 {
         Err(io::Error::last_os_error())

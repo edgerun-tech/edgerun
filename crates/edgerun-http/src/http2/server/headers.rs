@@ -114,8 +114,18 @@ impl Http2Server {
             );
         }
 
-        if state_before == Some(StreamState::HalfClosedRemote) && hf.end_stream && end_headers {
-            let _headers = match decoder.decode(&hf.header_block) {
+        // Trailers: second HEADERS frame on HalfClosedRemote stream (RFC 9113 §8.1)
+        if state_before == Some(StreamState::HalfClosedRemote) {
+            if !hf.end_stream {
+                // Trailers must have END_STREAM flag
+                return response::rst_stream(
+                    stream_id,
+                    ErrorCode::PROTOCOL_ERROR.to_u32(),
+                    &mut self.stream_manager,
+                );
+            }
+            // Decode and validate trailer headers
+            let trailers = match decoder.decode(&hf.header_block) {
                 Ok(h) => h,
                 Err(_) => {
                     self.goaway_sent = true;
@@ -126,9 +136,21 @@ impl Http2Server {
                     );
                 }
             };
-            if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
-                let _ = s.half_close_remote();
+            // Trailers must not contain pseudo-headers or connection-specific headers
+            for (name, _) in &trailers {
+                if name.starts_with(b":") {
+                    return response::rst_stream(
+                        stream_id,
+                        ErrorCode::PROTOCOL_ERROR.to_u32(),
+                        &mut self.stream_manager,
+                    );
+                }
             }
+            // Close the stream (both sides are now closed)
+            if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
+                let _ = s.close();
+            }
+            self.record_closed_stream(stream_id);
             return FrameAction::None;
         }
 
@@ -291,6 +313,7 @@ impl Http2Server {
         let action = response::respond_with_200(stream_id, encoder);
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_local();
+            self.record_closed_stream(stream_id);
         }
         self.half_close_remote(stream_id);
         action
@@ -299,6 +322,10 @@ impl Http2Server {
     fn half_close_remote(&mut self, stream_id: u32) {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
+            // If this closes the stream, record it
+            if s.state == StreamState::Closed {
+                self.record_closed_stream(stream_id);
+            }
         }
     }
 }

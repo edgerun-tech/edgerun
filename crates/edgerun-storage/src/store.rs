@@ -1011,8 +1011,7 @@ impl NodeStore {
         if healthy {
             return Ok(0);
         }
-        // TODO: rebuild indexes from event log
-        Ok(0)
+        self.rebuild_indexes()
     }
 
     /// Runs a WAL checkpoint to flush and truncate the WAL file.

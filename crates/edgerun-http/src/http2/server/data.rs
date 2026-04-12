@@ -95,7 +95,7 @@ impl Http2Server {
             s.bytes_received += data_len as u64;
         }
 
-        let mut actions = vec![response::send_window_update(0, data_len).to_frame()];
+        let mut actions = vec![response::send_window_update(sid, data_len).to_frame()];
 
         if df.end_stream {
             let _headers = self.pending_headers.remove(&sid).unwrap_or_default();
@@ -111,6 +111,7 @@ impl Http2Server {
                 }
                 _ => {}
             }
+            self.record_closed_stream(sid);
             self.half_close_remote_for_data(sid);
         }
 
@@ -120,6 +121,10 @@ impl Http2Server {
     fn half_close_remote_for_data(&mut self, stream_id: u32) {
         if let Some(s) = self.stream_manager.get_stream_mut(stream_id) {
             let _ = s.half_close_remote();
+            // If this closes the stream, record it
+            if s.state == crate::http2::stream::StreamState::Closed {
+                self.record_closed_stream(stream_id);
+            }
         }
     }
 }

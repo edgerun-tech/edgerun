@@ -1,6 +1,6 @@
 use super::*;
-use crate::http2::frame::{DataFrame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame};
-use crate::http2::{Decoder, Encoder, Frame, FrameType};
+use crate::http2::frame::{DataFrame, Frame, HeadersFrame, PingFrame, PriorityFrame, RstStreamFrame, WindowUpdateFrame};
+use crate::http2::{Decoder, Encoder, FrameType};
 
 fn h(name: &str, value: &str) -> (Vec<u8>, Vec<u8>) {
     (name.as_bytes().to_vec(), value.as_bytes().to_vec())
@@ -472,4 +472,143 @@ fn test_handle_client_goaway() {
         FrameAction::CloseConnection => {}
         _ => panic!("expected CloseConnection"),
     }
+}
+
+// ── Trailers support (RFC 9113 §8.1) ──
+
+#[test]
+fn test_trailers_path_reachable() {
+    let mut server = Http2Server::new();
+    let mut encoder = Encoder::new();
+    let mut decoder = Decoder::new();
+    let mut cont = ContinuationState::new();
+
+    // Manually create a HalfClosedRemote stream
+    let _ = server.stream_manager.get_or_create_stream(1);
+    if let Some(s) = server.stream_manager.get_stream_mut(1) {
+        s.open().unwrap();
+        s.half_close_remote().unwrap(); // Simulate client sent END_STREAM on HEADERS
+    }
+    // Also record it as processed
+    server.last_processed_stream_id = 1;
+
+    assert_eq!(
+        server.stream_manager.get_stream(1).unwrap().state,
+        crate::http2::stream::StreamState::HalfClosedRemote
+    );
+
+    // Now send trailers (HEADERS with END_STREAM on HalfClosedRemote stream)
+    let trailers_frame = Frame {
+        frame_type: FrameType::Headers,
+        flags: crate::http2::frame::flags::HEADERS_END_STREAM
+            | crate::http2::frame::flags::HEADERS_END_HEADERS,
+        stream_id: 1,
+        payload: vec![],
+    };
+
+    let action = server.handle_headers(&trailers_frame, &mut decoder, &mut encoder, &mut cont);
+    // Trailers should be accepted silently
+    assert!(matches!(action, FrameAction::None));
+
+    // Stream should now be Closed
+    let stream = server.stream_manager.get_stream(1).unwrap();
+    assert_eq!(stream.state, crate::http2::stream::StreamState::Closed);
+    assert!(server.is_closed_stream(1));
+}
+
+#[test]
+fn test_trailers_without_end_stream_rejected() {
+    let mut server = Http2Server::new();
+    let mut encoder = Encoder::new();
+    let mut decoder = Decoder::new();
+    let mut cont = ContinuationState::new();
+
+    // Manually create a HalfClosedRemote stream
+    let _ = server.stream_manager.get_or_create_stream(1);
+    if let Some(s) = server.stream_manager.get_stream_mut(1) {
+        s.open().unwrap();
+        s.half_close_remote().unwrap();
+    }
+    server.last_processed_stream_id = 1;
+
+    // Send trailers WITHOUT END_STREAM flag
+    let trailers_frame = Frame {
+        frame_type: FrameType::Headers,
+        flags: crate::http2::frame::flags::HEADERS_END_HEADERS, // No END_STREAM
+        stream_id: 1,
+        payload: vec![],
+    };
+
+    let action = server.handle_headers(&trailers_frame, &mut decoder, &mut encoder, &mut cont);
+    // Should get RST_STREAM
+    match action {
+        FrameAction::WriteFrames(frames) => {
+            let rst = RstStreamFrame::from_frame(&frames[0]).unwrap();
+            assert_eq!(rst.stream_id, 1);
+            assert_eq!(rst.error_code, ErrorCode::PROTOCOL_ERROR.to_u32());
+        }
+        other => panic!("expected RST_STREAM for trailers without END_STREAM, got {other:?}"),
+    }
+}
+
+// ── SETTINGS_INITIAL_WINDOW_SIZE handling ──
+
+#[test]
+fn test_settings_initial_window_size_updates_active_streams() {
+    let mut server = Http2Server::new();
+
+    // Create a stream first
+    let _ = server.stream_manager.get_or_create_stream(1);
+    let stream_before = server.stream_manager.get_stream(1).unwrap();
+    assert_eq!(stream_before.remote_window, 65535); // default
+
+    // Apply SETTINGS with new INITIAL_WINDOW_SIZE
+    let sf = SettingsFrame::new(vec![(0x4, 32768)]); // INITIAL_WINDOW_SIZE = 32768
+    let action = server.apply_client_settings(&sf);
+    // Should get SETTINGS + ACK
+    assert!(matches!(action, FrameAction::WriteFrames(_)));
+
+    // Stream window should have been adjusted (delta = 32768 - 65535 = -32767)
+    let stream_after = server.stream_manager.get_stream(1).unwrap();
+    assert_eq!(stream_after.remote_window, 32768);
+}
+
+// ── Closed stream tracking ──
+
+#[test]
+fn test_window_update_on_recently_closed_stream() {
+    let mut server = Http2Server::new();
+
+    // Create and close a stream
+    let _ = server.stream_manager.get_or_create_stream(1);
+    if let Some(s) = server.stream_manager.get_stream_mut(1) {
+        s.open().unwrap();
+        s.close();
+    }
+    server.record_closed_stream(1);
+    server.stream_manager.cleanup_closed();
+
+    // WINDOW_UPDATE on stream 1 should be accepted (not GOAWAY)
+    let wu = WindowUpdateFrame::new(1, 100).to_frame();
+    let action = server.handle_window_update(&wu);
+    assert!(matches!(action, FrameAction::None));
+}
+
+#[test]
+fn test_priority_on_recently_closed_stream() {
+    let mut server = Http2Server::new();
+
+    // Create and close a stream
+    let _ = server.stream_manager.get_or_create_stream(1);
+    if let Some(s) = server.stream_manager.get_stream_mut(1) {
+        s.open().unwrap();
+        s.close();
+    }
+    server.record_closed_stream(1);
+    server.stream_manager.cleanup_closed();
+
+    // PRIORITY on stream 1 should be accepted
+    let pf = PriorityFrame::new(1, false, 0, 16);
+    let action = server.handle_priority(&pf);
+    assert!(matches!(action, FrameAction::None));
 }

@@ -4,41 +4,46 @@
 
 use libc::{c_int, c_uint};
 
+/// Type alias for ioctl request codes — works on both glibc and musl.
+/// glibc uses c_ulong, musl uses c_int for the request parameter.
+/// We use c_int which is the kernel's actual type for ioctl request codes.
+pub type IoctlRequest = c_int;
+
 // DRM ioctl numbers (from kernel headers on this system, 64-bit x86_64)
-pub const DRM_IOCTL_VERSION: c_int = 0xc0406400u32 as c_int;
-pub const DRM_IOCTL_SET_CLIENT_CAP: c_int = 0x4010640du32 as c_int;
-pub const DRM_IOCTL_SET_MASTER: c_int = 0x0000641eu32 as c_int;
-pub const DRM_IOCTL_DROP_MASTER: c_int = 0x0000641fu32 as c_int;
-pub const DRM_IOCTL_PRIME_FD_TO_HANDLE: c_int = 0xc00c642eu32 as c_int;
-pub const DRM_IOCTL_PRIME_HANDLE_TO_FD: c_int = 0xc00c642du32 as c_int;
-pub const DRM_IOCTL_MODE_GETRESOURCES: c_int = 0xc04064a0u32 as c_int;
-pub const DRM_IOCTL_MODE_GETCRTC: c_int = 0xc06864a1u32 as c_int;
-pub const DRM_IOCTL_MODE_SETCRTC: c_int = 0xc06864a2u32 as c_int;
-pub const DRM_IOCTL_MODE_PAGE_FLIP: c_int = 0xc01864b0u32 as c_int;
-pub const DRM_IOCTL_MODE_MAP_DUMB: c_int = 0xc01064b3u32 as c_int;
-pub const DRM_IOCTL_MODE_RMFB: c_int = 0xc00464afu32 as c_int;
-pub const DRM_IOCTL_MODE_CREATE_DUMB: c_int = 0xc02064b2u32 as c_int;
-pub const DRM_IOCTL_MODE_GETCONNECTOR: c_int = 0xc05064a7u32 as c_int;
-pub const DRM_IOCTL_MODE_ADDFB2: c_int = 0xc06864b8u32 as c_int;
-pub const DRM_IOCTL_MODE_DESTROY_DUMB: c_int = 0xc00464b4u32 as c_int;
-pub const DRM_IOCTL_MODE_ATOMIC: c_int = 0xc03864bcu32 as c_int;
-pub const DRM_IOCTL_MODE_GETPLANE: c_int = 0xc02064b6u32 as c_int;
+pub const DRM_IOCTL_VERSION: IoctlRequest = 0xc0406400u32 as c_int;
+pub const DRM_IOCTL_SET_CLIENT_CAP: IoctlRequest = 0x4010640du32 as c_int;
+pub const DRM_IOCTL_SET_MASTER: IoctlRequest = 0x0000641eu32 as c_int;
+pub const DRM_IOCTL_DROP_MASTER: IoctlRequest = 0x0000641fu32 as c_int;
+pub const DRM_IOCTL_PRIME_FD_TO_HANDLE: IoctlRequest = 0xc00c642eu32 as c_int;
+pub const DRM_IOCTL_PRIME_HANDLE_TO_FD: IoctlRequest = 0xc00c642du32 as c_int;
+pub const DRM_IOCTL_MODE_GETRESOURCES: IoctlRequest = 0xc04064a0u32 as c_int;
+pub const DRM_IOCTL_MODE_GETCRTC: IoctlRequest = 0xc06864a1u32 as c_int;
+pub const DRM_IOCTL_MODE_SETCRTC: IoctlRequest = 0xc06864a2u32 as c_int;
+pub const DRM_IOCTL_MODE_PAGE_FLIP: IoctlRequest = 0xc01864b0u32 as c_int;
+pub const DRM_IOCTL_MODE_MAP_DUMB: IoctlRequest = 0xc01064b3u32 as c_int;
+pub const DRM_IOCTL_MODE_RMFB: IoctlRequest = 0xc00464afu32 as c_int;
+pub const DRM_IOCTL_MODE_CREATE_DUMB: IoctlRequest = 0xc02064b2u32 as c_int;
+pub const DRM_IOCTL_MODE_GETCONNECTOR: IoctlRequest = 0xc05064a7u32 as c_int;
+pub const DRM_IOCTL_MODE_ADDFB2: IoctlRequest = 0xc06864b8u32 as c_int;
+pub const DRM_IOCTL_MODE_DESTROY_DUMB: IoctlRequest = 0xc00464b4u32 as c_int;
+pub const DRM_IOCTL_MODE_ATOMIC: IoctlRequest = 0xc03864bcu32 as c_int;
+pub const DRM_IOCTL_MODE_GETPLANE: IoctlRequest = 0xc02064b6u32 as c_int;
 // Alias for backward compatibility
-pub const DRM_IOCTL_MODE_GETPLANES: c_int = DRM_IOCTL_MODE_GETPLANE;
+pub const DRM_IOCTL_MODE_GETPLANES: IoctlRequest = DRM_IOCTL_MODE_GETPLANE;
 
 // DRM syncobj ioctls (kernel 4.12+ — explicit synchronization)
-pub const DRM_IOCTL_SYNCOBJ_CREATE: c_int = 0xc00c644bu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_DESTROY: c_int = 0xc004644cu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD: c_int = 0xc010644du32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE: c_int = 0xc00c644eu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT: c_int = 0x40286457u32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL: c_int = 0x40286458u32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_TIMELINE_QUERY: c_int = 0xc018645cu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_IMPORT_SYNC_FILE: c_int = 0xc008645du32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_EXPORT_SYNC_FILE: c_int = 0xc008645eu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_WAIT: c_int = 0xc018644fu32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_RESET: c_int = 0xc0086450u32 as c_int;
-pub const DRM_IOCTL_SYNCOBJ_SIGNAL: c_int = 0xc0086451u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_CREATE: IoctlRequest = 0xc00c644bu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_DESTROY: IoctlRequest = 0xc004644cu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_HANDLE_TO_FD: IoctlRequest = 0xc010644du32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_FD_TO_HANDLE: IoctlRequest = 0xc00c644eu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_WAIT: IoctlRequest = 0x40286457u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_SIGNAL: IoctlRequest = 0x40286458u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_TIMELINE_QUERY: IoctlRequest = 0xc018645cu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_IMPORT_SYNC_FILE: IoctlRequest = 0xc008645du32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_EXPORT_SYNC_FILE: IoctlRequest = 0xc008645eu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_WAIT: IoctlRequest = 0xc018644fu32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_RESET: IoctlRequest = 0xc0086450u32 as c_int;
+pub const DRM_IOCTL_SYNCOBJ_SIGNAL: IoctlRequest = 0xc0086451u32 as c_int;
 
 // ─── Syncobj structs ────────────────────────────────────────
 

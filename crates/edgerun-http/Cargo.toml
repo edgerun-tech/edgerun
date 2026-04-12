@@ -20,7 +20,7 @@ edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
-hpack-patched = "0.3"
+hpack-patched = { path = "crates/hpack-patched" }
 httlib-huffman = "0.3"
 flate2.workspace = true
 brotli.workspace = true

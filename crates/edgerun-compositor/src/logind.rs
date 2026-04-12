@@ -663,7 +663,7 @@ fn recv_ancillary_fds(fd: RawFd) -> io::Result<Vec<OwnedFd>> {
     msg_hdr.msg_iov = &mut iov;
     msg_hdr.msg_iovlen = 1;
     msg_hdr.msg_control = cmsg_buf.as_mut_ptr() as *mut libc::c_void;
-    msg_hdr.msg_controllen = CMSG_BUF_SIZE;
+    msg_hdr.msg_controllen = CMSG_BUF_SIZE as _;
 
     // Use MSG_PEEK | MSG_DONTWAIT to check without consuming
     // Actually, we already read the header+body, so we need to get the fds
@@ -693,7 +693,10 @@ fn recv_ancillary_fds(fd: RawFd) -> io::Result<Vec<OwnedFd>> {
     while !cmsg_ptr.is_null() {
         let cmsg = unsafe { &*cmsg_ptr };
         if cmsg.cmsg_level == libc::SOL_SOCKET && cmsg.cmsg_type == libc::SCM_RIGHTS {
-            let num_fds = (cmsg.cmsg_len - std::mem::size_of::<libc::cmsghdr>()) / std::mem::size_of::<RawFd>();
+            let cmsg_len = cmsg.cmsg_len as usize;
+            let hdr_size = std::mem::size_of::<libc::cmsghdr>();
+            let fd_size = std::mem::size_of::<RawFd>();
+            let num_fds = (cmsg_len - hdr_size) / fd_size;
             let fd_ptr = unsafe {
                 libc::CMSG_DATA(cmsg as *const libc::cmsghdr) as *const RawFd
             };

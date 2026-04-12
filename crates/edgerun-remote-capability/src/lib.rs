@@ -2,9 +2,9 @@
 //!
 //! ## Quick start
 //!
-//! ```ignore
+//! ```
 //! use edgerun_remote_capability::RemoteCapabilityProvider;
-//! use edgerun_remote_capability::adapters::InputRemoteAdapter;
+//! use edgerun_remote_capability::MemoryRemoteTransport;
 //! ```
 
 pub mod protocol;

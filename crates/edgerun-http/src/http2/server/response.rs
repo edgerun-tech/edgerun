@@ -39,6 +39,21 @@ pub fn rst_stream(
     FrameAction::WriteFrames(frames)
 }
 
+/// Send a RST_STREAM frame and return the stream_id for caller to record.
+/// Use this when the caller needs to track the closed stream.
+pub fn rst_stream_with_record(
+    stream_id: u32,
+    error_code: u32,
+    stream_manager: &mut StreamManager,
+) -> (FrameAction, u32) {
+    let rst = RstStreamFrame::new(stream_id, error_code);
+    let frames = vec![rst.to_frame()];
+    if let Some(s) = stream_manager.get_stream_mut(stream_id) {
+        s.close();
+    }
+    (FrameAction::WriteFrames(frames), stream_id)
+}
+
 /// Send SETTINGS ACK.
 pub fn send_settings_ack() -> FrameAction {
     FrameAction::WriteFrames(vec![SettingsFrame::ack().to_frame()])
