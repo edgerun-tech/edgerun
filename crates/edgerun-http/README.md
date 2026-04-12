@@ -4,7 +4,7 @@ A dependency-free HTTP client and type system built exclusively with Rust's stan
 
 ## Features
 
-- HTTP/1.1 request and response types
+- HTTP/1.1 request and response types with redirect following + content-encoding decompression
 - HTTP/2 frame protocol implementation (RFC 9113) — from scratch, zero deps
 - HPACK compression (RFC 7541)
 - HTTP/2 server state machine with h2spec conformance testing
@@ -52,17 +52,15 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 | CONTROL stream validation (SETTINGS first) | RFC 9114 §6.2.1 | ✅ |
 | Critical stream closure detection | RFC 9114 §6.2.1 | ✅ |
 | Frame-per-stream type validation | RFC 9114 §7 | ✅ |
-| GOAWAY receive processing | RFC 9114 §5.2 | ✅ |
-| GOAWAY send + enforcement | RFC 9114 §5.2 | ✅ |
+| GOAWAY receive processing + enforcement | RFC 9114 §5.2 | ✅ |
 | RESET_STREAM generation | RFC 9000 §4.5 | ✅ |
 | STOP_SENDING generation | RFC 9000 §4.6 | ✅ |
 | Stateless reset tokens (CSPRNG + verification) | RFC 9000 §10.3 | ✅ |
 | Version negotiation packet encode/parse | RFC 9000 §6 | ✅ |
 | QUIC v1 + v2 support | RFC 9369 | ✅ |
 | Address validation / anti-amplification | RFC 9000 §8.1 | ✅ |
-| QPACK dynamic table support | RFC 9204 | ✅ |
+| QPACK dynamic table (encoder + decoder) | RFC 9204 | ✅ |
 | QPACK encoder/decoder streams created | RFC 9204 §4.2-4.3 | ✅ |
-| QPACK decoder dynamic table | RFC 9204 | ✅ |
 | 0-RTT / Early Data sending (client) | RFC 9001 §4.6 | ✅ |
 | 0-RTT key derivation (TLS key schedule) | RFC 8446 §7.1 | ✅ |
 | Connection migration (PATH_CHALLENGE/RESPONSE) | RFC 9000 §9 | ✅ |
@@ -82,15 +80,16 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 ### Still TODO
 
-| Feature | Priority |
-|---------|----------|
-| 0-RTT / Early Data reception (server-side decrypt) | IMPORTANT |
-| Full connection migration (active path tracking) | NICE |
-| Key update (full TLS key schedule) | IMPORTANT |
-| Server push data sending on push stream | IMPORTANT |
-| HTTP/1 redirect handling | IMPORTANT |
-| HTTP/1 content-encoding decompression | NICE |
-| CONNECT method tunneling | NICE |
+| Feature | Priority | Detail |
+|---------|----------|--------|
+| Server push: send HEADERS+DATA on push stream | IMPORTANT | `send_push_promise()` creates stream but caller must send data manually |
+| 0-RTT reception (server decrypt) | IMPORTANT | Server derives 0-RTT keys but doesn't decrypt early data packets |
+| Key update (full TLS key schedule) | IMPORTANT | `initiate_key_update()` is a placeholder — no new key derivation |
+| Full connection migration (active path tracking) | NICE | `active_path` field exists but never populated or enforced |
+| HTTP/1 content-encoding: client sends `Accept-Encoding` | ✅ DONE | Added with redirect + decompression |
+| HTTP/1 redirect following | ✅ DONE | 3xx with Location, relative URL resolution, method conversion |
+| HTTP/1 gzip/deflate/brotli decompression | ✅ DONE | Real decompression via flate2 + brotli crates |
+| CONNECT method tunneling | NICE | HTTP/2/3 CONNECT support for WebSocket/proxy tunneling |
 
 ### All 22 QUIC Frame Types Implemented
 
@@ -139,6 +138,16 @@ crates/edgerun-http/src/http3/
     ├── handshake.rs    # Client QUIC-TLS handshake, 0-RTT key derivation,
     │                   # CertificateValidator (chain + hostname + signature)
     └── server_handshake.rs # Server QUIC-TLS handshake, EarlyDataState
+
+crates/edgerun-http/src/http1/
+├── client.rs           # Async HTTP/1.1 client with redirect + decompression
+├── compression.rs      # gzip/deflate/brotli encode/decode (flate2 + brotli)
+├── request.rs          # Request type with builder
+├── response.rs         # Response type with body
+├── body.rs             # Async body reader (chunked transfer encoding)
+├── server.rs           # HTTP/1.1 server (async)
+├── buf_reader.rs       # Buffered reader for HTTP parsing
+└── mod.rs              # Module exports
 
 crates/edgerun-qpack/     # Vendored qpack 0.1.0 (crates.io), all modules public
 ```

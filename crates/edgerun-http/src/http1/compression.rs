@@ -88,7 +88,7 @@ pub fn compress_body(body: &[u8], encoding: ContentEncoding) -> Vec<u8> {
 pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
     let encoding = headers
         .get("content-encoding")
-        .map(|v| ContentEncoding::from_str(v))
+        .map(|v| ContentEncoding::from_str(v.as_str()))
         .unwrap_or(ContentEncoding::Identity);
 
     match encoding {
@@ -172,7 +172,7 @@ fn compress_brotli(data: &[u8]) -> Vec<u8> {
     let mut params = BrotliEncoderParams::default();
     params.mode = BrotliEncoderMode::BROTLI_MODE_GENERIC;
     params.quality = 4; // Moderate compression
-    brotli::BrotliCompress(&mut std::io::Cursor::new(data), &mut out, &params).ok()?;
+    brotli::BrotliCompress(&mut std::io::Cursor::new(data), &mut out, &params).unwrap_or_default();
     out
 }
 

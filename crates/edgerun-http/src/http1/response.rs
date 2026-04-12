@@ -46,16 +46,24 @@ impl Response {
 
     /// Create a response from parts after decompression.
     ///
-    /// Removes the `Content-Encoding` header and updates `Content-Length`
-    /// to reflect the decompressed body size.
-    pub fn from_parts_decompressed(status: StatusCode, mut headers: HeaderMap, body: Vec<u8>) -> Self {
-        // Remove Content-Encoding — body is now decoded
-        headers.remove("content-encoding");
-        // Update Content-Length to actual decompressed size
-        headers.insert("content-length", &body.len().to_string());
+    /// Rebuilds headers without Content-Encoding and updates Content-Length.
+    pub fn from_parts_decompressed(status: StatusCode, headers: &HeaderMap, body: Vec<u8>) -> Self {
+        // Rebuild headers without Content-Encoding, with updated Content-Length
+        let mut new_headers = HeaderMap::new();
+        for (name, value) in headers.iter() {
+            let n = name.as_str();
+            if n.eq_ignore_ascii_case("content-encoding") {
+                continue; // Skip Content-Encoding — body is decoded
+            }
+            if n.eq_ignore_ascii_case("content-length") {
+                new_headers.insert("content-length", &body.len().to_string()).ok();
+            } else {
+                new_headers.insert(n, value.as_str()).ok();
+            }
+        }
         Response {
             status,
-            headers,
+            headers: new_headers,
             body,
             trailers: HeaderMap::new(),
         }
