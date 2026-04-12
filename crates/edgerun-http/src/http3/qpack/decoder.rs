@@ -3,7 +3,7 @@
 //! Supports both stateless and dynamic table decoding.
 //! When `max_capacity` > 0, uses dynamic table entries for decoding.
 
-use qpack::{HeaderField, decode_stateless, DecoderError};
+use edgerun_qpack::{HeaderField, decode_stateless, DecoderError};
 use std::io::Cursor;
 
 /// QPACK decoder.

@@ -615,8 +615,9 @@ impl Http3Connection {
         // Convert to &[(&str, &str)] for encoder
         let refs: Vec<(&str, &str)> = h3_headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
 
-        encoder.encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))
+        let (header_block, _encoder_instructions) = encoder.encode(&refs)
+            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
+        Ok(header_block)
     }
 
     /// Encode a response into a QPACK header block.
@@ -638,8 +639,9 @@ impl Http3Connection {
 
         let refs: Vec<(&str, &str)> = h3_headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
 
-        encoder.encode(&refs)
-            .map_err(|e| Http3Error::QpackError(e.to_string()))
+        let (header_block, _encoder_instructions) = encoder.encode(&refs)
+            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
+        Ok(header_block)
     }
 
     /// Decode a request header block into (method, uri, headers).

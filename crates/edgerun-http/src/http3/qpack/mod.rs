@@ -30,14 +30,14 @@ impl std::fmt::Display for QpackError {
     }
 }
 
-impl From<qpack::EncoderError> for QpackError {
-    fn from(e: qpack::EncoderError) -> Self {
+impl From<edgerun_qpack::EncoderError> for QpackError {
+    fn from(e: edgerun_qpack::EncoderError) -> Self {
         QpackError::Encode(e.to_string())
     }
 }
 
-impl From<qpack::DecoderError> for QpackError {
-    fn from(e: qpack::DecoderError) -> Self {
+impl From<edgerun_qpack::DecoderError> for QpackError {
+    fn from(e: edgerun_qpack::DecoderError) -> Self {
         QpackError::Decode(e.to_string())
     }
 }

@@ -22,7 +22,7 @@ edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 hpack-patched = "0.3"
 httlib-huffman = "0.3"
-qpack = "0.1.0"
+edgerun-qpack = { path = "../edgerun-qpack" }
 
 [[bin]]
 name = "h2spec-server"
