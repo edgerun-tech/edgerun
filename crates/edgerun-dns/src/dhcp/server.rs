@@ -183,6 +183,7 @@ impl DhcpServer {
         // Try to allocate an IP
         let ip = match self.pool.allocate(
             mac,
+            msg.options.client_id.clone(),
             self.config.lease_time,
             msg.xid,
         ) {
@@ -275,7 +276,7 @@ impl DhcpServer {
                 // IP is assigned to someone else — release old, allocate new
                 self.pool.release(existing.mac);
                 // Try re-allocate
-                match self.pool.allocate(mac, self.config.lease_time, msg.xid) {
+                match self.pool.allocate(mac, msg.options.client_id.clone(), self.config.lease_time, msg.xid) {
                     Some(new_ip) if new_ip == ip => {
                         // Good, re-allocated same IP
                     }

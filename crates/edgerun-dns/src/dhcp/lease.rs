@@ -8,6 +8,9 @@ use std::time::{Duration, Instant};
 pub struct Lease {
     /// Client MAC address.
     pub mac: [u8; 6],
+    /// Client identifier (option 61), if provided. RFC 2131 §9 says this
+    /// takes precedence over chaddr for client identification.
+    pub client_id: Option<Vec<u8>>,
     /// Assigned IP address.
     pub ip: Ipv4Addr,
     /// Lease duration in seconds.
@@ -23,6 +26,19 @@ impl Lease {
     pub fn new(mac: [u8; 6], ip: Ipv4Addr, lease_time: u32, xid: u32) -> Self {
         Self {
             mac,
+            client_id: None,
+            ip,
+            lease_time,
+            granted_at: Instant::now(),
+            xid,
+        }
+    }
+
+    /// Create a new lease with client-id.
+    pub fn with_client_id(mac: [u8; 6], client_id: Vec<u8>, ip: Ipv4Addr, lease_time: u32, xid: u32) -> Self {
+        Self {
+            mac,
+            client_id: Some(client_id),
             ip,
             lease_time,
             granted_at: Instant::now(),
@@ -67,6 +83,8 @@ pub struct LeasePool {
     pub leases: std::collections::HashMap<u32, Lease>,
     /// MAC → IP mapping for fast lookup.
     pub mac_to_ip: std::collections::HashMap<[u8; 6], u32>,
+    /// Client-ID → IP mapping (RFC 2131 §9: client-id takes precedence).
+    pub client_id_to_ip: std::collections::HashMap<Vec<u8>, u32>,
     /// Reserved IPs (not to be handed out).
     pub reserved: std::collections::HashSet<u32>,
 }
@@ -79,6 +97,7 @@ impl LeasePool {
             pool_end,
             leases: std::collections::HashMap::new(),
             mac_to_ip: std::collections::HashMap::new(),
+            client_id_to_ip: std::collections::HashMap::new(),
             reserved: std::collections::HashSet::new(),
         }
     }
@@ -101,9 +120,20 @@ impl LeasePool {
     }
 
     /// Allocate the next available IP address for a client.
+    /// If client_id is provided, it takes precedence over MAC for identification (RFC 2131 §9).
     /// Returns None if the pool is exhausted.
-    pub fn allocate(&mut self, mac: [u8; 6], lease_time: u32, xid: u32) -> Option<Ipv4Addr> {
-        // If this MAC already has a lease, return it
+    pub fn allocate(&mut self, mac: [u8; 6], client_id: Option<Vec<u8>>, lease_time: u32, xid: u32) -> Option<Ipv4Addr> {
+        // Check by client-id first (RFC 2131 §9: client-id takes precedence)
+        if let Some(ref cid) = client_id {
+            if let Some(ip_u32) = self.client_id_to_ip.get(cid) {
+                if let Some(lease) = self.leases.get(ip_u32) {
+                    if !lease.is_expired() {
+                        return Some(lease.ip);
+                    }
+                }
+            }
+        }
+        // Fall back to MAC
         if let Some(ip_u32) = self.mac_to_ip.get(&mac) {
             if let Some(lease) = self.leases.get(ip_u32) {
                 if !lease.is_expired() {
@@ -125,9 +155,16 @@ impl LeasePool {
             }
             if !self.leases.contains_key(&ip_u32) {
                 let ip = u32_to_ip(ip_u32);
-                let lease = Lease::new(mac, ip, lease_time, xid);
+                let lease = if let Some(ref cid) = client_id {
+                    Lease::with_client_id(mac, cid.clone(), ip, lease_time, xid)
+                } else {
+                    Lease::new(mac, ip, lease_time, xid)
+                };
                 self.leases.insert(ip_u32, lease);
                 self.mac_to_ip.insert(mac, ip_u32);
+                if let Some(ref cid) = client_id {
+                    self.client_id_to_ip.insert(cid.clone(), ip_u32);
+                }
                 return Some(ip);
             }
         }
@@ -138,7 +175,11 @@ impl LeasePool {
     /// Remove a lease (client released or declined).
     pub fn release(&mut self, mac: [u8; 6]) {
         if let Some(ip_u32) = self.mac_to_ip.remove(&mac) {
-            self.leases.remove(&ip_u32);
+            if let Some(lease) = self.leases.remove(&ip_u32) {
+                if let Some(ref cid) = lease.client_id {
+                    self.client_id_to_ip.remove(cid);
+                }
+            }
         }
     }
 
@@ -154,6 +195,9 @@ impl LeasePool {
         for ip_u32 in expired {
             if let Some(lease) = self.leases.remove(&ip_u32) {
                 self.mac_to_ip.remove(&lease.mac);
+                if let Some(ref cid) = lease.client_id {
+                    self.client_id_to_ip.remove(cid);
+                }
             }
         }
     }
@@ -172,6 +216,72 @@ impl LeasePool {
     pub fn available_count(&self) -> u32 {
         let used = self.leases.len() as u32 + self.reserved.len() as u32;
         self.pool_size().saturating_sub(used)
+    }
+
+    /// Save the lease pool to a file for persistence.
+    /// Format: one line per lease as `ip_u32,mac_hex,client_id_hex,lease_time,granted_at_epoch,xid`
+    pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut f = std::fs::File::create(path)?;
+        writeln!(f, "# edgerun-dhcp lease database")?;
+        writeln!(f, "# pool_start={} pool_end={}", self.pool_start, self.pool_end)?;
+        for (ip_u32, lease) in &self.leases {
+            let mac_hex = lease.mac.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":");
+            let cid_hex = lease.client_id.as_ref()
+                .map(|c| c.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(":"))
+                .unwrap_or_else(|| "-".to_string());
+            let epoch = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+                .saturating_sub(lease.granted_at.elapsed().as_secs());
+            writeln!(f, "{},{},{},{},{},{}", ip_u32, mac_hex, cid_hex, lease.lease_time, epoch, lease.xid)?;
+        }
+        Ok(())
+    }
+
+    /// Load leases from a file. Restores leases that haven't expired.
+    /// Returns the number of leases restored.
+    pub fn load_from_file(&mut self, path: &str) -> std::io::Result<usize> {
+        let content = std::fs::read_to_string(path)?;
+        let mut restored = 0;
+        let now_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') { continue; }
+            let parts: Vec<&str> = line.split(',').collect();
+            if parts.len() != 6 { continue; }
+            let ip_u32: u32 = parts[0].parse().unwrap_or(0);
+            let ip = u32_to_ip(ip_u32);
+            let mac_parts: Vec<u8> = parts[1].split(':')
+                .filter_map(|s| u8::from_str_radix(s, 16).ok()).collect();
+            if mac_parts.len() != 6 { continue; }
+            let mut mac = [0u8; 6];
+            mac.copy_from_slice(&mac_parts);
+            let client_id = if parts[2] != "-" {
+                Some(parts[2].split(':').filter_map(|s| u8::from_str_radix(s, 16).ok()).collect::<Vec<_>>())
+            } else { None };
+            let lease_time: u32 = parts[3].parse().unwrap_or(0);
+            let granted_at_epoch: u64 = parts[4].parse().unwrap_or(0);
+            let xid: u32 = parts[5].parse().unwrap_or(0);
+            if now_epoch >= granted_at_epoch + lease_time as u64 { continue; }
+            let remaining = lease_time.saturating_sub((now_epoch - granted_at_epoch) as u32);
+            if remaining == 0 { continue; }
+            let lease = if let Some(ref cid) = client_id {
+                Lease::with_client_id(mac, cid.clone(), ip, remaining, xid)
+            } else {
+                Lease::new(mac, ip, remaining, xid)
+            };
+            self.leases.insert(ip_u32, lease);
+            self.mac_to_ip.insert(mac, ip_u32);
+            if let Some(ref cid) = client_id {
+                self.client_id_to_ip.insert(cid.clone(), ip_u32);
+            }
+            restored += 1;
+        }
+        Ok(restored)
     }
 }
 
@@ -215,15 +325,15 @@ mod tests {
         let mac1 = [1, 2, 3, 4, 5, 6];
         let mac2 = [6, 5, 4, 3, 2, 1];
 
-        let ip1 = pool.allocate(mac1, 3600, 0x1111).unwrap();
-        let ip2 = pool.allocate(mac2, 3600, 0x2222).unwrap();
+        let ip1 = pool.allocate(mac1, None, 3600, 0x1111).unwrap();
+        let ip2 = pool.allocate(mac2, None, 3600, 0x2222).unwrap();
 
         assert_ne!(ip1, ip2);
         assert_eq!(pool.active_count(), 2);
         assert_eq!(pool.available_count(), 9); // 11 total - 2 leased
 
         // Same MAC gets same IP
-        let ip1_again = pool.allocate(mac1, 3600, 0x3333).unwrap();
+        let ip1_again = pool.allocate(mac1, None, 3600, 0x3333).unwrap();
         assert_eq!(ip1, ip1_again);
 
         // Release
@@ -241,7 +351,7 @@ mod tests {
         pool.reserve(Ipv4Addr::new(10, 0, 0, 1)); // Gateway
 
         let mac = [0xaa; 6];
-        let ip = pool.allocate(mac, 3600, 0x1234).unwrap();
+        let ip = pool.allocate(mac, None, 3600, 0x1234).unwrap();
         assert_ne!(ip, Ipv4Addr::new(10, 0, 0, 1));
     }
 
@@ -256,9 +366,9 @@ mod tests {
         let mac2 = [2, 2, 2, 2, 2, 2];
         let mac3 = [3, 3, 3, 3, 3, 3];
 
-        assert!(pool.allocate(mac1, 3600, 0x1).is_some());
-        assert!(pool.allocate(mac2, 3600, 0x2).is_some());
-        assert!(pool.allocate(mac3, 3600, 0x3).is_none());
+        assert!(pool.allocate(mac1, None, 3600, 0x1).is_some());
+        assert!(pool.allocate(mac2, None, 3600, 0x2).is_some());
+        assert!(pool.allocate(mac3, None, 3600, 0x3).is_none());
     }
 
     #[test]
@@ -269,7 +379,7 @@ mod tests {
         );
 
         let mac = [0xff; 6];
-        pool.allocate(mac, 3600, 0x1234);
+        pool.allocate(mac, None, 3600, 0x1234);
         assert_eq!(pool.active_count(), 1);
 
         pool.sweep_expired();
@@ -294,7 +404,7 @@ mod tests {
         );
 
         let mac = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
-        let ip = pool.allocate(mac, 3600, 0x1234).unwrap();
+        let ip = pool.allocate(mac, None, 3600, 0x1234).unwrap();
 
         let lease_by_mac = pool.find_lease_by_mac(mac).unwrap();
         assert_eq!(lease_by_mac.ip, ip);
