@@ -56,6 +56,8 @@ pub enum DnsRecordType {
     ANY = 255,
     /// OPT pseudo-record for EDNS0 (RFC 6891).
     OPT = 41,
+    /// TSIG transaction signature (RFC 8945).
+    TSIG = 250,
 }
 
 impl DnsRecordType {
@@ -84,6 +86,7 @@ impl DnsRecordType {
             255 => Some(Self::ANY),
             257 => Some(Self::CAA),
             41 => Some(Self::OPT),
+            250 => Some(Self::TSIG),
             _ => None,
         }
     }
@@ -118,6 +121,7 @@ impl DnsRecordType {
             Self::DNSKEY => "DNSKEY",
             Self::NSEC3 => "NSEC3",
             Self::OPT => "OPT",
+            Self::TSIG => "TSIG",
         }
     }
 }
@@ -313,6 +317,8 @@ pub enum DnsRecordData {
         /// Raw option data (RFC 6891 options).
         options: Vec<u8>,
     },
+    /// TSIG transaction signature (RFC 8945).
+    TSIG(super::tsig::TsigRdata),
 }
 
 impl DnsRecordData {
@@ -489,6 +495,7 @@ impl DnsRecordData {
                 buf.extend_from_slice(options);
                 buf
             }
+            (DnsRecordType::TSIG, DnsRecordData::TSIG(rdata)) => rdata.to_wire(),
             _ => Vec::new(),
         }
     }
@@ -741,6 +748,43 @@ impl DnsRecordData {
                     options,
                 })
             }
+            DnsRecordType::TSIG => {
+                // TSIG RDATA: algorithm name, time_signed(6), fudge(2), mac_size(2), mac, orig_id(2), error(2), other_len(2), other_data
+                use crate::tsig::TsigRdata;
+                if data.len() < 20 {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let alg_name = decode_tsig_name(data, 0)?;
+                let alg_len = tsig_name_wire_len(data, 0);
+                let mut pos = alg_len;
+                if pos + 10 > data.len() {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let time_hi = u32::from_be_bytes([data[pos], data[pos+1], data[pos+2], data[pos+3]]);
+                let time_lo = u16::from_be_bytes([data[pos+4], data[pos+5]]);
+                let time_signed = ((time_hi as u64) << 16) | (time_lo as u64);
+                let fudge = u16::from_be_bytes([data[pos+6], data[pos+7]]);
+                let mac_size = u16::from_be_bytes([data[pos+8], data[pos+9]]);
+                pos += 10;
+                if pos + mac_size as usize + 6 > data.len() {
+                    return Ok(Self::Raw(data.to_vec()));
+                }
+                let mac = data[pos..pos+mac_size as usize].to_vec();
+                pos += mac_size as usize;
+                let orig_id = u16::from_be_bytes([data[pos], data[pos+1]]);
+                let error = u16::from_be_bytes([data[pos+2], data[pos+3]]);
+                let other_len = u16::from_be_bytes([data[pos+4], data[pos+5]]);
+                pos += 6;
+                let other_data = if other_len > 0 && pos + other_len as usize <= data.len() {
+                    data[pos..pos+other_len as usize].to_vec()
+                } else {
+                    Vec::new()
+                };
+                Ok(Self::TSIG(TsigRdata {
+                    algorithm: alg_name, time_signed, fudge, mac_size, mac,
+                    orig_id, error, other_len, other_data,
+                }))
+            }
             _ => Ok(Self::Raw(data.to_vec())),
         }
     }
@@ -768,6 +812,69 @@ pub fn encode_domain_name(name: &str) -> Vec<u8> {
     }
     buf.push(0); // root
     buf
+}
+
+/// Encode a domain name with DNS compression pointers.
+///
+/// Scans the existing buffer for matching suffixes and emits
+/// `\xC0\xNN` back-references instead of repeating labels.
+/// Per RFC 1035 §4.1.4.
+pub fn encode_domain_name_compressed(name: &str, msg: &[u8]) -> Vec<u8> {
+    let labels: Vec<&str> = name.split('.').filter(|l| !l.is_empty()).collect();
+    if labels.is_empty() {
+        return vec![0]; // root only
+    }
+
+    // Try to find the longest matching suffix in the existing message
+    let mut ptr_offset: Option<usize> = None;
+    let mut first_label = 0;
+
+    if !msg.is_empty() {
+        for start in 0..labels.len() {
+            let suffix = labels[start..].join(".");
+            if let Some(pos) = find_name_in_buffer(&suffix, msg) {
+                if pos < 16384 {
+                    ptr_offset = Some(pos);
+                    first_label = start;
+                    break;
+                }
+            }
+        }
+    }
+
+    let mut buf = Vec::new();
+    for i in 0..first_label {
+        let label = labels[i];
+        buf.push(label.len() as u8);
+        buf.extend_from_slice(label.as_bytes());
+    }
+
+    if let Some(pos) = ptr_offset {
+        let pointer = 0xC000 | (pos as u16);
+        buf.extend_from_slice(&pointer.to_be_bytes());
+    } else {
+        for i in first_label..labels.len() {
+            let label = labels[i];
+            buf.push(label.len() as u8);
+            buf.extend_from_slice(label.as_bytes());
+        }
+        buf.push(0);
+    }
+
+    buf
+}
+
+/// Find a domain name in the buffer and return its offset.
+fn find_name_in_buffer(name: &str, buf: &[u8]) -> Option<usize> {
+    let needle = encode_domain_name(name);
+    if needle.len() > buf.len() { return None; }
+    for i in 0..=(buf.len() - needle.len()) {
+        if buf[i] & 0xC0 == 0xC0 { continue; }
+        if buf[i..i + needle.len()] == needle[..] {
+            return Some(i);
+        }
+    }
+    None
 }
 
 /// Decode a domain name from DNS wire format, following compression pointers.
@@ -846,6 +953,35 @@ fn domain_name_wire_len(data: &[u8], offset: usize) -> usize {
             return pos + 2 - offset;
         }
         pos += 1 + b as usize;
+    }
+}
+
+/// Decode a TSIG algorithm name (simple wire format, no compression).
+fn decode_tsig_name(data: &[u8], offset: usize) -> Result<String, std::io::Error> {
+    let mut labels = Vec::new();
+    let mut pos = offset;
+    loop {
+        if pos >= data.len() { break; }
+        let len = data[pos] as usize;
+        if len == 0 { break; }
+        pos += 1;
+        if pos + len > data.len() {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "truncated TSIG name"));
+        }
+        labels.push(String::from_utf8_lossy(&data[pos..pos+len]).to_string());
+        pos += len;
+    }
+    if labels.is_empty() { Ok(".".to_string()) } else { Ok(labels.join(".")) }
+}
+
+/// Wire length of a TSIG name.
+fn tsig_name_wire_len(data: &[u8], offset: usize) -> usize {
+    let mut pos = offset;
+    loop {
+        if pos >= data.len() { return data.len() - offset; }
+        let len = data[pos] as usize;
+        if len == 0 { return pos + 1 - offset; }
+        pos += 1 + len;
     }
 }
 

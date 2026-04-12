@@ -51,10 +51,12 @@ pub mod dnssec;
 pub mod zone_file;
 pub mod cache;
 pub mod resolver;
+pub mod tsig;
 
 pub use cache::DnsCache;
 pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
 pub use server::RateLimiter;
+pub use tsig::{TsigKey, TsigSigner, TsigVerifier, TsigAlgorithm, TsigError};
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};

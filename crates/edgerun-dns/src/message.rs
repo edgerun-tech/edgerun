@@ -3,7 +3,7 @@
 use std::io;
 use std::net::Ipv4Addr;
 
-use super::record::{DnsRecordType, DnsRecordData, encode_domain_name, decode_domain_name};
+use super::record::{DnsRecordType, DnsRecordData, encode_domain_name, encode_domain_name_compressed, decode_domain_name};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -286,7 +286,11 @@ impl DnsQuestion {
     }
 
     fn to_wire(&self) -> Vec<u8> {
-        let mut buf = encode_domain_name(&self.name);
+        self.to_wire_compressed(&[])
+    }
+
+    fn to_wire_compressed(&self, msg: &[u8]) -> Vec<u8> {
+        let mut buf = encode_domain_name_compressed(&self.name, msg);
         buf.extend_from_slice(&self.qtype.as_u16().to_be_bytes());
         buf.extend_from_slice(&self.qclass.to_be_bytes());
         buf
@@ -555,7 +559,11 @@ impl DnsRecord {
     }
 
     fn to_wire(&self, _full_message_offset: usize) -> Vec<u8> {
-        let mut buf = encode_domain_name(&self.name);
+        self.to_wire_compressed(&[])
+    }
+
+    fn to_wire_compressed(&self, msg: &[u8]) -> Vec<u8> {
+        let mut buf = encode_domain_name_compressed(&self.name, msg);
         buf.extend_from_slice(&self.rtype.as_u16().to_be_bytes());
         buf.extend_from_slice(&self.rclass.to_be_bytes());
         buf.extend_from_slice(&self.ttl.to_be_bytes());
@@ -639,7 +647,7 @@ pub struct DnsMessage {
 }
 
 impl DnsMessage {
-    /// Serialize to DNS wire format.
+    /// Serialize to DNS wire format with name compression (RFC 1035 §4.1.4).
     pub fn to_wire(&self) -> Vec<u8> {
         let mut header = self.header.clone();
         header.question_count = self.questions.len() as u16;
@@ -650,16 +658,16 @@ impl DnsMessage {
         let mut buf = header.to_wire().to_vec();
 
         for q in &self.questions {
-            buf.extend_from_slice(&q.to_wire());
+            buf.extend_from_slice(&q.to_wire_compressed(&buf));
         }
         for rr in &self.answers {
-            buf.extend_from_slice(&rr.to_wire(buf.len()));
+            buf.extend_from_slice(&rr.to_wire_compressed(&buf));
         }
         for rr in &self.authority {
-            buf.extend_from_slice(&rr.to_wire(buf.len()));
+            buf.extend_from_slice(&rr.to_wire_compressed(&buf));
         }
         for rr in &self.additional {
-            buf.extend_from_slice(&rr.to_wire(buf.len()));
+            buf.extend_from_slice(&rr.to_wire_compressed(&buf));
         }
 
         buf
