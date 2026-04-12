@@ -168,8 +168,7 @@ fn test_interval_skip_missed() {
 
 fn test_sleep_type() {
     println!("  test_sleep_type...");
-    let fut = sleep(Duration::from_millis(1));
-    let _: Sleep = fut;
+    let _fut: Sleep = sleep(Duration::from_millis(1));
     println!("  test_sleep_type OK");
 }
 
@@ -182,8 +181,7 @@ fn test_elapsed_error_type() {
 
 fn test_ctrl_c_type() {
     println!("  test_ctrl_c_type...");
-    let fut = ctrl_c();
-    let _: edgerun_rt::CtrlC = fut;
+    let _fut: edgerun_rt::CtrlC = ctrl_c();
     println!("  test_ctrl_c_type OK");
 }
 

@@ -16,6 +16,16 @@ struct WatchData<T> {
     closed: bool,
 }
 
+/// Error returned when the watch channel is closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClosedError;
+
+impl std::fmt::Display for ClosedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "watch channel closed")
+    }
+}
+
 pub struct Sender<T> {
     data: Arc<Mutex<WatchData<T>>>,
     version: Arc<AtomicU64>,
@@ -68,17 +78,17 @@ impl<T> Sender<T> {
         }
     }
 
-    pub fn borrow(&self) -> Result<WatchRef<'_, T>, ()> {
+    pub fn borrow(&self) -> Result<WatchRef<'_, T>, ClosedError> {
         let guard = self.data.lock();
         if guard.closed {
-            return Err(());
+            return Err(ClosedError);
         }
         Ok(WatchRef { guard })
     }
 }
 
 impl<T: Clone> Sender<T> {
-    pub fn borrow_clone(&self) -> Result<T, ()> {
+    pub fn borrow_clone(&self) -> Result<T, ClosedError> {
         let guard = self.borrow()?;
         Ok(guard.guard.value.clone())
     }
@@ -94,13 +104,13 @@ impl<T> Clone for Sender<T> {
 }
 
 impl<T> Receiver<T> {
-    pub fn borrow(&self) -> Result<T, ()>
+    pub fn borrow(&self) -> Result<T, ClosedError>
     where
         T: Clone,
     {
         let guard = self.data.lock();
         if guard.closed {
-            return Err(());
+            return Err(ClosedError);
         }
         Ok(guard.value.clone())
     }
@@ -138,7 +148,7 @@ pub struct Changed<'a, T> {
 }
 
 impl<T> Future for Changed<'_, T> {
-    type Output = Result<(), ()>;
+    type Output = Result<(), ClosedError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
@@ -152,7 +162,7 @@ impl<T> Future for Changed<'_, T> {
         let mut guard = this.receiver.data.lock();
 
         if guard.closed {
-            return Poll::Ready(Err(()));
+            return Poll::Ready(Err(ClosedError));
         }
 
         let current_version = this.receiver.version.load(Ordering::Acquire);
