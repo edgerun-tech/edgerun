@@ -800,15 +800,12 @@ mod tests {
         use crate::uri::Uri;
 
         // ── Step 1: Server encodes a response ──────────────────────────
-        // :status:200 is index 28 in the static table
         let status = StatusCode::new(200).unwrap();
         let resp_headers = HeaderMap::new();
 
         let mut server_encoder = QpackEncoder::new();
         let encoded_response = Http3Connection::encode_response(status, &resp_headers, &mut server_encoder).unwrap();
         assert!(!encoded_response.is_empty());
-        // :status:200 is 1 byte (0xC0 | 28 = 0xDC)
-        assert_eq!(encoded_response.len(), 1);
 
         // ── Step 2: Client decodes the response ────────────────────────
         let mut client_decoder = QpackDecoder::new();
@@ -817,13 +814,11 @@ mod tests {
 
         assert_eq!(decoded_status.as_u16(), 200);
 
-        // ── Step 3: Manually encode a request using static table only ──
-        // :method:GET = 0xC0|18=0xD2, :scheme:https = 0xC0|26=0xDA, :path:/ = 0xC0|2=0xC2
-        let mut encoded_request = Vec::new();
-        // Indexed Header Field with Static Name Reference: 11SXXXXX
-        encoded_request.push(0xC0 | 18); // :method: GET
-        encoded_request.push(0xC0 | 26); // :scheme: https
-        encoded_request.push(0xC0 | 2);  // :path: /
+        // ── Step 3: Encode a request via the encoder ───────────────────
+        let uri = Uri::parse("https://localhost/").unwrap();
+        let headers = HeaderMap::new();
+        let mut req_encoder = QpackEncoder::new();
+        let encoded_request = Http3Connection::encode_request(&Method::GET, &uri, &headers, &mut req_encoder).unwrap();
 
         // ── Step 4: Server decodes the request ─────────────────────────
         let mut server_decoder = QpackDecoder::new();
@@ -887,18 +882,14 @@ mod tests {
         use crate::http3::http3::frame::Http3Frame;
         use crate::http3::qpack::{QpackDecoder, QpackEncoder};
         use crate::method::Method;
-        use crate::status::StatusCode;
-        use crate::uri::Uri;
 
         // ── Client side: encode a request ──────────────────────────────
-        // Use a URI that only has static table entries: :method:GET (18), :scheme:https (26), :path:/ (2)
-        // No :authority to avoid dynamic table entries for "localhost"
         let mut encoder = QpackEncoder::new();
-        let mut header_block = Vec::new();
-        // Manually encode using static table only
-        header_block.push(0xC0 | 18); // :method: GET
-        header_block.push(0xC0 | 26); // :scheme: https
-        header_block.push(0xC0 | 2);  // :path: /
+        let header_block = encoder.encode(&[
+            (":method", "GET"),
+            (":scheme", "https"),
+            (":path", "/"),
+        ]).unwrap();
 
         // Build a STREAM frame containing the HEADERS frame
         let headers_frame = Http3Frame::Headers { header_block };
@@ -1042,13 +1033,15 @@ mod tests {
     fn test_accept_request_static_headers() {
         use crate::http3::connection::Http3Connection;
         use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::qpack::QpackEncoder;
         use crate::method::Method;
 
-        // Manually craft HEADERS frame with static table request
-        let mut header_block = Vec::new();
-        header_block.push(0xC0 | 18); // :method: GET
-        header_block.push(0xC0 | 26); // :scheme: https
-        header_block.push(0xC0 | 2);  // :path: /
+        let mut encoder = QpackEncoder::new();
+        let header_block = encoder.encode(&[
+            (":method", "GET"),
+            (":scheme", "https"),
+            (":path", "/"),
+        ]).unwrap();
 
         let headers_frame = Http3Frame::Headers { header_block };
         let frame_bytes = headers_frame.to_bytes();
@@ -1094,10 +1087,11 @@ mod tests {
     #[test]
     fn test_server_sends_1rtt_response() {
         use crate::http3::http3::frame::Http3Frame;
+        use crate::http3::qpack::QpackEncoder;
 
-        // Build a response: HEADERS frame with :status: 200 (static table index 28)
-        let mut header_block = Vec::new();
-        header_block.push(0xC0 | 28); // :status: 200
+        let mut encoder = QpackEncoder::new();
+        let header_block = encoder.encode(&[(":status", "200")]).unwrap();
+
         let headers_frame = Http3Frame::Headers { header_block };
         let frame_bytes = headers_frame.to_bytes();
 
@@ -1132,5 +1126,94 @@ mod tests {
         let (packet, _) = QuicPacket::from_bytes(&buf[..n])
             .expect("parse received packet");
         assert_eq!(packet.header.packet_type, crate::http3::quic::packet::PacketType::OneRtt);
+    }
+
+    /// End-to-end HTTP/3 request/response test over real UDP sockets.
+    ///
+    /// Exercises the complete flow:
+    /// 1. Client encodes a GET request (QPACK) and sends via 1-RTT packet
+    /// 2. Server receives, decodes request headers
+    /// 3. Server encodes a 200 response (QPACK) and sends via 1-RTT packet
+    /// 4. Client receives and decodes response
+    ///
+    /// Uses connected UDP sockets so send()/recv() work without DNS lookups.
+    #[test]
+    fn test_e2e_request_response_over_udp() {
+        use crate::http3::connection::Http3Connection;
+        use crate::http3::http3::frame::Http3Frame;
+        use crate::header::HeaderMap;
+        use crate::method::Method;
+        use crate::status::StatusCode;
+        use crate::uri::Uri;
+
+        // Create two connected UDP sockets
+        let server_sock = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind server");
+        let client_sock = std::net::UdpSocket::bind("127.0.0.1:0").expect("bind Client");
+        let server_addr = server_sock.local_addr().expect("get server addr");
+        let client_addr = client_sock.local_addr().expect("get client addr");
+
+        server_sock.connect(client_addr).expect("connect server to client");
+        client_sock.connect(server_addr).expect("connect client to server");
+        server_sock.set_nonblocking(true).ok();
+        client_sock.set_nonblocking(true).ok();
+
+        // Create established connections (no handshake, no encryption)
+        let mut server_quic = QuicConnection::from_established_test(server_sock, client_addr);
+        let mut client_quic = QuicConnection::from_established_test(client_sock, server_addr);
+
+        let mut server = Http3Connection::from_mock(server_quic);
+        let mut client = Http3Connection::from_mock(client_quic);
+
+        // Disable dynamic table — without encoder/decoder streams the tables
+        // can't be synchronized between client and server.
+        server.disable_dynamic_table();
+        client.disable_dynamic_table();
+
+        // ── Client sends a GET request ──────────────────────────────────
+        let uri = Uri::parse("http://localhost/").unwrap();
+        let headers = HeaderMap::new();
+
+        // Debug: encode the request and print the bytes
+        let mut test_encoder = crate::http3::qpack::QpackEncoder::new();
+        test_encoder.set_max_capacity(0);
+        let debug_encoded = Http3Connection::encode_request(&Method::GET, &uri, &headers, &mut test_encoder)
+            .expect("encode_request failed");
+        eprintln!("[TEST] Encoded request bytes: {:02x?}", &debug_encoded);
+
+        let client_stream_id = client.send_request(&Method::GET, &uri, &headers, None)
+            .expect("client send_request failed");
+
+        assert_eq!(client_stream_id, 1); // First client bidi stream
+
+        // Give a moment for the packet to be sent
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // ── Server accepts the request ──────────────────────────────────
+        eprintln!("[TEST] Server calling accept_request...");
+        let result = server.accept_request();
+        eprintln!("[TEST] Server accept_request returned: {:?}", result.as_ref().map(|r| r.as_ref().map(|(sid, m, _, _)| (*sid, m.clone()))));
+        let (stream_id, method, _uri, _req_headers) = result
+            .expect("server accept_request failed")
+            .expect("no request available");
+
+        assert_eq!(stream_id, 1);
+        assert_eq!(method, Method::GET);
+
+        // ── Server sends a response ─────────────────────────────────────
+        let status = StatusCode::new(200).unwrap();
+        let resp_headers = HeaderMap::new();
+        server.send_response(stream_id, status, &resp_headers, Some(b"hello".to_vec()))
+            .expect("server send_response failed");
+
+        // Give a moment for the packet to be sent
+        std::thread::sleep(std::time::Duration::from_millis(10));
+
+        // ── Client receives the response ────────────────────────────────
+        let (got_status, _resp_headers, body) = client.recv_response(client_stream_id)
+            .expect("client recv_response failed")
+            .expect("no response available");
+
+        assert_eq!(got_status.as_u16(), 200);
+        assert_eq!(body, b"hello");
     }
 }

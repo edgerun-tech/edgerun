@@ -211,6 +211,19 @@ impl Http3Connection {
     }
 
     // ------------------------------------------------------------------
+    // QPACK configuration
+    // ------------------------------------------------------------------
+
+    /// Disable QPACK dynamic table encoding.
+    ///
+    /// Use this when the encoder and decoder are not synchronized
+    /// (e.g., in tests without encoder/decoder streams).
+    /// Only static table references and literals without indexing are used.
+    pub fn disable_dynamic_table(&mut self) {
+        self.qpack_encoder.set_max_capacity(0);
+    }
+
+    // ------------------------------------------------------------------
     // Server-side request lifecycle
     // ------------------------------------------------------------------
 
@@ -929,9 +942,9 @@ mod tests {
 
     #[test]
     fn test_qpack_decode_static_response() {
-        // Manually craft a minimal :status: 200 encoding using static table index 28
-        // Indexed Header Field: 1 1 S----- → 0xC0 | index
-        let encoded = vec![0xC0 | 28];
+        // Encode :status: 200 via encoder, then decode
+        let mut encoder = QpackEncoder::new();
+        let encoded = encoder.encode(&[(":status", "200")]).unwrap();
 
         let mut decoder = QpackDecoder::new();
         let (status, _headers) =
@@ -942,17 +955,18 @@ mod tests {
 
     #[test]
     fn test_qpack_decode_static_request() {
-        // Manually craft minimal request headers using static table:
-        // :method: GET → index 18, 0xC0 | 18
-        // :scheme: https → index 59, 0xC0 | 59
-        // :path: / → index 2, 0xC0 | 2
-        let encoded = vec![0xC0 | 18, 0xC0 | 59, 0xC0 | 2];
+        // Encode minimal request headers via encoder, then decode
+        let mut encoder = QpackEncoder::new();
+        let encoded = encoder.encode(&[
+            (":method", "GET"),
+            (":scheme", "https"),
+            (":path", "/"),
+        ]).unwrap();
 
         let mut decoder = QpackDecoder::new();
         let (method, _uri, _headers) =
             Http3Connection::decode_request(&encoded, &mut decoder).unwrap();
 
         assert_eq!(method, Method::GET);
-        // URI will be "https:/" without authority — just verify the method is correct
     }
 }
