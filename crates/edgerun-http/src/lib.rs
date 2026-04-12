@@ -112,6 +112,15 @@ pub mod middleware;
 pub use middleware::{Extensions, Middleware, Next, Chain, middleware_fn, FnMiddleware};
 
 // ---------------------------------------------------------------------------
+// Client middleware system
+// ---------------------------------------------------------------------------
+pub mod client_middleware;
+pub use client_middleware::{
+    ClientExtensions, ClientRequest, ClientMiddleware, ClientNext, ClientTransport,
+    client_middleware_fn, FnClientMiddleware, Chain as ClientChain, Client,
+};
+
+// ---------------------------------------------------------------------------
 // Protocol-specific modules
 // ---------------------------------------------------------------------------
 pub mod http1;
