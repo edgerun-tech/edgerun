@@ -61,7 +61,7 @@ impl CertRef {
     fn as_cert_and_key(&self) -> CertificateAndKey {
         CertificateAndKey {
             cert_der: self.cert_der.clone(),
-            signing_key: (*self.signing_key).clone(),
+            signing_key: Arc::clone(&self.signing_key),
         }
     }
 }
@@ -277,7 +277,7 @@ impl TlsBoundServer {
         // CertificateAndKey is not Clone (SigningKey isn't), so we Arc it.
         let cert = Arc::new(CertRef {
             cert_der: self.cert.cert_der.clone(),
-            signing_key: Arc::new(self.cert.signing_key.clone()),
+            signing_key: self.cert.signing_key.clone(),
         });
 
         loop {
@@ -317,7 +317,7 @@ impl TlsBoundServer {
         let max_size = self.max_request_size;
         let cert = CertRef {
             cert_der: self.cert.cert_der.clone(),
-            signing_key: std::sync::Arc::new(self.cert.signing_key.clone()),
+            signing_key: self.cert.signing_key.clone(),
         };
 
         handle_tls_connection(
@@ -342,7 +342,7 @@ async fn handle_tls_connection(
     max_request_size: usize,
 ) -> std::io::Result<()> {
     let cert_and_key = cert.as_cert_and_key();
-    let tls_stream = match AsyncTlsServerStream::accept(stream, &cert_and_key) {
+    let tls_stream = match AsyncTlsServerStream::accept(stream, &cert_and_key).await {
         Ok(s) => s,
         Err(e) => {
             edgerun_log::debug!("TLS handshake failed from {}: {}", peer_addr, e);

@@ -1907,6 +1907,7 @@ dependencies = [
  "edgerun-json",
  "edgerun-oci-runtime",
  "edgerun-secret-service",
+ "edgerun-tls",
  "flate2",
  "serde",
  "tar",

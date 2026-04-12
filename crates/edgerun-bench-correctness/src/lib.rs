@@ -366,6 +366,6 @@ pub fn rasterize_gpu(scene: &TestScene, width: u32, height: u32) -> Vec<u8> {
         ));
     }
 
-    edgerun_wgpu::render::render_to_pixels(width, height, &rects, &text_cmds)
+    edgerun_wgpu::render::render_to_pixels(width, height, &rects, &text_cmds, &[], 0.0, "")
 }
 

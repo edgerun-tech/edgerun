@@ -296,7 +296,7 @@ fn rasterize_gpu(scene: &TestScene, width: u32, height: u32) -> Vec<u8> {
 
     let text_cmds: Vec<GpuTextCommand> = vec![];
 
-    edgerun_wgpu::render::render_to_pixels(width, height, &rects, &text_cmds)
+    edgerun_wgpu::render::render_to_pixels(width, height, &rects, &text_cmds, &[], 0.0, "")
 }
 
 fn save_mismatch(path: &Path, cpu: &[u8], gpu: &[u8], diff: &[u8], count: usize) {

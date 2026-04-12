@@ -1,0 +1,159 @@
+# RFC-0005: Rendering Architecture — Spec-to-Code Pipeline
+
+**Status:** Working Draft
+**Date:** 2026-04-12
+**Based on:** Codebase audit + DESIGN.md + PHASE1_WGSL_DESIGN.md
+
+---
+
+## Abstract
+
+The rendering engine implements a novel **spec-to-code pipeline**: W3C/WHATWG specifications are extracted into Protocol Buffer definitions, which then drive code generation of behavioral Rust crates (parsers, rasterizers, WGSL shaders, layout engines). No browser generates its rendering code from machine-readable spec data.
+
+---
+
+## Architecture
+
+```
+W3C/WHATWG spec docs
+    ↓ (extract scripts: Python, Go)
+44 proto files in proto/edgerun/v0/
+    ↓ (buf generate + html-codegen + generate_renderer.py)
+~15,000 lines of generated Rust code
+    ↓ (wired into hand-written pipeline)
+edgerun-render → RGBA pixels
+```
+
+### The 18-Layer Model (from DESIGN.md)
+
+| Layer | Component | Status |
+|-------|-----------|--------|
+| 1 | Proto Data (40 files) | ✅ Complete |
+| 2 | Generated Type Crates (37+) | ✅ Generated |
+| 3 | Generated Behavioral (rasterizer, layout, css-cascade) | ⚠️ Partial |
+| 4 | Tile Multicore Rendering | ✅ Functional (~6× speedup) |
+| 5 | GPU Native Rasterizer (wgpu) | ✅ Functional |
+| 6 | GPU CSS Cascade + Layout | ✅ Functional (3-pass) |
+| 7 | Visual Cascade Debugger | ✅ Functional |
+| 8 | Conformance Dashboard | ✅ Generated (7.7% coverage) |
+| 9 | CSS Property Knowledge Graph | ✅ Functional (98 props) |
+| 10 | Spec Change Detector | ✅ Functional |
+| 11 | Incremental Layout Engine | ✅ Functional (3 tests) |
+| 12 | Deterministic Render Proof | ✅ Functional (5 tests) |
+| 13 | CSS Minification | ✅ Functional (60-70% compression) |
+| 14 | Predictive Layout Budget | ✅ Functional (4 tests) |
+| 15 | Accessibility Conformance | ✅ Functional (6 tests, WCAG 2.2) |
+| 16 | CSS Complexity Analyzer | ✅ Functional (3 tests) |
+| 17 | Deterministic Replay Engine | ✅ Functional (5 tests) |
+| 18 | CSS Rule Optimization | ✅ Functional (5 tests) |
+
+---
+
+## Code Generation Pipeline
+
+| Generator | Input | Output | Lines |
+|-----------|-------|--------|-------|
+| `buf generate` | 44 proto files | Generated prost bindings in 37+ crates | ~10,000 |
+| `html-codegen` (Go) | data/*.textproto (WHATWG IR) | tokenizer.rs, tree_builder.rs, entity_decoder | ~7,000 |
+| `scripts/generate_renderer.py` | CSS proto data | render_object.rs, layout_context.rs, box_model.rs, etc. | ~400 |
+| `scripts/generate_wgsl.py` | CSS proto + LUTs | shaders/render.wgsl | 1,810 |
+| `edgerun-wgpu` (hand-written) | shaders/*.wgsl | GPU pipeline, uniforms, font atlas | ~1,500 |
+
+---
+
+## Dual Render Architecture
+
+### CPU Path (`edgerun-render` → `edgerun-rasterizer`)
+```
+HTML string → WHATWG tokenizer → tree_builder → DOM
+CSS string → css_parser → Stylesheet
+DOM + CSS → build_layout → RenderObject tree
+RenderObject → position_tree → PositionedNode list
+PositionedNode → paint_node → RasterCommand list
+RasterCommand → scanline::rasterize → Vec<u8> (RGBA)
+```
+
+### GPU Path (`edgerun-demo-wgpu` → `edgerun-wgpu`)
+```
+HTML string → edgerun_render::parse_html → DOM
+CSS string → edgerun_css_cascade::parse_stylesheet → CascadeStylesheet
+DOM → flatten to Vec<GpuDomNode> + text buffer
+CSS → flatten to Vec<GpuCssRule>
+GpuDomNode + GpuCssRule → LayoutComputePipeline::run_full_layout() → Vec<GpuLayoutResult>
+GpuLayoutResult → Vec<GpuRectStyle> + Vec<GpuTextCommand>
+GpuRectStyle + GpuTextCommand → GpuRenderer::render_and_readback() → Vec<u8> (RGBA8)
+```
+
+### Deterministic Proof (`edgerun-render-proof`)
+Both paths receive the same input → produce pixels → byte-for-byte comparison. Mismatches saved as PNGs.
+
+---
+
+## Key Performance Data
+
+### CPU Rasterizer Throughput
+| Test | Throughput | FPS @ 4K |
+|------|-----------|----------|
+| Solid fills (scalar) | 3.4 Gpix/sec | 407 |
+| Solid fills (AVX2) | 2.8 Gpix/sec | 340 |
+| Gradients | ~0.1 Gpix/sec | 12 |
+
+Note: LLVM auto-vectorizes solid fills so well that AVX2 adds no benefit. Gradients are per-pixel f64 trig — SIMD can't help without rewriting the math.
+
+### Demo Performance
+- DOM: 39 nodes, CSS: 10 cascade rules, Paint commands: 28
+- Renders 960×640 PNG in ~30ms (CPU)
+
+---
+
+## Bugs Found & Fixed (from DESIGN.md)
+
+1. **CSS Parser Whitespace** — `parse_stylesheet` returned 0 rules from `"p { color: red; }"` because position was at space before `}`. Fixed by adding `skip_whitespace()` before `consume("}")`.
+2. **Display List Zero Rects** — `build_display_list()` emitted zero-sized rects. Fixed by implementing two-pass block layout directly in demo.
+3. **Space Characters Render as Boxes** — Whitespace-only text nodes rendered as bitmap squares. Fixed by checking `t.trim().is_empty()` before emitting `cmd_text`.
+
+---
+
+## Known Issues
+
+### Critical Gaps
+| Gap | Status | Impact |
+|-----|--------|--------|
+| G2. Text Shaping & Real Fonts | ❌ Not started | 8×8 bitmap font, no ligatures/kerning/fallback |
+| G5. Flexbox/Grid Layout | ❌ Not started | Only block layout; flex/grid variants exist but use block |
+| G6. Image Decoding | ❌ Not started | Only `// TODO` stub in `render.rs:93` |
+| G9. Media Queries | ❌ Not started | No `@media` parsing or evaluation |
+
+### Partial Gaps
+| Gap | Status | Details |
+|-----|--------|---------|
+| G8. Damage Tracking | ⚠️ Implemented, not integrated | `DirtySet` + `LayoutBudget` exist with 7 passing tests, but not wired into render pipeline |
+| G4. Real HTML/CSS Parsing → Render | ⚠️ Partial | layout_builder uses typed CSS values, but demo still has ad-hoc parsing |
+| G7. CSS Images | ⚠️ Partial | Linear/radial/conic gradients work; `url()` and `image-set()` not supported |
+
+### Code Quality Issues (verified against actual source)
+| Issue | Evidence |
+|-------|----------|
+| Image rendering stubbed | `render.rs:93` — `// TODO: decode image, emit Image command` |
+| 11 dead code modules | `EdgeValues`, `IntrinsicSizes`, `resolve_box_dimensions`, `apply_text_transform`, `should_wrap`, `resolve_font_weight`, `hsl_to_rgba`, `oklch_to_rgba`, `establishes_bfc`, `clips_overflow`, `build_display_list` — defined but never called in pipeline |
+| HSL/OKLCh colors fall to black | `computed_style.rs` falls back to black for non-RGB colors despite `color_convert.rs` having working converters |
+| Paint command disconnected | `paint_command.rs` emits `PaintCommand` with zero-sized rects; `render.rs` bypasses it with `RasterCommand` directly |
+| No real font metrics | `position_layout.rs` estimates text width as `font.size * 0.5` |
+| No position offsets | relative/absolute/fixed/sticky offsets parsed but never applied |
+| No transforms/opacity during paint | `has_transform`, `will_change`, `z_index` parsed but not applied |
+| `edgerun-css-cascade` unused | Full cascade engine exists independently but render pipeline uses its own simpler `css_parser.rs` |
+
+### Storage Issues (verified against actual source)
+| Issue | Evidence |
+|-------|----------|
+| `integrity_check_and_rebuild` stub | `store.rs:1014` — `// TODO: rebuild indexes from event log` returns `Ok(0)` |
+| Blob recipients spec violation | Spec §6.2 requires ≥1 recipient; code allows `&[]` |
+| No CAS for head updates | Spec §19.9 requires `compare_and_set_head`; implementation does separate `put_event` + `set_head` |
+| Stale doc comments | References to "SQLite" remain after migration to file-based binary indexes |
+
+### Tooling Gaps
+| Gap | Status |
+|-----|--------|
+| G10. CI Integration | ⚠️ Partial — `ci_check` binary exists, no CI config |
+| G11. Interactive Debugging | ⚠️ Functional — cascade-debugger is CLI only |
+| G12. ECMAScript Integration | ❌ Not started — Proto files exist, no JS engine |

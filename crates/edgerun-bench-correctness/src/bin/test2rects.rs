@@ -22,7 +22,7 @@ fn main() {
     println!("Byte at offset {} (rect[1].bg_color[0]): {:02X}", GpuRectStyle::SIZE, all_data[GpuRectStyle::SIZE]);
 
     let text_cmds: Vec<edgerun_wgpu::uniforms::GpuTextCommand> = vec![];
-    let pixels = edgerun_wgpu::render::render_to_pixels(200, 200, &rects, &text_cmds);
+    let pixels = edgerun_wgpu::render::render_to_pixels(200, 200, &rects, &text_cmds, &[], 0.0, "");
     let i = (100 * 200 + 100) as usize * 4;
     println!("GPU pixel (100,100): ({}, {}, {}, {})", pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]);
     let i2 = (10 * 200 + 10) as usize * 4;

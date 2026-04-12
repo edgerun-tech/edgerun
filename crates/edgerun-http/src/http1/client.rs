@@ -337,7 +337,7 @@ impl Client {
         tls.write_all(&request_bytes).await
             .map_err(Error::Network)?;
 
-        Self::read_response_tls(tls, is_head).await
+        Self::read_response_tls_full(tls, is_head).await
     }
 
     /// Execute an HTTPS request with streaming body reader.
@@ -345,7 +345,7 @@ impl Client {
     pub async fn execute_tls_streaming(
         &self,
         request: &Request,
-    ) -> Result<(Response, AsyncBodyReader<AsyncTlsStream<AsyncTcpStream>>)> {
+    ) -> Result<(Response, AsyncBodyReader<AsyncTlsStream<Arc<AsyncTcpStream>>>)> {
         let uri = request.uri();
         let is_head = request.method() == &Method::HEAD;
 
@@ -428,9 +428,9 @@ impl Client {
         &self,
         host: &str,
         port: u16,
-    ) -> Result<AsyncTlsStream<AsyncTcpStream>> {
+    ) -> Result<AsyncTlsStream<Arc<AsyncTcpStream>>> {
         let stream = self.resolve_and_connect(host, port).await?;
-        AsyncTlsStream::client(stream, host)
+        AsyncTlsStream::client(stream, host).await
             .map_err(|e| Error::ProtocolError(format!("TLS handshake failed: {}", e)))
     }
 
@@ -449,10 +449,18 @@ impl Client {
 
     #[cfg(feature = "tls")]
     async fn read_response_tls(
-        tls: AsyncTlsStream<AsyncTcpStream>,
+        tls: AsyncTlsStream<Arc<AsyncTcpStream>>,
+        is_head: bool,
+    ) -> Result<(Response, AsyncBodyReader<AsyncTlsStream<Arc<AsyncTcpStream>>>)> {
+        Self::read_response_headers_impl(tls, is_head).await
+    }
+
+    #[cfg(feature = "tls")]
+    async fn read_response_tls_full(
+        tls: AsyncTlsStream<Arc<AsyncTcpStream>>,
         is_head: bool,
     ) -> Result<Response> {
-        let (resp, body_reader) = Self::read_response_headers_impl(tls, is_head).await?;
+        let (resp, body_reader) = Self::read_response_tls(tls, is_head).await?;
         let body = body_reader.collect().await.map_err(|e| Error::Network(e))?;
         Ok(resp.with_body(body))
     }

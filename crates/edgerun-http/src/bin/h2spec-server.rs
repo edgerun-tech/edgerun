@@ -7,7 +7,7 @@
 
 use edgerun_http::http2::frame::{Frame, FrameType};
 use edgerun_http::http2::hpack::{Decoder, Encoder};
-use edgerun_http::http2::server::{FrameAction, Http2Server};
+use edgerun_http::http2::server::{FrameAction, Http2Server, ContinuationState};
 use edgerun_http::http2::ErrorCode;
 use edgerun_http::tls::TlsHttp2Server;
 use edgerun_tls::certificate_gen::generate_self_signed;
@@ -126,9 +126,7 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
     let mut decoder = Decoder::new();
     // Configure decoder with client's header table size setting
     decoder.set_max_table_size(server.client_settings.header_table_size as usize);
-    let mut header_block_buf = Vec::new();
-    let mut expecting_continuation = false;
-    let mut continuation_stream_id = 0u32;
+    let mut expecting_continuation = ContinuationState::new();
 
     loop {
         let (frame, raw_type_byte) = match read_frame(&mut tls_stream) {
@@ -139,7 +137,7 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
         // During a CONTINUATION sequence, unknown frame types are a connection error.
         // RFC 7540 §6.2: "Any other frame appearing in the middle of a header block
         // MUST be treated as a connection error of type PROTOCOL_ERROR."
-        if expecting_continuation && raw_type_byte >= 0xA {
+        if expecting_continuation.expecting && raw_type_byte >= 0xA {
             write_goaway(
                 &mut tls_stream,
                 server.last_processed_stream_id,
@@ -180,7 +178,7 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
 
         // If we're expecting a CONTINUATION, only CONTINUATION frames are allowed.
         // Any other frame type is a connection error (RFC 7540 §6.2).
-        if expecting_continuation && frame.frame_type != FrameType::Continuation {
+        if expecting_continuation.expecting && frame.frame_type != FrameType::Continuation {
             write_goaway(
                 &mut tls_stream,
                 server.last_processed_stream_id,
@@ -222,17 +220,17 @@ fn handle_connection(tcp_stream: std::net::TcpStream) -> std::io::Result<()> {
             }
             FrameType::Headers => server.handle_headers(
                 &frame,
-                &mut header_block_buf,
+                
                 &mut decoder,
                 &mut encoder,
                 &mut expecting_continuation,
-                &mut continuation_stream_id,
+                
             ),
             FrameType::Continuation => server.handle_continuation(
                 &frame,
-                &mut header_block_buf,
+                
                 &mut expecting_continuation,
-                &mut continuation_stream_id,
+                
                 &mut decoder,
                 &mut encoder,
             ),
