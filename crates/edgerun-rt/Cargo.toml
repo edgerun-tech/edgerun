@@ -32,3 +32,7 @@ harness = false
 [[test]]
 name = "oneshot_test"
 harness = false
+
+[[test]]
+name = "mpsc_test"
+harness = false
