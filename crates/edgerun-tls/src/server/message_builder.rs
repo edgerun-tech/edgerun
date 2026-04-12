@@ -55,14 +55,36 @@ pub fn build_server_hello(
 
 /// Build an EncryptedExtensions handshake message (RFC 8446 §4.3.1).
 ///
-/// Wire format: type(1) + length(3) + extensions_length(2) + extensions(0)
-/// Even with no extensions, the extensions_length field (2 bytes) is required.
-pub fn build_encrypted_extensions() -> Vec<u8> {
+/// Wire format: type(1) + length(3) + extensions_length(2) + extensions
+///
+/// If `alpn_protocol` is Some, includes the ALPN extension with the selected protocol.
+pub fn build_encrypted_extensions(alpn_protocol: Option<&[u8]>) -> Vec<u8> {
     let mut msg = Vec::new();
     msg.push(8); // EncryptedExtensions type
     msg.extend_from_slice(&[0u8; 2]);
-    msg.push(2u8); // body length = 2 (just the extensions_length field)
-    msg.extend_from_slice(&[0u8; 2]); // extensions_length = 0
+    msg.push(0u8); // length high byte placeholder
+
+    let ext_start = msg.len();
+    msg.extend_from_slice(&[0u8; 2]); // extensions_length placeholder
+
+    // ALPN extension (ext 16) — if a protocol was selected
+    if let Some(proto) = alpn_protocol {
+        msg.extend_from_slice(&16u16.to_be_bytes()); // ALPN extension type
+        // Protocol list: length(2) + proto_len(1) + proto
+        let proto_data_len = 3 + proto.len();
+        msg.extend_from_slice(&(proto_data_len as u16).to_be_bytes());
+        msg.extend_from_slice(&((proto_data_len - 2) as u16).to_be_bytes()); // protocol list length
+        msg.push(proto.len() as u8);
+        msg.extend_from_slice(proto);
+    }
+
+    let ext_len = (msg.len() - ext_start) as u16;
+    msg[ext_start - 2..ext_start].copy_from_slice(&ext_len.to_be_bytes());
+
+    // Fill message length
+    let msg_len = (msg.len() - 4) as u32;
+    msg[1..4].copy_from_slice(&msg_len.to_be_bytes()[1..]);
+
     msg
 }
 
@@ -210,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_encrypted_extensions_build() {
-        let ee_bytes = build_encrypted_extensions();
+        let ee_bytes = build_encrypted_extensions(None);
         assert_eq!(ee_bytes[0], 8);
         assert_eq!(ee_bytes.len(), 6);
     }
@@ -228,7 +250,7 @@ mod tests {
         let cert = generate_self_signed(&["localhost"]);
         let transcript = vec![0x01u8; 64];
 
-        let cv_bytes = build_certificate_verify(&transcript, &cert.signing_key, &Hasher::Sha256).unwrap();
+        let cv_bytes = build_certificate_verify(&transcript, &*cert.signing_key, &Hasher::Sha256).unwrap();
         assert_eq!(cv_bytes[0], 15);
         assert!(cv_bytes.len() > 4);
         assert_eq!(&cv_bytes[4..6], &[0x04, 0x03]);
@@ -295,7 +317,7 @@ mod tests {
 
         let mut write_cipher = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
 
-        let ee_bytes = build_encrypted_extensions();
+        let ee_bytes = build_encrypted_extensions(None);
         let ee_encrypted = write_cipher.encrypt(22, &ee_bytes);
 
         let mut read_cipher_ee = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
@@ -312,7 +334,7 @@ mod tests {
         assert_eq!(cert_decrypted, cert_msg);
 
         let transcript = vec![0xEEu8; 64];
-        let cv_bytes = build_certificate_verify(&transcript, &cert.signing_key, &hash).unwrap();
+        let cv_bytes = build_certificate_verify(&transcript, &*cert.signing_key, &hash).unwrap();
         let cv_encrypted = write_cipher.encrypt(22, &cv_bytes);
 
         let mut read_cipher_cv = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();

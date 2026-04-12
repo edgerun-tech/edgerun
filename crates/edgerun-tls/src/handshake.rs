@@ -20,6 +20,8 @@ pub struct ClientHelloBuilder {
     server_name: String,
     supported_groups: Vec<NamedGroup>,
     key_share: Vec<u8>,
+    /// ALPN protocols to advertise (e.g., &["h3"])
+    alpn_protocols: Vec<Vec<u8>>,
 }
 
 impl ClientHelloBuilder {
@@ -32,6 +34,7 @@ impl ClientHelloBuilder {
             server_name: server_name.to_string(),
             supported_groups: NamedGroup::client_default(),
             key_share: Vec::new(),
+            alpn_protocols: Vec::new(),
         }
     }
 
@@ -43,6 +46,14 @@ impl ClientHelloBuilder {
         self.key_share.extend_from_slice(&group.to_wire().to_be_bytes());
         self.key_share.extend_from_slice(&(public_key.len() as u16).to_be_bytes());
         self.key_share.extend_from_slice(public_key);
+        self
+    }
+
+    /// Set ALPN protocols to advertise (RFC 7301).
+    ///
+    /// For HTTP/3, use `&["h3"]`.
+    pub fn alpn_protocols(mut self, protocols: &[&[u8]]) -> Self {
+        self.alpn_protocols = protocols.iter().map(|p| p.to_vec()).collect();
         self
     }
 
@@ -138,6 +149,25 @@ impl ClientHelloBuilder {
             msg.extend_from_slice(&0u16.to_be_bytes());
             msg.extend_from_slice(&(data.len() as u16).to_be_bytes());
             msg.extend_from_slice(&data);
+        }
+
+        // 7. application_layer_protocol_negiation (ext 16) — ALPN (RFC 7301)
+        if !self.alpn_protocols.is_empty() {
+            let mut proto_list = Vec::new();
+            // Total length placeholder (2 bytes)
+            proto_list.extend_from_slice(&[0u8; 2]);
+            for proto in &self.alpn_protocols {
+                proto_list.push(proto.len() as u8);
+                proto_list.extend_from_slice(proto);
+            }
+            // Fill in total length
+            let total_len = (proto_list.len() - 2) as u16;
+            proto_list[0] = (total_len >> 8) as u8;
+            proto_list[1] = total_len as u8;
+
+            msg.extend_from_slice(&16u16.to_be_bytes()); // ALPN extension type
+            msg.extend_from_slice(&(proto_list.len() as u16).to_be_bytes());
+            msg.extend_from_slice(&proto_list);
         }
 
         // Fill extension length

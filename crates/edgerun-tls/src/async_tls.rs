@@ -436,7 +436,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> AsyncTlsServerStream<S> {
         // 4. Send encrypted handshake messages
         async_server_send_encrypted_handshake(
             &mut stream, &mut _write_cipher, &mut ks, &mut transcript, &hash,
-            &handshake_transcript_hash, &cert_and_key.cert_der, &cert_and_key.signing_key,
+            &handshake_transcript_hash, &cert_and_key.cert_der, &*cert_and_key.signing_key,
         ).await?;
 
         let app_transcript_hash = hash.hash(&transcript);
@@ -914,7 +914,7 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
 ) -> Result<()> {
     // EncryptedExtensions
-    let ee_msg = build_encrypted_extensions();
+    let ee_msg = build_encrypted_extensions(None);
     transcript.extend_from_slice(&ee_msg);
     let ee_ct = write_cipher.encrypt(22, &ee_msg);
     async_write_all(stream, &crate::record::TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes()).await?;

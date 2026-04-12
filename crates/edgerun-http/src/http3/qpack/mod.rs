@@ -5,6 +5,7 @@
 
 pub mod decoder;
 pub mod encoder;
+pub mod huffman;
 pub mod instructions;
 pub mod static_table;
 

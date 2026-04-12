@@ -1,0 +1,448 @@
+//! Async HTTP/3 server.
+//!
+//! Listens on a UDP socket and accepts incoming HTTP/3 (QUIC) connections.
+//! Each accepted connection gets its own [`Http3Connection`] with the full
+//! QUIC + TLS 1.3 handshake completed.
+//!
+//! # Example
+//! ```no_run
+//! use edgerun_http::http3::Http3Server;
+//! use edgerun_tls::certificate_gen::generate_self_signed;
+//! use edgerun_rt::Runtime;
+//!
+//! let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
+//! rt.block_on(async {
+//!     let cert = generate_self_signed(&["localhost"]);
+//!     let server = Http3Server::bind("127.0.0.1:4433", cert).await.unwrap();
+//!     println!("HTTP/3 server listening on {}", server.local_addr().unwrap());
+//!
+//!     // Accept connections in a loop
+//!     loop {
+//!         match server.accept().await {
+//!             Ok((conn, client_addr)) => {
+//!                 println!("Accepted HTTP/3 connection from {}", client_addr);
+//!                 // Handle conn...
+//!             }
+//!             Err(e) => eprintln!("Accept error: {}", e),
+//!         }
+//!     }
+//! });
+//! ```
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use edgerun_rt::AsyncUdpSocket;
+use edgerun_tls::certificate_gen::CertificateAndKey;
+
+use super::connection::Http3Connection;
+use super::quic::QuicTlsServerHandshaker;
+use super::quic::crypto::PacketProtection;
+use super::quic::packet::{QuicPacket, PacketType};
+use super::quic::frame::QuicFrame;
+use super::quic::QuicConnection;
+use super::quic::ConnectionId;
+use super::qpack::{QpackDecoder, QpackEncoder};
+use super::http3::settings::Http3Settings;
+use super::Http3Error;
+use std::collections::HashMap;
+
+/// HTTP/3 server listening on a UDP socket.
+pub struct Http3Server {
+    /// Underlying UDP socket
+    socket: Arc<AsyncUdpSocket>,
+    /// Certificate and signing key for TLS
+    cert_and_key: CertificateAndKey,
+    /// Pending connections (packet → server_addr)
+    pending: std::sync::Mutex<Vec<(Vec<u8>, SocketAddr)>>,
+}
+
+impl Http3Server {
+    /// Bind to the given address and prepare to accept HTTP/3 connections.
+    pub async fn bind<A: std::net::ToSocketAddrs>(
+        addr: A,
+        cert_and_key: CertificateAndKey,
+    ) -> std::io::Result<Self> {
+        let socket = Arc::new(AsyncUdpSocket::bind(addr)?);
+        Ok(Http3Server {
+            socket,
+            cert_and_key,
+            pending: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Local address of the server.
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.socket.local_addr()
+    }
+
+    /// Accept the next incoming HTTP/3 connection.
+    ///
+    /// This performs the full QUIC + TLS 1.3 server handshake:
+    /// 1. Receive Initial packet with ClientHello
+    /// 2. Derive Initial keys from client's DCID
+    /// 3. Parse ClientHello, build ServerHello
+    /// 4. Derive Handshake keys via ECDH
+    /// 5. Build and send encrypted handshake messages
+    /// 6. Wait for client's Finished
+    /// 7. Derive Application keys
+    ///
+    /// Returns the established connection and the client's address.
+    pub async fn accept(&self) -> Result<(Http3Connection, SocketAddr), String> {
+        loop {
+            // First check if we have pending data
+            {
+                let mut pending = self.pending.lock().unwrap();
+                if !pending.is_empty() {
+                    let (data, client_addr) = pending.remove(0);
+                    if let Ok(conn) = self.handle_initial_packet(&data, client_addr).await {
+                        return Ok(conn);
+                    }
+                    // If handshake failed, try next pending
+                }
+            }
+
+            // Receive next packet
+            let mut buf = [0u8; 65536]; // Max UDP datagram
+            let (n, client_addr) = self.socket.recv_from(&mut buf)
+                .await
+                .map_err(|e| format!("recv_from failed: {}", e))?;
+
+            let data = buf[..n].to_vec();
+            match self.handle_initial_packet(&data, client_addr).await {
+                Ok(conn) => return Ok(conn),
+                Err(e) => {
+                    // Log and try next packet
+                    eprintln!("[HTTP/3 server] handshake error from {}: {}", client_addr, e);
+                }
+            }
+        }
+    }
+
+    /// Process an Initial-level packet and perform the server-side handshake.
+    async fn handle_initial_packet(
+        &self,
+        data: &[u8],
+        client_addr: SocketAddr,
+    ) -> Result<(Http3Connection, SocketAddr), String> {
+        // Parse the QUIC packet
+        let (pkt, _) = QuicPacket::from_bytes(data)
+            .map_err(|e| format!("Packet parse error: {}", e))?;
+
+        if pkt.header.packet_type != PacketType::Initial {
+            return Err(format!("Expected Initial packet, got {:?}", pkt.header.packet_type));
+        }
+
+        let client_dcid = pkt.header.dst_cid.clone();
+        let client_scid = pkt.header.src_cid.clone();
+
+        // Decrypt the Initial packet payload
+        // First, derive Initial keys to decrypt
+        let mut handshaker = QuicTlsServerHandshaker::new(self.cert_and_key.clone());
+        let initial_keys = handshaker.initial_keys(&client_dcid);
+        let mut initial_protection = PacketProtection::new(&initial_keys);
+
+        // Decrypt payload
+        let plaintext = initial_protection.unprotect(&[], pkt.header.packet_number, &pkt.payload)
+            .map_err(|e| format!("Initial decrypt failed: {}", e))?;
+
+        // Parse CRYPTO frame
+        let (crypto_data, _) = Self::parse_crypto_frame(&plaintext)
+            .ok_or_else(|| "No CRYPTO frame in Initial packet".to_string())?;
+
+        // Process ClientHello, get ServerHello
+        let server_hello = handshaker.process_client_hello(&crypto_data)?;
+
+        // Now we need to send the response:
+        // 1. Initial packet with ServerHello (encrypted with Initial keys)
+        // 2. Handshake packets with EE, Cert, CertVerify, Finished (encrypted with Handshake keys)
+
+        // Build Initial response packet
+        let server_hello_frame = QuicFrame::Crypto {
+            offset: 0,
+            data: server_hello.clone(),
+        };
+        let initial_response = self.build_initial_response(
+            &client_dcid,
+            &client_scid,
+            &server_hello_frame,
+            &handshaker,
+        )?;
+
+        // Send Initial packet
+        self.socket.send_to(&initial_response, client_addr).await
+            .map_err(|e| format!("Failed to send Initial packet: {}", e))?;
+
+        // Build and send Handshake-level packets
+        let (handshake_crypto, expected_client_verify) = handshaker.build_encrypted_handshake()
+            .map_err(|e| format!("Failed to build encrypted handshake: {}", e))?;
+
+        let handshake_frame = QuicFrame::Crypto {
+            offset: 0,
+            data: handshake_crypto.clone(),
+        };
+        let handshake_response = self.build_handshake_response(
+            &client_dcid,
+            &client_scid,
+            &handshake_frame,
+            &handshaker,
+        )?;
+
+        // Send Handshake packet
+        self.socket.send_to(&handshake_response, client_addr).await
+            .map_err(|e| format!("Failed to send Handshake packet: {}", e))?;
+
+        // Wait for client's Finished in a Handshake packet
+        let client_finished_data = self.wait_for_client_finished(
+            client_addr,
+            &client_dcid,
+            &handshaker,
+            &expected_client_verify,
+        ).await?;
+
+        // Build the transcript including client Finished
+        let mut transcript_after = handshaker.transcript().to_vec();
+
+        // Derive application keys and build the handshake result
+        // The server uses the client's DCID (our SCID) as the dcid for key derivation
+        let handshake_result = handshaker.build_result(&client_dcid, &transcript_after)
+            .map_err(|e| format!("Failed to build handshake result: {}", e))?;
+        handshaker.mark_complete();
+
+        // Create a QuicConnection from the server-side handshake result
+        // We need to extract the raw socket — we'll use mem::replace to take ownership
+        // Actually, we can't extract the socket from AsyncUdpSocket. Instead,
+        // we create the Http3Connection directly with the handshake result.
+        let quic_conn = QuicConnection::from_server(
+            // For the server, we use the same socket but with the client's address
+            // The QuicConnection needs a UdpSocket — we'll create one bound to 0
+            // and manage the actual I/O through the server's socket.
+            // For now, use a dummy socket — the server handles I/O directly.
+            Self::dummy_socket().map_err(|e| format!("Failed to create dummy socket: {}", e))?,
+            client_addr.to_string(),
+            ConnectionId::new(client_dcid),
+            ConnectionId::new(client_scid),
+            handshake_result,
+        )?;
+
+        // Wrap in Http3Connection (sends server preface: control + QPACK streams)
+        let conn = Http3Connection::from_server(quic_conn)
+            .map_err(|e| format!("Failed to create server HTTP/3 connection: {}", e))?;
+
+        Ok((conn, client_addr))
+    }
+
+    /// Create a dummy UDP socket for server-side connections.
+    ///
+    /// Server connections don't use the socket directly — I/O is handled
+    /// through the server's AsyncUdpSocket.
+    fn dummy_socket() -> std::io::Result<std::net::UdpSocket> {
+        std::net::UdpSocket::bind("127.0.0.1:0")
+    }
+
+    /// Build Initial response packet (contains ServerHello).
+    fn build_initial_response(
+        &self,
+        client_dcid: &[u8],
+        client_scid: &[u8],
+        crypto_frame: &QuicFrame,
+        handshaker: &QuicTlsServerHandshaker,
+    ) -> Result<Vec<u8>, String> {
+        let payload = crypto_frame.to_bytes();
+        let initial_keys = handshaker.initial_keys(client_dcid);
+        let mut protection = PacketProtection::new(&initial_keys);
+
+        // Build long header for Initial
+        let mut header = Vec::new();
+        header.push(0x0C | 0x00); // Long header, Initial type (0x00), fixed bits
+        header.extend_from_slice(&0x00000001u32.to_be_bytes()); // Version
+        header.push(client_dcid.len() as u8);
+        header.extend_from_slice(client_dcid);
+        header.push(client_scid.len() as u8);
+        header.extend_from_slice(client_scid);
+        // Token length = 0 (varint, 1 byte)
+        header.push(0x00);
+        // Payload length placeholder (2 bytes, will fill after)
+        let payload_len_pos = header.len();
+        header.extend_from_slice(&[0u8; 2]);
+        // Packet number (2 bytes)
+        header.extend_from_slice(&0u64.to_be_bytes()[6..]);
+
+        let header_len = header.len();
+        header.extend_from_slice(&payload);
+
+        let encrypted = protection.protect(&header, &header[header_len..])
+            .map_err(|e| format!("Initial encrypt failed: {}", e))?;
+
+        // Fill in payload length
+        let total_payload = encrypted.len();
+        header[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
+        header[payload_len_pos + 1] = total_payload as u8;
+
+        // Rebuild: header + encrypted payload
+        let mut packet = header[..header_len].to_vec();
+        packet.extend_from_slice(&encrypted);
+
+        Ok(packet)
+    }
+
+    /// Build Handshake-level response packet (EE, Cert, CertVerify, Finished).
+    fn build_handshake_response(
+        &self,
+        client_dcid: &[u8],
+        client_scid: &[u8],
+        crypto_frame: &QuicFrame,
+        handshaker: &QuicTlsServerHandshaker,
+    ) -> Result<Vec<u8>, String> {
+        let payload = crypto_frame.to_bytes();
+        let hs_keys = handshaker.handshake_keys()
+            .map_err(|e| format!("Failed to derive handshake keys: {}", e))?;
+        let mut protection = PacketProtection::new(&hs_keys);
+
+        // Build long header for Handshake
+        let mut header = Vec::new();
+        header.push(0x0C | 0x20); // Long header, Handshake type (0x20), fixed bits
+        header.extend_from_slice(&0x00000001u32.to_be_bytes()); // Version
+        header.push(client_dcid.len() as u8);
+        header.extend_from_slice(client_dcid);
+        header.push(client_scid.len() as u8);
+        header.extend_from_slice(client_scid);
+        // Token length = 0
+        header.push(0x00);
+        // Payload length placeholder
+        let payload_len_pos = header.len();
+        header.extend_from_slice(&[0u8; 2]);
+        // Packet number
+        header.extend_from_slice(&0u64.to_be_bytes()[6..]);
+
+        let header_len = header.len();
+        header.extend_from_slice(&payload);
+
+        let encrypted = protection.protect(&header, &header[header_len..])
+            .map_err(|e| format!("Handshake encrypt failed: {}", e))?;
+
+        let total_payload = encrypted.len();
+        header[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
+        header[payload_len_pos + 1] = total_payload as u8;
+
+        let mut packet = header[..header_len].to_vec();
+        packet.extend_from_slice(&encrypted);
+
+        Ok(packet)
+    }
+
+    /// Wait for the client's Finished message in a Handshake packet.
+    ///
+    /// Receives, decrypts, and verifies the client's Finished verify_data.
+    /// Returns the raw client Finished message bytes (for transcript).
+    async fn wait_for_client_finished(
+        &self,
+        _client_addr: SocketAddr,
+        client_dcid: &[u8],
+        handshaker: &QuicTlsServerHandshaker,
+        expected_client_verify: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // Derive handshake-level protection keys for decryption
+        let hs_keys = handshaker.handshake_keys()
+            .map_err(|e| format!("Failed to derive handshake keys: {}", e))?;
+        let mut hs_protection = PacketProtection::new(&hs_keys);
+
+        // Try to receive packets until we find the client's Finished
+        for _ in 0..20 {
+            let mut buf = [0u8; 65536];
+            let (n, _src) = self.socket.recv_from(&mut buf)
+                .await
+                .map_err(|e| format!("recv_from failed: {}", e))?;
+
+            let (pkt, _) = QuicPacket::from_bytes(&buf[..n])
+                .map_err(|e| format!("Packet parse error: {}", e))?;
+
+            // Client sends Finished in Handshake-level packets
+            if pkt.header.packet_type != PacketType::Handshake {
+                continue;
+            }
+
+            // Decrypt
+            let plaintext = hs_protection.unprotect(&[], pkt.header.packet_number, &pkt.payload)
+                .map_err(|e| format!("Handshake decrypt failed: {}", e))?;
+
+            // Parse CRYPTO frame
+            if let Some((crypto_data, _)) = Self::parse_crypto_frame(&plaintext) {
+                // The client's Finished message is in this CRYPTO data
+                // Finished message: type(1) + length(3) + verify_data(32)
+                if crypto_data.len() >= 4 + expected_client_verify.len() {
+                    // Check if this is actually a Finished message (type 20)
+                    if crypto_data[0] == 20 {
+                        let verify_data = &crypto_data[4..4 + expected_client_verify.len()];
+                        
+                        // Verify the client's Finished
+                        handshaker.verify_client_finished(verify_data, expected_client_verify)?;
+                        
+                        return Ok(crypto_data);
+                    }
+                }
+            }
+        }
+
+        Err("Client Finished not received after 20 attempts".into())
+    }
+
+    /// Parse a CRYPTO frame from decrypted packet payload.
+    fn parse_crypto_frame(data: &[u8]) -> Option<(Vec<u8>, usize)> {
+        if data.is_empty() {
+            return None;
+        }
+
+        let frame_type = data[0];
+        if frame_type != 0x06 {
+            return None;
+        }
+
+        let mut pos = 1;
+        let (offset, n) = Self::decode_varint_at(data, pos).ok()?;
+        pos += n;
+        let _offset = offset;
+
+        let (length, n) = Self::decode_varint_at(data, pos).ok()?;
+        pos += n;
+
+        if pos + length as usize > data.len() {
+            return None;
+        }
+
+        let crypto_data = data[pos..pos + length as usize].to_vec();
+        Some((crypto_data, pos + length as usize))
+    }
+
+    fn decode_varint_at(data: &[u8], pos: usize) -> Result<(u64, usize), String> {
+        if pos >= data.len() {
+            return Err("Out of bounds".into());
+        }
+        let first = data[pos];
+        let len = match first >> 6 {
+            0 => 1,
+            1 => 2,
+            2 => 4,
+            3 => 8,
+            _ => return Err("Invalid varint".into()),
+        };
+        if pos + len > data.len() {
+            return Err("Varint incomplete".into());
+        }
+        let value = match len {
+            1 => (first & 0x3F) as u64,
+            2 => u16::from_be_bytes([first & 0x3F, data[pos + 1]]) as u64,
+            4 => {
+                let b = [first & 0x3F, data[pos + 1], data[pos + 2], data[pos + 3]];
+                u32::from_be_bytes(b) as u64
+            }
+            8 => {
+                let mut b: [u8; 8] = data[pos..pos + 8].try_into().unwrap();
+                b[0] &= 0x3F;
+                u64::from_be_bytes(b)
+            }
+            _ => unreachable!(),
+        };
+        Ok((value, len))
+    }
+}

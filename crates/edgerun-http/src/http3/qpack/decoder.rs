@@ -1,5 +1,6 @@
 //! QPACK decoder (RFC 9204)
 
+use super::huffman;
 use super::static_table;
 use super::{QpackError, QpackResult, DEFAULT_MAX_TABLE_CAPACITY};
 
@@ -28,6 +29,16 @@ impl QpackDecoder {
         QpackDecoder {
             dynamic_table: Vec::new(),
             max_capacity: DEFAULT_MAX_TABLE_CAPACITY,
+            current_size: 0,
+            insert_count: 0,
+        }
+    }
+
+    /// Create a decoder with the given dynamic table capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        QpackDecoder {
+            dynamic_table: Vec::new(),
+            max_capacity: capacity,
             current_size: 0,
             insert_count: 0,
         }
@@ -137,7 +148,12 @@ impl QpackDecoder {
         Ok((index as usize, !is_dynamic, bytes_read))
     }
 
-    /// Decode string
+    /// Decode string (RFC 9204 §5)
+    ///
+    /// Handles both raw and Huffman-encoded strings. The H flag (bit 7 of the
+    /// first byte) determines the encoding:
+    /// - H=1: Huffman-encoded string follows
+    /// - H=0: Raw UTF-8 string follows
     fn decode_string(data: &[u8], start: usize) -> QpackResult<(String, usize)> {
         if start >= data.len() {
             return Err(QpackError::DecoderStream("Not enough data".to_string()));
@@ -148,26 +164,29 @@ impl QpackDecoder {
 
         let (str_len, bytes_read) = super::decode_varint(data, start, 7)?;
 
-        if start + bytes_read + str_len as usize > data.len() {
+        // The actual string length is the value from the varint WITHOUT the H flag
+        let raw_len = (str_len as usize) & 0x7F; // Mask off H flag
+        let total_len = bytes_read + raw_len;
+
+        if start + total_len > data.len() {
             return Err(QpackError::DecoderStream("String incomplete".to_string()));
         }
 
-        let str_data =
-            &data[start + bytes_read..start + bytes_read + str_len as usize];
+        let str_data = &data[start + bytes_read..start + total_len];
 
         let value = if huffman {
-            // Huffman decoding is not yet implemented — reject rather than
-            // silently returning garbage (RFC 9204 §5).
-            return Err(QpackError::DecoderStream(
-                "Huffman-encoded strings not yet supported".to_string(),
-            ));
+            let decoded = huffman::decode(str_data)
+                .map_err(|e| QpackError::HuffmanDecode(e))?;
+            String::from_utf8(decoded).map_err(|_| {
+                QpackError::DecoderStream("Invalid UTF-8 in Huffman-decoded string".to_string())
+            })?
         } else {
             String::from_utf8(str_data.to_vec()).map_err(|_| {
                 QpackError::DecoderStream("Invalid UTF-8 in string".to_string())
             })?
         };
 
-        Ok((value, bytes_read + str_len as usize))
+        Ok((value, total_len))
     }
 
     /// Get entry from dynamic table

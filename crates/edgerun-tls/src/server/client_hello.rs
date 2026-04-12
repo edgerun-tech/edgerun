@@ -34,6 +34,8 @@ pub struct ClientHello {
     pub supported_groups: Vec<NamedGroup>,
     /// Signature algorithms (ext 13)
     pub signature_algorithms: Vec<u16>,
+    /// ALPN protocols offered by the client (ext 16)
+    pub alpn_protocols: Vec<Vec<u8>>,
 }
 
 impl ClientHello {
@@ -132,6 +134,7 @@ impl ClientHello {
         let mut supported_versions = Vec::new();
         let mut supported_groups = Vec::new();
         let mut signature_algorithms = Vec::new();
+        let mut alpn_protocols = Vec::new();
 
         if pos < msg.len() {
             if pos + 2 > msg.len() {
@@ -232,6 +235,24 @@ impl ClientHello {
                             }
                         }
                     }
+                    16 => {
+                        // application_layer_protocol_negotiation (ALPN) - RFC 7301
+                        if ext_data_len >= 2 {
+                            let proto_list_len = u16::from_be_bytes([ext_data[0], ext_data[1]]) as usize;
+                            let mut ppos = 2;
+                            while ppos < ext_data.len() && ppos < 2 + proto_list_len {
+                                if ppos + 1 > ext_data.len() { break; }
+                                let proto_len = ext_data[ppos] as usize;
+                                ppos += 1;
+                                if ppos + proto_len <= ext_data.len() {
+                                    alpn_protocols.push(ext_data[ppos..ppos + proto_len].to_vec());
+                                    ppos += proto_len;
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -250,6 +271,7 @@ impl ClientHello {
             supported_versions,
             supported_groups,
             signature_algorithms,
+            alpn_protocols,
         })
     }
 }

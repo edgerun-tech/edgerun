@@ -1497,6 +1497,7 @@ dependencies = [
  "edgerun-rt",
  "edgerun-tls",
  "hpack-patched",
+ "httlib-huffman",
  "serde",
  "serde_json",
 ]
@@ -1859,6 +1860,7 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-oci-runtime",
+ "edgerun-rt",
  "edgerun-secret-service",
  "flate2",
  "serde",
@@ -2579,6 +2581,12 @@ checksum = "83dd68e9ac6f591cf72a960f6ab2c40dcf6d173ee829f9ff3a0b69be8413a8e8"
 dependencies = [
  "log 0.3.9",
 ]
+
+[[package]]
+name = "httlib-huffman"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a9fcbcc408c5526c3ab80d534e5c86e7967c1fb7aa0a8c76abd1edc27deb877"
 
 [[package]]
 name = "hybrid-array"

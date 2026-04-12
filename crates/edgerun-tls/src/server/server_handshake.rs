@@ -2,6 +2,7 @@
 
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
+use std::sync::Arc;
 
 use crate::alert::{Alert, AlertLevel};
 use crate::certificate_gen::CertificateAndKey;
@@ -173,7 +174,7 @@ impl Write for TlsServerStream {
 struct ServerHandshake {
     stream: TcpStream,
     cert_der: Vec<u8>,
-    signing_key: edgerun_crypto::p256::ecdsa::SigningKey,
+    signing_key: Arc<edgerun_crypto::p256::ecdsa::SigningKey>,
     cipher_suite: CipherSuite,
     client_random: [u8; 32],
     server_random: [u8; 32],
@@ -197,7 +198,7 @@ impl ServerHandshake {
         ServerHandshake {
             stream,
             cert_der: cert_and_key.cert_der.clone(),
-            signing_key: cert_and_key.signing_key.clone(),
+            signing_key: Arc::clone(&cert_and_key.signing_key),
             cipher_suite,
             client_random: [0u8; 32],
             server_random: generate_random(),
@@ -357,7 +358,7 @@ impl ServerHandshake {
         handshake_transcript_hash: &[u8],
     ) -> Result<()> {
         eprintln!("[TLS] Sending EncryptedExtensions...");
-        let ee_msg = build_encrypted_extensions();
+        let ee_msg = build_encrypted_extensions(None);
         self.transcript.extend_from_slice(&ee_msg);
         let ee_ct = write_cipher.encrypt(22, &ee_msg);
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes())?;
@@ -369,7 +370,7 @@ impl ServerHandshake {
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: cert_ct }.to_bytes())?;
 
         eprintln!("[TLS] Sending CertificateVerify...");
-        let cv_msg = build_certificate_verify(&self.transcript, &self.signing_key, &self.hasher())?;
+        let cv_msg = build_certificate_verify(&self.transcript, &*self.signing_key, &self.hasher())?;
         self.transcript.extend_from_slice(&cv_msg);
         let cv_ct = write_cipher.encrypt(22, &cv_msg);
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: cv_ct }.to_bytes())?;
@@ -596,7 +597,7 @@ mod tests {
 
         let mut server_enc = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
 
-        let ee = build_encrypted_extensions();
+        let ee = build_encrypted_extensions(None);
         transcript.extend_from_slice(&ee);
         let ee_ct = server_enc.encrypt(22, &ee);
         let mut client_dec_ee = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();
@@ -611,7 +612,7 @@ mod tests {
         let (_ct, cert_pt) = client_dec_cert.decrypt(&cert_ct).unwrap();
         assert_eq!(cert_pt, cert_msg);
 
-        let cv = build_certificate_verify(&transcript, &cert.signing_key, &hash).unwrap();
+        let cv = build_certificate_verify(&transcript, &*cert.signing_key, &hash).unwrap();
         transcript.extend_from_slice(&cv);
         let cv_ct = server_enc.encrypt(22, &cv);
         let mut client_dec_cv = RecordCipher::new(&server_write.write_key, &server_write.write_iv).unwrap();

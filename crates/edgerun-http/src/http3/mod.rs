@@ -4,11 +4,13 @@ pub mod connection;
 pub mod http3;
 pub mod qpack;
 pub mod quic;
+pub mod server;
 pub mod varint;
 
 pub use connection::Http3Connection;
 pub use qpack::{QpackDecoder, QpackEncoder};
 pub use quic::QuicConnection;
+pub use server::Http3Server;
 
 /// HTTP/3 error types
 #[derive(Debug)]

@@ -1,5 +1,6 @@
 //! QPACK encoder (RFC 9204)
 
+use super::huffman;
 use super::static_table::{self, STATIC_TABLE};
 use super::{QpackResult, DEFAULT_MAX_TABLE_CAPACITY};
 
@@ -147,20 +148,17 @@ impl QpackEncoder {
             Self::encode_prefixed_varint(output, name_index as u64, 6, 0x20);
         }
 
-        // Encode value as string (7-bit prefix)
-        super::encode_varint(value.len() as u64, 7, output);
-        output.extend_from_slice(value);
+        // Encode value as string (with optional Huffman)
+        encode_string(output, value);
     }
 
     /// Encode literal header field with indexing (new name)
     fn encode_literal_with_indexing_new_name(output: &mut Vec<u8>, name: &[u8], value: &[u8]) {
-        // 0 0 1 T N----  (5-bit prefix for name length, type = 0b001)
-        Self::encode_prefixed_varint(output, name.len() as u64, 5, 0x10);
-        output.extend_from_slice(name);
-
-        // Value length with 7-bit prefix
-        super::encode_varint(value.len() as u64, 7, output);
-        output.extend_from_slice(value);
+        // Name: 5-bit prefix for length (type = 0b001)
+        // With Huffman: H flag on the length byte
+        encode_string_with_prefix(output, name, 5, 0x10);
+        // Value: 7-bit prefix for length
+        encode_string(output, value);
     }
 
     /// Add entry to dynamic table
@@ -217,6 +215,44 @@ enum MatchType {
     NameOnly,
 }
 
+/// Encode a string with Huffman if it reduces size, otherwise as raw bytes.
+///
+/// QPACK string representation (RFC 9204 §5):
+///   7-bit prefix integer for length, with H flag (bit 7 of first byte).
+///   If H=1, the string is Huffman-encoded. If H=0, it's raw UTF-8.
+fn encode_string(output: &mut Vec<u8>, data: &[u8]) {
+    encode_string_with_prefix(output, data, 7, 0x00);
+}
+
+/// Encode a string with a configurable prefix length and type.
+///
+/// `prefix_bits`: number of data bits in the first byte for the length (e.g., 5 or 7).
+/// `type_prefix`: the type bits to OR into the first byte (e.g., 0x10 for literal new name).
+fn encode_string_with_prefix(output: &mut Vec<u8>, data: &[u8], prefix_bits: u8, type_prefix: u8) {
+    let huffman_encoded = huffman::encode(data);
+    let use_huffman = huffman_encoded.len() < data.len() && !data.is_empty();
+
+    let (str_data, len) = if use_huffman {
+        (&huffman_encoded[..], huffman_encoded.len())
+    } else {
+        (data, data.len())
+    };
+
+    let start_pos = output.len();
+
+    // Encode length with the given prefix (same algorithm as super::encode_varint)
+    super::encode_varint(len as u64, prefix_bits, output);
+
+    // Set H flag on the first byte of the length encoding
+    if use_huffman {
+        output[start_pos] |= 0x80 | type_prefix;
+    } else {
+        output[start_pos] |= type_prefix;
+    }
+
+    output.extend_from_slice(str_data);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,8 +271,13 @@ mod tests {
         let mut encoder = QpackEncoder::new();
         let encoded = encoder.encode_header("x-custom", "value").unwrap();
 
-        // Should be literal with indexing (0001xxxx)
-        assert!((encoded[0] & 0xF0) == 0x10);
+        // Should be literal with indexing (type bits 0001 in lower 4 bits of first byte)
+        // With Huffman encoding, the H flag (bit 7) may also be set
+        // Check the type bits (bit 4) are set, and bits 5-6 are clear (new name format)
+        let first_byte = encoded[0];
+        // Lower 5 bits: type (1 bit) + length prefix (4 bits for 5-bit prefix)
+        // Type bit (bit 0 of the 5-bit field) should be 1 for "literal with indexing, new name"
+        assert!((first_byte & 0x10) != 0, "type bit not set: {:02x}", first_byte);
     }
 
     #[test]

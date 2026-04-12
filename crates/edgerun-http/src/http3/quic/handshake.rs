@@ -1,0 +1,505 @@
+//! QUIC-TLS handshake driver (RFC 9001 + RFC 8446).
+//!
+//! Drives the TLS 1.3 handshake over QUIC CRYPTO frames — no TLS record layer.
+//! Handshake messages are transported directly in CRYPTO frames.
+//!
+//! # Handshake Flow (Client)
+//! ```text
+//! Client                                          Server
+//! ------                                          ------
+//! Initial: CRYPTO( ClientHello )                →
+//!                                       ←  Initial: CRYPTO( ServerHello )
+//!                                       ←  Handshake: CRYPTO( EncryptedExtensions )
+//!                                       ←  Handshake: CRYPTO( Certificate )
+//!                                       ←  Handshake: CRYPTO( CertificateVerify )
+//!                                       ←  Handshake: CRYPTO( Finished )
+//! Handshake: CRYPTO( ClientFinished )   →
+//!
+//! [1-RTT packets with HTTP/3 data]      ↔     [1-RTT packets]
+//! ```
+
+use edgerun_crypto::getrandom;
+use edgerun_crypto::AesGcmCipher;
+use edgerun_tls::cipher::{CipherSuite, NamedGroup};
+use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
+use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
+use edgerun_tls::prf::{
+    Hasher, Tls13KeySchedule, TrafficKeys,
+    quic_initial_client_keys, quic_traffic_keys, quic_hp_key,
+    INITIAL_SALT_V1,
+};
+
+use super::frame::QuicFrame;
+use super::packet::QuicPacket;
+use super::crypto::{CryptoPhase, ProtectionKeys, PacketProtection, AeadAlgorithm};
+use super::{ConnectionId, TransportParameters, QUIC_VERSION_V1};
+
+/// QUIC-TLS handshake result.
+#[derive(Clone)]
+pub struct HandshakeResult {
+    /// Initial-level protection keys
+    pub initial_keys: ProtectionKeys,
+    /// Handshake-level protection keys
+    pub handshake_keys: ProtectionKeys,
+    /// Application (1-RTT) protection keys
+    pub app_keys: ProtectionKeys,
+    /// Negotiated cipher suite
+    pub cipher_suite: CipherSuite,
+    /// Server random (for debugging/extensions)
+    pub server_random: [u8; 32],
+    /// Full transcript of handshake messages (for exporters)
+    pub transcript: Vec<u8>,
+}
+
+/// QUIC-TLS handshake state machine (client side).
+pub struct QuicTlsHandshaker {
+    /// TLS 1.3 key schedule
+    key_schedule: Tls13KeySchedule,
+    /// Hasher matching the cipher suite
+    hasher: Hasher,
+    /// Client random bytes
+    client_random: [u8; 32],
+    /// Server random (filled after ServerHello)
+    server_random: [u8; 32],
+    /// ECDH key pair for key_share
+    key_pair: EcdhKeyPair,
+    /// Server's key share (parsed from ServerHello)
+    server_key_share: Vec<u8>,
+    /// Running transcript: concatenation of all handshake message bytes
+    transcript: Vec<u8>,
+    /// Cached client handshake traffic secret (for Finished + app key derivation)
+    client_hs_secret: Vec<u8>,
+    /// Cached server handshake traffic secret (for Finished verification)
+    server_hs_secret: Vec<u8>,
+    /// Negotiated cipher suite
+    cipher_suite: CipherSuite,
+    /// ClientHello raw bytes (for retransmission)
+    client_hello_bytes: Vec<u8>,
+    /// CRYPTO frame offset for retransmission
+    crypto_send_offset: usize,
+    /// Whether we've received ServerHello
+    received_server_hello: bool,
+    /// Whether handshake is complete
+    complete: bool,
+}
+
+impl QuicTlsHandshaker {
+    /// Create a new handshaker for a QUIC client connection.
+    pub fn new(server_name: &str) -> Self {
+        let mut client_random = [0u8; 32];
+        getrandom::fill(&mut client_random).expect("CSPRNG failure");
+
+        let key_pair = EcdhKeyPair::generate(KeyExchangeGroup::X25519)
+            .expect("X25519 key generation failed");
+
+        let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
+        let hasher = hasher_for_suite(cipher_suite);
+
+        let client_hello_bytes = build_client_hello_quic(&client_random, server_name, &key_pair)
+            .expect("ClientHello build failed");
+
+        let key_schedule = Tls13KeySchedule::new(hasher.clone());
+
+        QuicTlsHandshaker {
+            key_schedule,
+            hasher,
+            client_random,
+            server_random: [0u8; 32],
+            key_pair,
+            server_key_share: Vec::new(),
+            transcript: Vec::new(),
+            client_hs_secret: Vec::new(),
+            server_hs_secret: Vec::new(),
+            cipher_suite,
+            client_hello_bytes,
+            crypto_send_offset: 0,
+            received_server_hello: false,
+            complete: false,
+        }
+    }
+
+    /// Build the Initial packet payload: CRYPTO frame containing ClientHello.
+    ///
+    /// Returns `(crypto_frame_bytes, client_hello_bytes)`.
+    pub fn initial_crypto_data(&self) -> &[u8] {
+        &self.client_hello_bytes
+    }
+
+    /// Derive Initial-level protection keys for the given destination connection ID.
+    pub fn initial_keys(&self, dcid: &[u8]) -> ProtectionKeys {
+        let (write, read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
+        let hp = quic_hp_key(
+            &self.key_schedule_derive_initial_secret(dcid),
+            16,
+            &self.hasher,
+        );
+        ProtectionKeys::new(
+            AeadAlgorithm::Aes128Gcm,
+            write.write_key,
+            write.write_iv,
+            read.write_key,
+            read.write_iv,
+        )
+    }
+
+    /// Derive the initial traffic secret from DCID (for HP key derivation).
+    fn key_schedule_derive_initial_secret(&self, dcid: &[u8]) -> Vec<u8> {
+        // initial_secret = HKDF-Extract(initial_salt, dcid)
+        self.hasher.extract(INITIAL_SALT_V1, dcid)
+    }
+
+    /// Process received CRYPTO data from an Initial packet.
+    ///
+    /// Parses the ServerHello from the CRYPTO payload and advances the
+    /// key schedule. Returns `Ok(())` if ServerHello was successfully
+    /// parsed, or an error string if the data is invalid.
+    pub fn process_initial_crypto(&mut self, crypto_data: &[u8]) -> Result<(), String> {
+        // The CRYPTO payload from the server's Initial packet should contain
+        // the ServerHello handshake message.
+        // ServerHello wire format: type(1) + length(3) + payload
+        if crypto_data.is_empty() {
+            return Err("Empty CRYPTO data".into());
+        }
+
+        // The server may send multiple handshake messages in one CRYPTO payload.
+        // The first one should be ServerHello (type 2).
+        let sh = ServerHello::parse(crypto_data)
+            .map_err(|e| format!("Failed to parse ServerHello: {:?}", e))?;
+
+        if sh.supported_version != Some(0x0304) {
+            return Err(format!(
+                "Server did not negotiate TLS 1.3 (got {:?})",
+                sh.supported_version,
+            ));
+        }
+
+        self.server_random = sh.random;
+        self.server_key_share = sh.server_key_share.clone();
+        self.cipher_suite = sh.cipher_suite;
+        self.hasher = hasher_for_suite(self.cipher_suite);
+
+        // Append ClientHello to transcript (our own CH, which the server also has)
+        self.transcript.extend_from_slice(&self.client_hello_bytes);
+
+        // Append ServerHello to transcript
+        // crypto_data may contain more than just ServerHello. We need the exact
+        // ServerHello bytes for the transcript. ServerHello::parse doesn't return
+        // consumed bytes, so we re-serialize the length.
+        let sh_msg_len = if crypto_data.len() >= 4 {
+            let msg_len = u32::from_be_bytes([0, crypto_data[1], crypto_data[2], crypto_data[3]]) as usize;
+            4 + msg_len
+        } else {
+            crypto_data.len()
+        };
+        self.transcript.extend_from_slice(&crypto_data[..sh_msg_len.min(crypto_data.len())]);
+        self.received_server_hello = true;
+
+        // Advance key schedule to handshake phase
+        let shared_secret = self.key_pair.exchange(&self.server_key_share)?;
+        let transcript_hash = self.hasher.hash(&self.transcript);
+
+        self.key_schedule.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
+
+        // Cache the handshake traffic secrets for later use (Finished verification)
+        self.client_hs_secret = self.key_schedule.client_handshake_traffic_secret(&transcript_hash);
+        self.server_hs_secret = self.key_schedule.server_handshake_traffic_secret(&transcript_hash);
+
+        Ok(())
+    }
+
+    /// Check if we've received the ServerHello and can proceed to handshake phase.
+    pub fn has_server_hello(&self) -> bool {
+        self.received_server_hello
+    }
+
+    /// Derive handshake-level protection keys.
+    ///
+    /// Must be called after `process_initial_crypto()` succeeds.
+    /// Returns `(write_keys, read_keys)` for the Handshake encryption level.
+    pub fn handshake_keys(&self) -> Result<ProtectionKeys, String> {
+        let transcript_hash = self.hasher.hash(&self.transcript);
+
+        let client_hs_secret = self.key_schedule.client_handshake_traffic_secret(&transcript_hash);
+        let server_hs_secret = self.key_schedule.server_handshake_traffic_secret(&transcript_hash);
+
+        // From client perspective:
+        // - write: use client_hs_secret (client encrypts with its own secret)
+        // - read: use server_hs_secret (client decrypts server's encrypted data)
+        let write = quic_traffic_keys(&client_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let read = quic_traffic_keys(&server_hs_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let hp = quic_hp_key(&client_hs_secret, self.cipher_suite.key_len(), &self.hasher);
+
+        Ok(ProtectionKeys::new(
+            AeadAlgorithm::Aes128Gcm,
+            write.write_key,
+            write.write_iv,
+            read.write_key,
+            read.write_iv,
+        ))
+    }
+
+    /// Process received CRYPTO data from Handshake-level packets.
+    ///
+    /// Parses EncryptedExtensions, Certificate, CertificateVerify, and Finished
+    /// messages. Returns `Ok(())` if all messages were processed and the client
+    /// Finished message is ready to be sent.
+    ///
+    /// Returns the Client Finished CRYPTO data to send back to the server.
+    pub fn process_handshake_crypto(
+        &mut self,
+        crypto_data: &[u8],
+    ) -> Result<Vec<u8>, String> {
+        // The handshake CRYPTO payload contains multiple TLS handshake messages:
+        // EncryptedExtensions(8), Certificate(11), CertificateVerify(15), Finished(20)
+        let mut pos = 0;
+        let mut received_finished = false;
+
+        while pos < crypto_data.len() {
+            if pos + 4 > crypto_data.len() {
+                break;
+            }
+
+            let msg_type = crypto_data[pos];
+            let msg_len = u32::from_be_bytes([
+                0,
+                crypto_data[pos + 1],
+                crypto_data[pos + 2],
+                crypto_data[pos + 3],
+            ]) as usize;
+
+            if pos + 4 + msg_len > crypto_data.len() {
+                break; // Partial message, wait for more data
+            }
+
+            let msg = &crypto_data[pos..pos + 4 + msg_len];
+
+            match msg_type {
+                8 => {
+                    // EncryptedExtensions — append to transcript
+                    self.transcript.extend_from_slice(msg);
+                }
+                11 => {
+                    // Certificate — append to transcript
+                    // In QUIC, we still track the cert for validation
+                    self.transcript.extend_from_slice(msg);
+                }
+                15 => {
+                    // CertificateVerify — append to transcript
+                    self.transcript.extend_from_slice(msg);
+                }
+                20 => {
+                    // Finished — verify and append
+                    // Transcript hash for verification: hash of all messages BEFORE Finished
+                    let pre_finished_hash = self.hasher.hash(&self.transcript);
+
+                    // Use cached server handshake secret (derived from CH||SH transcript)
+                    let finished_key = self.hasher.expand_label(&self.server_hs_secret, "finished", &[], self.hasher.len());
+
+                    let verify_data = match self.hasher {
+                        Hasher::Sha256 => edgerun_crypto::hmac_sha256(&finished_key, &pre_finished_hash),
+                        Hasher::Sha384 => edgerun_crypto::hmac_sha384(&finished_key, &pre_finished_hash),
+                    };
+
+                    // verify_data is at offset 4 in the Finished message
+                    if msg.len() < 4 + verify_data.len() {
+                        return Err("Finished message too short".into());
+                    }
+
+                    let server_verify_data = &msg[4..];
+                    if server_verify_data.len() != verify_data.len()
+                        || !constant_time_eq(server_verify_data, &verify_data)
+                    {
+                        return Err("Server Finished verification failed".into());
+                    }
+
+                    // Append to transcript
+                    self.transcript.extend_from_slice(msg);
+                    received_finished = true;
+                }
+                _ => {
+                    // Unknown message type — append to transcript anyway
+                    self.transcript.extend_from_slice(msg);
+                }
+            }
+
+            pos += 4 + msg_len;
+        }
+
+        if !received_finished {
+            return Err("Server Finished not found in CRYPTO data".into());
+        }
+
+        // Build Client Finished
+        let client_finished = self.build_client_finished()?;
+        Ok(client_finished)
+    }
+
+    /// Build the Client Finished message (wire format).
+    fn build_client_finished(&self) -> Result<Vec<u8>, String> {
+        // Transcript hash includes all handshake messages up to (but not including) client Finished
+        let full_transcript_hash = self.hasher.hash(&self.transcript);
+
+        // Use cached client handshake secret (derived from CH||SH transcript)
+        let finished_key = self.hasher.expand_label(&self.client_hs_secret, "finished", &[], self.hasher.len());
+
+        let verify_data = match self.hasher {
+            Hasher::Sha256 => edgerun_crypto::hmac_sha256(&finished_key, &full_transcript_hash),
+            Hasher::Sha384 => edgerun_crypto::hmac_sha384(&finished_key, &full_transcript_hash),
+        };
+
+        // Finished message: type(1) + length(3) + verify_data
+        let mut msg = Vec::with_capacity(4 + verify_data.len());
+        msg.push(20); // Finished type
+        msg.extend_from_slice(&(verify_data.len() as u32).to_be_bytes()[1..]);
+        msg.extend_from_slice(&verify_data);
+
+        Ok(msg)
+    }
+
+    /// Derive application (1-RTT) traffic keys.
+    ///
+    /// Must be called after Client Finished has been sent and the transcript
+    /// includes the client Finished message.
+    pub fn app_keys(&self, transcript_after_client_finished: &[u8]) -> ProtectionKeys {
+        let app_transcript_hash = self.hasher.hash(transcript_after_client_finished);
+
+        let client_app_secret = self.key_schedule.client_app_traffic_secret(&app_transcript_hash);
+        let server_app_secret = self.key_schedule.server_app_traffic_secret(&app_transcript_hash);
+
+        let write = quic_traffic_keys(&client_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+        let read = quic_traffic_keys(&server_app_secret, self.cipher_suite.key_len(), 12, &self.hasher);
+
+        ProtectionKeys::new(
+            AeadAlgorithm::Aes128Gcm,
+            write.write_key,
+            write.write_iv,
+            read.write_key,
+            read.write_iv,
+        )
+    }
+
+    /// Check if handshake is complete.
+    pub fn is_complete(&self) -> bool {
+        self.complete
+    }
+
+    /// Mark handshake as complete.
+    pub fn mark_complete(&mut self) {
+        self.complete = true;
+    }
+
+    /// Get the full handshake transcript (for key derivation by caller).
+    pub fn transcript(&self) -> &[u8] {
+        &self.transcript
+    }
+
+    /// Build full handshake result with all protection keys.
+    pub fn build_result(&self, dcid: &[u8], transcript_after_finished: &[u8]) -> Result<HandshakeResult, String> {
+        let (init_write, init_read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
+
+        let hs_keys = self.handshake_keys()?;
+        let app_keys = self.app_keys(transcript_after_finished);
+
+        Ok(HandshakeResult {
+            initial_keys: ProtectionKeys::new(
+                AeadAlgorithm::Aes128Gcm,
+                init_write.write_key,
+                init_write.write_iv,
+                init_read.write_key,
+                init_read.write_iv,
+            ),
+            handshake_keys: hs_keys,
+            app_keys,
+            cipher_suite: self.cipher_suite,
+            server_random: self.server_random,
+            transcript: self.transcript.clone(),
+        })
+    }
+}
+
+/// Build a ClientHello handshake message for QUIC (no TLS record wrapper).
+///
+/// Uses the edgerun-tls ClientHelloBuilder, which produces the correct
+/// wire format: type(1) + length(3) + ClientHello payload.
+fn build_client_hello_quic(
+    client_random: &[u8; 32],
+    server_name: &str,
+    key_pair: &EcdhKeyPair,
+) -> Result<Vec<u8>, String> {
+    let public_key = key_pair.public_key_bytes();
+    let group = match key_pair.group() {
+        KeyExchangeGroup::SECP256R1 => NamedGroup::SECP256R1,
+        KeyExchangeGroup::X25519 => NamedGroup::X25519,
+    };
+
+    let mut random = [0u8; 32];
+    random.copy_from_slice(client_random);
+
+    let ch = ClientHelloBuilder::new(random, server_name)
+        .key_share(&public_key, group)
+        .build()
+        .map_err(|e| format!("ClientHello build error: {:?}", e))?;
+
+    Ok(ch)
+}
+
+/// Get the Hasher for a cipher suite.
+fn hasher_for_suite(suite: CipherSuite) -> Hasher {
+    match suite {
+        CipherSuite::TLS_AES_256_GCM_SHA384 => Hasher::Sha384,
+        _ => Hasher::Sha256,
+    }
+}
+
+/// Constant-time equality comparison for cryptographic data.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_handshaker_new() {
+        let hs = QuicTlsHandshaker::new("example.com");
+        assert!(!hs.received_server_hello);
+        assert!(!hs.complete);
+        assert!(!hs.initial_crypto_data().is_empty());
+    }
+
+    #[test]
+    fn test_initial_crypto_data_is_client_hello() {
+        let hs = QuicTlsHandshaker::new("example.com");
+        let data = hs.initial_crypto_data();
+
+        // First byte should be handshake type 1 (ClientHello)
+        assert_eq!(data[0], 1);
+
+        // Should have a reasonable length (ClientHello is typically 200-500 bytes)
+        assert!(data.len() > 100);
+    }
+
+    #[test]
+    fn test_initial_keys_derive() {
+        let hs = QuicTlsHandshaker::new("example.com");
+        let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
+        let keys = hs.initial_keys(&dcid);
+        assert_eq!(keys.write_key.len(), 16);
+        assert_eq!(keys.write_iv.len(), 12);
+    }
+
+    #[test]
+    fn test_hasher_for_suite() {
+        use edgerun_tls::cipher::CipherSuite;
+        assert!(matches!(hasher_for_suite(CipherSuite::TLS_AES_128_GCM_SHA256), Hasher::Sha256));
+        assert!(matches!(hasher_for_suite(CipherSuite::TLS_AES_256_GCM_SHA384), Hasher::Sha384));
+    }
+}

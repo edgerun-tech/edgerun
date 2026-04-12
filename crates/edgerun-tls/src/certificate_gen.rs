@@ -6,12 +6,15 @@
 use edgerun_crypto::p256::pkcs8::DecodePrivateKey;
 use edgerun_crypto::rcgen::{generate_simple_self_signed, CertifiedKey, KeyPair};
 
+use std::sync::Arc;
+
 /// A self-signed certificate with an associated ECDSA P-256 signing key.
+#[derive(Clone)]
 pub struct CertificateAndKey {
     /// DER-encoded X.509 certificate
     pub cert_der: Vec<u8>,
     /// ECDSA P-256 signing key (for CertificateVerify during TLS handshake)
-    pub signing_key: edgerun_crypto::p256::ecdsa::SigningKey,
+    pub signing_key: Arc<edgerun_crypto::p256::ecdsa::SigningKey>,
 }
 
 /// Generate a self-signed certificate for the given hostname(s).
@@ -34,7 +37,7 @@ pub fn generate_self_signed(hostnames: &[&str]) -> CertificateAndKey {
     // Convert rcgen KeyPair to p256::ecdsa::SigningKey via PKCS#8
     let signing_key = extract_signing_key(&signing_key);
 
-    CertificateAndKey { cert_der, signing_key }
+    CertificateAndKey { cert_der, signing_key: Arc::new(signing_key) }
 }
 
 /// Convert an rcgen KeyPair to a p256::ecdsa::SigningKey.

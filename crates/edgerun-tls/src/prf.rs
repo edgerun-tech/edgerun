@@ -193,6 +193,98 @@ fn build_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
     out
 }
 
+// ---------------------------------------------------------------------------
+// QUIC key derivation (RFC 9001 §5)
+// ---------------------------------------------------------------------------
+
+/// QUIC-specific HKDF-Expand-Label using `"quic {label}"` prefix.
+///
+/// RFC 9001 §5.1 uses the same HKDF-Expand-Label structure as TLS 1.3
+/// (RFC 8446 §7.1) but with the prefix `"quic"` instead of `"tls13"`.
+/// Labels: `"quic key"`, `"quic iv"`, `"quic hp"`, `"quic ku"`.
+fn build_quic_hkdf_label(label: &str, context: &[u8], length: usize) -> Vec<u8> {
+    let full_label = format!("quic {}", label);
+    let mut out = Vec::with_capacity(2 + 1 + full_label.len() + 1 + context.len());
+    out.extend_from_slice(&(length as u16).to_be_bytes());
+    out.push(full_label.len() as u8);
+    out.extend_from_slice(full_label.as_bytes());
+    out.push(context.len() as u8);
+    out.extend_from_slice(context);
+    out
+}
+
+impl Hasher {
+    /// HKDF-Expand-Label using QUIC labels (`"quic {label}"`).
+    ///
+    /// Used for deriving AEAD keys, IVs, and header protection keys from
+    /// QUIC traffic secrets (RFC 9001 §5.1).
+    pub fn quic_expand_label(&self, secret: &[u8], label: &str, context: &[u8], length: usize) -> Vec<u8> {
+        let hkdf_label = build_quic_hkdf_label(label, context, length);
+        self.expand(secret, &hkdf_label, length)
+    }
+}
+
+/// Well-known initial salts for QUIC version 1 (RFC 9001 §5.2).
+pub const INITIAL_SALT_V1: &[u8] = &[
+    0x38, 0x76, 0xcf, 0x71, 0xba, 0x52, 0x1f, 0x3d,
+    0x62, 0xd5, 0x1f, 0xa5, 0x78, 0x3d, 0x78, 0x39,
+    0x87, 0x6d, 0xc0, 0x78,
+];
+
+/// Initial traffic keys for a QUIC client (RFC 9001 §5.2).
+///
+/// Derives the AEAD keys and IVs for Initial packets from the server's
+/// destination connection ID.
+///
+/// Returns `(write_keys, read_keys)` where:
+/// - `write_keys` — keys for encrypting client → server Initial packets
+/// - `read_keys` — keys for decrypting server → client Initial packets
+pub fn quic_initial_client_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> (TrafficKeys, TrafficKeys) {
+    let initial_secret = hash.extract(INITIAL_SALT_V1, dcid);
+
+    let client_in_secret = hash.quic_expand_label(&initial_secret, "client in", &[], hash.len());
+    let server_in_secret = hash.quic_expand_label(&initial_secret, "server in", &[], hash.len());
+
+    let write_keys = quic_traffic_keys(&server_in_secret, cipher_key_len, iv_len, hash);
+    let read_keys = quic_traffic_keys(&client_in_secret, cipher_key_len, iv_len, hash);
+
+    (write_keys, read_keys)
+}
+
+/// Initial traffic keys for a QUIC server (RFC 9001 §5.2).
+///
+/// Returns `(write_keys, read_keys)` where:
+/// - `write_keys` — keys for encrypting server → client Initial packets
+/// - `read_keys` — keys for decrypting client → server Initial packets
+pub fn quic_initial_server_keys(dcid: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> (TrafficKeys, TrafficKeys) {
+    let initial_secret = hash.extract(INITIAL_SALT_V1, dcid);
+
+    let client_in_secret = hash.quic_expand_label(&initial_secret, "client in", &[], hash.len());
+    let server_in_secret = hash.quic_expand_label(&initial_secret, "server in", &[], hash.len());
+
+    let write_keys = quic_traffic_keys(&client_in_secret, cipher_key_len, iv_len, hash);
+    let read_keys = quic_traffic_keys(&server_in_secret, cipher_key_len, iv_len, hash);
+
+    (write_keys, read_keys)
+}
+
+/// Derive AEAD traffic keys (key + IV) from a QUIC traffic secret.
+///
+/// Uses QUIC-specific labels `"quic key"` and `"quic iv"` (RFC 9001 §5.1).
+pub fn quic_traffic_keys(secret: &[u8], cipher_key_len: usize, iv_len: usize, hash: &Hasher) -> TrafficKeys {
+    TrafficKeys {
+        write_key: hash.quic_expand_label(secret, "key", &[], cipher_key_len),
+        write_iv: hash.quic_expand_label(secret, "iv", &[], iv_len),
+    }
+}
+
+/// Derive header protection key from a QUIC traffic secret.
+///
+/// Uses QUIC-specific label `"quic hp"` (RFC 9001 §5.4).
+pub fn quic_hp_key(secret: &[u8], cipher_key_len: usize, hash: &Hasher) -> Vec<u8> {
+    hash.quic_expand_label(secret, "hp", &[], cipher_key_len)
+}
+
 // HMAC helpers re-exported from edgerun-crypto (single source of truth)
 pub use edgerun_crypto::{hmac_sha256, hmac_sha384};
 
@@ -247,5 +339,46 @@ mod tests {
         let expected_iv: [u8; 12] = [0x18, 0x22, 0x30, 0x84, 0x73, 0x5f, 0x2f, 0x2d, 0x85, 0x88, 0xca, 0xaa];
         assert_eq!(keys.write_key, expected_key, "Key mismatch");
         assert_eq!(keys.write_iv, expected_iv, "IV mismatch");
+    }
+
+    // --- QUIC key derivation tests (RFC 9001) ---
+
+    #[test]
+    fn test_quic_expand_label_differs_from_tls13() {
+        let hash = Hasher::Sha256;
+        let secret = vec![0xAB; 32];
+        let tls_label = hash.expand_label(&secret, "key", &[], 16);
+        let quic_label = hash.quic_expand_label(&secret, "key", &[], 16);
+        assert_eq!(tls_label.len(), quic_label.len());
+        assert_ne!(tls_label, quic_label);
+    }
+
+    #[test]
+    fn test_quic_initial_keys_derive() {
+        let hash = Hasher::Sha256;
+        let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
+        let (write, read) = quic_initial_client_keys(&dcid, 16, 12, &hash);
+        assert_eq!(write.write_key.len(), 16);
+        assert_eq!(write.write_iv.len(), 12);
+        assert_eq!(read.write_key.len(), 16);
+        assert_eq!(read.write_iv.len(), 12);
+        assert_ne!(write.write_key, read.write_key);
+    }
+
+    #[test]
+    fn test_quic_traffic_keys_derive() {
+        let hash = Hasher::Sha256;
+        let secret = vec![0xCD; 32];
+        let keys = quic_traffic_keys(&secret, 16, 12, &hash);
+        assert_eq!(keys.write_key.len(), 16);
+        assert_eq!(keys.write_iv.len(), 12);
+    }
+
+    #[test]
+    fn test_quic_hp_key_derive() {
+        let hash = Hasher::Sha256;
+        let secret = vec![0xCD; 32];
+        let hp = quic_hp_key(&secret, 16, &hash);
+        assert_eq!(hp.len(), 16);
     }
 }
