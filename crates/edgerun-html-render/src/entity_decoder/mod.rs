@@ -1,54 +1,4 @@
-package htmlcodegen
-
-import (
-	"fmt"
-	"sort"
-	"strings"
-
-	"edgerunrefcore/gen/go/edgerun/v0/html"
-)
-
-// GenerateEntityDecoderRust produces entity_decoder/ as a multi-file module:
-//   - entity_decoder/mod.rs (logic)
-//   - entity_decoder/table.inc (data, included via include!())
-func GenerateEntityDecoderRust(catalog *html.EntityCatalog) map[string]string {
-	type entity struct {
-		name    string
-		cp1     uint32
-		cp2     uint32
-		semiReq bool
-	}
-
-	var entities []entity
-	for _, e := range catalog.Entities {
-		entities = append(entities, entity{
-			name:    e.Name,
-			cp1:     e.CodePoint_1,
-			cp2:     e.CodePoint_2,
-			semiReq: e.SemicolonRequired,
-		})
-	}
-
-	sort.Slice(entities, func(i, j int) bool {
-		return entities[i].name < entities[j].name
-	})
-
-	var entries []string
-	for _, e := range entities {
-		entries = append(entries,
-			fmt.Sprintf(`    ("%s", 0x%04X, 0x%04X),`, e.name, e.cp1, e.cp2))
-	}
-	entityTable := strings.Join(entries, "\n")
-	total := len(entities)
-
-	// The table goes in a separate include file to keep mod.rs small.
-	tableInc := fmt.Sprintf(`// WHATWG §13.1.4.22 Named character references table.
-// Generated from proto IR with %d entities.
-const ENTITY_TABLE: &[(&str, u32, u32)] = &[
-%s
-];`, total, entityTable)
-
-	modRs := fmt.Sprintf(`// DO NOT EDIT.
+// DO NOT EDIT.
 // Auto-generated from Parser IR by cmd/html-codegen
 // Regenerate: go run ./cmd/html-codegen
 extern crate alloc;
@@ -57,7 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 // WHATWG §13.1.4.22 Named character references — sorted table for binary search.
-// Generated from proto IR with %d entities.
+// Generated from proto IR with 2125 entities.
 // The raw table lives in table.inc (included below) to keep this file small.
 include!("table.inc");
 
@@ -143,11 +93,4 @@ mod tests {
     fn test_no_entity() {
         assert_eq!(decode_entities_in_text("Hello"), "Hello");
     }
-}
-`, total)
-
-	return map[string]string{
-		"entity_decoder/mod.rs":   modRs,
-		"entity_decoder/table.inc": tableInc,
-	}
 }

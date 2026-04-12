@@ -11,7 +11,8 @@
 // Writes:
 //   output-dir/crates/edgerun-html-render/src/tokenizer.rs
 //   output-dir/crates/edgerun-html-render/src/tree_builder.rs
-//   output-dir/crates/edgerun-html-render/src/entity_decoder.rs
+//   output-dir/crates/edgerun-html-render/src/entity_decoder/mod.rs
+//   output-dir/crates/edgerun-html-render/src/entity_decoder/table.inc
 //   output-dir/crates/edgerun-html-render/src/html_parser.rs
 package main
 
@@ -73,13 +74,22 @@ func main() {
 	treeBuilderRs := codegen.GenerateTreeBuilderRust(&ruleSet, metadata["void_elements"])
 	writeFile(filepath.Join(srcDir, "tree_builder.rs"), treeBuilderRs)
 
-	entityDecoderRs := codegen.GenerateEntityDecoderRust(&catalog)
-	writeFile(filepath.Join(srcDir, "entity_decoder.rs"), entityDecoderRs)
+	// Entity decoder is generated as a multi-file module (mod.rs + table.inc)
+	entityFiles := codegen.GenerateEntityDecoderRust(&catalog)
+	for relPath, content := range entityFiles {
+		fullPath := filepath.Join(srcDir, relPath)
+		os.MkdirAll(filepath.Dir(fullPath), 0755)
+		writeFile(fullPath, content)
+	}
+
+	// Remove old single-file entity_decoder.rs if it exists
+	os.Remove(filepath.Join(srcDir, "entity_decoder.rs"))
 
 	htmlParserRs := codegen.GenerateHtmlParserRs()
 	writeFile(filepath.Join(srcDir, "html_parser.rs"), htmlParserRs)
 
-	fmt.Printf("Generated 4 Rust files to %s\n", srcDir)
+	totalFiles := 3 + len(entityFiles)
+	fmt.Printf("Generated %d Rust files to %s\n", totalFiles, srcDir)
 }
 
 func readFile(path string) []byte {
