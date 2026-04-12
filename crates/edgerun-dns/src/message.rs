@@ -551,6 +551,47 @@ impl DnsRecord {
         }
     }
 
+    /// Create an HINFO record (RFC 1035 — Host Info).
+    pub fn hinfo(name: String, cpu: String, os: String, ttl: u32) -> Self {
+        Self {
+            name, rtype: DnsRecordType::HINFO, rclass: 1, ttl,
+            data: DnsRecordData::HINFO { cpu, os },
+        }
+    }
+
+    /// Create an RP record (RFC 1183 — Responsible Person).
+    pub fn rp(name: String, mbox: String, txt: String, ttl: u32) -> Self {
+        Self {
+            name, rtype: DnsRecordType::RP, rclass: 1, ttl,
+            data: DnsRecordData::RP { mbox, txt },
+        }
+    }
+
+    /// Create a LOC record (RFC 1876 — Location).
+    pub fn loc(name: String, version: u8, size: u32, horiz_pre: u32, vert_pre: u32,
+              latitude: u32, longitude: u32, altitude: u32, ttl: u32) -> Self {
+        Self {
+            name, rtype: DnsRecordType::LOC, rclass: 1, ttl,
+            data: DnsRecordData::LOC { version, size, horiz_pre, vert_pre, latitude, longitude, altitude },
+        }
+    }
+
+    /// Create an AFSDB record (RFC 1183 — AFS Database).
+    pub fn afsdb(name: String, subtype: u16, hostname: String, ttl: u32) -> Self {
+        Self {
+            name, rtype: DnsRecordType::AFSDB, rclass: 1, ttl,
+            data: DnsRecordData::AFSDB { subtype, hostname },
+        }
+    }
+
+    /// Create a URI record (RFC 7553 — Uniform Resource Identifier).
+    pub fn uri(name: String, priority: u16, weight: u16, target: String, ttl: u32) -> Self {
+        Self {
+            name, rtype: DnsRecordType::URI, rclass: 1, ttl,
+            data: DnsRecordData::URI { priority, weight, target },
+        }
+    }
+
     /// Create an EDNS0 OPT pseudo-record (RFC 6891).
     ///
     /// The `rclass` field holds the UDP payload size, and `ttl` encodes

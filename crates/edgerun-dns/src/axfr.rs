@@ -209,6 +209,12 @@ fn format_rdata(data: &DnsRecordData) -> String {
             format!("{} {} \"{}\" \"{}\" \"{}\" {}", order, preference, flags, services, regexp, replacement),
         DnsRecordData::CAA { critical, tag, value } =>
             format!("{} {} \"{}\"", if *critical { 128 } else { 0 }, tag, value),
+        DnsRecordData::HINFO { cpu, os } => format!("\"{}\" \"{}\"", cpu, os),
+        DnsRecordData::RP { mbox, txt } => format!("{} {}", mbox, txt),
+        DnsRecordData::LOC { version, size, horiz_pre, vert_pre, latitude, longitude, altitude } =>
+            format!("{} {} {} {} {} {} {} {}", version, size, horiz_pre, vert_pre, latitude, longitude, altitude, altitude),
+        DnsRecordData::AFSDB { subtype, hostname } => format!("{} {}", subtype, hostname),
+        DnsRecordData::URI { priority, weight, target } => format!("{} {} \"{}\"", priority, weight, target),
         _ => format!("{:?}", data),
     }
 }

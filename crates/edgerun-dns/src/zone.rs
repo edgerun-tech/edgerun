@@ -207,6 +207,42 @@ impl DnsZone {
         self.add_record(rr);
     }
 
+    /// Add an HINFO record (RFC 1035 — Host Info).
+    pub fn add_hinfo(&mut self, name: &str, cpu: &str, os: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::hinfo(full_name, cpu.to_string(), os.to_string(), ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an RP record (RFC 1183 — Responsible Person).
+    pub fn add_rp(&mut self, name: &str, mbox: &str, txt: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::rp(full_name, mbox.to_string(), txt.to_string(), ttl);
+        self.add_record(rr);
+    }
+
+    /// Add a LOC record (RFC 1876 — Location).
+    pub fn add_loc(&mut self, name: &str, size: u32, latitude: u32, longitude: u32,
+                   altitude: u32, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::loc(full_name, 0, size, 18582825, 18582825, latitude, longitude, altitude, ttl);
+        self.add_record(rr);
+    }
+
+    /// Add an AFSDB record (RFC 1183 — AFS Database).
+    pub fn add_afsdb(&mut self, name: &str, subtype: u16, hostname: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::afsdb(full_name, subtype, hostname.to_string(), ttl);
+        self.add_record(rr);
+    }
+
+    /// Add a URI record (RFC 7553 — Uniform Resource Identifier).
+    pub fn add_uri(&mut self, name: &str, priority: u16, weight: u16, target: &str, ttl: u32) {
+        let full_name = self.full_name(name);
+        let rr = DnsRecord::uri(full_name, priority, weight, target.to_string(), ttl);
+        self.add_record(rr);
+    }
+
     /// Add a raw record directly.
     pub fn add_record(&mut self, rr: DnsRecord) {
         let name = rr.name.to_lowercase();

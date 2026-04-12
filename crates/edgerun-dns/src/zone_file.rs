@@ -194,6 +194,27 @@ impl ZoneFileParser {
                         minimum: parse_u32(expect(6, "SOA: expected minimum")?, "minimum")?,
                     }})
             }
+            DnsRecordType::HINFO => {
+                let cpu = expect(0, "HINFO: expected cpu")?.to_string();
+                let os = expect(1, "HINFO: expected os")?.to_string();
+                Ok(DnsRecord::hinfo(owner.to_string(), cpu, os, ttl))
+            }
+            DnsRecordType::RP => {
+                Ok(DnsRecord::rp(owner.to_string(),
+                    normalize_target(expect(0, "RP: expected mbox")?, &self.origin),
+                    normalize_target(expect(1, "RP: expected txt")?, &self.origin), ttl))
+            }
+            DnsRecordType::AFSDB => {
+                let subtype = parse_u16(expect(0, "AFSDB: expected subtype")?, "subtype")?;
+                Ok(DnsRecord::afsdb(owner.to_string(), subtype,
+                    normalize_target(expect(1, "AFSDB: expected hostname")?, &self.origin), ttl))
+            }
+            DnsRecordType::URI => {
+                let priority = parse_u16(expect(0, "URI: expected priority")?, "priority")?;
+                let weight = parse_u16(expect(1, "URI: expected weight")?, "weight")?;
+                let target = rdata[2..].join(" ").trim_matches('"').to_string();
+                Ok(DnsRecord::uri(owner.to_string(), priority, weight, target, ttl))
+            }
             _ => Ok(DnsRecord { name: owner.to_string(), rtype, rclass: 1, ttl, data: DnsRecordData::Raw(rdata.join(" ").into_bytes()) }),
         }
     }
@@ -219,7 +240,7 @@ fn tokenize(line: &str) -> Vec<String> {
 
 fn is_class_or_type(token: &str) -> bool {
     matches!(token.to_uppercase().as_str(),
-        "IN"|"CS"|"CH"|"HS"|"A"|"AAAA"|"CNAME"|"NS"|"MX"|"TXT"|"PTR"|"SOA"|"SRV"|"NAPTR"|"CAA"|"TLSA"|"HTTPS"|"SVCB"|"DS"|"DNSKEY"|"RRSIG"|"NSEC"|"NSEC3"|"ANY"|"OPT"|"SPF")
+        "IN"|"CS"|"CH"|"HS"|"A"|"AAAA"|"CNAME"|"NS"|"MX"|"TXT"|"PTR"|"SOA"|"SRV"|"NAPTR"|"CAA"|"TLSA"|"HTTPS"|"SVCB"|"DS"|"DNSKEY"|"RRSIG"|"NSEC"|"NSEC3"|"ANY"|"OPT"|"SPF"|"TSIG"|"HINFO"|"RP"|"LOC"|"AFSDB"|"URI")
 }
 
 fn normalize_owner(token: &str, origin: &str) -> String {
@@ -246,7 +267,10 @@ fn rtype_from_str(s: &str) -> Option<DnsRecordType> {
         "HTTPS"=>Some(DnsRecordType::HTTPS),"SVCB"=>Some(DnsRecordType::SVCB),"DS"=>Some(DnsRecordType::DS),
         "DNSKEY"=>Some(DnsRecordType::DNSKEY),"RRSIG"=>Some(DnsRecordType::RRSIG),
         "NSEC"=>Some(DnsRecordType::NSEC),"NSEC3"=>Some(DnsRecordType::NSEC3),"SPF"=>Some(DnsRecordType::TXT),
-        "ANY"=>Some(DnsRecordType::ANY),_=>None,
+        "ANY"=>Some(DnsRecordType::ANY),"HINFO"=>Some(DnsRecordType::HINFO),"RP"=>Some(DnsRecordType::RP),
+        "LOC"=>Some(DnsRecordType::LOC),"AFSDB"=>Some(DnsRecordType::AFSDB),"URI"=>Some(DnsRecordType::URI),
+        "TSIG"=>Some(DnsRecordType::TSIG),
+        _=>None,
     }
 }
 

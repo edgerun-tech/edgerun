@@ -168,6 +168,30 @@ impl DnsClient {
         Ok(ptrs)
     }
 
+    /// Query for HINFO records.
+    pub async fn query_hinfo(&mut self, name: &str) -> Result<Vec<(String, String)>, io::Error> {
+        let msg = self.send_query(name, DnsRecordType::HINFO).await?;
+        let mut results = Vec::new();
+        for answer in &msg.answers {
+            if let DnsRecordData::HINFO { cpu, os } = &answer.data {
+                results.push((cpu.clone(), os.clone()));
+            }
+        }
+        Ok(results)
+    }
+
+    /// Query for URI records.
+    pub async fn query_uri(&mut self, name: &str) -> Result<Vec<(u16, u16, String)>, io::Error> {
+        let msg = self.send_query(name, DnsRecordType::URI).await?;
+        let mut results = Vec::new();
+        for answer in &msg.answers {
+            if let DnsRecordData::URI { priority, weight, target } = &answer.data {
+                results.push((*priority, *weight, target.clone()));
+            }
+        }
+        Ok(results)
+    }
+
     /// Send a generic query and return the full response message.
     pub async fn query(&mut self, name: &str, qtype: DnsRecordType) -> Result<DnsMessage, io::Error> {
         self.send_query(name, qtype).await

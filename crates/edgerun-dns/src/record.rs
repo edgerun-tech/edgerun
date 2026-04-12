@@ -58,6 +58,18 @@ pub enum DnsRecordType {
     OPT = 41,
     /// TSIG transaction signature (RFC 8945).
     TSIG = 250,
+    /// Host Information (RFC 1035 §3.3.2) — CPU and OS.
+    HINFO = 13,
+    /// Responsible Person (RFC 1183) — mailbox + TXT name.
+    RP = 17,
+    /// Location (RFC 1876) — GPS coordinates.
+    LOC = 29,
+    /// AFS Data Base location (RFC 1183 §1).
+    AFSDB = 18,
+    /// URI (RFC 7553) — Uniform Resource Identifier.
+    URI = 256,
+    /// Sender Policy Framework (RFC 4408, deprecated, treat as TXT).
+    SPF = 99,
 }
 
 impl DnsRecordType {
@@ -87,6 +99,12 @@ impl DnsRecordType {
             257 => Some(Self::CAA),
             41 => Some(Self::OPT),
             250 => Some(Self::TSIG),
+            13 => Some(Self::HINFO),
+            17 => Some(Self::RP),
+            29 => Some(Self::LOC),
+            18 => Some(Self::AFSDB),
+            256 => Some(Self::URI),
+            99 => Some(Self::SPF),
             _ => None,
         }
     }
@@ -122,6 +140,12 @@ impl DnsRecordType {
             Self::NSEC3 => "NSEC3",
             Self::OPT => "OPT",
             Self::TSIG => "TSIG",
+            Self::HINFO => "HINFO",
+            Self::RP => "RP",
+            Self::LOC => "LOC",
+            Self::AFSDB => "AFSDB",
+            Self::URI => "URI",
+            Self::SPF => "SPF",
         }
     }
 }
@@ -319,6 +343,53 @@ pub enum DnsRecordData {
     },
     /// TSIG transaction signature (RFC 8945).
     TSIG(super::tsig::TsigRdata),
+    /// HINFO — host CPU and OS (RFC 1035 §3.3.2).
+    HINFO {
+        /// CPU type (e.g. "x86_64").
+        cpu: String,
+        /// Operating system (e.g. "Linux").
+        os: String,
+    },
+    /// RP — Responsible Person (RFC 1183 §2.2).
+    RP {
+        /// Mailbox domain name (encoded as `<user>.<domain>`).
+        mbox: String,
+        /// TXT record name with additional info.
+        txt: String,
+    },
+    /// LOC — Geographic location (RFC 1876).
+    LOC {
+        /// Version (always 0).
+        version: u8,
+        /// Size in cm (encoded as 10^exponent * mantissa).
+        size: u32,
+        /// Horizontal precision.
+        horiz_pre: u32,
+        /// Vertical precision.
+        vert_pre: u32,
+        /// Latitude (0..2^32, 0 = equator).
+        latitude: u32,
+        /// Longitude (0..2^32, 0 = prime meridian).
+        longitude: u32,
+        /// Altitude in cm above 100km below WGS84 reference spheroid.
+        altitude: u32,
+    },
+    /// AFSDB — AFS Data Base location (RFC 1183 §1).
+    AFSDB {
+        /// Subtype: 1 = AFS cell, 2 = DCE/NCA.
+        subtype: u16,
+        /// Hostname of the AFS server.
+        hostname: String,
+    },
+    /// URI — Uniform Resource Identifier (RFC 7553).
+    URI {
+        /// Priority (lower = preferred).
+        priority: u16,
+        /// Weight for load balancing.
+        weight: u16,
+        /// The URI target (e.g. "http://example.com/path").
+        target: String,
+    },
 }
 
 impl DnsRecordData {
@@ -496,6 +567,43 @@ impl DnsRecordData {
                 buf
             }
             (DnsRecordType::TSIG, DnsRecordData::TSIG(rdata)) => rdata.to_wire(),
+            (DnsRecordType::HINFO, DnsRecordData::HINFO { cpu, os }) => {
+                let mut buf = Vec::new();
+                buf.push(cpu.len() as u8);
+                buf.extend_from_slice(cpu.as_bytes());
+                buf.push(os.len() as u8);
+                buf.extend_from_slice(os.as_bytes());
+                buf
+            }
+            (DnsRecordType::RP, DnsRecordData::RP { mbox, txt }) => {
+                let mut buf = encode_domain_name(mbox);
+                buf.extend(encode_domain_name(txt));
+                buf
+            }
+            (DnsRecordType::LOC, DnsRecordData::LOC {
+                version, size, horiz_pre, vert_pre, latitude, longitude, altitude,
+            }) => {
+                let mut buf = Vec::new();
+                buf.push(*version);
+                buf.push(*size as u8);
+                buf.push(*horiz_pre as u8);
+                buf.push(*vert_pre as u8);
+                buf.extend_from_slice(&latitude.to_be_bytes());
+                buf.extend_from_slice(&longitude.to_be_bytes());
+                buf.extend_from_slice(&altitude.to_be_bytes());
+                buf
+            }
+            (DnsRecordType::AFSDB, DnsRecordData::AFSDB { subtype, hostname }) => {
+                let mut buf = subtype.to_be_bytes().to_vec();
+                buf.extend(encode_domain_name(hostname));
+                buf
+            }
+            (DnsRecordType::URI, DnsRecordData::URI { priority, weight, target }) => {
+                let mut buf = priority.to_be_bytes().to_vec();
+                buf.extend_from_slice(&weight.to_be_bytes());
+                buf.extend_from_slice(target.as_bytes());
+                buf
+            }
             _ => Vec::new(),
         }
     }
@@ -785,6 +893,50 @@ impl DnsRecordData {
                     orig_id, error, other_len, other_data,
                 }))
             }
+            DnsRecordType::HINFO => {
+                if data.len() < 2 { return Ok(Self::Raw(data.to_vec())); }
+                let cpu_len = data[0] as usize;
+                let cpu = String::from_utf8_lossy(&data[1..1+cpu_len.min(data.len()-1)]).to_string();
+                let rest_start = 1 + cpu_len;
+                let os = if rest_start < data.len() {
+                    let os_len = data[rest_start] as usize;
+                    let os_end = (rest_start + 1 + os_len).min(data.len());
+                    String::from_utf8_lossy(&data[rest_start+1..os_end]).to_string()
+                } else { String::new() };
+                Ok(Self::HINFO { cpu, os })
+            }
+            DnsRecordType::RP => {
+                if data.len() < 2 { return Ok(Self::Raw(data.to_vec())); }
+                let mbox = decode_domain_name(data, 0, offset_map)?;
+                let mbox_len = domain_name_wire_len(data, 0);
+                let txt = if mbox_len < data.len() {
+                    decode_domain_name(data, mbox_len, offset_map)?
+                } else { String::new() };
+                Ok(Self::RP { mbox, txt })
+            }
+            DnsRecordType::LOC => {
+                if data.len() < 16 { return Ok(Self::Raw(data.to_vec())); }
+                Ok(Self::LOC {
+                    version: data[0], size: data[1] as u32,
+                    horiz_pre: data[2] as u32, vert_pre: data[3] as u32,
+                    latitude: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+                    longitude: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
+                    altitude: u32::from_be_bytes([data[12], data[13], data[14], data[15]]),
+                })
+            }
+            DnsRecordType::AFSDB => {
+                if data.len() < 4 { return Ok(Self::Raw(data.to_vec())); }
+                let subtype = u16::from_be_bytes([data[0], data[1]]);
+                let hostname = decode_domain_name(data, 2, offset_map)?;
+                Ok(Self::AFSDB { subtype, hostname })
+            }
+            DnsRecordType::URI => {
+                if data.len() < 4 { return Ok(Self::Raw(data.to_vec())); }
+                let priority = u16::from_be_bytes([data[0], data[1]]);
+                let weight = u16::from_be_bytes([data[2], data[3]]);
+                let target = String::from_utf8_lossy(&data[4..]).to_string();
+                Ok(Self::URI { priority, weight, target })
+            }
             _ => Ok(Self::Raw(data.to_vec())),
         }
     }
@@ -999,7 +1151,10 @@ mod tests {
     fn test_record_type_from_u16() {
         assert_eq!(DnsRecordType::from_u16(1), Some(DnsRecordType::A));
         assert_eq!(DnsRecordType::from_u16(28), Some(DnsRecordType::AAAA));
-        assert_eq!(DnsRecordType::from_u16(99), None);
+        assert_eq!(DnsRecordType::from_u16(250), Some(DnsRecordType::TSIG));
+        assert_eq!(DnsRecordType::from_u16(256), Some(DnsRecordType::URI));
+        assert_eq!(DnsRecordType::from_u16(99), Some(DnsRecordType::SPF));
+        assert_eq!(DnsRecordType::from_u16(9999), None);
     }
 
     #[test]
@@ -1228,5 +1383,33 @@ mod tests {
         assert_eq!(wire[7], 3);   // hash length
         assert_eq!(&wire[8..11], &[0xAB, 0xCD, 0xEF]);
         assert_eq!(wire[11], 0x40); // type bits
+    }
+
+    #[test]
+    fn test_hinfo_wire() {
+        let data = DnsRecordData::HINFO { cpu: "x86_64".to_string(), os: "Linux".to_string() };
+        let wire = data.to_wire(DnsRecordType::HINFO);
+        assert_eq!(wire[0], 6); // "x86_64" len
+        assert_eq!(&wire[1..7], b"x86_64");
+        assert_eq!(wire[7], 5); // "Linux" len
+        assert_eq!(&wire[8..13], b"Linux");
+    }
+
+    #[test]
+    fn test_uri_wire() {
+        let data = DnsRecordData::URI { priority: 10, weight: 1, target: "http://example.com".to_string() };
+        let wire = data.to_wire(DnsRecordType::URI);
+        assert_eq!(wire[0..2], [0, 10]);
+        assert_eq!(wire[2..4], [0, 1]);
+        assert_eq!(&wire[4..], b"http://example.com");
+    }
+
+    #[test]
+    fn test_afsdb_wire() {
+        let data = DnsRecordData::AFSDB { subtype: 1, hostname: "afs.example.com".to_string() };
+        let wire = data.to_wire(DnsRecordType::AFSDB);
+        assert_eq!(wire[0..2], [0, 1]);
+        // hostname follows as domain name encoding
+        assert!(wire.len() > 4);
     }
 }
