@@ -75,6 +75,17 @@ impl DhcpServer {
         let socket = UdpSocket::bind(("0.0.0.0", DHCP_SERVER_PORT))?;
         socket.set_broadcast(true)?;
         socket.set_read_timeout(Some(Duration::from_millis(200)))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = socket.as_raw_fd();
+            let opt: libc::c_int = 1;
+            unsafe {
+                libc::setsockopt(fd, libc::SOL_SOCKET, libc::SO_REUSEADDR,
+                    &opt as *const _ as *const libc::c_void,
+                    std::mem::size_of::<libc::c_int>() as libc::socklen_t);
+            }
+        }
 
         let mut pool = LeasePool::new(pool_start, pool_end);
 

@@ -11,6 +11,7 @@ edgerun-rt = { path = "../edgerun-rt" }
 edgerun-log = { path = "../edgerun-log" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-tls = { path = "../edgerun-tls" }
+libc = "0.2"
 
 [lints]
 workspace = true

@@ -171,6 +171,8 @@ pub struct DhcpOptions {
     pub client_machine_id: Option<[u8; 17]>,
     /// Vendor-encapsulated options (option 43) — raw PXE sub-options.
     pub vendor_encap: Option<Vec<u8>>,
+    /// Parsed vendor sub-options from option 43.
+    pub vendor_sub_options: Vec<(u8, Vec<u8>)>,
     /// Hostname (option 12).
     pub host_name: Option<String>,
     /// Raw unparsed options (for extensions we don't understand).
@@ -734,6 +736,20 @@ impl DhcpOptions {
                 }
                 OPT_VENDOR_ENCAP => {
                     opts.vendor_encap = Some(value.to_vec());
+                    // Parse vendor sub-options (RFC 4578 PXE format)
+                    let mut j = 0;
+                    while j < value.len() {
+                        let sub_code = value[j];
+                        if sub_code == 255 { break; } // End
+                        if sub_code == 0 { j += 1; continue; } // Pad
+                        j += 1;
+                        if j >= value.len() { break; }
+                        let sub_len = value[j] as usize;
+                        j += 1;
+                        if j + sub_len > value.len() { break; }
+                        opts.vendor_sub_options.push((sub_code, value[j..j+sub_len].to_vec()));
+                        j += sub_len;
+                    }
                 }
                 OPT_HOST_NAME => {
                     opts.host_name = Some(String::from_utf8_lossy(value).to_string());

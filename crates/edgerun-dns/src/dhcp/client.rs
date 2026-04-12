@@ -326,10 +326,9 @@ fn read_mac_from_interface(interface: &str) -> Result<[u8; 6], io::Error> {
 }
 
 fn random_xid() -> u32 {
-    // Simple random XID from time-based
-    use std::time::SystemTime;
-    let d = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default();
-    (d.as_millis() as u32).wrapping_mul(2654435761) // Knuth multiplicative
+    // Use getrandom for cryptographically secure XID (prevents DHCP spoofing)
+    use edgerun_crypto::RngCore;
+    let mut bytes = [0u8; 4];
+    edgerun_crypto::OsRng.fill_bytes(&mut bytes);
+    u32::from_be_bytes(bytes)
 }

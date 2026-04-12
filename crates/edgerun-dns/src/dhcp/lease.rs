@@ -3,6 +3,21 @@
 use std::net::Ipv4Addr;
 use std::time::{Duration, Instant};
 
+/// DHCP lease states per RFC 2131 §3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeaseState {
+    /// Client has received an OFFER but not yet sent REQUEST.
+    Offered,
+    /// Lease is bound — client has IP and is using it.
+    Bound,
+    /// Past T1 (50% of lease) — client unicasts REQUEST to current server.
+    Renewing,
+    /// Past T2 (87.5% of lease) — client broadcasts REQUEST to any server.
+    Rebinding,
+    /// Client has released the lease.
+    Released,
+}
+
 /// A DHCP lease record.
 #[derive(Debug, Clone)]
 pub struct Lease {
@@ -19,10 +34,12 @@ pub struct Lease {
     pub granted_at: Instant,
     /// Transaction ID of the exchange.
     pub xid: u32,
+    /// Current lease state (RFC 2131 §3).
+    pub state: LeaseState,
 }
 
 impl Lease {
-    /// Create a new lease.
+    /// Create a new lease in BOUND state.
     pub fn new(mac: [u8; 6], ip: Ipv4Addr, lease_time: u32, xid: u32) -> Self {
         Self {
             mac,
@@ -31,6 +48,20 @@ impl Lease {
             lease_time,
             granted_at: Instant::now(),
             xid,
+            state: LeaseState::Bound,
+        }
+    }
+
+    /// Create a new offered lease (not yet bound).
+    pub fn offered(mac: [u8; 6], ip: Ipv4Addr, lease_time: u32, xid: u32) -> Self {
+        Self {
+            mac,
+            client_id: None,
+            ip,
+            lease_time,
+            granted_at: Instant::now(),
+            xid,
+            state: LeaseState::Offered,
         }
     }
 
@@ -43,7 +74,22 @@ impl Lease {
             lease_time,
             granted_at: Instant::now(),
             xid,
+            state: LeaseState::Bound,
         }
+    }
+
+    /// Update lease state based on elapsed time.
+    pub fn update_state(&self) -> LeaseState {
+        if self.is_expired() {
+            return LeaseState::Released;
+        }
+        if self.is_rebinding_due() {
+            return LeaseState::Rebinding;
+        }
+        if self.is_renewal_due() {
+            return LeaseState::Renewing;
+        }
+        LeaseState::Bound
     }
 
     /// Returns true if this lease has expired.
@@ -119,7 +165,8 @@ impl LeasePool {
         self.leases.get(&ip_to_u32(ip))
     }
 
-    /// Allocate the next available IP address for a client.
+    /// Allocate (offer) the next available IP address for a client.
+    /// Creates a lease in OFFERED state (not yet bound).
     /// If client_id is provided, it takes precedence over MAC for identification (RFC 2131 §9).
     /// Returns None if the pool is exhausted.
     pub fn allocate(&mut self, mac: [u8; 6], client_id: Option<Vec<u8>>, lease_time: u32, xid: u32) -> Option<Ipv4Addr> {
@@ -155,11 +202,7 @@ impl LeasePool {
             }
             if !self.leases.contains_key(&ip_u32) {
                 let ip = u32_to_ip(ip_u32);
-                let lease = if let Some(ref cid) = client_id {
-                    Lease::with_client_id(mac, cid.clone(), ip, lease_time, xid)
-                } else {
-                    Lease::new(mac, ip, lease_time, xid)
-                };
+                let lease = Lease::offered(mac, ip, lease_time, xid);
                 self.leases.insert(ip_u32, lease);
                 self.mac_to_ip.insert(mac, ip_u32);
                 if let Some(ref cid) = client_id {
@@ -181,6 +224,31 @@ impl LeasePool {
                 }
             }
         }
+    }
+
+    /// Acknowledge a lease — transition from OFFERED to BOUND state.
+    /// Called when client sends REQUEST and we send ACK.
+    pub fn acknowledge(&mut self, ip: Ipv4Addr) {
+        if let Some(ip_u32) = self.leases.keys().find(|&&k| u32_to_ip(k) == ip).copied() {
+            if let Some(lease) = self.leases.get_mut(&ip_u32) {
+                lease.state = LeaseState::Bound;
+                lease.granted_at = Instant::now();
+            }
+        }
+    }
+
+    /// Transition an offered lease to bound. Returns the lease if found.
+    pub fn bind_offer(&mut self, mac: [u8; 6], ip: Ipv4Addr) -> Option<&Lease> {
+        if let Some(ip_u32) = self.mac_to_ip.get(&mac).copied() {
+            if let Some(lease) = self.leases.get_mut(&ip_u32) {
+                if lease.ip == ip && lease.state == LeaseState::Offered {
+                    lease.state = LeaseState::Bound;
+                    lease.granted_at = Instant::now();
+                    return Some(lease);
+                }
+            }
+        }
+        None
     }
 
     /// Remove all expired leases.
@@ -216,6 +284,42 @@ impl LeasePool {
     pub fn available_count(&self) -> u32 {
         let used = self.leases.len() as u32 + self.reserved.len() as u32;
         self.pool_size().saturating_sub(used)
+    }
+
+    /// Compact the lease database — remove released leases and rebuild indexes.
+    /// Returns the number of entries removed.
+    pub fn compact(&mut self) -> usize {
+        let before = self.leases.len();
+        let released: Vec<u32> = self.leases.iter()
+            .filter(|(_, l)| l.state == LeaseState::Released)
+            .map(|(ip, _)| *ip)
+            .collect();
+        for ip_u32 in &released {
+            if let Some(lease) = self.leases.remove(ip_u32) {
+                self.mac_to_ip.remove(&lease.mac);
+                if let Some(ref cid) = lease.client_id {
+                    self.client_id_to_ip.remove(cid);
+                }
+                self.reserved.remove(ip_u32);
+            }
+        }
+        before - self.leases.len()
+    }
+
+    /// Get lease state summary for monitoring.
+    pub fn state_summary(&self) -> std::collections::HashMap<&'static str, usize> {
+        let mut summary = std::collections::HashMap::new();
+        for lease in self.leases.values() {
+            let key = match lease.state {
+                LeaseState::Offered => "offered",
+                LeaseState::Bound => "bound",
+                LeaseState::Renewing => "renewing",
+                LeaseState::Rebinding => "rebinding",
+                LeaseState::Released => "released",
+            };
+            *summary.entry(key).or_insert(0) += 1;
+        }
+        summary
     }
 
     /// Save the lease pool to a file for persistence.
