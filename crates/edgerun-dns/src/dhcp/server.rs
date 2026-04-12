@@ -335,6 +335,7 @@ impl DhcpServer {
 
     fn handle_inform(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         // INFORM: client has IP already, wants config info
+        // Per RFC 2131 §4.3.5, server MUST NOT include lease_time in INFORM response
         let mac = msg.client_mac();
         eprintln!(
             "edgerun-dhcp: INFORM from {} (xid=0x{:08x})",
@@ -342,7 +343,7 @@ impl DhcpServer {
             msg.xid
         );
 
-        let ack = DhcpMessage::ack(
+        let mut ack = DhcpMessage::ack(
             msg.xid,
             mac,
             msg.ciaddr,
@@ -350,10 +351,14 @@ impl DhcpServer {
             self.config.subnet_mask,
             self.config.router,
             self.config.dns_servers.clone(),
-            0, // No lease — client already has IP
+            0, // Placeholder — will be omitted
             None, // No PXE for INFORM
             None,
         );
+        // Remove lease_time from INFORM response per RFC 2131 §4.3.5
+        ack.options.lease_time = None;
+        ack.options.renewal_time = None;
+        ack.options.rebind_time = None;
 
         self.send_reply(&ack, msg)
     }
@@ -413,8 +418,14 @@ impl DhcpServer {
     fn send_reply(&mut self, msg: &DhcpMessage, original: &DhcpMessage) -> Result<(), io::Error> {
         let wire = msg.to_wire();
 
-        // If client had an IP and broadcast flag is not set, send unicast
-        if !original.ciaddr.is_unspecified() && !original.broadcast {
+        // RFC 2131 §4.1: If relay agent (giaddr) is set, unicast to it
+        if !original.giaddr.is_unspecified() {
+            let addr = SocketAddr::new(
+                std::net::IpAddr::V4(original.giaddr),
+                DHCP_SERVER_PORT,
+            );
+            self.socket.send_to(&wire, addr)?;
+        } else if !original.ciaddr.is_unspecified() && !original.broadcast {
             let addr = SocketAddr::new(
                 std::net::IpAddr::V4(original.ciaddr),
                 DHCP_CLIENT_PORT,

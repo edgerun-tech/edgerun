@@ -54,6 +54,8 @@ pub struct DhcpClient {
     pub server_id: Option<Ipv4Addr>,
     /// Offered IP from DISCOVER.
     pub offered_ip: Option<Ipv4Addr>,
+    /// When the current address acquisition started (for secs field, RFC 2131 §4.1).
+    secs_start: Option<Instant>,
 }
 
 impl DhcpClient {
@@ -103,6 +105,7 @@ impl DhcpClient {
             current_lease: None,
             server_id: None,
             offered_ip: None,
+            secs_start: None,
         })
     }
 
@@ -111,6 +114,7 @@ impl DhcpClient {
     /// Returns the lease or an error.
     pub fn acquire_lease(&mut self, timeout: Duration) -> Result<Lease, io::Error> {
         let deadline = Instant::now() + timeout;
+        self.secs_start = Some(Instant::now());
 
         // Step 1: DISCOVER
         self.send_discover()?;
@@ -171,8 +175,15 @@ impl DhcpClient {
 
     // --- Internal methods ---
 
+    fn secs_elapsed(&self) -> u16 {
+        self.secs_start
+            .map(|start| start.elapsed().as_secs().min(u16::MAX as u64) as u16)
+            .unwrap_or(0)
+    }
+
     fn send_discover(&mut self) -> Result<(), io::Error> {
-        let msg = DhcpMessage::discover(self.xid, self.mac);
+        let mut msg = DhcpMessage::discover(self.xid, self.mac);
+        msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
         let broadcast = SocketAddr::new(
             std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
@@ -183,7 +194,8 @@ impl DhcpClient {
     }
 
     fn send_request(&mut self, ip: Ipv4Addr, server_id: Ipv4Addr) -> Result<(), io::Error> {
-        let msg = DhcpMessage::request(self.xid, self.mac, ip, server_id);
+        let mut msg = DhcpMessage::request(self.xid, self.mac, ip, server_id);
+        msg.secs = self.secs_elapsed();
         let wire = msg.to_wire();
         let broadcast = SocketAddr::new(
             std::net::IpAddr::V4(Ipv4Addr::BROADCAST),
