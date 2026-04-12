@@ -80,3 +80,7 @@ harness = false
 [[test]]
 name = "select_test"
 harness = false
+
+[[test]]
+name = "cancellation_test"
+harness = false

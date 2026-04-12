@@ -26,6 +26,7 @@ mod sleep_until;
 mod yield_now;
 mod join;
 mod select;
+mod cancellation;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
@@ -58,6 +59,9 @@ pub use timers::{
 };
 pub use sleep_until::{sleep_until, timeout_at, SleepUntil, TimeoutAt};
 pub use yield_now::{yield_now, YieldNow};
+
+// Cancellation.
+pub use cancellation::{CancellationToken, Cancelled};
 
 // Sync primitives.
 pub use notify::{Notify, Notified};
