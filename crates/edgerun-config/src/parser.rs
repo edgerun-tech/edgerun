@@ -178,11 +178,100 @@ impl ConfigState {
 
         Ok(())
     }
+
+    /// Build DhcpScope instances for a given DHCP server config.
+    /// Returns scopes indexed by pool name, ready for DhcpMultiServer.
+    pub fn build_dhcp_scopes(
+        &self,
+        server_index: usize,
+    ) -> Result<std::collections::HashMap<String, edgerun_dns::dhcp::DhcpScope>, ConfigError> {
+        let server = self.dhcp_servers.get(server_index).ok_or_else(|| {
+            ConfigError::ValidationError(format!("dhcp_servers[{}]: out of range", server_index))
+        })?;
+
+        let dns_servers: Vec<std::net::Ipv4Addr> = server.dns_servers.iter()
+            .flatten()
+            .filter_map(|s| s.parse().ok())
+            .collect();
+
+        let router: std::net::Ipv4Addr = server.router.as_deref()
+            .unwrap_or("0.0.0.0")
+            .parse()
+            .map_err(|e| ConfigError::ValidationError(format!("invalid router: {}", e)))?;
+
+        let mut scopes = std::collections::HashMap::new();
+
+        for pool_name in &server.pools {
+            let pool = self.dhcp_pools.iter()
+                .find(|p| &p.name == pool_name)
+                .ok_or_else(|| ConfigError::ValidationError(
+                    format!("pool '{}' not found", pool_name)
+                ))?;
+
+            let range_start: std::net::Ipv4Addr = pool.range_start.parse()
+                .map_err(|e| ConfigError::ValidationError(format!("invalid range_start: {}", e)))?;
+            let range_end: std::net::Ipv4Addr = pool.range_end.parse()
+                .map_err(|e| ConfigError::ValidationError(format!("invalid range_end: {}", e)))?;
+            let subnet_mask: std::net::Ipv4Addr = pool.subnet_mask.parse()
+                .map_err(|e| ConfigError::ValidationError(format!("invalid subnet_mask: {}", e)))?;
+
+            let mut scope = edgerun_dns::dhcp::DhcpScope::new(
+                &pool.name,
+                range_start,
+                range_end,
+                subnet_mask,
+                router,
+                dns_servers.clone(),
+                server.default_lease_time,
+            );
+
+            // Apply PXE config
+            if let (Some(tftp), Some(bootfile)) = (&server.tftp_server, &server.bootfile) {
+                if let Ok(tftp_ip) = tftp.parse::<std::net::Ipv4Addr>() {
+                    scope = scope.with_pxe(tftp_ip, bootfile.clone());
+                }
+            }
+
+            // Apply static reservations
+            if let Some(ref reservations) = server.reservations {
+                for res in reservations {
+                    if let (Ok(mac), Ok(ip)) = (parse_mac(&res.mac), res.ip.parse::<std::net::Ipv4Addr>()) {
+                        scope.pool.reserve(ip);
+                        // Reserve in the pool's lease map too
+                        scope.pool.leases.insert(
+                            edgerun_dns::dhcp::lease::ip_to_u32(ip),
+                            edgerun_dns::dhcp::lease::Lease::with_client_id(
+                                mac, res.mac.as_bytes().to_vec(), ip,
+                                server.default_lease_time, 0,
+                            ),
+                        );
+                    }
+                }
+            }
+
+            scopes.insert(pool.name.clone(), scope);
+        }
+
+        Ok(scopes)
+    }
 }
 
 fn parse_ipv4(s: &str) -> Result<std::net::Ipv4Addr, ConfigError> {
     s.parse()
         .map_err(|e| ConfigError::ValidationError(format!("invalid IPv4 '{}': {}", s, e)))
+}
+
+fn parse_mac(s: &str) -> Result<[u8; 6], ConfigError> {
+    let parts: Vec<u8> = s.split(':')
+        .map(|p| u8::from_str_radix(p, 16)
+            .map_err(|e| ConfigError::ValidationError(format!("invalid MAC '{}': {}", s, e))))
+        .collect::<Result<Vec<_>, _>>()?;
+    if parts.len() != 6 {
+        return Err(ConfigError::ValidationError(format!("invalid MAC '{}' (need 6 bytes)", s)));
+    }
+    let mut mac = [0u8; 6];
+    mac.copy_from_slice(&parts);
+    Ok(mac)
 }
 
 /// Config parsing/validation errors.
