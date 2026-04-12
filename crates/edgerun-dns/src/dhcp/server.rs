@@ -186,11 +186,15 @@ impl DhcpServer {
     fn handle_discover(&mut self, msg: &DhcpMessage) -> Result<(), io::Error> {
         let mac = msg.client_mac();
         eprintln!(
-            "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x}) bootp={}",
+            "edgerun-dhcp: DISCOVER from {} (xid=0x{:08x}) bootp={} rapid={}",
             format_mac(mac),
             msg.xid,
-            msg.is_bootp
+            msg.is_bootp,
+            msg.options.param_request_list.contains(&super::message::OPT_RAPID_COMMIT)
         );
+
+        // Check for rapid commit (RFC 4039) — 2-message DORA
+        let rapid_commit = msg.options.param_request_list.contains(&super::message::OPT_RAPID_COMMIT);
 
         // Try to allocate an IP
         let ip = match self.pool.allocate(
@@ -205,12 +209,6 @@ impl DhcpServer {
                 return self.send_nak(msg.xid, mac);
             }
         };
-
-        eprintln!(
-            "edgerun-dhcp: sending OFFER {} to {}",
-            ip,
-            format_mac(mac)
-        );
 
         let (tftp, bootfile) = self.pxe_boot_params(msg);
 
@@ -240,6 +238,19 @@ impl DhcpServer {
                 let file_bytes = bootfile.as_bytes();
                 offer.file[..file_bytes.len().min(128)].copy_from_slice(&file_bytes[..file_bytes.len().min(128)]);
             }
+        }
+
+        // Rapid commit: respond with ACK instead of OFFER (RFC 4039)
+        if rapid_commit {
+            offer.options.param_request_list.push(super::message::OPT_RAPID_COMMIT);
+            edgerun_log::info!("edgerun-dhcp: sending RAPID-COMMIT ACK {} to {}",
+                ip, format_mac(mac));
+        } else {
+            eprintln!(
+                "edgerun-dhcp: sending OFFER {} to {}",
+                ip,
+                format_mac(mac)
+            );
         }
 
         self.send_reply(&offer, msg)
@@ -354,9 +365,8 @@ impl DhcpServer {
             requested
         );
         if let Some(ip) = requested {
-            self.pool.release(mac);
-            // Mark as reserved temporarily so we don't re-assign immediately
-            self.pool.reserve(ip);
+            // Record conflict — this IP is in use by another host (RFC 2131 §2.2)
+            self.pool.record_conflict(ip, mac);
         }
         Ok(())
     }

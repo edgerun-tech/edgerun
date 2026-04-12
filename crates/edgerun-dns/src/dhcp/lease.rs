@@ -133,6 +133,8 @@ pub struct LeasePool {
     pub client_id_to_ip: std::collections::HashMap<Vec<u8>, u32>,
     /// Reserved IPs (not to be handed out).
     pub reserved: std::collections::HashSet<u32>,
+    /// IPs that had conflicts (reported via DECLINE). Blacklisted temporarily.
+    pub conflicts: std::collections::HashMap<u32, Instant>,
 }
 
 impl LeasePool {
@@ -145,6 +147,7 @@ impl LeasePool {
             mac_to_ip: std::collections::HashMap::new(),
             client_id_to_ip: std::collections::HashMap::new(),
             reserved: std::collections::HashSet::new(),
+            conflicts: std::collections::HashMap::new(),
         }
     }
 
@@ -195,10 +198,20 @@ impl LeasePool {
         // Find a free IP
         let start = ip_to_u32(self.pool_start);
         let end = ip_to_u32(self.pool_end);
+        let now = Instant::now();
 
         for ip_u32 in start..=end {
             if self.reserved.contains(&ip_u32) {
                 continue;
+            }
+            // Skip IPs with recent conflicts (RFC 2131 §2.2 — conflict detection)
+            if let Some(conflict_time) = self.conflicts.get(&ip_u32) {
+                // Blacklist for 10 minutes after conflict
+                if now.duration_since(*conflict_time) < Duration::from_secs(600) {
+                    continue;
+                }
+                // Expired conflict — clean up
+                self.conflicts.remove(&ip_u32);
             }
             if !self.leases.contains_key(&ip_u32) {
                 let ip = u32_to_ip(ip_u32);
@@ -282,8 +295,40 @@ impl LeasePool {
 
     /// Number of available addresses.
     pub fn available_count(&self) -> u32 {
-        let used = self.leases.len() as u32 + self.reserved.len() as u32;
+        let used = self.leases.len() as u32 + self.reserved.len() as u32 + self.conflicts.len() as u32;
         self.pool_size().saturating_sub(used)
+    }
+
+    /// Record an IP conflict (RFC 2131 §2.2).
+    /// Called when a DECLINE is received — the client detected the IP via ARP.
+    pub fn record_conflict(&mut self, ip: Ipv4Addr, reporter_mac: [u8; 6]) {
+        let ip_u32 = ip_to_u32(ip);
+        edgerun_log::warn!("edgerun-dhcp: IP conflict detected for {} (reported by {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x})",
+            ip,
+            reporter_mac[0], reporter_mac[1], reporter_mac[2],
+            reporter_mac[3], reporter_mac[4], reporter_mac[5]);
+
+        // Release the lease if it exists
+        if let Some(lease) = self.leases.remove(&ip_u32) {
+            self.mac_to_ip.retain(|_, v| *v != ip_u32);
+            if let Some(ref cid) = lease.client_id {
+                self.client_id_to_ip.retain(|_, v| *v != ip_u32);
+            }
+        }
+
+        // Also remove from reserved if it was reserved
+        self.reserved.remove(&ip_u32);
+
+        // Blacklist this IP for 10 minutes
+        self.conflicts.insert(ip_u32, Instant::now());
+    }
+
+    /// Number of active conflicts.
+    pub fn active_conflict_count(&self) -> usize {
+        let now = Instant::now();
+        self.conflicts.iter()
+            .filter(|(_, t)| now.duration_since(**t) < Duration::from_secs(600))
+            .count()
     }
 
     /// Compact the lease database — remove released leases and rebuild indexes.
@@ -515,5 +560,33 @@ mod tests {
 
         let lease_by_ip = pool.find_lease_by_ip(ip).unwrap();
         assert_eq!(lease_by_ip.mac, mac);
+    }
+
+    #[test]
+    fn test_conflict_detection() {
+        let mut pool = LeasePool::new(
+            Ipv4Addr::new(192, 168, 1, 100),
+            Ipv4Addr::new(192, 168, 1, 110),
+        );
+
+        let mac1 = [1, 2, 3, 4, 5, 6];
+        let mac2 = [6, 5, 4, 3, 2, 1];
+        let ip = Ipv4Addr::new(192, 168, 1, 100);
+
+        // Allocate to mac1
+        let assigned = pool.allocate(mac1, None, 3600, 1).unwrap();
+        assert_eq!(assigned, ip);
+        assert_eq!(pool.active_conflict_count(), 0);
+
+        // mac2 reports conflict (ARP detected ip already in use)
+        pool.record_conflict(ip, mac2);
+
+        // The IP should be blacklisted and not re-allocated
+        assert_eq!(pool.active_conflict_count(), 1);
+        assert!(pool.find_lease_by_ip(ip).is_none());
+
+        // Next allocation should skip the conflicted IP
+        let assigned2 = pool.allocate(mac2, None, 3600, 2).unwrap();
+        assert_ne!(assigned2, ip); // Should get the next available IP
     }
 }

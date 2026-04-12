@@ -63,6 +63,8 @@ pub const OPT_DOMAIN_SEARCH: u8 = 119;
 pub const OPT_CLIENT_FQDN: u8 = 81;
 /// Vendor Class Identifier
 pub const OPT_VENDOR_CLASS: u8 = 60;
+/// Rapid Commit (RFC 4039) — 2-message DORA exchange
+pub const OPT_RAPID_COMMIT: u8 = 80;
 pub const OPT_END: u8 = 255;
 pub const OPT_PAD: u8 = 0;
 
