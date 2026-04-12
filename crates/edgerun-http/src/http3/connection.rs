@@ -1267,6 +1267,41 @@ impl Http3Connection {
         Ok(push_stream_id)
     }
 
+    /// Send HEADERS + DATA frames on a push stream.
+    ///
+    /// After `send_push_promise()` creates the push stream, call this to
+    /// send the pushed response headers and body.
+    pub fn send_push_data(
+        &mut self,
+        push_stream_id: u64,
+        push_headers: Vec<u8>,
+        push_body: Vec<u8>,
+        fin: bool,
+    ) -> Result<()> {
+        // Send HEADERS frame on push stream
+        let headers_frame = Http3Frame::Headers { header_block: push_headers };
+        let headers_data = headers_frame.to_bytes();
+        self.quic
+            .send_stream_data(push_stream_id, &headers_data, false)
+            .map_err(|e| Http3Error::QuicError(e))?;
+
+        // Send DATA frame on push stream
+        if !push_body.is_empty() {
+            let data_frame = Http3Frame::Data { payload: push_body };
+            let data_data = data_frame.to_bytes();
+            self.quic
+                .send_stream_data(push_stream_id, &data_data, fin)
+                .map_err(|e| Http3Error::QuicError(e))?;
+        } else if fin {
+            // No body, but close the stream
+            self.quic
+                .send_stream_data(push_stream_id, &[], true)
+                .map_err(|e| Http3Error::QuicError(e))?;
+        }
+
+        Ok(())
+    }
+
     /// Send a MAX_PUSH_ID frame to allow the server to push more responses.
     pub fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
         let frame = Http3Frame::MaxPushId { push_id };

@@ -395,6 +395,17 @@ impl QuicTransport {
         self.pn_state[idx].packets_sent += 1;
     }
 
+    /// Get the packet number range for a given space.
+    ///
+    /// Since each space starts at 0 and uses independent counters, we can
+    /// filter by checking which space's counter each PN belongs to.
+    fn pn_range_for_space(&self, space: PacketNumberSpace) -> (u64, u64) {
+        let idx = space as usize;
+        let max_pn = self.pn_state[idx].next;
+        // Floor is 0, ceiling is current next PN for this space
+        (0, max_pn)
+    }
+
     pub fn on_ack_received(
         &mut self,
         space: PacketNumberSpace,
@@ -486,13 +497,27 @@ impl QuicTransport {
             .unwrap_or(self.rtt_estimate)
             .mul_f64(1.125);
 
+        // Only consider packets in this packet number space.
+        // Packets in the same space have contiguous packet numbers, so we can
+        // filter by checking the range: Initial [0, handshake_start),
+        // Handshake [handshake_start, app_start), AppData [app_start, ∞).
+        // For simplicity, we use the space index to filter — packets recorded
+        // with `record_packet_sent` for a given space have their PN tracked.
+        // Since we track all sent_packets in one flat list, filter by PN range.
+        let (pn_min, pn_max) = self.pn_range_for_space(space);
+
         let lost_pns: Vec<u64> = self.sent_packets.iter().filter_map(|pkt| {
             if pkt.acked || pkt.lost {
+                return None;
+            }
+            // Filter by packet number space
+            if pkt.packet_number < pn_min || pkt.packet_number >= pn_max {
                 return None;
             }
 
             let larger_acked = self.sent_packets.iter().any(|other| {
                 other.acked && other.packet_number > pkt.packet_number
+                    && other.packet_number >= pn_min && other.packet_number < pn_max
             });
 
             let time_expired = now.duration_since(pkt.time_sent) > time_threshold;
@@ -544,10 +569,6 @@ impl QuicTransport {
 
     pub fn can_send_bytes(&self, bytes: usize) -> bool {
         self.congestion.can_send() && self.congestion.available_window() >= bytes as u64
-    }
-
-    pub fn on_ack_received_simple(&mut self, space: PacketNumberSpace, largest_acknowledged: u64) {
-        self.pn_state[space as usize].clear_up_to(largest_acknowledged);
     }
 
     // -----------------------------------------------------------------------

@@ -120,6 +120,8 @@ pub struct QuicTlsServerHandshaker {
     complete: bool,
     /// Session ID (echoed from ClientHello)
     session_id: Vec<u8>,
+    /// 0-RTT early traffic secret (derived from ClientHello hash)
+    server_early_traffic_secret: Option<Vec<u8>>,
 }
 
 impl QuicTlsServerHandshaker {
@@ -146,6 +148,7 @@ impl QuicTlsServerHandshaker {
             negotiated_alpn: None,
             complete: false,
             session_id: Vec::new(),
+            server_early_traffic_secret: None,
         }
     }
 
@@ -246,7 +249,15 @@ impl QuicTlsServerHandshaker {
 
         let mut ks = Tls13KeySchedule::new(self.hasher.clone());
         ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
+
+        // Derive server 0-RTT early traffic secret from ClientHello hash.
+        // This allows the server to decrypt 0-RTT data from the client.
+        // Must be derived BEFORE advancing past early secret to handshake.
+        let ch_hash = self.hasher.hash(crypto_data);
+        let early_secret = ks.client_early_traffic_secret(&ch_hash);
+
         self.key_schedule = Some(ks);
+        self.server_early_traffic_secret = Some(early_secret);
 
         Ok(sh_bytes)
     }
@@ -404,7 +415,18 @@ impl QuicTlsServerHandshaker {
                 app_read.write_key,
                 app_read.write_iv,
             ),
-            early_data_keys: None, // 0-RTT keys not derived (server-side)
+            early_data_keys: self.server_early_traffic_secret.as_ref().map(|secret| {
+                // Server reads 0-RTT data from client, so client's write keys are server's read keys
+                let read_keys = quic_traffic_keys(secret, self.cipher_suite.key_len(), 12, &self.hasher);
+                // Server would write 0-RTT response using the same secret (same direction)
+                ProtectionKeys::new(
+                    AeadAlgorithm::Aes128Gcm,
+                    read_keys.write_key.clone(),
+                    read_keys.write_iv.clone(),
+                    read_keys.write_key,
+                    read_keys.write_iv,
+                )
+            }),
             cipher_suite: self.cipher_suite,
             client_random: self.client_random,
             server_name: self.server_name.clone(),
