@@ -509,6 +509,82 @@ fn test_dnskey_wire_roundtrip() {
     }
 }
 
+// -----------------------------------------------------------------------
+// NSEC3 Proof Synthesis (RFC 5155)
+// -----------------------------------------------------------------------
+
+#[test]
+fn test_nsec3_hash_deterministic() {
+    // Same input + salt + iterations always produces the same hash
+    let hash1 = edgerun_dns::nsec3_hash_owner("www.example.com", &[0xDE, 0xAD], 1);
+    let hash2 = edgerun_dns::nsec3_hash_owner("www.example.com", &[0xDE, 0xAD], 1);
+    assert_eq!(hash1, hash2);
+    assert_eq!(hash1.len(), 20); // SHA-1 output
+}
+
+#[test]
+fn test_nsec3_hash_different_salt() {
+    let hash1 = edgerun_dns::nsec3_hash_owner("www.example.com", &[0xDE, 0xAD], 1);
+    let hash2 = edgerun_dns::nsec3_hash_owner("www.example.com", &[0xBE, 0xEF], 1);
+    assert_ne!(hash1, hash2);
+}
+
+#[test]
+fn test_nsec3_hash_different_iterations() {
+    let hash1 = edgerun_dns::nsec3_hash_owner("www.example.com", &[], 0);
+    let hash5 = edgerun_dns::nsec3_hash_owner("www.example.com", &[], 5);
+    assert_ne!(hash1, hash5);
+}
+
+#[test]
+fn test_nsec3_base32hex_encoding() {
+    let hash = vec![0u8; 20];
+    let b32 = edgerun_dns::nsec3_base32hex(&hash);
+    // 20 bytes → 32 base32hex characters
+    assert_eq!(b32.len(), 32);
+    // All lowercase base32hex characters
+    assert!(b32.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+}
+
+#[test]
+fn test_nsec3_type_bitmap() {
+    use edgerun_dns::record::DnsRecordType;
+    let types = vec![DnsRecordType::A, DnsRecordType::AAAA, DnsRecordType::NS];
+    let bitmap = edgerun_dns::nsec3_type_bitmap(&types);
+    assert!(!bitmap.is_empty());
+}
+
+#[test]
+fn test_nsec3_synthesize_chain() {
+    let names = vec![
+        "@".to_string(),
+        "www".to_string(),
+        "mail".to_string(),
+    ];
+    let chain = edgerun_dns::synthesize_nsec3_chain(
+        "example.com", &names, &[0xDE, 0xAD], 1, 0, 3600,
+    );
+    assert_eq!(chain.len(), 3);
+    // All should be NSEC3 records
+    for rr in &chain {
+        assert_eq!(rr.rtype, edgerun_dns::record::DnsRecordType::NSEC3);
+    }
+}
+
+#[test]
+fn test_nsec3_find_covering() {
+    let names = vec![
+        "example.com".to_string(),
+        "www.example.com".to_string(),
+    ];
+    let chain = edgerun_dns::synthesize_nsec3_chain(
+        "example.com", &names, &[0xAB], 1, 0, 3600,
+    );
+    // Query a name not in the zone
+    let covering = edgerun_dns::find_nsec3_covering(&chain, "nonexistent.example.com", &[0xAB], 1);
+    assert!(covering.is_some());
+}
+
 #[test]
 fn test_nsec3_wire_roundtrip() {
     let nsec3 = DnsRecordData::NSEC3 {

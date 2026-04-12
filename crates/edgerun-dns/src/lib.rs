@@ -71,3 +71,4 @@ pub use name::{validate_name, normalize_name, NameError};
 pub use dnssec::{DnssecResult, compute_key_tag, verify_rrsig, verify_chain_of_trust, validate_response};
 pub use dnssec::{generate_dnskey_ed25519, generate_dnskey_ecdsap256, sign_rrsig_ed25519, sign_rrset_ecdsap256};
 pub use dnssec::{sign_zone_ed25519, sign_zone_ecdsap256};
+pub use dnssec::{nsec3_hash_owner, nsec3_base32hex, nsec3_type_bitmap, synthesize_nsec3_chain, find_nsec3_covering};

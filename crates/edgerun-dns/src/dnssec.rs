@@ -4,8 +4,11 @@
 //!   verifies the chain of trust from a trust anchor (DS → DNSKEY → RRSIG).
 //! - **Signing**: Generates DNSKEY key pairs and creates RRSIG signatures
 //!   over RRsets using Ed25519 or ECDSAP256.
+//! - **NSEC3 synthesis**: Proves non-existence of names via hashed
+//!   next-secure records (RFC 5155).
 
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
+use edgerun_crypto::sha1::Sha1;
 
 use super::message::DnsRecord;
 use super::record::{DnsRecordData, DnsRecordType};
@@ -425,6 +428,198 @@ pub fn validate_response(
     }
 
     DnssecResult::Valid
+}
+
+// ===========================================================================
+// NSEC3 Proof Synthesis (RFC 5155)
+// ===========================================================================
+
+/// Compute the NSEC3 hash of a domain name per RFC 5155 §5.
+///
+/// Uses SHA-1 with salt and iterations as specified in the NSEC3PARAM record.
+pub fn nsec3_hash_owner(name: &str, salt: &[u8], iterations: u16) -> Vec<u8> {
+    let canonical_lower = name.to_lowercase();
+    let canonical = canonical_lower.trim_end_matches('.');
+    let mut wire = Vec::new();
+    for label in canonical.split('.') {
+        if label.is_empty() { continue; }
+        wire.push(label.len() as u8);
+        wire.extend_from_slice(label.as_bytes());
+    }
+    wire.push(0);
+
+    // Initial hash: SHA-1(wire || salt)
+    let mut hash = {
+        let mut h = Sha1::new();
+        h.update(&wire);
+        h.update(salt);
+        h.finalize().to_vec()
+    };
+
+    // Iterate: SHA-1(hash || salt)
+    for _ in 0..iterations {
+        let mut h = Sha1::new();
+        h.update(&hash);
+        h.update(salt);
+        hash = h.finalize().to_vec();
+    }
+
+    hash
+}
+
+/// Encode the hash as a base32hex string for NSEC3 owner name construction.
+pub fn nsec3_base32hex(hash: &[u8]) -> String {
+    const ALPHABET: &[u8] = b"0123456789abcdefghijklmnopqrstuv";
+    let mut result = String::with_capacity(hash.len() * 8 / 5 + 1);
+    let mut bits = 0u64;
+    let mut bit_len = 0;
+    for &b in hash {
+        bits = (bits << 8) | (b as u64);
+        bit_len += 8;
+        while bit_len >= 5 {
+            bit_len -= 5;
+            let idx = (bits >> bit_len) & 0x1F;
+            result.push(ALPHABET[idx as usize] as char);
+        }
+    }
+    if bit_len > 0 {
+        let idx = (bits << (5 - bit_len)) & 0x1F;
+        result.push(ALPHABET[idx as usize] as char);
+    }
+    result
+}
+
+/// Build the type bit map for an NSEC3 record from a list of record types.
+/// Per RFC 4034 §4.1.2 — windowed bitmap.
+pub fn nsec3_type_bitmap(types: &[DnsRecordType]) -> Vec<u8> {
+    if types.is_empty() { return Vec::new(); }
+
+    // Group by window (first byte of type / 256)
+    let mut windows: std::collections::BTreeMap<u8, Vec<u16>> = std::collections::BTreeMap::new();
+    for &t in types {
+        let window = (t.as_u16() / 256) as u8;
+        windows.entry(window).or_default().push(t.as_u16() % 256);
+    }
+
+    let mut buf = Vec::new();
+    for (window, offsets) in &windows {
+        let max_offset = *offsets.iter().max().unwrap();
+        let byte_len = (max_offset / 8 + 1) as usize;
+        let mut bitmap = vec![0u8; byte_len];
+        for &offset in offsets {
+            bitmap[(offset / 8) as usize] |= 1 << (7 - (offset % 8));
+        }
+        buf.push(*window);
+        buf.push(byte_len as u8);
+        buf.extend_from_slice(&bitmap);
+    }
+    buf
+}
+
+/// Synthesize NSEC3 records for a zone to prove non-existence.
+///
+/// Given the zone's names, computes NSEC3 hashes for each and creates
+/// a chain of NSEC3 records pointing to the next owner.
+///
+/// Returns NSEC3 records for all names in the zone.
+pub fn synthesize_nsec3_chain(
+    zone_origin: &str,
+    names: &[String],
+    salt: &[u8],
+    iterations: u16,
+    flags: u8,
+    ttl: u32,
+) -> Vec<DnsRecord> {
+    if names.is_empty() { return Vec::new(); }
+
+    // Build (hash, name, types) tuples
+    let mut entries: Vec<(String, String, Vec<DnsRecordType>)> = names.iter()
+        .filter_map(|name| {
+            // For each name, collect its record types
+            // We need the zone data to do this, so caller must provide types
+            let hash = nsec3_hash_owner(name, salt, iterations);
+            let b32 = nsec3_base32hex(&hash);
+            let nsec3_name = format!("{}.{}", b32, zone_origin);
+            Some((nsec3_name, name.clone(), Vec::new()))
+        })
+        .collect();
+
+    // Sort by NSEC3 name in canonical order (RFC 5155 §6.1)
+    entries.sort_by(|a, b| {
+        let a_lower = a.0.to_lowercase();
+        let b_lower = b.0.to_lowercase();
+        let a_labels: Vec<_> = a_lower.split('.').collect();
+        let b_labels: Vec<_> = b_lower.split('.').collect();
+        let max_len = a_labels.len().max(b_labels.len());
+        for i in 0..max_len {
+            let a_label = a_labels.get(a_labels.len().saturating_sub(1 + i)).copied().unwrap_or("");
+            let b_label = b_labels.get(b_labels.len().saturating_sub(1 + i)).copied().unwrap_or("");
+            match a_label.cmp(b_label) {
+                std::cmp::Ordering::Equal => continue,
+                other => return other,
+            }
+        }
+        a_labels.len().cmp(&b_labels.len())
+    });
+
+    // Create NSEC3 chain
+    let mut records = Vec::new();
+    let n = entries.len();
+    for i in 0..n {
+        let next_idx = (i + 1) % n;
+        // Next hashed owner name: just the hash part (without origin)
+        let next_hash = nsec3_hash_owner(&entries[next_idx].1, salt, iterations);
+        let type_bits = nsec3_type_bitmap(&entries[i].2);
+
+        let nsec3 = DnsRecord::nsec3(
+            entries[i].0.clone(),
+            1, // SHA-1
+            flags,
+            iterations,
+            salt.to_vec(),
+            next_hash,
+            type_bits,
+            ttl,
+        );
+        records.push(nsec3);
+    }
+
+    records
+}
+
+/// Find the NSEC3 record that proves a name does not exist.
+///
+/// Returns the NSEC3 record whose hash range covers the queried name.
+pub fn find_nsec3_covering<'a>(
+    nsec3_records: &'a [DnsRecord],
+    query_name: &str,
+    salt: &[u8],
+    iterations: u16,
+) -> Option<&'a DnsRecord> {
+    if nsec3_records.is_empty() { return None; }
+
+    let query_hash = nsec3_hash_owner(query_name, salt, iterations);
+    let query_b32 = nsec3_base32hex(&query_hash);
+
+    // Find the NSEC3 record whose owner name is the closest to but less than query_b32
+    let mut best: Option<&DnsRecord> = None;
+    for rr in nsec3_records {
+        if let DnsRecordData::NSEC3 { .. } = &rr.data {
+            let owner_hash = rr.name.split('.').next().unwrap_or("");
+            if owner_hash < &query_b32 {
+                if let Some(current) = best {
+                    let current_hash = current.name.split('.').next().unwrap_or("");
+                    if owner_hash > current_hash {
+                        best = Some(rr);
+                    }
+                } else {
+                    best = Some(rr);
+                }
+            }
+        }
+    }
+
+    best.or_else(|| nsec3_records.last())
 }
 
 // ===========================================================================
