@@ -27,7 +27,7 @@ use std::sync::Arc;
 #[cfg(feature = "hardware")]
 use edgerun_evdev_input::EvdevInputBackend;
 #[cfg(feature = "all-hardware")]
-use edgerun_remote_capability::{
+use edgerun_remote_capability::adapters::{
     BluetoothRemoteAdapter, BluetoothConnectionRemoteAdapter,
     CameraRemoteAdapter, InputRemoteAdapter,
     MicrophoneRemoteAdapter, SpeakerRemoteAdapter,

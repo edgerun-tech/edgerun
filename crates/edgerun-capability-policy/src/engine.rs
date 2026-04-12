@@ -13,7 +13,7 @@ use prost_types::{Duration as ProstDuration, Timestamp};
 use super::types::*;
 use super::helpers::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
     pub(crate) issuer: Option<IdentityRef>,
     default_grant_duration: Duration,
