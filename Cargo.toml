@@ -72,6 +72,7 @@ members = [
   "crates/edgerun-url",
   "crates/edgerun-encoding",
   "crates/edgerun-dns",
+  "crates/edgerun-config",
   "crates/edgerun-drm-display",
   "crates/edgerun-ecmascript",
   "crates/edgerun-fetch",

@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Kubernetes-compatible DNS/DHCP configuration with event-sourced state"
+
+[dependencies]
+edgerun-dns = { path = "../edgerun-dns" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+thiserror = "1"
+
+[lints]
+workspace = true
