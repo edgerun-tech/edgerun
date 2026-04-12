@@ -863,6 +863,67 @@ impl Http3Connection {
         Ok(header_block)
     }
 
+    /// Encode a CONNECT request into a QPACK header block.
+    ///
+    /// CONNECT requests use `:method: CONNECT` and `:authority` (target host).
+    /// For extended CONNECT (RFC 9114 §4.4), an optional `:protocol` can be set
+    /// to `websocket` for WebSocket-over-HTTP/3 tunneling.
+    pub(crate) fn encode_connect_request(
+        authority: &str,
+        protocol: Option<&str>,
+        headers: &HeaderMap,
+        encoder: &mut QpackEncoder,
+    ) -> Result<Vec<u8>> {
+        let mut h3_headers: Vec<(String, String)> = Vec::new();
+
+        // :method: CONNECT
+        h3_headers.push((":method".into(), "CONNECT".into()));
+        // :authority
+        h3_headers.push((":authority".into(), authority.into()));
+
+        // Optional :protocol for extended CONNECT (WebSocket, WebTransport)
+        if let Some(proto) = protocol {
+            h3_headers.push((":protocol".into(), proto.into()));
+        }
+
+        // Regular headers
+        for (name, value) in headers.iter() {
+            h3_headers.push((name.as_str().into(), value.as_str().into()));
+        }
+
+        let refs: Vec<(&str, &str)> = h3_headers.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+
+        let (header_block, _encoder_instructions) = encoder.encode(&refs)
+            .map_err(|e| Http3Error::QpackError(e.to_string()))?;
+        Ok(header_block)
+    }
+
+    /// Send a CONNECT request to establish a tunnel (RFC 9114 §4.4).
+    ///
+    /// For HTTP/3, CONNECT establishes a bidirectional tunnel stream.
+    /// Returns the stream ID for the tunnel. Use `send_stream_data` on the
+    /// returned stream ID to send raw tunnel data.
+    ///
+    /// # Extended CONNECT (WebSocket)
+    /// Set `protocol` to `Some("websocket")` for WebSocket-over-HTTP/3 tunneling
+    /// (RFC 9114 §4.4, RFC 9220).
+    pub fn send_connect(
+        &mut self,
+        authority: &str,
+        protocol: Option<&str>,
+        extra_headers: &HeaderMap,
+    ) -> Result<u64> {
+        let header_block = Self::encode_connect_request(
+            authority,
+            protocol,
+            extra_headers,
+            &mut self.qpack_encoder,
+        )?;
+
+        // CONNECT uses a bidirectional stream, no body initially
+        self.send_request_raw(header_block, None)
+    }
+
     /// Encode a response into a QPACK header block.
     pub(crate) fn encode_response(
         status: StatusCode,

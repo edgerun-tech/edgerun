@@ -58,6 +58,9 @@ pub struct QuicConnection {
     cipher_suite_hash: edgerun_tls::prf::Hasher,
     /// Next send offset per stream (for STREAM frame fragmentation)
     stream_send_offset: std::collections::HashMap<u64, u64>,
+    /// Active path for connection migration (local_addr, remote_addr)
+    /// Set when the first packet is received from the peer
+    active_path: Option<(std::net::SocketAddr, std::net::SocketAddr)>,
     /// Pending migration path challenges (data → deadline)
     pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
 }
@@ -102,6 +105,7 @@ impl QuicConnection {
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             stream_send_offset: std::collections::HashMap::new(),
+            active_path: None,
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -201,6 +205,9 @@ impl QuicConnection {
 
         handshaker.mark_complete();
         self.established = true;
+
+        // Initialize the active path for connection migration (RFC 9000 §9)
+        self.initialize_active_path();
 
         // Enable 0-RTT early data if keys were derived
         if let Some(early_keys) = handshaker.early_data_keys() {
@@ -441,6 +448,7 @@ impl QuicConnection {
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             stream_send_offset: std::collections::HashMap::new(),
+            active_path: None,
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -479,6 +487,7 @@ impl QuicConnection {
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             stream_send_offset: std::collections::HashMap::new(),
+            active_path: None,
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -516,6 +525,7 @@ impl QuicConnection {
             server_app_traffic_secret: Vec::new(),
             cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             stream_send_offset: std::collections::HashMap::new(),
+            active_path: None,
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -838,6 +848,34 @@ impl QuicConnection {
     // ------------------------------------------------------------------
     // Connection Migration (RFC 9000 §9)
     // ------------------------------------------------------------------
+
+    /// Get the currently active path (local_addr, remote_addr).
+    ///
+    /// Returns `None` if no path has been validated yet.
+    pub fn active_path(&self) -> Option<(std::net::SocketAddr, std::net::SocketAddr)> {
+        self.active_path
+    }
+
+    /// Set the active path after successful path validation.
+    ///
+    /// This is called after receiving a valid PATH_RESPONSE for a
+    /// previously sent PATH_CHALLENGE (RFC 9000 §9.3).
+    pub fn set_active_path(&mut self, local: std::net::SocketAddr, remote: std::net::SocketAddr) {
+        self.active_path = Some((local, remote));
+    }
+
+    /// Initialize the active path from the socket's local address and the server address.
+    ///
+    /// Called after handshake completion to establish the initial path.
+    pub fn initialize_active_path(&mut self) {
+        if self.active_path.is_none() {
+            if let Ok(local) = self.socket.local_addr() {
+                if let Ok(remote) = self.server_addr.parse::<std::net::SocketAddr>() {
+                    self.active_path = Some((local, remote));
+                }
+            }
+        }
+    }
 
     /// Send a PATH_CHALLENGE to probe a new path (RFC 9000 §9.1).
     ///
@@ -1554,5 +1592,38 @@ mod tests {
 
         assert_eq!(got_status.as_u16(), 200);
         assert_eq!(body, b"hello");
+    }
+
+    #[test]
+    fn test_active_path_initialized_after_dummy() {
+        let conn = QuicConnection::dummy();
+        // Dummy doesn't call handshake, so active_path stays None
+        assert!(conn.active_path.is_none());
+    }
+
+    #[test]
+    fn test_set_active_path() {
+        let mut conn = QuicConnection::dummy();
+        let local: std::net::SocketAddr = "127.0.0.1:12345".parse().unwrap();
+        let remote: std::net::SocketAddr = "192.168.1.1:443".parse().unwrap();
+
+        conn.set_active_path(local, remote);
+        let path = conn.active_path();
+        assert!(path.is_some());
+        let (l, r) = path.unwrap();
+        assert_eq!(l, local);
+        assert_eq!(r, remote);
+    }
+
+    #[test]
+    fn test_key_phase_initial_value() {
+        let conn = QuicConnection::dummy();
+        assert!(!conn.key_phase());
+    }
+
+    #[test]
+    fn test_stream_send_offset_starts_at_zero() {
+        let conn = QuicConnection::dummy();
+        assert!(conn.stream_send_offset.is_empty());
     }
 }

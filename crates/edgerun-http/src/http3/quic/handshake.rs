@@ -163,7 +163,10 @@ impl CertificateValidator {
     /// The client verifies this signature using the server's public key from
     /// the leaf certificate.
     ///
-    /// Currently supports ECDSA P-256 (0x0403).
+    /// Supported algorithms:
+    /// - 0x0403: ECDSA-SECP256R1-SHA256 (P-256)
+    /// - 0x0804: ED25519 (Curve25519)
+    /// - 0x0401: RSA-PSS-SHA256
     pub fn verify_certificate_signature(
         &self,
         cert_der: &[u8],
@@ -176,13 +179,210 @@ impl CertificateValidator {
                 // ECDSA-SECP256R1-SHA256 (P-256)
                 self.verify_ecdsa_p256(cert_der, signature, transcript_hash)
             }
-            0x0401 | 0x0804 => {
-                // RSA-PSS-SHA256 (0x0401) and ED25519 (0x0804) not yet implemented
-                // Accept signatures for testing — must be fixed for production
-                signature.len() >= 64
+            0x0804 => {
+                // ED25519
+                self.verify_ed25519(cert_der, signature, transcript_hash)
+            }
+            0x0401 => {
+                // RSA-PSS-SHA256
+                self.verify_rsa_pss_sha256(cert_der, signature, transcript_hash)
             }
             _ => false,
         }
+    }
+
+    /// Verify an ED25519 signature over the transcript hash.
+    fn verify_ed25519(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
+        use edgerun_crypto::ed25519_dalek::Verifier;
+
+        // ED25519 SPKI OID: 1.3.101.112
+        // In DER: 0x30 0x05 0x06 0x03 0x2B 0x65 0x70
+        // The public key follows as 0x03 0x21 0x00 <32 bytes>
+        let ed25519_oid = [0x06, 0x03, 0x2B, 0x65, 0x70];
+        let oid_pos = match Self::find_subsequence(cert_der, &ed25519_oid) {
+            Some(p) => p,
+            None => return false,
+        };
+
+        // After OID, find the BIT STRING containing the public key
+        let rest = &cert_der[oid_pos + ed25519_oid.len()..];
+        let pk_start = match rest.iter().position(|&b| b == 0x03) {
+            Some(p) => p,
+            None => return false,
+        };
+        let pk_len = rest[pk_start + 1] as usize;
+        if pk_len < 34 || pk_start + pk_len > rest.len() {
+            return false;
+        }
+        // BIT STRING: 0x03 <len> 0x00 <32 bytes>
+        let pk_bytes = &rest[pk_start + 3..pk_start + pk_len];
+        if pk_bytes.len() != 32 {
+            return false;
+        }
+
+        let pk_bytes_arr: [u8; 32] = match pk_bytes.try_into() {
+            Ok(arr) => arr,
+            Err(_) => return false,
+        };
+        let verifying_key = match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes_arr) {
+            Ok(vk) => vk,
+            Err(_) => return false,
+        };
+
+        if signature.len() != 64 {
+            return false;
+        }
+
+        let sig = match edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+
+        verifying_key.verify(transcript_hash, &sig).is_ok()
+    }
+
+    /// Verify an RSA-PSS-SHA256 signature over the transcript hash.
+    fn verify_rsa_pss_sha256(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
+        use edgerun_crypto::rsa::RsaPublicKey;
+        use edgerun_crypto::rsa::pkcs1::DecodeRsaPublicKey;
+        use edgerun_crypto::rsa::traits::PublicKeyParts;
+        use num_bigint::BigUint;
+
+        // RSA SPKI OID: 1.2.840.113549.1.1.1
+        // In DER: 0x06 0x09 0x2A 0x86 0x48 0x86 0xF7 0x0D 0x01 0x01 0x01
+        let rsa_oid = [0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01];
+        let oid_pos = match Self::find_subsequence(cert_der, &rsa_oid) {
+            Some(p) => p,
+            None => return false,
+        };
+
+        // After OID, find the BIT STRING containing the RSA public key
+        let rest = &cert_der[oid_pos + rsa_oid.len()..];
+        let pk_start = match rest.iter().position(|&b| b == 0x03) {
+            Some(p) => p,
+            None => return false,
+        };
+        let pk_len = rest[pk_start + 1] as usize;
+        if pk_start + pk_len > rest.len() {
+            return false;
+        }
+        // BIT STRING: 0x03 <len> 0x00 <DER-encoded RSAPublicKey>
+        let der_pk = &rest[pk_start + 3..pk_start + pk_len];
+
+        let rsa_pk = match RsaPublicKey::from_pkcs1_der(der_pk) {
+            Ok(pk) => pk,
+            Err(_) => return false,
+        };
+
+        let n = BigUint::from_bytes_be(&rsa_pk.n().to_bytes_be());
+        let e = BigUint::from_bytes_be(&rsa_pk.e().to_bytes_be());
+        let k = rsa_pk.n().bits().div_ceil(8);
+
+        // Verify RSA-PSS signature with SHA-256
+        let sig_int = BigUint::from_bytes_be(signature);
+
+        if sig_int >= n {
+            return false;
+        }
+
+        // m = s^e mod n
+        let m = sig_int.modpow(&e, &n);
+        let m_bytes = m.to_bytes_be();
+
+        // Pad to k bytes
+        let mut em = vec![0u8; k];
+        let start = k - m_bytes.len();
+        em[start..].copy_from_slice(&m_bytes);
+
+        // Verify PSS padding (RFC 8017 §9.1.2)
+        Self::verify_pss_padding(&em, transcript_hash, k * 8)
+    }
+
+    /// Verify RSA-PSS padding (RFC 8017 §9.1.2).
+    fn verify_pss_padding(em: &[u8], msg_hash: &[u8], em_bits: usize) -> bool {
+        let em_len = em.len();
+        if em_len < 22 || em[em_len - 1] != 0xBC {
+            return false;
+        }
+
+        // SHA-256 hash length
+        let h_len = 32;
+        // Salt length (same as hash length for TLS)
+        let s_len = 32;
+
+        let masked_db = &em[..em_len - h_len - 1];
+        let hash = &em[em_len - h_len - s_len - 1..em_len - s_len - 1];
+        let salt = &em[em_len - s_len - 1..em_len - 1];
+
+        // Compute DBMask = MGF1(hash, emLen - hLen - 1)
+        let db_mask = Self::mgf1_sha256(hash, em_len - h_len - 1);
+
+        // Unmask DB
+        let mut db = vec![0u8; masked_db.len()];
+        for (i, (&a, &b)) in masked_db.iter().zip(db_mask.iter()).enumerate() {
+            db[i] = a ^ b;
+        }
+
+        // Clear top bits
+        let top_bits = 8 * em_len - em_bits;
+        if top_bits > 0 {
+            db[0] &= 0xFF >> top_bits;
+        }
+
+        // DB = PS || 0x01 || salt
+        // PS is all zeros
+        let ps_len = em_len - h_len - s_len - 2;
+        for i in 0..ps_len {
+            if db[i] != 0 {
+                return false;
+            }
+        }
+        if db[ps_len] != 0x01 {
+            return false;
+        }
+        let extracted_salt = &db[ps_len + 1..];
+        if extracted_salt != salt {
+            return false;
+        }
+
+        // Compute H' = Hash(8*0x00 || mHash || salt)
+        use edgerun_crypto::sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update([0u8; 8]);
+        hasher.update(msg_hash);
+        hasher.update(salt);
+        let h_prime = hasher.finalize();
+
+        h_prime.as_slice() == hash
+    }
+
+    /// MGF1 with SHA-256 (RFC 8017 Appendix B.2.1).
+    fn mgf1_sha256(seed: &[u8], mask_len: usize) -> Vec<u8> {
+        use edgerun_crypto::sha2::{Sha256, Digest};
+        let mut t = Vec::with_capacity(mask_len);
+        let mut counter = 0u32;
+        while t.len() < mask_len {
+            let mut hasher = Sha256::new();
+            hasher.update(seed);
+            hasher.update(&counter.to_be_bytes());
+            t.extend_from_slice(&hasher.finalize());
+            counter += 1;
+        }
+        t.truncate(mask_len);
+        t
+    }
+
+    /// Find a byte subsequence in data.
+    fn find_subsequence(data: &[u8], needle: &[u8]) -> Option<usize> {
+        if needle.is_empty() || needle.len() > data.len() {
+            return None;
+        }
+        for i in 0..=data.len() - needle.len() {
+            if data[i..i + needle.len()] == *needle {
+                return Some(i);
+            }
+        }
+        None
     }
 
     /// Verify an ECDSA P-256 signature over the transcript hash.
