@@ -184,6 +184,12 @@ impl Http3Frame {
                     .map_err(|e| e.to_string())?;
                 Http3Frame::MaxPushId { push_id }
             }
+            Some(Http3FrameType::PushPromise) => {
+                let (push_id, varint_len) = Self::decode_varint(payload)
+                    .map_err(|e| e.to_string())?;
+                let header_block = payload[varint_len..].to_vec();
+                Http3Frame::PushPromise { push_id, header_block }
+            }
             Some(Http3FrameType::StreamsBlocked) => {
                 let (limit, _) = Self::decode_varint(payload)
                     .map_err(|e| e.to_string())?;

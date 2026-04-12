@@ -102,6 +102,15 @@ impl Tls13KeySchedule {
         self.secret = handshake_secret;
     }
 
+    /// Derive client early traffic secret (0-RTT, RFC 8446 §7.1).
+    ///
+    /// Must be called BEFORE `advance_to_handshake()` — while the secret
+    /// is still the early secret. Derives using label "c e traffic"
+    /// with the ClientHello hash as context.
+    pub fn client_early_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
+        self.hash.expand_label(&self.secret, "c e traffic", ch_hash, self.hash.len())
+    }
+
     /// Derive client handshake traffic secret
     pub fn client_handshake_traffic_secret(&self, ch_hash: &[u8]) -> Vec<u8> {
         self.hash.expand_label(&self.secret, "c hs traffic", ch_hash, self.hash.len())

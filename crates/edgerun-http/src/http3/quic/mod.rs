@@ -680,20 +680,16 @@ impl QuicConnection {
     // 0-RTT / Early Data (RFC 9001 §4.6, RFC 9114 §4.3)
     // ------------------------------------------------------------------
 
-    /// Enable 0-RTT early data for this connection.
+    /// Enable 0-RTT early data with pre-derived protection keys.
     ///
-    /// When enabled, the client can send HTTP/3 requests in the first flight
-    /// (before the handshake completes) using 0-RTT keys.
+    /// The keys must be derived from the TLS early secret + ClientHello hash
+    /// (RFC 8446 §7.1, "c e traffic" label). Call this after constructing
+    /// the connection but before sending any data.
     ///
     /// NOTE: 0-RTT data is vulnerable to replay attacks. Only use for idempotent
     /// requests (GET, HEAD, OPTIONS).
-    pub fn enable_early_data(&mut self) {
-        // Clone the protection keys for 0-RTT — PacketProtection doesn't impl Clone,
-        // so we create a new one from the same keys
-        self.early_data_protection = self.protection.as_ref().map(|p| {
-            // Use a new protection instance with the same underlying keys
-            crypto::PacketProtection::new(&crypto::ProtectionKeys::test_keys())
-        });
+    pub fn enable_early_data(&mut self, keys: crypto::ProtectionKeys) {
+        self.early_data_protection = Some(crypto::PacketProtection::new(&keys));
         self.early_data_sent = false;
     }
 

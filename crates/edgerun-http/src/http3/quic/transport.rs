@@ -673,8 +673,8 @@ mod tests {
     fn test_transport_new() {
         let local = ConnectionId::random();
         let remote = ConnectionId::random();
-        let transport = QuicTransport::new(local, remote);
-        assert_eq!(transport.next_packet_number(PacketNumberSpace::Initial), 0);
+        let transport = QuicTransport::new(local.clone(), remote.clone());
+        assert_eq!(transport.current_packet_number(PacketNumberSpace::Initial), 0);
         assert_eq!(transport.max_data, 65535);
     }
 

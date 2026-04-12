@@ -191,6 +191,8 @@ pub struct HandshakeResult {
     pub handshake_keys: ProtectionKeys,
     /// Application (1-RTT) protection keys
     pub app_keys: ProtectionKeys,
+    /// 0-RTT early data protection keys (if 0-RTT was enabled)
+    pub early_data_keys: Option<ProtectionKeys>,
     /// Negotiated cipher suite
     pub cipher_suite: CipherSuite,
     /// Server random (for debugging/extensions)
@@ -223,12 +225,20 @@ pub struct QuicTlsHandshaker {
     cipher_suite: CipherSuite,
     /// ClientHello raw bytes (for retransmission)
     client_hello_bytes: Vec<u8>,
+    /// Server name for SNI and certificate validation
+    server_name: String,
     /// CRYPTO frame offset for retransmission
     crypto_send_offset: usize,
     /// Whether we've received ServerHello
     received_server_hello: bool,
     /// Whether handshake is complete
     complete: bool,
+    /// Server certificate chain (DER-encoded, from TLS Certificate message)
+    server_cert_chain: Vec<Vec<u8>>,
+    /// CertificateVerify signature (algorithm + raw bytes)
+    cert_verify_signature: Option<(u16, Vec<u8>)>,
+    /// Certificate validation result (set after processing Certificate)
+    cert_validation: Option<CertValidationResult>,
 }
 
 impl QuicTlsHandshaker {
@@ -260,9 +270,13 @@ impl QuicTlsHandshaker {
             server_hs_secret: Vec::new(),
             cipher_suite,
             client_hello_bytes,
+            server_name: server_name.to_string(),
             crypto_send_offset: 0,
             received_server_hello: false,
             complete: false,
+            server_cert_chain: Vec::new(),
+            cert_verify_signature: None,
+            cert_validation: None,
         }
     }
 
@@ -360,6 +374,21 @@ impl QuicTlsHandshaker {
         self.received_server_hello
     }
 
+    /// Get the server name (SNI).
+    pub fn server_name(&self) -> &str {
+        &self.server_name
+    }
+
+    /// Get the certificate validation result (if available).
+    pub fn cert_validation(&self) -> Option<&CertValidationResult> {
+        self.cert_validation.as_ref()
+    }
+
+    /// Get the server certificate chain (DER-encoded).
+    pub fn server_cert_chain(&self) -> &[Vec<u8>] {
+        &self.server_cert_chain
+    }
+
     /// Derive handshake-level protection keys.
     ///
     /// Must be called after `process_initial_crypto()` succeeds.
@@ -427,12 +456,49 @@ impl QuicTlsHandshaker {
                     self.transcript.extend_from_slice(msg);
                 }
                 11 => {
-                    // Certificate — append to transcript
-                    // In QUIC, we still track the cert for validation
+                    // Certificate — parse and extract DER certificate chain
+                    // TLS 1.3 format: type(1) + len(3) + context_len(1) + context + cert_list_len(3) + entries
+                    if msg_len >= 5 {
+                        let context_len = msg[4] as usize;
+                        let cert_list_start = 5 + context_len;
+                        if cert_list_start + 3 <= msg.len() {
+                            let cert_list_len = u32::from_be_bytes([0, msg[cert_list_start], msg[cert_list_start + 1], msg[cert_list_start + 2]]) as usize;
+                            let mut cert_pos = cert_list_start + 3;
+                            let cert_end = cert_pos + cert_list_len.min(msg.len() - cert_pos);
+
+                            while cert_pos + 3 <= cert_end {
+                                let cert_len = u32::from_be_bytes([0, msg[cert_pos], msg[cert_pos + 1], msg[cert_pos + 2]]) as usize;
+                                cert_pos += 3;
+                                if cert_pos + cert_len <= cert_end && cert_len > 0 {
+                                    let cert_der = msg[cert_pos..cert_pos + cert_len].to_vec();
+                                    self.server_cert_chain.push(cert_der);
+                                }
+                                cert_pos += cert_len;
+                                // Skip extensions (2-byte length + data)
+                                if cert_pos + 2 <= cert_end {
+                                    let ext_len = u16::from_be_bytes([msg[cert_pos], msg[cert_pos + 1]]) as usize;
+                                    cert_pos += 2 + ext_len;
+                                }
+                            }
+
+                            // Validate certificate chain
+                            let validator = CertificateValidator::new(Some(&self.server_name()));
+                            self.cert_validation = Some(validator.validate_chain(&self.server_cert_chain));
+                        }
+                    }
                     self.transcript.extend_from_slice(msg);
                 }
                 15 => {
-                    // CertificateVerify — append to transcript
+                    // CertificateVerify — extract signature algorithm and signature
+                    // Format: type(1) + len(3) + sig_alg(2) + sig_len(2) + signature
+                    if msg_len >= 8 {
+                        let sig_alg = u16::from_be_bytes([msg[4], msg[5]]);
+                        let sig_len = u16::from_be_bytes([msg[6], msg[7]]) as usize;
+                        if 8 + sig_len <= msg.len() {
+                            let signature = msg[8..8 + sig_len].to_vec();
+                            self.cert_verify_signature = Some((sig_alg, signature));
+                        }
+                    }
                     self.transcript.extend_from_slice(msg);
                 }
                 20 => {
@@ -558,6 +624,7 @@ impl QuicTlsHandshaker {
             ),
             handshake_keys: hs_keys,
             app_keys,
+            early_data_keys: None, // 0-RTT keys derived separately from early secret
             cipher_suite: self.cipher_suite,
             server_random: self.server_random,
             transcript: self.transcript.clone(),

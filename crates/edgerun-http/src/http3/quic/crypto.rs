@@ -10,6 +10,7 @@
 //! - Hardcoded test keys for unit testing the packet layer
 
 use edgerun_crypto::AesGcmCipher;
+use edgerun_crypto::aes_gcm;
 
 use std::collections::HashMap;
 
@@ -152,16 +153,36 @@ impl PacketProtection {
         let pn = self.packet_number;
         self.packet_number += 1;
         let nonce = self.make_nonce(&self.write_iv, pn);
-        self.write_aead.encrypt(&nonce, plaintext)
+
+        // Use the AEAD with AAD (the unprotected packet header)
+        let mut buffer = plaintext.to_vec();
+        let tag = self.write_aead.encrypt_in_place_detached(&nonce, header, &mut buffer)
+            .map_err(|e| format!("AEAD encrypt failed: {:?}", e))?;
+
+        // GCM output = ciphertext || tag (16 bytes)
+        buffer.extend_from_slice(tag.as_slice());
+        Ok(buffer)
     }
 
     /// Unprotect (decrypt) a packet payload
     ///
     /// AAD = unprotected packet header (authenticated but not encrypted)
     /// Nonce = read_iv XOR (packet_number << 8)
-    pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext: &[u8]) -> Result<Vec<u8>, String> {
+    pub fn unprotect(&mut self, header: &[u8], packet_number: u64, ciphertext_and_tag: &[u8]) -> Result<Vec<u8>, String> {
         let nonce = self.make_nonce(&self.read_iv, packet_number);
-        self.read_aead.decrypt(&nonce, ciphertext)
+
+        // Split ciphertext from the trailing 16-byte GCM tag
+        if ciphertext_and_tag.len() < 16 {
+            return Err("Ciphertext too short for AEAD tag".to_string());
+        }
+        let tag_start = ciphertext_and_tag.len() - 16;
+        let tag = aes_gcm::Tag::from_slice(&ciphertext_and_tag[tag_start..]);
+        let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
+
+        self.read_aead.decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
+            .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
+
+        Ok(buffer)
     }
 
     /// QUIC nonce construction: iv XOR (packet_number << 8)

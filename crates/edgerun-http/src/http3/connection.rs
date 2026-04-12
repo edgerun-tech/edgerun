@@ -28,8 +28,7 @@ pub struct Http3Connection {
     qpack_decoder: QpackDecoder,
     /// Local HTTP/3 settings
     local_settings: Http3Settings,
-    /// Remote HTTP/3 settings
-    #[allow(dead_code)]
+    /// Remote HTTP/3 settings (populated from peer's SETTINGS frame)
     remote_settings: Http3Settings,
     /// Streams
     streams: HashMap<u64, Http3Stream>,
@@ -37,11 +36,9 @@ pub struct Http3Connection {
     next_bidi_stream_id: u64,
     /// Next unidirectional stream ID
     next_uni_stream_id: u64,
-    /// Max push ID
-    #[allow(dead_code)]
+    /// Max push ID (next push ID to assign)
     max_push_id: u64,
     /// Server name (for SNI)
-    #[allow(dead_code)]
     server_name: String,
     /// Control stream ID
     control_stream_id: Option<u64>,
@@ -196,6 +193,22 @@ impl Http3Connection {
 
         Ok(())
     }
+
+    /// Get the server name (SNI) for this connection.
+    pub fn server_name(&self) -> &str {
+        &self.server_name
+    }
+
+    /// Get the next push ID that will be assigned.
+    pub fn next_push_id(&self) -> u64 {
+        self.max_push_id
+    }
+
+    /// Get the remote peer settings.
+    pub fn remote_settings(&self) -> &Http3Settings {
+        &self.remote_settings
+    }
+
 
     /// Send connection preface (control stream + SETTINGS)
     fn send_connection_preface(&mut self) -> Result<()> {
