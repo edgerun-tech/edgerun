@@ -46,9 +46,16 @@ pub struct QuicConnection {
     recv_offset: usize,
     /// Server destination connection ID (used for Initial key derivation)
     server_dcid: ConnectionId,
-    /// Stream reassembly buffers (offset → data) per stream
-    /// Next expected offset per stream (for reassembly)
-    /// FIN received per stream
+    /// Current key phase (0 or 1, toggles on each update — RFC 9001 §6)
+    key_phase: bool,
+    /// Previous protection keys (for decrypting in-flight packets during key transition)
+    prev_protection: Option<crypto::PacketProtection>,
+    /// Client application traffic secret (for key updates — RFC 9001 §6)
+    client_app_traffic_secret: Vec<u8>,
+    /// Server application traffic secret (for key updates — RFC 9001 §6)
+    server_app_traffic_secret: Vec<u8>,
+    /// Hash algorithm matching the cipher suite (for HKDF-Expand-Label)
+    cipher_suite_hash: edgerun_tls::prf::Hasher,
     /// Pending migration path challenges (data → deadline)
     pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
 }
@@ -87,6 +94,11 @@ impl QuicConnection {
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: remote_cid.clone(),
+            key_phase: false,
+            prev_protection: None,
+            client_app_traffic_secret: Vec::new(),
+            server_app_traffic_secret: Vec::new(),
+            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -178,6 +190,11 @@ impl QuicConnection {
         let app_keys = handshaker.app_keys(&transcript_after_finished);
         let app_protection = crypto::PacketProtection::new(&app_keys);
         self.protection = Some(app_protection);
+
+        // Store app traffic secrets for future key updates (RFC 9001 §6)
+        self.client_app_traffic_secret = handshaker.client_app_traffic_secret(&transcript_after_finished);
+        self.server_app_traffic_secret = handshaker.server_app_traffic_secret(&transcript_after_finished);
+        self.cipher_suite_hash = handshaker.hasher().clone();
 
         handshaker.mark_complete();
         self.established = true;
@@ -415,6 +432,11 @@ impl QuicConnection {
             server_dcid: remote_cid,
             early_data_protection: None,
             early_data_sent: false,
+            key_phase: false,
+            prev_protection: None,
+            client_app_traffic_secret: Vec::new(),
+            server_app_traffic_secret: Vec::new(),
+            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -447,6 +469,11 @@ impl QuicConnection {
             server_dcid: remote_cid,
             early_data_protection: None,
             early_data_sent: false,
+            key_phase: false,
+            prev_protection: None,
+            client_app_traffic_secret: Vec::new(),
+            server_app_traffic_secret: Vec::new(),
+            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             pending_path_challenges: std::collections::HashMap::new(),
         }
     }
@@ -478,6 +505,11 @@ impl QuicConnection {
             server_dcid: client_dcid,
             early_data_protection: None,
             early_data_sent: false,
+            key_phase: false,
+            prev_protection: None,
+            client_app_traffic_secret: Vec::new(),
+            server_app_traffic_secret: Vec::new(),
+            cipher_suite_hash: edgerun_tls::prf::Hasher::Sha256,
             pending_path_challenges: std::collections::HashMap::new(),
         };
 
@@ -800,17 +832,80 @@ impl QuicConnection {
     // Key Update (RFC 9001 §6)
     // ------------------------------------------------------------------
 
-    /// Initiate a key update for 1-RTT traffic keys.
+    /// Initiate a key update for 1-RTT traffic keys (RFC 9001 §6).
     ///
     /// When the AEAD key usage limit is approaching, the endpoint initiates
-    /// a key update by sending a 1-RTT packet with the Key Phase bit set.
+    /// a key update by deriving new traffic secrets and updating protection keys.
+    /// The Key Phase bit is toggled in subsequent 1-RTT packets.
+    ///
+    /// # RFC 9001 §6 Key Update Process
+    /// 1. Derive next secret: `next_secret = HKDF-Expand-Label(current_secret, "traffic upd", "", Hash.length)`
+    /// 2. Derive new keys from next secret
+    /// 3. Update protection with new keys
+    /// 4. Store old protection for in-flight packet decryption
+    /// 5. Toggle key phase bit
     pub fn initiate_key_update(&mut self) -> Result<(), String> {
-        // In a full implementation, this would:
-        // 1. Derive new traffic keys using the TLS key schedule
-        // 2. Update self.protection with new keys
-        // 3. Set the Key Phase bit in subsequent 1-RTT packets
-        // 4. Track the old keys for decrypting in-flight packets
-        Ok(()) // Placeholder
+        if self.client_app_traffic_secret.is_empty() {
+            return Err("Cannot initiate key update: no application traffic secret available".into());
+        }
+
+        // Derive next client application traffic secret (RFC 8446 §7.2)
+        let next_secret = self.cipher_suite_hash.expand_label(
+            &self.client_app_traffic_secret,
+            "traffic upd",
+            &[],
+            self.cipher_suite_hash.len(),
+        );
+
+        // Derive new keys from the next secret
+        let key_len = 16; // AES-128-GCM
+        let iv_len = 12;
+        let next_key = self.cipher_suite_hash.expand_label(
+            &next_secret,
+            "quic key",
+            &[],
+            key_len,
+        );
+        let next_iv = self.cipher_suite_hash.expand_label(
+            &next_secret,
+            "quic iv",
+            &[],
+            iv_len,
+        );
+
+        // Store old protection for in-flight packet decryption
+        if let Some(old_protection) = self.protection.take() {
+            self.prev_protection = Some(old_protection);
+        }
+
+        // Create new protection with updated keys
+        let new_keys = crypto::ProtectionKeys::new(
+            crypto::AeadAlgorithm::Aes128Gcm,
+            next_key.clone(),
+            next_iv.clone(),
+            next_key,
+            next_iv,
+        );
+        self.protection = Some(crypto::PacketProtection::new(&new_keys));
+
+        // Update the stored secret for future key updates
+        self.client_app_traffic_secret = next_secret;
+
+        // Toggle key phase bit
+        self.key_phase = !self.key_phase;
+
+        Ok(())
+    }
+
+    /// Get the current key phase (for setting the Key Phase bit in packet headers).
+    pub fn key_phase(&self) -> bool {
+        self.key_phase
+    }
+
+    /// Clear previous protection keys (safe to call after confirming peer has received
+    /// packets encrypted with the new keys — RFC 9001 §6.1).
+    pub fn discard_old_keys(&mut self) {
+        self.prev_protection = None;
     }
 
     // ------------------------------------------------------------------

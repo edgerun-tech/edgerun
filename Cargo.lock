@@ -1338,7 +1338,6 @@ version = "0.1.0"
 dependencies = [
  "edgerun-crypto",
  "edgerun-log",
- "log 0.4.29",
  "serde",
  "thiserror 1.0.69",
 ]

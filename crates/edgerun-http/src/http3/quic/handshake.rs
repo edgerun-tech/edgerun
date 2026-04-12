@@ -684,6 +684,23 @@ impl QuicTlsHandshaker {
         &self.transcript
     }
 
+    /// Derive client application traffic secret (for key updates).
+    pub fn client_app_traffic_secret(&self, transcript_after_finished: &[u8]) -> Vec<u8> {
+        let hash = self.hasher.hash(transcript_after_finished);
+        self.key_schedule.client_app_traffic_secret(&hash)
+    }
+
+    /// Derive server application traffic secret (for key updates).
+    pub fn server_app_traffic_secret(&self, transcript_after_finished: &[u8]) -> Vec<u8> {
+        let hash = self.hasher.hash(transcript_after_finished);
+        self.key_schedule.server_app_traffic_secret(&hash)
+    }
+
+    /// Get the hasher (for HKDF operations in key updates).
+    pub fn hasher(&self) -> &edgerun_tls::prf::Hasher {
+        &self.hasher
+    }
+
     /// Build full handshake result with all protection keys.
     pub fn build_result(&self, dcid: &[u8], transcript_after_finished: &[u8]) -> Result<HandshakeResult, String> {
         let (init_write, init_read) = quic_initial_client_keys(dcid, 16, 12, &self.hasher);
