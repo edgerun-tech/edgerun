@@ -225,6 +225,91 @@ pub fn aes256_gcm_decrypt(key: &[u8; 32], nonce: &[u8; 12], ciphertext_and_tag: 
 }
 
 // ---------------------------------------------------------------------------
+// PEM / DER encoding utilities
+// ---------------------------------------------------------------------------
+
+/// PEM-encode arbitrary DER bytes with the given label.
+///
+/// Returns the PEM string including `-----BEGIN <label>-----` / `-----END <label>-----`.
+pub fn pem_encode(label: &str, der: &[u8]) -> String {
+    pem::encode(&pem::Pem::new(label, der.to_vec()))
+}
+
+/// Parse a PEM block by label, returning the raw DER bytes.
+pub fn pem_decode(label: &str, pem_str: &str) -> Result<Vec<u8>, String> {
+    let parsed = pem::parse(pem_str).map_err(|e| format!("invalid PEM: {e}"))?;
+    if parsed.tag() != label {
+        return Err(format!("expected PEM label '{label}', got '{}'", parsed.tag()));
+    }
+    Ok(parsed.contents().to_vec())
+}
+
+/// PEM-encode a P-256 ECDSA signing key to PKCS#8 PEM format.
+///
+/// Returns the PEM string including `-----BEGIN PRIVATE KEY-----` / `-----END PRIVATE KEY-----`.
+pub fn p256_signing_key_to_pem(key: &p256::ecdsa::SigningKey) -> String {
+    use ecdsa::elliptic_curve::pkcs8::EncodePrivateKey;
+    let der = key.to_pkcs8_der().expect("P-256 key to PKCS#8 DER");
+    pem_encode("PRIVATE KEY", der.as_bytes())
+}
+
+/// Parse a P-256 ECDSA signing key from PEM-encoded PKCS#8.
+///
+/// Accepts `-----BEGIN PRIVATE KEY-----` or `-----BEGIN EC PRIVATE KEY-----`.
+pub fn p256_signing_key_from_pem(pem_str: &str) -> Result<p256::ecdsa::SigningKey, String> {
+    use p256::elliptic_curve::pkcs8::DecodePrivateKey;
+    p256::ecdsa::SigningKey::from_pkcs8_pem(pem_str)
+        .map_err(|e| format!("failed to parse P-256 PEM key: {e}"))
+}
+
+/// Parse a P-256 ECDSA signing key from DER-encoded PKCS#8.
+pub fn p256_signing_key_from_der(der: &[u8]) -> Result<p256::ecdsa::SigningKey, String> {
+    use p256::elliptic_curve::pkcs8::DecodePrivateKey;
+    p256::ecdsa::SigningKey::from_pkcs8_der(der)
+        .map_err(|e| format!("failed to parse P-256 DER key: {e}"))
+}
+
+/// Parse an X.509 certificate from PEM format, returning DER bytes.
+pub fn x509_cert_from_pem(pem_str: &str) -> Result<Vec<u8>, String> {
+    use x509_cert::der::{DecodePem, Encode};
+    let cert = x509_cert::Certificate::from_pem(pem_str)
+        .map_err(|e| format!("failed to parse PEM certificate: {e}"))?;
+    cert.to_der()
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("failed to re-encode cert to DER: {e}"))
+}
+
+/// Parse a PEM string containing both a certificate and a PKCS#8 private key,
+/// returning `(cert_der, signing_key)`.
+///
+/// The PEM blocks can be in any order. Only the first certificate and first
+/// private key are used.
+pub fn load_cert_and_key_from_pem(
+    pem_text: &str,
+) -> Result<(Vec<u8>, p256::ecdsa::SigningKey), String> {
+    let mut cert_der: Option<Vec<u8>> = None;
+    let mut key_der: Option<Vec<u8>> = None;
+
+    for pem_obj in pem::parse_many(pem_text).map_err(|e| format!("invalid PEM: {e}"))? {
+        match pem_obj.tag() {
+            "CERTIFICATE" => {
+                cert_der = Some(pem_obj.contents().to_vec());
+            }
+            "PRIVATE KEY" | "EC PRIVATE KEY" => {
+                key_der = Some(pem_obj.contents().to_vec());
+            }
+            _ => {}
+        }
+    }
+
+    let cert = cert_der.ok_or("no CERTIFICATE block found")?;
+    let key_der_bytes = key_der.ok_or("no PRIVATE KEY block found")?;
+    let key = p256_signing_key_from_der(&key_der_bytes)?;
+
+    Ok((cert, key))
+}
+
+// ---------------------------------------------------------------------------
 // Unified AEAD cipher enum
 // ---------------------------------------------------------------------------
 

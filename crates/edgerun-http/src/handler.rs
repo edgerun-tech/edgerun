@@ -16,22 +16,20 @@ use std::sync::Arc;
 ///
 /// ```
 /// use edgerun_http::{Handler, Request, Response, StatusCode};
+/// use std::future::Future;
+/// use std::pin::Pin;
 ///
 /// struct MyHandler;
 ///
 /// impl Handler for MyHandler {
-///     fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+///     fn handle(&self, _req: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
 ///         Box::pin(async move {
-///             Response::text(
-///                 StatusCode::from_u16(200).unwrap(),
-///                 &format!("Hello, {}!", request.uri().request_target()),
-///             )
+///             Response::text(StatusCode::new(200).unwrap(), "Hello!")
 ///         })
 ///     }
 /// }
 /// ```
 pub trait Handler: Send + Sync + 'static {
-    /// Handle an HTTP request and return a response.
     fn handle(
         &self,
         request: Request,
@@ -45,7 +43,7 @@ pub trait Handler: Send + Sync + 'static {
 ///
 /// let handler = into_handler(|request| {
 ///     Response::text(
-///         StatusCode::from_u16(200).unwrap(),
+///         StatusCode::new(200).unwrap(),
 ///         &format!("Got: {} {}", request.method().as_str(), request.uri().request_target()),
 ///     )
 /// });
@@ -64,7 +62,7 @@ where
 ///
 /// let handler = into_handler_async(|request| async move {
 ///     Response::text(
-///         StatusCode::from_u16(200).unwrap(),
+///         StatusCode::new(200).unwrap(),
 ///         &format!("Hello, {}!", request.uri().request_target()),
 ///     )
 /// });
@@ -78,50 +76,33 @@ where
 }
 
 /// A handler that wraps a synchronous function.
-pub struct SyncHandler<F> {
-    f: F,
-}
+pub struct SyncHandler<F> { f: F }
 
 impl<F> Handler for SyncHandler<F>
 where
     F: Fn(Request) -> Response + Send + Sync + 'static,
 {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
-        Box::pin(async move {
-            (self.f)(request)
-        })
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+        Box::pin(async move { (self.f)(request) })
     }
 }
 
 /// A handler that wraps an async function.
-pub struct AsyncHandler<F> {
-    f: F,
-}
+pub struct AsyncHandler<F> { f: F }
 
-impl<F> Handler for AsyncHandler<F>
+impl<F, Fut> Handler for AsyncHandler<F>
 where
-    F: Fn(Request) -> impl Future<Output = Response> + Send + Sync + 'static,
+    F: Fn(Request) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Response> + Send + 'static,
 {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         Box::pin((self.f)(request))
     }
 }
 
-/// `Arc<dyn Handler>` also implements `Handler`.
 impl Handler for Arc<dyn Handler> {
-    fn handle(
-        &self,
-        request: Request,
-    ) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
+    fn handle(&self, request: Request) -> Pin<Box<dyn Future<Output = Response> + Send + '_>> {
         let handler = Arc::clone(self);
-        Box::pin(async move {
-            handler.handle(request).await
-        })
+        Box::pin(async move { handler.handle(request).await })
     }
 }

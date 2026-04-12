@@ -1,14 +1,17 @@
-# edgerun Reference Core: Implementation Status & Gap Analysis
+# Edgerun Reference Core: Implementation Status & Gap Analysis
 
-**Last updated:** 2026-04-10  
-**Project:** edgerun_reference_core  
-**Status:** Active development — core protocol functional, security hardening in progress
+**Last updated:** 2026-04-12
+**Project:** edgerun_reference_core
+**Status:** Active development — core protocol, crypto, storage, mesh, hardware signing, and most hardware I/O are functional.
 
 ---
 
 ## Project Overview
 
-A Rust multi-crate workspace (99 crates) implementing the **edgerun v0 protocol** — a distributed, identity-based, append-only information fabric for peer-to-peer mesh networking, capability-discovered hardware abstraction, and a compute marketplace.
+A Rust multi-crate workspace (138 crates) implementing:
+1. **A distributed protocol** — identity-routed mesh networking, capability-discovered hardware abstraction, append-only event log, hardware-backed signing
+2. **A spec-driven browser engine** — W3C/WHATWG specs → Protocol Buffers → generated type crates → behavioral code → pixels
+3. **Infrastructure services** — DNS/DHCP server, HTTP/1.1/2/3 stack, OCI container runtime, Wayland compositor
 
 ### Architecture Summary
 
@@ -20,11 +23,12 @@ A Rust multi-crate workspace (99 crates) implementing the **edgerun v0 protocol*
  │  │  Identity: TPM 2.0 | YubiKey | Android Keystore | SW  │  │
  │  └────────────────────────────────────────────────────────┘  │
  │  ┌────────────────────────────────────────────────────────┐  │
- │  │  Mesh: edgerun-mesh + mesh-link + mesh-router          │  │
+ │  │  Mesh: edgerun-mesh + mesh-link + mesh-session          │  │
  │  │    ECDSA-signed frames | Bellman-Ford routing          │  │
  │  └────────────────────────────────────────────────────────┘  │
  │  ┌────────────────────────────────────────────────────────┐  │
  │  │  Command dispatch: signature verify | delegation      │  │
+ │  │  Domain-separated signatures | Root trust verification │  │
  │  └────────────────────────────────────────────────────────┘  │
  │  ┌────────────────────────────────────────────────────────┐  │
  │  │  Workload: OCI pull | cgroups v2 | namespaces | exec  │  │
@@ -40,51 +44,78 @@ A Rust multi-crate workspace (99 crates) implementing the **edgerun v0 protocol*
 
  Protocol: edgerun-proto (prost) + edgerun-core (validation, crypto, conformance)
  Runtime:  edgerun-rt (custom epoll-based async, no tokio)
- JSON:     edgerun-json (zero-dep, published on crates.io v1.0.149)
+ JSON:     edgerun-json (published on crates.io v1.0.149)
+ Crypto:   edgerun-crypto (single boundary, no ring/openssl)
 ```
 
 ### What Works
 
 - **Core protocol**: Full protobuf bindings, canonical encoding, deterministic serialization
-- **Crypto**: Inline SHA-256/384/512, HKDF, HMAC, ECDSA P-256 sign/verify, domain tag constants defined
+- **Crypto**: Domain-separated signing (`SHA-256(domain_tag || 0x00 || record_hash)`), SHA-256/384/512, HKDF, HMAC, ECDSA P-256 sign/verify
+- **Domain separation**: 14 hash tags + 13 signature tags defined AND applied across all signing paths (signer.rs, command_dispatch.rs, session.rs, mesh_node.rs, mesh_network.rs, all hardware signing backends)
 - **Command validation**: Structural, cryptographic, replay detection (hash-keyed), timing, delegation chain
-- **Command dispatch**: AddController, RemoveController, TransferControl, PublishSnapshot, FetchObject, Query, ExecuteWorkload, TerminateWorkload, Custom
-- **Delegation chain**: Signature verification, recipient/issuer continuity, revocation checks, timing bounds, action attenuation checks
+- **Delegation chain**: Signature verification, recipient/issuer continuity, revocation checks, timing bounds, action attenuation, **root trust verification** against `trusted_root_ids`
 - **Controller set management**: Projection from event log, survives restarts
 - **Storage**: Append-only event log, AES-GCM encrypted blobs, content-addressed storage, index rebuild
 - **Mesh networking**: Frame types, ECDSA signing, raw Ethernet + UDP link layer, Bellman-Ford routing, multicast discovery
 - **TCP sessions**: SessionHello/SessionAccept handshake, TCP listener, peer reconnection
-- **OCI workloads**: Container pull, cgroups v2, namespaces, pivot_root, seccomp-BPF stub, resource tracking, rate limiting
+- **OCI workloads**: Container pull, cgroups v2, namespaces, pivot_root, seccomp-BPF, resource tracking, rate limiting
+- **Seccomp-BPF**: Architecture-specific syscall allow-lists (x86_64: ~80, aarch64: ~80), applied in `pre_exec` before exec — fail-closed
 - **Metering**: WorkMeter for RC-microsecond billing
 - **Health**: HTTP /health endpoint
 - **Ingress**: Rate limiting, duplicate screening (FNV-1a 64-bit)
-- **Conformance corpus**: 610 YAML test vectors across 11 suites (canonical, command, control, crypto, delegation, network, object, query, snapshot, stream, trust)
-- **Hardware signing abstraction**: Unified `MeshSigner` trait with TPM, YubiKey, Android Keystore, software backends
+- **Conformance corpus**: 610 YAML test vectors across 11 suites
+- **Hardware signing abstraction**: Unified `MeshSigner` trait with TPM 2.0, YubiKey, Android Keystore, software backends
 - **edgerun-json**: Published crate (v1.0.149), zero-dep, up to 3.78x faster than serde_json on tape path
+- **HTTP stack**: HTTP/1.1, HTTP/2, HTTP/3 with HPACK/QPACK, stream multiplexing, flow control
+- **DNS server**: Authoritative + recursive DNS with YAML config, hot-reload
+- **DHCPv6**: Full DHCPv6 implementation
+- **WiFi**: nl80211 netlink scan/connect/disconnect/AP mode
+- **Bluetooth**: HCI management socket, discovery/connect/pair
+- **Audio**: ALSA capture/playback with mixer control
+- **Camera**: V4L2 streaming capture with mmap
+- **Input**: evdev event loop with poll(), EVIOCGRAB
+- **Face detection**: Haar cascade CPU-based detection
+- **Secret service**: D-Bus Secret Service daemon with biometric sessions
+- **Audio calibration**: Sweep-based speaker/mic calibration
+- **Audio liveness**: VAD + challenge/response anti-spoofing
+- **CSS rasterizer**: Scanline renderer with AVX2 SIMD, tile multicore (~6× on 6-core), 148-color LUT, 9 border patterns, 16 blend modes
+- **CSS cascade engine**: Full per-property cascade with specificity, origin/importance, combinators, attr selectors, pseudo-classes
+- **CSS value parser**: 30+ length units, all color formats, calc()/min()/max()/clamp(), var(), url() — 101 tests
+- **WebGPU renderer**: Fragment shader rasterizer with painter's algorithm, solid/linear/radial/conic gradients, borders, shadows
+- **CSS minifier**: 60-70% compression via proto canonical varint property IDs
+- **CSS property knowledge graph**: 98 properties with metadata, fluent query API, shorthand expansion
+- **WCAG accessibility analyzer**: Contrast ratio, font-size, spacing, animation duration, focus indicators
+- **CSS complexity analyzer**: Specificity scoring, cascade depth, dead rules, layout trigger percentage
+- **Deterministic replay engine**: Binary format, record/playback for bug reproduction
+- **CSS rule optimizer**: Merge selectors, remove dead rules, flatten combinators, reorder by specificity
+- **Layout budget estimator**: Predict rendering cost, dirty tracking, incremental relayout
+- **Cascade debugger**: CLI tool showing rule ranking, per-property winners, inheritance chain
+- **Render proof**: CPU vs GPU pixel-by-pixel comparison via fuzz corpus
+- **HTML render pipeline**: Block layout pipeline (HTML+CSS → DOM → cascade → layout → paint → rasterize → PNG). Flexbox/grid not yet implemented.
+- **edgerun-edit**: AST-level Rust code editor using syn 2 + prettyplease
 
 ---
 
-## Critical Implementation Gaps (P0 — Security Correctness)
+## Resolved Gaps (Previously Reported)
 
-### 1. Domain separation not applied to signatures
-**Severity:** Critical — signature replay attacks possible across record types  
-**Spec:** §17.9, §17.11 — `sig_input = sig_domain_tag || 0x00 || record_hash_bytes`  
-**Status:** Domain tag constants are **defined** in `edgerun-core/src/crypto.rs` (14 hash tags, 13 signature tags) but **NOT applied** during signing.
+| # | Gap | Resolution |
+|---|-----|-----------|
+| P0-1 | Domain separation not applied to signatures | ✅ **RESOLVED** — `sign_record()`, `sign_record_with_tpm_checked()`, `sign_record_with_yubikey_checked()`, `sign_record_with_keystore_checked()` all apply domain tags via `signature_input()` in `edgerun-core/src/crypto.rs` and all hardware backends |
+| P0-3 | Delegation chain does not verify root trust | ✅ **RESOLVED** — `command.rs:296-303` checks root issuer against `ctx.trusted_root_ids`, with test `delegation_chain_root_not_in_trusted_roots_is_rejected` |
+| P0-4 | PerformanceCertificate not cryptographically bound | ✅ **RESOLVED** — `PerformanceCertificate::verify()` validates digest integrity and ECDSA signature |
+| P1-5 | Seccomp-BPF filter not applied | ✅ **RESOLVED** — `edgerun-oci-runtime/src/seccomp.rs` with architecture-specific allow-lists, applied in `pre_exec` |
+| P1-6 | Action lifecycle events partially implemented | ✅ **RESOLVED** — `record_action_event()` emits `ActionCompleted`/`ActionFailed` events in `command_dispatch.rs` |
 
-All signing code (`signer.rs`, `command_dispatch.rs`, `session.rs`, `mesh_node.rs`, `mesh_network.rs`) calls `sign_prehash(digest)` with the **raw SHA-256 digest** without prepending the domain tag. This means a signature intended for one record type (e.g., CommandEnvelope) could potentially be replayed against another (e.g., EventEnvelope).
+---
 
-**Files affected:**
-- `crates/edgerun-node/src/signer.rs:48` — `sign_prehash(digest)`
-- `crates/edgerun-node/src/command_dispatch.rs:1567` — `signer.sign_digest(&digest_bytes)` where `digest_bytes` is raw SHA-256
-- `crates/edgerun-node/src/session.rs:343` — `sign_prehash(digest)`
-- `crates/edgerun-node/src/mesh_node.rs:260` — `sign_prehash(digest)`
-- `crates/edgerun-node/src/mesh_network.rs:139` — `sign_prehash(digest)`
+## Current Gaps
 
-**Fix required:** Prepend domain tag bytes before hashing: `SHA-256(domain_tag || 0x00 || canonical_bytes)`
+### P0 — Security Correctness
 
-### 2. Assurance requirements ignored during command validation
-**Severity:** High — marketplace trust model broken  
-**Spec:** `CommandEnvelope.requested_assurance` field (field 14)  
+#### 1. Assurance requirements ignored during command validation
+**Severity:** High — marketplace trust model incomplete
+**Spec:** `CommandEnvelope.requested_assurance` field (field 14)
 **Status:** The `requested_assurance` field is **never inspected** by the command validation pipeline.
 
 A command can request hardware-backed or attested-runtime execution, but the receiving node has no logic to evaluate whether it can satisfy that requirement. AssuranceClaim types are fully defined in `trust.proto` and validators exist in `validators.rs`, but the daemon:
@@ -94,126 +125,134 @@ A command can request hardware-backed or attested-runtime execution, but the rec
 
 **File:** `crates/edgerun-core/src/command.rs` — `validate_command()` does not check `command.requested_assurance`
 
-### 3. Delegation chain does not verify root trust
-**Severity:** High — unauthorized delegations accepted  
-**Spec:** Root issuer must be "acceptable under local trust policy"  
-**Status:** `validate_delegation_chain()` in `command.rs` checks chain continuity, revocation, and timing, but does **NOT** verify that the first delegation's issuer is in `ctx.trusted_root_ids`.
+### P1 — Security Hardening
 
-The conformance validator in `validators.rs` does check `trust_roots`, but the **runtime** `command.rs` delegation validator does not.
-
-**File:** `crates/edgerun-core/src/command.rs` — `validate_delegation_chain()` never references `ctx.trusted_root_ids`
-
-### 4. PerformanceCertificate not cryptographically bound
-**Severity:** Medium-High — billing fraud possible  
-**Status:** ✅ **RESOLVED** — `PerformanceCertificate::verify()` validates both digest integrity and ECDSA signature. New certificates are signed during creation via `cache_cert()`. Legacy unsigned certs are signed on first use and re-cached. Node identity mismatch is also detected.
-
----
-
-## High-Priority Gaps (P1 — Security Hardening)
-
-### 5. Seccomp-BPF filter not applied
-**Spec:** ~75 essential syscalls whitelist  
-**Status:** ✅ **RESOLVED** — Seccomp-BPF is fully implemented in `edgerun-oci-runtime/src/seccomp.rs` with architecture-specific allow-lists (x86_64: ~80 syscalls, aarch64: ~80 syscalls). Applied in `container.rs` `pre_exec` closure before exec — fail-closed, container startup aborts if seccomp can't be applied.
-
-### 6. Action lifecycle events partially implemented
-**Status:** `record_action_event()` function exists and is called in `command_dispatch.rs`, emitting `ActionCompleted`/`ActionFailed` events. However, `ACTION_STARTED` is NOT emitted before work begins.
-
-### 7. WorkSettlement bilateral signing missing
-**Spec:** Buyer+seller signed settlement as cryptographic proof  
+#### 2. WorkSettlement bilateral signing missing
+**Spec:** Buyer+seller signed settlement as cryptographic proof
 **Status:** Only unilateral `WorkAccounting` recorded on provider side. No bilateral settlement protocol.
 
-### 8. ComputeAdvertisement not published/discovered
+#### 3. ComputeAdvertisement not published/discovered
 **Status:** Type defined in `accounting.rs` but no mesh-based publish/discover flow exists.
 
-### 9. Query signatures not verified
+#### 4. Query signatures not verified
 **Status:** `QueryRequest.signature` is optional and **never checked** even when present. Any peer can query without authorization.
 
-### 10. Query proof generation missing
-**Spec:** `QueryResultFragment` should include `proof_objects` (SnapshotSetProof, EventSetProof, ObjectAssertionProof)  
+#### 5. Query proof generation missing
+**Spec:** `QueryResultFragment` should include `proof_objects` (SnapshotSetProof, EventSetProof, ObjectAssertionProof)
 **Status:** Query engine returns basic event refs and snapshot refs but does NOT generate proof bundles.
 
----
+#### 6. ACTION_STARTED not emitted before work begins
+**Status:** `record_action_event()` emits `ActionCompleted`/`ActionFailed` but `ACTION_STARTED` is not emitted before work begins. Audit trail has a gap between command receipt and completion.
 
-## Medium-Priority Gaps (P2 — Protocol Completeness)
+### P2 — Protocol Completeness
 
-### 11. Protocol messages defined but not handled
-- **Secret management** (types 1001-1003): `PutSecret`, `DeleteSecret`, `ListSecrets` — proto + crate exist, **no dispatch handlers**
+#### 7. Protocol messages defined but not handled
+- **Secret management** (types 1001-1003): `PutSecret`, `DeleteSecret`, `ListSecrets` — proto + `edgerun-secret-service` crate exist, but **no dispatch handlers** in `edgerund` command router
 - **RelayEnvelope**: Store-and-forward semantics defined but **no inbound relay processing**
-- **IdentityRecord**: Identity registration/supersession defined but **not used** — identity is static (genesis only)
+- **IdentityRecord**: Identity registration/supersession defined but **not used** — identity is static (genesis only), no rotation or supersession
 - **StoreObject** (type 5): Proto command defined, **no handler**
 
-### 12. Storage model gaps
+#### 8. Storage model gaps
 - **Chunking**: Protocol defines `ChunkManifest` + `ChunkEntry` but storage uses single encrypted blobs
 - **Storage tiers**: Hot/warm/cold/archive tiers defined but single blob store only
 - **Object descriptors**: `put_object` doesn't create `LogicalObjectDescriptor` or `StoredRepresentationHeader`
 
-### 13. Fetch queue response processing incomplete
+#### 9. Fetch queue response processing incomplete
 **Status:** `run_fetch_queue_consumer` in `daemon.rs` logs object refs but does NOT decode `bundled_result_object`, store fetched objects, or record fetch events.
-
-### 14. Identity lifecycle missing
-**Status:** Node identity is static (genesis payload + config). No `IdentityRecord` creation, storage, or verification. No identity rotation or supersession.
 
 ---
 
 ## Hardware Capability Gaps
 
-39 hardware adapter crates exist, mostly at **trait definition + discovery-only** stage.
+### FULLY FUNCTIONAL (complete I/O pipelines)
 
-### Fully Implemented
-| Crate | Status |
-|-------|--------|
-| `edgerun-goodix-fingerprint` | USB protocol parsing, enrollment control |
-| `edgerun-tpm` | TPM 2.0 commands, Linux TPM adapter, key operations |
-| `edgerun-yubikey` | YubiKey PIV/APDU signing path (subset: PIV only, no OTP/U2F) |
+| Crate | What It Does | I/O Method |
+|-------|-------------|------------|
+| **edgerun-tpm** | TPM 2.0 signing, key provisioning, PCR policies | `/dev/tpmrm0` direct I/O, TPM wire encoding/decoding |
+| **edgerun-yubikey** | YubiKey PIV signing, attestation, PIN verification | Raw USB CCID transport (`/dev/bus/usb/`), `USBDEVFS_CONTROL` ioctl, APDU chaining |
+| **edgerun-goodix-fingerprint** | Full fingerprint enrollment + identification | Raw USB bulk (`/dev/bus/usb/`), `ioctl(USBDEVFS_CLAIMINTERFACE)`, CRC8/CRC32 validation |
+| **edgerun-evdev-input** | Input device event loop (keyboard, mouse, touch, pen, gamepad) | `poll()` event loop, `EVIOCGRAB` exclusive access, `/dev/input/eventN`, sysfs capability bitmaps |
+| **edgerun-alsa-microphone** | Audio capture with format/channel/rate negotiation | `/dev/snd/pcmC*D*c`, ALSA ioctls (`HW_PARAMS`, `PREPARE`, `READI_FRAMES`) |
+| **edgerun-alsa-speaker** | Audio playback + mixer control (volume, mute) | `/dev/snd/pcmC*D*p` + `/dev/snd/controlC*`, ALSA + mixer ioctls |
+| **edgerun-v4l2-camera** | Streaming camera capture (MJPEG, YUYV, NV12, RGB24, Gray8/Y10/Y12/Y16) | V4L2 ioctls (`REQBUFS`, `QBUF`/`DQBUF`, `STREAMON`/`OFF`), `mmap()` |
+| **edgerun-linux-wifi** | WiFi scan, connect (WPA-PSK), AP mode, regulatory domain | nl80211 generic netlink (`NETLINK_GENERIC`), full scan result parsing (SSID IE, RSN IE) |
+| **edgerun-mgmt-bluetooth** | BT controller mgmt: powered, discoverable, pair, connect, scan | HCI mgmt socket (`AF_BLUETOOTH`, `BTPROTO_HCI`), `poll()` event loop |
+| **edgerun-face-detection** | Haar cascade face detection with bounding boxes, landmarks, tracking | CPU-based integral image + Viola-Jones, NMS for overlapping detections |
+| **edgerun-secret-service** | Freedesktop Secret Service D-Bus daemon with biometric sessions | D-Bus wire protocol over Unix socket, encrypted blob store, append-only audit log |
+| **edgerun-audio-calibration** | Speaker/mic calibration sweeps with RMS/peak dBFS measurement | Uses `AlsaSpeakerBackend` + `AlsaMicrophoneBackend` for real I/O |
+| **edgerun-audio-liveliness** | Voice activity detection, challenge/response anti-spoofing | Real mic capture, spectral analysis, latency checks |
 
-### Discovery + Trait Definitions (No I/O)
-| Crate | Missing |
-|-------|---------|
-| `linux-pci`, `linux-usb` | Full driver binding, resource mapping, interrupt setup, transfer endpoints |
-| `evdev-input`, `drm-display` | Event loop, device-specific translation, atomic modesetting |
-| `amd-xdna`, `linux-npu` | Command queue, workload submission, model execution API |
+### PARTIAL I/O (some operations work, missing complementary paths)
 
-### Control Interface Only (No Runtime I/O)
-| Crate | Missing |
-|-------|---------|
-| `bluetooth`, `mgmt-bluetooth` | GATT client/server, LE links, security (SMP), MTU, L2CAP |
-| `wifi`, `linux-wifi` | WPA, SSID/auth management, AP mode traffic handling |
-| `display`, `drm-display` | Render/commit pathway, composable modesetting |
-| `npu` | Backend implementation, scheduler, load management |
+| Crate | What Works | What's Missing |
+|-------|-----------|---------------|
+| **edgerun-linux-netif** | Discovery via sysfs, interface up/down via `SIOCGIFFLAGS`/`SIOCSIFFLAGS` ioctl | IP address config, routing table, DHCP client, DNS config |
+| **edgerun-linux-cec** | CEC transmit via `CEC_TRANSMIT` ioctl (Active Source, Standby, Wake, etc.) | CEC receive/event loop for incoming messages |
+| **edgerun-amd-xdna** | DRM ioctls for context create/destroy, BO create/info/sync, exec cmd, power modes | Workload result polling, error handling, model execution API |
 
-### Protocol Layer Not Exposed
-| Crate | Missing Protocol |
-|-------|-----------------|
-| `bluetooth` | GATT discover/read/write/notify |
-| `wifi` | WPA/hostapd integration |
-| `nfc`, `linux-nfc` | LLCP, SNEP, tag read/write, card emulation |
-| `usb`, `linux-usb` | HCI transfers, bulk/iso/ctl communications |
+### DISCOVERY ONLY (sysfs/proc reads, no I/O)
 
-### Mediation / Remote Wrappers
-| Crate | Status |
-|-------|--------|
-| `remote-capability` | RPC layer + proxy adapters, **no network transport backend** |
-| `capabilities` | Core trait layer only, no hardware runtime enforcement |
+| Crate | What It Does | Missing |
+|-------|-------------|---------|
+| **edgerun-drm-display** | DRM connector discovery, mode listing, connection status from sysfs | Actual modesetting — `present()` returns `CapabilityError::Unsupported`, no framebuffer control |
+| **edgerun-linux-pci** | PCI bus scanning via sysfs (vendor/device IDs, class codes, driver, link speed, topology) | Driver binding, config space access, interrupt setup |
+| **edgerun-linux-usb** | USB device enumeration via sysfs (bus/dev, vendor/product, strings, speed, driver, children) | USB device I/O, transfer endpoints, bulk/iso/ctl communications |
+| **edgerun-linux-nfc** | NFC adapter enumeration from sysfs (power state, protocols) | Target polling, NDEF read/write, ISO-DEP communication, SNEP/LLCP |
+| **edgerun-linux-npu** | NPU sysfs device info (driver, firmware, PCI addr, char device path) | Workload submission, ioctls, command queue |
+| **edgerun-linux-gpu** | GPU enumeration via sysfs + DRM (vendor/device IDs, driver, card/render nodes, connector modes) | Modesetting, rendering, command submission |
+| **edgerun-linux-power** | Power supply sysfs reads (battery capacity, voltage, current, AC online, lid state) | Power state changes, suspend/resume, CPU frequency control |
+
+### JUST TYPES/TRAITS (no runtime code)
+
+| Crate | Description | What Would Be Needed |
+|-------|-------------|---------------------|
+| **edgerun-bluetooth** | Abstract `BluetoothScanner`/`BluetoothConnectionProvider` traits | GATT client/server, LE links, security (SMP), MTU, L2CAP — implement using `edgerun-mgmt-bluetooth` as backend |
+| **edgerun-wifi** | Abstract `WifiScanner`/`WifiController`/`WifiAccessPointController` traits | Implement using `edgerun-linux-wifi` as backend (nl80211 is already functional) |
+| **edgerun-input** | Abstract `InputDevice` trait, event type union | Implement using `edgerun-evdev-input` as backend |
+| **edgerun-display** | Abstract `DisplayDevice` trait, mode/config descriptors | Implement using `edgerun-drm-display` (once modesetting is added) |
+| **edgerun-microphone** | Abstract `MicrophoneDevice` trait, capture request types | Implement using `edgerun-alsa-microphone` as backend |
+| **edgerun-speaker** | Abstract `SpeakerDevice` trait, playback request types | Implement using `edgerun-alsa-speaker` as backend |
+| **edgerun-fingerprint** | Abstract `FingerprintReader` trait, enrollment/verification types | `edgerun-goodix-fingerprint` is already a concrete implementation |
+| **edgerun-camera-biometrics** | Abstract `CameraReader`/`CameraBiometricReader` traits, liveness challenge | Implement using `edgerun-v4l2-camera` as backend |
+| **edgerun-biometrics** | Biometric state, modality enums, verification policy types | Orchestration layer — delegates to camera/fingerprint backends |
+| **edgerun-network-interface** | Abstract `NetworkInterfaceController` trait, descriptor types | Implement using `edgerun-linux-netif` as backend |
+| **edgerun-usb** | Abstract `UsbInventory` trait, device/interface model | Discovery is `edgerun-linux-usb`; I/O would need `libusb` or raw `usbfs` |
+| **edgerun-pci** | Abstract `PciInventory` trait, device model | Discovery is `edgerun-linux-pci`; config access would need `/proc/bus/pci` or `sysfs` mmap |
+| **edgerun-npu** | Abstract `NpuDevice` trait, workload request/result types | Implement using `edgerun-amd-xdna` or `edgerun-linux-npu` as backend |
+| **edgerun-android-hardware** | Android NDK hardware access types | JNI + Android NDK bindings |
+
+### INFRASTRUCTURE / ORCHESTRATION
+
+| Crate | Status | Notes |
+|-------|--------|-------|
+| **edgerun-capabilities** | ✅ Trait + enforcement layer | `CapabilityProvider` trait, `CapabilityError`, descriptor helpers, validation — no hardware I/O by design |
+| **edgerun-hardware-signing** | ✅ Orchestration + feature-gated adapters | `MeshSigner` trait, `HardwareMeshSigner<K>` wrapper, TPM/YubiKey/Android adapters behind features |
+| **edgerun-remote-capability** | ⚠️ RPC protocol + transport, no hardware | Framed Unix/TCP socket transport, capability invocation serialization, policy wrapping, signing/verification — needs hardware proxy adapters |
+| **edgerun-capability-policy** | ✅ Policy enforcement | Depends on `edgerun-capabilities`, `edgerun-crypto`, `edgerun-proto`, `edgerun-core` |
+| **edgerun-machine-report** | ✅ Machine capability reporting | Enumerates all available hardware backends |
 
 ---
 
-## Known TODOs (Project-Specific)
+## How Capability Layers Connect
 
-| Location | TODO |
-|----------|------|
-| `edgerun-http2/src/connection.rs:183` | Implement missing HTTP/2 frame types |
-| `edgerun-oci-runtime/src/lib.rs:128` | Add proper aarch64 syscall list (currently placeholder) |
-| `edgerun-virtual-disk/src/` | FlushAck implementation |
-| `edgerun-node/src/daemon.rs` | Fetch queue: decode bundled_result_object, store objects |
+```
+Abstract trait crate          Platform backend crate           Result
+─────────────────            ────────────────────             ──────
+edgerun-input        ←──────  edgerun-evdev-input             Event loop + classification
+edgerun-microphone   ←──────  edgerun-alsa-microphone         ALSA PCM capture
+edgerun-speaker      ←──────  edgerun-alsa-speaker            ALSA PCM playback + mixer
+edgerun-camera-biometrics ←─  edgerun-v4l2-camera             V4L2 streaming capture
+edgerun-display      ←──────  edgerun-drm-display             (once modesetting is added)
+edgerun-wifi         ←──────  edgerun-linux-wifi              nl80211 netlink (already functional)
+edgerun-bluetooth    ←──────  edgerun-mgmt-bluetooth          HCI mgmt socket (already functional)
+edgerun-fingerprint  ←──────  edgerun-goodix-fingerprint      USB bulk enrollment/ID
+edgerun-network-interface ←─  edgerun-linux-netif             sysfs + ioctl up/down
+edgerun-npu          ←──────  edgerun-amd-xdna                DRM ioctls (partial)
+edgerun-usb          ←──────  edgerun-linux-usb               sysfs discovery only
+edgerun-pci          ←──────  edgerun-linux-pci               sysfs discovery only
+```
 
----
-
-## Conformance Status
-
-- **Corpus:** 610 YAML test vectors across 11 suites ✅
-- **Harness:** `conformance.rs` validates canonical, command, control, crypto, delegation, network, object, query, snapshot, stream, trust ✅
-- **Independent implementations:** 1 of 2 required ❌
-- **Query validator:** Less mature than delegation/command/trust validators ⚠️
+The pattern is: **abstract trait crate defines the interface, platform backend crate provides the Linux implementation**. Most platform backends are already functional — the trait crates are thin wrappers that haven't been wired up.
 
 ---
 
@@ -224,169 +263,3 @@ The conformance validator in `validators.rs` does check `trust_roots`, but the *
 3. **P2 gaps** are protocol completeness — can be deferred
 4. Hardware gaps are optional (behind `all-hardware` feature flag)
 5. Reference for implementers adding platform-specific provider crates
-
----
-
-## 3. edgerun-alsa-microphone
-- Has: backend stub, capability descriptor, trait implementations
-- Missing: complete microphone capture pipeline, device open/read, full ALSA integration
-
-## 4. edgerun-alsa-speaker
-- Has: backend info, playback card/PCM info, backend capability provider
-- Missing: streaming output implementation (ring buffers, format conversion) inside this crate; minimal driver wrapper
-
-## 5. edgerun-amd-xdna
-- Has: NPU discovery + capability metadata for AMD xDNA
-- Missing: command execution path, workload submission and response polling
-
-## 6. edgerun-android-keystore
-- Has: provider traits, key metadata, signing helpers
-- Missing: key lifecycle operations (generate/import/delete), full Android keystore handshake flows
-
-## 7. edgerun-audio-calibration
-- Has: calibration request/response types and analysis helpers
-- Missing: direct audio I/O or integration with capture/playback hardware
-
-## 8. edgerun-biometrics
-- Has: biometric state, modality enums2, policy helpers
-- Missing: direct sensor pipeline (delegate to camera/fingerprint backends)
-
-## 9. edgerun-bluetooth
-- Has:
-  - `BluetoothScanner` scan_nearby
-  - `BluetoothConnectionProvider` list_connections
-  - beacon, connection info models
-- Missing (full BLE):
-  - GATT client/server (discover/read/write/notify)
-  - connect/disconnect/control over LE links
-  - security (pair/bond/SMP), MTU, L2CAP channels
-  - active scan/filter params and advertisement control
-
-## 10. edgerun-camera-biometrics
-- Has: biometric camera traits + validation patterns
-- Missing: platform camera capture and HAL binding (in v4l2 adapter)
-
-## 11. edgerun-capabilities
-- Has: core capability provider traits, descriptor/operation model
-- Missing: actual hardware runtime enforcement; abstract layer only
-
-## 12. edgerun-core
-- Has: core primitives and non-device-specific APIs (crypto/normalization)
-- Missing: explicit hardware capability contract; not a platform driver crate
-
-## 13. edgerun-display
-- Has: `DisplayDevice` trait, mode/config descriptors
-- Missing: concrete display pathway (render/commit) in this crate
-
-## 14. edgerun-drm-display
-- Has: DRM connector discovery, mode info, backend provider
-- Missing: atomic/composable modesetting and full pipeline state commit
-
-## 15. edgerun-evdev-input
-- Has: evdev discovery/metadata and backend provider
-- Missing: event loop plus device-specific input translation
-
-## 16. edgerun-fingerprint
-- Has: reader trait, enroll/verify structures, policies
-- Missing: sensor implementation (Goodix adapter only; generic devices missing)
-
-## 17. edgerun-goodix-fingerprint
-- Has: Goodix protocol parsing, USB packet flows, enrollment control
-- Missing: generic fingerprint interface and extensive error conditions mapping
-
-## 18. edgerun-hardware-signing
-- Has: provider composition for Android, TPM, YubiKey
-- Missing: full physical transport and device discovery beyond adapters
-
-## 19. edgerun-input
-- Has: generic `InputDevice` trait, event type union, descriptors
-- Missing: backends (evdev, windows, etc.) and runtime event consumer
-
-## 20. edgerun-linux-netif
-- Has: Linux interface enumeration, flags, capabilities
-- Missing: network configuration (IP, routes, DHCP), advanced state updates
-
-## 21. edgerun-linux-nfc
-- Has: NFC adapter enumeration provider
-- Missing: tag read/write, peer-to-peer activation, SNEP/LLCP implementation
-
-## 22. edgerun-linux-npu
-- Has: Linux NPU backend discovery and capability provider
-- Missing: command queue and model execution API
-
-## 23. edgerun-linux-pci
-- Has: PCI bus scanning and device enumeration
-- Missing: full driver binding, resource mapping, interrupt/setup flows
-
-## 24. edgerun-linux-usb
-- Has: USB device discovery and descriptor modeling
-- Missing: transfer endpoints, bulk/iso/ctl communications
-
-## 25. edgerun-linux-wifi
-- Has: Wi-Fi interface backend + capability provider
-- Missing: network connection control (WPA, SSID/auth management) in this crate
-
-## 26. edgerun-mgmt-bluetooth
-- Has: BlueZ mgmt API device/controller operations
-- Missing: GATT profile and BLE streaming actions, module-level policy for connectivity
-
-## 27. edgerun-microphone
-- Has: microphone trait and capture request types
-- Missing: device-specific adapters, buffering, format negotiation
-
-## 28. edgerun-network-interface
-- Has: abstract interface control trait and descriptor
-- Missing: per-OS implementation (linux, windows) plus config mutation operations
-
-## 29. edgerun-nfc
-- Has: `NfcDevice` trait and target observation types
-- Missing: tag read/write and card emulation on platform-specific paths
-
-## 30. edgerun-npu
-- Has: NPU device trait, request/result types, operation modes
-- Missing: backend implementation (e.g., linux-npu, amd-xdna), scheduler and load management
-
-## 31. edgerun-pci
-- Has: PCI inventory trait and device model
-- Missing: direct bus config access, userland driver controls
-
-## 32. edgerun-proto
-- Has: protobuf message bindings and generated types
-- Missing: explicit hardware onboarding logic; this is wire-format only
-
-## 33. edgerun-remote-capability
-- Has: remote provider/transport protocol and proxy adapters for each capability
-- Missing: network transport backend and production security (auth/encryption)
-
-## 34. edgerun-speaker
-- Has: speaker trait, playback request/result, capability descriptor
-- Missing: platform-specific playback driver (ALSA, etc.) in this crate
-
-## 35. edgerun-tpm
-- Has: TPM command model, key operations, and Linux TPM adapter
-- Missing: fully conformant TSS policy engine; hardware TPM behaviors still in lower primitives
-
-## 36. edgerun-usb
-- Has: USB inventory trait, device/interface model
-- Missing: detailed transfer APIs and endpoint I/O
-
-## 37. edgerun-v4l2-camera
-- Has: V4L2 probe/capture, and camera-biometric specifics
-- Missing: cross-platform camera capability (non-Linux), advanced queue controls
-
-## 38. edgerun-wifi
-- Has: Wifi scanner/controller/AP traits and result structs
-- Missing: sophisticated connection flows, credential management, AP mode traffic handling
-
-## 39. edgerun-yubikey
-- Has: YubiKey reader probe, PIV/APDU signing path
-- Missing: full OTP/U2F interfaces (only subset currently)
-
----
-
-## Hardware capability gap categories
-
-1. Device discovery only (no control or I/O): `linux-pci`, `linux-usb`, `linux-netif`, `linux-nfc`, `evdev-input`, `drm-display`, `amd-xdna`.
-2. Control-only interface with no runtime I/O: `bluetooth`, `wifi`, `display`, `network-interface`, `npu`, `tpm`.
-3. Protocol layer not exposed: `bluetooth` (GATT), `wifi` (WPA/hostapd), `nfc` (LLCP), `usb` (HCI transfers).
-4. Mediation / remote wrappers: `remote-capability` adds RPC layer but no hardware backend.

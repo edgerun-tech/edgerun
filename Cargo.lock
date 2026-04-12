@@ -1179,6 +1179,8 @@ dependencies = [
  "hmac",
  "p256",
  "pbkdf2",
+ "pem",
+ "pkcs8 0.10.2",
  "primeorder",
  "rand_core 0.10.0",
  "rand_core 0.6.4",

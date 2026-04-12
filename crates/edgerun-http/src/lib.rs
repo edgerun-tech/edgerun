@@ -93,18 +93,17 @@ pub use uri::{Scheme, Uri};
 // ---------------------------------------------------------------------------
 // Unified API — cross-protocol server, client, handler, request, response
 // ---------------------------------------------------------------------------
-// TODO: these modules have pre-existing compile errors (edgerun_rt API changes)
-// pub mod handler;
-// pub mod request;
-// pub mod response;
-// pub mod server;
-// pub mod client;
+pub mod handler;
+pub mod request;
+pub mod response;
+pub mod server;
+pub mod client;
 
-// pub use handler::{Handler, into_handler, into_handler_async, SyncHandler, AsyncHandler};
-// pub use request::{Request, RequestBuilder};
-// pub use response::Response;
-// pub use server::{HttpServer, BoundHttpServer};
-// pub use client::{HttpClient, HttpVersion};
+pub use handler::{Handler, into_handler, into_handler_async, SyncHandler, AsyncHandler};
+pub use request::{Request, RequestBuilder};
+pub use response::Response;
+pub use server::{HttpServer, BoundHttpServer};
+pub use client::{HttpClient, HttpVersion};
 
 // ---------------------------------------------------------------------------
 // Protocol-specific modules

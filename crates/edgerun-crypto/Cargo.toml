@@ -21,7 +21,7 @@ aes-gcm = { version = "0.10", default-features = false, features = ["aes", "allo
 hmac = { version = "0.12", default-features = false }
 hkdf = { version = "0.12", default-features = false }
 digest = { version = "0.10", default-features = false }
-ecdsa = { version = "0.16", default-features = false, features = ["der", "digest", "hazmat"] }
+ecdsa = { version = "0.16", default-features = false, features = ["der", "digest", "hazmat", "pkcs8"] }
 elliptic-curve = { version = "0.13", default-features = false, features = ["hazmat", "sec1", "arithmetic"] }
 signature = { version = "2", default-features = false }
 der = { version = "0.8", default-features = false, features = ["alloc", "derive", "oid"] }
@@ -47,6 +47,8 @@ getrandom = { version = "0.4", default-features = false }
 # X.509 certificate generation (uses same der/const-oid/p256/ecdsa stack above)
 x509-cert = { version = "0.2", default-features = false, features = ["builder", "pem"] }
 rcgen = "0.14.7"
+pem = "3"
+pkcs8 = { version = "0.10", default-features = false, features = ["pem"] }
 
 [lints]
 workspace = true

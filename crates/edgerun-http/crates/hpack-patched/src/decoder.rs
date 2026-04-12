@@ -431,7 +431,7 @@ impl<'a> Decoder<'a> {
     /// - index: whether or not the decoded value should be indexed (i.e.
     ///   included in the dynamic table).
     fn decode_literal<'b>(&'b self, buf: &'b [u8], index: bool)
-            -> Result<((Cow<[u8]>, Cow<[u8]>), usize), DecoderError> {
+            -> Result<((Cow<'b, [u8]>, Cow<'b, [u8]>), usize), DecoderError> {
         let prefix = if index {
             6
         } else {

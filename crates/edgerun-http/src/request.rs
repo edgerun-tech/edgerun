@@ -29,16 +29,11 @@ impl Request {
     }
 
     /// Parse a request from raw HTTP/1.x bytes.
-    ///
-    /// For HTTP/2 and HTTP/3, requests arrive already decoded from their
-    /// binary framing — this method is primarily for HTTP/1.1 testing.
     pub fn from_http(raw: &str) -> Result<Self> {
-        // Find the end of the request line
         let line_end = raw.find("\r\n").ok_or_else(|| {
             crate::Error::InvalidRequest("No request line".to_string())
         })?;
 
-        // Parse request line
         let request_line = &raw[..line_end];
         let mut parts = request_line.splitn(3, ' ');
         let method_str = parts.next().ok_or_else(|| {
@@ -47,18 +42,13 @@ impl Request {
         let target = parts.next().ok_or_else(|| {
             crate::Error::InvalidRequest("No request target".to_string())
         })?;
-        let version_str = parts.next().ok_or_else(|| {
-            crate::Error::InvalidRequest("No HTTP version".to_string())
-        })?;
 
-        let method = method_str.parse()?;
+        let method = method_str.parse().map_err(|e: String| crate::Error::InvalidRequest(e))?;
 
-        // Find the end of the headers
         let header_end = raw[line_end..].find("\r\n\r\n")
             .map(|i| line_end + i)
             .unwrap_or(raw.len());
 
-        // Parse headers
         let header_block = &raw[line_end + 2..header_end];
         let mut headers = HeaderMap::new();
         for line in header_block.lines() {
@@ -66,38 +56,27 @@ impl Request {
                 let name = line[..colon].trim();
                 let value = line[colon + 1..].trim();
                 if !name.is_empty() {
-                    headers.insert(name, value);
+                    let _ = headers.insert(name, value);
                 }
             }
         }
 
-        // Build URI from request target and Host header
-        let mut uri = if target.starts_with("http://") || target.starts_with("https://") {
-            Uri::parse(target)?
+        let uri = if target.starts_with("http://") || target.starts_with("https://") {
+            Uri::parse(target).map_err(|e| crate::Error::InvalidUri(e.to_string()))?
         } else {
-            let host = headers.get("Host").unwrap_or("");
-            let uri_str = if host.is_empty() {
-                format!("http://localhost{}", target)
-            } else if target.starts_with('/') {
+            let host = headers.get("Host").map(|v| v.as_str()).unwrap_or("localhost");
+            let uri_str = if target.starts_with('/') {
                 format!("http://{}{}", host, target)
             } else {
                 format!("http://{}/{}", host, target)
             };
-            Uri::parse(&uri_str)?
+            Uri::parse(&uri_str).map_err(|e| crate::Error::InvalidUri(e.to_string()))?
         };
 
-        // Override scheme from version (HTTP/1.0 has no scheme info, default to http)
-        let version = version_str.trim();
-        if !version.is_empty() {
-            // Just validate, don't store
-            let _ = version;
-        }
-
-        // Parse body based on Content-Length
         let body = if header_end + 4 < raw.len() {
             let body_str = &raw[header_end + 4..];
             if let Some(cl) = headers.get("content-length") {
-                if let Ok(len) = cl.parse::<usize>() {
+                if let Ok(len) = cl.as_str().parse::<usize>() {
                     Some(body_str[..len.min(body_str.len())].as_bytes().to_vec())
                 } else {
                     Some(body_str.as_bytes().to_vec())
@@ -112,57 +91,29 @@ impl Request {
         Ok(Self { method, uri, headers, body })
     }
 
-    /// HTTP method.
-    pub fn method(&self) -> &Method {
-        &self.method
-    }
-
-    /// Request URI.
-    pub fn uri(&self) -> &Uri {
-        &self.uri
-    }
-
-    /// Request headers.
-    pub fn headers(&self) -> &HeaderMap {
-        &self.headers
-    }
-
-    /// Mutable access to headers.
-    pub fn headers_mut(&mut self) -> &mut HeaderMap {
-        &mut self.headers
-    }
-
-    /// Request body, if present.
-    pub fn body(&self) -> Option<&[u8]> {
-        self.body.as_deref()
-    }
-
-    /// Take ownership of the body.
-    pub fn into_body(self) -> Option<Vec<u8>> {
-        self.body
-    }
+    pub fn method(&self) -> &Method { &self.method }
+    pub fn uri(&self) -> &Uri { &self.uri }
+    pub fn headers(&self) -> &HeaderMap { &self.headers }
+    pub fn headers_mut(&mut self) -> &mut HeaderMap { &mut self.headers }
+    pub fn body(&self) -> Option<&[u8]> { self.body.as_deref() }
+    pub fn into_body(self) -> Option<Vec<u8>> { self.body }
 
     /// Serialize the request as raw HTTP/1.1 bytes.
-    ///
-    /// Useful for debugging or proxy forwarding.
     pub fn to_http_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
-
-        // Request line
         buf.extend_from_slice(self.method.as_str().as_bytes());
         buf.push(b' ');
         buf.extend_from_slice(self.uri.request_target().as_bytes());
         buf.extend_from_slice(b" HTTP/1.1\r\n");
 
-        // Headers
         for (name, value) in self.headers.iter() {
-            buf.extend_from_slice(name.as_bytes());
-            buf.extend_from_slice(b": ");
-            buf.extend_from_slice(value.as_bytes());
+            buf.extend_from_slice(name.as_str().as_bytes());
+            buf.push(b':');
+            buf.push(b' ');
+            buf.extend_from_slice(value.as_str().as_bytes());
             buf.extend_from_slice(b"\r\n");
         }
 
-        // Content-Length
         if let Some(ref body) = self.body {
             let cl = body.len().to_string();
             buf.extend_from_slice(b"Content-Length: ");
@@ -173,25 +124,16 @@ impl Request {
         }
 
         buf.extend_from_slice(b"\r\n");
-
-        // Body
         if let Some(ref body) = self.body {
             buf.extend_from_slice(body);
         }
-
         buf
     }
 }
 
 impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {:?}",
-            self.method.as_str(),
-            self.uri.request_target(),
-            self.headers
-        )
+        write!(f, "{} {}", self.method.as_str(), self.uri.request_target())
     }
 }
 
@@ -206,26 +148,14 @@ pub struct RequestBuilder {
 
 impl RequestBuilder {
     pub fn new() -> Self {
-        Self {
-            method: Method::GET,
-            uri: None,
-            headers: HeaderMap::new(),
-            body: None,
-        }
+        Self { method: Method::GET, uri: None, headers: HeaderMap::new(), body: None }
     }
 
-    pub fn method(mut self, method: Method) -> Self {
-        self.method = method;
-        self
-    }
-
-    pub fn uri(mut self, uri: impl AsRef<str>) -> Self {
-        self.uri = Some(uri.as_ref().to_string());
-        self
-    }
+    pub fn method(mut self, method: Method) -> Self { self.method = method; self }
+    pub fn uri(mut self, uri: impl AsRef<str>) -> Self { self.uri = Some(uri.as_ref().to_string()); self }
 
     pub fn header(mut self, name: &str, value: &str) -> Self {
-        self.headers.insert(name, value);
+        let _ = self.headers.insert(name, value);
         self
     }
 
@@ -235,16 +165,8 @@ impl RequestBuilder {
     }
 
     pub fn json_body(mut self, json: &str) -> Self {
-        self.headers.insert("Content-Type", "application/json");
+        let _ = self.headers.insert("Content-Type", "application/json");
         self.body = Some(json.as_bytes().to_vec());
-        self
-    }
-
-    pub fn body_opt(mut self, body: Option<Vec<u8>>) -> Self {
-        if let Some(ref b) = body {
-            self.headers.insert("Content-Length", &b.len().to_string());
-        }
-        self.body = body;
         self
     }
 
@@ -252,12 +174,11 @@ impl RequestBuilder {
         let uri_str = self.uri.ok_or_else(|| {
             crate::Error::InvalidRequest("No URI specified".to_string())
         })?;
-        let uri = Uri::parse(&uri_str)?;
+        let uri = Uri::parse(&uri_str).map_err(|e| crate::Error::InvalidUri(e.to_string()))?;
 
         let mut headers = self.headers;
         if let Some(ref body) = self.body {
-            let cl = body.len().to_string();
-            headers.insert("Content-Length", &cl);
+            let _ = headers.insert("Content-Length", &body.len().to_string());
         }
 
         Ok(Request::new(self.method, uri, headers, self.body))
@@ -265,7 +186,5 @@ impl RequestBuilder {
 }
 
 impl Default for RequestBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
