@@ -20,6 +20,9 @@
 
 use edgerun_crypto::getrandom;
 use edgerun_crypto::AesGcmCipher;
+use edgerun_crypto::p256::ecdsa::{VerifyingKey, Signature};
+use edgerun_crypto::p256::elliptic_curve::sec1::FromEncodedPoint;
+use edgerun_crypto::p256::EncodedPoint;
 use edgerun_tls::cipher::{CipherSuite, NamedGroup};
 use edgerun_tls::handshake::{ClientHelloBuilder, ServerHello};
 use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
@@ -159,6 +162,8 @@ impl CertificateValidator {
     /// The server signs the transcript hash with its private key.
     /// The client verifies this signature using the server's public key from
     /// the leaf certificate.
+    ///
+    /// Currently supports ECDSA P-256 (0x0403).
     pub fn verify_certificate_signature(
         &self,
         cert_der: &[u8],
@@ -166,19 +171,60 @@ impl CertificateValidator {
         signature: &[u8],
         transcript_hash: &[u8],
     ) -> bool {
-        // In a full implementation:
-        // 1. Extract the public key from cert_der
-        // 2. Construct the signature verification context
-        // 3. Verify the signature over transcript_hash
-        //
-        // The signature algorithm determines the verification method:
-        // 0x0401 = RSA-PSS-SHA256
-        // 0x0403 = ECDSA-SECP256R1-SHA256
-        // 0x0804 = ED25519
-        //
-        // For now, accept all signatures (testing mode).
-        // In production, this must verify signatures cryptographically.
-        signature.len() >= 64 // Require at least 512-bit signature
+        match signature_algorithm {
+            0x0403 => {
+                // ECDSA-SECP256R1-SHA256 (P-256)
+                self.verify_ecdsa_p256(cert_der, signature, transcript_hash)
+            }
+            0x0401 | 0x0804 => {
+                // RSA-PSS-SHA256 (0x0401) and ED25519 (0x0804) not yet implemented
+                // Accept signatures for testing — must be fixed for production
+                signature.len() >= 64
+            }
+            _ => false,
+        }
+    }
+
+    /// Verify an ECDSA P-256 signature over the transcript hash.
+    fn verify_ecdsa_p256(&self, cert_der: &[u8], signature: &[u8], transcript_hash: &[u8]) -> bool {
+        use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
+
+        // Minimal X.509 SubjectPublicKeyInfo parsing for P-256 keys.
+        // We scan for the 0x04 uncompressed point prefix in the cert.
+        let mut point_data = None;
+        for i in 0..cert_der.len().saturating_sub(64) {
+            if cert_der[i] == 0x04 && cert_der.len() >= i + 65 {
+                point_data = Some(&cert_der[i..i + 65]);
+                break;
+            }
+        }
+
+        let point_bytes = match point_data {
+            Some(p) => p,
+            None => return false,
+        };
+
+        let encoded_point = match EncodedPoint::from_bytes(point_bytes) {
+            Ok(ep) => ep,
+            Err(_) => return false,
+        };
+
+        let verifying_key = match VerifyingKey::from_encoded_point(&encoded_point) {
+            Ok(vk) => vk,
+            Err(_) => return false,
+        };
+
+        if signature.len() < 64 {
+            return false;
+        }
+
+        let sig = match Signature::from_slice(signature) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+
+        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
+        verifying_key.verify_prehash(transcript_hash, &sig).is_ok()
     }
 }
 
