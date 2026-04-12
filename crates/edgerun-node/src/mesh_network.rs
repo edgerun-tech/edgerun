@@ -102,11 +102,6 @@ mod tests {
     use edgerun_crypto::rand_core::RngCore;
 use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
-    fn random_signing_key() -> edgerun_crypto::p256::ecdsa::SigningKey {
-        let mut bytes = [0u8; 32];
-        edgerun_crypto::getrandom::fill(&mut bytes).expect("getrandom failed");
-        edgerun_crypto::p256::ecdsa::SigningKey::from_bytes(&bytes.into()).unwrap()
-    }
 
     struct TestSigner {
         node_id: NodeID,
@@ -115,7 +110,7 @@ use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
 
     impl TestSigner {
         fn new() -> Self {
-            let key = random_signing_key();
+            let key = edgerun_crypto::random_p256_signing_key();
             let vk = key.verifying_key();
             let encoded = vk.to_encoded_point(false);
             let mut node_bytes = [0u8; 64];
