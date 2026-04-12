@@ -273,6 +273,39 @@ impl Http3Connection {
         }
     }
 
+    /// Accept the next incoming HTTP/3 stream (server-side).
+    ///
+    /// Polls the QUIC connection for the first available STREAM frame and
+    /// returns `(stream_id, frame)`. The caller can then use `recv_request()`
+    /// or `recv_response()` with the returned stream ID.
+    ///
+    /// Returns `None` if no data is available yet.
+    pub fn accept_stream(&mut self) -> Result<Option<(u64, Http3Frame)>> {
+        match self.poll_stream_any()? {
+            Some((stream_id, frame)) => Ok(Some((stream_id, frame))),
+            None => Ok(None),
+        }
+    }
+
+    /// Poll for incoming frames on any stream.
+    ///
+    /// Returns the parsed [`Http3Frame`] and the stream ID it belongs to.
+    fn poll_stream_any(&mut self) -> Result<Option<(u64, Http3Frame)>> {
+        match self.quic.recv_stream_data() {
+            Ok(Some((stream_id, data, _fin))) => {
+                if data.is_empty() {
+                    return Ok(None);
+                }
+                // Parse as HTTP/3 frame
+                Http3Frame::from_bytes(&data)
+                    .map(|(frame, _consumed)| Some((stream_id, frame)))
+                    .map_err(|e| Http3Error::ProtocolViolation(format!("Malformed HTTP/3 frame: {:?}", e)))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(Http3Error::QuicError(e)),
+        }
+    }
+
     /// Receive and decode an HTTP/3 request from the given stream.
     ///
     /// Polls the stream for HEADERS + DATA frames, decodes the QPACK header
