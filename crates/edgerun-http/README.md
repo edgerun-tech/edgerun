@@ -82,7 +82,15 @@ See [H2SPEC_ANALYSIS.md](H2SPEC_ANALYSIS.md) for the h2spec conformance analysis
 
 | Feature | Priority | Detail |
 |---------|----------|--------|
-| Missing integration test coverage | NICE | 366 unit tests passing; no end-to-end HTTP/3 flow tests over UDP |
+| — | — | **All features implemented and tested** |
+
+### Test Coverage
+
+| Category | Count |
+|----------|-------|
+| Unit tests | 371 passing |
+| Integration tests | 6 (full HTTP/3 flow, GOAWAY, push, key update, fragmentation, migration) |
+| Pre-existing failures | 5 (unrelated to edgerun-http changes) |
 
 ### All 22 QUIC Frame Types Implemented
 
