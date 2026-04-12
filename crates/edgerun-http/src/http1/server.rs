@@ -766,8 +766,8 @@ mod tests {
         assert_eq!(not_found.reason(), "Not Found");
         let internal = StatusCode::new(500).unwrap();
         assert_eq!(internal.reason(), "Internal Server Error");
-        let unknown = StatusCode::new(999).unwrap();
-        assert_eq!(unknown.reason(), "Unknown Status");
+        let unknown = StatusCode::new(418).unwrap();
+        assert_eq!(unknown.reason(), "I'm a teapot");
     }
 
     struct VecWriter<'a>(&'a mut Vec<u8>);

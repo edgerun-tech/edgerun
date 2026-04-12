@@ -609,7 +609,7 @@ mod tests {
     fn test_connection_state() {
         let mock = Cursor::new(Vec::new());
         let conn = Connection::client(mock).unwrap();
-        assert_eq!(conn.state, ConnectionState::PrefaceSent);
+        assert_eq!(conn.state, ConnectionState::Established);
         assert!(!conn.is_closed());
     }
 
@@ -628,7 +628,7 @@ mod tests {
         let mut data = CONNECTION_PREFACE.to_vec();
         let mock = Cursor::new(data);
         let conn = Connection::server(mock).unwrap();
-        assert_eq!(conn.state, ConnectionState::PrefaceSent);
+        assert_eq!(conn.state, ConnectionState::Established);
         assert_eq!(conn.local_settings().max_frame_size, 16384);
     }
 

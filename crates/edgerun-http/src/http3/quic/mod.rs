@@ -1713,7 +1713,10 @@ mod tests {
             0,
             stream_frame.to_bytes(),
         );
-        server.quic_mut().inject_packet(pkt.to_bytes());
+        let pkt_bytes = pkt.to_bytes();
+        // Debug: print packet bytes
+        // eprintln!("DEBUG Injected packet: {:02x?}", pkt_bytes);
+        server.quic_mut().inject_packet(pkt_bytes);
 
         // Server accepts the request
         let (stream_id, frame) = server.accept_stream()
@@ -1742,19 +1745,31 @@ mod tests {
         let resp_headers_frame = Http3Frame::Headers { header_block: resp_header_block };
         let resp_data_frame = Http3Frame::Data { payload: b"Hello, HTTP/3!".to_vec() };
 
-        // Send HEADERS
+        // Wrap HTTP/3 frames in QUIC STREAM frames for transport
+        let h_stream_frame = QuicFrame::Stream {
+            stream_id: 0,
+            offset: 0,
+            fin: false,
+            data: resp_headers_frame.to_bytes(),
+        };
         let h_pkt = QuicPacket::one_rtt(
             vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
             0,
-            resp_headers_frame.to_bytes(),
+            h_stream_frame.to_bytes(),
         );
         client.quic_mut().inject_packet(h_pkt.to_bytes());
 
         // Send DATA
+        let d_stream_frame = QuicFrame::Stream {
+            stream_id: 0,
+            offset: resp_headers_frame.to_bytes().len() as u64,
+            fin: true,
+            data: resp_data_frame.to_bytes(),
+        };
         let d_pkt = QuicPacket::one_rtt(
             vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
             1,
-            resp_data_frame.to_bytes(),
+            d_stream_frame.to_bytes(),
         );
         client.quic_mut().inject_packet(d_pkt.to_bytes());
 
