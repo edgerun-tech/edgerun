@@ -2,6 +2,7 @@
 
 use crate::header::HeaderMap;
 use crate::method::Method;
+use crate::middleware::Extensions;
 use crate::uri::Uri;
 use crate::Result;
 use std::fmt;
@@ -9,12 +10,13 @@ use std::fmt;
 /// An HTTP request, protocol-agnostic.
 ///
 /// Used by [`crate::Handler`] across HTTP/1.1, HTTP/2, and HTTP/3 servers.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Request {
     method: Method,
     uri: Uri,
     headers: HeaderMap,
     body: Option<Vec<u8>>,
+    extensions: Extensions,
 }
 
 impl Request {
@@ -25,7 +27,7 @@ impl Request {
 
     /// Create a request with explicit fields (used internally by servers).
     pub(crate) fn new(method: Method, uri: Uri, headers: HeaderMap, body: Option<Vec<u8>>) -> Self {
-        Self { method, uri, headers, body }
+        Self { method, uri, headers, body, extensions: Extensions::new() }
     }
 
     /// Parse a request from raw HTTP/1.x bytes.
@@ -88,7 +90,7 @@ impl Request {
             None
         };
 
-        Ok(Self { method, uri, headers, body })
+        Ok(Self { method, uri, headers, body, extensions: Extensions::new() })
     }
 
     pub fn method(&self) -> &Method { &self.method }
@@ -97,6 +99,12 @@ impl Request {
     pub fn headers_mut(&mut self) -> &mut HeaderMap { &mut self.headers }
     pub fn body(&self) -> Option<&[u8]> { self.body.as_deref() }
     pub fn into_body(self) -> Option<Vec<u8>> { self.body }
+
+    /// Access the extensions map — used by middleware to pass data between layers.
+    pub fn extensions(&self) -> &Extensions { &self.extensions }
+
+    /// Mutate the extensions map — insert data for downstream middleware/handler.
+    pub fn extensions_mut(&mut self) -> &mut Extensions { &mut self.extensions }
 
     /// Serialize the request as raw HTTP/1.1 bytes.
     pub fn to_http_bytes(&self) -> Vec<u8> {
@@ -136,18 +144,31 @@ impl fmt::Display for Request {
     }
 }
 
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Request")
+            .field("method", &self.method)
+            .field("uri", &self.uri)
+            .field("headers", &self.headers)
+            .field("body_len", &self.body.as_ref().map(|b| b.len()))
+            .field("extensions", &self.extensions)
+            .finish()
+    }
+}
+
 /// Builder for [`Request`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RequestBuilder {
     method: Method,
     uri: Option<String>,
     headers: HeaderMap,
     body: Option<Vec<u8>>,
+    extensions: Extensions,
 }
 
 impl RequestBuilder {
     pub fn new() -> Self {
-        Self { method: Method::GET, uri: None, headers: HeaderMap::new(), body: None }
+        Self { method: Method::GET, uri: None, headers: HeaderMap::new(), body: None, extensions: Extensions::new() }
     }
 
     pub fn method(mut self, method: Method) -> Self { self.method = method; self }
@@ -169,6 +190,12 @@ impl RequestBuilder {
         self
     }
 
+    /// Attach an extension value to the request.
+    pub fn extension<T: Send + 'static>(mut self, value: T) -> Self {
+        self.extensions.insert(value);
+        self
+    }
+
     pub fn build(self) -> Result<Request> {
         let uri_str = self.uri.ok_or_else(|| {
             crate::Error::InvalidRequest("No URI specified".to_string())
@@ -180,7 +207,13 @@ impl RequestBuilder {
             let _ = headers.insert("Content-Length", &body.len().to_string());
         }
 
-        Ok(Request::new(self.method, uri, headers, self.body))
+        Ok(Request {
+            method: self.method,
+            uri,
+            headers,
+            body: self.body,
+            extensions: self.extensions,
+        })
     }
 }
 

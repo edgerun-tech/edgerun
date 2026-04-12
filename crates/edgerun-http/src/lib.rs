@@ -106,6 +106,12 @@ pub use server::{HttpServer, BoundHttpServer, TlsCertificate};
 pub use client::{HttpClient, HttpVersion};
 
 // ---------------------------------------------------------------------------
+// Middleware system
+// ---------------------------------------------------------------------------
+pub mod middleware;
+pub use middleware::{Extensions, Middleware, Next, Chain, middleware_fn, FnMiddleware};
+
+// ---------------------------------------------------------------------------
 // Protocol-specific modules
 // ---------------------------------------------------------------------------
 pub mod http1;
