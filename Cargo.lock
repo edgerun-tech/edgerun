@@ -1494,11 +1494,11 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-dns",
  "edgerun-log",
+ "edgerun-qpack",
  "edgerun-rt",
  "edgerun-tls",
  "hpack-patched",
  "httlib-huffman",
- "qpack",
  "serde",
  "serde_json",
 ]
@@ -1911,6 +1911,13 @@ name = "edgerun-proto-watch"
 version = "0.1.0"
 dependencies = [
  "notify",
+]
+
+[[package]]
+name = "edgerun-qpack"
+version = "0.1.0"
+dependencies = [
+ "bytes",
 ]
 
 [[package]]
@@ -2588,16 +2595,6 @@ name = "httlib-huffman"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a9fcbcc408c5526c3ab80d534e5c86e7967c1fb7aa0a8c76abd1edc27deb877"
-
-[[package]]
-name = "http"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3ba2a386d7f85a81f119ad7498ebe444d2e22c2af0b86b069416ace48b3311a"
-dependencies = [
- "bytes",
- "itoa",
-]
 
 [[package]]
 name = "hybrid-array"
@@ -3478,16 +3475,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8991c4cbdb8bc5b11f0b074ffe286c30e523de90fee5ba8132f1399f23cb3dd7"
 dependencies = [
  "prost",
-]
-
-[[package]]
-name = "qpack"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a4d4d85f50f59c6b93b23b1b359d30ae7029d4d22147431568effc8522b3f3e"
-dependencies = [
- "bytes",
- "http",
 ]
 
 [[package]]
