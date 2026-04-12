@@ -9,7 +9,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 // ===========================================================================
@@ -105,10 +105,10 @@ impl AsyncTcpStream {
     /// Raw fd — do not close it manually.
     pub fn as_raw_fd(&self) -> RawFd { self.fd }
 
-    pub fn clear_read(&self) { self.read_waker.lock().unwrap().take(); }
-    pub fn clear_write(&self) { self.write_waker.lock().unwrap().take(); }
-    pub fn wait_read(&self, waker: Waker) { *self.read_waker.lock().unwrap() = Some(waker); }
-    pub fn wait_write(&self, waker: Waker) { *self.write_waker.lock().unwrap() = Some(waker); }
+    pub fn clear_read(&self) { self.read_waker.lock().take(); }
+    pub fn clear_write(&self) { self.write_waker.lock().take(); }
+    pub fn wait_read(&self, waker: Waker) { *self.read_waker.lock() = Some(waker); }
+    pub fn wait_write(&self, waker: Waker) { *self.write_waker.lock() = Some(waker); }
 }
 
 impl Drop for AsyncTcpStream {
@@ -373,7 +373,7 @@ impl AsyncWrite for AsyncTcpStream {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    (*this.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    (*this.write_waker.lock()) = Some(cx.waker().clone());
                     crate::register_connecting_fd(fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -435,7 +435,7 @@ impl AsyncRead for AsyncReadHalf {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    (*self.inner.read_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    (*self.inner.read_waker.lock()) = Some(cx.waker().clone());
                     crate::register_fd_read(fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -458,7 +458,7 @@ impl AsyncWrite for AsyncWriteHalf {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    (*self.inner.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    (*self.inner.write_waker.lock()) = Some(cx.waker().clone());
                     crate::register_connecting_fd(fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -531,7 +531,7 @@ impl AsyncWrite for Arc<AsyncTcpStream> {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    (*self.write_waker.lock().unwrap()) = Some(cx.waker().clone());
+                    (*self.write_waker.lock()) = Some(cx.waker().clone());
                     crate::register_connecting_fd(fd, cx.waker().clone());
                     Poll::Pending
                 } else {

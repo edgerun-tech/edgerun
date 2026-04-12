@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 /// An async notification primitive. Thread-safe, can be cloned.
@@ -54,7 +54,7 @@ impl Notify {
     pub fn notify_one(&self) {
         // Fast path: no lock if there are waiting tasks.
         // Try to claim a waiter.
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         if let Some(waker) = inner.waiters.pop_front() {
             drop(inner);
             waker.wake();
@@ -66,7 +66,7 @@ impl Notify {
 
     /// Wakes all waiting tasks.
     pub fn notify_waiters(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         let waiters = std::mem::take(&mut inner.waiters);
         drop(inner);
         for waker in waiters {
@@ -93,7 +93,7 @@ impl Future for Notified<'_> {
             return Poll::Ready(());
         }
 
-        let mut inner = this.notify.inner.lock().unwrap();
+        let mut inner = this.notify.inner.lock();
 
         // Double-check after acquiring the lock (a notify may have raced).
         if this.notify.notified.load(Ordering::Acquire) > 0 {
@@ -116,7 +116,7 @@ impl Drop for Notified<'_> {
         // If we registered a waker but the future was dropped before completing,
         // remove ourselves from the waiters list.
         if self.registered {
-            if let Ok(_inner) = self.notify.inner.lock() {
+            if let Some(_inner) = self.notify.inner.try_lock() {
                 // We can't efficiently remove by pointer, but we don't need to:
                 // the waker will just be woken spuriously and re-register.
                 // For correctness, the waker wakes a task that may have already

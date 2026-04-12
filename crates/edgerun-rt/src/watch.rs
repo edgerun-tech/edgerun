@@ -9,7 +9,8 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 struct WatchData<T> {
@@ -47,7 +48,7 @@ impl<T> Sender<T> {
 
     /// Updates the value and notifies all waiting receivers.
     pub fn send_replace(&mut self, value: T) {
-        let mut guard = self.data.lock().unwrap();
+        let mut guard = self.data.lock();
         guard.value = value;
         self.version.fetch_add(1, Ordering::Release);
         let waiters = std::mem::take(&mut guard.waiters);
@@ -59,19 +60,18 @@ impl<T> Sender<T> {
 
     /// Closes the channel.
     pub fn close(&self) {
-        if let Ok(mut guard) = self.data.lock() {
+        let mut guard = self.data.lock();
             guard.closed = true;
             let waiters = std::mem::take(&mut guard.waiters);
             drop(guard);
             for waker in waiters {
                 waker.wake();
             }
-        }
     }
 
     /// Returns a reference to the current value.
     pub fn borrow(&self) -> Result<WatchRef<'_, T>, ()> {
-        let guard = self.data.lock().map_err(|_| ())?;
+        let guard = self.data.lock();
         if guard.closed {
             return Err(());
         }
@@ -99,7 +99,7 @@ impl<T> Receiver<T> {
     where
         T: Clone,
     {
-        let guard = self.data.lock().map_err(|_| ())?;
+        let guard = self.data.lock();
         if guard.closed { return Err(()); }
         Ok(guard.value.clone())
     }
@@ -122,7 +122,7 @@ impl<T> Receiver<T> {
 
 /// A reference to the current watch value.
 pub struct WatchRef<'a, T> {
-    guard: std::sync::MutexGuard<'a, WatchData<T>>,
+    guard: parking_lot::MutexGuard<'a, WatchData<T>>,
 }
 
 impl<T> std::ops::Deref for WatchRef<'_, T> {
@@ -148,10 +148,7 @@ impl<T> Future for Changed<'_, T> {
             return Poll::Ready(Ok(()));
         }
 
-        let mut guard = match this.receiver.data.lock() {
-            Ok(g) => g,
-            Err(_) => return Poll::Ready(Err(())),
-        };
+        let mut guard = this.receiver.data.lock();
 
         if guard.closed {
             return Poll::Ready(Err(()));

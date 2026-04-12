@@ -10,7 +10,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 // ===========================================================================
@@ -91,7 +91,7 @@ impl AsyncUdpSocket {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    *self.write_waker.lock().unwrap() = Some(cx.waker().clone());
+                    *self.write_waker.lock() = Some(cx.waker().clone());
                     crate::register_fd_write(self.fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -127,7 +127,7 @@ impl AsyncUdpSocket {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    *self.read_waker.lock().unwrap() = Some(cx.waker().clone());
+                    *self.read_waker.lock() = Some(cx.waker().clone());
                     crate::register_fd_read(self.fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -158,7 +158,7 @@ impl AsyncUdpSocket {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    *self.write_waker.lock().unwrap() = Some(cx.waker().clone());
+                    *self.write_waker.lock() = Some(cx.waker().clone());
                     crate::register_fd_write(self.fd, cx.waker().clone());
                     Poll::Pending
                 } else {
@@ -186,7 +186,7 @@ impl AsyncUdpSocket {
             if n < 0 {
                 let e = io::Error::last_os_error();
                 if e.kind() == io::ErrorKind::WouldBlock {
-                    *self.read_waker.lock().unwrap() = Some(cx.waker().clone());
+                    *self.read_waker.lock() = Some(cx.waker().clone());
                     crate::register_fd_read(self.fd, cx.waker().clone());
                     Poll::Pending
                 } else {

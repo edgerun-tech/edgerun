@@ -311,3 +311,6 @@ impl AesGcmCipher {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

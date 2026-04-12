@@ -7,7 +7,7 @@
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 struct RwLockData<T> {
@@ -63,7 +63,7 @@ impl<T> RwLock<T> {
     /// Consumes the lock and returns the inner value.
     pub fn into_inner(self) -> T {
         match std::sync::Arc::try_unwrap(self.data) {
-            Ok(mutex) => mutex.into_inner().unwrap().value,
+            Ok(mutex) => mutex.into_inner().value,
             Err(_) => panic!("RwLock::into_inner called with outstanding guards"),
         }
     }
@@ -98,7 +98,7 @@ impl<T> std::ops::Deref for RwLockReadGuard<T> {
 
 impl<T> Drop for RwLockReadGuard<T> {
     fn drop(&mut self) {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock();
         data.readers -= 1;
         if data.readers == 0 && data.waiting_writers > 0 {
             if let Some(waker) = data.write_waiters.pop_front() {
@@ -136,7 +136,7 @@ impl<T> std::ops::DerefMut for RwLockWriteGuard<T> {
 
 impl<T> Drop for RwLockWriteGuard<T> {
     fn drop(&mut self) {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data.lock();
         data.writing = false;
         if data.waiting_writers > 0 {
             if let Some(waker) = data.write_waiters.pop_front() {
@@ -170,7 +170,7 @@ impl<'a, T> Future for RwLockReadFuture<'a, T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let mut data = this.lock.data.lock().unwrap();
+        let mut data = this.lock.data.lock();
 
         if !data.writing && data.waiting_writers == 0 {
             data.readers += 1;
@@ -191,7 +191,7 @@ impl<'a, T> Future for RwLockWriteFuture<'a, T> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let mut data = this.lock.data.lock().unwrap();
+        let mut data = this.lock.data.lock();
 
         if !data.writing && data.readers == 0 {
             data.writing = true;

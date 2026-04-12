@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 /// An async counting semaphore.
@@ -84,7 +84,7 @@ impl Semaphore {
         // Wake up to `n` waiters.
         let to_wake = n.min(self.available.load(Ordering::Relaxed));
         if to_wake > 0 {
-            let mut inner = self.inner.lock().unwrap();
+            let mut inner = self.inner.lock();
             for _ in 0..to_wake {
                 if let Some(waker) = inner.waiters.pop_front() {
                     // Decrement available (we gave it to this waiter).
@@ -106,7 +106,7 @@ impl Semaphore {
     /// Closes the semaphore. All pending and future `acquire()` calls
     /// will return `Closed`.
     pub fn close(&self) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock();
         inner.closed = true;
         // Wake all waiters so they see the closed state.
         let waiters = std::mem::take(&mut inner.waiters);
@@ -118,7 +118,7 @@ impl Semaphore {
 
     /// Returns whether the semaphore is closed.
     pub fn closed(&self) -> bool {
-        self.inner.lock().unwrap().closed
+        self.inner.lock().closed
     }
 }
 
@@ -185,7 +185,7 @@ impl Future for Acquire<'_> {
 
         // Register waker.
         {
-            let mut inner = this.semaphore.inner.lock().unwrap();
+            let mut inner = this.semaphore.inner.lock();
             if inner.closed {
                 return Poll::Ready(Err(AcquireError::Closed));
             }
@@ -198,7 +198,7 @@ impl Future for Acquire<'_> {
         // Double-check: a permit may have been added while we were registering.
         prev = this.semaphore.available.load(Ordering::Acquire);
         if prev > 0 {
-            let mut inner = this.semaphore.inner.lock().unwrap();
+            let mut inner = this.semaphore.inner.lock();
             if this.semaphore.available.load(Ordering::Acquire) > 0 {
                 // Remove ourselves from waiters (best effort).
                 // We can't identify our waker, but we can drain one.

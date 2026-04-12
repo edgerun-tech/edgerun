@@ -178,5 +178,6 @@ edgerun-crypto = { path = "crates/edgerun-crypto" }
 # edgerun-json as drop-in replacement for serde_json
 edgerun-json = { path = "crates/edgerun-json", features = ["serde"] }
 libc = "0.2"
+parking_lot = "0.12"
 prost = { version = "0.14", default-features = false, features = ["derive"] }
 prost-types = "0.14"

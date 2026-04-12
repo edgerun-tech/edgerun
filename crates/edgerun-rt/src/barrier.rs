@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::task::{Context, Poll, Waker};
 
 /// An async barrier for coordinating `n` tasks.
@@ -58,7 +58,7 @@ impl Future for BarrierWait<'_> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
-        let mut inner = this.barrier.inner.lock().unwrap();
+        let mut inner = this.barrier.inner.lock();
 
         let current_gen = this.barrier.generation.load(Ordering::Acquire);
         if current_gen > this.generation {
