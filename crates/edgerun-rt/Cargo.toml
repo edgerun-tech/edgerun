@@ -64,3 +64,7 @@ harness = false
 [[test]]
 name = "mutex_test"
 harness = false
+
+[[test]]
+name = "sleep_until_test"
+harness = false

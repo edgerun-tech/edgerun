@@ -22,6 +22,7 @@ mod semaphore;
 mod rwlock;
 mod barrier;
 mod mutex;
+mod sleep_until;
 pub mod mpsc;
 pub mod oneshot;
 pub mod unbounded;
@@ -52,6 +53,7 @@ pub use timers::{
     sleep, timeout, interval, ctrl_c, Sleep, Timeout, Elapsed, Interval,
     MissedTickBehavior, CtrlC,
 };
+pub use sleep_until::{sleep_until, timeout_at, SleepUntil, TimeoutAt};
 
 // Sync primitives.
 pub use notify::{Notify, Notified};
