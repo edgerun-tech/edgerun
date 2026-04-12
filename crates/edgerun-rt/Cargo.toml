@@ -28,3 +28,7 @@ harness = false
 [[test]]
 name = "rwlock_test"
 harness = false
+
+[[test]]
+name = "oneshot_test"
+harness = false
