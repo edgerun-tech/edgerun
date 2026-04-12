@@ -55,6 +55,8 @@ pub mod tsig;
 pub mod axfr;
 pub mod dot;
 pub mod doh;
+pub mod dhcp;
+pub mod tftp;
 
 pub use cache::DnsCache;
 pub use resolver::{RecursiveResolver, RootHint, default_root_hints};
@@ -63,6 +65,13 @@ pub use tsig::{TsigKey, TsigSigner, TsigVerifier, TsigAlgorithm, TsigError};
 pub use axfr::{handle_axfr, handle_notify, handle_update};
 pub use dot::{DotServer, DotServerConfig};
 pub use doh::{DohServer, DohServerConfig};
+
+// DHCP re-exports
+pub use dhcp::{DhcpClient, DhcpServer, DhcpMessage, DhcpOp, DhcpMessageType, DhcpOptions, PxeClientArch, Lease};
+pub use dhcp::{OPT_TFTP_SERVER_NAME, OPT_BOOTFILE_NAME, OPT_CLIENT_ARCH, OPT_CLIENT_NDI, OPT_CLIENT_MACHINE_ID, OPT_VENDOR_ENCAP, OPT_HOST_NAME};
+
+// TFTP re-exports
+pub use tftp::{TftpServer, TftpMessage, TftpOpcode, TftpError, TftpOptions, BlobTftpProvider};
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
