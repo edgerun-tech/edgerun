@@ -76,3 +76,7 @@ harness = false
 [[test]]
 name = "join_test"
 harness = false
+
+[[test]]
+name = "select_test"
+harness = false
