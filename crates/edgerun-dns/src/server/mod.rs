@@ -25,6 +25,9 @@ pub struct DnsServerConfig {
     pub default_ttl: u32,
     /// Maximum queries per second per source IP (0 = unlimited).
     pub rate_limit_qps: u32,
+    /// Optional IPv6 bind address (e.g. "[::]:53").
+    /// If set, a second UDP+TCP listener is created for IPv6.
+    pub bind_addr_ipv6: Option<String>,
 }
 
 impl Default for DnsServerConfig {
@@ -33,6 +36,7 @@ impl Default for DnsServerConfig {
             bind_addr: "0.0.0.0:53".to_string(),
             default_ttl: 3600,
             rate_limit_qps: 0,
+            bind_addr_ipv6: None,
         }
     }
 }
@@ -107,10 +111,16 @@ pub struct DnsServer {
     rate_limiter: RateLimiter,
     /// Shutdown signal — when set to true, server loops exit.
     shutdown_flag: Arc<edgerun_rt::RwLock<bool>>,
+    /// Optional IPv6 UDP socket.
+    udp_socket_ipv6: Option<Arc<AsyncUdpSocket>>,
+    /// Optional IPv6 TCP listener.
+    tcp_listener_ipv6: Option<Arc<AsyncTcpListener>>,
 }
 
 impl DnsServer {
     /// Create a new DNS server, binding to both UDP and TCP.
+    ///
+    /// If `config.bind_addr_ipv6` is set, also binds to the IPv6 address.
     pub fn new(config: DnsServerConfig) -> Result<Self, io::Error> {
         let udp_socket = Arc::new(AsyncUdpSocket::bind(&config.bind_addr)?);
         let tcp_listener = Arc::new(AsyncTcpListener::bind(&config.bind_addr)?);
@@ -120,6 +130,16 @@ impl DnsServer {
             "edgerun-dns: server bound to {} (UDP + TCP)",
             local
         );
+
+        let (udp_ipv6, tcp_ipv6) = if let Some(ref v6_addr) = config.bind_addr_ipv6 {
+            let udp6 = Arc::new(AsyncUdpSocket::bind(v6_addr)?);
+            let tcp6 = Arc::new(AsyncTcpListener::bind(v6_addr)?);
+            let local6 = udp6.local_addr().unwrap();
+            edgerun_log::info!("edgerun-dns: server bound to {} (IPv6 UDP + TCP)", local6);
+            (Some(udp6), Some(tcp6))
+        } else {
+            (None, None)
+        };
 
         Ok(Self {
             udp_socket,
@@ -131,6 +151,8 @@ impl DnsServer {
             },
             rate_limiter: RateLimiter::new(config.rate_limit_qps),
             shutdown_flag: Arc::new(edgerun_rt::RwLock::new(false)),
+            udp_socket_ipv6: udp_ipv6,
+            tcp_listener_ipv6: tcp_ipv6,
         })
     }
 
@@ -167,6 +189,18 @@ impl DnsServer {
             let rate_limiter = self.rate_limiter.clone();
             let shutdown = Arc::clone(&self.shutdown_flag);
             edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(listener, state, rate_limiter, shutdown));
+        }
+
+        // Spawn IPv6 loops if configured.
+        if let (Some(udp6), Some(tcp6)) = (&self.udp_socket_ipv6, &self.tcp_listener_ipv6) {
+            let state = self.state.clone();
+            let rate_limiter = self.rate_limiter.clone();
+            let shutdown = Arc::clone(&self.shutdown_flag);
+            let udp6 = Arc::clone(udp6);
+            let tcp6 = Arc::clone(tcp6);
+            edgerun_rt::spawn(udp::udp_recv_loop_with_rate_limiting(
+                udp6, state.clone(), rate_limiter.clone(), shutdown.clone()));
+            edgerun_rt::spawn(tcp::tcp_accept_loop_with_shutdown(tcp6, state, rate_limiter, shutdown));
         }
 
         // Run UDP receive loop.
