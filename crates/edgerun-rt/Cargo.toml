@@ -13,3 +13,14 @@ edgerun-log = { path = "../edgerun-log" }
 
 [lints]
 workspace = true
+
+[[example]]
+name = "tcp_echo"
+
+[[test]]
+name = "notify_test"
+harness = false
+
+[[test]]
+name = "semaphore_test"
+harness = false
