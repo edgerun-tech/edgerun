@@ -36,6 +36,35 @@ use edgerun_tls::certificate_gen::CertificateAndKey;
 use super::crypto::{AeadAlgorithm, ProtectionKeys};
 use super::ConnectionId;
 
+/// 0-RTT early data state (RFC 9001 §4.6).
+#[derive(Debug, Clone)]
+pub struct EarlyDataState {
+    /// Whether the server accepted 0-RTT
+    pub accepted: bool,
+    /// Maximum allowed 0-RTT data size
+    pub max_early_data_size: u64,
+    /// Actual 0-RTT data received (if any)
+    pub data: Option<Vec<u8>>,
+}
+
+impl EarlyDataState {
+    pub fn new() -> Self {
+        EarlyDataState {
+            accepted: false,
+            max_early_data_size: 0,
+            data: None,
+        }
+    }
+
+    pub fn with_max_size(max_size: u64) -> Self {
+        EarlyDataState {
+            accepted: true,
+            max_early_data_size: max_size,
+            data: None,
+        }
+    }
+}
+
 /// Server-side QUIC-TLS handshake result.
 #[derive(Clone)]
 pub struct ServerHandshakeResult {
@@ -45,6 +74,8 @@ pub struct ServerHandshakeResult {
     pub handshake_keys: ProtectionKeys,
     /// Application (1-RTT) protection keys
     pub app_keys: ProtectionKeys,
+    /// 0-RTT early data protection keys (if client offered early data)
+    pub early_data_keys: Option<ProtectionKeys>,
     /// Negotiated cipher suite
     pub cipher_suite: CipherSuite,
     /// Client random bytes
@@ -53,6 +84,8 @@ pub struct ServerHandshakeResult {
     pub server_name: Option<String>,
     /// Negotiated ALPN protocol (e.g., Some(b"h3"))
     pub negotiated_alpn: Option<Vec<u8>>,
+    /// 0-RTT early data state
+    pub early_data: EarlyDataState,
     /// Full transcript of handshake messages
     pub transcript: Vec<u8>,
 }
@@ -371,10 +404,12 @@ impl QuicTlsServerHandshaker {
                 app_read.write_key,
                 app_read.write_iv,
             ),
+            early_data_keys: None, // 0-RTT keys not derived (server-side)
             cipher_suite: self.cipher_suite,
             client_random: self.client_random,
             server_name: self.server_name.clone(),
             negotiated_alpn: self.negotiated_alpn.clone(),
+            early_data: EarlyDataState::new(),
             transcript: self.transcript.clone(),
         })
     }

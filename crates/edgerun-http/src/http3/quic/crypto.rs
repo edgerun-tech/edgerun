@@ -29,6 +29,7 @@ pub enum CryptoPhase {
 pub enum AeadAlgorithm {
     Aes128Gcm,
     Aes256Gcm,
+    ChaCha20Poly1305,
 }
 
 impl AeadAlgorithm {
@@ -36,12 +37,34 @@ impl AeadAlgorithm {
         match self {
             AeadAlgorithm::Aes128Gcm => 16,
             AeadAlgorithm::Aes256Gcm => 32,
+            AeadAlgorithm::ChaCha20Poly1305 => 32,
         }
     }
 
     fn tag_len(&self) -> usize {
-        // Both AES-GCM variants produce 16-byte tags
+        // All AEAD algorithms produce 16-byte tags
         16
+    }
+
+    /// Check if this is a ChaCha20 cipher suite.
+    pub fn is_chacha20(self) -> bool {
+        matches!(self, AeadAlgorithm::ChaCha20Poly1305)
+    }
+
+    /// Check if this is an AES cipher suite.
+    pub fn is_aes(self) -> bool {
+        !self.is_chacha20()
+    }
+
+    /// Preferred cipher suite for the client (RFC 9001 §5.3).
+    ///
+    /// ChaCha20 is preferred when there's no AES hardware acceleration.
+    /// AES-128-GCM is preferred when AES-NI is available.
+    pub fn preferred() -> Self {
+        // In production, check for AES-NI:
+        // if std::is_x86_feature_detected!("aes") { Aes128Gcm } else { ChaCha20Poly1305 }
+        // For now, default to AES-128-GCM.
+        AeadAlgorithm::Aes128Gcm
     }
 }
 

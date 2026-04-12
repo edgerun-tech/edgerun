@@ -46,6 +46,66 @@ use super::qpack::{QpackDecoder, QpackEncoder};
 use super::http3::settings::Http3Settings;
 use super::Http3Error;
 use std::collections::HashMap;
+use std::sync::Mutex;
+
+/// Per-client address validation state (RFC 9000 §8.1).
+///
+/// During the Initial phase, the server MUST limit its sends to 3x the
+/// bytes received from the client until the client's address is validated
+/// (via receiving a Handshake packet or a valid Retry token).
+struct AddressValidationState {
+    /// Total bytes received from this client during Initial phase
+    bytes_received: u64,
+    /// Total bytes sent to this client during Initial phase
+    bytes_sent: u64,
+    /// Whether the client's address has been validated
+    /// (set to true when we receive a valid Handshake packet)
+    address_validated: bool,
+    /// Timestamp of last activity (for cleanup)
+    last_activity: std::time::Instant,
+}
+
+impl AddressValidationState {
+    fn new() -> Self {
+        AddressValidationState {
+            bytes_received: 0,
+            bytes_sent: 0,
+            address_validated: false,
+            last_activity: std::time::Instant::now(),
+        }
+    }
+
+    /// Check if we're allowed to send `bytes` more bytes to this client.
+    ///
+    /// RFC 9000 §8.1: Before address validation, server sends ≤ 3 × bytes received.
+    fn can_send(&self, bytes: u64) -> bool {
+        if self.address_validated {
+            return true;
+        }
+        self.bytes_sent + bytes <= self.bytes_received * 3
+    }
+
+    /// Record bytes received from this client.
+    fn record_received(&mut self, bytes: u64) {
+        self.bytes_received += bytes;
+        self.last_activity = std::time::Instant::now();
+    }
+
+    /// Record bytes sent to this client.
+    fn record_sent(&mut self, bytes: u64) {
+        self.bytes_sent += bytes;
+    }
+
+    /// Mark the client's address as validated.
+    fn mark_validated(&mut self) {
+        self.address_validated = true;
+    }
+
+    /// Check if this validation state is stale (> 30 seconds).
+    fn is_stale(&self) -> bool {
+        self.last_activity.elapsed().as_secs() > 30
+    }
+}
 
 /// HTTP/3 server listening on a UDP socket.
 pub struct Http3Server {
@@ -54,7 +114,9 @@ pub struct Http3Server {
     /// Certificate and signing key for TLS
     cert_and_key: CertificateAndKey,
     /// Pending connections (packet → server_addr)
-    pending: std::sync::Mutex<Vec<(Vec<u8>, SocketAddr)>>,
+    pending: Mutex<Vec<(Vec<u8>, SocketAddr)>>,
+    /// Address validation state per client (for anti-amplification)
+    validation_state: Mutex<HashMap<SocketAddr, AddressValidationState>>,
 }
 
 impl Http3Server {
@@ -67,7 +129,8 @@ impl Http3Server {
         Ok(Http3Server {
             socket,
             cert_and_key,
-            pending: std::sync::Mutex::new(Vec::new()),
+            pending: Mutex::new(Vec::new()),
+            validation_state: Mutex::new(HashMap::new()),
         })
     }
 
@@ -133,6 +196,15 @@ impl Http3Server {
             return Err(format!("Expected Initial packet, got {:?}", pkt.header.packet_type));
         }
 
+        // Update address validation state
+        {
+            let mut state_map = self.validation_state.lock().unwrap();
+            // Clean up stale entries
+            state_map.retain(|_, state| !state.is_stale());
+            let state = state_map.entry(client_addr).or_insert_with(AddressValidationState::new);
+            state.record_received(data.len() as u64);
+        }
+
         let client_dcid = pkt.header.dst_cid.clone();
         let client_scid = pkt.header.src_cid.clone();
 
@@ -157,6 +229,20 @@ impl Http3Server {
         // 1. Initial packet with ServerHello (encrypted with Initial keys)
         // 2. Handshake packets with EE, Cert, CertVerify, Finished (encrypted with Handshake keys)
 
+        // Check anti-amplification limit before sending
+        {
+            let state_map = self.validation_state.lock().unwrap();
+            if let Some(state) = state_map.get(&client_addr) {
+                let estimated_response_size = 500; // Estimate Initial packet size
+                if !state.can_send(estimated_response_size as u64) {
+                    return Err(format!(
+                        "Anti-amplification limit reached for {} ({} sent, {} received)",
+                        client_addr, state.bytes_sent, state.bytes_received
+                    ));
+                }
+            }
+        }
+
         // Build Initial response packet
         let server_hello_frame = QuicFrame::Crypto {
             offset: 0,
@@ -173,7 +259,15 @@ impl Http3Server {
         self.socket.send_to(&initial_response, client_addr).await
             .map_err(|e| format!("Failed to send Initial packet: {}", e))?;
 
-        // Build and send Handshake-level packets
+        // Update validation state
+        {
+            let mut state_map = self.validation_state.lock().unwrap();
+            if let Some(state) = state_map.get_mut(&client_addr) {
+                state.record_sent(initial_response.len() as u64);
+            }
+        }
+
+        // Build and send Handshake packet
         let (handshake_crypto, expected_client_verify) = handshaker.build_encrypted_handshake()
             .map_err(|e| format!("Failed to build encrypted handshake: {}", e))?;
 
@@ -188,9 +282,30 @@ impl Http3Server {
             &handshaker,
         )?;
 
+        // Check anti-amplification limit for Handshake
+        {
+            let state_map = self.validation_state.lock().unwrap();
+            if let Some(state) = state_map.get(&client_addr) {
+                if !state.can_send(handshake_response.len() as u64) {
+                    return Err(format!(
+                        "Anti-amplification limit reached for {} (Handshake)",
+                        client_addr
+                    ));
+                }
+            }
+        }
+
         // Send Handshake packet
         self.socket.send_to(&handshake_response, client_addr).await
             .map_err(|e| format!("Failed to send Handshake packet: {}", e))?;
+
+        // Update validation state
+        {
+            let mut state_map = self.validation_state.lock().unwrap();
+            if let Some(state) = state_map.get_mut(&client_addr) {
+                state.record_sent(handshake_response.len() as u64);
+            }
+        }
 
         // Wait for client's Finished in a Handshake packet
         let client_finished_data = self.wait_for_client_finished(
@@ -199,6 +314,14 @@ impl Http3Server {
             &handshaker,
             &expected_client_verify,
         ).await?;
+
+        // Client's address is now validated (they received our Handshake and replied)
+        {
+            let mut state_map = self.validation_state.lock().unwrap();
+            if let Some(state) = state_map.get_mut(&client_addr) {
+                state.mark_validated();
+            }
+        }
 
         // Build the transcript including client Finished
         let mut transcript_after = handshaker.transcript().to_vec();

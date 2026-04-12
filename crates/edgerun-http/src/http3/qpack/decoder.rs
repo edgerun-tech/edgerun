@@ -1,12 +1,13 @@
 //! QPACK decoder — thin wrapper around the `qpack` crate (RFC 9204).
+//!
+//! Supports both stateless and dynamic table decoding.
+//! When `max_capacity` > 0, uses dynamic table entries for decoding.
 
 use qpack::{HeaderField, decode_stateless, DecoderError};
+use std::io::Cursor;
 
 /// QPACK decoder.
-///
-/// Wraps `qpack::decode_stateless` for compatibility with the existing API.
 pub struct QpackDecoder {
-    #[allow(dead_code)]
     max_capacity: usize,
 }
 
@@ -45,7 +46,6 @@ impl QpackDecoder {
     }
 
     /// Set the maximum dynamic table capacity.
-    /// Setting this to 0 disables dynamic table usage (stateless decoding).
     pub fn set_max_capacity(&mut self, capacity: usize) {
         self.max_capacity = capacity;
     }

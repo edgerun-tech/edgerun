@@ -95,6 +95,44 @@ impl QuicPacket {
         }
     }
 
+    /// Create a Retry packet (RFC 9000 §17.2.5).
+    ///
+    /// Sent by a server to request the client retry with a different
+    /// connection ID or to perform address validation.
+    pub fn retry(
+        version: u32,
+        dst_cid: Vec<u8>,
+        src_cid: Vec<u8>,
+        token: Vec<u8>,
+        integrity_tag: [u8; 16],
+    ) -> Vec<u8> {
+        let mut output = Vec::new();
+        // First byte: 0xF0 | fixed bit (1)
+        output.push(0xF1);
+        // Version
+        output.extend_from_slice(&version.to_be_bytes());
+        // DCID length + data
+        output.push(dst_cid.len() as u8);
+        output.extend_from_slice(&dst_cid);
+        // SCID length + data
+        output.push(src_cid.len() as u8);
+        output.extend_from_slice(&src_cid);
+        // Retry token
+        output.extend_from_slice(&token);
+        // Integrity tag (16 bytes)
+        output.extend_from_slice(&integrity_tag);
+        output
+    }
+
+    /// Check if a packet is a Retry packet.
+    pub fn is_retry(data: &[u8]) -> bool {
+        if data.is_empty() {
+            return false;
+        }
+        // First byte: 0xF0-0xFF (type 0x30 with fixed bit)
+        (data[0] & 0xF0) == 0xF0
+    }
+
     /// Create a 1-RTT packet
     pub fn one_rtt(
         dst_cid: Vec<u8>,

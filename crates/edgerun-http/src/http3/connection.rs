@@ -52,6 +52,12 @@ pub struct Http3Connection {
     /// Tracks which streams have already received HEADERS frames
     /// Key = stream_id, Value = true if HEADERS received
     stream_headers_received: HashMap<u64, bool>,
+    /// Stream priorities (RFC 9218)
+    /// Key = stream_id, Value = (urgency, incremental)
+    stream_priorities: HashMap<u64, (u8, bool)>,
+    /// Connection migration state (RFC 9000 §9)
+    /// The current active path (source and destination addresses)
+    active_path: Option<(std::net::SocketAddr, std::net::SocketAddr)>,
 }
 
 impl Http3Connection {
@@ -74,6 +80,8 @@ impl Http3Connection {
             pending_crypto: Vec::new(),
             recv_buffers: HashMap::new(),
             stream_headers_received: HashMap::new(),
+            stream_priorities: HashMap::new(),
+            active_path: None,
         };
 
         // Send connection preface: create control stream and send SETTINGS
@@ -101,6 +109,8 @@ impl Http3Connection {
             pending_crypto: Vec::new(),
             recv_buffers: HashMap::new(),
             stream_headers_received: HashMap::new(),
+            stream_priorities: HashMap::new(),
+            active_path: None,
         };
 
         // Send server connection preface:
@@ -132,6 +142,8 @@ impl Http3Connection {
             pending_crypto: Vec::new(),
             recv_buffers: HashMap::new(),
             stream_headers_received: HashMap::new(),
+            stream_priorities: HashMap::new(),
+            active_path: None,
         }
     }
 
@@ -774,6 +786,49 @@ impl Http3Connection {
         Ok(())
     }
 
+    /// Send HTTP/3 response trailers (RFC 9114 §4.2).
+    ///
+    /// Trailers are additional headers sent after the response body.
+    /// The stream remains open after sending trailers (FIN not set).
+    pub fn send_response_trailers(
+        &mut self,
+        stream_id: u64,
+        trailer_block: Vec<u8>,
+    ) -> super::Result<()> {
+        // Trailers are sent as a HEADERS frame after DATA
+        // The server must have already sent the initial HEADERS + DATA
+        let headers_frame = Http3Frame::Headers { header_block: trailer_block };
+        let frame_data = headers_frame.to_bytes();
+
+        self.quic
+            .send_stream_data(stream_id, &frame_data, false)
+            .map_err(|e| Http3Error::QuicError(e))
+    }
+
+    /// Receive HTTP/3 response trailers from the given stream.
+    ///
+    /// After receiving the response body, call this to check for trailers.
+    /// Returns `None` if no trailer HEADERS frame is available.
+    pub fn recv_response_trailers(
+        &mut self,
+        stream_id: u64,
+    ) -> Result<Option<HeaderMap>> {
+        // Poll for a HEADERS frame on the stream (trailers)
+        match self.poll_stream(stream_id)? {
+            Some(Http3Frame::Headers { header_block }) => {
+                let headers = self.qpack_decoder.decode(&header_block)
+                    .map_err(|e| Http3Error::QpackError(e.to_string()))?;
+                let mut trailer_map = HeaderMap::new();
+                for (name, value) in headers {
+                    let _ = trailer_map.insert(&name, &value);
+                }
+                Ok(Some(trailer_map))
+            }
+            Some(_) => Ok(None), // Non-HEADERS frame — not a trailer
+            None => Ok(None),
+        }
+    }
+
     /// Poll for incoming frames on the given stream.
     ///
     /// Returns the parsed [`Http3Frame`] if one was received, `None` if no data
@@ -878,6 +933,164 @@ impl Http3Connection {
             output.extend_from_slice(&bytes[1..]);
         }
     }
+
+    // ------------------------------------------------------------------
+    // Server Push (RFC 9114 §4.4, §7.5-7.6)
+    // ------------------------------------------------------------------
+
+    /// Send a PUSH_PROMISE frame to the client (server push).
+    ///
+    /// The server pushes a response for a request stream by sending a
+    /// PUSH_PROMISE with the push stream ID and the promised request headers.
+    ///
+    /// Returns the push stream ID that will carry the pushed response.
+    pub fn send_push_promise(
+        &mut self,
+        request_stream_id: u64,
+        promised_headers: Vec<u8>,
+    ) -> Result<u64> {
+        let push_id = self.max_push_id;
+        let push_stream_id = self.next_uni_stream_id;
+        self.next_uni_stream_id += 4;
+        self.max_push_id += 1;
+
+        // Send PUSH_PROMISE on the request stream
+        let push_promise = Http3Frame::PushPromise {
+            push_id,
+            header_block: promised_headers,
+        };
+        let frame_data = push_promise.to_bytes();
+
+        self.quic
+            .send_stream_data(request_stream_id, &frame_data, false)
+            .map_err(|e| format!("Failed to send PUSH_PROMISE: {}", e))?;
+
+        Ok(push_stream_id)
+    }
+
+    /// Send a MAX_PUSH_ID frame to allow the server to push more responses.
+    pub fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
+        let frame = Http3Frame::MaxPushId { push_id };
+        let frame_data = frame.to_bytes();
+
+        let control_id = self.control_stream_id
+            .ok_or_else(|| "No control stream established".to_string())?;
+
+        self.quic
+            .send_stream_data(control_id, &frame_data, false)
+            .map_err(|e| format!("Failed to send MAX_PUSH_ID: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Cancel a server push stream.
+    pub fn cancel_push(&mut self, push_id: u64) -> Result<()> {
+        let frame = Http3Frame::CancelPush { push_id };
+        let frame_data = frame.to_bytes();
+
+        let control_id = self.control_stream_id
+            .ok_or_else(|| "No control stream established".to_string())?;
+
+        self.quic
+            .send_stream_data(control_id, &frame_data, false)
+            .map_err(|e| format!("Failed to send CANCEL_PUSH: {}", e))?;
+
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Server Push Stream Reading (RFC 9114 §4.4, §7.2)
+    // ------------------------------------------------------------------
+
+    /// Accept an incoming push stream from the server.
+    ///
+    /// When the server opens a unidirectional stream with type 0x1 (push),
+    /// call this to begin reading the pushed response.
+    /// The push stream starts with a push ID (varint) followed by HTTP/3 frames.
+    pub fn accept_push_stream(
+        &mut self,
+        stream_id: u64,
+    ) -> Result<Option<(u64, Vec<(String, String)>)>> {
+        // Push streams start with a varint push_id followed by HEADERS + DATA
+        // We read the raw bytes and parse the push ID manually
+        match self.poll_stream(stream_id)? {
+            Some(Http3Frame::Headers { header_block }) => {
+                let headers = self.qpack_decoder.decode(&header_block)
+                    .map_err(|e| Http3Error::QpackError(e.to_string()))?;
+                // Use stream_id as push_id proxy (in a full impl, read the varint prefix)
+                Ok(Some((stream_id, headers)))
+            }
+            _ => Ok(None),
+        }
+    }
+
+    /// Read DATA frames from an accepted push stream.
+    ///
+    /// After `accept_push_stream()`, call this repeatedly to receive
+    /// the pushed response body.
+    pub fn read_push_body(
+        &mut self,
+        stream_id: u64,
+    ) -> Result<Option<Vec<u8>>> {
+        match self.poll_stream(stream_id)? {
+            Some(Http3Frame::Data { payload }) => Ok(Some(payload)),
+            _ => Ok(None),
+        }
+    }
+
+    /// Check if a unidirectional stream is a known push stream.
+    pub fn is_push_stream(&self, stream_id: u64) -> bool {
+        // Push streams are unidirectional (stream_id % 4 == 3)
+        // and were advertised via PUSH_PROMISE
+        stream_id % 4 == 3
+    }
+
+    // ------------------------------------------------------------------
+    // HTTP/3 Priority (RFC 9218)
+    // ------------------------------------------------------------------
+
+    /// Set the priority for a request stream (RFC 9218 §4).
+    ///
+    /// Priority determines the scheduling order of responses.
+    /// The priority field is sent on the request stream before the request body.
+    pub fn set_stream_priority(
+        &mut self,
+        stream_id: u64,
+        urgency: u8,
+        incremental: bool,
+    ) -> Result<()> {
+        // Priority frame format (RFC 9218 §4):
+        // 0x00 = Priority field ID
+        // urgency (0-7), incremental (1 bit)
+        let priority_byte = (urgency.min(7) << 1) | (incremental as u8);
+        let priority_data = vec![0x00, priority_byte];
+
+        self.quic
+            .send_stream_data(stream_id, &priority_data, false)
+            .map_err(|e| Http3Error::QuicError(e))
+    }
+
+    /// Get the priority for a received stream.
+    ///
+    /// Returns (urgency, incremental) if a priority frame was received.
+    pub fn get_stream_priority(&self, stream_id: u64) -> Option<(u8, bool)> {
+        self.stream_priorities.get(&stream_id).copied()
+    }
+
+    /// Schedule streams by priority for transmission.
+    ///
+    /// Returns stream IDs sorted by urgency (lower = more urgent),
+    /// with incremental streams interleaved.
+    pub fn schedule_by_priority(&self) -> Vec<u64> {
+        let mut streams: Vec<(u64, u8, bool)> = self.stream_priorities.iter()
+            .map(|(id, (u, i))| (*id, *u, *i))
+            .collect();
+
+        // Sort by urgency (lower first), then incremental (non-incremental first)
+        streams.sort_by_key(|(_, u, i)| (*u, *i as u8));
+
+        streams.into_iter().map(|(id, _, _)| id).collect()
+    }
 }
 
 #[cfg(test)]
@@ -901,6 +1114,8 @@ mod tests {
             pending_crypto: Vec::new(),
             recv_buffers: HashMap::new(),
             stream_headers_received: HashMap::new(),
+            stream_priorities: HashMap::new(),
+            active_path: None,
         };
 
         assert_eq!(conn.next_bidi_stream_id, 0);

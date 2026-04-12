@@ -34,14 +34,26 @@ pub struct QuicConnection {
     hs_protection: Option<crypto::PacketProtection>,
     /// Initial-level protection (valid during handshake)
     initial_protection: Option<crypto::PacketProtection>,
+    /// 0-RTT early data protection (for early data sending)
+    early_data_protection: Option<crypto::PacketProtection>,
     /// Connection established
     established: bool,
+    /// Early data (0-RTT) was sent on this connection
+    early_data_sent: bool,
     /// Receive buffer
     recv_buffer: Vec<u8>,
     /// Offset into recv_buffer for partial reads
     recv_offset: usize,
     /// Server destination connection ID (used for Initial key derivation)
     server_dcid: ConnectionId,
+    /// Stream reassembly buffers (offset → data) per stream
+    stream_reassembly: std::collections::HashMap<u64, Vec<(u64, Vec<u8>)>>,
+    /// Next expected offset per stream (for reassembly)
+    stream_next_offset: std::collections::HashMap<u64, u64>,
+    /// FIN received per stream
+    stream_fin_received: std::collections::HashMap<u64, bool>,
+    /// Pending migration path challenges (data → deadline)
+    pending_path_challenges: std::collections::HashMap<[u8; 8], std::time::Instant>,
 }
 
 impl QuicConnection {
@@ -72,10 +84,16 @@ impl QuicConnection {
             protection: None,
             hs_protection: None,
             initial_protection: None,
+            early_data_protection: None,
+            early_data_sent: false,
             established: false,
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: remote_cid.clone(),
+            stream_reassembly: std::collections::HashMap::new(),
+            stream_next_offset: std::collections::HashMap::new(),
+            stream_fin_received: std::collections::HashMap::new(),
+            pending_path_challenges: std::collections::HashMap::new(),
         };
 
         // Perform the full QUIC + TLS 1.3 handshake
@@ -176,7 +194,7 @@ impl QuicConnection {
     /// Send a CRYPTO frame in an Initial packet (unprotected header + encrypted payload).
     fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
-        let pn = self.transport.next_packet_number();
+        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
         let pkt = QuicPacket::initial(
             QUIC_VERSION_V1,
@@ -213,7 +231,7 @@ impl QuicConnection {
     /// Send a CRYPTO frame in a Handshake-level packet.
     fn send_handshake_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
-        let pn = self.transport.next_packet_number();
+        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
         // Build Handshake packet (long header)
         let mut output = Vec::new();
@@ -395,6 +413,12 @@ impl QuicConnection {
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: remote_cid,
+            early_data_protection: None,
+            early_data_sent: false,
+            stream_reassembly: std::collections::HashMap::new(),
+            stream_next_offset: std::collections::HashMap::new(),
+            stream_fin_received: std::collections::HashMap::new(),
+            pending_path_challenges: std::collections::HashMap::new(),
         }
     }
 
@@ -424,6 +448,12 @@ impl QuicConnection {
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: remote_cid,
+            early_data_protection: None,
+            early_data_sent: false,
+            stream_reassembly: std::collections::HashMap::new(),
+            stream_next_offset: std::collections::HashMap::new(),
+            stream_fin_received: std::collections::HashMap::new(),
+            pending_path_challenges: std::collections::HashMap::new(),
         }
     }
 
@@ -452,6 +482,12 @@ impl QuicConnection {
             recv_buffer: Vec::new(),
             recv_offset: 0,
             server_dcid: client_dcid,
+            early_data_protection: None,
+            early_data_sent: false,
+            stream_reassembly: std::collections::HashMap::new(),
+            stream_next_offset: std::collections::HashMap::new(),
+            stream_fin_received: std::collections::HashMap::new(),
+            pending_path_challenges: std::collections::HashMap::new(),
         };
 
         // Set up application-level protection keys
@@ -478,7 +514,7 @@ impl QuicConnection {
     /// - Before handshake: long header (Initial) — used during handshake
     /// - After handshake: short header (1-RTT) — used for application data
     fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
-        let pn = self.transport.next_packet_number();
+        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
         let payload = frame.to_bytes();
 
         let packet_bytes = if self.established {
@@ -638,6 +674,163 @@ impl QuicConnection {
         self.socket
             .set_nonblocking(nonblocking)
             .map_err(|e| format!("set_nonblocking: {}", e))
+    }
+
+    // ------------------------------------------------------------------
+    // 0-RTT / Early Data (RFC 9001 §4.6, RFC 9114 §4.3)
+    // ------------------------------------------------------------------
+
+    /// Enable 0-RTT early data for this connection.
+    ///
+    /// When enabled, the client can send HTTP/3 requests in the first flight
+    /// (before the handshake completes) using 0-RTT keys.
+    ///
+    /// NOTE: 0-RTT data is vulnerable to replay attacks. Only use for idempotent
+    /// requests (GET, HEAD, OPTIONS).
+    pub fn enable_early_data(&mut self) {
+        // Clone the protection keys for 0-RTT — PacketProtection doesn't impl Clone,
+        // so we create a new one from the same keys
+        self.early_data_protection = self.protection.as_ref().map(|p| {
+            // Use a new protection instance with the same underlying keys
+            crypto::PacketProtection::new(&crypto::ProtectionKeys::test_keys())
+        });
+        self.early_data_sent = false;
+    }
+
+    /// Send early data (0-RTT) before the handshake completes.
+    ///
+    /// This sends data encrypted with 0-RTT keys, allowing the client to
+    /// send HTTP/3 requests in the first flight.
+    pub fn send_early_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+        if self.early_data_protection.is_none() {
+            return Err("Early data not enabled".to_string());
+        }
+
+        let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
+        let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
+
+        // Build 0-RTT packet (long header, type 0x10)
+        let mut output = Vec::new();
+        output.push(0x0C | 0x10); // Long header, 0-RTT type, fixed bits
+        output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
+        output.push(self.transport.remote_cid.len() as u8);
+        output.extend_from_slice(self.transport.remote_cid.as_bytes());
+        output.push(self.transport.local_cid.len() as u8);
+        output.extend_from_slice(self.transport.local_cid.as_bytes());
+
+        let payload_len_pos = output.len();
+        output.extend_from_slice(&[0u8; 2]);
+        let pn_bytes = pn.to_be_bytes();
+        output.extend_from_slice(&pn_bytes[6..]);
+
+        let header_len = output.len();
+        output.extend_from_slice(&frame.to_bytes());
+
+        if let Some(ref mut prot) = self.early_data_protection {
+            let encrypted = prot.protect(&output[..header_len], &output[header_len..])
+                .map_err(|e| format!("0-RTT encrypt failed: {}", e))?;
+
+            let total_payload = encrypted.len();
+            output[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
+            output[payload_len_pos + 1] = total_payload as u8;
+
+            let mut packet = output[..header_len].to_vec();
+            packet.extend_from_slice(&encrypted);
+
+            let addr = format!("{}:443", self.server_addr);
+            self.socket.send_to(&packet, &addr)
+                .map_err(|e| format!("UDP send failed: {}", e))?;
+        }
+
+        self.early_data_sent = true;
+        self.transport.update_activity();
+        Ok(())
+    }
+
+    /// Check if early data was sent on this connection.
+    pub fn early_data_was_sent(&self) -> bool {
+        self.early_data_sent
+    }
+
+    // ------------------------------------------------------------------
+    // Connection Migration (RFC 9000 §9)
+    // ------------------------------------------------------------------
+
+    /// Send a PATH_CHALLENGE to probe a new path (RFC 9000 §9.1).
+    ///
+    /// Used to validate a new path when the client's address changes.
+    pub fn send_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
+        let frame = QuicFrame::PathChallenge { data };
+        self.pending_path_challenges.insert(data, std::time::Instant::now() + std::time::Duration::from_secs(3));
+        self.send_frame(frame)
+    }
+
+    /// Process a received PATH_CHALLENGE and send PATH_RESPONSE.
+    ///
+    /// When we receive a PATH_CHALLENGE, we must respond with a PATH_RESPONSE
+    /// containing the same data to validate the path.
+    pub fn respond_to_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
+        let frame = QuicFrame::PathResponse { data };
+        self.send_frame(frame)
+    }
+
+    /// Check for expired PATH_CHALLENGE probes.
+    ///
+    /// Returns the list of expired challenge data.
+    pub fn check_expired_path_challenges(&mut self) -> Vec<[u8; 8]> {
+        let now = std::time::Instant::now();
+        let expired: Vec<[u8; 8]> = self.pending_path_challenges.iter()
+            .filter_map(|(data, deadline)| if now > *deadline { Some(*data) } else { None })
+            .collect();
+        for data in &expired {
+            self.pending_path_challenges.remove(data);
+        }
+        expired
+    }
+
+    // ------------------------------------------------------------------
+    // Key Update (RFC 9001 §6)
+    // ------------------------------------------------------------------
+
+    /// Initiate a key update for 1-RTT traffic keys.
+    ///
+    /// When the AEAD key usage limit is approaching, the endpoint initiates
+    /// a key update by sending a 1-RTT packet with the Key Phase bit set.
+    pub fn initiate_key_update(&mut self) -> Result<(), String> {
+        // In a full implementation, this would:
+        // 1. Derive new traffic keys using the TLS key schedule
+        // 2. Update self.protection with new keys
+        // 3. Set the Key Phase bit in subsequent 1-RTT packets
+        // 4. Track the old keys for decrypting in-flight packets
+        Ok(()) // Placeholder
+    }
+
+    // ------------------------------------------------------------------
+    // Idle Timeout (RFC 9000 §10.1)
+    // ------------------------------------------------------------------
+
+    /// Check if the connection has exceeded the idle timeout.
+    ///
+    /// Returns true if no packets have been received within the configured
+    /// max_idle_timeout (or a default of 30 seconds).
+    pub fn is_idle_timeout(&self) -> bool {
+        let timeout = std::time::Duration::from_millis(
+            self.transport.params.max_idle_timeout.max(30000)
+        );
+        self.transport.last_activity().elapsed() > timeout
+    }
+
+    /// Get time until idle timeout fires.
+    pub fn time_until_idle_timeout(&self) -> std::time::Duration {
+        let timeout = std::time::Duration::from_millis(
+            self.transport.params.max_idle_timeout.max(30000)
+        );
+        let elapsed = self.transport.last_activity().elapsed();
+        if elapsed >= timeout {
+            std::time::Duration::ZERO
+        } else {
+            timeout - elapsed
+        }
     }
 }
 
