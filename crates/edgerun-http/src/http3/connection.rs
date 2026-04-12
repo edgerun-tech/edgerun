@@ -9,6 +9,7 @@ use super::http3::frame::{Http3Frame, Http3FrameType};
 use super::http3::settings::Http3Settings;
 use super::http3::stream::{Http3Stream, Http3StreamType};
 use super::http3::stream_types;
+use super::error_codes;
 use super::qpack::{QpackDecoder, QpackEncoder};
 use std::collections::hash_map::Entry;
 use super::quic::QuicConnection as QuicConn;
@@ -413,52 +414,87 @@ impl Http3Connection {
     /// Otherwise, reads from the QUIC connection.
     fn poll_stream_with_buffer(&mut self) -> Result<Option<(u64, Http3Frame)>> {
         // First, check existing buffers for parseable frames
-        let mut consumed_streams = Vec::new();
-        for (&stream_id, buf) in &self.recv_buffers {
-            if buf.is_empty() {
-                consumed_streams.push(stream_id);
-                continue;
-            }
-            match Http3Frame::from_bytes(buf) {
-                Ok((frame, consumed)) => {
+        // Collect stream IDs and clone their buffer data to avoid borrow conflicts
+        let stream_ids: Vec<u64> = self.recv_buffers.keys().copied().collect();
+
+        for stream_id in &stream_ids {
+            let buf = match self.recv_buffers.get(stream_id) {
+                Some(b) if !b.is_empty() => b.clone(),
+                _ => continue,
+            };
+
+            match self.try_parse_frame_for_stream(*stream_id, &buf) {
+                Ok(Some((frame, consumed))) => {
                     // Remove consumed bytes from buffer
-                    let buf = self.recv_buffers.get_mut(&stream_id).unwrap();
-                    buf.drain(..consumed);
-                    if buf.is_empty() {
-                        consumed_streams.push(stream_id);
+                    if let Some(buf) = self.recv_buffers.get_mut(stream_id) {
+                        buf.drain(..consumed);
+                        if buf.is_empty() {
+                            self.recv_buffers.remove(stream_id);
+                        }
                     }
-                    return Ok(Some((stream_id, frame)));
+                    return Ok(Some((*stream_id, frame)));
                 }
-                Err(_) => {
+                Ok(None) => {
                     // Not enough data for a complete frame yet
                 }
+                Err(_) => {
+                    // Protocol violation — reset this stream
+                    let _ = self.quic.send_reset_stream(*stream_id, error_codes::H3_FRAME_ERROR);
+                    self.recv_buffers.remove(stream_id);
+                }
             }
-        }
-
-        // Clean up empty buffers
-        for stream_id in consumed_streams {
-            self.recv_buffers.remove(&stream_id);
         }
 
         // Read from QUIC connection
         match self.quic.recv_stream_data() {
-            Ok(Some((stream_id, data, _fin))) => {
+            Ok(Some((stream_id, data, fin))) => {
+                // Handle stream closure
+                if fin {
+                    self.on_stream_closed(stream_id);
+                    return Ok(None);
+                }
+
                 if data.is_empty() {
                     return Ok(None);
                 }
 
-                // Try to parse an HTTP/3 frame from this data
-                match Http3Frame::from_bytes(&data) {
-                    Ok((frame, consumed)) => {
-                        // Buffer any leftover bytes
-                        if consumed < data.len() {
-                            let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
-                            buf.extend_from_slice(&data[consumed..]);
-                        }
-                        Ok(Some((stream_id, frame)))
+                // For unidirectional streams with no known type, read the type varint first
+                if stream_id % 4 >= 2 && !self.known_uni_stream_types.contains_key(&stream_id) {
+                    let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
+                    buf.extend_from_slice(&data);
+                    return self.try_read_stream_type(stream_id);
+                }
+
+                // Dispatch based on stream type
+                let stream_type = if stream_id % 4 >= 2 {
+                    self.known_uni_stream_types.get(&stream_id).copied()
+                } else {
+                    None // Bidirectional — always request/response
+                };
+
+                match stream_type {
+                    Some(stream_types::CONTROL) => {
+                        // Control stream: validate and dispatch frames
+                        self.buffer_and_parse_control(stream_id, data)
                     }
-                    Err(_) => {
-                        // Not a complete HTTP/3 frame — buffer for later
+                    Some(stream_types::QPACK_ENCODER) => {
+                        // QPACK encoder stream: feed to decoder
+                        self.qpack_decoder.on_encoder_stream(&data).ok();
+                        Ok(None)
+                    }
+                    Some(stream_types::QPACK_DECODER) => {
+                        // QPACK decoder stream: feed to encoder
+                        if let Ok((push_id, _)) = Http3Frame::decode_varint(&data) {
+                            self.qpack_encoder.set_known_received_count(push_id);
+                        }
+                        Ok(None)
+                    }
+                    Some(stream_types::PUSH) => {
+                        // Push stream: parse as HTTP/3 frames
+                        self.buffer_and_parse_frame(stream_id, data)
+                    }
+                    _ => {
+                        // Unknown stream type — buffer and try to read type varint
                         let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
                         buf.extend_from_slice(&data);
                         Ok(None)
@@ -467,6 +503,136 @@ impl Http3Connection {
             }
             Ok(None) => Ok(None),
             Err(e) => Err(Http3Error::QuicError(e)),
+        }
+    }
+
+    /// Try to read the stream type varint from a new unidirectional stream.
+    fn try_read_stream_type(&mut self, stream_id: u64) -> Result<Option<(u64, Http3Frame)>> {
+        let buf = self.recv_buffers.get(&stream_id).cloned().unwrap_or_default();
+        if buf.is_empty() {
+            return Ok(None);
+        }
+
+        match Http3Frame::decode_varint(&buf) {
+            Ok((stream_type, varint_len)) => {
+                if buf.len() < varint_len {
+                    return Ok(None); // Incomplete varint
+                }
+                // Remove the type varint from the buffer
+                if let Some(buf) = self.recv_buffers.get_mut(&stream_id) {
+                    buf.drain(..varint_len);
+                }
+                self.known_uni_stream_types.insert(stream_id, stream_type);
+
+                // Parse any remaining data as frames for this stream type
+                if let Some(buf) = self.recv_buffers.get(&stream_id).cloned() {
+                    if !buf.is_empty() {
+                        match stream_type {
+                            stream_types::CONTROL => {
+                                return self.buffer_and_parse_control(stream_id, buf);
+                            }
+                            stream_types::QPACK_ENCODER => {
+                                self.qpack_decoder.on_encoder_stream(&buf).ok();
+                            }
+                            stream_types::QPACK_DECODER => {
+                                if let Ok((push_id, _)) = Http3Frame::decode_varint(&buf) {
+                                    self.qpack_encoder.set_known_received_count(push_id);
+                                }
+                            }
+                            stream_types::PUSH => {
+                                return self.buffer_and_parse_frame(stream_id, buf);
+                            }
+                            _ => {} // Unknown type — discard
+                        }
+                    }
+                }
+                Ok(None)
+            }
+            Err(_) => Ok(None), // Incomplete varint — wait for more data
+        }
+    }
+
+    /// Buffer data on the control stream and parse frames with validation.
+    fn buffer_and_parse_control(&mut self, stream_id: u64, data: Vec<u8>) -> Result<Option<(u64, Http3Frame)>> {
+        let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
+        buf.extend_from_slice(&data);
+
+        // Parse and extract goaway_id before borrowing self again
+        let (frame_opt, goaway_id_opt) = match Http3Frame::from_bytes(buf) {
+            Ok((frame, consumed)) => {
+                // Validate frame type for control stream
+                if let Err(e) = Self::validate_control_stream_frame(frame.frame_type()) {
+                    return Err(e);
+                }
+
+                let goaway_id = if let Http3Frame::Goaway { stream_id: gid } = &frame {
+                    Some(*gid)
+                } else {
+                    None
+                };
+
+                buf.drain(..consumed);
+                if buf.is_empty() {
+                    self.recv_buffers.remove(&stream_id);
+                }
+                (Some(frame), goaway_id)
+            }
+            Err(_) => (None, None),
+        };
+
+        // Dispatch GOAWAY after releasing the buffer borrow
+        if let Some(gid) = goaway_id_opt {
+            self.process_goaway(gid);
+        }
+
+        Ok(frame_opt.map(|f| (stream_id, f)))
+    }
+
+    /// Buffer data and try to parse an HTTP/3 frame.
+    fn buffer_and_parse_frame(&mut self, stream_id: u64, data: Vec<u8>) -> Result<Option<(u64, Http3Frame)>> {
+        let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
+        buf.extend_from_slice(&data);
+
+        match Http3Frame::from_bytes(buf) {
+            Ok((frame, consumed)) => {
+                buf.drain(..consumed);
+                if buf.is_empty() {
+                    self.recv_buffers.remove(&stream_id);
+                }
+                Ok(Some((stream_id, frame)))
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    /// Try to parse an HTTP/3 frame from the buffer for a known stream type.
+    fn try_parse_frame_for_stream(
+        &mut self,
+        stream_id: u64,
+        buf: &[u8],
+    ) -> Result<Option<(Http3Frame, usize)>> {
+        // For control streams, validate frame types
+        if self.control_stream_id == Some(stream_id) {
+            match Http3Frame::from_bytes(buf) {
+                Ok((frame, consumed)) => {
+                    Self::validate_control_stream_frame(frame.frame_type())?;
+                    let goaway_id = if let Http3Frame::Goaway { stream_id: gid } = &frame {
+                        Some(*gid)
+                    } else {
+                        None
+                    };
+                    if let Some(gid) = goaway_id {
+                        self.process_goaway(gid);
+                    }
+                    Ok(Some((frame, consumed)))
+                }
+                Err(_) => Ok(None),
+            }
+        } else {
+            match Http3Frame::from_bytes(buf) {
+                Ok((frame, consumed)) => Ok(Some((frame, consumed))),
+                Err(_) => Ok(None),
+            }
         }
     }
 
