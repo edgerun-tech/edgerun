@@ -1,7 +1,9 @@
-//! DNSSEC validation (RFC 4033–4035).
+//! DNSSEC validation **and signing** (RFC 4033–4035).
 //!
-//! Validates RRSIG signatures against DNSKEY records and verifies
-//! the chain of trust from a trust anchor (DS → DNSKEY → RRSIG).
+//! - **Validation**: Verifies RRSIG signatures against DNSKEY records,
+//!   verifies the chain of trust from a trust anchor (DS → DNSKEY → RRSIG).
+//! - **Signing**: Generates DNSKEY key pairs and creates RRSIG signatures
+//!   over RRsets using Ed25519 or ECDSAP256.
 
 use edgerun_crypto::sha2::{Digest, Sha256, Sha384};
 
@@ -423,4 +425,156 @@ pub fn validate_response(
     }
 
     DnssecResult::Valid
+}
+
+// ===========================================================================
+// DNSSEC Signing — DNSKEY generation and RRSIG creation
+// ===========================================================================
+
+/// Generate an Ed25519 DNSKEY record and return the signing key alongside it.
+/// Algorithm 15 per RFC 8080.
+pub fn generate_dnskey_ed25519(
+    name: String, flags: u16, ttl: u32,
+) -> (DnsRecord, edgerun_crypto::Ed25519SigningKey) {
+    let signing_key = edgerun_crypto::Ed25519SigningKey::generate(&mut edgerun_crypto::OsRng);
+    let vk = signing_key.verifying_key();
+    let public_key_bytes = vk.to_bytes().to_vec();
+    let dnskey = DnsRecord::dnskey(name, flags, 3, 15, public_key_bytes, ttl);
+    (dnskey, signing_key)
+}
+
+/// Generate an ECDSAP256-SHA256 DNSKEY record and return the signing key.
+/// Algorithm 13 per RFC 6605.
+pub fn generate_dnskey_ecdsap256(
+    name: String, flags: u16, ttl: u32,
+) -> (DnsRecord, edgerun_crypto::p256::ecdsa::SigningKey) {
+    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
+    let vk = signing_key.verifying_key();
+    let encoded = vk.to_encoded_point(false);
+    let public_key_bytes = encoded.as_bytes().to_vec();
+    let dnskey = DnsRecord::dnskey(name, flags, 3, 13, public_key_bytes, ttl);
+    (dnskey, signing_key)
+}
+
+/// Sign an RRset using Ed25519 (DNSSEC algorithm 15). Returns an RRSIG record.
+pub fn sign_rrsig_ed25519(
+    rrset: &[DnsRecord],
+    signing_key: &edgerun_crypto::Ed25519SigningKey,
+    dnskey_record: &DnsRecord,
+    signer_name: String,
+    inception: u32, expiration: u32, original_ttl: u32,
+) -> DnsRecord {
+    use edgerun_crypto::Signer;
+    let key_tag = compute_key_tag(dnskey_record);
+    let labels = rrset[0].name.split('.').filter(|l| !l.is_empty()).count() as u8;
+
+    let signed_data = build_signed_data(rrset, &DnsRecord {
+        name: rrset[0].name.clone(),
+        rtype: DnsRecordType::RRSIG,
+        rclass: rrset[0].rclass,
+        ttl: original_ttl,
+        data: DnsRecordData::RRSIG {
+            type_covered: rrset[0].rtype.as_u16(),
+            algorithm: 15, labels, original_ttl,
+            expiration, inception, key_tag,
+            signer_name: signer_name.clone(),
+            signature: Vec::new(),
+        },
+    });
+
+    let signature = signing_key.sign(&signed_data).to_vec();
+    DnsRecord::rrsig(rrset[0].name.clone(), rrset[0].rtype.as_u16(), 15, labels,
+        original_ttl, expiration, inception, key_tag, signer_name, signature, original_ttl)
+}
+
+/// Sign an RRset using ECDSAP256-SHA256 (DNSSEC algorithm 13). Returns an RRSIG record.
+pub fn sign_rrset_ecdsap256(
+    rrset: &[DnsRecord],
+    signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    dnskey_record: &DnsRecord,
+    signer_name: String,
+    inception: u32, expiration: u32, original_ttl: u32,
+) -> DnsRecord {
+    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    let key_tag = compute_key_tag(dnskey_record);
+    let labels = rrset[0].name.split('.').filter(|l| !l.is_empty()).count() as u8;
+
+    let signed_data = build_signed_data(rrset, &DnsRecord {
+        name: rrset[0].name.clone(),
+        rtype: DnsRecordType::RRSIG,
+        rclass: rrset[0].rclass,
+        ttl: original_ttl,
+        data: DnsRecordData::RRSIG {
+            type_covered: rrset[0].rtype.as_u16(),
+            algorithm: 13, labels, original_ttl,
+            expiration, inception, key_tag,
+            signer_name: signer_name.clone(),
+            signature: Vec::new(),
+        },
+    });
+
+    let mut hasher = Sha256::new();
+    hasher.update(&signed_data);
+    let digest = hasher.finalize();
+    use edgerun_crypto::p256::NistP256;
+    let signature: edgerun_crypto::ecdsa::Signature<NistP256> = signing_key.sign_prehash(&digest).expect("ECDSA sign ok");
+    use edgerun_crypto::ecdsa::SignatureEncoding;
+    let signature = signature.to_bytes().to_vec();
+
+    DnsRecord::rrsig(rrset[0].name.clone(), rrset[0].rtype.as_u16(), 13, labels,
+        original_ttl, expiration, inception, key_tag, signer_name, signature, original_ttl)
+}
+
+/// Sign an entire zone's RRsets using Ed25519.
+pub fn sign_zone_ed25519(
+    zone: &crate::zone::DnsZone,
+    dnskey: &DnsRecord,
+    signing_key: &edgerun_crypto::Ed25519SigningKey,
+    inception: u32, expiration: u32,
+) -> Vec<DnsRecord> {
+    use std::collections::HashMap;
+    let mut rrsets: HashMap<(String, DnsRecordType), Vec<DnsRecord>> = HashMap::new();
+    for name in zone.names() {
+        for rr in zone.get_records(name) {
+            rrsets.entry((rr.name.clone(), rr.rtype)).or_default().push((*rr).clone());
+        }
+    }
+
+    let signer_name = zone.origin.clone();
+    let mut rrsigs = Vec::new();
+    for ((_, rtype), records) in &rrsets {
+        if *rtype == DnsRecordType::RRSIG || *rtype == DnsRecordType::NSEC
+            || *rtype == DnsRecordType::NSEC3 { continue; }
+        let rrsig = sign_rrsig_ed25519(records, signing_key, dnskey,
+            signer_name.clone(), inception, expiration, records[0].ttl);
+        rrsigs.push(rrsig);
+    }
+    rrsigs
+}
+
+/// Sign an entire zone's RRsets using ECDSAP256-SHA256.
+pub fn sign_zone_ecdsap256(
+    zone: &crate::zone::DnsZone,
+    dnskey: &DnsRecord,
+    signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    inception: u32, expiration: u32,
+) -> Vec<DnsRecord> {
+    use std::collections::HashMap;
+    let mut rrsets: HashMap<(String, DnsRecordType), Vec<DnsRecord>> = HashMap::new();
+    for name in zone.names() {
+        for rr in zone.get_records(name) {
+            rrsets.entry((rr.name.clone(), rr.rtype)).or_default().push((*rr).clone());
+        }
+    }
+
+    let signer_name = zone.origin.clone();
+    let mut rrsigs = Vec::new();
+    for ((_, rtype), records) in &rrsets {
+        if *rtype == DnsRecordType::RRSIG || *rtype == DnsRecordType::NSEC
+            || *rtype == DnsRecordType::NSEC3 { continue; }
+        let rrsig = sign_rrset_ecdsap256(records, signing_key, dnskey,
+            signer_name.clone(), inception, expiration, records[0].ttl);
+        rrsigs.push(rrsig);
+    }
+    rrsigs
 }

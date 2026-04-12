@@ -1861,7 +1861,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-oci-runtime",
- "edgerun-rt",
  "edgerun-secret-service",
  "flate2",
  "serde",
@@ -1969,6 +1968,7 @@ version = "0.1.0"
 dependencies = [
  "edgerun-log",
  "libc",
+ "parking_lot",
 ]
 
 [[package]]

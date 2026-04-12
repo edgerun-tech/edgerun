@@ -22,7 +22,7 @@ use super::record::{DnsRecordType, DnsRecordData};
 ///
 /// let rt = Runtime::new_multi_thread().enable_all().build().unwrap();
 /// rt.block_on(async {
-///     let client = DnsClient::new("8.8.8.8:53").unwrap();
+///     let mut client = DnsClient::new("8.8.8.8:53").unwrap();
 ///     match client.query_a("www.example.com").await {
 ///         Ok(ips) => println!("IPs: {:?}", ips),
 ///         Err(e) => eprintln!("DNS query failed: {}", e),

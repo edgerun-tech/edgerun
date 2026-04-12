@@ -234,6 +234,10 @@ impl DnsZone {
 
     /// Resolve a name+type query against this zone.
     /// Returns matching records or None if the name doesn't exist in this zone.
+    ///
+    /// Supports RFC 1034 §4.3.3 wildcards: `*.example.com` matches any
+    /// single-label name like `foo.example.com` when the queried name
+    /// does not exist exactly in the zone.
     pub fn resolve(&self, name: &str, qtype: DnsRecordType) -> Option<Vec<DnsRecord>> {
         let lookup = self.full_name(name).to_lowercase();
 
@@ -251,8 +255,48 @@ impl DnsZone {
                 }
             }
         } else {
-            None
+            // Name does not exist — try wildcard matching (RFC 1034 §4.3.3).
+            // For `foo.example.com`, try `*.example.com`.
+            // For `bar.foo.example.com`, try `*.foo.example.com` then `*.example.com`.
+            self.resolve_wildcard(&lookup, qtype)
         }
+    }
+
+    /// Try wildcard matching when an exact name lookup fails.
+    /// Returns the most specific wildcard match, or None.
+    fn resolve_wildcard(&self, qname: &str, qtype: DnsRecordType) -> Option<Vec<DnsRecord>> {
+        let origin = self.origin.to_lowercase();
+
+        let qname_without_origin = qname.strip_suffix(&format!(".{}", origin));
+        let prefix = match qname_without_origin {
+            Some(p) if !p.is_empty() => p,
+            _ => return None,
+        };
+
+        let labels: Vec<&str> = prefix.split('.').collect();
+        // Try wildcard at each sub-level.
+        // When i=0 → zone-level wildcard: `*.example.com`
+        // When i>0 → sub-level wildcard: `*.foo.example.com`
+        for i in (0..=labels.len()).rev() {
+            let wildcard = if i == 0 {
+                format!("*.{}", origin)
+            } else {
+                format!("*.{}.{}", labels[i..].join("."), origin)
+            };
+
+            if let Some(records) = self.records.get(&wildcard) {
+                if qtype == DnsRecordType::ANY {
+                    return Some(records.clone());
+                }
+                let matching: Vec<_> = records.iter()
+                    .filter(|r| r.rtype == qtype)
+                    .cloned()
+                    .collect();
+                return Some(matching);
+            }
+        }
+
+        None
     }
 
     /// Get all records for a name.
@@ -434,5 +478,54 @@ mod tests {
         assert_eq!(zone.record_count("mail"), 2);
         zone.remove_record("mail", DnsRecordType::TXT);
         assert_eq!(zone.record_count("mail"), 1);
+    }
+
+    #[test]
+    fn test_wildcard_single_label() {
+        let mut zone = DnsZone::new("example.com");
+        zone.add_a("www", Ipv4Addr::new(192, 168, 1, 1), 3600);
+        zone.add_a("*", Ipv4Addr::new(10, 0, 0, 1), 300);
+
+        let records = zone.resolve("www.example.com", DnsRecordType::A).unwrap();
+        assert_eq!(records.len(), 1); // exact match wins
+        if let DnsRecordData::A(ip) = &records[0].data {
+            assert_eq!(*ip, Ipv4Addr::new(192, 168, 1, 1));
+        }
+
+        let records = zone.resolve("foo.example.com", DnsRecordType::A).unwrap();
+        assert_eq!(records.len(), 1); // wildcard match
+        if let DnsRecordData::A(ip) = &records[0].data {
+            assert_eq!(*ip, Ipv4Addr::new(10, 0, 0, 1));
+        }
+    }
+
+    #[test]
+    fn test_wildcard_no_match_origin() {
+        let mut zone = DnsZone::new("example.com");
+        zone.add_a("*", Ipv4Addr::new(10, 0, 0, 1), 300);
+        assert!(zone.resolve("example.com", DnsRecordType::A).is_none());
+    }
+
+    #[test]
+    fn test_wildcard_multi_level_specific() {
+        let mut zone = DnsZone::new("example.com");
+        zone.add_a("*", Ipv4Addr::new(10, 0, 0, 1), 300);
+        zone.add_a("*.sub", Ipv4Addr::new(10, 0, 1, 1), 300);
+
+        let records = zone.resolve("foo.sub.example.com", DnsRecordType::A).unwrap();
+        assert_eq!(records.len(), 1);
+        if let DnsRecordData::A(ip) = &records[0].data {
+            assert_eq!(*ip, Ipv4Addr::new(10, 0, 1, 1)); // more specific wildcard
+        }
+    }
+
+    #[test]
+    fn test_wildcard_any_type() {
+        let mut zone = DnsZone::new("example.com");
+        zone.add_a("*", Ipv4Addr::new(10, 0, 0, 1), 300);
+        zone.add_txt("*", "wildcard text", 300);
+
+        let records = zone.resolve("foo.example.com", DnsRecordType::ANY).unwrap();
+        assert_eq!(records.len(), 2);
     }
 }

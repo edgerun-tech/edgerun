@@ -81,7 +81,7 @@ impl DnsServer {
             state: ServerState {
                 zones: Arc::new(edgerun_rt::RwLock::new(HashMap::new())),
                 default_ttl: config.default_ttl,
-                forward_to: None,
+                forward_to: Arc::new(edgerun_rt::RwLock::new(None)),
             },
         })
     }
@@ -98,10 +98,8 @@ impl DnsServer {
     }
 
     /// Set the upstream resolver address for recursive forwarding.
-    /// Currently a no-op — forward_to is set at construction time.
-    pub async fn set_forward_to(&self, _addr: Option<String>) {
-        // TODO: Replace ServerState.forward_to with Arc<RwLock<Option<String>>>
-        // for runtime-configurable forwarding.
+    pub async fn set_forward_to(&self, addr: Option<String>) {
+        *self.state.forward_to.write().await = addr;
     }
 
     /// Run the server event loop (async, runs forever).

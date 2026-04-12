@@ -20,8 +20,8 @@ pub struct ServerState {
     pub zones: Arc<edgerun_rt::RwLock<HashMap<String, DnsZone>>>,
     /// Default TTL for newly created records.
     pub default_ttl: u32,
-    /// Upstream resolver address for recursive forwarding (if any).
-    pub forward_to: Option<String>,
+    /// Upstream resolver address for recursive forwarding (runtime-configurable).
+    pub forward_to: Arc<edgerun_rt::RwLock<Option<String>>>,
 }
 
 /// Query parse failure — respond with FORMERR.
@@ -79,7 +79,8 @@ pub async fn handle_query(
 
     if answers.is_empty() {
         // Try forwarding if upstream is configured
-        if let Some(ref upstream) = state.forward_to {
+        let forward_addr = state.forward_to.read().await.clone();
+        if let Some(ref upstream) = forward_addr {
             match forward_query(upstream, wire).await {
                 Ok(forwarded) => {
                     edgerun_log::debug!("edgerun-dns: forwarded {} to upstream", qname);

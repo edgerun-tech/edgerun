@@ -48,6 +48,10 @@ pub mod zone;
 pub mod record;
 pub mod name;
 pub mod dnssec;
+pub mod zone_file;
+pub mod cache;
+
+pub use cache::DnsCache;
 
 pub use message::{DnsMessage, DnsHeader, DnsOpcode, DnsResponseCode};
 pub use message::{DnsQuestion, DnsRecord};
@@ -58,3 +62,5 @@ pub use zone::DnsZone;
 pub use record::{DnsRecordType, DnsRecordData};
 pub use name::{validate_name, normalize_name, NameError};
 pub use dnssec::{DnssecResult, compute_key_tag, verify_rrsig, verify_chain_of_trust, validate_response};
+pub use dnssec::{generate_dnskey_ed25519, generate_dnskey_ecdsap256, sign_rrsig_ed25519, sign_rrset_ecdsap256};
+pub use dnssec::{sign_zone_ed25519, sign_zone_ecdsap256};
