@@ -399,9 +399,33 @@ impl QuicTransport {
         &mut self,
         space: PacketNumberSpace,
         largest_acknowledged: u64,
+        first_ack_range: u64,
+        ack_ranges: &[(u64, u64)],
         ack_delay: std::time::Duration,
     ) {
         let idx = space as usize;
+
+        // Build the set of acked packet numbers from the ACK frame ranges
+        // Range 0: [largest_acknowledged - first_ack_range, largest_acknowledged]
+        // Range N: [prev_end - gap - range, prev_end - gap - 1]
+        let mut acked_pns = std::collections::HashSet::new();
+
+        // First range
+        let range_start = largest_acknowledged.saturating_sub(first_ack_range);
+        for pn in range_start..=largest_acknowledged {
+            acked_pns.insert(pn);
+        }
+
+        // Subsequent ranges
+        let mut prev_end = range_start;
+        for &(gap, range) in ack_ranges {
+            let range_end = prev_end.saturating_sub(gap + 1);
+            let range_start = range_end.saturating_sub(range);
+            for pn in range_start..=range_end {
+                acked_pns.insert(pn);
+            }
+            prev_end = range_start;
+        }
 
         // FIRST: Detect lost packets
         self.detect_lost_packets(space);
@@ -413,7 +437,7 @@ impl QuicTransport {
             if pkt.lost {
                 continue;
             }
-            if !pkt.acked && pkt.packet_number <= largest_acknowledged {
+            if !pkt.acked && acked_pns.contains(&pkt.packet_number) {
                 pkt.acked = true;
                 newly_acked_size += pkt.size as u64;
                 newly_acked_count += 1;
@@ -455,7 +479,7 @@ impl QuicTransport {
     }
 
     fn detect_lost_packets(&mut self, space: PacketNumberSpace) {
-        let _idx = space as usize;
+        let idx = space as usize;
         let now = std::time::Instant::now();
 
         let time_threshold = self.smoothed_rtt
@@ -598,9 +622,10 @@ impl QuicTransport {
             QuicFrame::MaxStreamData { max_stream_data, .. } => {
                 self.max_stream_data = *max_stream_data;
             }
-            QuicFrame::Ack { largest_acknowledged, ack_delay, .. } => {
+            QuicFrame::Ack { largest_acknowledged, ack_delay, first_ack_range, ack_ranges, .. } => {
                 let delay = std::time::Duration::from_micros(*ack_delay);
-                self.on_ack_received(PacketNumberSpace::ApplicationData, *largest_acknowledged, delay);
+                self.on_ack_received(PacketNumberSpace::ApplicationData, *largest_acknowledged,
+                    *first_ack_range, ack_ranges, delay);
             }
             _ => {}
         }
