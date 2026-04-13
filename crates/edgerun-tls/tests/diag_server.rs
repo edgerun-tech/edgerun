@@ -146,7 +146,7 @@ fn diagnose_tls_handshake_with_openssl() {
 
     // Try to use edgerun-tls server
     println!("\n--- Attempting edgerun-tls server handshake ---");
-    let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"]);
+    let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"]).unwrap();
     let result = edgerun_tls::server::TlsServerStream::accept(stream, &cert);
     match result {
         Ok(mut tls) => {
@@ -171,7 +171,7 @@ fn verify_internal_loopback() {
 
     let server_thread = thread::spawn(move || {
         let (stream, _) = listener.accept().unwrap();
-        let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"]);
+        let cert = edgerun_tls::certificate_gen::generate_self_signed(&["localhost"]).unwrap();
         let mut tls = edgerun_tls::server::TlsServerStream::accept(stream, &cert)
             .expect("server handshake failed");
         let mut buf = [0u8; 1024];

@@ -22,14 +22,14 @@ pub struct RecordCipher {
 
 impl RecordCipher {
     /// Create a new record cipher from key and IV
-    pub fn new(key: &[u8], iv: &[u8]) -> Result<Self, String> {
+    pub fn new(key: &[u8], iv: &[u8]) -> Result<Self, crate::TlsError> {
         if iv.len() != 12 {
-            return Err(format!("IV must be 12 bytes, got {}", iv.len()));
+            return Err(crate::TlsError::Cipher(format!("IV must be 12 bytes, got {}", iv.len())));
         }
         let mut iv_arr = [0u8; 12];
         iv_arr.copy_from_slice(iv);
 
-        let cipher = AesGcmCipher::new_from_slice(key)?;
+        let cipher = AesGcmCipher::new_from_slice(key).map_err(|e| crate::TlsError::Cipher(e.to_string()))?;
 
         Ok(RecordCipher {
             cipher,

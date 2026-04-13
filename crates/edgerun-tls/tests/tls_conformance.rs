@@ -281,7 +281,7 @@ fn test_encrypted_extensions_roundtrip() {
 /// Certificate message must be decryptable and parseable.
 #[test]
 fn test_certificate_message_roundtrip() {
-    let cert = generate_self_signed(&["localhost"]);
+    let cert = generate_self_signed(&["localhost"]).unwrap();
     let cipher_suite = CipherSuite::TLS_AES_128_GCM_SHA256;
     let hash = Hasher::Sha256;
 
@@ -342,7 +342,7 @@ fn test_finished_verify_data() {
 /// and verify both sides compute the same transcript hash.
 #[test]
 fn test_handshake_message_sequence() {
-    let cert = generate_self_signed(&["localhost"]);
+    let cert = generate_self_signed(&["localhost"]).unwrap();
     let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
     let hash = Hasher::Sha256;

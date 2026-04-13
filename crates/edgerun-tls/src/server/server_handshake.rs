@@ -230,11 +230,6 @@ impl ServerHandshake {
         transcript.extend_from_slice(&self.sh_msg);
         let transcript_hash = hash.hash(&transcript);
 
-        eprintln!("[SERVER] CH msg: {} bytes, SH msg: {} bytes", self.ch_msg.len(), self.sh_msg.len());
-        eprintln!("[SERVER] transcript_hash: {:02x?}", &transcript_hash[..8]);
-        eprintln!("[SERVER] CH first 8: {:02x?}", &self.ch_msg[..8.min(self.ch_msg.len())]);
-        eprintln!("[SERVER] SH first 8: {:02x?}", &self.sh_msg[..8.min(self.sh_msg.len())]);
-
         let mut ks = Tls13KeySchedule::new(hash.clone());
         ks.advance_to_handshake(&shared_secret, &transcript_hash, &transcript_hash);
 
@@ -276,9 +271,6 @@ impl ServerHandshake {
         }
         let fragment = read_record_fragment(&mut self.stream, len)?;
         let ch = ClientHello::parse(&fragment)?;
-
-        eprintln!("[TLS] ClientHello parsed: supported_versions={:?}, cipher_suites={:?}",
-            ch.supported_versions, ch.cipher_suites);
 
         if !ch.supported_versions.iter().any(|&v| v == 0x0304) {
             return Err(TlsError::HandshakeFailure("Client does not support TLS 1.3".into()));
@@ -357,25 +349,21 @@ impl ServerHandshake {
         ks: &mut Tls13KeySchedule,
         handshake_transcript_hash: &[u8],
     ) -> Result<()> {
-        eprintln!("[TLS] Sending EncryptedExtensions...");
         let ee_msg = build_encrypted_extensions(None);
         self.transcript.extend_from_slice(&ee_msg);
         let ee_ct = write_cipher.encrypt(22, &ee_msg);
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: ee_ct }.to_bytes())?;
 
-        eprintln!("[TLS] Sending Certificate ({} bytes)...", self.cert_der.len());
         let cert_msg = build_certificate_message(&self.cert_der);
         self.transcript.extend_from_slice(&cert_msg);
         let cert_ct = write_cipher.encrypt(22, &cert_msg);
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: cert_ct }.to_bytes())?;
 
-        eprintln!("[TLS] Sending CertificateVerify...");
         let cv_msg = build_certificate_verify(&self.transcript, &*self.signing_key, &self.hasher())?;
         self.transcript.extend_from_slice(&cv_msg);
         let cv_ct = write_cipher.encrypt(22, &cv_msg);
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: cv_ct }.to_bytes())?;
 
-        eprintln!("[TLS] Sending Finished...");
         // Use the handshake transcript hash (CH || SH || EE || Cert || CV) for Finished verification
         // Per RFC 8446 §4.4.4: verify_data = HMAC(finished_key, Hash(transcript))
         // where transcript includes all messages up to (but not including) this Finished
@@ -389,7 +377,6 @@ impl ServerHandshake {
         self.stream.write_all(&TlsRecord { content_type: 23, version: 0x0303, fragment: finished_ct }.to_bytes())?;
         self.stream.flush()?;
 
-        eprintln!("[TLS] All encrypted handshake messages sent");
         Ok(())
     }
 
@@ -558,7 +545,7 @@ mod tests {
 
     #[test]
     fn test_simulated_handshake_message_flow() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = generate_self_signed(&["localhost"]).unwrap();
         let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let client_random = [0xAAu8; 32];

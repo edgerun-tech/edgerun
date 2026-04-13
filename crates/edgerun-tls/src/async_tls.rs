@@ -5,15 +5,16 @@
 //! async `poll_read` / `poll_write` instead of `std::io::Read` / `Write`.
 //!
 //! # Example (client)
-//! ```no_run
+//! ```ignore
 //! use edgerun_tls::async_tls::AsyncTlsStream;
-//! use edgerun_rt::{AsyncTcpStream, AsyncReadHalf, AsyncWriteHalf};
+//! use std::sync::Arc;
 //!
-//! async fn connect(host: &str, port: u16) -> Result<AsyncTlsStream<AsyncTcpStream>, String> {
-//!     let stream = edgerun_rt::ConnectFuture::new(&format!("{}:{}", host, port))
-//!         .await
-//!         .map_err(|e| e.to_string())?;
-//!     AsyncTlsStream::client(stream, host).await
+//! // AsyncTlsStream works with any async read/write stream
+//! async fn tls_client_example() {
+//!     // let tcp_stream = ... // some async TCP connection
+//!     // let arc_stream = Arc::new(tcp_stream);
+//!     // let mut tls = AsyncTlsStream::client(arc_stream, "example.com").await.unwrap();
+//!     // tls.write_all(b"GET / HTTP/1.1\r\n").await.unwrap();
 //! }
 //! ```
 

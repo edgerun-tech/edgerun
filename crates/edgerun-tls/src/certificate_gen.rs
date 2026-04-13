@@ -12,6 +12,7 @@ use edgerun_crypto::{
     p256_signing_key_to_pem,
     load_cert_and_key_from_pem,
     x509_cert_from_pem,
+    CryptoError,
 };
 
 /// A certificate with an associated ECDSA P-256 signing key.
@@ -39,7 +40,7 @@ impl CertificateAndKey {
     ///
     /// The PEM text should contain exactly one `CERTIFICATE` block and
     /// one `PRIVATE KEY` (or `EC PRIVATE KEY`) block.
-    pub fn from_pem(pem_text: &str) -> Result<Self, String> {
+    pub fn from_pem(pem_text: &str) -> Result<Self, CryptoError> {
         let (cert_der, signing_key) = load_cert_and_key_from_pem(pem_text)?;
         Ok(Self {
             cert_der,
@@ -48,7 +49,7 @@ impl CertificateAndKey {
     }
 
     /// Parse from DER-encoded certificate and PKCS#8 DER-encoded private key.
-    pub fn from_der_pair(cert_der: &[u8], key_der: &[u8]) -> Result<Self, String> {
+    pub fn from_der_pair(cert_der: &[u8], key_der: &[u8]) -> Result<Self, CryptoError> {
         let signing_key = p256_signing_key_from_der(key_der)?;
         Ok(Self {
             cert_der: cert_der.to_vec(),
@@ -62,13 +63,14 @@ impl CertificateAndKey {
     }
 
     /// Serialize the private key as PEM.
-    pub fn key_pem(&self) -> String {
+    pub fn key_pem(&self) -> Result<String, CryptoError> {
         p256_signing_key_to_pem(&self.signing_key)
     }
 
     /// Serialize both certificate and key as a single PEM string.
-    pub fn to_pem(&self) -> String {
-        format!("{}\n{}", self.cert_pem(), self.key_pem())
+    pub fn to_pem(&self) -> Result<String, CryptoError> {
+        let key_pem = self.key_pem()?;
+        Ok(format!("{}\n{}", self.cert_pem(), key_pem))
     }
 }
 
@@ -76,33 +78,33 @@ impl CertificateAndKey {
 ///
 /// Uses `rcgen` to produce a properly DER-encoded X.509 v3 certificate
 /// with ECDSA P-256 key, SAN extensions, and 1-year validity.
-pub fn generate_self_signed(hostnames: &[&str]) -> CertificateAndKey {
-    let (cert_der, signing_key) = edgerun_crypto::generate_self_signed(hostnames);
-    CertificateAndKey {
+pub fn generate_self_signed(hostnames: &[&str]) -> Result<CertificateAndKey, CryptoError> {
+    let (cert_der, signing_key) = edgerun_crypto::generate_self_signed(hostnames)?;
+    Ok(CertificateAndKey {
         cert_der,
         signing_key: Arc::new(signing_key),
-    }
+    })
 }
 
 /// Generate a self-signed certificate and return it as PEM.
 ///
 /// Returns `(cert_pem, key_pem)`.
-pub fn generate_self_signed_pem(hostnames: &[&str]) -> (String, String) {
+pub fn generate_self_signed_pem(hostnames: &[&str]) -> Result<(String, String), CryptoError> {
     edgerun_crypto::generate_self_signed_pem(hostnames)
 }
 
 /// Parse a PEM-encoded X.509 certificate, returning DER bytes.
-pub fn cert_from_pem(pem_str: &str) -> Result<Vec<u8>, String> {
+pub fn cert_from_pem(pem_str: &str) -> Result<Vec<u8>, CryptoError> {
     x509_cert_from_pem(pem_str)
 }
 
 /// Parse a PEM-encoded PKCS#8 private key.
-pub fn signing_key_from_pem(pem_str: &str) -> Result<p256::ecdsa::SigningKey, String> {
+pub fn signing_key_from_pem(pem_str: &str) -> Result<p256::ecdsa::SigningKey, CryptoError> {
     p256_signing_key_from_pem(pem_str)
 }
 
 /// Serialize a P-256 signing key to PEM.
-pub fn signing_key_to_pem(key: &p256::ecdsa::SigningKey) -> String {
+pub fn signing_key_to_pem(key: &p256::ecdsa::SigningKey) -> Result<String, CryptoError> {
     p256_signing_key_to_pem(key)
 }
 

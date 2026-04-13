@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_certificate_message_build() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = generate_self_signed(&["localhost"]).unwrap();
         let cert_msg = build_certificate_message(&cert.cert_der);
         assert_eq!(cert_msg[0], 11);
         assert!(cert_msg.len() > cert.cert_der.len());
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_certificate_verify_build() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = generate_self_signed(&["localhost"]).unwrap();
         let transcript = vec![0x01u8; 64];
 
         let cv_bytes = build_certificate_verify(&transcript, &*cert.signing_key, &Hasher::Sha256).unwrap();
@@ -283,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_server_hello_encrypt_decrypt_roundtrip() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = generate_self_signed(&["localhost"]).unwrap();
         let client_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let server_keys = EcdhKeyPair::generate(KeyExchangeGroup::SECP256R1).unwrap();
         let client_random = [0xCCu8; 32];
