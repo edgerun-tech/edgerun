@@ -91,6 +91,12 @@ pub trait AsyncWriteExt: AsyncWrite + Unpin {
     {
         FlushFut { s: self }
     }
+    fn shutdown(&mut self) -> ShutdownFut<'_, Self>
+    where
+        Self: Sized,
+    {
+        ShutdownFut { s: self }
+    }
 }
 impl<W: AsyncWrite + Unpin> AsyncWriteExt for W {}
 
@@ -166,6 +172,17 @@ impl<W: AsyncWrite + Unpin> Future for FlushFut<'_, W> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
         Pin::new(&mut *this.s).poll_flush(cx)
+    }
+}
+
+pub struct ShutdownFut<'a, W: Unpin> {
+    s: &'a mut W,
+}
+impl<W: AsyncWrite + Unpin> Future for ShutdownFut<'_, W> {
+    type Output = io::Result<()>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        Pin::new(&mut *this.s).poll_shutdown(cx)
     }
 }
 

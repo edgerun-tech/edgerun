@@ -120,3 +120,7 @@ harness = false
 [[test]]
 name = "tcp_socket_test"
 harness = false
+
+[[test]]
+name = "duplex_test"
+harness = false

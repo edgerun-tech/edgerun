@@ -31,6 +31,7 @@ mod cancellation;
 mod unix;
 mod unix_dgram;
 mod async_fd;
+mod duplex;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -68,6 +69,9 @@ pub use async_fd::{AsyncFd, ReadyFuture, OwnedAsyncFd, async_fd_from_raw, pipe};
 
 // I/O utilities.
 pub use io_util::{copy, copy_bidirectional, empty, sink, repeat, Empty, Sink, Repeat};
+
+// DuplexStream.
+pub use duplex::DuplexStream;
 
 // UDP.
 pub use udp::AsyncUdpSocket;
