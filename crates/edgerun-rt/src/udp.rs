@@ -30,6 +30,12 @@ pub struct AsyncUdpSocket {
 impl AsyncUdpSocket {
     pub fn bind<A: ToSocketAddrs>(addr: A) -> io::Result<Self> {
         let socket = StdUdp::bind(addr)?;
+        Self::from_std(socket)
+    }
+
+    /// Wrap an existing `std::net::UdpSocket` as an async socket.
+    /// The socket is set to non-blocking mode.
+    pub fn from_std(socket: StdUdp) -> io::Result<Self> {
         socket.set_nonblocking(true)?;
         let fd = socket.as_raw_fd();
         std::mem::forget(socket);

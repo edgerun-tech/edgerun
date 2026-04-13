@@ -2,7 +2,6 @@
 
 use super::Http3Error;
 use std::collections::HashMap;
-use std::net::UdpSocket;
 use std::str::FromStr;
 
 use super::http3::frame::{Http3Frame, Http3FrameType};
@@ -101,9 +100,12 @@ impl Http3Connection {
         self.going_away
     }
 
-    /// Create a new HTTP/3 client connection
-    pub fn connect(socket: UdpSocket, server_name: &str) -> Result<Self> {
-        let quic = QuicConn::client(socket, server_name)?;
+    /// Create a new HTTP/3 client connection.
+    ///
+    /// Resolves the server hostname, establishes a QUIC connection with
+    /// TLS 1.3 handshake, and sends the HTTP/3 connection preface.
+    pub async fn connect(server_name: &str) -> Result<Self> {
+        let quic = QuicConn::connect(server_name).await?;
 
         let mut conn = Http3Connection {
             quic,
@@ -132,8 +134,7 @@ impl Http3Connection {
             max_uni_streams: 100,
         };
 
-        // Send connection preface: create control stream and send SETTINGS
-        conn.send_connection_preface()?;
+        conn.send_connection_preface().await?;
 
         Ok(conn)
     }
@@ -141,7 +142,7 @@ impl Http3Connection {
     /// Create a server-side HTTP/3 connection from an established QUIC connection.
     ///
     /// Sends the HTTP/3 connection preface: control stream + QPACK encoder/decoder streams.
-    pub fn from_server(quic: QuicConn) -> super::Result<Self> {
+    pub async fn from_server(quic: QuicConn) -> super::Result<Self> {
         let mut conn = Http3Connection {
             quic,
             qpack_encoder: QpackEncoder::new(),
@@ -169,11 +170,7 @@ impl Http3Connection {
             max_uni_streams: 100,
         };
 
-        // Send server connection preface:
-        // 1. Control stream with SETTINGS
-        // 2. QPACK encoder stream
-        // 3. QPACK decoder stream
-        conn.send_server_preface()?;
+        conn.send_server_preface().await?;
 
         Ok(conn)
     }
@@ -217,8 +214,7 @@ impl Http3Connection {
     /// - Control stream (type 0x00) with SETTINGS
     /// - QPACK encoder stream (type 0x02)
     /// - QPACK decoder stream (type 0x03)
-    fn send_server_preface(&mut self) -> super::Result<()> {
-        // 1. Control stream (stream ID 3 for server-initiated uni)
+    async fn send_server_preface(&mut self) -> super::Result<()> {
         let control_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
 
@@ -230,32 +226,25 @@ impl Http3Connection {
         };
         stream_data.extend_from_slice(&settings_frame.to_bytes());
 
-        self.quic.send_stream_data(control_stream_id, &stream_data, false)
+        self.quic.send_stream_data(control_stream_id, &stream_data, false).await
             .map_err(|e| format!("Failed to send control stream: {}", e))?;
         self.control_stream_id = Some(control_stream_id);
 
-        // 2. QPACK encoder stream (stream ID 7)
         let encoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
 
         let mut encoder_data = Vec::new();
         Self::encode_varint(stream_types::QPACK_ENCODER, &mut encoder_data);
-        // No additional data needed — default settings are fine
-
-        self.quic.send_stream_data(encoder_stream_id, &encoder_data, false)
+        self.quic.send_stream_data(encoder_stream_id, &encoder_data, false).await
             .map_err(|e| format!("Failed to send QPACK encoder stream: {}", e))?;
 
-        // 3. QPACK decoder stream (stream ID 11)
         let decoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
 
         let mut decoder_data = Vec::new();
         Self::encode_varint(stream_types::QPACK_DECODER, &mut decoder_data);
-        // Send Set Max Table Capacity with 0 (no dynamic table for now)
-        // Instruction: 0x20 | (max_table_capacity >> 8) ... (simplified: just 0)
-        decoder_data.push(0x20); // Set Max Table Capacity = 0
-
-        self.quic.send_stream_data(decoder_stream_id, &decoder_data, false)
+        decoder_data.push(0x20);
+        self.quic.send_stream_data(decoder_stream_id, &decoder_data, false).await
             .map_err(|e| format!("Failed to send QPACK decoder stream: {}", e))?;
 
         Ok(())
@@ -278,35 +267,28 @@ impl Http3Connection {
 
 
     /// Send connection preface (control stream + SETTINGS)
-    fn send_connection_preface(&mut self) -> Result<()> {
-        // Create control stream (unidirectional)
+    async fn send_connection_preface(&mut self) -> Result<()> {
         let control_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
 
-        // Stream type indicator: 0x00 = control stream
         let mut stream_data = Vec::new();
         Self::encode_varint(stream_types::CONTROL, &mut stream_data);
 
-        // SETTINGS frame
         let settings_frame = Http3Frame::Settings {
             entries: self.local_settings.to_entries(),
         };
         stream_data.extend_from_slice(&settings_frame.to_bytes());
 
-        // Send on QUIC unidirectional stream
-        self.quic.send_stream_data(control_stream_id, &stream_data, false)
+        self.quic.send_stream_data(control_stream_id, &stream_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
 
         self.control_stream_id = Some(control_stream_id);
 
-        // Create QPACK encoder stream (unidirectional, type 0x02)
         let encoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
         let mut encoder_data = Vec::new();
         Self::encode_varint(stream_types::QPACK_ENCODER, &mut encoder_data);
-        // Set Max Table Capacity (if dynamic table enabled)
         if self.qpack_encoder.insert_count() == 0 && self.local_settings.max_table_capacity > 0 {
-            // Send Set Max Table Capacity: 0x20 | (capacity & 0x1F), then remaining if > 31
             let cap = self.local_settings.max_table_capacity as usize;
             if cap <= 31 {
                 encoder_data.push((0x20 | (cap & 0x1F)) as u8);
@@ -320,17 +302,15 @@ impl Http3Connection {
                 encoder_data.push(remaining as u8);
             }
         }
-        self.quic.send_stream_data(encoder_stream_id, &encoder_data, false)
+        self.quic.send_stream_data(encoder_stream_id, &encoder_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
         self.qpack_encoder_stream_id = Some(encoder_stream_id);
 
-        // Create QPACK decoder stream (unidirectional, type 0x03)
         let decoder_stream_id = self.next_uni_stream_id;
         self.next_uni_stream_id += 4;
         let mut decoder_data = Vec::new();
         Self::encode_varint(stream_types::QPACK_DECODER, &mut decoder_data);
-        // Decoder stream starts empty — instructions sent as needed
-        self.quic.send_stream_data(decoder_stream_id, &decoder_data, false)
+        self.quic.send_stream_data(decoder_stream_id, &decoder_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
         self.qpack_decoder_stream_id = Some(decoder_stream_id);
 
@@ -363,37 +343,46 @@ impl Http3Connection {
     /// the request body, then `send_response(stream_id, ...)` to reply.
     ///
     /// Returns `None` if no data is available yet.
-    pub fn accept_request(
-        &mut self,
-    ) -> Result<Option<(u64, Method, Uri, HeaderMap)>> {
-        loop {
-            let (stream_id, frame) = match self.poll_stream_with_buffer()? {
-                Some((sid, frame)) => (sid, frame),
-                None => return Ok(None),
-            };
-
-            match frame {
-                Http3Frame::Headers { header_block } => {
-                    // Decode the request headers
-                    let (method, uri, headers) =
-                        Self::decode_request(&header_block, &mut self.qpack_decoder)?;
-
-                    // Mark that this stream has received HEADERS
-                    self.stream_headers_received.insert(stream_id, true);
-
-                    return Ok(Some((stream_id, method, uri, headers)));
-                }
-                Http3Frame::Data { payload } => {
-                    // Data before headers — buffer it for later
-                    let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
-                    buf.extend_from_slice(&payload);
-                }
-                _ => {
-                    // Ignore non-data frames during request acceptance
+        /// Accept the next incoming HTTP/3 request (server-side).
+        ///
+        /// Receives data from the QUIC connection, parses HTTP/3 frames,
+        /// decodes QPACK headers, and returns `(stream_id, method, uri, headers)`.
+        ///
+        /// After calling this, use `recv_request_body(stream_id)` to collect
+        /// the request body, then `send_response(stream_id, ...)` to reply.
+        ///
+        /// Returns `None` if no data is available yet.
+        pub async fn accept_request(
+            &mut self,
+        ) -> Result<Option<(u64, Method, Uri, HeaderMap)>> {
+            loop {
+                let (stream_id, frame) = match self.poll_stream_with_buffer().await? {
+                    Some((sid, frame)) => (sid, frame),
+                    None => return Ok(None),
+                };
+    
+                match frame {
+                    Http3Frame::Headers { header_block } => {
+                        // Decode the request headers
+                        let (method, uri, headers) =
+                            Self::decode_request(&header_block, &mut self.qpack_decoder)?;
+    
+                        // Mark that this stream has received HEADERS
+                        self.stream_headers_received.insert(stream_id, true);
+    
+                        return Ok(Some((stream_id, method, uri, headers)));
+                    }
+                    Http3Frame::Data { payload } => {
+                        // Data before headers — buffer it for later
+                        let buf = self.recv_buffers.entry(stream_id).or_insert_with(Vec::new);
+                        buf.extend_from_slice(&payload);
+                    }
+                    _ => {
+                        // Ignore non-data frames during request acceptance
+                    }
                 }
             }
         }
-    }
 
     /// Receive the request body for the given stream.
     ///
@@ -402,41 +391,48 @@ impl Http3Connection {
     /// then polls for additional DATA frames.
     ///
     /// Returns the body bytes, or `None` if no body data is available yet.
-    pub fn recv_request_body(&mut self, stream_id: u64) -> Result<Option<Vec<u8>>> {
-        let mut body = Vec::new();
-
-        // First, return any buffered data (from DATA frames received before HEADERS)
-        if let Entry::Occupied(mut entry) = self.recv_buffers.entry(stream_id) {
-            let buf = entry.get_mut();
-            if !buf.is_empty() {
-                body.append(buf);
-                entry.remove();
-            }
-        }
-
-        // Then collect any additional DATA frames
-        loop {
-            match self.poll_stream(stream_id)? {
-                Some(Http3Frame::Data { payload }) => {
-                    body.extend_from_slice(&payload);
+        /// Receive the request body for the given stream.
+        ///
+        /// Collects all DATA frames on this stream until no more data is available.
+        /// Returns buffered data first (from frames received before HEADERS),
+        /// then polls for additional DATA frames.
+        ///
+        /// Returns the body bytes, or `None` if no body data is available yet.
+        pub async fn recv_request_body(&mut self, stream_id: u64) -> Result<Option<Vec<u8>>> {
+            let mut body = Vec::new();
+    
+            // First, return any buffered data (from DATA frames received before HEADERS)
+            if let Entry::Occupied(mut entry) = self.recv_buffers.entry(stream_id) {
+                let buf = entry.get_mut();
+                if !buf.is_empty() {
+                    body.append(buf);
+                    entry.remove();
                 }
-                Some(_) => {} // Ignore other frames
-                None => break,
+            }
+    
+            // Then collect any additional DATA frames
+            loop {
+                match self.poll_stream(stream_id).await? {
+                    Some(Http3Frame::Data { payload }) => {
+                        body.extend_from_slice(&payload);
+                    }
+                    Some(_) => {} // Ignore other frames
+                    None => break,
+                }
+            }
+    
+            if body.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(body))
             }
         }
-
-        if body.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(body))
-        }
-    }
 
     /// Poll for an HTTP/3 frame on any stream, using per-stream receive buffers.
     ///
     /// If a stream has buffered data, tries to parse a frame from it first.
     /// Otherwise, reads from the QUIC connection.
-    fn poll_stream_with_buffer(&mut self) -> Result<Option<(u64, Http3Frame)>> {
+    async fn poll_stream_with_buffer(&mut self) -> Result<Option<(u64, Http3Frame)>> {
         // First, check existing buffers for parseable frames
         // Collect stream IDs and clone their buffer data to avoid borrow conflicts
         let stream_ids: Vec<u64> = self.recv_buffers.keys().copied().collect();
@@ -462,15 +458,14 @@ impl Http3Connection {
                     // Not enough data for a complete frame yet
                 }
                 Err(_) => {
-                    // Protocol violation — reset this stream
-                    let _ = self.quic.send_reset_stream(*stream_id, error_codes::H3_FRAME_ERROR);
+                    let _ = self.quic.send_reset_stream(*stream_id, error_codes::H3_FRAME_ERROR).await;
                     self.recv_buffers.remove(stream_id);
                 }
             }
         }
 
         // Read from QUIC connection
-        match self.quic.recv_stream_data() {
+        match self.quic.recv_stream_data().await {
             Ok(Some((stream_id, data, fin))) => {
                 // Handle stream closure
                 if fin {
@@ -672,9 +667,7 @@ impl Http3Connection {
     ///
     /// Encodes the method, URI, and headers via QPACK, sends HEADERS + DATA
     /// on a new bidirectional stream, and returns the stream ID.
-    ///
-    /// The stream ID can be used with `poll_stream()` to receive the response.
-    pub fn send_request(
+    pub async fn send_request(
         &mut self,
         method: &Method,
         uri: &Uri,
@@ -682,14 +675,14 @@ impl Http3Connection {
         body: Option<Vec<u8>>,
     ) -> Result<u64> {
         let header_block = Self::encode_request(method, uri, headers, &mut self.qpack_encoder)?;
-        self.send_request_raw(header_block, body)
+        self.send_request_raw(header_block, body).await
     }
 
     /// Send an HTTP/3 response using typed parameters.
     ///
     /// Encodes the status and headers via QPACK, sends HEADERS + DATA on the
     /// given stream ID.
-    pub fn send_response(
+    pub async fn send_response(
         &mut self,
         stream_id: u64,
         status: StatusCode,
@@ -697,7 +690,7 @@ impl Http3Connection {
         body: Option<Vec<u8>>,
     ) -> Result<()> {
         let header_block = Self::encode_response(status, headers, &mut self.qpack_encoder)?;
-        self.send_response_raw(stream_id, header_block, body)
+        self.send_response_raw(stream_id, header_block, body).await
     }
 
     /// Receive and decode an HTTP/3 response from the given stream.
@@ -706,16 +699,14 @@ impl Http3Connection {
     /// block, and returns `(status, headers, body)`.
     ///
     /// Returns `None` if no data is available yet.
-    pub fn recv_response(
+    pub async fn recv_response(
         &mut self,
         stream_id: u64,
     ) -> Result<Option<(StatusCode, HeaderMap, Vec<u8>)>> {
-        // Poll for frames on the stream
         let mut headers_received = false;
         let mut body = Vec::new();
 
-        // First, get the HEADERS frame
-        let frame = match self.poll_stream(stream_id)? {
+        let frame = match self.poll_stream(stream_id).await? {
             Some(f) => f,
             None => return Ok(None),
         };
@@ -727,7 +718,6 @@ impl Http3Connection {
                 (s, h)
             }
             Http3Frame::Data { payload } => {
-                // Body without headers — unusual but handle it
                 body.extend_from_slice(&payload);
                 return Ok(Some((
                     StatusCode::new(200).map_err(|e| Http3Error::ProtocolViolation(e))?,
@@ -742,13 +732,12 @@ impl Http3Connection {
             }
         };
 
-        // Then collect any DATA frames
         loop {
-            match self.poll_stream(stream_id)? {
+            match self.poll_stream(stream_id).await? {
                 Some(Http3Frame::Data { payload }) => {
                     body.extend_from_slice(&payload);
                 }
-                Some(_) => {} // Ignore other frames
+                Some(_) => {}
                 None => break,
             }
         }
@@ -767,23 +756,29 @@ impl Http3Connection {
     /// or `recv_response()` with the returned stream ID.
     ///
     /// Returns `None` if no data is available yet.
-    pub fn accept_stream(&mut self) -> Result<Option<(u64, Http3Frame)>> {
-        match self.poll_stream_any()? {
-            Some((stream_id, frame)) => Ok(Some((stream_id, frame))),
-            None => Ok(None),
+        /// Accept the next incoming HTTP/3 stream (server-side).
+        ///
+        /// Polls the QUIC connection for the first available STREAM frame and
+        /// returns `(stream_id, frame)`. The caller can then use `recv_request()`
+        /// or `recv_response()` with the returned stream ID.
+        ///
+        /// Returns `None` if no data is available yet.
+        pub async fn accept_stream(&mut self) -> Result<Option<(u64, Http3Frame)>> {
+            match self.poll_stream_any().await? {
+                Some((stream_id, frame)) => Ok(Some((stream_id, frame))),
+                None => Ok(None),
+            }
         }
-    }
 
     /// Poll for incoming frames on any stream.
     ///
     /// Returns the parsed [`Http3Frame`] and the stream ID it belongs to.
-    fn poll_stream_any(&mut self) -> Result<Option<(u64, Http3Frame)>> {
-        match self.quic.recv_stream_data() {
+    async fn poll_stream_any(&mut self) -> Result<Option<(u64, Http3Frame)>> {
+        match self.quic.recv_stream_data().await {
             Ok(Some((stream_id, data, _fin))) => {
                 if data.is_empty() {
                     return Ok(None);
                 }
-                // Parse as HTTP/3 frame
                 Http3Frame::from_bytes(&data)
                     .map(|(frame, _consumed)| Some((stream_id, frame)))
                     .map_err(|e| Http3Error::ProtocolViolation(format!("Malformed HTTP/3 frame: {:?}", e)))
@@ -799,40 +794,46 @@ impl Http3Connection {
     /// block, and returns `(method, uri, headers, body)`.
     ///
     /// Returns `None` if no data is available yet.
-    pub fn recv_request(
-        &mut self,
-        stream_id: u64,
-    ) -> Result<Option<(Method, Uri, HeaderMap, Vec<u8>)>> {
-        let frame = match self.poll_stream(stream_id)? {
-            Some(f) => f,
-            None => return Ok(None),
-        };
-
-        let (method, uri, headers) = match frame {
-            Http3Frame::Headers { header_block } => {
-                Self::decode_request(&header_block, &mut self.qpack_decoder)?
-            }
-            _ => {
-                return Err(Http3Error::ProtocolViolation(
-                    "Expected HEADERS frame for request".to_string(),
-                ));
-            }
-        };
-
-        // Collect body
-        let mut body = Vec::new();
-        loop {
-            match self.poll_stream(stream_id)? {
-                Some(Http3Frame::Data { payload }) => {
-                    body.extend_from_slice(&payload);
+        /// Receive and decode an HTTP/3 request from the given stream.
+        ///
+        /// Polls the stream for HEADERS + DATA frames, decodes the QPACK header
+        /// block, and returns `(method, uri, headers, body)`.
+        ///
+        /// Returns `None` if no data is available yet.
+        pub async fn recv_request(
+            &mut self,
+            stream_id: u64,
+        ) -> Result<Option<(Method, Uri, HeaderMap, Vec<u8>)>> {
+            let frame = match self.poll_stream(stream_id).await? {
+                Some(f) => f,
+                None => return Ok(None),
+            };
+    
+            let (method, uri, headers) = match frame {
+                Http3Frame::Headers { header_block } => {
+                    Self::decode_request(&header_block, &mut self.qpack_decoder)?
                 }
-                Some(_) => {}
-                None => break,
+                _ => {
+                    return Err(Http3Error::ProtocolViolation(
+                        "Expected HEADERS frame for request".to_string(),
+                    ));
+                }
+            };
+    
+            // Collect body
+            let mut body = Vec::new();
+            loop {
+                match self.poll_stream(stream_id).await? {
+                    Some(Http3Frame::Data { payload }) => {
+                        body.extend_from_slice(&payload);
+                    }
+                    Some(_) => {}
+                    None => break,
+                }
             }
+    
+            Ok(Some((method, uri, headers, body)))
         }
-
-        Ok(Some((method, uri, headers, body)))
-    }
 
     // ------------------------------------------------------------------
     // QPACK encode/decode helpers
@@ -935,7 +936,7 @@ impl Http3Connection {
     /// # Extended CONNECT (WebSocket)
     /// Set `protocol` to `Some("websocket")` for WebSocket-over-HTTP/3 tunneling
     /// (RFC 9114 §4.4, RFC 9220).
-    pub fn send_connect(
+    pub async fn send_connect(
         &mut self,
         authority: &str,
         protocol: Option<&str>,
@@ -949,7 +950,7 @@ impl Http3Connection {
         )?;
 
         // CONNECT uses a bidirectional stream, no body initially
-        self.send_request_raw(header_block, None)
+        self.send_request_raw(header_block, None).await
     }
 
     /// Encode a response into a QPACK header block.
@@ -1068,12 +1069,11 @@ impl Http3Connection {
     // ------------------------------------------------------------------
 
     /// Send a request with a pre-encoded QPACK header block.
-    pub fn send_request_raw(
+    pub async fn send_request_raw(
         &mut self,
         header_block: Vec<u8>,
         body: Option<Vec<u8>>,
     ) -> Result<u64> {
-        // Check GOAWAY — reject new streams beyond goaway ID
         if let Some(max_id) = self.going_away {
             if self.next_bidi_stream_id > max_id {
                 return Err(Http3Error::FrameUnexpected(format!(
@@ -1083,7 +1083,6 @@ impl Http3Connection {
             }
         }
 
-        // Check stream creation limits
         if !self.can_create_bidi_stream() {
             return Err(Http3Error::ProtocolViolation(format!(
                 "Bidirectional stream limit reached ({}/{})",
@@ -1094,26 +1093,21 @@ impl Http3Connection {
         let stream_id = self.next_bidi_stream_id;
         self.next_bidi_stream_id += 4;
 
-        // Create stream
         let stream = Http3Stream::new(stream_id, Http3StreamType::Request);
         self.streams.insert(stream_id, stream);
 
-        // Send HEADERS frame
         let headers_frame = Http3Frame::Headers { header_block };
         let frame_data = headers_frame.to_bytes();
 
         self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
+            .send_stream_data(stream_id, &frame_data, body.is_none()).await
             .map_err(|e| format!("Failed to send headers: {}", e))?;
 
-        // Send DATA frame if body present
         if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data {
-                payload: body_data,
-            };
+            let data_frame = Http3Frame::Data { payload: body_data };
             let data_bytes = data_frame.to_bytes();
             self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
+                .send_stream_data(stream_id, &data_bytes, true).await
                 .map_err(|e| format!("Failed to send data: {}", e))?;
         }
 
@@ -1121,7 +1115,7 @@ impl Http3Connection {
     }
 
     /// Send an HTTP/3 response with a pre-encoded QPACK header block.
-    pub fn send_response_raw(
+    pub async fn send_response_raw(
         &mut self,
         stream_id: u64,
         header_block: Vec<u8>,
@@ -1131,16 +1125,14 @@ impl Http3Connection {
         let frame_data = headers_frame.to_bytes();
 
         self.quic
-            .send_stream_data(stream_id, &frame_data, body.is_none())
+            .send_stream_data(stream_id, &frame_data, body.is_none()).await
             .map_err(|e| format!("Failed to send headers: {}", e))?;
 
         if let Some(body_data) = body {
-            let data_frame = Http3Frame::Data {
-                payload: body_data,
-            };
+            let data_frame = Http3Frame::Data { payload: body_data };
             let data_bytes = data_frame.to_bytes();
             self.quic
-                .send_stream_data(stream_id, &data_bytes, true)
+                .send_stream_data(stream_id, &data_bytes, true).await
                 .map_err(|e| format!("Failed to send data: {}", e))?;
         }
 
@@ -1155,7 +1147,7 @@ impl Http3Connection {
     ///
     /// Trailers are additional headers sent after the response body.
     /// The stream remains open after sending trailers (FIN not set).
-    pub fn send_response_trailers(
+    pub async fn send_response_trailers(
         &mut self,
         stream_id: u64,
         trailer_block: Vec<u8>,
@@ -1166,7 +1158,7 @@ impl Http3Connection {
         let frame_data = headers_frame.to_bytes();
 
         self.quic
-            .send_stream_data(stream_id, &frame_data, false)
+            .send_stream_data(stream_id, &frame_data, false).await
             .map_err(|e| Http3Error::QuicError(e))
     }
 
@@ -1174,12 +1166,12 @@ impl Http3Connection {
     ///
     /// After receiving the response body, call this to check for trailers.
     /// Returns `None` if no trailer HEADERS frame is available.
-    pub fn recv_response_trailers(
+    pub async fn recv_response_trailers(
         &mut self,
         stream_id: u64,
     ) -> Result<Option<HeaderMap>> {
         // Poll for a HEADERS frame on the stream (trailers)
-        match self.poll_stream(stream_id)? {
+        match self.poll_stream(stream_id).await? {
             Some(Http3Frame::Headers { header_block }) => {
                 let headers = self.qpack_decoder.decode(&header_block)
                     .map_err(|e| Http3Error::QpackError(e.to_string()))?;
@@ -1198,8 +1190,7 @@ impl Http3Connection {
     ///
     /// Returns the parsed [`Http3Frame`] if one was received, `None` if no data
     /// is available, or an error if the frame is malformed.
-    pub fn poll_stream(&mut self, stream_id: u64) -> Result<Option<Http3Frame>> {
-        // First check buffer for this stream
+    pub async fn poll_stream(&mut self, stream_id: u64) -> Result<Option<Http3Frame>> {
         if let Entry::Occupied(mut entry) = self.recv_buffers.entry(stream_id) {
             let buf = entry.get_mut();
             if !buf.is_empty() {
@@ -1211,21 +1202,16 @@ impl Http3Connection {
                         }
                         return Ok(Some(frame));
                     }
-                    Err(_) => {
-                        // Not enough data in buffer — fall through to read more
-                    }
+                    Err(_) => {}
                 }
             }
         }
 
-        // Try to receive data from QUIC
-        match self.quic.recv_stream_data() {
+        match self.quic.recv_stream_data().await {
             Ok(Some((recv_stream_id, data, _fin))) => {
-                // Buffer the data for this stream
                 let buf = self.recv_buffers.entry(recv_stream_id).or_insert_with(Vec::new);
                 buf.extend_from_slice(&data);
 
-                // If it's for the requested stream, try to parse
                 if recv_stream_id == stream_id {
                     match Http3Frame::from_bytes(buf) {
                         Ok((frame, consumed)) => {
@@ -1235,14 +1221,10 @@ impl Http3Connection {
                             }
                             return Ok(Some(frame));
                         }
-                        Err(_) => {
-                            // Not enough data yet — return None, data stays in buffer
-                            return Ok(None);
-                        }
+                        Err(_) => return Ok(None),
                     }
                 }
 
-                // Data for a different stream — return None, data stays buffered
                 Ok(None)
             }
             Ok(None) => Ok(None),
@@ -1251,7 +1233,7 @@ impl Http3Connection {
     }
 
     /// Send GOAWAY
-    pub fn goaway(&mut self, stream_id: u64) -> Result<()> {
+    pub async fn goaway(&mut self, stream_id: u64) -> Result<()> {
         self.sent_goaway_id = stream_id;
         let frame = Http3Frame::Goaway { stream_id };
         let frame_data = frame.to_bytes();
@@ -1260,7 +1242,7 @@ impl Http3Connection {
             .ok_or_else(|| "No control stream established".to_string())?;
 
         self.quic
-            .send_stream_data(control_id, &frame_data, false)
+            .send_stream_data(control_id, &frame_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
 
         Ok(())
@@ -1313,7 +1295,7 @@ impl Http3Connection {
     /// Returns the push stream ID that will carry the pushed response.
     /// After calling this, use `quic.send_stream_data(push_stream_id, ...)`
     /// to send HEADERS + DATA frames on the push stream.
-    pub fn send_push_promise(
+    pub async fn send_push_promise(
         &mut self,
         request_stream_id: u64,
         promised_headers: Vec<u8>,
@@ -1339,7 +1321,7 @@ impl Http3Connection {
         let frame_data = push_promise.to_bytes();
 
         self.quic
-            .send_stream_data(request_stream_id, &frame_data, false)
+            .send_stream_data(request_stream_id, &frame_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
 
         // Create the push stream with type varint prefix (RFC 9114 §6.2.4)
@@ -1347,7 +1329,7 @@ impl Http3Connection {
         Self::encode_varint(stream_types::PUSH, &mut push_stream_data);
 
         self.quic
-            .send_stream_data(push_stream_id, &push_stream_data, false)
+            .send_stream_data(push_stream_id, &push_stream_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
 
         // Track this push stream
@@ -1360,7 +1342,7 @@ impl Http3Connection {
     ///
     /// After `send_push_promise()` creates the push stream, call this to
     /// send the pushed response headers and body.
-    pub fn send_push_data(
+    pub async fn send_push_data(
         &mut self,
         push_stream_id: u64,
         push_headers: Vec<u8>,
@@ -1371,7 +1353,7 @@ impl Http3Connection {
         let headers_frame = Http3Frame::Headers { header_block: push_headers };
         let headers_data = headers_frame.to_bytes();
         self.quic
-            .send_stream_data(push_stream_id, &headers_data, false)
+            .send_stream_data(push_stream_id, &headers_data, false).await
             .map_err(|e| Http3Error::QuicError(e))?;
 
         // Send DATA frame on push stream
@@ -1379,12 +1361,12 @@ impl Http3Connection {
             let data_frame = Http3Frame::Data { payload: push_body };
             let data_data = data_frame.to_bytes();
             self.quic
-                .send_stream_data(push_stream_id, &data_data, fin)
+                .send_stream_data(push_stream_id, &data_data, fin).await
                 .map_err(|e| Http3Error::QuicError(e))?;
         } else if fin {
             // No body, but close the stream
             self.quic
-                .send_stream_data(push_stream_id, &[], true)
+                .send_stream_data(push_stream_id, &[], true).await
                 .map_err(|e| Http3Error::QuicError(e))?;
         }
 
@@ -1392,7 +1374,7 @@ impl Http3Connection {
     }
 
     /// Send a MAX_PUSH_ID frame to allow the server to push more responses.
-    pub fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
+    pub async fn send_max_push_id(&mut self, push_id: u64) -> Result<()> {
         let frame = Http3Frame::MaxPushId { push_id };
         let frame_data = frame.to_bytes();
 
@@ -1400,14 +1382,14 @@ impl Http3Connection {
             .ok_or_else(|| "No control stream established".to_string())?;
 
         self.quic
-            .send_stream_data(control_id, &frame_data, false)
+            .send_stream_data(control_id, &frame_data, false).await
             .map_err(|e| format!("Failed to send MAX_PUSH_ID: {}", e))?;
 
         Ok(())
     }
 
     /// Cancel a server push stream.
-    pub fn cancel_push(&mut self, push_id: u64) -> Result<()> {
+    pub async fn cancel_push(&mut self, push_id: u64) -> Result<()> {
         let frame = Http3Frame::CancelPush { push_id };
         let frame_data = frame.to_bytes();
 
@@ -1415,7 +1397,7 @@ impl Http3Connection {
             .ok_or_else(|| "No control stream established".to_string())?;
 
         self.quic
-            .send_stream_data(control_id, &frame_data, false)
+            .send_stream_data(control_id, &frame_data, false).await
             .map_err(|e| format!("Failed to send CANCEL_PUSH: {}", e))?;
 
         Ok(())
@@ -1431,13 +1413,11 @@ impl Http3Connection {
     /// this reads the push ID varint prefix and then the HEADERS frame.
     ///
     /// Returns (push_id, decoded_headers) if a complete push is available.
-    pub fn accept_push_stream(
+    pub async fn accept_push_stream(
         &mut self,
         _expected_stream_id: u64,
     ) -> Result<Option<(u64, Vec<(String, String)>)>> {
-        // Push stream wire format: push_id (varint) + HEADERS frame + DATA frame(s)
-        // First, read the raw stream data (recv_stream_data returns stream_id, data, fin)
-        let result = match self.quic.recv_stream_data()? {
+        let result = match self.quic.recv_stream_data().await? {
             Some(d) => d,
             None => return Ok(None),
         };
@@ -1473,11 +1453,11 @@ impl Http3Connection {
     ///
     /// After `accept_push_stream()`, call this repeatedly to receive
     /// the pushed response body.
-    pub fn read_push_body(
+    pub async fn read_push_body(
         &mut self,
         stream_id: u64,
     ) -> Result<Option<Vec<u8>>> {
-        match self.poll_stream(stream_id)? {
+        match self.poll_stream(stream_id).await? {
             Some(Http3Frame::Data { payload }) => Ok(Some(payload)),
             _ => Ok(None),
         }
@@ -1497,7 +1477,7 @@ impl Http3Connection {
     ///
     /// Priority determines the scheduling order of responses.
     /// The priority field is sent on the request stream before the request body.
-    pub fn set_stream_priority(
+    pub async fn set_stream_priority(
         &mut self,
         stream_id: u64,
         urgency: u8,
@@ -1510,7 +1490,7 @@ impl Http3Connection {
         let priority_data = vec![0x00, priority_byte];
 
         self.quic
-            .send_stream_data(stream_id, &priority_data, false)
+            .send_stream_data(stream_id, &priority_data, false).await
             .map_err(|e| Http3Error::QuicError(e))
     }
 
@@ -1704,9 +1684,9 @@ impl Http3Connection {
     /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
     ///
     /// Tells the peer to stop sending on this stream and discard pending data.
-    pub fn reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
+    pub async fn reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
         self.quic
-            .send_reset_stream(stream_id, error_code)
+            .send_reset_stream(stream_id, error_code).await
             .map_err(|e| Http3Error::QuicError(e))?;
         self.on_stream_closed(stream_id);
         Ok(())
@@ -1715,9 +1695,9 @@ impl Http3Connection {
     /// Send STOP_SENDING to tell peer to stop sending on a stream (RFC 9000 §4.6).
     ///
     /// We don't want to receive more data on this stream.
-    pub fn stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
+    pub async fn stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<()> {
         self.quic
-            .send_stop_sending(stream_id, error_code)
+            .send_stop_sending(stream_id, error_code).await
             .map_err(|e| Http3Error::QuicError(e))
     }
 }

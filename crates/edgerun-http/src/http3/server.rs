@@ -350,6 +350,7 @@ impl Http3Server {
 
         // Wrap in Http3Connection (sends server preface: control + QPACK streams)
         let conn = Http3Connection::from_server(quic_conn)
+            .await
             .map_err(|e| format!("Failed to create server HTTP/3 connection: {}", e))?;
 
         Ok((conn, client_addr))

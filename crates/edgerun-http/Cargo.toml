@@ -18,6 +18,7 @@ tls = []
 edgerun-tls = { path = "../edgerun-tls" }
 edgerun-crypto = { path = "../edgerun-crypto" }
 edgerun-rt = { path = "../edgerun-rt" }
+parking_lot = "0.12"
 edgerun-log = { path = "../edgerun-log" }
 edgerun-dns = { path = "../edgerun-dns" }
 hpack-patched = { path = "crates/hpack-patched" }
@@ -31,6 +32,7 @@ edgerun-qpack = { path = "../edgerun-qpack" }
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+futures = "0.3"
 
 [lints]
 workspace = true

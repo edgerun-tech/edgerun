@@ -11,6 +11,7 @@ mod ready_queue;
 mod waker;
 mod reactor;
 mod task_map;
+mod metrics;
 mod blocking_pool;
 mod runtime;
 mod io_traits;
@@ -55,7 +56,10 @@ mod watch;
 pub use std::time::Instant;
 
 // Runtime.
-pub use runtime::{Builder, Runtime, RuntimeHandle, spawn, spawn_blocking};
+pub use runtime::{Builder, JoinError, JoinHandle, Runtime, RuntimeHandle, spawn, spawn_blocking};
+
+// Metrics.
+pub use metrics::RuntimeMetrics;
 
 // I/O traits and extensions.
 pub use io_traits::{AsyncRead, AsyncWrite, AsyncReadExt, AsyncWriteExt, Take, poll_fn, PollFn, Lines, ReadLineFut};

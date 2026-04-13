@@ -485,14 +485,14 @@ mod tests {
 
     #[test]
     fn test_server_handshaker_new() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let hs = QuicTlsServerHandshaker::new(cert);
         assert!(!hs.complete);
     }
 
     #[test]
     fn test_server_initial_keys_derive() {
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let hs = QuicTlsServerHandshaker::new(cert);
         let client_dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let keys = hs.initial_keys(&client_dcid);
@@ -506,7 +506,7 @@ mod tests {
         use edgerun_tls::handshake::ClientHelloBuilder;
         use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let mut hs = QuicTlsServerHandshaker::new(cert);
 
         // Build a real ClientHello
@@ -533,7 +533,7 @@ mod tests {
         use edgerun_tls::handshake::ClientHelloBuilder;
         use edgerun_tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = edgerun_tls::generate_self_signed(&["localhost", "127.0.0.1"]).unwrap();
         let mut hs = QuicTlsServerHandshaker::new(cert);
 
         let mut client_random = [0u8; 32];

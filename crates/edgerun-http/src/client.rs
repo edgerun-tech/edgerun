@@ -7,70 +7,7 @@ use crate::header::HeaderMap;
 use crate::method::Method;
 use crate::uri::Uri;
 use crate::{Error, Request, Response, Result, StatusCode};
-use edgerun_rt::{AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture, timeout};
-use std::sync::Arc;
 use std::time::Duration;
-
-/// A transport that can carry HTTP/1.1 traffic.
-/// Either a raw TCP stream or a TLS-wrapped stream.
-enum Transport {
-    /// Plain TCP (Arc for shared read/write).
-    Tcp(Arc<AsyncTcpStream>),
-    /// TLS 1.3 over TCP.
-    Tls(edgerun_tls::async_tls::AsyncTlsStream<Arc<AsyncTcpStream>>),
-}
-
-impl AsyncRead for Transport {
-    fn poll_read(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        unsafe {
-            match self.get_unchecked_mut() {
-                Transport::Tcp(s) => std::pin::Pin::new(s).poll_read(cx, buf),
-                Transport::Tls(s) => std::pin::Pin::new(s).poll_read(cx, buf),
-            }
-        }
-    }
-}
-
-impl AsyncWrite for Transport {
-    fn poll_write(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        unsafe {
-            match self.get_unchecked_mut() {
-                Transport::Tcp(s) => std::pin::Pin::new(s).poll_write(cx, buf),
-                Transport::Tls(s) => std::pin::Pin::new(s).poll_write(cx, buf),
-            }
-        }
-    }
-    fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        unsafe {
-            match self.get_unchecked_mut() {
-                Transport::Tcp(s) => std::pin::Pin::new(s).poll_flush(cx),
-                Transport::Tls(s) => std::pin::Pin::new(s).poll_flush(cx),
-            }
-        }
-    }
-    fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        unsafe {
-            match self.get_unchecked_mut() {
-                Transport::Tcp(s) => std::pin::Pin::new(s).poll_shutdown(cx),
-                Transport::Tls(s) => std::pin::Pin::new(s).poll_shutdown(cx),
-            }
-        }
-    }
-}
 
 /// HTTP protocol preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +27,7 @@ impl Default for HttpVersion {
 pub struct HttpClient {
     version: HttpVersion,
     connect_timeout: Duration,
+    read_timeout: Duration,
     max_redirects: u8,
     follow_redirects: bool,
     auto_decompress: bool,
@@ -100,6 +38,7 @@ impl HttpClient {
         Self {
             version: HttpVersion::default(),
             connect_timeout: Duration::from_secs(10),
+            read_timeout: Duration::from_secs(30),
             max_redirects: 10,
             follow_redirects: true,
             auto_decompress: true,
@@ -108,6 +47,7 @@ impl HttpClient {
 
     pub fn version(mut self, v: HttpVersion) -> Self { self.version = v; self }
     pub fn with_connect_timeout(mut self, t: Duration) -> Self { self.connect_timeout = t; self }
+    pub fn with_read_timeout(mut self, t: Duration) -> Self { self.read_timeout = t; self }
     pub fn with_max_redirects(mut self, max: u8) -> Self { self.max_redirects = max; self.follow_redirects = max > 0; self }
     pub fn no_redirects(mut self) -> Self { self.follow_redirects = false; self.max_redirects = 0; self }
     pub fn no_decompress(mut self) -> Self { self.auto_decompress = false; self }
@@ -151,130 +91,175 @@ impl HttpClient {
                     Err(_) => self.execute_http1(request).await,
                 }
             }
-            HttpVersion::Http3 | HttpVersion::Best => self.execute_http1(request).await,
+            HttpVersion::Http3 => self.execute_http3(request).await,
+            HttpVersion::Best => {
+                // Try HTTP/3 first, fall back to HTTP/1.1
+                match self.execute_http3(request).await {
+                    Ok(r) => Ok(r),
+                    Err(_) => self.execute_http1(request).await,
+                }
+            }
         }
     }
 
-    /// Execute an HTTP/1.1 request.
+    /// Execute an HTTP/1.1 request using the full-featured `http1::Client`.
     ///
-    /// If the URI scheme is `https`, performs a TLS 1.3 handshake via
-    /// `edgerun_tls::async_tls::AsyncTlsStream` before sending the request.
+    /// Delegates to `http1::Client` which handles DNS resolution, TLS,
+    /// redirects, chunked encoding, and automatic decompression.
     async fn execute_http1(&self, request: &Request) -> Result<Response> {
         use crate::http1::compression;
 
-        let mut current_uri = request.uri().to_string();
-        let mut current_method = request.method().clone();
-        let mut remaining = self.max_redirects;
+        // Build an http1::Request from the top-level Request
+        let uri_str = request.uri().to_string();
+        let mut h1_req = crate::http1::Request::builder()
+            .method(request.method().clone())
+            .uri(&uri_str);
+
+        for (k, v) in request.headers().iter() {
+            h1_req = h1_req.header(k.as_str(), v.as_str());
+        }
+
+        if let Some(body) = request.body() {
+            h1_req = h1_req.body(body.to_vec());
+        }
+
+        let h1_req = h1_req.build()?;
+
+        // Create http1::Client with matching settings
+        let mut h1_client = crate::http1::Client::new()
+            .with_connect_timeout(self.connect_timeout);
+
+        if !self.follow_redirects {
+            h1_client = h1_client.no_redirects();
+        } else {
+            h1_client = h1_client.with_max_redirects(self.max_redirects);
+        }
+
+        if !self.auto_decompress {
+            h1_client = h1_client.no_decompress();
+        }
+
+        // Execute via http1::Client
+        let h1_resp = h1_client.execute(&h1_req).await?;
+
+        // Convert http1::Response → crate::Response
+        let body = if self.auto_decompress {
+            compression::decompress_body(h1_resp.body(), h1_resp.headers())
+                .unwrap_or_else(|| h1_resp.body().to_vec())
+        } else {
+            h1_resp.body().to_vec()
+        };
+
+        let mut headers = HeaderMap::new();
+        for (k, v) in h1_resp.headers().iter() {
+            let _ = headers.insert(k.as_str(), v.as_str());
+        }
+
+        Ok(Response::from_parts(h1_resp.status(), headers, body))
+    }
+
+    /// Execute an HTTP/3 request via QUIC.
+    ///
+    /// Performs DNS resolution, QUIC+TLS handshake, HTTP/3 connection preface,
+    /// request/response exchange, redirect following, and decompression.
+    async fn execute_http3(&self, request: &Request) -> Result<Response> {
+        use crate::http3::connection::Http3Connection;
+        use crate::http1::compression;
+
+        let uri = request.uri();
+        if !uri.is_https() {
+            return Err(Error::ProtocolError(
+                "HTTP/3 only supports HTTPS scheme".to_string()
+            ));
+        }
+
+        let host = uri.host().ok_or_else(|| {
+            Error::ProtocolError("HTTP/3 requires host in URI".to_string())
+        })?.to_string();
+        let port = uri.port().unwrap_or(443);
+
+        let mut resp_redirect_count = 0;
+        let mut current_request = request.clone();
 
         loop {
-            let req = Request::builder()
-                .method(current_method.clone())
-                .uri(&current_uri)
-                .body(request.body().map(|b| b.to_vec()).unwrap_or_default())
-                .build()?;
+            let cur_uri = current_request.uri();
+            let cur_host = cur_uri.host()
+                .ok_or_else(|| Error::ProtocolError("No host".to_string()))?;
+            let cur_port = cur_uri.port().unwrap_or(443);
+            let cur_path = cur_uri.path().to_string();
+            let cur_query = cur_uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+            let path_and_query = format!("{}{}", cur_path, cur_query);
 
-            let uri = req.uri();
-            let host = uri.host().ok_or_else(|| Error::InvalidUri("No host in URI".to_string()))?;
-            let port = uri.port().unwrap_or_else(|| if uri.is_https() { 443 } else { 80 });
-            let use_tls = uri.is_https();
-
-            let mut transport = self.connect(host, port, use_tls).await?;
-
-            let request_bytes = if self.auto_decompress {
-                let mut bytes = req.to_http_bytes();
-                if let Some(pos) = bytes.windows(4).position(|w| w == b"\r\n\r\n") {
-                    let ae = b"Accept-Encoding: gzip, deflate, br\r\n";
-                    bytes.splice(pos..pos, ae.iter().copied());
-                }
-                bytes
+            // Establish HTTP/3 connection
+            let server_addr = if cur_port == 443 {
+                cur_host.to_string()
             } else {
-                req.to_http_bytes()
+                format!("{}:{}", cur_host, cur_port)
             };
 
-            transport.write_all(&request_bytes).await?;
-            transport.flush().await?;
+            let mut conn = Http3Connection::connect(&server_addr).await
+                .map_err(|e| Error::Network(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionRefused, e
+                )))?;
 
-            let mut response_bytes = Vec::new();
-            let mut buf = [0u8; 8192];
-            loop {
-                let n = transport.read(&mut buf).await?;
-                if n == 0 { break; }
-                response_bytes.extend_from_slice(&buf[..n]);
+            let mut headers = HeaderMap::new();
+            for (k, v) in current_request.headers().iter() {
+                let _ = headers.insert(k.as_str(), v.as_str());
             }
 
-            let response = crate::http1::Response::from_bytes(&response_bytes, false)?;
+            let method = current_request.method().clone();
+            let req_uri = Uri::parse(&format!("https://{}{}", server_addr, path_and_query))
+                .map_err(|e| Error::ProtocolError(e.to_string()))?;
 
-            if self.follow_redirects && remaining > 0 {
-                let status = response.status().as_u16();
-                if (301..=308).contains(&status) || status == 307 || status == 308 {
-                    if let Some(location) = response.headers().get("Location") {
-                        current_uri = location.as_str().to_string();
-                        if status <= 302 && !matches!(current_method, Method::GET | Method::HEAD) {
-                            current_method = Method::GET;
-                        }
-                        remaining -= 1;
-                        continue;
-                    }
+            let body = current_request.body().map(|b| b.to_vec());
+
+            let stream_id = conn.send_request(&method, &req_uri, &headers, body).await
+                .map_err(|e| Error::Network(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe, format!("{:?}", e)
+                )))?;
+
+            let response = conn.recv_response(stream_id).await
+                .map_err(|e| Error::Network(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset, format!("{:?}", e)
+                )))?;
+
+            let (status, resp_headers, body) = response.ok_or_else(|| {
+                Error::ProtocolError("No response received".to_string())
+            })?;
+
+            // Check for redirect
+            if self.follow_redirects && status.is_redirection() && resp_redirect_count < self.max_redirects as usize {
+                if let Some(location) = resp_headers.get("location") {
+                    let loc = location.as_str();
+                    let _new_uri = Uri::parse(loc)
+                        .map_err(|e| Error::ProtocolError(format!("Invalid redirect URI: {}", e)))?;
+
+                    current_request = Request::builder()
+                        .method(if status.as_u16() == 303 {
+                            Method::GET
+                        } else {
+                            current_request.method().clone()
+                        })
+                        .uri(loc)
+                        .build()?;
+                    resp_redirect_count += 1;
+                    continue;
                 }
             }
 
             let body = if self.auto_decompress {
-                compression::decompress_body(response.body(), response.headers())
-                    .unwrap_or_else(|| response.body().to_vec())
+                compression::decompress_body(&body, &resp_headers)
+                    .unwrap_or_else(|| body)
             } else {
-                response.body().to_vec()
+                body
             };
 
-            let mut h = HeaderMap::new();
-            for (k, v) in response.headers().iter() {
-                h.insert(k.as_str(), v.as_str());
-            }
-
-            return Ok(Response::from_parts(response.status(), h, body));
+            return Ok(Response::from_parts(status, resp_headers, body));
         }
     }
 
     async fn execute_http2(&self, _request: &Request) -> Result<Response> {
         Err(Error::ProtocolError("HTTP/2 client not yet async-capable".to_string()))
-    }
-
-    /// Connect to a host, optionally performing a TLS handshake.
-    async fn connect(&self, host: &str, port: u16, use_tls: bool) -> Result<Transport> {
-        let tcp = self.connect_tcp(host, port).await?;
-
-        if use_tls {
-            use edgerun_tls::async_tls::AsyncTlsStream;
-            let tls_stream = AsyncTlsStream::client(tcp, host)
-                .await
-                .map_err(|e| Error::InvalidUri(format!("TLS handshake failed: {e}")))?;
-            Ok(Transport::Tls(tls_stream))
-        } else {
-            Ok(Transport::Tcp(tcp))
-        }
-    }
-
-    /// Resolve DNS and establish a raw TCP connection.
-    async fn connect_tcp(&self, host: &str, port: u16) -> Result<Arc<AsyncTcpStream>> {
-        let fut: ConnectFuture = if let Ok(addr) = host.parse::<std::net::IpAddr>() {
-            let addr = std::net::SocketAddr::new(addr, port);
-            ConnectFuture::new(addr)
-        } else {
-            let mut dns = edgerun_dns::DnsClient::new("8.8.8.8:53")
-                .map_err(|_| Error::InvalidUri(format!("DNS client creation failed for {}", host)))?;
-            let addrs = dns.query_a(host)
-                .await
-                .map_err(|_| Error::InvalidUri(format!("DNS resolution failed for {}", host)))?;
-            let Some(first) = addrs.into_iter().next() else {
-                return Err(Error::InvalidUri(format!("No A records for {}", host)));
-            };
-            let addr = std::net::SocketAddr::new(std::net::IpAddr::V4(first), port);
-            ConnectFuture::new(addr)
-        };
-
-        timeout(self.connect_timeout, fut)
-            .await
-            .map_err(|_| Error::Timeout)?
-            .map_err(Error::from)
     }
 }
 

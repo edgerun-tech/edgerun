@@ -160,3 +160,11 @@ harness = false
 [[test]]
 name = "mpsc_permit_test"
 harness = false
+
+[[test]]
+name = "abort_test"
+harness = false
+
+[[test]]
+name = "metrics_test"
+harness = false

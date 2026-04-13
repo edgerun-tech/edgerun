@@ -16,13 +16,15 @@ pub use transport::QuicTransport;
 
 use crypto::{CryptoPhase, ProtectionKeys as ProtKeys};
 
-use std::net::UdpSocket;
+use edgerun_rt::AsyncUdpSocket;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs, UdpSocket};
+use std::sync::Arc;
 
 /// QUIC connection
 pub struct QuicConnection {
-    /// UDP socket
-    socket: UdpSocket,
-    /// Server address
+    /// UDP socket — async for client path, dummy/wrapped for tests
+    socket: Arc<AsyncUdpSocket>,
+    /// Server address (hostname:port)
     server_addr: String,
     /// Transport layer
     transport: QuicTransport,
@@ -68,7 +70,7 @@ pub struct QuicConnection {
 }
 
 impl QuicConnection {
-    /// Create client connection and perform full QUIC + TLS 1.3 handshake.
+    /// Create a client connection and perform full QUIC + TLS 1.3 handshake.
     ///
     /// This performs the complete handshake:
     /// 1. Derive Initial keys from well-known salt + server DCID
@@ -78,18 +80,31 @@ impl QuicConnection {
     /// 5. Send client Finished
     /// 6. Derive application traffic keys
     ///
-    /// Returns the connection ready for HTTP/3 data transfer.
-    pub fn client(socket: UdpSocket, server: &str) -> Result<Self, String> {
-        socket.set_nonblocking(true).map_err(|e| format!("set_nonblocking: {}", e))?;
+    /// Resolves `server` hostname via DNS, binds a UDP socket to a random
+    /// local port, and returns the connection ready for HTTP/3 data transfer.
+    pub async fn connect(server: &str) -> Result<Self, String> {
+        // Resolve hostname to IP address
+        let (server_host, server_port) = if let Ok(addr) = server.parse::<SocketAddr>() {
+            (addr.ip().to_owned(), addr.port())
+        } else if let Ok(ip) = server.parse::<IpAddr>() {
+            (ip, 443)
+        } else {
+            let resolved = Self::resolve_host(server).await?;
+            (resolved, 443)
+        };
+
+        // Bind UDP socket
+        let socket = Arc::new(AsyncUdpSocket::bind("0.0.0.0:0")
+            .map_err(|e| format!("Failed to bind UDP socket: {}", e))?);
 
         let local_cid = ConnectionId::random();
-        let remote_cid = ConnectionId::random(); // This becomes the server's DCID
+        let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
         let crypto = QuicCrypto::new();
 
         let mut conn = QuicConnection {
             socket,
-            server_addr: server.to_string(),
+            server_addr: format!("{}:{}", server_host, server_port),
             transport,
             crypto,
             protection: None,
@@ -112,14 +127,37 @@ impl QuicConnection {
             sent_packets_buffer: Vec::new(),
         };
 
-        // Perform the full QUIC + TLS 1.3 handshake
-        conn.do_handshake(server)?;
+        conn.do_handshake().await?;
+
+        // Initialize active path
+        if let Ok(local) = conn.socket.local_addr() {
+            if let Ok(remote) = format!("{}:{}", server_host, server_port).parse() {
+                conn.active_path = Some((local, remote));
+            }
+        }
 
         Ok(conn)
     }
 
+    /// Resolve hostname to IP address.
+    async fn resolve_host(host: &str) -> Result<IpAddr, String> {
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            return Ok(ip);
+        }
+        match host.to_socket_addrs() {
+            Ok(mut addrs) => {
+                if let Some(addr) = addrs.next() {
+                    return Ok(addr.ip());
+                }
+            }
+            Err(_) => {}
+        }
+        Err(format!("DNS resolution failed for {}", host))
+    }
+
     /// Perform the QUIC + TLS 1.3 handshake.
-    fn do_handshake(&mut self, server_name: &str) -> Result<(), String> {
+    async fn do_handshake(&mut self) -> Result<(), String> {
+        let server_name = self.server_addr.split(':').next().unwrap_or(&self.server_addr);
         let mut handshaker = handshake::QuicTlsHandshaker::new(server_name);
 
         // ── Step 1: Derive Initial keys ──────────────────────────────
@@ -135,10 +173,10 @@ impl QuicConnection {
             offset: 0,
             data: crypto_data.to_vec(),
         };
-        self.send_initial_frame(crypto_frame)?;
+        self.send_initial_frame(crypto_frame).await?;
 
         // ── Step 3: Receive server's Initial packet ──────────────────
-        let server_initial = self.recv_packet()?;
+        let server_initial = self.recv_packet().await?;
         let decrypted_initial = self.decrypt_packet_initial(&server_initial)?;
 
         // Parse CRYPTO frame from decrypted payload
@@ -158,9 +196,9 @@ impl QuicConnection {
         // These may come in one or multiple packets.
         let mut all_handshake_crypto = Vec::new();
 
-        // Try to receive handshake data (with timeout via non-blocking socket)
+        // Try to receive handshake data (with async I/O)
         for _ in 0..10 {
-            match self.recv_packet() {
+            match self.recv_packet().await {
                 Ok(pkt) => {
                     let decrypted = self.decrypt_packet_handshake(&pkt)?;
                     if let Some((data, _)) = Self::parse_crypto_frame(&decrypted) {
@@ -171,8 +209,7 @@ impl QuicConnection {
                     if !all_handshake_crypto.is_empty() {
                         break;
                     }
-                    // Small sleep and retry
-                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    edgerun_rt::sleep(std::time::Duration::from_millis(10)).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -190,7 +227,7 @@ impl QuicConnection {
             offset: 0,
             data: client_finished.clone(),
         };
-        self.send_handshake_frame(client_finished_frame)?;
+        self.send_handshake_frame(client_finished_frame).await?;
 
         // Update transcript with client Finished (needed for app key derivation)
         let mut transcript_after_finished = handshaker.transcript().to_vec();
@@ -221,7 +258,7 @@ impl QuicConnection {
     }
 
     /// Send a CRYPTO frame in an Initial packet (unprotected header + encrypted payload).
-    fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
+    async fn send_initial_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
@@ -235,7 +272,6 @@ impl QuicConnection {
         );
 
         let packet_bytes = pkt.to_bytes();
-        // Encrypt payload with Initial keys
         let header_len = 9.min(packet_bytes.len());
         let send_bytes = if let Some(ref mut prot) = self.initial_protection {
             prot.protect(&packet_bytes[..header_len], &packet_bytes[header_len..])
@@ -244,47 +280,37 @@ impl QuicConnection {
             return Err("No Initial protection keys".into());
         };
 
-        // Prepend unencrypted header
         let mut full_packet = packet_bytes[..header_len].to_vec();
         full_packet.extend_from_slice(&send_bytes);
 
-        let addr = format!("{}:443", self.server_addr);
-        self.socket
-            .send_to(&full_packet, &addr)
+        let addr: SocketAddr = self.server_addr.parse()
+            .map_err(|e| format!("Invalid server address: {}", e))?;
+        self.socket.send_to(&full_packet, addr).await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
+        self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
         Ok(())
     }
 
     /// Send a CRYPTO frame in a Handshake-level packet.
-    fn send_handshake_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
+    async fn send_handshake_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let payload = frame.to_bytes();
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
-        // Build Handshake packet (long header)
         let mut output = Vec::new();
-
-        // First byte: Long header, Handshake type (0x20), fixed bits (0x0C)
         output.push(0x2C);
-        // Version
         output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
-        // DCID length + DCID
         output.push(self.transport.remote_cid.len() as u8);
         output.extend_from_slice(self.transport.remote_cid.as_bytes());
-        // SCID length + SCID
         output.push(self.transport.local_cid.len() as u8);
         output.extend_from_slice(self.transport.local_cid.as_bytes());
-        // Token length (0 for Handshake)
         output.extend_from_slice(&0u64.to_be_bytes());
-        // Payload length placeholder (will fill after)
         let payload_len_pos = output.len();
         output.extend_from_slice(&[0u8; 2]);
-        // Packet number (2 bytes for simplicity)
         let pn_bytes = pn.to_be_bytes();
         output.extend_from_slice(&pn_bytes[6..]);
 
-        // Encrypt payload
         let header_len = output.len();
         output.extend_from_slice(&payload);
 
@@ -295,38 +321,30 @@ impl QuicConnection {
             return Err("No Handshake protection keys".into());
         };
 
-        // Fill in payload length
         let total_payload = send_bytes.len();
-        // Encode as varint (2 bytes for typical sizes)
         output[payload_len_pos] = ((total_payload >> 8) as u8) | 0x40;
         output[payload_len_pos + 1] = total_payload as u8;
 
-        // Prepend header, append encrypted payload
         let mut full_packet = output[..header_len].to_vec();
         full_packet.extend_from_slice(&send_bytes);
 
-        let addr = format!("{}:443", self.server_addr);
-        self.socket
-            .send_to(&full_packet, &addr)
+        let addr: SocketAddr = self.server_addr.parse()
+            .map_err(|e| format!("Invalid server address: {}", e))?;
+        self.socket.send_to(&full_packet, addr).await
             .map_err(|e| format!("UDP send failed: {}", e))?;
 
+        self.sent_packets_buffer.push(full_packet);
         self.transport.update_activity();
         Ok(())
     }
 
     /// Receive a raw QUIC packet from the UDP socket.
-    fn recv_packet(&mut self) -> Result<QuicPacket, String> {
+    async fn recv_packet(&mut self) -> Result<QuicPacket, String> {
         let mut buf = [0u8; 4096];
-        match self.socket.recv(&mut buf) {
-            Ok(n) => {
-                self.recv_buffer = buf[..n].to_vec();
-                self.recv_offset = 0;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                return Err("No data available (would block)".into());
-            }
-            Err(e) => return Err(format!("UDP recv failed: {}", e)),
-        }
+        let (n, _) = self.socket.recv_from(&mut buf).await
+            .map_err(|e| format!("UDP recv failed: {}", e))?;
+        self.recv_buffer = buf[..n].to_vec();
+        self.recv_offset = 0;
 
         let (packet, _consumed) = QuicPacket::from_bytes(&self.recv_buffer)
             .map_err(|e| format!("Packet parse error: {}", e))?;
@@ -425,8 +443,8 @@ impl QuicConnection {
 
     /// Create a dummy connection for testing
     pub fn dummy() -> Self {
-        let socket = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
-        socket.set_nonblocking(true).expect("Cannot set non-blocking");
+        let udp = UdpSocket::bind("127.0.0.1:0").expect("Cannot bind test socket");
+        let socket = Arc::new(AsyncUdpSocket::from_std(udp).expect("Cannot wrap test socket"));
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -467,6 +485,7 @@ impl QuicConnection {
     /// The connection is marked as `established` with no protection keys,
     /// suitable for testing 1-RTT packet construction without encryption.
     pub fn from_established_test(socket: UdpSocket, target: std::net::SocketAddr) -> Self {
+        let socket = Arc::new(AsyncUdpSocket::from_std(socket).expect("Cannot wrap test socket"));
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -508,6 +527,8 @@ impl QuicConnection {
         client_scid: ConnectionId,
         handshake_result: crate::http3::quic::server_handshake::ServerHandshakeResult,
     ) -> Result<Self, String> {
+        let socket = Arc::new(AsyncUdpSocket::from_std(socket)
+            .map_err(|e| format!("Cannot wrap socket: {}", e))?);
         let transport = QuicTransport::new(client_dcid.clone(), client_scid.clone());
 
         let mut conn = QuicConnection {
@@ -554,18 +575,13 @@ impl QuicConnection {
     /// the `fin` bit. Each chunk is sent in a separate QUIC packet.
     ///
     /// The stream offset is tracked per stream across calls.
-    pub fn send_stream_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+    pub async fn send_stream_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
         if data.is_empty() && !fin {
             return Ok(());
         }
 
-        // MTU minus QUIC header (~20 bytes) and STREAM frame overhead (~10 bytes)
-        // gives us a safe max of ~1170 bytes per STREAM frame payload
         const MAX_STREAM_PAYLOAD: usize = 1170;
-
-        // Get current offset for this stream
         let mut offset = self.stream_send_offset.get(&stream_id).copied().unwrap_or(0);
-
         let total_len = data.len();
         let mut chunks_sent = 0;
         while chunks_sent * MAX_STREAM_PAYLOAD < total_len {
@@ -580,7 +596,7 @@ impl QuicConnection {
                 fin: is_last,
                 data: chunk.to_vec(),
             };
-            self.send_frame(frame)?;
+            self.send_frame(frame).await?;
 
             offset += chunk.len() as u64;
             chunks_sent += 1;
@@ -591,22 +607,22 @@ impl QuicConnection {
     }
 
     /// Send RESET_STREAM to abort a stream (RFC 9000 §4.5).
-    pub fn send_reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+    pub async fn send_reset_stream(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
         let frame = QuicFrame::ResetStream {
             stream_id,
             error_code,
             final_size: 0,
         };
-        self.send_frame(frame)
+        self.send_frame(frame).await
     }
 
     /// Send STOP_SENDING to tell peer to stop sending (RFC 9000 §4.6).
-    pub fn send_stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
+    pub async fn send_stop_sending(&mut self, stream_id: u64, error_code: u64) -> Result<(), String> {
         let frame = QuicFrame::StopSending {
             stream_id,
             error_code,
         };
-        self.send_frame(frame)
+        self.send_frame(frame).await
     }
 
     /// Send a single QUIC frame
@@ -614,12 +630,11 @@ impl QuicConnection {
     /// Builds the appropriate packet header based on connection state:
     /// - Before handshake: long header (Initial) — used during handshake
     /// - After handshake: short header (1-RTT) — used for application data
-    fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
+    pub async fn send_frame(&mut self, frame: QuicFrame) -> Result<(), String> {
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
         let payload = frame.to_bytes();
 
         let packet_bytes = if self.established {
-            // 1-RTT: short header format (RFC 9000 §17.3)
             QuicPacket::one_rtt(
                 self.transport.remote_cid.as_bytes().to_vec(),
                 pn,
@@ -627,7 +642,6 @@ impl QuicConnection {
             )
             .to_bytes()
         } else {
-            // Pre-handshake: long header Initial format
             QuicPacket::initial(
                 QUIC_VERSION_V1,
                 self.transport.remote_cid.as_bytes().to_vec(),
@@ -639,35 +653,23 @@ impl QuicConnection {
             .to_bytes()
         };
 
-        // Encrypt if we have protection keys
         let send_bytes = if let Some(ref mut prot) = self.protection {
-            // For 1-RTT packets, protect payload starting after short header
-            let header_len = if self.established {
-                // Short header: 1 byte + 8-byte CID + 1-byte PN = 10 bytes
-                10
-            } else {
-                9
-            };
+            let header_len = if self.established { 10 } else { 9 };
             prot.protect(&packet_bytes[..header_len.min(packet_bytes.len())], &packet_bytes[header_len.min(packet_bytes.len())..])
                 .map_err(|e| format!("Packet protection failed: {}", e))?
         } else {
             packet_bytes
         };
 
-        // Send via UDP — use send() if socket is connected, send_to() otherwise
-        // Also capture the sent bytes for integration testing
         self.sent_packets_buffer.push(send_bytes.clone());
 
-        if self.server_addr.parse::<std::net::SocketAddr>().is_ok() {
-            // Already connected (for testing)
-            self.socket.send(&send_bytes)
-                .map_err(|e| format!("UDP send failed: {}", e))?;
-        } else {
-            let addr = format!("{}:443", self.server_addr);
-            self.socket
-                .send_to(&send_bytes, &addr)
-                .map_err(|e| format!("UDP send failed: {}", e))?;
-        }
+        let addr: SocketAddr = self.server_addr.parse()
+            .unwrap_or_else(|_| {
+                format!("{}:443", self.server_addr).parse()
+                    .expect("server_addr must be parseable as SocketAddr")
+            });
+        self.socket.send_to(&send_bytes, addr).await
+            .map_err(|e| format!("UDP send failed: {}", e))?;
 
         self.transport.update_activity();
         Ok(())
@@ -677,24 +679,16 @@ impl QuicConnection {
     ///
     /// Reads from the UDP socket, decrypts 1-RTT packets, parses QUIC frames,
     /// and returns the first STREAM frame found.
-    pub fn recv_stream_data(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
-        // Try to read from UDP if buffer is empty
+    pub async fn recv_stream_data(&mut self) -> Result<Option<(u64, Vec<u8>, bool)>, String> {
         if self.recv_buffer.is_empty() || self.recv_offset >= self.recv_buffer.len() {
             let mut buf = [0u8; 65536];
-            match self.socket.recv(&mut buf) {
-                Ok(n) => {
-                    self.recv_buffer = buf[..n].to_vec();
-                    self.recv_offset = 0;
-                    self.transport.update_activity();
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                    return Ok(None);
-                }
-                Err(e) => return Err(format!("UDP recv failed: {}", e)),
-            }
+            let (n, _) = self.socket.recv_from(&mut buf).await
+                .map_err(|e| format!("UDP recv failed: {}", e))?;
+            self.recv_buffer = buf[..n].to_vec();
+            self.recv_offset = 0;
+            self.transport.update_activity();
         }
 
-        // Parse and decrypt packets from the buffer
         self.recv_from_buffer()
     }
 
@@ -805,11 +799,9 @@ impl QuicConnection {
         self.protection = Some(PacketProtection::new(keys));
     }
 
-    /// Set non-blocking mode
-    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), String> {
-        self.socket
-            .set_nonblocking(nonblocking)
-            .map_err(|e| format!("set_nonblocking: {}", e))
+    /// Set non-blocking mode — no-op for async sockets (always non-blocking).
+    pub fn set_nonblocking(&self, _nonblocking: bool) -> Result<(), String> {
+        Ok(())
     }
 
     // ------------------------------------------------------------------
@@ -833,7 +825,7 @@ impl QuicConnection {
     ///
     /// This sends data encrypted with 0-RTT keys, allowing the client to
     /// send HTTP/3 requests in the first flight.
-    pub fn send_early_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
+    pub async fn send_early_data(&mut self, stream_id: u64, data: &[u8], fin: bool) -> Result<(), String> {
         if self.early_data_protection.is_none() {
             return Err("Early data not enabled".to_string());
         }
@@ -841,9 +833,8 @@ impl QuicConnection {
         let frame = self.transport.create_stream_frame(stream_id, data.to_vec(), fin);
         let pn = self.transport.next_packet_number(PacketNumberSpace::ApplicationData);
 
-        // Build 0-RTT packet (long header, type 0x1)
         let mut output = Vec::new();
-        output.push(0xD0); // Long header (0x80) + fixed bit (0x40) + type 01 (0x10) + reserved (0x00)
+        output.push(0xD0);
         output.extend_from_slice(&QUIC_VERSION_V1.to_be_bytes());
         output.push(self.transport.remote_cid.len() as u8);
         output.extend_from_slice(self.transport.remote_cid.as_bytes());
@@ -869,8 +860,9 @@ impl QuicConnection {
             let mut packet = output[..header_len].to_vec();
             packet.extend_from_slice(&encrypted);
 
-            let addr = format!("{}:443", self.server_addr);
-            self.socket.send_to(&packet, &addr)
+            let addr: SocketAddr = format!("{}:443", self.server_addr).parse()
+                .map_err(|e| format!("Invalid server address: {}", e))?;
+            self.socket.send_to(&packet, addr).await
                 .map_err(|e| format!("UDP send failed: {}", e))?;
         }
 
@@ -919,19 +911,19 @@ impl QuicConnection {
     /// Send a PATH_CHALLENGE to probe a new path (RFC 9000 §9.1).
     ///
     /// Used to validate a new path when the client's address changes.
-    pub fn send_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
+    pub async fn send_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
         let frame = QuicFrame::PathChallenge { data };
         self.pending_path_challenges.insert(data, std::time::Instant::now() + std::time::Duration::from_secs(3));
-        self.send_frame(frame)
+        self.send_frame(frame).await
     }
 
     /// Process a received PATH_CHALLENGE and send PATH_RESPONSE.
     ///
     /// When we receive a PATH_CHALLENGE, we must respond with a PATH_RESPONSE
     /// containing the same data to validate the path.
-    pub fn respond_to_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
+    pub async fn respond_to_path_challenge(&mut self, data: [u8; 8]) -> Result<(), String> {
         let frame = QuicFrame::PathResponse { data };
-        self.send_frame(frame)
+        self.send_frame(frame).await
     }
 
     /// Check for expired PATH_CHALLENGE probes.
@@ -1280,9 +1272,15 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Receive the stream data
-        let (stream_id, data, fin) = conn.recv_stream_data()
-            .expect("recv_stream_data failed")
-            .expect("no stream data received");
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (stream_id, data, fin) = rt.block_on(async move {
+            conn.recv_stream_data().await
+                .expect("recv_stream_data failed")
+                .expect("no stream data received")
+        });
 
         assert_eq!(stream_id, 0);
         assert_eq!(data, b"hello");
@@ -1334,9 +1332,15 @@ mod tests {
         conn.inject_packet(packet_bytes);
 
         // Accept the incoming stream
-        let (stream_id, frame_data, fin) = conn.recv_stream_data()
-            .expect("recv failed")
-            .expect("no data");
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (stream_id, frame_data, fin) = rt.block_on(async move {
+            conn.recv_stream_data().await
+                .expect("recv failed")
+                .expect("no data")
+        });
 
         // The frame data contains HTTP/3 frames — parse the HEADERS frame
         if let Http3Frame::Headers { header_block } = Http3Frame::from_bytes(&frame_data)
@@ -1368,7 +1372,7 @@ mod tests {
         use edgerun_tls::certificate_gen::generate_self_signed;
 
         // ── Setup ──────────────────────────────────────────────────────
-        let cert = generate_self_signed(&["localhost"]);
+        let cert = generate_self_signed(&["localhost"]).expect("generate cert");
         let client_dcid = ConnectionId::random();  // Client's dest connection ID (server's source)
         let server_dcid = ConnectionId::random();  // Server's dest connection ID (client's source)
 
@@ -1482,7 +1486,13 @@ mod tests {
         quic.protection = None; // No encryption for this test
 
         // Send the frame
-        quic.send_stream_data(1, &stream_bytes, true)
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            quic.send_stream_data(1, &stream_bytes, true).await
+        })
             .expect("send_stream_data failed");
 
         // Receive on the other end and verify it's a 1-RTT packet
@@ -1579,9 +1589,15 @@ mod tests {
         server.quic_mut().inject_packet(pkt_bytes);
 
         // Server accepts the request
-        let (stream_id, frame) = server.accept_stream()
-            .expect("accept_stream failed")
-            .expect("no frame");
+        let rt = edgerun_rt::Runtime::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (stream_id, frame) = rt.block_on(async move {
+            server.accept_stream().await
+                .expect("accept_stream failed")
+                .expect("no frame")
+        });
 
         assert_eq!(stream_id, 0);
         if let Http3Frame::Headers { header_block } = frame {
@@ -1634,9 +1650,11 @@ mod tests {
         client.quic_mut().inject_packet(d_pkt.to_bytes());
 
         // Client receives response
-        let response = client.recv_response(0)
-            .expect("recv_response failed")
-            .expect("no response");
+        let response = rt.block_on(async move {
+            client.recv_response(0).await
+                .expect("recv_response failed")
+                .expect("no response")
+        });
 
         let (got_status, _got_headers, got_body) = response;
         assert_eq!(got_status.as_u16(), 200);
