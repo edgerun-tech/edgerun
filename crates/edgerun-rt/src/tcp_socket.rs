@@ -166,9 +166,12 @@ impl TcpSocket {
                 return Err(e);
             }
             // Connect in progress — wait for completion.
+            // wait_for_connect registers fd with the reactor internally.
             wait_for_connect(fd).await?;
         }
 
+        // Register fd with reactor for subsequent I/O (covers both
+        // immediate-connect and EINPROGRESS paths).
         let rt = current_rt();
         rt.reactor.get_or_register_fd(fd);
 

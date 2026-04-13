@@ -158,11 +158,6 @@ impl FdInterest {
         }
     }
 
-    fn has_any(&self) -> bool {
-        let state = self.state.lock();
-        state.0.is_some() || state.1.is_some()
-    }
-
     /// Set both wakers and update epoll events atomically.
     /// Used by `wait_read`/`wait_write` to ensure the fd is properly
     /// registered with epoll before returning.

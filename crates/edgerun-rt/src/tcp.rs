@@ -12,7 +12,6 @@ use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::io_traits::{AsyncRead, AsyncWrite};
@@ -28,8 +27,6 @@ use crate::runtime::{current_rt, try_current_rt};
 /// the last drop closes it.
 pub struct AsyncTcpStream {
     fd: RawFd,
-    read_waker: Mutex<Option<Waker>>,
-    write_waker: Mutex<Option<Waker>>,
     /// Reference count — the last drop closes the fd.
     refs: Arc<AtomicUsize>,
 }
@@ -40,22 +37,16 @@ impl AsyncTcpStream {
     pub fn from_fd(fd: RawFd) -> Self {
         Self {
             fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         }
     }
 
-    /// Wraps an already-connected `std::net::TcpStream`.
-    /// Sets non-blocking and takes ownership.
     pub fn from_std(stream: std::net::TcpStream) -> io::Result<Self> {
         stream.set_nonblocking(true)?;
         let raw = stream.as_raw_fd();
         std::mem::forget(stream);
         Ok(Self {
             fd: raw,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         })
     }
@@ -220,8 +211,6 @@ impl Clone for AsyncTcpStream {
         self.refs.fetch_add(1, Ordering::Relaxed);
         Self {
             fd: self.fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::clone(&self.refs),
         }
     }

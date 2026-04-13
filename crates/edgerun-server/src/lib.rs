@@ -307,7 +307,10 @@ impl Server {
             let smtp_config = edgerun_smtp::server::SmtpServerConfig {
                 bind_addr: config.bind_addr,
                 domain: config.domain_name,
-                max_message_size: config.max_message_size,
+                limits: edgerun_smtp::ServerLimits {
+                    max_message_size: config.max_message_size,
+                    ..Default::default()
+                },
                 smtps: config.smtps,
             };
             let srv = edgerun_smtp::SmtpServer::with_memory_store(smtp_config)?;

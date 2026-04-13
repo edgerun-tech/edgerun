@@ -20,11 +20,13 @@ use crate::runtime::current_rt;
 pub fn sleep(d: Duration) -> Sleep {
     Sleep {
         deadline: Instant::now() + d,
+        registered: false,
     }
 }
 
 pub struct Sleep {
     deadline: Instant,
+    registered: bool,
 }
 
 impl Future for Sleep {
@@ -34,9 +36,13 @@ impl Future for Sleep {
         if Instant::now() >= self.deadline {
             Poll::Ready(())
         } else {
-            current_rt()
-                .reactor
-                .register_timer(self.deadline, cx.waker().clone());
+            let this = unsafe { self.get_unchecked_mut() };
+            if !this.registered {
+                current_rt()
+                    .reactor
+                    .register_timer(this.deadline, cx.waker().clone());
+                this.registered = true;
+            }
             Poll::Pending
         }
     }
@@ -142,26 +148,30 @@ impl Interval {
         self._mb = b;
     }
     pub fn tick(&mut self) -> IntervalTick<'_> {
-        IntervalTick { interval: self }
+        IntervalTick { interval: self, registered: false }
     }
 }
 
 pub struct IntervalTick<'a> {
     interval: &'a mut Interval,
+    registered: bool,
 }
 
 impl Future for IntervalTick<'_> {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
         if Instant::now() >= this.interval.next {
             this.interval.next += this.interval.d;
             Poll::Ready(())
         } else {
-            current_rt()
-                .reactor
-                .register_timer(this.interval.next, cx.waker().clone());
+            if !this.registered {
+                current_rt()
+                    .reactor
+                    .register_timer(this.interval.next, cx.waker().clone());
+                this.registered = true;
+            }
             Poll::Pending
         }
     }

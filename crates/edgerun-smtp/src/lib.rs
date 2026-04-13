@@ -1,7 +1,5 @@
 //! Async SMTP server and client (RFC 5321) using `edgerun-rt`.
 //!
-//! Provides SMTP protocol implementation for sending and receiving email.
-//!
 //! ## Server example
 //! ```no_run
 //! use edgerun_smtp::server::{SmtpServer, SmtpServerConfig};
@@ -39,12 +37,15 @@
 //! ```
 
 pub mod client;
+pub mod protocol;
 pub mod server;
 pub mod types;
 
 pub use client::{EmailBuilder, SmtpClient};
 pub use server::{MailHandler, MemoryMailStore, SmtpServer, SmtpServerConfig};
+pub use server::handler::{AuthCredentials, AuthResult};
 pub use types::{
-    MailEnvelope, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
+    DsnNotify, DsnRet, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand,
+    SmtpResponse, SmtpResponseCode, SmtpState,
     get_subject, get_from_address, get_date, parse_headers,
 };

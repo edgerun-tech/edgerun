@@ -8,13 +8,13 @@
 
 use std::future::Future;
 use std::io::{self};
-use std::os::unix::net::{UnixStream as StdUnixStream, UnixListener as StdUnixListener};
+use std::os::unix::net::UnixListener as StdUnixListener;
 use std::os::unix::io::{AsRawFd, RawFd};
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::io_traits::{AsyncRead, AsyncWrite};
@@ -27,8 +27,6 @@ use crate::runtime::try_current_rt;
 /// Async Unix domain stream socket.
 pub struct UnixStream {
     fd: RawFd,
-    read_waker: Mutex<Option<Waker>>,
-    write_waker: Mutex<Option<Waker>>,
     refs: Arc<AtomicUsize>,
 }
 
@@ -37,8 +35,6 @@ impl UnixStream {
     pub fn from_fd(fd: RawFd) -> Self {
         Self {
             fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         }
     }
@@ -96,8 +92,6 @@ impl UnixStream {
 
         Ok(Self {
             fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         })
     }
@@ -196,8 +190,6 @@ impl UnixStream {
         }
         Ok(Self {
             fd: new_fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         })
     }
@@ -220,8 +212,6 @@ impl Clone for UnixStream {
         self.refs.fetch_add(1, Ordering::Relaxed);
         Self {
             fd: self.fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::clone(&self.refs),
         }
     }

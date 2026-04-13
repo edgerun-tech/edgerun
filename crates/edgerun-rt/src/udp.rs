@@ -10,7 +10,6 @@ use std::os::unix::io::{AsRawFd, RawFd};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::runtime::try_current_rt;
@@ -23,8 +22,6 @@ use crate::reactor_fd_ready::{FdReadReady, FdWriteReady};
 /// Async UDP socket with non-blocking I/O.
 pub struct AsyncUdpSocket {
     fd: RawFd,
-    read_waker: Mutex<Option<Waker>>,
-    write_waker: Mutex<Option<Waker>>,
     refs: Arc<AtomicUsize>,
 }
 
@@ -42,8 +39,6 @@ impl AsyncUdpSocket {
         std::mem::forget(socket);
         Ok(Self {
             fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::new(AtomicUsize::new(1)),
         })
     }
@@ -363,8 +358,6 @@ impl Clone for AsyncUdpSocket {
         self.refs.fetch_add(1, Ordering::Relaxed);
         Self {
             fd: self.fd,
-            read_waker: Mutex::new(None),
-            write_waker: Mutex::new(None),
             refs: Arc::clone(&self.refs),
         }
     }
