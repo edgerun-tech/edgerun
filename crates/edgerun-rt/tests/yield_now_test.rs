@@ -1,5 +1,5 @@
-// Test yield_now with the actual runtime.
-use edgerun_rt::{yield_now, YieldNow, Runtime, spawn};
+// Test yieldnow with the actual runtime.
+use edgerun_rt::{yieldnow, YieldNow, Runtime, spawn};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,7 +11,7 @@ fn main() {
         test_yield_type();
         test_yield_does_not_deadlock();
         test_yield_allows_other_work();
-        println!("All yield_now tests passed!");
+        println!("All yieldnow tests passed!");
     });
 }
 
@@ -20,7 +20,7 @@ fn test_yield_basic() {
     let counter = Arc::new(AtomicUsize::new(0));
     let c = counter.clone();
     let h = spawn(async move {
-        yield_now().await;
+        yieldnow().await;
         c.fetch_add(1, Ordering::SeqCst);
     });
     std::thread::sleep(Duration::from_millis(50));
@@ -31,7 +31,7 @@ fn test_yield_basic() {
 
 fn test_yield_type() {
     println!("  test_yield_type...");
-    let _fut: YieldNow = yield_now();
+    let _fut: YieldNow = yieldnow();
     println!("  test_yield_type OK");
 }
 
@@ -41,9 +41,9 @@ fn test_yield_does_not_deadlock() {
     let c = counter.clone();
 
     let h = spawn(async move {
-        yield_now().await;
+        yieldnow().await;
         edgerun_rt::sleep(Duration::from_millis(10)).await;
-        yield_now().await;
+        yieldnow().await;
         edgerun_rt::sleep(Duration::from_millis(10)).await;
         c.fetch_add(1, Ordering::SeqCst);
     });
@@ -62,7 +62,7 @@ fn test_yield_allows_other_work() {
     // Task 1 yields
     let c1a = c1.clone();
     let t1 = spawn(async move {
-        yield_now().await;
+        yieldnow().await;
         edgerun_rt::sleep(Duration::from_millis(50)).await;
         c1a.fetch_add(1, Ordering::SeqCst);
     });

@@ -217,6 +217,13 @@ impl Builder {
                             // No sleep needed: the task registered its waker
                             // and will be re-enqueued when the waker fires.
                             tasks.reinsert(id, task);
+
+                            // Check if the task yielded. If so, immediately
+                            // re-enqueue it without going through the waker
+                            // (which would take a shared mutex on the queue).
+                            if crate::yield_now::take_yield_request() {
+                                queue.push(id);
+                            }
                         }
                         Ok(false) => {
                             // Task completed — dropped (not re-inserted).

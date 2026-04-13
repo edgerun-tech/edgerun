@@ -110,7 +110,7 @@ pub use timers::{
     MissedTickBehavior, CtrlC,
 };
 pub use sleep_until::{sleep_until, timeout_at, SleepUntil, TimeoutAt};
-pub use yield_now::{yield_now, YieldNow};
+pub use yield_now::{yieldnow, YieldNow};
 
 // Cancellation.
 pub use cancellation::{CancellationToken, Cancelled};
