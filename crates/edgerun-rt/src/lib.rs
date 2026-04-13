@@ -32,6 +32,7 @@ mod unix;
 mod unix_dgram;
 mod async_fd;
 mod duplex;
+mod buf;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -72,6 +73,9 @@ pub use io_util::{copy, copy_bidirectional, empty, sink, repeat, Empty, Sink, Re
 
 // DuplexStream.
 pub use duplex::DuplexStream;
+
+// Buffered I/O.
+pub use buf::{BufReader, BufWriter};
 
 // UDP.
 pub use udp::AsyncUdpSocket;
