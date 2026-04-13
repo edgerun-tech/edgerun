@@ -632,11 +632,13 @@ pub async fn cmd_run(path: &PathBuf, listen_addr: Option<SocketAddr>, health_por
     // --- TCP listener (if configured) ---
     if let Some(addr) = listen_addr {
         let tcp_signer: Arc<dyn edgerun_hardware_signing::MeshSigner + Send + Sync> = Arc::clone(&signer);
+        let tcp_cancel = cancel.child_token();
         let _tcp_handle = edgerun_rt::spawn(run_tcp_listener(
             addr,
             node_id,
             store_tx.clone(),
             tcp_signer,
+            tcp_cancel,
         ));
         edgerun_log::info!("TCP listener started");
     } else {

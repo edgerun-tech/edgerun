@@ -22,6 +22,7 @@ pub async fn run_tcp_listener(
     node_id: NodeID,
     store_tx: edgerun_rt::mpsc::Sender<StoreRequest>,
     signer: Arc<dyn MeshSigner + Send + Sync>,
+    cancel: edgerun_rt::CancellationToken,
 ) {
     let listener = match edgerun_rt::AsyncTcpListener::bind(&listen_addr) {
         Ok(l) => l,
@@ -34,17 +35,25 @@ pub async fn run_tcp_listener(
     let ctx = SessionContext { node_id, signer };
 
     loop {
-        match listener.accept().await {
-            Ok((stream, _peer_addr)) => {
-                let conn_store_tx = store_tx.clone();
-                let ctx = ctx.clone();
-                edgerun_rt::spawn(async move {
-                    edgerun_log::debug!("TCP connection accepted");
-                    handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
-                });
+        edgerun_rt::select! {
+            _ = cancel.cancelled() => {
+                edgerun_log::info!("TCP listener shutting down");
+                return;
             }
-            Err(e) => {
-                edgerun_log::warn!("TCP accept error: {}", e);
+            result = listener.accept() => {
+                match result {
+                    Ok((stream, _peer_addr)) => {
+                        let conn_store_tx = store_tx.clone();
+                        let ctx = ctx.clone();
+                        edgerun_rt::spawn(async move {
+                            edgerun_log::debug!("TCP connection accepted");
+                            handle_tcp_connection(stream, conn_store_tx, &ctx, None).await;
+                        });
+                    }
+                    Err(e) => {
+                        edgerun_log::warn!("TCP accept error: {}", e);
+                    }
+                }
             }
         }
     }
