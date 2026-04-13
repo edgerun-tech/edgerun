@@ -340,6 +340,49 @@ impl SmtpClient {
         Ok(())
     }
 
+    /// Send a BDAT chunk (RFC 3030).
+    ///
+    /// Sends `BDAT <size>` followed by exactly `size` bytes of data.
+    /// If `last` is true, this is the final chunk and the server will
+    /// attempt delivery.
+    ///
+    /// The server responds with `250 OK` after each chunk.
+    ///
+    /// Use this instead of [`Self::data`] for large messages or when
+    /// the server advertises `CHUNKING`.
+    pub async fn bdat(&mut self, data: &[u8], last: bool) -> io::Result<()> {
+        let last_str = if last { " LAST" } else { "" };
+        let cmd = format!("BDAT {}{}", data.len(), last_str);
+        let response = self.send_command(&cmd).await?;
+        if !response.code.is_success() {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("BDAT rejected: {}", response.message),
+            ));
+        }
+
+        self.transport.write_all(data).await?;
+        self.transport.flush().await?;
+
+        // Server sends a final OK for the last chunk.
+        if last {
+            let response = self.read_response().await?;
+            if !response.code.is_success() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("Message rejected: {}", response.message),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Send a complete message using BDAT (single-chunk convenience method).
+    pub async fn bdat_message(&mut self, message: &[u8]) -> io::Result<()> {
+        self.bdat(message, true).await
+    }
+
     /// Send RSET.
     pub async fn rset(&mut self) -> io::Result<()> {
         let response = self.send_command("RSET").await?;

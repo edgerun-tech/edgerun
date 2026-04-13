@@ -216,7 +216,7 @@ where
         _ => return Ok(()),
     };
 
-    if first_line.as_bytes().starts_with(H2_PREFACE) {
+    if first_line.starts_with("PRI * HTTP/2.0") {
         handle_http2(reader, handler, http2_idle_timeout, max_request_size).await
     } else {
         handle_http1_line(reader, first_line, handler, keep_alive, max_request_size).await
@@ -317,9 +317,7 @@ where
     // RFC 9113 §3.4: Server MUST send initial SETTINGS frame immediately
     let entries = server.server_settings.to_entries();
     let settings_frame = crate::http2::frame::SettingsFrame::new(entries.clone());
-    eprintln!("[h2] sending initial SETTINGS frame: {:?}", entries);
     write_frame(&mut rdwr, &settings_frame.to_frame()).await?;
-    eprintln!("[h2] SETTINGS frame sent, entering loop");
 
     loop {
         frame_count += 1;
@@ -328,38 +326,23 @@ where
             server.cleanup_closed_streams();
         }
 
-        eprintln!("[h2] waiting for frame #{}", frame_count);
         let frame = match timeout(idle_timeout, read_frame(&mut rdwr, server.max_frame_size)).await {
-            Ok(Ok(Ok(f))) => {
-                eprintln!("[h2] received frame: type={:?} flags=0x{:02x} stream={} payload_len={}", f.frame_type, f.flags, f.stream_id, f.payload.len());
-                f
-            }
+            Ok(Ok(Ok(f))) => f,
             Ok(Ok(Err((stream_id, error_code)))) => {
-                eprintln!("[h2] frame error: stream={} error={}", stream_id, error_code);
                 write_goaway(&mut rdwr, server.last_processed_stream_id, error_code, b"Frame too large").await;
                 break;
             }
-            Ok(Err(e)) => {
-                eprintln!("[h2] read error: {:?}", e);
-                break;
-            }
+            Ok(Err(_)) => break,
             Err(_) => {
-                eprintln!("[h2] idle timeout");
+                edgerun_log::debug!("HTTP/2 connection idle timeout reached");
                 break;
             }
         };
 
         if frame.frame_type == FrameType::Settings {
             let settings_frame = match crate::http2::frame::SettingsFrame::from_frame(&frame) {
-                Ok(sf) => {
-                    eprintln!("[h2] parsed SETTINGS: ack={} entries={:?}", sf.ack, sf.entries);
-                    sf
-                }
-                Err(e) => {
-                    eprintln!("[h2] bad SETTINGS frame: {:?}", e);
-                    write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await;
-                    break;
-                }
+                Ok(sf) => sf,
+                Err(_) => { write_goaway(&mut rdwr, server.last_processed_stream_id, ErrorCode::PROTOCOL_ERROR.to_u32(), b"Bad SETTINGS").await; break; }
             };
             match server.apply_client_settings(&settings_frame) {
                 FrameAction::WriteFrames(frames) => {
