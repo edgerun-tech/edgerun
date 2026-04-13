@@ -1,6 +1,6 @@
 //! Async mutex — exclusive access with wait queue.
 //!
-//! A parking_lot::Mutex guards only the wait queue and an "acquired" flag.
+//! A sync Mutex guards only the wait queue and an "acquired" flag.
 //! Data is behind an UnsafeCell, protected by the async protocol.
 
 use std::cell::UnsafeCell;
@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use parking_lot::Mutex as PLMutex;
+use crate::sync::Mutex as SyncMutex;
 use std::task::{Context, Poll, Waker};
 
 struct State {
@@ -18,14 +18,14 @@ struct State {
 
 /// An async mutex for exclusive access to `T`.
 pub struct Mutex<T> {
-    state: Arc<PLMutex<State>>,
+    state: Arc<SyncMutex<State>>,
     data: UnsafeCell<T>,
 }
 
 impl<T> Mutex<T> {
     pub fn new(data: T) -> Self {
         Self {
-            state: Arc::new(PLMutex::new(State {
+            state: Arc::new(SyncMutex::new(State {
                 acquired: false,
                 waiters: VecDeque::new(),
             })),
@@ -60,7 +60,7 @@ unsafe impl<T: Send> Sync for Mutex<T> {}
 /// A guard that holds exclusive access to the mutex.
 pub struct MutexGuard<'a, T> {
     data: &'a UnsafeCell<T>,
-    state: Arc<PLMutex<State>>,
+    state: Arc<SyncMutex<State>>,
 }
 
 // Safety: MutexGuard is Send when T is Send because it holds exclusive
@@ -92,7 +92,7 @@ impl<T> Drop for MutexGuard<'_, T> {
 
 /// A future that resolves to an async mutex lock guard.
 pub struct MutexLockFuture<'a, T> {
-    state: Arc<PLMutex<State>>,
+    state: Arc<SyncMutex<State>>,
     data: &'a UnsafeCell<T>,
     registered: bool,
 }

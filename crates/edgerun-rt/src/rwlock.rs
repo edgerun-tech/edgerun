@@ -1,10 +1,10 @@
 //! Async read-write lock.
 //!
-//! Uses `parking_lot::RwLock` internally for correct concurrent reader access.
+//! Uses our `sync::RwLock` internally for correct concurrent reader access.
 //! The async layer provides wait queues with write-preference scheduling.
 //!
 //! ## Fix applied:
-//! Guards hold `parking_lot::RwLockReadGuard`/`RwLockWriteGuard` (not `MutexGuard`),
+//! Guards hold `crate::sync::RwLockReadGuard`/`RwLockWriteGuard` (not `MutexGuard`),
 //! so multiple readers coexist correctly. The async wait queue prevents busy-spinning.
 
 use std::collections::VecDeque;
@@ -12,7 +12,7 @@ use std::future::Future;
 use std::mem::ManuallyDrop;
 use std::pin::Pin;
 use std::sync::Arc;
-use parking_lot::Mutex;
+use crate::sync::{Mutex, RwLock as SyncRwLock};
 use std::task::{Context, Poll, Waker};
 
 struct RwState {
@@ -24,7 +24,7 @@ struct RwState {
 }
 
 struct Inner<T> {
-    data: parking_lot::RwLock<T>,
+    data: SyncRwLock<T>,
     state: Arc<Mutex<RwState>>,
 }
 
@@ -44,7 +44,7 @@ impl<T> RwLock<T> {
         }));
         Self {
             inner: Arc::new(Inner {
-                data: parking_lot::RwLock::new(value),
+                data: SyncRwLock::new(value),
                 state,
             }),
         }
@@ -82,7 +82,7 @@ impl<T: Default> Default for RwLock<T> {
 
 /// A read guard. Multiple readers can coexist.
 pub struct RwLockReadGuard<'a, T> {
-    guard: parking_lot::RwLockReadGuard<'a, T>,
+    guard: crate::sync::RwLockReadGuard<'a, T>,
     state: Arc<Mutex<RwState>>,
 }
 
@@ -108,7 +108,7 @@ impl<T> Drop for RwLockReadGuard<'_, T> {
 
 /// A write guard. Exclusive access.
 pub struct RwLockWriteGuard<'a, T> {
-    guard: parking_lot::RwLockWriteGuard<'a, T>,
+    guard: crate::sync::RwLockWriteGuard<'a, T>,
     state: Arc<Mutex<RwState>>,
 }
 

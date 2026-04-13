@@ -1,13 +1,13 @@
 //! Watch channel — single-value broadcast with version tracking.
 //!
-//! Uses `parking_lot::Mutex` consistently.
+//! Uses `crate::sync::Mutex` consistently.
 
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 struct WatchData<T> {
@@ -132,7 +132,7 @@ impl<T> Receiver<T> {
 }
 
 pub struct WatchRef<'a, T> {
-    guard: parking_lot::MutexGuard<'a, WatchData<T>>,
+    guard: crate::sync::MutexGuard<'a, WatchData<T>>,
 }
 
 impl<T> std::ops::Deref for WatchRef<'_, T> {

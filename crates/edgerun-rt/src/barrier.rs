@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 /// An async barrier for coordinating `n` tasks.

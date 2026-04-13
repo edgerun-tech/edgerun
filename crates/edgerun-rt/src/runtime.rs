@@ -10,7 +10,7 @@ use std::future::Future;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread::JoinHandle as StdJoinHandle;
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 use crate::blocking_pool::BlockingPool;
 pub use crate::blocking_pool::{JoinError, JoinHandle};

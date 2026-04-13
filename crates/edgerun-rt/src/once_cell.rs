@@ -1,6 +1,6 @@
 //! `OnceCell` — cell that can be initialized exactly once.
 
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 enum State<T> {

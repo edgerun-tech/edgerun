@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll, Waker};
 
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 struct Inner {
     count: AtomicUsize,

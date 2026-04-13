@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::Context;
 
 type PollFn = Box<dyn FnMut(&mut Context<'_>) -> bool + Send>;

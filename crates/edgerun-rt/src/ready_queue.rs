@@ -8,7 +8,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use parking_lot::{Condvar, Mutex};
+use crate::sync::{Condvar, Mutex};
 
 struct ReadyQueueInner {
     q: Mutex<VecDeque<usize>>,
@@ -47,9 +47,9 @@ impl ReadyQueue {
             if self.inner.done.load(Ordering::Acquire) {
                 return None;
             }
-            let timed_out =
+            let notified =
                 self.inner.cvar.wait_for(&mut q, std::time::Duration::from_millis(100));
-            if timed_out.timed_out()
+            if !notified
                 && self.inner.done.load(Ordering::Acquire)
                 && q.is_empty()
             {

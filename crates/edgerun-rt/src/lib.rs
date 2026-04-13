@@ -40,6 +40,7 @@ mod signal;
 mod once_cell;
 mod latch;
 mod rate_limiter;
+mod sync;
 mod io_util;
 pub mod fs;
 pub mod mpsc;
@@ -58,6 +59,9 @@ pub use std::time::Instant;
 
 // Runtime.
 pub use runtime::{Builder, JoinError, JoinHandle, Runtime, RuntimeHandle, spawn, spawn_blocking};
+
+// Synchronization primitives.
+pub mod sync;
 
 // Metrics.
 pub use metrics::RuntimeMetrics;

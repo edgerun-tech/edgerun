@@ -123,7 +123,7 @@ struct SpanEntry {
 // Task span registry — maps task IDs to root span IDs
 // ===========================================================================
 
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 pub(crate) struct TaskSpanMap {
     map: Mutex<std::collections::HashMap<usize, u64>>,

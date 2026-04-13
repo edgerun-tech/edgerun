@@ -8,7 +8,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 use crate::oneshot;
 use crate::runtime::spawn;

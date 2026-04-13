@@ -27,7 +27,7 @@ pub struct RateLimiter {
     /// Current tokens, stored as f64 bits.
     tokens: AtomicU64,
     /// Last refill time.
-    last_refill: parking_lot::Mutex<Instant>,
+    last_refill: crate::sync::Mutex<Instant>,
 }
 
 impl RateLimiter {
@@ -40,7 +40,7 @@ impl RateLimiter {
             capacity,
             rate: rate.to_bits(),
             tokens: AtomicU64::new((capacity as f64).to_bits()),
-            last_refill: parking_lot::Mutex::new(Instant::now()),
+            last_refill: crate::sync::Mutex::new(Instant::now()),
         }
     }
 

@@ -8,7 +8,7 @@ use std::io::{self};
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::Waker;
 
 use crate::ready_queue::ReadyQueue;

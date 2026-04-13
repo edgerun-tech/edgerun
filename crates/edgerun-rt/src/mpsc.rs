@@ -1,7 +1,7 @@
 //! Bounded mpsc channel with proper multi-sender backpressure.
 //!
 //! ## Fixes applied:
-//! - Uses `parking_lot::Mutex` (no `.unwrap()`)
+//! - Uses our `sync::Mutex` (no `.unwrap()`)
 //! - `SendFut` stores `(Waker, T)` in pending queue — atomic register-then-check
 //!   under a single lock. No race between "queue full" and "space freed".
 
@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use parking_lot::{Condvar, Mutex};
+use crate::sync::{Condvar, Mutex};
 use std::task::{Context, Poll, Waker};
 
 pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {

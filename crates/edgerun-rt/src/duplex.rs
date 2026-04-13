@@ -9,7 +9,7 @@ use std::io::{self};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 
 use crate::io_traits::{AsyncRead, AsyncWrite};
 

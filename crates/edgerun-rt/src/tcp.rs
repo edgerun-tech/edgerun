@@ -12,7 +12,7 @@ use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use parking_lot::Mutex;
+use crate::sync::Mutex;
 use std::task::{Context, Poll, Waker};
 
 use crate::io_traits::{AsyncRead, AsyncWrite};

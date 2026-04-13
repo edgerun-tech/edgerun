@@ -107,7 +107,7 @@ impl SignalKind {
 pub struct Signal {
     /// File descriptor from signalfd. Owned — we close it in Drop.
     fd: std::sync::Arc<std::sync::atomic::AtomicI32>,
-    read_waker: parking_lot::Mutex<Option<std::task::Waker>>,
+    read_waker: crate::sync::Mutex<Option<std::task::Waker>>,
     refs: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
@@ -148,7 +148,7 @@ impl Signal {
 
         Ok(Self {
             fd: std::sync::Arc::new(std::sync::atomic::AtomicI32::new(sfd_fd)),
-            read_waker: parking_lot::Mutex::new(None),
+            read_waker: crate::sync::Mutex::new(None),
             refs: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(1)),
         })
     }
@@ -172,7 +172,7 @@ impl Clone for Signal {
         self.refs.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self {
             fd: self.fd.clone(),
-            read_waker: parking_lot::Mutex::new(None),
+            read_waker: crate::sync::Mutex::new(None),
             refs: self.refs.clone(),
         }
     }
